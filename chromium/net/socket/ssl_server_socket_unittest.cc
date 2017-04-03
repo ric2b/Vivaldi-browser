@@ -20,10 +20,6 @@
 #include <queue>
 #include <utility>
 
-#include <openssl/evp.h>
-#include <openssl/ssl.h>
-#include <openssl/x509.h>
-
 #include "base/callback_helpers.h"
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
@@ -38,7 +34,6 @@
 #include "build/build_config.h"
 #include "crypto/nss_util.h"
 #include "crypto/rsa_private_key.h"
-#include "crypto/scoped_openssl_types.h"
 #include "crypto/signature_creator.h"
 #include "net/base/address_list.h"
 #include "net/base/completion_callback.h"
@@ -53,6 +48,7 @@
 #include "net/cert/ct_verifier.h"
 #include "net/cert/mock_cert_verifier.h"
 #include "net/cert/mock_client_cert_verifier.h"
+#include "net/cert/signed_certificate_timestamp_and_status.h"
 #include "net/cert/x509_certificate.h"
 #include "net/http/transport_security_state.h"
 #include "net/log/net_log_with_source.h"
@@ -60,7 +56,6 @@
 #include "net/socket/socket_test_util.h"
 #include "net/socket/ssl_client_socket.h"
 #include "net/socket/stream_socket.h"
-#include "net/ssl/scoped_openssl_types.h"
 #include "net/ssl/ssl_cert_request_info.h"
 #include "net/ssl/ssl_cipher_suite_names.h"
 #include "net/ssl/ssl_connection_status_flags.h"
@@ -74,6 +69,9 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/platform_test.h"
+#include "third_party/boringssl/src/include/openssl/evp.h"
+#include "third_party/boringssl/src/include/openssl/ssl.h"
+#include "third_party/boringssl/src/include/openssl/x509.h"
 
 using net::test::IsError;
 using net::test::IsOk;
@@ -96,7 +94,7 @@ class MockCTVerifier : public CTVerifier {
   int Verify(X509Certificate* cert,
              const std::string& stapled_ocsp_response,
              const std::string& sct_list_from_tls_extension,
-             ct::CTVerifyResult* result,
+             SignedCertificateTimestampAndStatusList* output_scts,
              const NetLogWithSource& net_log) override {
     return net::OK;
   }
@@ -452,14 +450,14 @@ class SSLServerSocketTest : public PlatformTest {
 
     EVP_PKEY_up_ref(key->key());
     client_ssl_config_.client_private_key =
-        WrapOpenSSLPrivateKey(crypto::ScopedEVP_PKEY(key->key()));
+        WrapOpenSSLPrivateKey(bssl::UniquePtr<EVP_PKEY>(key->key()));
   }
 
   void ConfigureClientCertsForServer() {
     server_ssl_config_.client_cert_type =
         SSLServerConfig::ClientCertType::REQUIRE_CLIENT_CERT;
 
-    ScopedX509NameStack cert_names(
+    bssl::UniquePtr<STACK_OF(X509_NAME)> cert_names(
         SSL_load_client_CA_file(GetTestCertsDirectory()
                                     .AppendASCII(kClientCertCAFileName)
                                     .MaybeAsASCII()
@@ -550,17 +548,19 @@ TEST_F(SSLServerSocketTest, Handshake) {
   ASSERT_TRUE(client_socket_->GetSSLInfo(&ssl_info));
   EXPECT_EQ(CERT_STATUS_AUTHORITY_INVALID, ssl_info.cert_status);
 
-  // The default cipher suite should be ECDHE and, unless on NSS and the
-  // platform doesn't support it, an AEAD.
+  // The default cipher suite should be ECDHE and an AEAD.
   uint16_t cipher_suite =
       SSLConnectionStatusToCipherSuite(ssl_info.connection_status);
   const char* key_exchange;
   const char* cipher;
   const char* mac;
   bool is_aead;
-  SSLCipherSuiteToStrings(&key_exchange, &cipher, &mac, &is_aead, cipher_suite);
-  EXPECT_STREQ("ECDHE_RSA", key_exchange);
+  bool is_tls13;
+  SSLCipherSuiteToStrings(&key_exchange, &cipher, &mac, &is_aead, &is_tls13,
+                          cipher_suite);
   EXPECT_TRUE(is_aead);
+  ASSERT_FALSE(is_tls13);
+  EXPECT_STREQ("ECDHE_RSA", key_exchange);
 }
 
 // This test makes sure the session cache is working.
@@ -786,7 +786,8 @@ TEST_F(SSLServerSocketTest, HandshakeWithClientCertRequiredNotSupplied) {
 
   client_socket_->Disconnect();
 
-  EXPECT_THAT(handshake_callback.GetResult(server_ret), IsError(ERR_FAILED));
+  EXPECT_THAT(handshake_callback.GetResult(server_ret),
+              IsError(ERR_CONNECTION_CLOSED));
 }
 
 TEST_F(SSLServerSocketTest, HandshakeWithClientCertRequiredNotSuppliedCached) {
@@ -819,7 +820,8 @@ TEST_F(SSLServerSocketTest, HandshakeWithClientCertRequiredNotSuppliedCached) {
 
   client_socket_->Disconnect();
 
-  EXPECT_THAT(handshake_callback.GetResult(server_ret), IsError(ERR_FAILED));
+  EXPECT_THAT(handshake_callback.GetResult(server_ret),
+              IsError(ERR_CONNECTION_CLOSED));
   server_socket_->Disconnect();
 
   // Below, check that the cache didn't store the result of a failed handshake.
@@ -841,7 +843,8 @@ TEST_F(SSLServerSocketTest, HandshakeWithClientCertRequiredNotSuppliedCached) {
 
   client_socket_->Disconnect();
 
-  EXPECT_THAT(handshake_callback2.GetResult(server_ret2), IsError(ERR_FAILED));
+  EXPECT_THAT(handshake_callback2.GetResult(server_ret2),
+              IsError(ERR_CONNECTION_CLOSED));
 }
 
 TEST_F(SSLServerSocketTest, HandshakeWithWrongClientCertSupplied) {

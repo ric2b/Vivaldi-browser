@@ -9,19 +9,18 @@
 #include "ash/common/default_accessibility_delegate.h"
 #include "ash/common/gpu_support_stub.h"
 #include "ash/common/media_delegate.h"
-#include "ash/common/new_window_delegate.h"
 #include "ash/common/palette_delegate.h"
 #include "ash/common/session/session_state_delegate.h"
-#include "ash/common/shell_window_ids.h"
 #include "ash/common/system/tray/default_system_tray_delegate.h"
+#include "ash/common/test/test_shelf_delegate.h"
 #include "ash/common/wm/window_state.h"
 #include "ash/default_wallpaper_delegate.h"
+#include "ash/public/cpp/shell_window_ids.h"
 #include "ash/shell.h"
 #include "ash/shell/context_menu.h"
 #include "ash/shell/example_factory.h"
 #include "ash/shell/toplevel_window.h"
 #include "ash/test/test_keyboard_ui.h"
-#include "ash/test/test_shelf_delegate.h"
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/utf_string_conversions.h"
@@ -36,31 +35,6 @@
 namespace ash {
 namespace shell {
 namespace {
-
-class NewWindowDelegateImpl : public NewWindowDelegate {
- public:
-  NewWindowDelegateImpl() {}
-  ~NewWindowDelegateImpl() override {}
-
-  // NewWindowDelegate:
-  void NewTab() override {}
-  void NewWindow(bool incognito) override {
-    ToplevelWindow::CreateParams create_params;
-    create_params.can_resize = true;
-    create_params.can_maximize = true;
-    ToplevelWindow::CreateToplevelWindow(create_params);
-  }
-  void OpenFileManager() override {}
-  void OpenCrosh() override {}
-  void OpenGetHelp() override {}
-  void RestoreTab() override {}
-  void ShowKeyboardOverlay() override {}
-  void ShowTaskManager() override {}
-  void OpenFeedbackPage() override {}
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(NewWindowDelegateImpl);
-};
 
 class MediaDelegateImpl : public MediaDelegate {
  public:
@@ -124,7 +98,7 @@ class SessionStateDelegateImpl : public SessionStateDelegate {
   bool IsActiveUserSessionStarted() const override { return true; }
   bool CanLockScreen() const override { return true; }
   bool IsScreenLocked() const override { return screen_locked_; }
-  bool ShouldLockScreenBeforeSuspending() const override { return false; }
+  bool ShouldLockScreenAutomatically() const override { return false; }
   void LockScreen() override {
     shell::CreateLockScreen();
     screen_locked_ = true;
@@ -137,10 +111,11 @@ class SessionStateDelegateImpl : public SessionStateDelegate {
   bool IsUserSessionBlocked() const override {
     return !IsActiveUserSessionStarted() || IsScreenLocked();
   }
-  SessionState GetSessionState() const override {
+  session_manager::SessionState GetSessionState() const override {
     // Assume that if session is not active we're at login.
-    return IsActiveUserSessionStarted() ? SESSION_STATE_ACTIVE
-                                        : SESSION_STATE_LOGIN_PRIMARY;
+    return IsActiveUserSessionStarted()
+               ? session_manager::SessionState::ACTIVE
+               : session_manager::SessionState::LOGIN_PRIMARY;
   }
   const user_manager::UserInfo* GetUserInfo(UserIndex index) const override {
     return user_info_.get();
@@ -196,12 +171,8 @@ ShellDelegateImpl::ShellDelegateImpl()
 
 ShellDelegateImpl::~ShellDelegateImpl() {}
 
-::shell::Connector* ShellDelegateImpl::GetShellConnector() const {
+::service_manager::Connector* ShellDelegateImpl::GetShellConnector() const {
   return nullptr;
-}
-
-bool ShellDelegateImpl::IsFirstRunAfterBoot() const {
-  return false;
 }
 
 bool ShellDelegateImpl::IsIncognitoAllowed() const {
@@ -266,10 +237,6 @@ SessionStateDelegate* ShellDelegateImpl::CreateSessionStateDelegate() {
 
 AccessibilityDelegate* ShellDelegateImpl::CreateAccessibilityDelegate() {
   return new DefaultAccessibilityDelegate;
-}
-
-NewWindowDelegate* ShellDelegateImpl::CreateNewWindowDelegate() {
-  return new NewWindowDelegateImpl;
 }
 
 MediaDelegate* ShellDelegateImpl::CreateMediaDelegate() {

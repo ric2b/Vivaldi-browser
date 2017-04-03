@@ -26,6 +26,7 @@ namespace net {
 
 static const int kNumSecondsPerMinute = 60;
 static const int kNumSecondsPerHour = kNumSecondsPerMinute * 60;
+static const uint64_t kNumSecondsPerWeek = kNumSecondsPerHour * 24 * 7;
 static const uint64_t kNumMicrosPerSecond = base::Time::kMicrosecondsPerSecond;
 static const uint64_t kNumMicrosPerMilli =
     base::Time::kMicrosecondsPerMillisecond;

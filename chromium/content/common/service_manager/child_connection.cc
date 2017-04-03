@@ -11,17 +11,17 @@
 #include "content/public/common/service_manager_connection.h"
 #include "mojo/edk/embedder/embedder.h"
 #include "mojo/public/cpp/system/message_pipe.h"
-#include "services/shell/public/cpp/connector.h"
-#include "services/shell/public/cpp/identity.h"
-#include "services/shell/public/cpp/interface_registry.h"
-#include "services/shell/public/interfaces/service.mojom.h"
+#include "services/service_manager/public/cpp/connector.h"
+#include "services/service_manager/public/cpp/identity.h"
+#include "services/service_manager/public/cpp/interface_registry.h"
+#include "services/service_manager/public/interfaces/service.mojom.h"
 
 namespace content {
 
 namespace {
 
 void CallBinderOnTaskRunner(
-    const shell::InterfaceRegistry::Binder& binder,
+    const service_manager::InterfaceRegistry::Binder& binder,
     scoped_refptr<base::SequencedTaskRunner> task_runner,
     const std::string& interface_name,
     mojo::ScopedMessagePipeHandle request_handle) {
@@ -37,13 +37,13 @@ class ChildConnection::IOThreadContext
  public:
   IOThreadContext() {}
 
-  void Initialize(const shell::Identity& child_identity,
-                  shell::Connector* connector,
+  void Initialize(const service_manager::Identity& child_identity,
+                  service_manager::Connector* connector,
                   mojo::ScopedMessagePipeHandle service_pipe,
                   scoped_refptr<base::SequencedTaskRunner> io_task_runner) {
     DCHECK(!io_task_runner_);
     io_task_runner_ = io_task_runner;
-    std::unique_ptr<shell::Connector> io_thread_connector;
+    std::unique_ptr<service_manager::Connector> io_thread_connector;
     if (connector)
       io_thread_connector = connector->Clone();
     io_task_runner_->PostTask(
@@ -85,16 +85,16 @@ class ChildConnection::IOThreadContext
   virtual ~IOThreadContext() {}
 
   void InitializeOnIOThread(
-      const shell::Identity& child_identity,
-      std::unique_ptr<shell::Connector> connector,
+      const service_manager::Identity& child_identity,
+      std::unique_ptr<service_manager::Connector> connector,
       mojo::ScopedMessagePipeHandle service_pipe) {
-    shell::mojom::ServicePtr service;
-    service.Bind(mojo::InterfacePtrInfo<shell::mojom::Service>(
+    service_manager::mojom::ServicePtr service;
+    service.Bind(mojo::InterfacePtrInfo<service_manager::mojom::Service>(
         std::move(service_pipe), 0u));
-    shell::mojom::PIDReceiverRequest pid_receiver_request =
+    service_manager::mojom::PIDReceiverRequest pid_receiver_request =
         mojo::GetProxy(&pid_receiver_);
 
-    shell::Connector::ConnectParams params(child_identity);
+    service_manager::Connector::ConnectParams params(child_identity);
     params.set_client_process_connection(std::move(service),
                                          std::move(pid_receiver_request));
 
@@ -115,8 +115,8 @@ class ChildConnection::IOThreadContext
   }
 
   scoped_refptr<base::SequencedTaskRunner> io_task_runner_;
-  std::unique_ptr<shell::Connection> connection_;
-  shell::mojom::PIDReceiverPtr pid_receiver_;
+  std::unique_ptr<service_manager::Connection> connection_;
+  service_manager::mojom::PIDReceiverPtr pid_receiver_;
 
   DISALLOW_COPY_AND_ASSIGN(IOThreadContext);
 };
@@ -125,14 +125,17 @@ ChildConnection::ChildConnection(
     const std::string& service_name,
     const std::string& instance_id,
     const std::string& child_token,
-    shell::Connector* connector,
+    service_manager::Connector* connector,
     scoped_refptr<base::SequencedTaskRunner> io_task_runner)
-    : context_(new IOThreadContext),
-      child_identity_(service_name, shell::mojom::kInheritUserID, instance_id),
+    : child_token_(child_token),
+      context_(new IOThreadContext),
+      child_identity_(service_name,
+                      service_manager::mojom::kInheritUserID,
+                      instance_id),
       service_token_(mojo::edk::GenerateRandomToken()),
       weak_factory_(this) {
   mojo::ScopedMessagePipeHandle service_pipe =
-      mojo::edk::CreateParentMessagePipe(service_token_, child_token);
+      mojo::edk::CreateParentMessagePipe(service_token_, child_token_);
 
   context_->Initialize(child_identity_, connector, std::move(service_pipe),
                        io_task_runner);
@@ -144,9 +147,18 @@ ChildConnection::ChildConnection(
 
 ChildConnection::~ChildConnection() {
   context_->ShutDown();
+
+  if (process_handle_ == base::kNullProcessHandle) {
+    // The process handle was never set, so we have to assume the process was
+    // not successfully launched. Note that ChildProcessLauncher may also call
+    // call ChildProcessLaunchFailed for the same token, so this is (harmlessly)
+    // redundant in some cases.
+    mojo::edk::ChildProcessLaunchFailed(child_token_);
+  }
 }
 
 void ChildConnection::SetProcessHandle(base::ProcessHandle handle) {
+  process_handle_ = handle;
   context_->SetProcessHandle(handle);
 }
 

@@ -465,6 +465,12 @@ bool GuestViewManager::CanEmbedderAccessInstanceID(
   if (!guest_view)
     return false;
 
+  if (guest_view->CanBeEmbeddedInsideCrossProcessFrames()) {
+    // MimeHandlerViewGuests (PDF) may be embedded in a cross-process frame.
+    return embedder_render_process_id ==
+           guest_view->GetOwnerSiteInstance()->GetProcess()->GetID();
+  }
+
   // andre@vivaldi.com: This was changed because of the embedder/guest relation
   //                    with tabstrip guests and VivaldiViews.
   // TODO (gisli@vivaldi.com):  Should add check (below check or both embedders

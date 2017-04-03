@@ -1,201 +1,189 @@
 // Copyright 2015 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
-
 /**
- * @constructor
- * @extends {WebInspector.ThrottledWidget}
+ * @unrestricted
  */
-WebInspector.AccessibilitySidebarView = function()
-{
-    WebInspector.ThrottledWidget.call(this);
+Accessibility.AccessibilitySidebarView = class extends UI.ThrottledWidget {
+  constructor() {
+    super();
     this._node = null;
-    this._sidebarPaneStack = WebInspector.viewManager.createStackLocation();
-    this._treeSubPane = new WebInspector.AXTreePane();
+    this._axNode = null;
+    this._sidebarPaneStack = UI.viewManager.createStackLocation();
+    this._treeSubPane = new Accessibility.AXTreePane();
     this._sidebarPaneStack.showView(this._treeSubPane);
-    this._ariaSubPane = new WebInspector.ARIAAttributesPane();
+    this._ariaSubPane = new Accessibility.ARIAAttributesPane();
     this._sidebarPaneStack.showView(this._ariaSubPane);
-    this._axNodeSubPane = new WebInspector.AXNodeSubPane();
+    this._axNodeSubPane = new Accessibility.AXNodeSubPane();
     this._sidebarPaneStack.showView(this._axNodeSubPane);
     this._sidebarPaneStack.widget().show(this.element);
-    WebInspector.context.addFlavorChangeListener(WebInspector.DOMNode, this._pullNode, this);
+    UI.context.addFlavorChangeListener(SDK.DOMNode, this._pullNode, this);
     this._pullNode();
-}
+  }
 
-WebInspector.AccessibilitySidebarView.prototype = {
-    /**
-     * @return {?WebInspector.DOMNode}
-     */
-    node: function()
-    {
-        return this._node;
-    },
+  /**
+   * @return {?SDK.DOMNode}
+   */
+  node() {
+    return this._node;
+  }
 
-    /**
-     * @param {?Array<!AccessibilityAgent.AXNode>} nodes
-     */
-    accessibilityNodeCallback: function(nodes)
-    {
-        if (!nodes)
-            return;
+  /**
+   * @param {?Accessibility.AccessibilityNode} axNode
+   */
+  accessibilityNodeCallback(axNode) {
+    if (!axNode)
+      return;
 
-        var currentAXNode = nodes[0];
-        if (currentAXNode.ignored)
-            this._sidebarPaneStack.removeView(this._ariaSubPane);
-        else
-            this._sidebarPaneStack.showView(this._ariaSubPane, this._axNodeSubPane);
+    this._axNode = axNode;
 
-        if (this._axNodeSubPane)
-            this._axNodeSubPane.setAXNode(currentAXNode);
-        if (this._treeSubPane)
-            this._treeSubPane.setAXNodeAndAncestors(nodes);
-    },
+    if (axNode.ignored())
+      this._sidebarPaneStack.removeView(this._ariaSubPane);
+    else
+      this._sidebarPaneStack.showView(this._ariaSubPane, this._axNodeSubPane);
 
-    /**
-     * @override
-     * @protected
-     * @return {!Promise.<?>}
-     */
-    doUpdate: function()
-    {
-        var node = this.node();
-        this._treeSubPane.setNode(node);
-        this._axNodeSubPane.setNode(node);
-        this._ariaSubPane.setNode(node);
-        return WebInspector.AccessibilityModel.fromTarget(node.target()).getAXNodeChain(node.id)
-            .then((nodes) => { this.accessibilityNodeCallback(nodes); });
-    },
+    if (this._axNodeSubPane)
+      this._axNodeSubPane.setAXNode(axNode);
+    if (this._treeSubPane)
+      this._treeSubPane.setAXNode(axNode);
+  }
 
-    /**
-     * @override
-     */
-    wasShown: function()
-    {
-        WebInspector.ThrottledWidget.prototype.wasShown.call(this);
+  /**
+   * @override
+   * @protected
+   * @return {!Promise.<?>}
+   */
+  doUpdate() {
+    var node = this.node();
+    this._treeSubPane.setNode(node);
+    this._axNodeSubPane.setNode(node);
+    this._ariaSubPane.setNode(node);
+    if (!node)
+      return Promise.resolve();
+    var accessibilityModel = Accessibility.AccessibilityModel.fromTarget(node.target());
+    accessibilityModel.clear();
+    return accessibilityModel.requestPartialAXTree(node).then(() => {
+      this.accessibilityNodeCallback(accessibilityModel.axNodeForDOMNode(node));
+    });
+  }
 
-        this._treeSubPane.setNode(this.node());
-        this._axNodeSubPane.setNode(this.node());
-        this._ariaSubPane.setNode(this.node());
+  /**
+   * @override
+   */
+  wasShown() {
+    super.wasShown();
 
-        WebInspector.targetManager.addModelListener(WebInspector.DOMModel, WebInspector.DOMModel.Events.AttrModified, this._onAttrChange, this);
-        WebInspector.targetManager.addModelListener(WebInspector.DOMModel, WebInspector.DOMModel.Events.AttrRemoved, this._onAttrChange, this);
-        WebInspector.targetManager.addModelListener(WebInspector.DOMModel, WebInspector.DOMModel.Events.CharacterDataModified, this._onNodeChange, this);
-        WebInspector.targetManager.addModelListener(WebInspector.DOMModel, WebInspector.DOMModel.Events.ChildNodeCountUpdated, this._onNodeChange, this);
-    },
+    this._treeSubPane.setNode(this.node());
+    this._axNodeSubPane.setNode(this.node());
+    this._ariaSubPane.setNode(this.node());
 
-    /**
-     * @override
-     */
-    willHide: function()
-    {
-        WebInspector.targetManager.removeModelListener(WebInspector.DOMModel, WebInspector.DOMModel.Events.AttrModified, this._onAttrChange, this);
-        WebInspector.targetManager.removeModelListener(WebInspector.DOMModel, WebInspector.DOMModel.Events.AttrRemoved, this._onAttrChange, this);
-        WebInspector.targetManager.removeModelListener(WebInspector.DOMModel, WebInspector.DOMModel.Events.CharacterDataModified, this._onNodeChange, this);
-        WebInspector.targetManager.removeModelListener(WebInspector.DOMModel, WebInspector.DOMModel.Events.ChildNodeCountUpdated, this._onNodeChange, this);
-    },
+    SDK.targetManager.addModelListener(SDK.DOMModel, SDK.DOMModel.Events.AttrModified, this._onAttrChange, this);
+    SDK.targetManager.addModelListener(SDK.DOMModel, SDK.DOMModel.Events.AttrRemoved, this._onAttrChange, this);
+    SDK.targetManager.addModelListener(
+        SDK.DOMModel, SDK.DOMModel.Events.CharacterDataModified, this._onNodeChange, this);
+    SDK.targetManager.addModelListener(
+        SDK.DOMModel, SDK.DOMModel.Events.ChildNodeCountUpdated, this._onNodeChange, this);
+  }
 
-    _pullNode: function()
-    {
-        this._node = WebInspector.context.flavor(WebInspector.DOMNode);
-        this._ariaSubPane.setNode(this._node);
-        this._axNodeSubPane.setNode(this._node);
-        this.update();
-    },
+  /**
+   * @override
+   */
+  willHide() {
+    SDK.targetManager.removeModelListener(SDK.DOMModel, SDK.DOMModel.Events.AttrModified, this._onAttrChange, this);
+    SDK.targetManager.removeModelListener(SDK.DOMModel, SDK.DOMModel.Events.AttrRemoved, this._onAttrChange, this);
+    SDK.targetManager.removeModelListener(
+        SDK.DOMModel, SDK.DOMModel.Events.CharacterDataModified, this._onNodeChange, this);
+    SDK.targetManager.removeModelListener(
+        SDK.DOMModel, SDK.DOMModel.Events.ChildNodeCountUpdated, this._onNodeChange, this);
+  }
 
-    /**
-     * @param {!WebInspector.Event} event
-     */
-    _onAttrChange: function(event)
-    {
-        if (!this.node())
-            return;
-        var node = event.data.node;
-        if (this.node() !== node)
-            return;
-        this.update();
-    },
+  _pullNode() {
+    this._node = UI.context.flavor(SDK.DOMNode);
+    this.update();
+  }
 
-    /**
-     * @param {!WebInspector.Event} event
-     */
-    _onNodeChange: function(event)
-    {
-        if (!this.node())
-            return;
-        var node = event.data;
-        if (this.node() !== node)
-            return;
-        this.update();
-    },
+  /**
+   * @param {!Common.Event} event
+   */
+  _onAttrChange(event) {
+    if (!this.node())
+      return;
+    var node = event.data.node;
+    if (this.node() !== node)
+      return;
+    this.update();
+  }
 
-
-    __proto__: WebInspector.ThrottledWidget.prototype
+  /**
+   * @param {!Common.Event} event
+   */
+  _onNodeChange(event) {
+    if (!this.node())
+      return;
+    var node = event.data;
+    if (this.node() !== node)
+      return;
+    this.update();
+  }
 };
 
 /**
- * @constructor
- * @extends {WebInspector.SimpleView}
- * @param {string} name
+ * @unrestricted
  */
-WebInspector.AccessibilitySubPane = function(name)
-{
-    WebInspector.SimpleView.call(this, name);
+Accessibility.AccessibilitySubPane = class extends UI.SimpleView {
+  /**
+   * @param {string} name
+   */
+  constructor(name) {
+    super(name);
 
     this._axNode = null;
-    this.registerRequiredCSS("accessibility/accessibilityNode.css");
-}
+    this.registerRequiredCSS('accessibility/accessibilityNode.css');
+  }
 
-WebInspector.AccessibilitySubPane.prototype = {
-    /**
-     * @param {?AccessibilityAgent.AXNode} axNode
-     * @protected
-     */
-    setAXNode: function(axNode)
-    {
-    },
+  /**
+   * @param {?Accessibility.AccessibilityNode} axNode
+   * @protected
+   */
+  setAXNode(axNode) {
+  }
 
-    /**
-     * @return {?WebInspector.DOMNode}
-     */
-    node: function()
-    {
-        return this._node;
-    },
+  /**
+   * @return {?SDK.DOMNode}
+   */
+  node() {
+    return this._node;
+  }
 
-    /**
-     * @param {?WebInspector.DOMNode} node
-     */
-    setNode: function(node)
-    {
-        this._node = node;
-    },
+  /**
+   * @param {?SDK.DOMNode} node
+   */
+  setNode(node) {
+    this._node = node;
+  }
 
-    /**
-     * @param {string} textContent
-     * @param {string=} className
-     * @return {!Element}
-     */
-    createInfo: function(textContent, className)
-    {
-        var classNameOrDefault = className || "gray-info-message";
-        var info = this.element.createChild("div", classNameOrDefault);
-        info.textContent = textContent;
-        return info;
-    },
+  /**
+   * @param {string} textContent
+   * @param {string=} className
+   * @return {!Element}
+   */
+  createInfo(textContent, className) {
+    var classNameOrDefault = className || 'gray-info-message';
+    var info = this.element.createChild('div', classNameOrDefault);
+    info.textContent = textContent;
+    return info;
+  }
 
-    /**
-     * @return {!TreeOutline}
-     */
-    createTreeOutline: function()
-    {
-        var treeOutline = new TreeOutlineInShadow();
-        treeOutline.registerRequiredCSS("accessibility/accessibilityNode.css");
-        treeOutline.registerRequiredCSS("components/objectValue.css");
+  /**
+   * @return {!TreeOutline}
+   */
+  createTreeOutline() {
+    var treeOutline = new TreeOutlineInShadow();
+    treeOutline.registerRequiredCSS('accessibility/accessibilityNode.css');
+    treeOutline.registerRequiredCSS('components/objectValue.css');
 
-        treeOutline.element.classList.add("hidden");
-        this.element.appendChild(treeOutline.element);
-        return treeOutline;
-    },
-
-    __proto__: WebInspector.SimpleView.prototype
-}
+    treeOutline.element.classList.add('hidden');
+    this.element.appendChild(treeOutline.element);
+    return treeOutline;
+  }
+};

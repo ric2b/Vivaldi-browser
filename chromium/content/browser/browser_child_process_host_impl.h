@@ -12,13 +12,13 @@
 
 #include "base/compiler_specific.h"
 #include "base/memory/ref_counted.h"
+#include "base/memory/shared_memory.h"
 #include "base/memory/weak_ptr.h"
 #include "base/process/process.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/waitable_event_watcher.h"
 #include "build/build_config.h"
 #include "content/browser/child_process_launcher.h"
-#include "content/browser/power_monitor_message_broadcaster.h"
 #include "content/public/browser/browser_child_process_host.h"
 #include "content/public/browser/child_process_data.h"
 #include "content/public/common/child_process_host_delegate.h"
@@ -31,7 +31,7 @@ namespace base {
 class CommandLine;
 }
 
-namespace shell {
+namespace service_manager {
 class InterfaceProvider;
 }
 
@@ -85,7 +85,7 @@ class CONTENT_EXPORT BrowserChildProcessHostImpl
   bool CanShutdown() override;
   void OnChildDisconnected() override;
   const base::Process& GetProcess() const override;
-  shell::InterfaceProvider* GetRemoteInterfaces() override;
+  service_manager::InterfaceProvider* GetRemoteInterfaces() override;
   bool OnMessageReceived(const IPC::Message& message) override;
   void OnChannelConnected(int32_t peer_pid) override;
   void OnChannelError() override;
@@ -156,8 +156,6 @@ class CONTENT_EXPORT BrowserChildProcessHostImpl
   std::unique_ptr<ChildConnection> child_connection_;
 
   std::unique_ptr<ChildProcessLauncher> child_process_;
-
-  PowerMonitorMessageBroadcaster power_monitor_message_broadcaster_;
 
 #if defined(OS_WIN)
   // Watches to see if the child process exits before the IPC channel has

@@ -59,7 +59,6 @@ Scrollbar::Scrollbar(ScrollableArea* scrollableArea,
       m_documentDragPos(0),
       m_enabled(true),
       m_scrollTimer(this, &Scrollbar::autoscrollTimerFired),
-      m_overlapsResizer(false),
       m_elasticOverscroll(0),
       m_trackNeedsRepaint(true),
       m_thumbNeedsRepaint(true) {
@@ -70,6 +69,7 @@ Scrollbar::Scrollbar(ScrollableArea* scrollableArea,
   // scrollbars (rather than leaving one dimension of the scrollbar alone when
   // sizing).
   int thickness = m_theme.scrollbarThickness(controlSize);
+  m_themeScrollbarThickness = thickness;
   if (m_hostWindow)
     thickness = m_hostWindow->windowToViewportScalar(thickness);
   Widget::setFrameRect(IntRect(0, 0, thickness, thickness));
@@ -95,9 +95,9 @@ void Scrollbar::setFrameRect(const IntRect& frameRect) {
   setNeedsPaintInvalidation(AllParts);
 }
 
-ScrollbarOverlayStyle Scrollbar::getScrollbarOverlayStyle() const {
-  return m_scrollableArea ? m_scrollableArea->getScrollbarOverlayStyle()
-                          : ScrollbarOverlayStyleDefault;
+ScrollbarOverlayColorTheme Scrollbar::getScrollbarOverlayColorTheme() const {
+  return m_scrollableArea ? m_scrollableArea->getScrollbarOverlayColorTheme()
+                          : ScrollbarOverlayColorThemeDark;
 }
 
 void Scrollbar::getTickmarks(Vector<IntRect>& tickmarks) const {
@@ -217,8 +217,7 @@ void Scrollbar::startTimerIfNeeded(double delay) {
 }
 
 void Scrollbar::stopTimerIfNeeded() {
-  if (m_scrollTimer.isActive())
-    m_scrollTimer.stop();
+  m_scrollTimer.stop();
 }
 
 ScrollDirectionPhysical Scrollbar::pressedPartScrollDirectionPhysical() {
@@ -254,15 +253,15 @@ void Scrollbar::moveThumb(int pos, bool draggingDocument) {
     if (m_draggingDocument)
       delta = pos - m_documentDragPos;
     m_draggingDocument = true;
-    FloatPoint currentPosition =
-        m_scrollableArea->scrollAnimator().currentPosition();
+    ScrollOffset currentPosition =
+        m_scrollableArea->scrollAnimator().currentOffset();
     float destinationPosition =
-        (m_orientation == HorizontalScrollbar ? currentPosition.x()
-                                              : currentPosition.y()) +
+        (m_orientation == HorizontalScrollbar ? currentPosition.width()
+                                              : currentPosition.height()) +
         delta;
-    destinationPosition = m_scrollableArea->clampScrollPosition(
-        m_orientation, destinationPosition);
-    m_scrollableArea->setScrollPositionSingleAxis(
+    destinationPosition =
+        m_scrollableArea->clampScrollOffset(m_orientation, destinationPosition);
+    m_scrollableArea->setScrollOffsetSingleAxis(
         m_orientation, destinationPosition, UserScroll);
     m_documentDragPos = pos;
     return;
@@ -286,14 +285,14 @@ void Scrollbar::moveThumb(int pos, bool draggingDocument) {
   else if (delta < 0)
     delta = std::max(-thumbPos, delta);
 
-  float minPos = m_scrollableArea->minimumScrollPosition(m_orientation);
-  float maxPos = m_scrollableArea->maximumScrollPosition(m_orientation);
+  float minOffset = m_scrollableArea->minimumScrollOffset(m_orientation);
+  float maxOffset = m_scrollableArea->maximumScrollOffset(m_orientation);
   if (delta) {
-    float newPosition = static_cast<float>(thumbPos + delta) *
-                            (maxPos - minPos) / (trackLen - thumbLen) +
-                        minPos;
-    m_scrollableArea->setScrollPositionSingleAxis(m_orientation, newPosition,
-                                                  UserScroll);
+    float newOffset = static_cast<float>(thumbPos + delta) *
+                          (maxOffset - minOffset) / (trackLen - thumbLen) +
+                      minOffset;
+    m_scrollableArea->setScrollOffsetSingleAxis(m_orientation, newOffset,
+                                                UserScroll);
   }
 }
 
@@ -412,10 +411,9 @@ void Scrollbar::mouseMoved(const PlatformMouseEvent& evt) {
   if (m_pressedPart == ThumbPart) {
     if (theme().shouldSnapBackToDragOrigin(*this, evt)) {
       if (m_scrollableArea) {
-        m_scrollableArea->setScrollPositionSingleAxis(
+        m_scrollableArea->setScrollOffsetSingleAxis(
             m_orientation,
-            m_dragOrigin +
-                m_scrollableArea->minimumScrollPosition(m_orientation),
+            m_dragOrigin + m_scrollableArea->minimumScrollOffset(m_orientation),
             UserScroll);
       }
     } else {
@@ -464,12 +462,16 @@ void Scrollbar::mouseExited() {
 }
 
 void Scrollbar::mouseUp(const PlatformMouseEvent& mouseEvent) {
+  bool isCaptured = m_pressedPart == ThumbPart;
   setPressedPart(NoPart);
   m_pressedPos = 0;
   m_draggingDocument = false;
   stopTimerIfNeeded();
 
   if (m_scrollableArea) {
+    if (isCaptured)
+      m_scrollableArea->mouseReleasedScrollbar();
+
     // m_hoveredPart won't be updated until the next mouseMoved or mouseDown, so
     // we have to hit test to really know if the mouse has exited the scrollbar
     // on a mouseUp.
@@ -504,17 +506,20 @@ void Scrollbar::mouseDown(const PlatformMouseEvent& evt) {
     moveThumb(desiredPos);
     return;
   }
-  if (m_pressedPart == ThumbPart)
+  if (m_pressedPart == ThumbPart) {
     m_dragOrigin = m_currentPos;
+    if (m_scrollableArea)
+      m_scrollableArea->mouseCapturedScrollbar();
+  }
 
   m_pressedPos = pressedPos;
 
   autoscrollPressedPart(theme().initialAutoscrollTimerDelay());
 }
 
-void Scrollbar::visibilityChanged() {
+void Scrollbar::setScrollbarsHidden(bool hidden) {
   if (m_scrollableArea)
-    m_scrollableArea->scrollbarVisibilityChanged();
+    m_scrollableArea->setScrollbarsHidden(hidden);
 }
 
 void Scrollbar::setEnabled(bool e) {
@@ -529,8 +534,7 @@ int Scrollbar::scrollbarThickness() const {
   int thickness = orientation() == HorizontalScrollbar ? height() : width();
   if (!thickness || !m_hostWindow)
     return thickness;
-  return m_hostWindow->windowToViewportScalar(
-      m_theme.scrollbarThickness(controlSize()));
+  return m_hostWindow->windowToViewportScalar(m_themeScrollbarThickness);
 }
 
 bool Scrollbar::isOverlayScrollbar() const {
@@ -541,8 +545,7 @@ bool Scrollbar::shouldParticipateInHitTesting() {
   // Non-overlay scrollbars should always participate in hit testing.
   if (!isOverlayScrollbar())
     return true;
-  return m_scrollableArea->scrollAnimator()
-      .shouldScrollbarParticipateInHitTesting(*this);
+  return !m_scrollableArea->scrollbarsHidden();
 }
 
 bool Scrollbar::isWindowActive() const {
@@ -588,24 +591,26 @@ float Scrollbar::scrollableAreaCurrentPos() const {
   if (!m_scrollableArea)
     return 0;
 
-  if (m_orientation == HorizontalScrollbar)
-    return m_scrollableArea->scrollPosition().x() -
-           m_scrollableArea->minimumScrollPosition().x();
+  if (m_orientation == HorizontalScrollbar) {
+    return m_scrollableArea->scrollOffset().width() -
+           m_scrollableArea->minimumScrollOffset().width();
+  }
 
-  return m_scrollableArea->scrollPosition().y() -
-         m_scrollableArea->minimumScrollPosition().y();
+  return m_scrollableArea->scrollOffset().height() -
+         m_scrollableArea->minimumScrollOffset().height();
 }
 
 float Scrollbar::scrollableAreaTargetPos() const {
   if (!m_scrollableArea)
     return 0;
 
-  if (m_orientation == HorizontalScrollbar)
-    return m_scrollableArea->scrollAnimator().desiredTargetPosition().x() -
-           m_scrollableArea->minimumScrollPosition().x();
+  if (m_orientation == HorizontalScrollbar) {
+    return m_scrollableArea->scrollAnimator().desiredTargetOffset().width() -
+           m_scrollableArea->minimumScrollOffset().width();
+  }
 
-  return m_scrollableArea->scrollAnimator().desiredTargetPosition().y() -
-         m_scrollableArea->minimumScrollPosition().y();
+  return m_scrollableArea->scrollAnimator().desiredTargetOffset().height() -
+         m_scrollableArea->minimumScrollOffset().height();
 }
 
 LayoutRect Scrollbar::visualRect() const {

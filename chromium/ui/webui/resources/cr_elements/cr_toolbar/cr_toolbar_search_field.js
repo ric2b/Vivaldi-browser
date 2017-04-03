@@ -28,17 +28,27 @@ Polymer({
     },
 
     /** @private */
-    hasSearchText_: Boolean,
+    hasSearchText_: {
+      type: Boolean,
+      reflectToAttribute: true
+    },
 
+    /** @private */
     isSpinnerShown_: {
       type: Boolean,
       computed: 'computeIsSpinnerShown_(spinnerActive, showingSearch)'
-    }
+    },
+
+    /** @private */
+    searchFocused_: {
+      type: Boolean,
+      value: false
+    },
   },
 
   listeners: {
-    'tap': 'showSearch_',
-    'searchInput.bind-value-changed': 'onBindValueChanged_',
+    // Deliberately uses 'click' instead of 'tap' to fix crbug.com/624356.
+    'click': 'showSearch_',
   },
 
   /** @return {!HTMLInputElement} */
@@ -46,9 +56,20 @@ Polymer({
     return this.$.searchInput;
   },
 
+  /**
+   * Sets the value of the search field. Overridden from CrSearchFieldBehavior.
+   * @param {string} value
+   * @param {boolean=} opt_noEvent Whether to prevent a 'search-changed' event
+   *     firing for this change.
+   */
+  setValue: function(value, opt_noEvent) {
+    CrSearchFieldBehavior.setValue.call(this, value, opt_noEvent);
+    this.onSearchInput_();
+  },
+
   /** @return {boolean} */
   isSearchFocused: function() {
-    return this.$.searchTerm.focused;
+    return this.searchFocused_;
   },
 
   /**
@@ -69,7 +90,13 @@ Polymer({
   },
 
   /** @private */
+  onInputFocus_: function() {
+    this.searchFocused_ = true;
+  },
+
+  /** @private */
   onInputBlur_: function() {
+    this.searchFocused_ = false;
     if (!this.hasSearchText_)
       this.showingSearch = false;
   },
@@ -80,8 +107,8 @@ Polymer({
    * after any change, whether the result of user input or JS modification.
    * @private
    */
-  onBindValueChanged_: function() {
-    var newValue = this.$.searchInput.bindValue;
+  onSearchInput_: function() {
+    var newValue = this.$.searchInput.value;
     this.hasSearchText_ = newValue != '';
     if (newValue != '')
       this.showingSearch = true;
@@ -100,8 +127,8 @@ Polymer({
    * @param {Event} e
    * @private
    */
-  hideSearch_: function(e) {
-    this.showingSearch = false;
-    e.stopPropagation();
+  clearSearch_: function(e) {
+    this.setValue('');
+    this.getSearchInput().focus();
   }
 });

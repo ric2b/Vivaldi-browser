@@ -4,6 +4,7 @@
 
 #include "content/browser/devtools/protocol/target_handler.h"
 
+#include "content/browser/devtools/devtools_manager.h"
 #include "content/browser/devtools/service_worker_devtools_agent_host.h"
 #include "content/browser/frame_host/frame_tree.h"
 #include "content/browser/frame_host/frame_tree_node.h"
@@ -83,6 +84,14 @@ ServiceWorkerDevToolsAgentHost::Map GetMatchingServiceWorkers(
   return result;
 }
 
+scoped_refptr<TargetInfo> CreateInfo(DevToolsAgentHost* host) {
+  return TargetInfo::Create()
+      ->set_target_id(host->GetId())
+      ->set_title(host->GetTitle())
+      ->set_url(host->GetURL().spec())
+      ->set_type(host->GetType());
+}
+
 }  // namespace
 
 TargetHandler::TargetHandler()
@@ -109,6 +118,9 @@ void TargetHandler::SetClient(std::unique_ptr<Client> client) {
 void TargetHandler::Detached() {
   SetAutoAttach(false, false);
   SetDiscoverTargets(false);
+  for (const auto& id_host : attached_hosts_)
+    id_host.second->DetachClient(this);
+  attached_hosts_.clear();
 }
 
 void TargetHandler::UpdateServiceWorkers() {
@@ -175,29 +187,30 @@ void TargetHandler::ReattachTargetsOfType(
     if (pair.second->GetType() == type &&
         new_hosts.find(pair.first) == new_hosts.end()) {
       DetachFromTargetInternal(pair.second.get());
-      TargetRemovedInternal(pair.second.get());
     }
   }
   for (const auto& pair : new_hosts) {
-    if (old_hosts.find(pair.first) == old_hosts.end()) {
-      TargetCreatedInternal(pair.second.get());
+    if (old_hosts.find(pair.first) == old_hosts.end())
       AttachToTargetInternal(pair.second.get(), waiting_for_debugger);
-    }
   }
 }
 
 void TargetHandler::TargetCreatedInternal(DevToolsAgentHost* host) {
+  if (reported_hosts_.find(host->GetId()) != reported_hosts_.end())
+    return;
   client_->TargetCreated(
-      TargetCreatedParams::Create()->set_target_info(
-          TargetInfo::Create()->set_target_id(host->GetId())
-                              ->set_title(host->GetTitle())
-                              ->set_url(host->GetURL().spec())
-                              ->set_type(host->GetType())));
+      TargetCreatedParams::Create()->set_target_info(CreateInfo(host)));
+  reported_hosts_[host->GetId()] = host;
 }
 
-void TargetHandler::TargetRemovedInternal(DevToolsAgentHost* host) {
-  client_->TargetRemoved(TargetRemovedParams::Create()
+void TargetHandler::TargetDestroyedInternal(
+    DevToolsAgentHost* host) {
+  auto it = reported_hosts_.find(host->GetId());
+  if (it == reported_hosts_.end())
+    return;
+  client_->TargetDestroyed(TargetDestroyedParams::Create()
       ->set_target_id(host->GetId()));
+  reported_hosts_.erase(it);
 }
 
 bool TargetHandler::AttachToTargetInternal(
@@ -206,7 +219,7 @@ bool TargetHandler::AttachToTargetInternal(
     return false;
   attached_hosts_[host->GetId()] = host;
   client_->AttachedToTarget(AttachedToTargetParams::Create()
-      ->set_target_id(host->GetId())
+      ->set_target_info(CreateInfo(host))
       ->set_waiting_for_debugger(waiting_for_debugger));
   return true;
 }
@@ -227,7 +240,14 @@ Response TargetHandler::SetDiscoverTargets(bool discover) {
   if (discover_ == discover)
     return Response::OK();
   discover_ = discover;
-  // TODO(dgozman): observe all agent hosts here.
+  if (discover_) {
+    DevToolsAgentHost::AddObserver(this);
+  } else {
+    DevToolsAgentHost::RemoveObserver(this);
+    RawHostsMap copy = reported_hosts_;
+    for (const auto& id_host : copy)
+      TargetDestroyedInternal(id_host.second);
+  }
   return Response::OK();
 }
 
@@ -235,7 +255,7 @@ Response TargetHandler::SetAutoAttach(
     bool auto_attach, bool wait_for_debugger_on_start) {
   wait_for_debugger_on_start_ = wait_for_debugger_on_start;
   if (auto_attach_ == auto_attach)
-    return Response::OK();
+    return Response::FallThrough();
   auto_attach_ = auto_attach;
   if (auto_attach_) {
     ServiceWorkerDevToolsManager::GetInstance()->AddObserver(this);
@@ -247,7 +267,7 @@ Response TargetHandler::SetAutoAttach(
     ReattachTargetsOfType(empty, DevToolsAgentHost::kTypeFrame, false);
     ReattachTargetsOfType(empty, DevToolsAgentHost::kTypeServiceWorker, false);
   }
-  return Response::OK();
+  return Response::FallThrough();
 }
 
 Response TargetHandler::SetAttachToFrames(bool value) {
@@ -263,12 +283,18 @@ Response TargetHandler::SetAttachToFrames(bool value) {
   return Response::OK();
 }
 
+Response TargetHandler::SetRemoteLocations(
+    const std::vector<std::unique_ptr<base::DictionaryValue>>& locations) {
+  return Response::ServerError("Not supported");
+}
+
 Response TargetHandler::AttachToTarget(const std::string& target_id,
                                        bool* out_success) {
-  scoped_refptr<DevToolsAgentHost> agent_host(
-      DevToolsAgentHost::GetForId(target_id));
+  // TODO(dgozman): only allow reported hosts.
+  scoped_refptr<DevToolsAgentHost> agent_host =
+      DevToolsAgentHost::GetForId(target_id);
   if (!agent_host)
-    return Response::InvalidParams("No target with such id");
+    return Response::ServerError("No target with given id found");
   *out_success = AttachToTargetInternal(agent_host.get(), false);
   return Response::OK();
 }
@@ -277,7 +303,8 @@ Response TargetHandler::DetachFromTarget(const std::string& target_id) {
   auto it = attached_hosts_.find(target_id);
   if (it == attached_hosts_.end())
     return Response::InternalError("Not attached to the target");
-  DetachFromTargetInternal(it->second.get());
+  DevToolsAgentHost* agent_host = it->second.get();
+  DetachFromTargetInternal(agent_host);
   return Response::OK();
 }
 
@@ -286,7 +313,7 @@ Response TargetHandler::SendMessageToTarget(
     const std::string& message) {
   auto it = attached_hosts_.find(target_id);
   if (it == attached_hosts_.end())
-    return Response::InternalError("Not attached to the target");
+    return Response::FallThrough();
   it->second->DispatchProtocolMessage(this, message);
   return Response::OK();
 }
@@ -294,24 +321,65 @@ Response TargetHandler::SendMessageToTarget(
 Response TargetHandler::GetTargetInfo(
     const std::string& target_id,
     scoped_refptr<TargetInfo>* target_info) {
+  // TODO(dgozman): only allow reported hosts.
   scoped_refptr<DevToolsAgentHost> agent_host(
       DevToolsAgentHost::GetForId(target_id));
   if (!agent_host)
-    return Response::InvalidParams("No target with such id");
-  *target_info = TargetInfo::Create()
-      ->set_target_id(agent_host->GetId())
-      ->set_type(agent_host->GetType())
-      ->set_title(agent_host->GetTitle())
-      ->set_url(agent_host->GetURL().spec());
+    return Response::InvalidParams("No target with given id found");
+  *target_info = CreateInfo(agent_host.get());
   return Response::OK();
 }
 
 Response TargetHandler::ActivateTarget(const std::string& target_id) {
+  // TODO(dgozman): only allow reported hosts.
   scoped_refptr<DevToolsAgentHost> agent_host(
       DevToolsAgentHost::GetForId(target_id));
   if (!agent_host)
-    return Response::InvalidParams("No target with such id");
+    return Response::InvalidParams("No target with given id found");
   agent_host->Activate();
+  return Response::OK();
+}
+
+Response TargetHandler::CloseTarget(const std::string& target_id,
+                                    bool* out_success) {
+  scoped_refptr<DevToolsAgentHost> agent_host =
+      DevToolsAgentHost::GetForId(target_id);
+  if (!agent_host)
+    return Response::ServerError("No target with given id found");
+  *out_success = agent_host->Close();
+  return Response::OK();
+}
+
+Response TargetHandler::CreateBrowserContext(std::string* out_context_id) {
+  return Response::ServerError("Not supported");
+}
+
+Response TargetHandler::DisposeBrowserContext(const std::string& context_id,
+                                              bool* out_success) {
+  return Response::ServerError("Not supported");
+}
+
+Response TargetHandler::CreateTarget(const std::string& url,
+                                     const int* width,
+                                     const int* height,
+                                     const std::string* context_id,
+                                     std::string* out_target_id) {
+  DevToolsManagerDelegate* delegate =
+      DevToolsManager::GetInstance()->delegate();
+  if (!delegate)
+    return Response::ServerError("Not supported");
+  scoped_refptr<content::DevToolsAgentHost> agent_host =
+      delegate->CreateNewTarget(GURL(url));
+  if (!agent_host)
+    return Response::ServerError("Not supported");
+  *out_target_id = agent_host->GetId();
+  return Response::OK();
+}
+
+Response TargetHandler::GetTargets(
+    std::vector<scoped_refptr<TargetInfo>>* target_infos) {
+  for (const auto& host : DevToolsAgentHost::GetOrCreateAll())
+    target_infos->push_back(CreateInfo(host.get()));
   return Response::OK();
 }
 
@@ -336,7 +404,22 @@ void TargetHandler::AgentHostClosed(
   client_->DetachedFromTarget(DetachedFromTargetParams::Create()->
       set_target_id(host->GetId()));
   attached_hosts_.erase(host->GetId());
-  TargetRemovedInternal(host);
+}
+
+// -------------- DevToolsAgentHostObserver -----------------
+
+bool TargetHandler::ShouldForceDevToolsAgentHostCreation() {
+  return true;
+}
+
+void TargetHandler::DevToolsAgentHostCreated(DevToolsAgentHost* agent_host) {
+  DCHECK(attached_hosts_.find(agent_host->GetId()) == attached_hosts_.end());
+  TargetCreatedInternal(agent_host);
+}
+
+void TargetHandler::DevToolsAgentHostDestroyed(DevToolsAgentHost* agent_host) {
+  DCHECK(attached_hosts_.find(agent_host->GetId()) == attached_hosts_.end());
+  TargetDestroyedInternal(agent_host);
 }
 
 // -------- ServiceWorkerDevToolsManager::Observer ----------

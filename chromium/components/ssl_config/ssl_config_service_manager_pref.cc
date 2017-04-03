@@ -85,8 +85,8 @@ uint16_t SSLProtocolVersionFromString(const std::string& version_str) {
   return version;
 }
 
-const base::Feature kDHECiphersFeature{
-    "DHECiphers", base::FEATURE_DISABLED_BY_DEFAULT,
+const base::Feature kTLS13Feature{
+    "NegotiateTLS13", base::FEATURE_DISABLED_BY_DEFAULT,
 };
 
 }  // namespace
@@ -194,12 +194,10 @@ SSLConfigServiceManagerPref::SSLConfigServiceManagerPref(
       io_task_runner_(io_task_runner) {
   DCHECK(local_state);
 
-  // Restore DHE-based ciphers if enabled via features.
-  // TODO(davidben): Remove this when the removal has succeeded.
-  // https://crbug.com/619194.
-  if (base::FeatureList::IsEnabled(kDHECiphersFeature)) {
-    local_state->SetDefaultPrefValue(ssl_config::prefs::kDHEEnabled,
-                                     new base::FundamentalValue(true));
+  if (base::FeatureList::IsEnabled(kTLS13Feature)) {
+    local_state->SetDefaultPrefValue(
+        ssl_config::prefs::kSSLVersionMax,
+        new base::StringValue(switches::kSSLVersionTLSv13));
   }
 
   PrefChangeRegistrar::NamedChangeCallback local_state_callback =

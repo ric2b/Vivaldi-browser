@@ -22,8 +22,10 @@
 #include "content/browser/service_worker/service_worker_context_core.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
 #include "content/browser/service_worker/service_worker_handle.h"
+#include "content/browser/service_worker/service_worker_test_utils.h"
 #include "content/common/service_worker/embedded_worker_messages.h"
 #include "content/common/service_worker/service_worker_messages.h"
+#include "content/common/service_worker/service_worker_types.h"
 #include "content/common/service_worker/service_worker_utils.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/mock_resource_context.h"
@@ -60,7 +62,7 @@ class TestingServiceWorkerDispatcherHost : public ServiceWorkerDispatcherHost {
       ServiceWorkerContextWrapper* context_wrapper,
       ResourceContext* resource_context,
       EmbeddedWorkerTestHelper* helper)
-      : ServiceWorkerDispatcherHost(process_id, NULL, resource_context),
+      : ServiceWorkerDispatcherHost(process_id, nullptr, resource_context),
         bad_messages_received_count_(0),
         helper_(helper) {
     Init(context_wrapper);
@@ -256,6 +258,9 @@ class ServiceWorkerDispatcherHostTest : public testing::Test {
   ServiceWorkerProviderHost* provider_host_;
 };
 
+class ServiceWorkerDispatcherHostTestP
+    : public MojoServiceWorkerTestP<ServiceWorkerDispatcherHostTest> {};
+
 class ServiceWorkerTestContentBrowserClient : public TestContentBrowserClient {
  public:
   ServiceWorkerTestContentBrowserClient() {}
@@ -268,7 +273,7 @@ class ServiceWorkerTestContentBrowserClient : public TestContentBrowserClient {
   }
 };
 
-TEST_F(ServiceWorkerDispatcherHostTest,
+TEST_P(ServiceWorkerDispatcherHostTestP,
        Register_ContentSettingsDisallowsServiceWorker) {
   ServiceWorkerTestContentBrowserClient test_browser_client;
   ContentBrowserClient* old_browser_client =
@@ -302,7 +307,7 @@ TEST_F(ServiceWorkerDispatcherHostTest,
   SetBrowserClientForTesting(old_browser_client);
 }
 
-TEST_F(ServiceWorkerDispatcherHostTest, Register_HTTPS) {
+TEST_P(ServiceWorkerDispatcherHostTestP, Register_HTTPS) {
   const int64_t kProviderId = 99;  // Dummy value
   std::unique_ptr<ServiceWorkerProviderHost> host(
       CreateServiceWorkerProviderHost(kProviderId));
@@ -315,7 +320,7 @@ TEST_F(ServiceWorkerDispatcherHostTest, Register_HTTPS) {
            ServiceWorkerMsg_ServiceWorkerRegistered::ID);
 }
 
-TEST_F(ServiceWorkerDispatcherHostTest, Register_NonSecureTransportLocalhost) {
+TEST_P(ServiceWorkerDispatcherHostTestP, Register_NonSecureTransportLocalhost) {
   const int64_t kProviderId = 99;  // Dummy value
   std::unique_ptr<ServiceWorkerProviderHost> host(
       CreateServiceWorkerProviderHost(kProviderId));
@@ -328,7 +333,7 @@ TEST_F(ServiceWorkerDispatcherHostTest, Register_NonSecureTransportLocalhost) {
            ServiceWorkerMsg_ServiceWorkerRegistered::ID);
 }
 
-TEST_F(ServiceWorkerDispatcherHostTest, Register_InvalidScopeShouldFail) {
+TEST_P(ServiceWorkerDispatcherHostTestP, Register_InvalidScopeShouldFail) {
   const int64_t kProviderId = 99;  // Dummy value
   std::unique_ptr<ServiceWorkerProviderHost> host(
       CreateServiceWorkerProviderHost(kProviderId));
@@ -340,7 +345,7 @@ TEST_F(ServiceWorkerDispatcherHostTest, Register_InvalidScopeShouldFail) {
   EXPECT_EQ(1, dispatcher_host_->bad_messages_received_count_);
 }
 
-TEST_F(ServiceWorkerDispatcherHostTest, Register_InvalidScriptShouldFail) {
+TEST_P(ServiceWorkerDispatcherHostTestP, Register_InvalidScriptShouldFail) {
   const int64_t kProviderId = 99;  // Dummy value
   std::unique_ptr<ServiceWorkerProviderHost> host(
       CreateServiceWorkerProviderHost(kProviderId));
@@ -351,7 +356,7 @@ TEST_F(ServiceWorkerDispatcherHostTest, Register_InvalidScriptShouldFail) {
   EXPECT_EQ(1, dispatcher_host_->bad_messages_received_count_);
 }
 
-TEST_F(ServiceWorkerDispatcherHostTest, Register_NonSecureOriginShouldFail) {
+TEST_P(ServiceWorkerDispatcherHostTestP, Register_NonSecureOriginShouldFail) {
   const int64_t kProviderId = 99;  // Dummy value
   std::unique_ptr<ServiceWorkerProviderHost> host(
       CreateServiceWorkerProviderHost(kProviderId));
@@ -364,7 +369,7 @@ TEST_F(ServiceWorkerDispatcherHostTest, Register_NonSecureOriginShouldFail) {
   EXPECT_EQ(1, dispatcher_host_->bad_messages_received_count_);
 }
 
-TEST_F(ServiceWorkerDispatcherHostTest, Register_CrossOriginShouldFail) {
+TEST_P(ServiceWorkerDispatcherHostTestP, Register_CrossOriginShouldFail) {
   const int64_t kProviderId = 99;  // Dummy value
   std::unique_ptr<ServiceWorkerProviderHost> host(
       CreateServiceWorkerProviderHost(kProviderId));
@@ -408,7 +413,7 @@ TEST_F(ServiceWorkerDispatcherHostTest, Register_CrossOriginShouldFail) {
   EXPECT_EQ(6, dispatcher_host_->bad_messages_received_count_);
 }
 
-TEST_F(ServiceWorkerDispatcherHostTest, Register_BadCharactersShouldFail) {
+TEST_P(ServiceWorkerDispatcherHostTestP, Register_BadCharactersShouldFail) {
   const int64_t kProviderId = 99;  // Dummy value
   std::unique_ptr<ServiceWorkerProviderHost> host(
       CreateServiceWorkerProviderHost(kProviderId));
@@ -440,7 +445,7 @@ TEST_F(ServiceWorkerDispatcherHostTest, Register_BadCharactersShouldFail) {
   EXPECT_EQ(6, dispatcher_host_->bad_messages_received_count_);
 }
 
-TEST_F(ServiceWorkerDispatcherHostTest,
+TEST_P(ServiceWorkerDispatcherHostTestP,
        Register_FileSystemDocumentShouldFail) {
   const int64_t kProviderId = 99;  // Dummy value
   std::unique_ptr<ServiceWorkerProviderHost> host(
@@ -464,7 +469,7 @@ TEST_F(ServiceWorkerDispatcherHostTest,
   EXPECT_EQ(3, dispatcher_host_->bad_messages_received_count_);
 }
 
-TEST_F(ServiceWorkerDispatcherHostTest,
+TEST_P(ServiceWorkerDispatcherHostTestP,
        Register_FileSystemScriptOrScopeShouldFail) {
   const int64_t kProviderId = 99;  // Dummy value
   std::unique_ptr<ServiceWorkerProviderHost> host(
@@ -488,7 +493,7 @@ TEST_F(ServiceWorkerDispatcherHostTest,
   EXPECT_EQ(3, dispatcher_host_->bad_messages_received_count_);
 }
 
-TEST_F(ServiceWorkerDispatcherHostTest, EarlyContextDeletion) {
+TEST_P(ServiceWorkerDispatcherHostTestP, EarlyContextDeletion) {
   helper_->ShutdownContext();
 
   // Let the shutdown reach the simulated IO thread.
@@ -500,7 +505,7 @@ TEST_F(ServiceWorkerDispatcherHostTest, EarlyContextDeletion) {
            ServiceWorkerMsg_ServiceWorkerRegistrationError::ID);
 }
 
-TEST_F(ServiceWorkerDispatcherHostTest, ProviderCreatedAndDestroyed) {
+TEST_P(ServiceWorkerDispatcherHostTestP, ProviderCreatedAndDestroyed) {
   const int kProviderId = 1001;
   int process_id = helper_->mock_render_process_id();
 
@@ -535,7 +540,7 @@ TEST_F(ServiceWorkerDispatcherHostTest, ProviderCreatedAndDestroyed) {
   EXPECT_FALSE(context()->GetProviderHost(process_id, kProviderId));
 }
 
-TEST_F(ServiceWorkerDispatcherHostTest, GetRegistration_SameOrigin) {
+TEST_P(ServiceWorkerDispatcherHostTestP, GetRegistration_SameOrigin) {
   const int64_t kProviderId = 99;  // Dummy value
   std::unique_ptr<ServiceWorkerProviderHost> host(
       CreateServiceWorkerProviderHost(kProviderId));
@@ -547,7 +552,8 @@ TEST_F(ServiceWorkerDispatcherHostTest, GetRegistration_SameOrigin) {
                   ServiceWorkerMsg_DidGetRegistration::ID);
 }
 
-TEST_F(ServiceWorkerDispatcherHostTest, GetRegistration_CrossOriginShouldFail) {
+TEST_P(ServiceWorkerDispatcherHostTestP,
+       GetRegistration_CrossOriginShouldFail) {
   const int64_t kProviderId = 99;  // Dummy value
   std::unique_ptr<ServiceWorkerProviderHost> host(
       CreateServiceWorkerProviderHost(kProviderId));
@@ -558,7 +564,7 @@ TEST_F(ServiceWorkerDispatcherHostTest, GetRegistration_CrossOriginShouldFail) {
   EXPECT_EQ(1, dispatcher_host_->bad_messages_received_count_);
 }
 
-TEST_F(ServiceWorkerDispatcherHostTest,
+TEST_P(ServiceWorkerDispatcherHostTestP,
        GetRegistration_InvalidScopeShouldFail) {
   const int64_t kProviderId = 99;  // Dummy value
   std::unique_ptr<ServiceWorkerProviderHost> host(
@@ -570,7 +576,7 @@ TEST_F(ServiceWorkerDispatcherHostTest,
   EXPECT_EQ(1, dispatcher_host_->bad_messages_received_count_);
 }
 
-TEST_F(ServiceWorkerDispatcherHostTest,
+TEST_P(ServiceWorkerDispatcherHostTestP,
        GetRegistration_NonSecureOriginShouldFail) {
   const int64_t kProviderId = 99;  // Dummy value
   std::unique_ptr<ServiceWorkerProviderHost> host(
@@ -582,7 +588,7 @@ TEST_F(ServiceWorkerDispatcherHostTest,
   EXPECT_EQ(1, dispatcher_host_->bad_messages_received_count_);
 }
 
-TEST_F(ServiceWorkerDispatcherHostTest, GetRegistration_EarlyContextDeletion) {
+TEST_P(ServiceWorkerDispatcherHostTestP, GetRegistration_EarlyContextDeletion) {
   helper_->ShutdownContext();
 
   // Let the shutdown reach the simulated IO thread.
@@ -593,7 +599,7 @@ TEST_F(ServiceWorkerDispatcherHostTest, GetRegistration_EarlyContextDeletion) {
                   ServiceWorkerMsg_ServiceWorkerGetRegistrationError::ID);
 }
 
-TEST_F(ServiceWorkerDispatcherHostTest, GetRegistrations_SecureOrigin) {
+TEST_P(ServiceWorkerDispatcherHostTestP, GetRegistrations_SecureOrigin) {
   const int64_t kProviderId = 99;  // Dummy value
   std::unique_ptr<ServiceWorkerProviderHost> host(
       CreateServiceWorkerProviderHost(kProviderId));
@@ -603,7 +609,7 @@ TEST_F(ServiceWorkerDispatcherHostTest, GetRegistrations_SecureOrigin) {
   GetRegistrations(kProviderId, ServiceWorkerMsg_DidGetRegistrations::ID);
 }
 
-TEST_F(ServiceWorkerDispatcherHostTest,
+TEST_P(ServiceWorkerDispatcherHostTestP,
        GetRegistrations_NonSecureOriginShouldFail) {
   const int64_t kProviderId = 99;  // Dummy value
   std::unique_ptr<ServiceWorkerProviderHost> host(
@@ -615,7 +621,8 @@ TEST_F(ServiceWorkerDispatcherHostTest,
   EXPECT_EQ(1, dispatcher_host_->bad_messages_received_count_);
 }
 
-TEST_F(ServiceWorkerDispatcherHostTest, GetRegistrations_EarlyContextDeletion) {
+TEST_P(ServiceWorkerDispatcherHostTestP,
+       GetRegistrations_EarlyContextDeletion) {
   helper_->ShutdownContext();
 
   // Let the shutdown reach the simulated IO thread.
@@ -624,7 +631,7 @@ TEST_F(ServiceWorkerDispatcherHostTest, GetRegistrations_EarlyContextDeletion) {
   GetRegistrations(-1, ServiceWorkerMsg_ServiceWorkerGetRegistrationsError::ID);
 }
 
-TEST_F(ServiceWorkerDispatcherHostTest, CleanupOnRendererCrash) {
+TEST_P(ServiceWorkerDispatcherHostTestP, CleanupOnRendererCrash) {
   GURL pattern = GURL("http://www.example.com/");
   GURL script_url = GURL("http://www.example.com/service_worker.js");
   int process_id = helper_->mock_render_process_id();
@@ -669,7 +676,7 @@ TEST_F(ServiceWorkerDispatcherHostTest, CleanupOnRendererCrash) {
   EXPECT_EQ(0, new_dispatcher_host->bad_messages_received_count_);
 }
 
-TEST_F(ServiceWorkerDispatcherHostTest, DispatchExtendableMessageEvent) {
+TEST_P(ServiceWorkerDispatcherHostTestP, DispatchExtendableMessageEvent) {
   GURL pattern = GURL("http://www.example.com/");
   GURL script_url = GURL("http://www.example.com/service_worker.js");
 
@@ -709,7 +716,7 @@ TEST_F(ServiceWorkerDispatcherHostTest, DispatchExtendableMessageEvent) {
   EXPECT_EQ(ref_count + 1, sender_worker_handle->ref_count());
 }
 
-TEST_F(ServiceWorkerDispatcherHostTest, DispatchExtendableMessageEvent_Fail) {
+TEST_P(ServiceWorkerDispatcherHostTestP, DispatchExtendableMessageEvent_Fail) {
   GURL pattern = GURL("http://www.example.com/");
   GURL script_url = GURL("http://www.example.com/service_worker.js");
 
@@ -750,7 +757,7 @@ TEST_F(ServiceWorkerDispatcherHostTest, DispatchExtendableMessageEvent_Fail) {
   EXPECT_EQ(ref_count, sender_worker_handle->ref_count());
 }
 
-TEST_F(ServiceWorkerDispatcherHostTest, OnSetHostedVersionId) {
+TEST_P(ServiceWorkerDispatcherHostTestP, OnSetHostedVersionId) {
   GURL pattern = GURL("http://www.example.com/");
   GURL script_url = GURL("http://www.example.com/service_worker.js");
 
@@ -778,7 +785,7 @@ TEST_F(ServiceWorkerDispatcherHostTest, OnSetHostedVersionId) {
   EXPECT_EQ(1, dispatcher_host_->bad_messages_received_count_);
 }
 
-TEST_F(ServiceWorkerDispatcherHostTest, OnSetHostedVersionId_DetachedWorker) {
+TEST_P(ServiceWorkerDispatcherHostTestP, OnSetHostedVersionId_DetachedWorker) {
   GURL pattern = GURL("http://www.example.com/");
   GURL script_url = GURL("http://www.example.com/service_worker.js");
 
@@ -806,7 +813,7 @@ TEST_F(ServiceWorkerDispatcherHostTest, OnSetHostedVersionId_DetachedWorker) {
   EXPECT_EQ(0, dispatcher_host_->bad_messages_received_count_);
 }
 
-TEST_F(ServiceWorkerDispatcherHostTest, ReceivedTimedOutRequestResponse) {
+TEST_P(ServiceWorkerDispatcherHostTestP, ReceivedTimedOutRequestResponse) {
   GURL pattern = GURL("https://www.example.com/");
   GURL script_url = GURL("https://www.example.com/service_worker.js");
 
@@ -823,14 +830,18 @@ TEST_F(ServiceWorkerDispatcherHostTest, ReceivedTimedOutRequestResponse) {
 
   // Receive a response for a timed out request. The bad message count should
   // not increase.
-  const int kRequestId = 91;  // Dummy value
+  const int kFetchEventId = 91;  // Dummy value
   dispatcher_host_->OnMessageReceived(ServiceWorkerHostMsg_FetchEventResponse(
-      version_->embedded_worker()->embedded_worker_id(), kRequestId,
+      version_->embedded_worker()->embedded_worker_id(), kFetchEventId,
       SERVICE_WORKER_FETCH_EVENT_RESULT_FALLBACK, ServiceWorkerResponse(),
       base::Time::Now()));
 
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(0, dispatcher_host_->bad_messages_received_count_);
 }
+
+INSTANTIATE_TEST_CASE_P(ServiceWorkerDispatcherHostTest,
+                        ServiceWorkerDispatcherHostTestP,
+                        testing::Bool());
 
 }  // namespace content

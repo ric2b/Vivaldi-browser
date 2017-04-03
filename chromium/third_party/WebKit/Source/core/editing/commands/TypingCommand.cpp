@@ -157,7 +157,7 @@ void TypingCommand::updateSelectionIfDifferentFromCurrentSelection(
     return;
 
   typingCommand->setStartingSelection(currentSelection);
-  typingCommand->setEndingSelection(currentSelection);
+  typingCommand->setEndingVisibleSelection(currentSelection);
 }
 
 static String dispatchBeforeTextInsertedEvent(
@@ -218,7 +218,7 @@ void TypingCommand::insertText(Document& document,
           lastTypingCommandIfStillOpenForTyping(frame)) {
     if (lastTypingCommand->endingSelection() != selectionForInsertion) {
       lastTypingCommand->setStartingSelection(selectionForInsertion);
-      lastTypingCommand->setEndingSelection(selectionForInsertion);
+      lastTypingCommand->setEndingVisibleSelection(selectionForInsertion);
     }
 
     lastTypingCommand->setCompositionType(compositionType);
@@ -238,11 +238,11 @@ void TypingCommand::insertText(Document& document,
   bool changeSelection = selectionForInsertion != currentSelection;
   if (changeSelection) {
     command->setStartingSelection(selectionForInsertion);
-    command->setEndingSelection(selectionForInsertion);
+    command->setEndingVisibleSelection(selectionForInsertion);
   }
   command->apply();
   if (changeSelection) {
-    command->setEndingSelection(currentSelection);
+    command->setEndingVisibleSelection(currentSelection);
     frame->selection().setSelection(currentSelection);
   }
 }
@@ -512,9 +512,10 @@ bool TypingCommand::makeEditableRootEmpty(EditingState* editingState) {
   addBlockPlaceholderIfNeeded(root, editingState);
   if (editingState->isAborted())
     return false;
-  setEndingSelection(createVisibleSelectionDeprecated(
-      Position::firstPositionInNode(root), TextAffinity::Downstream,
-      endingSelection().isDirectional()));
+  setEndingSelection(SelectionInDOMTree::Builder()
+                         .collapse(Position::firstPositionInNode(root))
+                         .setIsDirectional(endingSelection().isDirectional())
+                         .build());
 
   return true;
 }
@@ -548,6 +549,7 @@ void TypingCommand::deleteKeyPressed(TextGranularity granularity,
         typingAddedToOpenCommand(DeleteKey);
 
       m_smartDelete = false;
+      document().updateStyleAndLayoutIgnorePendingStylesheets();
 
       SelectionModifier selectionModifier(*frame, endingSelection());
       selectionModifier.modify(FrameSelection::AlterationExtend,
@@ -557,7 +559,7 @@ void TypingCommand::deleteKeyPressed(TextGranularity granularity,
         selectionModifier.modify(FrameSelection::AlterationExtend,
                                  DirectionBackward, CharacterGranularity);
 
-      VisiblePosition visibleStart(endingSelection().visibleStartDeprecated());
+      VisiblePosition visibleStart(endingSelection().visibleStart());
       if (previousPositionOf(visibleStart, CannotCrossEditingBoundary)
               .isNull()) {
         // When the caret is at the start of the editable area in an empty list
@@ -593,7 +595,7 @@ void TypingCommand::deleteKeyPressed(TextGranularity granularity,
 
       // If the caret is at the start of a paragraph after a table, move content
       // into the last table cell.
-      if (isStartOfParagraphDeprecated(visibleStart) &&
+      if (isStartOfParagraph(visibleStart) &&
           tableElementJustBefore(
               previousPositionOf(visibleStart, CannotCrossEditingBoundary))) {
         // Unless the caret is just before a table.  We don't want to move a
@@ -607,9 +609,12 @@ void TypingCommand::deleteKeyPressed(TextGranularity granularity,
         // If the caret is just after a table, select the table and don't delete
         // anything.
       } else if (Element* table = tableElementJustBefore(visibleStart)) {
-        setEndingSelection(createVisibleSelectionDeprecated(
-            Position::beforeNode(table), endingSelection().start(),
-            TextAffinity::Downstream, endingSelection().isDirectional()));
+        setEndingSelection(
+            SelectionInDOMTree::Builder()
+                .collapse(Position::beforeNode(table))
+                .extend(endingSelection().start())
+                .setIsDirectional(endingSelection().isDirectional())
+                .build());
         typingAddedToOpenCommand(DeleteKey);
         return;
       }
@@ -693,6 +698,7 @@ void TypingCommand::forwardDeleteKeyPressed(TextGranularity granularity,
       break;
     case CaretSelection: {
       m_smartDelete = false;
+      document().updateStyleAndLayoutIgnorePendingStylesheets();
 
       // Handle delete at beginning-of-block case.
       // Do nothing in the case that the caret is at the start of a
@@ -707,7 +713,7 @@ void TypingCommand::forwardDeleteKeyPressed(TextGranularity granularity,
 
       Position downstreamEnd =
           mostForwardCaretPosition(endingSelection().end());
-      VisiblePosition visibleEnd = endingSelection().visibleEndDeprecated();
+      VisiblePosition visibleEnd = endingSelection().visibleEnd();
       Node* enclosingTableCell =
           enclosingNodeOfType(visibleEnd.deepEquivalent(), &isTableCell);
       if (enclosingTableCell &&
@@ -716,7 +722,7 @@ void TypingCommand::forwardDeleteKeyPressed(TextGranularity granularity,
                   .deepEquivalent())
         return;
       if (visibleEnd.deepEquivalent() ==
-          endOfParagraphDeprecated(visibleEnd).deepEquivalent())
+          endOfParagraph(visibleEnd).deepEquivalent())
         downstreamEnd = mostForwardCaretPosition(
             nextPositionOf(visibleEnd, CannotCrossEditingBoundary)
                 .deepEquivalent());
@@ -724,10 +730,13 @@ void TypingCommand::forwardDeleteKeyPressed(TextGranularity granularity,
       if (isDisplayInsideTable(downstreamEnd.computeContainerNode()) &&
           downstreamEnd.computeOffsetInContainerNode() <=
               caretMinOffset(downstreamEnd.computeContainerNode())) {
-        setEndingSelection(createVisibleSelectionDeprecated(
-            endingSelection().end(),
-            Position::afterNode(downstreamEnd.computeContainerNode()),
-            TextAffinity::Downstream, endingSelection().isDirectional()));
+        setEndingSelection(
+            SelectionInDOMTree::Builder()
+                .setBaseAndExtentDeprecated(
+                    endingSelection().end(),
+                    Position::afterNode(downstreamEnd.computeContainerNode()))
+                .setIsDirectional(endingSelection().isDirectional())
+                .build());
         typingAddedToOpenCommand(ForwardDeleteKey);
         return;
       }
@@ -736,8 +745,7 @@ void TypingCommand::forwardDeleteKeyPressed(TextGranularity granularity,
       // the next paragraph (if any)
       if (granularity == ParagraphBoundary &&
           selectionModifier.selection().isCaret() &&
-          isEndOfParagraphDeprecated(
-              selectionModifier.selection().visibleEndDeprecated()))
+          isEndOfParagraph(selectionModifier.selection().visibleEnd()))
         selectionModifier.modify(FrameSelection::AlterationExtend,
                                  DirectionForward, CharacterGranularity);
 

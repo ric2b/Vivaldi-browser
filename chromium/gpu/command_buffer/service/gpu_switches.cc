@@ -35,6 +35,9 @@ const char kEnableGPUDebugging[]            = "enable-gpu-debugging";
 // dlls.
 const char kEnableGPUServiceLoggingGPU[]    = "enable-gpu-service-logging";
 
+// Enable logging of GPU driver debug messages.
+const char kEnableGPUDriverDebugLogging[] = "enable-gpu-driver-debug-logging";
+
 // Turn off gpu program caching
 const char kDisableGpuProgramCache[]        = "disable-gpu-program-cache";
 
@@ -49,10 +52,6 @@ const char kGpuProgramCacheSizeKb[]         = "gpu-program-cache-size-kb";
 
 // Disables the GPU shader on disk cache.
 const char kDisableGpuShaderDiskCache[]     = "disable-gpu-shader-disk-cache";
-
-// Allows async texture uploads (off main thread) via GL context sharing.
-const char kEnableShareGroupAsyncTextureUpload[] =
-    "enable-share-group-async-texture-upload";
 
 // Simulates shared textures when share groups are not available. Not available
 // everywhere.

@@ -18,9 +18,9 @@
 #include "ui/views/test/views_test_base.h"
 
 #if defined(USE_AURA)
+#include "ui/aura/client/drag_drop_client.h"
 #include "ui/events/event.h"
 #include "ui/events/event_handler.h"
-#include "ui/wm/public/drag_drop_client.h"
 #endif
 
 using base::ASCIIToUTF16;
@@ -246,8 +246,6 @@ class TestDragDropClient : public aura::client::DragDropClient,
                        int operation,
                        ui::DragDropTypes::DragEventSource source,
                        bool& cancelled) override;
-  void DragUpdate(aura::Window* target, const ui::LocatedEvent& event) override;
-  void Drop(aura::Window* target, const ui::LocatedEvent& event) override;
   void DragCancel() override;
   bool IsDragDropInProgress() override;
 
@@ -286,15 +284,6 @@ int TestDragDropClient::StartDragAndDrop(
   return operation;
 }
 
-void TestDragDropClient::DragUpdate(aura::Window* target,
-                                    const ui::LocatedEvent& event) {
-}
-
-void TestDragDropClient::Drop(aura::Window* target,
-                              const ui::LocatedEvent& event) {
-  drag_in_progress_ = false;
-}
-
 void TestDragDropClient::DragCancel() {
   drag_in_progress_ = false;
 }
@@ -308,11 +297,10 @@ void TestDragDropClient::OnMouseEvent(ui::MouseEvent* event) {
     return;
   switch (event->type()) {
     case ui::ET_MOUSE_DRAGGED:
-      DragUpdate(target_, *event);
       event->StopPropagation();
       break;
     case ui::ET_MOUSE_RELEASED:
-      Drop(target_, *event);
+      drag_in_progress_ = false;
       event->StopPropagation();
       break;
     default:
@@ -359,6 +347,13 @@ TEST_F(MenuButtonTest, ButtonStateForMenuButtonsWithPressedLocks) {
   // mouse-move event. https://crbug.com/615033
   if (IsMus())
     return;
+
+  // Similarly for aura-mus-client the location of the cursor is not updated by
+  // EventGenerator so that IsMouseHovered() checks the wrong thing.
+  // https://crbug.com/615033.
+  if (IsAuraMusClient())
+    return;
+
   CreateMenuButtonWithNoListener();
 
   // Move the mouse over the button; the button should be in a hovered state.
@@ -551,6 +546,10 @@ TEST_F(MenuButtonTest, DraggableMenuButtonDoesNotActivateOnDrag) {
   // https://crbug.com/614037.
   if (IsMus())
     return;
+  // TODO: test uses GetContext(), which is not applicable to aura-mus.
+  // http://crbug.com/663809.
+  if (IsAuraMusClient())
+    return;
   TestMenuButtonListener menu_button_listener;
   CreateMenuButtonWithMenuButtonListener(&menu_button_listener);
   TestDragController drag_controller;
@@ -576,6 +575,11 @@ TEST_F(MenuButtonTest, ActivateDropDownOnGestureTap) {
   // Hovered-state is not updated under mus when EventGenerator send a
   // mouse-move event. https://crbug.com/615033
   if (IsMus())
+    return;
+  // Similarly for aura-mus-client the location of the cursor is not updated by
+  // EventGenerator so that IsMouseHovered() checks the wrong thing.
+  // https://crbug.com/615033.
+  if (IsAuraMusClient())
     return;
   TestMenuButtonListener menu_button_listener;
   CreateMenuButtonWithMenuButtonListener(&menu_button_listener);

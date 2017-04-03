@@ -67,10 +67,9 @@ class MODULES_EXPORT IDBRequest : public EventTargetWithInlineData,
   ~IDBRequest() override;
   DECLARE_VIRTUAL_TRACE();
 
-  ScriptState* getScriptState() { return m_scriptState.get(); }
-  ScriptValue result(ExceptionState&);
+  ScriptValue result(ScriptState*, ExceptionState&);
   DOMException* error(ExceptionState&) const;
-  ScriptValue source() const;
+  ScriptValue source(ScriptState*) const;
   IDBTransaction* transaction() const { return m_transaction.get(); }
 
   bool isResultDirty() const { return m_resultDirty; }
@@ -84,6 +83,10 @@ class MODULES_EXPORT IDBRequest : public EventTargetWithInlineData,
   enum ReadyState { PENDING = 1, DONE = 2, EarlyDeath = 3 };
 
   const String& readyState() const;
+
+  // Returns a new WebIDBCallbacks for this request. Must only be called once.
+  std::unique_ptr<WebIDBCallbacks> createWebCallbacks();
+  void webCallbacksDestroyed();
 
   DEFINE_ATTRIBUTE_EVENT_LISTENER(success);
   DEFINE_ATTRIBUTE_EVENT_LISTENER(error);
@@ -123,7 +126,7 @@ class MODULES_EXPORT IDBRequest : public EventTargetWithInlineData,
   bool hasPendingActivity() const final;
 
   // ActiveDOMObject
-  void contextDestroyed() final;
+  void contextDestroyed() override;
 
   // EventTarget
   const AtomicString& interfaceName() const override;
@@ -148,7 +151,6 @@ class MODULES_EXPORT IDBRequest : public EventTargetWithInlineData,
   // EventTarget
   DispatchEventResult dispatchEventInternal(Event*) override;
 
-  bool m_contextStopped = false;
   Member<IDBTransaction> m_transaction;
   ReadyState m_readyState = PENDING;
   bool m_requestAborted = false;  // May be aborted by transaction then receive
@@ -162,7 +164,6 @@ class MODULES_EXPORT IDBRequest : public EventTargetWithInlineData,
   void ackReceivedBlobs(const IDBValue*);
   void ackReceivedBlobs(const Vector<RefPtr<IDBValue>>&);
 
-  RefPtr<ScriptState> m_scriptState;
   Member<IDBAny> m_source;
   Member<IDBAny> m_result;
   Member<DOMException> m_error;
@@ -185,6 +186,10 @@ class MODULES_EXPORT IDBRequest : public EventTargetWithInlineData,
   bool m_didFireUpgradeNeededEvent = false;
   bool m_preventPropagation = false;
   bool m_resultDirty = true;
+
+  // Pointer back to the WebIDBCallbacks that holds a persistent reference to
+  // this object.
+  WebIDBCallbacks* m_webCallbacks = nullptr;
 };
 
 }  // namespace blink

@@ -12,10 +12,11 @@
 
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
-#include "services/shell/public/cpp/connector.h"
+#include "services/service_manager/public/cpp/connector.h"
 #include "services/ui/common/util.h"
 #include "services/ui/public/cpp/in_flight_change.h"
 #include "services/ui/public/cpp/input_event_handler.h"
+#include "services/ui/public/cpp/surface_id_handler.h"
 #include "services/ui/public/cpp/window_drop_target.h"
 #include "services/ui/public/cpp/window_manager_delegate.h"
 #include "services/ui/public/cpp/window_observer.h"
@@ -23,8 +24,11 @@
 #include "services/ui/public/cpp/window_tracker.h"
 #include "services/ui/public/cpp/window_tree_client_delegate.h"
 #include "services/ui/public/cpp/window_tree_client_observer.h"
+#include "services/ui/public/interfaces/constants.mojom.h"
 #include "services/ui/public/interfaces/window_manager_window_tree_factory.mojom.h"
+#include "ui/display/screen.h"
 #include "ui/events/event.h"
+#include "ui/gfx/geometry/dip_util.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/size.h"
 
@@ -32,6 +36,22 @@ namespace ui {
 
 Id MakeTransportId(ClientSpecificId client_id, ClientSpecificId local_id) {
   return (client_id << 16) | local_id;
+}
+
+// Helper function to get the device_scale_factor() of the display::Display
+// with |display_id|.
+float ScaleFactorForDisplay(int64_t display_id) {
+  // TODO(riajiang): Change to use display::GetDisplayWithDisplayId() after
+  // https://codereview.chromium.org/2361283002/ is landed.
+  std::vector<display::Display> displays =
+      display::Screen::GetScreen()->GetAllDisplays();
+  auto iter = std::find_if(displays.begin(), displays.end(),
+                           [display_id](const display::Display& display) {
+                             return display.id() == display_id;
+                           });
+  if (iter != displays.end())
+    return iter->device_scale_factor();
+  return 1.f;
 }
 
 // Helper called to construct a local window object from transport data.
@@ -49,7 +69,10 @@ Window* AddWindowToClient(WindowTreeClient* client,
       window_data->properties
           .To<std::map<std::string, std::vector<uint8_t>>>());
   client->AddWindow(window);
-  private_window.LocalSetBounds(gfx::Rect(), window_data->bounds);
+  private_window.LocalSetBounds(
+      gfx::Rect(),
+      gfx::ConvertRectToDIP(ScaleFactorForDisplay(window->display_id()),
+                            window_data->bounds));
   if (parent)
     WindowPrivate(parent).LocalAddChild(window);
   return window;
@@ -91,8 +114,8 @@ WindowTreeClient::WindowTreeClient(
 WindowTreeClient::~WindowTreeClient() {
   in_destructor_ = true;
 
-  FOR_EACH_OBSERVER(WindowTreeClientObserver, observers_,
-                    OnWillDestroyClient(this));
+  for (auto& observer : observers_)
+    observer.OnWillDestroyClient(this);
 
   std::vector<Window*> non_owned;
   WindowTracker tracker;
@@ -113,28 +136,29 @@ WindowTreeClient::~WindowTreeClient() {
   while (!tracker.windows().empty())
     delete tracker.windows().front();
 
-  FOR_EACH_OBSERVER(WindowTreeClientObserver, observers_,
-                    OnDidDestroyClient(this));
+  for (auto& observer : observers_)
+    observer.OnDidDestroyClient(this);
 }
 
 void WindowTreeClient::ConnectViaWindowTreeFactory(
-    shell::Connector* connector) {
+    service_manager::Connector* connector) {
   // The client id doesn't really matter, we use 101 purely for debugging.
   client_id_ = 101;
 
   mojom::WindowTreeFactoryPtr factory;
-  connector->ConnectToInterface("service:ui", &factory);
+  connector->ConnectToInterface(ui::mojom::kServiceName, &factory);
   mojom::WindowTreePtr window_tree;
   factory->CreateWindowTree(GetProxy(&window_tree),
                             binding_.CreateInterfacePtrAndBind());
   SetWindowTree(std::move(window_tree));
 }
 
-void WindowTreeClient::ConnectAsWindowManager(shell::Connector* connector) {
+void WindowTreeClient::ConnectAsWindowManager(
+    service_manager::Connector* connector) {
   DCHECK(window_manager_delegate_);
 
   mojom::WindowManagerWindowTreeFactoryPtr factory;
-  connector->ConnectToInterface("service:ui", &factory);
+  connector->ConnectToInterface(ui::mojom::kServiceName, &factory);
   mojom::WindowTreePtr window_tree;
   factory->CreateWindowTree(GetProxy(&window_tree),
                             binding_.CreateInterfacePtrAndBind());
@@ -216,7 +240,10 @@ void WindowTreeClient::SetBounds(Window* window,
   DCHECK(tree_);
   const uint32_t change_id = ScheduleInFlightChange(
       base::MakeUnique<InFlightBoundsChange>(window, old_bounds));
-  tree_->SetWindowBounds(change_id, server_id(window), bounds);
+  tree_->SetWindowBounds(
+      change_id, server_id(window),
+      gfx::ConvertRectToPixel(ScaleFactorForDisplay(window->display_id()),
+                              bounds));
 }
 
 void WindowTreeClient::SetCapture(Window* window) {
@@ -248,12 +275,25 @@ void WindowTreeClient::SetClientArea(
     const gfx::Insets& client_area,
     const std::vector<gfx::Rect>& additional_client_areas) {
   DCHECK(tree_);
-  tree_->SetClientArea(window_id, client_area, additional_client_areas);
+  float device_scale_factor =
+      ScaleFactorForDisplay(GetWindowByServerId(window_id)->display_id());
+  std::vector<gfx::Rect> additional_client_areas_in_pixel;
+  for (const gfx::Rect& area : additional_client_areas) {
+    additional_client_areas_in_pixel.push_back(
+        gfx::ConvertRectToPixel(device_scale_factor, area));
+  }
+  tree_->SetClientArea(
+      window_id, gfx::ConvertInsetsToPixel(device_scale_factor, client_area),
+      additional_client_areas_in_pixel);
 }
 
 void WindowTreeClient::SetHitTestMask(Id window_id, const gfx::Rect& mask) {
   DCHECK(tree_);
-  tree_->SetHitTestMask(window_id, mask);
+  tree_->SetHitTestMask(
+      window_id,
+      gfx::ConvertRectToPixel(
+          ScaleFactorForDisplay(GetWindowByServerId(window_id)->display_id()),
+          mask));
 }
 
 void WindowTreeClient::ClearHitTestMask(Id window_id) {
@@ -347,13 +387,14 @@ void WindowTreeClient::RequestClose(Window* window) {
     window_manager_internal_client_->WmRequestClose(server_id(window));
 }
 
-void WindowTreeClient::AttachSurface(
+void WindowTreeClient::AttachCompositorFrameSink(
     Id window_id,
-    mojom::SurfaceType type,
-    mojo::InterfaceRequest<mojom::Surface> surface,
-    mojom::SurfaceClientPtr client) {
+    mojom::CompositorFrameSinkType type,
+    cc::mojom::MojoCompositorFrameSinkRequest compositor_frame_sink,
+    cc::mojom::MojoCompositorFrameSinkClientPtr client) {
   DCHECK(tree_);
-  tree_->AttachSurface(window_id, type, std::move(surface), std::move(client));
+  tree_->AttachCompositorFrameSink(
+      window_id, type, std::move(compositor_frame_sink), std::move(client));
 }
 
 void WindowTreeClient::LocalSetCapture(Window* window) {
@@ -362,11 +403,11 @@ void WindowTreeClient::LocalSetCapture(Window* window) {
   Window* lost_capture = capture_window_;
   capture_window_ = window;
   if (lost_capture) {
-    FOR_EACH_OBSERVER(WindowObserver, *WindowPrivate(lost_capture).observers(),
-                      OnWindowLostCapture(lost_capture));
+    for (auto& observer : *WindowPrivate(lost_capture).observers())
+      observer.OnWindowLostCapture(lost_capture);
   }
-  FOR_EACH_OBSERVER(WindowTreeClientObserver, observers_,
-                    OnWindowTreeCaptureChanged(window, lost_capture));
+  for (auto& observer : observers_)
+    observer.OnWindowTreeCaptureChanged(window, lost_capture);
 }
 
 void WindowTreeClient::LocalSetFocus(Window* focused) {
@@ -376,15 +417,15 @@ void WindowTreeClient::LocalSetFocus(Window* focused) {
   // |WindowTreeClient::GetFocusedWindow()| etc.
   focused_window_ = focused;
   if (blurred) {
-    FOR_EACH_OBSERVER(WindowObserver, *WindowPrivate(blurred).observers(),
-                      OnWindowFocusChanged(focused, blurred));
+    for (auto& observer : *WindowPrivate(blurred).observers())
+      observer.OnWindowFocusChanged(focused, blurred);
   }
   if (focused) {
-    FOR_EACH_OBSERVER(WindowObserver, *WindowPrivate(focused).observers(),
-                      OnWindowFocusChanged(focused, blurred));
+    for (auto& observer : *WindowPrivate(focused).observers())
+      observer.OnWindowFocusChanged(focused, blurred);
   }
-  FOR_EACH_OBSERVER(WindowTreeClientObserver, observers_,
-                    OnWindowTreeFocusChanged(focused, blurred));
+  for (auto& observer : observers_)
+    observer.OnWindowTreeFocusChanged(focused, blurred);
 }
 
 void WindowTreeClient::AddWindow(Window* window) {
@@ -463,28 +504,19 @@ bool WindowTreeClient::ApplyServerChangeToExistingInFlightChange(
   return true;
 }
 
-Window* WindowTreeClient::BuildWindowTree(
+void WindowTreeClient::BuildWindowTree(
     const mojo::Array<mojom::WindowDataPtr>& windows,
     Window* initial_parent) {
-  std::vector<Window*> parents;
-  Window* root = nullptr;
-  Window* last_window = nullptr;
-  if (initial_parent)
-    parents.push_back(initial_parent);
-  for (size_t i = 0; i < windows.size(); ++i) {
-    if (last_window && windows[i]->parent_id == server_id(last_window)) {
-      parents.push_back(last_window);
-    } else if (!parents.empty()) {
-      while (server_id(parents.back()) != windows[i]->parent_id)
-        parents.pop_back();
-    }
-    Window* window = AddWindowToClient(
-        this, !parents.empty() ? parents.back() : nullptr, windows[i]);
-    if (!last_window)
-      root = window;
-    last_window = window;
+  for (const auto& window_data : windows) {
+    Window* parent = window_data->parent_id == 0
+                         ? nullptr
+                         : GetWindowByServerId(window_data->parent_id);
+    Window* existing_window = GetWindowByServerId(window_data->window_id);
+    if (!existing_window)
+      AddWindowToClient(this, parent, window_data);
+    else if (parent)
+      WindowPrivate(parent).LocalAddChild(existing_window);
   }
-  return root;
 }
 
 Window* WindowTreeClient::NewWindowImpl(
@@ -562,8 +594,8 @@ void WindowTreeClient::OnEmbedImpl(mojom::WindowTree* window_tree,
   delegate_->OnEmbed(root);
 
   if (focused_window_) {
-    FOR_EACH_OBSERVER(WindowTreeClientObserver, observers_,
-                      OnWindowTreeFocusChanged(focused_window_, nullptr));
+    for (auto& observer : observers_)
+      observer.OnWindowTreeFocusChanged(focused_window_, nullptr);
   }
 }
 
@@ -649,7 +681,7 @@ void WindowTreeClient::PerformDragDrop(
   DCHECK(!current_drag_state_);
 
   // TODO(erg): Pass |cursor_location| and |bitmap| in PerformDragDrop() when
-  // we start showing an image representation of the drag under he cursor.
+  // we start showing an image representation of the drag under the cursor.
 
   if (window->drop_target()) {
     // To minimize the number of round trips, copy the drag drop data to our
@@ -775,8 +807,8 @@ void WindowTreeClient::OnEmbed(ClientSpecificId client_id,
 void WindowTreeClient::OnEmbeddedAppDisconnected(Id window_id) {
   Window* window = GetWindowByServerId(window_id);
   if (window) {
-    FOR_EACH_OBSERVER(WindowObserver, *WindowPrivate(window).observers(),
-                      OnWindowEmbeddedAppDisconnected(window));
+    for (auto& observer : *WindowPrivate(window).observers())
+      observer.OnWindowEmbeddedAppDisconnected(window);
   }
 }
 
@@ -878,11 +910,16 @@ void WindowTreeClient::OnWindowBoundsChanged(Id window_id,
   if (!window)
     return;
 
-  InFlightBoundsChange new_change(window, new_bounds);
+  float device_scale_factor = ScaleFactorForDisplay(window->display_id());
+  gfx::Rect old_bounds_in_dip =
+      gfx::ConvertRectToDIP(device_scale_factor, old_bounds);
+  gfx::Rect new_bounds_in_dip =
+      gfx::ConvertRectToDIP(device_scale_factor, new_bounds);
+
+  InFlightBoundsChange new_change(window, new_bounds_in_dip);
   if (ApplyServerChangeToExistingInFlightChange(new_change))
     return;
-
-  WindowPrivate(window).LocalSetBounds(old_bounds, new_bounds);
+  WindowPrivate(window).LocalSetBounds(old_bounds_in_dip, new_bounds_in_dip);
 }
 
 void WindowTreeClient::OnClientAreaChanged(
@@ -891,9 +928,15 @@ void WindowTreeClient::OnClientAreaChanged(
     mojo::Array<gfx::Rect> new_additional_client_areas) {
   Window* window = GetWindowByServerId(window_id);
   if (window) {
+    float device_scale_factor = ScaleFactorForDisplay(window->display_id());
+    std::vector<gfx::Rect> new_additional_client_areas_in_dip;
+    for (const gfx::Rect& area : new_additional_client_areas) {
+      new_additional_client_areas_in_dip.push_back(
+          gfx::ConvertRectToDIP(device_scale_factor, area));
+    }
     WindowPrivate(window).LocalSetClientArea(
-        new_client_area,
-        new_additional_client_areas.To<std::vector<gfx::Rect>>());
+        gfx::ConvertInsetsToDIP(device_scale_factor, new_client_area),
+        new_additional_client_areas_in_dip);
   }
 }
 
@@ -1092,6 +1135,21 @@ void WindowTreeClient::OnWindowPredefinedCursorChanged(
   WindowPrivate(window).LocalSetPredefinedCursor(cursor);
 }
 
+void WindowTreeClient::OnWindowSurfaceChanged(
+    Id window_id,
+    const cc::SurfaceId& surface_id,
+    const gfx::Size& frame_size,
+    float device_scale_factor) {
+  Window* window = GetWindowByServerId(window_id);
+  if (!window)
+    return;
+  std::unique_ptr<SurfaceInfo> surface_info(base::MakeUnique<SurfaceInfo>());
+  surface_info->surface_id = surface_id;
+  surface_info->frame_size = frame_size;
+  surface_info->device_scale_factor = device_scale_factor;
+  WindowPrivate(window).LocalSetSurfaceId(std::move(surface_info));
+}
+
 void WindowTreeClient::OnDragDropStart(
     mojo::Map<mojo::String, mojo::Array<uint8_t>> mime_data) {
   mime_drag_data_ = std::move(mime_data);
@@ -1222,8 +1280,8 @@ void WindowTreeClient::RequestClose(uint32_t window_id) {
   if (!window || !IsRoot(window))
     return;
 
-  FOR_EACH_OBSERVER(WindowObserver, *WindowPrivate(window).observers(),
-                    OnRequestClose(window));
+  for (auto& observer : *WindowPrivate(window).observers())
+    observer.OnRequestClose(window);
 }
 
 void WindowTreeClient::OnConnect(ClientSpecificId client_id) {
@@ -1247,6 +1305,11 @@ void WindowTreeClient::WmDisplayRemoved(int64_t display_id) {
   }
 }
 
+void WindowTreeClient::WmDisplayModified(const display::Display& display) {
+  DCHECK(window_manager_delegate_);
+  window_manager_delegate_->OnWmDisplayModified(display);
+}
+
 void WindowTreeClient::WmSetBounds(uint32_t change_id,
                                        Id window_id,
                                        const gfx::Rect& transit_bounds) {
@@ -1254,12 +1317,14 @@ void WindowTreeClient::WmSetBounds(uint32_t change_id,
   bool result = false;
   if (window) {
     DCHECK(window_manager_delegate_);
-    gfx::Rect bounds = transit_bounds;
+    gfx::Rect transit_bounds_in_dip = gfx::ConvertRectToDIP(
+        ScaleFactorForDisplay(window->display_id()), transit_bounds);
+    gfx::Rect bounds = transit_bounds_in_dip;
     result = window_manager_delegate_->OnWmSetBounds(window, &bounds);
     if (result) {
       // If the resulting bounds differ return false. Returning false ensures
       // the client applies the bounds we set below.
-      result = bounds == transit_bounds;
+      result = bounds == transit_bounds_in_dip;
       window->SetBounds(bounds);
     }
   }
@@ -1407,8 +1472,12 @@ void WindowTreeClient::SetUnderlaySurfaceOffsetAndExtendedHitArea(
     const gfx::Vector2d& offset,
     const gfx::Insets& hit_area) {
   if (window_manager_internal_client_) {
+    // TODO(riajiang): Figure out if |offset| needs to be converted.
+    // (http://crbugs.com/646932)
     window_manager_internal_client_->SetUnderlaySurfaceOffsetAndExtendedHitArea(
-        server_id(window), offset.x(), offset.y(), hit_area);
+        server_id(window), offset.x(), offset.y(),
+        gfx::ConvertInsetsToDIP(ScaleFactorForDisplay(window->display_id()),
+                                hit_area));
   }
 }
 

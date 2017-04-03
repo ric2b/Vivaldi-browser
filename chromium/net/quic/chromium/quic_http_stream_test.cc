@@ -465,9 +465,8 @@ class QuicHttpStreamTest : public ::testing::TestWithParam<QuicVersion> {
 
   std::unique_ptr<QuicReceivedPacket> ConstructClientRstStreamPacket(
       QuicPacketNumber packet_number) {
-    return client_maker_.MakeRstPacket(
-        packet_number, true, stream_id_,
-        AdjustErrorForVersion(QUIC_RST_ACKNOWLEDGEMENT, GetParam()));
+    return client_maker_.MakeRstPacket(packet_number, true, stream_id_,
+                                       QUIC_RST_ACKNOWLEDGEMENT);
   }
 
   std::unique_ptr<QuicReceivedPacket> ConstructClientRstStreamCancelledPacket(
@@ -525,11 +524,11 @@ class QuicHttpStreamTest : public ::testing::TestWithParam<QuicVersion> {
   }
 
   void ReceivePromise(QuicStreamId id) {
+    auto headers = AsHeaderList(push_promise_);
     QuicChromiumClientStream* stream =
         QuicHttpStreamPeer::GetQuicChromiumClientStream(stream_.get());
-    stream->OnStreamHeaders(serialized_push_promise_);
-
-    stream->OnPromiseHeadersComplete(id, serialized_push_promise_.size());
+    stream->OnPromiseHeaderList(id, headers.uncompressed_header_bytes(),
+                                headers);
   }
 
   void ExpectLoadTimingValid(const LoadTimingInfo& load_timing_info,

@@ -83,6 +83,8 @@
 #include "web/WebViewImpl.h"
 #include "wtf/text/WTFString.h"
 
+#include "app/vivaldi_apptools.h"
+
 namespace blink {
 
 // Figure out the URL of a page or subframe. Returns |page_type| as the type,
@@ -302,10 +304,12 @@ bool ContextMenuClientImpl::showContextMenu(const ContextMenu* defaultMenu,
       data.frameHistoryItem = WebHistoryItem(historyItem);
   }
 
+  // HitTestResult::isSelected() ensures clean layout by performing a hit test.
   if (r.isSelected()) {
     if (!isHTMLInputElement(*r.innerNode()) ||
-        toHTMLInputElement(r.innerNode())->type() != InputTypeNames::password)
+        toHTMLInputElement(r.innerNode())->type() != InputTypeNames::password) {
       data.selectedText = selectedFrame->selectedText().stripWhiteSpace();
+    }
   }
 
   if (r.isContentEditable()) {
@@ -331,6 +335,22 @@ bool ContextMenuClientImpl::showContextMenu(const ContextMenu* defaultMenu,
           &data.dictionarySuggestions);
     }
 
+    if (vivaldi::IsVivaldiRunning()) {
+      // Collect information of input field so that we can use it to set up
+      // correct menu content.
+      HTMLInputElement& inputElement = toHTMLInputElement(*r.innerNode());
+      if (inputElement.hasClass()) {
+        size_t size = inputElement.classNames().size();
+        for (size_t i = 0; i < size; i++) {
+          const AtomicString& s = inputElement.classNames()[i];
+          if (s.startsWith("vivaldi-")) {
+            data.vivaldiInputType = s;
+            break;
+          }
+        }
+      }
+    }
+
     HTMLFormElement* form = selectedFrame->selection().currentForm();
     if (form && isHTMLInputElement(*r.innerNode())) {
       HTMLInputElement& selectedElement = toHTMLInputElement(*r.innerNode());
@@ -338,10 +358,6 @@ bool ContextMenuClientImpl::showContextMenu(const ContextMenu* defaultMenu,
           WebFormElement(form), WebInputElement(&selectedElement));
       if (ws.url().isValid())
         data.keywordURL = ws.url();
-
-      if (selectedElement.classNames().contains(AtomicString("url"))){
-        data.isVivaldiAddressfield = true;
-      }
     }
   }
 

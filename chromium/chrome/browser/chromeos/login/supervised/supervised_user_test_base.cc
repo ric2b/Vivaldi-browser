@@ -36,10 +36,10 @@
 #include "chromeos/cryptohome/mock_homedir_methods.h"
 #include "chromeos/login/auth/key.h"
 #include "chromeos/login/auth/user_context.h"
-#include "components/sync/api/fake_sync_change_processor.h"
-#include "components/sync/api/sync_change.h"
-#include "components/sync/api/sync_error_factory_mock.h"
-#include "components/sync/core/attachments/attachment_service_proxy_for_test.h"
+#include "components/sync/model/attachments/attachment_service_proxy_for_test.h"
+#include "components/sync/model/fake_sync_change_processor.h"
+#include "components/sync/model/sync_change.h"
+#include "components/sync/model/sync_error_factory_mock.h"
 #include "components/sync/protocol/sync.pb.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/test/browser_test_utils.h"
@@ -373,9 +373,9 @@ void SupervisedUserTestBase::SigninAsSupervisedUser(
   // Clean first run flag before logging in.
   static_cast<SupervisedUserManagerImpl*>(
       ChromeUserManager::Get()->GetSupervisedUserManager())
-      ->CheckForFirstRun(user->email());
+      ->CheckForFirstRun(user->GetAccountId().GetUserEmail());
 
-  LoginUser(user->email());
+  LoginUser(user->GetAccountId().GetUserEmail());
   if (check_homedir_calls)
     ::testing::Mock::VerifyAndClearExpectations(mock_homedir_methods_);
   Profile* profile = ProfileHelper::Get()->GetProfileByUserUnsafe(user);
@@ -394,7 +394,7 @@ void SupervisedUserTestBase::SigninAsManager(int user_index) {
   // Created supervised user have to be first in a list.
   const user_manager::User* user =
       user_manager::UserManager::Get()->GetUsers().at(user_index);
-  LoginUser(user->email());
+  LoginUser(user->GetAccountId().GetUserEmail());
   Profile* profile = ProfileHelper::Get()->GetProfileByUserUnsafe(user);
   shared_settings_adapter_.reset(
       new SupervisedUsersSharedSettingsSyncTestAdapter(profile));

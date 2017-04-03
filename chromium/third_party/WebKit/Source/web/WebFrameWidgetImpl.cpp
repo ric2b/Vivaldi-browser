@@ -30,7 +30,7 @@
 
 #include "web/WebFrameWidgetImpl.h"
 
-#include "core/InputTypeNames.h"
+#include "core/dom/DocumentUserGestureToken.h"
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/Editor.h"
 #include "core/editing/FrameSelection.h"
@@ -41,7 +41,6 @@
 #include "core/frame/RemoteFrame.h"
 #include "core/frame/Settings.h"
 #include "core/frame/VisualViewport.h"
-#include "core/html/HTMLInputElement.h"
 #include "core/html/HTMLTextAreaElement.h"
 #include "core/input/EventHandler.h"
 #include "core/layout/LayoutView.h"
@@ -62,8 +61,11 @@
 #include "web/CompositorMutatorImpl.h"
 #include "web/CompositorProxyClientImpl.h"
 #include "web/ContextMenuAllowedScope.h"
+#include "web/InspectorOverlay.h"
+#include "web/PageOverlay.h"
 #include "web/WebDevToolsAgentImpl.h"
 #include "web/WebInputEventConversion.h"
+#include "web/WebInputMethodControllerImpl.h"
 #include "web/WebLocalFrameImpl.h"
 #include "web/WebPluginContainerImpl.h"
 #include "web/WebRemoteFrameImpl.h"
@@ -249,6 +251,12 @@ void WebFrameWidgetImpl::updateAllLifecyclePhases() {
   if (!m_localRoot)
     return;
 
+  if (InspectorOverlay* overlay = inspectorOverlay()) {
+    overlay->updateAllLifecyclePhases();
+    // TODO(chrishtr): integrate paint into the overlay's lifecycle.
+    if (overlay->pageOverlay() && overlay->pageOverlay()->graphicsLayer())
+      overlay->pageOverlay()->graphicsLayer()->paint(nullptr);
+  }
   PageWidgetDelegate::updateAllLifecyclePhases(*page(), *m_localRoot->frame());
   updateLayerTreeBackgroundColor();
 }
@@ -262,8 +270,10 @@ void WebFrameWidgetImpl::updateLayerTreeViewport() {
   if (!page() || !m_layerTreeView)
     return;
 
-  // FIXME: We need access to page scale information from the WebView.
-  m_layerTreeView->setPageScaleFactorAndLimits(1, 1, 1);
+  // Pass the limits even though this is for subframes, as the limits will be
+  // needed in setting the raster scale.
+  m_layerTreeView->setPageScaleFactorAndLimits(
+      1, view()->minimumPageScaleFactor(), view()->maximumPageScaleFactor());
 }
 
 void WebFrameWidgetImpl::updateLayerTreeBackgroundColor() {
@@ -316,9 +326,18 @@ WebInputEventResult WebFrameWidgetImpl::handleInputEvent(
   TRACE_EVENT1("input", "WebFrameWidgetImpl::handleInputEvent", "type",
                WebInputEvent::GetName(inputEvent.type));
 
+  // If a drag-and-drop operation is in progress, ignore input events.
+  if (m_doingDragAndDrop)
+    return WebInputEventResult::HandledSuppressed;
+
   // Don't handle events once we've started shutting down.
   if (!page())
     return WebInputEventResult::NotHandled;
+
+  if (InspectorOverlay* overlay = inspectorOverlay()) {
+    if (overlay->handleInputEvent(inputEvent))
+      return WebInputEventResult::HandledSuppressed;
+  }
 
   // Report the event to be NOT processed by WebKit, so that the browser can
   // handle it appropriately.
@@ -352,7 +371,8 @@ WebInputEventResult WebFrameWidgetImpl::handleInputEvent(
       case WebInputEvent::MouseDown:
         eventType = EventTypeNames::mousedown;
         gestureIndicator = wrapUnique(
-            new UserGestureIndicator(DefinitelyProcessingNewUserGesture));
+            new UserGestureIndicator(DocumentUserGestureToken::create(
+                &node->document(), UserGestureToken::NewGesture)));
         m_mouseCaptureGestureToken = gestureIndicator->currentToken();
         break;
       case WebInputEvent::MouseUp:
@@ -395,6 +415,12 @@ void WebFrameWidgetImpl::setBaseBackgroundColor(WebColor color) {
   m_localRoot->frameView()->setBaseBackgroundColor(color);
 }
 
+WebInputMethodControllerImpl*
+WebFrameWidgetImpl::getActiveWebInputMethodController() const {
+  return WebInputMethodControllerImpl::fromFrame(
+      focusedLocalFrameAvailableForIme());
+}
+
 void WebFrameWidgetImpl::scheduleAnimation() {
   if (m_layerTreeView) {
     m_layerTreeView->setNeedsBeginFrame();
@@ -419,7 +445,7 @@ void WebFrameWidgetImpl::applyViewportDeltas(
     const WebFloatSize& mainFrameDelta,
     const WebFloatSize& elasticOverscrollDelta,
     float pageScaleDelta,
-    float topControlsDelta) {
+    float browserControlsDelta) {
   // FIXME: To be implemented.
 }
 
@@ -440,7 +466,7 @@ void WebFrameWidgetImpl::setFocus(bool enable) {
         // focused, then the focus element shows with a focus ring but
         // no caret and does respond to keyboard inputs.
         focusedFrame->document()->updateStyleAndLayoutTree();
-        if (element->isTextFormControl()) {
+        if (element->isTextControl()) {
           element->updateFocusAppearance(SelectionBehaviorOnFocus::Restore);
         } else if (hasEditableStyle(*element)) {
           // updateFocusAppearance() selects all the text of
@@ -449,7 +475,7 @@ void WebFrameWidgetImpl::setFocus(bool enable) {
           // caret back to the beginning of the text.
           Position position(element, 0);
           focusedFrame->selection().setSelection(
-              createVisibleSelection(position, SelDefaultAffinity));
+              SelectionInDOMTree::Builder().collapse(position).build());
         }
       }
     }
@@ -483,98 +509,6 @@ void WebFrameWidgetImpl::setFocus(bool enable) {
 
 // TODO(ekaramad):This method is almost duplicated in WebViewImpl as well. This
 // code needs to be refactored  (http://crbug.com/629721).
-bool WebFrameWidgetImpl::setComposition(
-    const WebString& text,
-    const WebVector<WebCompositionUnderline>& underlines,
-    int selectionStart,
-    int selectionEnd) {
-  LocalFrame* focused = focusedLocalFrameAvailableForIme();
-  if (!focused)
-    return false;
-
-  if (WebPlugin* plugin = focusedPluginIfInputMethodSupported(focused))
-    return plugin->setComposition(text, underlines, selectionStart,
-                                  selectionEnd);
-
-  // The input focus has been moved to another WebWidget object.
-  // We should use this |editor| object only to complete the ongoing
-  // composition.
-  InputMethodController& inputMethodController =
-      focused->inputMethodController();
-  if (!focused->editor().canEdit() && !inputMethodController.hasComposition())
-    return false;
-
-  // We should verify the parent node of this IME composition node are
-  // editable because JavaScript may delete a parent node of the composition
-  // node. In this case, WebKit crashes while deleting texts from the parent
-  // node, which doesn't exist any longer.
-  const EphemeralRange range =
-      inputMethodController.compositionEphemeralRange();
-  if (range.isNotNull()) {
-    Node* node = range.startPosition().computeContainerNode();
-    focused->document()->updateStyleAndLayoutTree();
-    if (!node || !hasEditableStyle(*node))
-      return false;
-  }
-
-  // A keypress event is canceled. If an ongoing composition exists, then the
-  // keydown event should have arisen from a handled key (e.g., backspace).
-  // In this case we ignore the cancellation and continue; otherwise (no
-  // ongoing composition) we exit and signal success only for attempts to
-  // clear the composition.
-  if (m_suppressNextKeypressEvent && !inputMethodController.hasComposition())
-    return text.isEmpty();
-
-  UserGestureIndicator gestureIndicator(DefinitelyProcessingNewUserGesture);
-
-  // When the range of composition underlines overlap with the range between
-  // selectionStart and selectionEnd, WebKit somehow won't paint the selection
-  // at all (see InlineTextBox::paint() function in InlineTextBox.cpp).
-  // But the selection range actually takes effect.
-  inputMethodController.setComposition(
-      String(text), CompositionUnderlineVectorBuilder(underlines),
-      selectionStart, selectionEnd);
-
-  return text.isEmpty() || inputMethodController.hasComposition();
-}
-
-// TODO(ekaramad):These methods are almost duplicated in WebViewImpl as well.
-// This code needs to be refactored  (http://crbug.com/629721).
-bool WebFrameWidgetImpl::commitText(const WebString& text,
-                                    int relativeCaretPosition) {
-  UserGestureIndicator gestureIndicator(DefinitelyProcessingNewUserGesture);
-  LocalFrame* focused = focusedLocalFrameAvailableForIme();
-  if (!focused)
-    return false;
-
-  if (WebPlugin* plugin = focusedPluginIfInputMethodSupported(focused))
-    return plugin->commitText(text, relativeCaretPosition);
-
-  return focused->inputMethodController().commitText(text,
-                                                     relativeCaretPosition);
-}
-
-bool WebFrameWidgetImpl::finishComposingText(
-    ConfirmCompositionBehavior selectionBehavior) {
-  LocalFrame* focused = focusedLocalFrameAvailableForIme();
-  if (!focused)
-    return false;
-
-  if (WebPlugin* plugin = focusedPluginIfInputMethodSupported(focused))
-    return plugin->finishComposingText(selectionBehavior);
-
-  // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
-  // needs to be audited.  See http://crbug.com/590369 for more details.
-  focused->document()->updateStyleAndLayoutIgnorePendingStylesheets();
-
-  return focused->inputMethodController().finishComposingText(
-      selectionBehavior == KeepSelection
-          ? InputMethodController::KeepSelection
-          : InputMethodController::DoNotKeepSelection);
-}
-
-// TODO(ekaramad):This method is almost duplicated in WebViewImpl as well. This
-// code needs to be refactored  (http://crbug.com/629721).
 WebRange WebFrameWidgetImpl::compositionRange() {
   LocalFrame* focused = focusedLocalFrameAvailableForIme();
   if (!focused)
@@ -596,148 +530,18 @@ WebRange WebFrameWidgetImpl::compositionRange() {
   return PlainTextRange::create(*editable, range);
 }
 
-// TODO(ekaramad):This method is almost duplicated in WebViewImpl as well. This
-// code needs to be refactored  (http://crbug.com/629721).
 WebTextInputInfo WebFrameWidgetImpl::textInputInfo() {
-  WebTextInputInfo info;
-
   LocalFrame* focused = focusedLocalFrameInWidget();
   if (!focused)
-    return info;
-
-  FrameSelection& selection = focused->selection();
-  if (!selection.isAvailable()) {
-    // plugins/mouse-capture-inside-shadow.html reaches here.
-    return info;
-  }
-  Element* element = selection.selection().rootEditableElement();
-  if (!element)
-    return info;
-
-  info.inputMode = inputModeOfFocusedElement();
-
-  info.type = textInputType();
-  info.flags = textInputFlags();
-  if (info.type == WebTextInputTypeNone)
-    return info;
-
-  if (!focused->editor().canEdit())
-    return info;
-
-  // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
-  // needs to be audited.  see http://crbug.com/590369 for more details.
-  focused->document()->updateStyleAndLayoutIgnorePendingStylesheets();
-
-  DocumentLifecycle::DisallowTransitionScope disallowTransition(
-      focused->document()->lifecycle());
-
-  // Emits an object replacement character for each replaced element so that
-  // it is exposed to IME and thus could be deleted by IME on android.
-  info.value = plainText(EphemeralRange::rangeOfContents(*element),
-                         TextIteratorEmitsObjectReplacementCharacter);
-
-  if (info.value.isEmpty())
-    return info;
-
-  EphemeralRange firstRange = firstEphemeralRangeOf(selection.selection());
-  if (firstRange.isNotNull()) {
-    PlainTextRange plainTextRange(PlainTextRange::create(*element, firstRange));
-    if (plainTextRange.isNotNull()) {
-      info.selectionStart = plainTextRange.start();
-      info.selectionEnd = plainTextRange.end();
-    }
-  }
-
-  EphemeralRange range =
-      focused->inputMethodController().compositionEphemeralRange();
-  if (range.isNotNull()) {
-    PlainTextRange plainTextRange(PlainTextRange::create(*element, range));
-    if (plainTextRange.isNotNull()) {
-      info.compositionStart = plainTextRange.start();
-      info.compositionEnd = plainTextRange.end();
-    }
-  }
-
-  return info;
+    return WebTextInputInfo();
+  return focused->inputMethodController().textInputInfo();
 }
 
-// TODO(ekaramad):This method is almost duplicated in WebViewImpl as well. This
-// code needs to be refactored  (http://crbug.com/629721).
 WebTextInputType WebFrameWidgetImpl::textInputType() {
-  LocalFrame* focusedFrame = focusedLocalFrameInWidget();
-  if (!focusedFrame)
+  LocalFrame* focused = focusedLocalFrameInWidget();
+  if (!focused)
     return WebTextInputTypeNone;
-
-  if (!focusedFrame->selection().isAvailable()) {
-    // "mouse-capture-inside-shadow.html" reaches here.
-    return WebTextInputTypeNone;
-  }
-
-  // It's important to preserve the equivalence of textInputInfo().type and
-  // textInputType(), so perform the same rootEditableElement() existence check
-  // here for consistency.
-  if (!focusedFrame->selection().selection().rootEditableElement())
-    return WebTextInputTypeNone;
-
-  Document* document = focusedFrame->document();
-  if (!document)
-    return WebTextInputTypeNone;
-
-  Element* element = document->focusedElement();
-  if (!element)
-    return WebTextInputTypeNone;
-
-  if (isHTMLInputElement(*element)) {
-    HTMLInputElement& input = toHTMLInputElement(*element);
-    const AtomicString& type = input.type();
-
-    if (input.isDisabledOrReadOnly())
-      return WebTextInputTypeNone;
-
-    if (type == InputTypeNames::password)
-      return WebTextInputTypePassword;
-    if (type == InputTypeNames::search)
-      return WebTextInputTypeSearch;
-    if (type == InputTypeNames::email)
-      return WebTextInputTypeEmail;
-    if (type == InputTypeNames::number)
-      return WebTextInputTypeNumber;
-    if (type == InputTypeNames::tel)
-      return WebTextInputTypeTelephone;
-    if (type == InputTypeNames::url)
-      return WebTextInputTypeURL;
-    if (type == InputTypeNames::date)
-      return WebTextInputTypeDate;
-    if (type == InputTypeNames::datetime_local)
-      return WebTextInputTypeDateTimeLocal;
-    if (type == InputTypeNames::month)
-      return WebTextInputTypeMonth;
-    if (type == InputTypeNames::time)
-      return WebTextInputTypeTime;
-    if (type == InputTypeNames::week)
-      return WebTextInputTypeWeek;
-    if (type == InputTypeNames::text)
-      return WebTextInputTypeText;
-
-    return WebTextInputTypeNone;
-  }
-
-  if (isHTMLTextAreaElement(*element)) {
-    if (toHTMLTextAreaElement(*element).isDisabledOrReadOnly())
-      return WebTextInputTypeNone;
-    return WebTextInputTypeTextArea;
-  }
-
-  if (element->isHTMLElement()) {
-    if (toHTMLElement(element)->isDateTimeFieldElement())
-      return WebTextInputTypeDateTimeField;
-  }
-
-  document->updateStyleAndLayoutTree();
-  if (hasEditableStyle(*element))
-    return WebTextInputTypeContentEditable;
-
-  return WebTextInputTypeNone;
+  return focused->inputMethodController().textInputType();
 }
 
 WebColor WebFrameWidgetImpl::backgroundColor() const {
@@ -801,6 +605,10 @@ bool WebFrameWidgetImpl::selectionTextDirection(WebTextDirection& start,
   const LocalFrame* frame = focusedLocalFrameInWidget();
   if (!frame)
     return false;
+
+  // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
+  // needs to be audited.  See http://crbug.com/590369 for more details.
+  frame->document()->updateStyleAndLayoutIgnorePendingStylesheets();
 
   FrameSelection& selection = frame->selection();
   if (selection.selection().toNormalizedEphemeralRange().isNull())
@@ -877,11 +685,6 @@ void WebFrameWidgetImpl::willCloseLayerTreeView() {
   m_mutator = nullptr;
   m_layerTreeView = nullptr;
   m_layerTreeViewClosed = true;
-}
-
-void WebFrameWidgetImpl::didChangeWindowResizerRect() {
-  if (m_localRoot->frameView())
-    m_localRoot->frameView()->windowResizerRectChanged();
 }
 
 void WebFrameWidgetImpl::didAcquirePointerLock() {
@@ -1130,7 +933,7 @@ WebInputEventResult WebFrameWidgetImpl::handleKeyEvent(
   }
 #endif  // !OS(MACOSX)
 
-  return keyEventDefault(event);
+  return WebInputEventResult::NotHandled;
 }
 
 WebInputEventResult WebFrameWidgetImpl::handleCharEvent(
@@ -1175,125 +978,7 @@ WebInputEventResult WebFrameWidgetImpl::handleCharEvent(
   if (result != WebInputEventResult::NotHandled)
     return result;
 
-  return keyEventDefault(event);
-}
-
-WebInputEventResult WebFrameWidgetImpl::keyEventDefault(
-    const WebKeyboardEvent& event) {
-  LocalFrame* frame = toLocalFrame(focusedCoreFrame());
-  if (!frame)
-    return WebInputEventResult::NotHandled;
-
-  switch (event.type) {
-    case WebInputEvent::Char:
-      if (event.windowsKeyCode == VKEY_SPACE) {
-        int keyCode = ((event.modifiers & WebInputEvent::ShiftKey) ? VKEY_PRIOR
-                                                                   : VKEY_NEXT);
-        return scrollViewWithKeyboard(keyCode, event.modifiers);
-      }
-      break;
-    case WebInputEvent::KeyDown:
-    case WebInputEvent::RawKeyDown:
-      if (event.modifiers == WebInputEvent::ControlKey) {
-        switch (event.windowsKeyCode) {
-#if !OS(MACOSX)
-          case 'A':
-            WebFrame::fromFrame(focusedCoreFrame())
-                ->toWebLocalFrame()
-                ->executeCommand(WebString::fromUTF8("SelectAll"));
-            return WebInputEventResult::HandledSystem;
-          case VKEY_INSERT:
-          case 'C':
-            WebFrame::fromFrame(focusedCoreFrame())
-                ->toWebLocalFrame()
-                ->executeCommand(WebString::fromUTF8("Copy"));
-            return WebInputEventResult::HandledSystem;
-#endif
-          // Match FF behavior in the sense that Ctrl+home/end are the only Ctrl
-          // key combinations which affect scrolling. Safari is buggy in the
-          // sense that it scrolls the page for all Ctrl+scrolling key
-          // combinations. For e.g. Ctrl+pgup/pgdn/up/down, etc.
-          case VKEY_HOME:
-          case VKEY_END:
-            break;
-          default:
-            return WebInputEventResult::NotHandled;
-        }
-      }
-      if (!event.isSystemKey && !(event.modifiers & WebInputEvent::ShiftKey))
-        return scrollViewWithKeyboard(event.windowsKeyCode, event.modifiers);
-      break;
-    default:
-      break;
-  }
   return WebInputEventResult::NotHandled;
-}
-
-WebInputEventResult WebFrameWidgetImpl::scrollViewWithKeyboard(int keyCode,
-                                                               int modifiers) {
-  ScrollDirection scrollDirection;
-  ScrollGranularity scrollGranularity;
-#if OS(MACOSX)
-  // Control-Up/Down should be PageUp/Down on Mac.
-  if (modifiers & WebMouseEvent::ControlKey) {
-    if (keyCode == VKEY_UP)
-      keyCode = VKEY_PRIOR;
-    else if (keyCode == VKEY_DOWN)
-      keyCode = VKEY_NEXT;
-  }
-#endif
-  if (!mapKeyCodeForScroll(keyCode, &scrollDirection, &scrollGranularity))
-    return WebInputEventResult::NotHandled;
-
-  LocalFrame* frame = toLocalFrame(focusedCoreFrame());
-  if (frame &&
-      frame->eventHandler().bubblingScroll(scrollDirection, scrollGranularity))
-    return WebInputEventResult::HandledSystem;
-  return WebInputEventResult::NotHandled;
-}
-
-bool WebFrameWidgetImpl::mapKeyCodeForScroll(
-    int keyCode,
-    ScrollDirection* scrollDirection,
-    ScrollGranularity* scrollGranularity) {
-  switch (keyCode) {
-    case VKEY_LEFT:
-      *scrollDirection = ScrollLeftIgnoringWritingMode;
-      *scrollGranularity = ScrollByLine;
-      break;
-    case VKEY_RIGHT:
-      *scrollDirection = ScrollRightIgnoringWritingMode;
-      *scrollGranularity = ScrollByLine;
-      break;
-    case VKEY_UP:
-      *scrollDirection = ScrollUpIgnoringWritingMode;
-      *scrollGranularity = ScrollByLine;
-      break;
-    case VKEY_DOWN:
-      *scrollDirection = ScrollDownIgnoringWritingMode;
-      *scrollGranularity = ScrollByLine;
-      break;
-    case VKEY_HOME:
-      *scrollDirection = ScrollUpIgnoringWritingMode;
-      *scrollGranularity = ScrollByDocument;
-      break;
-    case VKEY_END:
-      *scrollDirection = ScrollDownIgnoringWritingMode;
-      *scrollGranularity = ScrollByDocument;
-      break;
-    case VKEY_PRIOR:  // page up
-      *scrollDirection = ScrollUpIgnoringWritingMode;
-      *scrollGranularity = ScrollByPage;
-      break;
-    case VKEY_NEXT:  // page down
-      *scrollDirection = ScrollDownIgnoringWritingMode;
-      *scrollGranularity = ScrollByPage;
-      break;
-    default:
-      return false;
-  }
-
-  return true;
 }
 
 Frame* WebFrameWidgetImpl::focusedCoreFrame() const {
@@ -1442,6 +1127,14 @@ HitTestResult WebFrameWidgetImpl::hitTestResultForRootFramePos(
   return result;
 }
 
+InspectorOverlay* WebFrameWidgetImpl::inspectorOverlay() {
+  if (!m_localRoot)
+    return nullptr;
+  if (WebDevToolsAgentImpl* devtools = m_localRoot->devToolsAgentImpl())
+    return devtools->overlay();
+  return nullptr;
+}
+
 LocalFrame* WebFrameWidgetImpl::focusedLocalFrameInWidget() const {
   LocalFrame* frame = page()->focusController().focusedFrame();
   return (frame && frame->localFrameRoot() == m_localRoot->frame()) ? frame
@@ -1455,81 +1148,6 @@ WebPlugin* WebFrameWidgetImpl::focusedPluginIfInputMethodSupported(
   if (container && container->supportsInputMethod())
     return container->plugin();
   return nullptr;
-}
-
-WebString WebFrameWidgetImpl::inputModeOfFocusedElement() const {
-  if (!RuntimeEnabledFeatures::inputModeAttributeEnabled())
-    return WebString();
-
-  Element* element = focusedElement();
-  if (!element)
-    return WebString();
-
-  if (isHTMLInputElement(*element)) {
-    const HTMLInputElement& input = toHTMLInputElement(*element);
-    if (input.supportsInputModeAttribute())
-      return input.fastGetAttribute(HTMLNames::inputmodeAttr).lower();
-    return WebString();
-  }
-  if (isHTMLTextAreaElement(*element)) {
-    const HTMLTextAreaElement& textarea = toHTMLTextAreaElement(*element);
-    return textarea.fastGetAttribute(HTMLNames::inputmodeAttr).lower();
-  }
-
-  return WebString();
-}
-
-int WebFrameWidgetImpl::textInputFlags() const {
-  Element* element = focusedElement();
-  if (!element)
-    return WebTextInputFlagNone;
-
-  DEFINE_STATIC_LOCAL(AtomicString, autocompleteString, ("autocomplete"));
-  DEFINE_STATIC_LOCAL(AtomicString, autocorrectString, ("autocorrect"));
-  int flags = 0;
-
-  const AtomicString& autocomplete = element->getAttribute(autocompleteString);
-  if (autocomplete == "on")
-    flags |= WebTextInputFlagAutocompleteOn;
-  else if (autocomplete == "off")
-    flags |= WebTextInputFlagAutocompleteOff;
-
-  const AtomicString& autocorrect = element->getAttribute(autocorrectString);
-  if (autocorrect == "on")
-    flags |= WebTextInputFlagAutocorrectOn;
-  else if (autocorrect == "off")
-    flags |= WebTextInputFlagAutocorrectOff;
-
-  SpellcheckAttributeState spellcheck = element->spellcheckAttributeState();
-  if (spellcheck == SpellcheckAttributeTrue)
-    flags |= WebTextInputFlagSpellcheckOn;
-  else if (spellcheck == SpellcheckAttributeFalse)
-    flags |= WebTextInputFlagSpellcheckOff;
-
-  if (isHTMLTextFormControlElement(element)) {
-    HTMLTextFormControlElement* formElement =
-        static_cast<HTMLTextFormControlElement*>(element);
-    if (formElement->supportsAutocapitalize()) {
-      DEFINE_STATIC_LOCAL(const AtomicString, none, ("none"));
-      DEFINE_STATIC_LOCAL(const AtomicString, characters, ("characters"));
-      DEFINE_STATIC_LOCAL(const AtomicString, words, ("words"));
-      DEFINE_STATIC_LOCAL(const AtomicString, sentences, ("sentences"));
-
-      const AtomicString& autocapitalize = formElement->autocapitalize();
-      if (autocapitalize == none)
-        flags |= WebTextInputFlagAutocapitalizeNone;
-      else if (autocapitalize == characters)
-        flags |= WebTextInputFlagAutocapitalizeCharacters;
-      else if (autocapitalize == words)
-        flags |= WebTextInputFlagAutocapitalizeWords;
-      else if (autocapitalize == sentences)
-        flags |= WebTextInputFlagAutocapitalizeSentences;
-      else
-        NOTREACHED();
-    }
-  }
-
-  return flags;
 }
 
 LocalFrame* WebFrameWidgetImpl::focusedLocalFrameAvailableForIme() const {

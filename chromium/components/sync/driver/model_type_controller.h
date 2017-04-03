@@ -12,8 +12,8 @@
 #include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
 #include "components/sync/base/model_type.h"
+#include "components/sync/base/sync_prefs.h"
 #include "components/sync/driver/data_type_controller.h"
-#include "components/sync/driver/sync_prefs.h"
 
 namespace syncer {
 
@@ -35,6 +35,7 @@ class ModelTypeController : public DataTypeController {
   bool ShouldLoadModelBeforeConfigure() const override;
   void LoadModels(const ModelLoadCallback& model_load_callback) override;
   void GetAllNodes(const AllNodesCallback& callback) override;
+  void GetStatusCounters(const StatusCountersCallback& callback) override;
 
   // Registers non-blocking data type with sync backend. In the process the
   // activation context is passed to ModelTypeRegistry, where ModelTypeWorker
@@ -66,7 +67,7 @@ class ModelTypeController : public DataTypeController {
       SyncError error,
       std::unique_ptr<ActivationContext> activation_context);
 
-  // The sync client, which provides access to this type's ModelTypeService.
+  // The sync client, which provides access to this type's ModelTypeSyncBridge.
   SyncClient* const sync_client_;
 
   // The thread the model type lives on.

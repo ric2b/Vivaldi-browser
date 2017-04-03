@@ -90,7 +90,7 @@ void ViewPainter::paintBoxDecorationBackground(const PaintInfo& paintInfo) {
     // instead, otherwise keep transparent as is.
     if (paintsBaseBackground || rootBackgroundColor.alpha() ||
         m_layoutView.style()->backgroundLayers().image())
-      context.fillRect(backgroundRect, Color::white, SkXfermode::kSrc_Mode);
+      context.fillRect(backgroundRect, Color::white, SkBlendMode::kSrc);
     return;
   }
 
@@ -126,12 +126,13 @@ void ViewPainter::paintBoxDecorationBackground(const PaintInfo& paintInfo) {
   }
 
   if (!backgroundRenderable) {
-    if (baseBackgroundColor.alpha())
-      context.fillRect(backgroundRect, baseBackgroundColor,
-                       shouldClearCanvas ? SkXfermode::kSrc_Mode
-                                         : SkXfermode::kSrcOver_Mode);
-    else if (shouldClearCanvas)
-      context.fillRect(backgroundRect, Color(), SkXfermode::kClear_Mode);
+    if (baseBackgroundColor.alpha()) {
+      context.fillRect(
+          backgroundRect, baseBackgroundColor,
+          shouldClearCanvas ? SkBlendMode::kSrc : SkBlendMode::kSrcOver);
+    } else if (shouldClearCanvas) {
+      context.fillRect(backgroundRect, Color(), SkBlendMode::kClear);
+    }
     return;
   }
 
@@ -140,7 +141,7 @@ void ViewPainter::paintBoxDecorationBackground(const PaintInfo& paintInfo) {
       BoxPainter(m_layoutView)
           .calculateFillLayerOcclusionCulling(
               reversedPaintList, m_layoutView.style()->backgroundLayers());
-  ASSERT(reversedPaintList.size());
+  DCHECK(reversedPaintList.size());
 
   // If the root background color is opaque, isolation group can be skipped
   // because the canvas
@@ -154,10 +155,11 @@ void ViewPainter::paintBoxDecorationBackground(const PaintInfo& paintInfo) {
     shouldDrawBackgroundInSeparateBuffer = false;
 
   if (shouldDrawBackgroundInSeparateBuffer) {
-    if (baseBackgroundColor.alpha())
-      context.fillRect(backgroundRect, baseBackgroundColor,
-                       shouldClearCanvas ? SkXfermode::kSrc_Mode
-                                         : SkXfermode::kSrcOver_Mode);
+    if (baseBackgroundColor.alpha()) {
+      context.fillRect(
+          backgroundRect, baseBackgroundColor,
+          shouldClearCanvas ? SkBlendMode::kSrc : SkBlendMode::kSrcOver);
+    }
     context.beginLayer();
   }
 
@@ -165,21 +167,27 @@ void ViewPainter::paintBoxDecorationBackground(const PaintInfo& paintInfo) {
       shouldDrawBackgroundInSeparateBuffer
           ? rootBackgroundColor
           : baseBackgroundColor.blend(rootBackgroundColor);
+  if (combinedBackgroundColor != frameView.baseBackgroundColor() &&
+      !context.getPaintController().nonDefaultBackgroundColorPainted()) {
+    TRACE_EVENT_INSTANT0("blink.user_timing", "paintNonDefaultBackgroundColor",
+                         TRACE_EVENT_SCOPE_GLOBAL);
+    context.getPaintController().setNonDefaultBackgroundColorPainted();
+  }
   if (combinedBackgroundColor.alpha()) {
     if (!combinedBackgroundColor.hasAlpha() &&
         RuntimeEnabledFeatures::slimmingPaintV2Enabled())
       recorder.setKnownToBeOpaque();
     context.fillRect(backgroundRect, combinedBackgroundColor,
                      (shouldDrawBackgroundInSeparateBuffer || shouldClearCanvas)
-                         ? SkXfermode::kSrc_Mode
-                         : SkXfermode::kSrcOver_Mode);
+                         ? SkBlendMode::kSrc
+                         : SkBlendMode::kSrcOver);
   } else if (shouldClearCanvas && !shouldDrawBackgroundInSeparateBuffer) {
-    context.fillRect(backgroundRect, Color(), SkXfermode::kClear_Mode);
+    context.fillRect(backgroundRect, Color(), SkBlendMode::kClear);
   }
 
   for (auto it = reversedPaintList.rbegin(); it != reversedPaintList.rend();
        ++it) {
-    ASSERT((*it)->clip() == BorderFillBox);
+    DCHECK((*it)->clip() == BorderFillBox);
 
     bool shouldPaintInViewportSpace =
         (*it)->attachment() == FixedBackgroundAttachment;

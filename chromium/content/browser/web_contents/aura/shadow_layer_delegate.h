@@ -11,10 +11,6 @@
 #include "base/macros.h"
 #include "ui/compositor/layer_delegate.h"
 
-namespace aura {
-class Window;
-}
-
 namespace ui {
 class Layer;
 }
@@ -37,7 +33,6 @@ class ShadowLayerDelegate : public ui::LayerDelegate {
   void OnPaintLayer(const ui::PaintContext& context) override;
   void OnDelegatedFrameDamage(const gfx::Rect& damage_rect_in_dip) override;
   void OnDeviceScaleFactorChanged(float device_scale_factor) override;
-  base::Closure PrepareForLayerBoundsChange() override;
 
   std::unique_ptr<ui::Layer> layer_;
 

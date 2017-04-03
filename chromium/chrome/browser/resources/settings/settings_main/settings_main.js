@@ -25,10 +25,10 @@ Polymer({
       notify: true,
     },
 
-    /** @private */
-    advancedToggleExpanded_: {
+    advancedToggleExpanded: {
       type: Boolean,
-      value: false,
+      notify: true,
+      observer: 'updatePagesShown_',
     },
 
     /**
@@ -90,13 +90,14 @@ Polymer({
 
   /** @override */
   attached: function() {
-    document.addEventListener('toggle-advanced-page', function(e) {
-      this.advancedToggleExpanded_ = e.detail;
-      this.updatePagesShown_();
-    }.bind(this));
-
+    this.listen(this, 'freeze-scroll', 'onFreezeScroll_');
     var currentRoute = settings.getCurrentRoute();
     this.hasExpandedSection_ = currentRoute && currentRoute.isSubpage();
+  },
+
+  /** @override */
+  detached: function() {
+    this.unlisten(this, 'freeze-scroll', 'onFreezeScroll_');
   },
 
   /** @private */
@@ -138,12 +139,11 @@ Polymer({
    * Enables or disables user scrolling, via overscroll: hidden. Room for the
    * hidden scrollbar is added to prevent the page width from changing back and
    * forth. Also freezes the overscroll height.
-   * @param {!Event} e
-   * @param {boolean} detail True to freeze, false to unfreeze.
+   * @param {!Event} e |e.detail| is true to freeze, false to unfreeze.
    * @private
    */
-  onFreezeScroll_: function(e, detail) {
-    if (detail) {
+  onFreezeScroll_: function(e) {
+    if (e.detail) {
       // Update the overscroll and ignore scroll events.
       this.setOverscroll_(this.overscrollHeight_());
       this.ignoreScroll_ = true;
@@ -206,7 +206,7 @@ Polymer({
       this.hasExpandedSection_ = false;
 
     if (settings.Route.ADVANCED.contains(newRoute))
-      this.advancedToggleExpanded_ = true;
+      this.advancedToggleExpanded = true;
 
     this.updatePagesShown_();
   },
@@ -235,7 +235,7 @@ Polymer({
             !this.hasExpandedSection_,
         advanced: this.hasExpandedSection_ ?
             settings.Route.ADVANCED.contains(currentRoute) :
-            this.advancedToggleExpanded_,
+            this.advancedToggleExpanded,
       };
     }
 
@@ -292,7 +292,7 @@ Polymer({
 
   /** @private */
   toggleAdvancedPage_: function() {
-    this.fire('toggle-advanced-page', !this.advancedToggleExpanded_);
+    this.advancedToggleExpanded = !this.advancedToggleExpanded;
   },
 
   /**
@@ -318,32 +318,23 @@ Polymer({
   },
 
   /**
-   * Navigates to the default search page (if necessary).
-   * @private
-   */
-  ensureInDefaultSearchPage_: function() {
-    if (settings.getCurrentRoute() != settings.Route.BASIC)
-      settings.navigateTo(settings.Route.BASIC);
-  },
-
-  /**
    * @param {string} query
    * @return {!Promise} A promise indicating that searching finished.
    */
   searchContents: function(query) {
     // Trigger rendering of the basic and advanced pages and search once ready.
     this.inSearchMode_ = true;
-    this.ensureInDefaultSearchPage_();
     this.toolbarSpinnerActive = true;
 
     return new Promise(function(resolve, reject) {
       setTimeout(function() {
         var whenSearchDone = settings.getSearchManager().search(
             query, assert(this.getPage_(settings.Route.BASIC)));
-        assert(
-            whenSearchDone ===
-                settings.getSearchManager().search(
-                    query, assert(this.getPage_(settings.Route.ADVANCED))));
+
+        if (this.pageVisibility.advancedSettings !== false) {
+          assert(whenSearchDone === settings.getSearchManager().search(
+              query, assert(this.getPage_(settings.Route.ADVANCED))));
+        }
 
         whenSearchDone.then(function(request) {
           resolve();

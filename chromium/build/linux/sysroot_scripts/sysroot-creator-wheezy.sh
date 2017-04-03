@@ -7,6 +7,8 @@ SCRIPT_DIR=$(cd $(dirname $0) && pwd)
 
 DISTRO=debian
 DIST=wheezy
+DIST_UPDATES=wheezy-updates
+
 APT_REPO=http://http.us.debian.org/debian
 KEYRING_FILE=${SCRIPT_DIR}/debian-archive-wheezy-stable.gpg
 
@@ -51,6 +53,9 @@ DEBIAN_PACKAGES="\
   libdrm-dev
   libdrm-nouveau1a
   libdrm-radeon1
+  libegl1-mesa
+  libegl1-mesa-dev
+  libegl1-mesa-drivers
   libelf1
   libelf-dev
   libexpat1
@@ -85,6 +90,8 @@ DEBIAN_PACKAGES="\
   libgpg-error-dev
   libgssapi-krb5-2
   libgssrpc4
+  libgtk-3-0
+  libgtk-3-dev
   libgtk2.0-0
   libgtk2.0-dev
   libk5crypto3
@@ -131,6 +138,8 @@ DEBIAN_PACKAGES="\
   libtasn1-3
   libudev-dev
   libudev0
+  libwayland0
+  libwayland-dev
   libx11-6
   libx11-dev
   libx11-xcb1

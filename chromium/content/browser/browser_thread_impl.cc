@@ -185,6 +185,16 @@ void BrowserThreadImpl::FlushThreadPoolHelperForTesting() {
 void BrowserThreadImpl::Init() {
   BrowserThreadGlobals& globals = g_globals.Get();
 
+  if (BrowserThread::CurrentlyOn(BrowserThread::DB) ||
+      BrowserThread::CurrentlyOn(BrowserThread::FILE) ||
+      BrowserThread::CurrentlyOn(BrowserThread::FILE_USER_BLOCKING) ||
+      BrowserThread::CurrentlyOn(BrowserThread::PROCESS_LAUNCHER) ||
+      BrowserThread::CurrentlyOn(BrowserThread::CACHE)) {
+    base::MessageLoop* message_loop = base::MessageLoop::current();
+    message_loop->DisallowNesting();
+    message_loop->DisallowTaskObservers();
+  }
+
   using base::subtle::AtomicWord;
   AtomicWord* storage =
       reinterpret_cast<AtomicWord*>(&globals.thread_delegates[identifier_]);
@@ -561,20 +571,6 @@ BrowserThread::GetTaskRunnerForThread(ID identifier) {
   return g_task_runners.Get().proxies[identifier];
 }
 
-// static
-base::MessageLoop* BrowserThread::UnsafeGetMessageLoopForThread(ID identifier) {
-  if (g_globals == nullptr)
-    return nullptr;
-
-  BrowserThreadGlobals& globals = g_globals.Get();
-  base::AutoLock lock(globals.lock);
-  base::Thread* thread = globals.threads[identifier];
-  DCHECK(thread);
-  base::MessageLoop* loop = thread->message_loop();
-  return loop;
-}
-
-// static
 void BrowserThread::SetDelegate(ID identifier,
                                 BrowserThreadDelegate* delegate) {
   using base::subtle::AtomicWord;

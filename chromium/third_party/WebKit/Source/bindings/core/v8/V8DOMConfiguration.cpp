@@ -119,10 +119,48 @@ void installAttributeInternal(
     NOTREACHED();
 }
 
+void installLazyDataAttributeInternal(
+    v8::Isolate* isolate,
+    v8::Local<v8::ObjectTemplate> instanceTemplate,
+    v8::Local<v8::ObjectTemplate> prototypeTemplate,
+    const V8DOMConfiguration::AttributeConfiguration& attribute,
+    const DOMWrapperWorld& world) {
+  if (attribute.exposeConfiguration ==
+          V8DOMConfiguration::OnlyExposedToPrivateScript &&
+      !world.isPrivateScriptIsolatedWorld())
+    return;
+
+  v8::Local<v8::Name> name = v8AtomicString(isolate, attribute.name);
+  v8::AccessorNameGetterCallback getter = attribute.getter;
+  DCHECK(!attribute.setter);
+  DCHECK(!attribute.getterForMainWorld);
+  DCHECK(!attribute.setterForMainWorld);
+  v8::Local<v8::Value> data =
+      v8::External::New(isolate, const_cast<WrapperTypeInfo*>(attribute.data));
+  DCHECK(static_cast<v8::AccessControl>(attribute.settings) == v8::DEFAULT);
+
+  DCHECK(attribute.propertyLocationConfiguration);
+  if (attribute.propertyLocationConfiguration &
+      V8DOMConfiguration::OnInstance) {
+    instanceTemplate->SetLazyDataProperty(
+        name, getter, data,
+        static_cast<v8::PropertyAttribute>(attribute.attribute));
+  }
+  if (attribute.propertyLocationConfiguration &
+      V8DOMConfiguration::OnPrototype) {
+    prototypeTemplate->SetLazyDataProperty(
+        name, getter, data,
+        static_cast<v8::PropertyAttribute>(attribute.attribute));
+  }
+  if (attribute.propertyLocationConfiguration & V8DOMConfiguration::OnInterface)
+    NOTREACHED();
+}
+
 template <class FunctionOrTemplate>
 v8::Local<FunctionOrTemplate> createAccessorFunctionOrTemplate(
     v8::Isolate*,
     v8::FunctionCallback,
+    V8DOMConfiguration::CachedAccessorCallback,
     v8::Local<v8::Value> data,
     v8::Local<v8::Signature>,
     int length);
@@ -132,13 +170,21 @@ v8::Local<v8::FunctionTemplate>
 createAccessorFunctionOrTemplate<v8::FunctionTemplate>(
     v8::Isolate* isolate,
     v8::FunctionCallback callback,
+    V8DOMConfiguration::CachedAccessorCallback cachedAccessorCallback,
     v8::Local<v8::Value> data,
     v8::Local<v8::Signature> signature,
     int length) {
   v8::Local<v8::FunctionTemplate> functionTemplate;
   if (callback) {
-    functionTemplate =
-        v8::FunctionTemplate::New(isolate, callback, data, signature, length);
+    if (cachedAccessorCallback) {
+      functionTemplate = v8::FunctionTemplate::NewWithCache(
+          isolate, callback, cachedAccessorCallback(isolate), data, signature,
+          length);
+    } else {
+      functionTemplate =
+          v8::FunctionTemplate::New(isolate, callback, data, signature, length);
+    }
+
     if (!functionTemplate.IsEmpty()) {
       functionTemplate->RemovePrototype();
       functionTemplate->SetAcceptAnyReceiver(false);
@@ -151,6 +197,7 @@ template <>
 v8::Local<v8::Function> createAccessorFunctionOrTemplate<v8::Function>(
     v8::Isolate* isolate,
     v8::FunctionCallback callback,
+    V8DOMConfiguration::CachedAccessorCallback,
     v8::Local<v8::Value> data,
     v8::Local<v8::Signature> signature,
     int length) {
@@ -159,7 +206,7 @@ v8::Local<v8::Function> createAccessorFunctionOrTemplate<v8::Function>(
 
   v8::Local<v8::FunctionTemplate> functionTemplate =
       createAccessorFunctionOrTemplate<v8::FunctionTemplate>(
-          isolate, callback, data, signature, length);
+          isolate, callback, nullptr, data, signature, length);
   if (functionTemplate.IsEmpty())
     return v8::Local<v8::Function>();
 
@@ -187,12 +234,15 @@ void installAccessorInternal(
   v8::Local<v8::Name> name = v8AtomicString(isolate, accessor.name);
   v8::FunctionCallback getterCallback = accessor.getter;
   v8::FunctionCallback setterCallback = accessor.setter;
+  V8DOMConfiguration::CachedAccessorCallback cachedAccessorCallback = nullptr;
   if (world.isMainWorld()) {
     if (accessor.getterForMainWorld)
       getterCallback = accessor.getterForMainWorld;
     if (accessor.setterForMainWorld)
       setterCallback = accessor.setterForMainWorld;
+    cachedAccessorCallback = accessor.cachedAccessorCallback;
   }
+
   // Support [LenientThis] by not specifying the signature.  V8 does not do
   // the type checking against holder if no signature is specified.  Note that
   // info.Holder() passed to callbacks will be *unsafe*.
@@ -206,10 +256,11 @@ void installAccessorInternal(
       (V8DOMConfiguration::OnInstance | V8DOMConfiguration::OnPrototype)) {
     v8::Local<FunctionOrTemplate> getter =
         createAccessorFunctionOrTemplate<FunctionOrTemplate>(
-            isolate, getterCallback, data, signature, 0);
+            isolate, getterCallback, cachedAccessorCallback, data, signature,
+            0);
     v8::Local<FunctionOrTemplate> setter =
         createAccessorFunctionOrTemplate<FunctionOrTemplate>(
-            isolate, setterCallback, data, signature, 1);
+            isolate, setterCallback, nullptr, data, signature, 1);
     if (accessor.propertyLocationConfiguration & V8DOMConfiguration::OnInstance)
       instanceOrTemplate->SetAccessorProperty(
           name, getter, setter,
@@ -229,10 +280,12 @@ void installAccessorInternal(
     // type check against a holder.
     v8::Local<FunctionOrTemplate> getter =
         createAccessorFunctionOrTemplate<FunctionOrTemplate>(
-            isolate, getterCallback, data, v8::Local<v8::Signature>(), 0);
+            isolate, getterCallback, nullptr, data, v8::Local<v8::Signature>(),
+            0);
     v8::Local<FunctionOrTemplate> setter =
         createAccessorFunctionOrTemplate<FunctionOrTemplate>(
-            isolate, setterCallback, data, v8::Local<v8::Signature>(), 1);
+            isolate, setterCallback, nullptr, data, v8::Local<v8::Signature>(),
+            1);
     interfaceOrTemplate->SetAccessorProperty(
         name, getter, setter,
         static_cast<v8::PropertyAttribute>(accessor.attribute),
@@ -305,6 +358,13 @@ void installMethodInternal(v8::Isolate* isolate,
 
   v8::Local<v8::Name> name = method.methodName(isolate);
   v8::FunctionCallback callback = method.callbackForWorld(world);
+  // Promise-returning functions need to return a reject promise when
+  // an exception occurs.  This includes a case that the receiver object is not
+  // of the type.  So, we disable the type check of the receiver object on V8
+  // side so that V8 won't throw.  Instead, we do the check on Blink side and
+  // convert an exception to a reject promise.
+  if (method.holderCheckConfiguration == V8DOMConfiguration::DoNotCheckHolder)
+    signature = v8::Local<v8::Signature>();
 
   DCHECK(method.propertyLocationConfiguration);
   if (method.propertyLocationConfiguration &
@@ -351,6 +411,13 @@ void installMethodInternal(
 
   v8::Local<v8::Name> name = method.methodName(isolate);
   v8::FunctionCallback callback = method.callbackForWorld(world);
+  // Promise-returning functions need to return a reject promise when
+  // an exception occurs.  This includes a case that the receiver object is not
+  // of the type.  So, we disable the type check of the receiver object on V8
+  // side so that V8 won't throw.  Instead, we do the check on Blink side and
+  // convert an exception to a reject promise.
+  if (method.holderCheckConfiguration == V8DOMConfiguration::DoNotCheckHolder)
+    signature = v8::Local<v8::Signature>();
 
   DCHECK(method.propertyLocationConfiguration);
   if (method.propertyLocationConfiguration &
@@ -421,6 +488,19 @@ void V8DOMConfiguration::installAttribute(
     v8::Local<v8::Object> prototype,
     const AttributeConfiguration& attribute) {
   installAttributeInternal(isolate, instance, prototype, attribute, world);
+}
+
+void V8DOMConfiguration::installLazyDataAttributes(
+    v8::Isolate* isolate,
+    const DOMWrapperWorld& world,
+    v8::Local<v8::ObjectTemplate> instanceTemplate,
+    v8::Local<v8::ObjectTemplate> prototypeTemplate,
+    const AttributeConfiguration* attributes,
+    size_t attributeCount) {
+  for (size_t i = 0; i < attributeCount; ++i) {
+    installLazyDataAttributeInternal(isolate, instanceTemplate,
+                                     prototypeTemplate, attributes[i], world);
+  }
 }
 
 void V8DOMConfiguration::installAccessors(
@@ -592,7 +672,6 @@ v8::Local<v8::FunctionTemplate> V8DOMConfiguration::domClassTemplate(
   if (!result.IsEmpty())
     return result;
 
-  TRACE_EVENT_SCOPED_SAMPLING_STATE("blink", "BuildDOMTemplate");
   result = v8::FunctionTemplate::New(
       isolate, V8ObjectConstructor::isValidConstructorMode);
   configureDOMClassTemplate(isolate, world, result);

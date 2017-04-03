@@ -33,6 +33,7 @@
 #include "core/fetch/ImageResource.h"
 #include "core/fetch/ResourceFetcher.h"
 #include "core/fetch/ResourceLoaderOptions.h"
+#include "core/frame/Settings.h"
 #include "core/style/StyleFetchedImageSet.h"
 #include "core/style/StyleInvalidImage.h"
 #include "platform/weborigin/KURL.h"
@@ -55,7 +56,7 @@ void CSSImageSetValue::fillImageSet() {
     String imageURL = imageValue.url();
 
     ++i;
-    ASSERT_WITH_SECURITY_IMPLICATION(i < length);
+    SECURITY_DCHECK(i < length);
     const CSSValue& scaleFactorValue = item(i);
     float scaleFactor = toCSSPrimitiveValue(scaleFactorValue).getFloatValue();
 
@@ -116,6 +117,8 @@ StyleImage* CSSImageSetValue::cacheImage(
     if (crossOrigin != CrossOriginAttributeNotSet)
       request.setCrossOriginAccessControl(document.getSecurityOrigin(),
                                           crossOrigin);
+    if (document.settings() && document.settings()->fetchImagePlaceholders())
+      request.setAllowImagePlaceholder();
 
     if (ImageResource* cachedImage =
             ImageResource::fetch(request, document.fetcher()))
@@ -144,7 +147,7 @@ String CSSImageSetValue::customCSSText() const {
     result.append(' ');
 
     ++i;
-    ASSERT_WITH_SECURITY_IMPLICATION(i < length);
+    SECURITY_DCHECK(i < length);
     const CSSValue& scaleFactorValue = item(i);
     result.append(scaleFactorValue.cssText());
     // FIXME: Eventually the scale factor should contain it's own unit

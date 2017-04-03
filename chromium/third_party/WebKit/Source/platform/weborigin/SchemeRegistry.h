@@ -36,10 +36,10 @@
 
 namespace blink {
 
-using URLSchemesSet = HashSet<String, CaseFoldingHash>;
+using URLSchemesSet = HashSet<String>;
 
 template <typename T>
-using URLSchemesMap = HashMap<String, T, CaseFoldingHash>;
+using URLSchemesMap = HashMap<String, T>;
 
 class PLATFORM_EXPORT SchemeRegistry {
   STATIC_ONLY(SchemeRegistry);
@@ -50,7 +50,6 @@ class PLATFORM_EXPORT SchemeRegistry {
   static void registerURLSchemeAsLocal(const String&);
   static bool shouldTreatURLSchemeAsLocal(const String&);
 
-  static void registerURLSchemeAsRestrictingMixedContent(const String&);
   static bool shouldTreatURLSchemeAsRestrictingMixedContent(const String&);
 
   // Subresources transported by secure schemes do not trigger mixed content

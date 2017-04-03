@@ -268,7 +268,7 @@ void ChangePictureOptionsHandler::HandlePageHidden(
 
 void ChangePictureOptionsHandler::SendSelectedImage() {
   const user_manager::User* user = GetUser();
-  DCHECK(!user->email().empty());
+  DCHECK(user->GetAccountId().is_valid());
 
   previous_image_index_ = user->image_index();
   switch (previous_image_index_) {
@@ -279,7 +279,7 @@ void ChangePictureOptionsHandler::SendSelectedImage() {
       break;
     }
     case user_manager::User::USER_IMAGE_PROFILE: {
-      // User has his/her Profile image as the current image.
+      // User has their Profile image as the current image.
       SendProfileImage(user->GetImage(), true);
       break;
     }

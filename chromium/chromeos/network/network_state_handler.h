@@ -215,6 +215,11 @@ class CHROMEOS_EXPORT NetworkStateHandler
   // properties actually changed.
   void RequestUpdateForNetwork(const std::string& service_path);
 
+  // Informs NetworkStateHandler to notify observers that the properties for
+  // the network may have changed. Called e.g. when the proxy properties may
+  // have changed.
+  void SendUpdateNotificationForNetwork(const std::string& service_path);
+
   // Clears the last_error value for the NetworkState for |service_path|.
   void ClearLastErrorForNetwork(const std::string& service_path);
 
@@ -224,6 +229,14 @@ class CHROMEOS_EXPORT NetworkStateHandler
   // Sets the Manager.WakeOnLan property. Note: we do not track this state, we
   // only set it.
   void SetWakeOnLanEnabled(bool enabled);
+
+  // Enable or disable network bandwidth throttling, on all interfaces on the
+  // system. If |enabled| is true, |upload_rate_kbits| and |download_rate_kbits|
+  // are the desired rates (in kbits/s) to throttle to. If |enabled| is false,
+  // throttling is off, and the rates are ignored.
+  void SetNetworkThrottlingStatus(bool enabled,
+                                  uint32_t upload_rate_kbits,
+                                  uint32_t download_rate_kbits);
 
   const std::string& GetCheckPortalListForTest() const {
     return check_portal_list_;
@@ -244,7 +257,7 @@ class CHROMEOS_EXPORT NetworkStateHandler
                            const std::string& error);
 
   // Constructs and initializes an instance for testing.
-  static NetworkStateHandler* InitializeForTest();
+  static std::unique_ptr<NetworkStateHandler> InitializeForTest();
 
   // Default set of comma separated interfaces on which to enable
   // portal checking.

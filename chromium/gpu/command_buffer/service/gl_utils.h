@@ -54,6 +54,22 @@ void PopulateNumericCapabilities(Capabilities* caps,
 
 bool CheckUniqueAndNonNullIds(GLsizei n, const GLuint* client_ids);
 
+const char* GetServiceVersionString(const FeatureInfo* feature_info);
+const char* GetServiceShadingLanguageVersionString(
+    const FeatureInfo* feature_info);
+const char* GetServiceRendererString(const FeatureInfo* feature_info);
+const char* GetServiceVendorString(const FeatureInfo* feature_info);
+
+void APIENTRY LogGLDebugMessage(GLenum source,
+                                GLenum type,
+                                GLuint id,
+                                GLenum severity,
+                                GLsizei length,
+                                const GLchar* message,
+                                GLvoid* user_param);
+
+void InitializeGLDebugLogging();
+
 } // gles2
 } // gpu
 

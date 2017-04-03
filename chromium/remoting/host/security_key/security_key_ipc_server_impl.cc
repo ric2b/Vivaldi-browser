@@ -11,14 +11,19 @@
 #include "base/callback.h"
 #include "base/callback_helpers.h"
 #include "base/location.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_checker.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/timer/timer.h"
 #include "ipc/ipc_channel.h"
 #include "ipc/ipc_message.h"
 #include "ipc/ipc_message_macros.h"
+#include "mojo/edk/embedder/embedder.h"
+#include "mojo/edk/embedder/named_platform_handle.h"
+#include "mojo/edk/embedder/named_platform_handle_utils.h"
 #include "remoting/base/logging.h"
 #include "remoting/host/chromoting_messages.h"
+#include "remoting/host/client_session_details.h"
 
 #if defined(OS_WIN)
 #include "base/strings/stringprintf.h"
@@ -41,13 +46,15 @@ namespace remoting {
 
 SecurityKeyIpcServerImpl::SecurityKeyIpcServerImpl(
     int connection_id,
-    uint32_t peer_session_id,
+    ClientSessionDetails* client_session_details,
     base::TimeDelta initial_connect_timeout,
     const SecurityKeyAuthHandler::SendMessageCallback& message_callback,
+    const base::Closure& connect_callback,
     const base::Closure& done_callback)
     : connection_id_(connection_id),
-      peer_session_id_(peer_session_id),
+      client_session_details_(client_session_details),
       initial_connect_timeout_(initial_connect_timeout),
+      connect_callback_(connect_callback),
       done_callback_(done_callback),
       message_callback_(message_callback),
       weak_factory_(this) {
@@ -56,15 +63,20 @@ SecurityKeyIpcServerImpl::SecurityKeyIpcServerImpl(
   DCHECK(!message_callback_.is_null());
 }
 
-SecurityKeyIpcServerImpl::~SecurityKeyIpcServerImpl() {}
+SecurityKeyIpcServerImpl::~SecurityKeyIpcServerImpl() {
+  CloseChannel();
+}
 
-bool SecurityKeyIpcServerImpl::CreateChannel(const std::string& channel_name,
-                                             base::TimeDelta request_timeout) {
+bool SecurityKeyIpcServerImpl::CreateChannel(
+    const mojo::edk::NamedPlatformHandle& channel_handle,
+    base::TimeDelta request_timeout) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(!ipc_channel_);
   security_key_request_timeout_ = request_timeout;
 
+  mojo::edk::CreateServerHandleOptions options;
 #if defined(OS_WIN)
+  options.enforce_uniqueness = false;
   // Create a named pipe owned by the current user (the LocalService account
   // (SID: S-1-5-19) when running in the network process) which is available to
   // all authenticated users.
@@ -74,20 +86,17 @@ bool SecurityKeyIpcServerImpl::CreateChannel(const std::string& channel_name,
     return false;
   }
   std::string user_sid_utf8 = base::WideToUTF8(user_sid);
-  std::string security_descriptor = base::StringPrintf(
-      "O:%sG:%sD:(A;;GA;;;AU)", user_sid_utf8.c_str(), user_sid_utf8.c_str());
+  options.security_descriptor = base::UTF8ToUTF16(base::StringPrintf(
+      "O:%sG:%sD:(A;;GA;;;AU)", user_sid_utf8.c_str(), user_sid_utf8.c_str()));
 
-  base::win::ScopedHandle pipe;
-  if (!CreateIpcChannel(channel_name, security_descriptor, &pipe)) {
-    return false;
-  }
-
-  ipc_channel_ =
-      IPC::Channel::CreateNamedServer(IPC::ChannelHandle(pipe.Get()), this);
-#else  // defined(OS_WIN)
-  ipc_channel_ =
-      IPC::Channel::CreateNamedServer(IPC::ChannelHandle(channel_name), this);
-#endif  // !defined(OS_WIN)
+#endif  // defined(OS_WIN)
+  mojo_peer_token_ = mojo::edk::GenerateRandomToken();
+  ipc_channel_ = IPC::Channel::CreateServer(
+      mojo::edk::ConnectToPeerProcess(
+          mojo::edk::CreateServerHandle(channel_handle, options),
+          mojo_peer_token_)
+          .release(),
+      this);
 
   if (!ipc_channel_->Connect()) {
     ipc_channel_.reset();
@@ -138,38 +147,48 @@ bool SecurityKeyIpcServerImpl::OnMessageReceived(const IPC::Message& message) {
 void SecurityKeyIpcServerImpl::OnChannelConnected(int32_t peer_pid) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
+  if (!connect_callback_.is_null()) {
+    base::ResetAndReturn(&connect_callback_).Run();
+  }
+
 #if defined(OS_WIN)
   DWORD peer_session_id;
   if (!ProcessIdToSessionId(peer_pid, &peer_session_id)) {
     PLOG(ERROR) << "ProcessIdToSessionId() failed";
     connection_close_pending_ = true;
-  } else if (peer_session_id != peer_session_id_) {
+  } else if (peer_session_id != client_session_details_->desktop_session_id()) {
     LOG(ERROR) << "Ignoring connection attempt from outside remoted session.";
     connection_close_pending_ = true;
   }
   if (connection_close_pending_) {
+    ipc_channel_->Send(
+        new ChromotingNetworkToRemoteSecurityKeyMsg_InvalidSession());
+
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE, base::Bind(&SecurityKeyIpcServerImpl::OnChannelError,
                               weak_factory_.GetWeakPtr()));
     return;
   }
 #else   // !defined(OS_WIN)
-  CHECK_EQ(peer_session_id_, UINT32_MAX);
+  CHECK_EQ(client_session_details_->desktop_session_id(), UINT32_MAX);
 #endif  // !defined(OS_WIN)
 
   // Reset the timer to give the client a chance to send the request.
   timer_.Start(FROM_HERE, initial_connect_timeout_,
                base::Bind(&SecurityKeyIpcServerImpl::OnChannelError,
                           base::Unretained(this)));
+
+  ipc_channel_->Send(
+      new ChromotingNetworkToRemoteSecurityKeyMsg_ConnectionReady());
 }
 
 void SecurityKeyIpcServerImpl::OnChannelError() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  if (ipc_channel_) {
-    ipc_channel_->Close();
-    connection_close_pending_ = false;
-  }
+  CloseChannel();
 
+  if (!connect_callback_.is_null()) {
+    base::ResetAndReturn(&connect_callback_).Run();
+  }
   if (!done_callback_.is_null()) {
     // Note: This callback may result in this object being torn down.
     base::ResetAndReturn(&done_callback_).Run();
@@ -187,6 +206,18 @@ void SecurityKeyIpcServerImpl::OnSecurityKeyRequest(
 
   HOST_LOG << "Received security key request: " << GetCommandCode(request_data);
   message_callback_.Run(connection_id_, request_data);
+}
+
+void SecurityKeyIpcServerImpl::CloseChannel() {
+  if (ipc_channel_) {
+    ipc_channel_->Close();
+    connection_close_pending_ = false;
+  }
+  // Close the underlying mojo connection.
+  if (!mojo_peer_token_.empty()) {
+    mojo::edk::ClosePeerConnection(mojo_peer_token_);
+    mojo_peer_token_.clear();
+  }
 }
 
 }  // namespace remoting

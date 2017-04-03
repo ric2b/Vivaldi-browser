@@ -44,6 +44,7 @@
 #include "components/data_use_measurement/core/data_use_user_data.h"
 #include "components/prefs/pref_service.h"
 #include "components/rappor/rappor_service.h"
+#include "components/safe_browsing_db/safe_browsing_prefs.h"
 #include "components/variations/net/variations_http_headers.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/browser_thread.h"
@@ -146,6 +147,7 @@ const wchar_t kFoundUwsValueName[] = L"FoundUws";
 const wchar_t kMemoryUsedValueName[] = L"MemoryUsed";
 const wchar_t kLogsUploadResultValueName[] = L"LogsUploadResult";
 const wchar_t kExitCodeValueName[] = L"ExitCode";
+const wchar_t kEngineErrorCodeValueName[] = L"EngineErrorCode";
 
 const char kFoundUwsMetricName[] = "SoftwareReporter.FoundUwS";
 const char kFoundUwsReadErrorMetricName[] =
@@ -159,6 +161,7 @@ const char kLogsUploadResultMetricName[] = "SoftwareReporter.LogsUploadResult";
 const char kLogsUploadResultRegistryErrorMetricName[] =
     "SoftwareReporter.LogsUploadResultRegistryError";
 const char kExitCodeMetricName[] = "SoftwareReporter.ExitCodeFromRegistry";
+const char kEngineErrorCodeMetricName[] = "SoftwareReporter.EngineErrorCode";
 
 // The max value for histogram SoftwareReporter.LogsUploadResult, which is used
 // to send UMA information about the result of Software Reporter's attempt to
@@ -223,6 +226,20 @@ class UMAHistogramReporter {
 
     RecordSparseHistogram(kExitCodeMetricName, exit_code_in_registry);
     reporter_key.DeleteValue(kExitCodeValueName);
+  }
+
+  void ReportEngineErrorCode() const {
+    base::win::RegKey reporter_key;
+    DWORD engine_error_code;
+    if (reporter_key.Open(HKEY_CURRENT_USER, registry_key_.c_str(),
+                          KEY_QUERY_VALUE | KEY_SET_VALUE) != ERROR_SUCCESS ||
+        reporter_key.ReadValueDW(kEngineErrorCodeValueName,
+                                 &engine_error_code) != ERROR_SUCCESS) {
+      return;
+    }
+
+    RecordSparseHistogram(kEngineErrorCodeMetricName, engine_error_code);
+    reporter_key.DeleteValue(kEngineErrorCodeValueName);
   }
 
   // Reports UwS found by the software reporter tool via UMA and RAPPOR.
@@ -553,8 +570,7 @@ void DisplaySRTPrompt(const base::FilePath& download_path) {
 bool SafeBrowsingExtendedEnabledForBrowser(const Browser* browser) {
   const Profile* profile = browser->profile();
   return profile && !profile->IsOffTheRecord() &&
-         profile->GetPrefs()->GetBoolean(
-             prefs::kSafeBrowsingExtendedReportingEnabled);
+         IsExtendedReportingEnabled(*profile->GetPrefs());
 }
 
 // Returns true if there is a profile that is not in incognito mode and the user
@@ -616,10 +632,13 @@ class SRTFetcher : public net::URLFetcherDelegate {
     ProfileIOData* io_data = ProfileIOData::FromResourceContext(
         profile_->GetResourceContext());
     net::HttpRequestHeaders headers;
+    // Note: It's fine to pass in |is_signed_in| false, which does not affect
+    // transmission of experiment ids coming from the variations server.
+    bool is_signed_in = false;
     variations::AppendVariationHeaders(
         url_fetcher_->GetOriginalURL(), io_data->IsOffTheRecord(),
         ChromeMetricsServiceAccessor::IsMetricsAndCrashReportingEnabled(),
-        &headers);
+        is_signed_in, &headers);
     url_fetcher_->SetExtraRequestHeaders(headers.ToString());
     url_fetcher_->Start();
   }
@@ -831,6 +850,7 @@ class ReporterRunner : public chrome::BrowserListObserver {
     UMAHistogramReporter uma(finished_invocation.suffix);
     uma.ReportVersion(version);
     uma.ReportExitCode(exit_code);
+    uma.ReportEngineErrorCode();
     uma.ReportFoundUwS(finished_invocation.BehaviourIsSupported(
         SwReporterInvocation::BEHAVIOUR_LOG_TO_RAPPOR));
 

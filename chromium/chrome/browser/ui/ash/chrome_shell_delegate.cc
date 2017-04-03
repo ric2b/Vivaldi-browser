@@ -29,6 +29,7 @@
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
 #include "chrome/browser/chromeos/accessibility/magnification_manager.h"
+#include "chrome/browser/chromeos/arc/fileapi/arc_content_file_system_url_util.h"
 #include "chrome/browser/chromeos/background/ash_wallpaper_delegate.h"
 #include "chrome/browser/chromeos/display/display_configuration_observer.h"
 #include "chrome/browser/chromeos/display/display_preferences.h"
@@ -46,7 +47,6 @@
 #include "chrome/browser/ui/app_list/app_list_view_delegate.h"
 #include "chrome/browser/ui/ash/app_list/app_list_service_ash.h"
 #include "chrome/browser/ui/ash/chrome_keyboard_ui.h"
-#include "chrome/browser/ui/ash/chrome_new_window_delegate.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller_impl.h"
 #include "chrome/browser/ui/ash/launcher/launcher_context_menu.h"
 #include "chrome/browser/ui/ash/media_delegate_chromeos.h"
@@ -282,20 +282,28 @@ class AccessibilityDelegateImpl : public ash::AccessibilityDelegate {
   void TriggerAccessibilityAlert(ash::AccessibilityAlert alert) override {
     Profile* profile = ProfileManager::GetActiveUserProfile();
     if (profile) {
+      int msg = 0;
       switch (alert) {
-        case ash::A11Y_ALERT_WINDOW_NEEDED: {
-          AutomationManagerAura::GetInstance()->HandleAlert(
-              profile, l10n_util::GetStringUTF8(IDS_A11Y_ALERT_WINDOW_NEEDED));
+        case ash::A11Y_ALERT_CAPS_ON:
+          msg = IDS_A11Y_ALERT_CAPS_ON;
           break;
-        }
-        case ash::A11Y_ALERT_WINDOW_OVERVIEW_MODE_ENTERED: {
-          AutomationManagerAura::GetInstance()->HandleAlert(
-              profile, l10n_util::GetStringUTF8(
-                           IDS_A11Y_ALERT_WINDOW_OVERVIEW_MODE_ENTERED));
+        case ash::A11Y_ALERT_CAPS_OFF:
+          msg = IDS_A11Y_ALERT_CAPS_OFF;
           break;
-        }
+        case ash::A11Y_ALERT_WINDOW_NEEDED:
+          msg = IDS_A11Y_ALERT_WINDOW_NEEDED;
+          break;
+        case ash::A11Y_ALERT_WINDOW_OVERVIEW_MODE_ENTERED:
+          msg = IDS_A11Y_ALERT_WINDOW_OVERVIEW_MODE_ENTERED;
+          break;
         case ash::A11Y_ALERT_NONE:
+          msg = 0;
           break;
+      }
+
+      if (msg) {
+        AutomationManagerAura::GetInstance()->HandleAlert(
+            profile, l10n_util::GetStringUTF8(msg));
       }
     }
   }
@@ -332,13 +340,8 @@ ChromeShellDelegate::ChromeShellDelegate()
 ChromeShellDelegate::~ChromeShellDelegate() {
 }
 
-shell::Connector* ChromeShellDelegate::GetShellConnector() const {
+service_manager::Connector* ChromeShellDelegate::GetShellConnector() const {
   return content::ServiceManagerConnection::GetForProcess()->GetConnector();
-}
-
-bool ChromeShellDelegate::IsFirstRunAfterBoot() const {
-  return base::CommandLine::ForCurrentProcess()->HasSwitch(
-      chromeos::switches::kFirstExecAfterBoot);
 }
 
 bool ChromeShellDelegate::IsMultiProfilesEnabled() const {
@@ -358,7 +361,7 @@ bool ChromeShellDelegate::IsMultiProfilesEnabled() const {
     // in. For special cases like Kiosk mode and / or guest mode this isn't a
     // problem since either the browser gets restarted and / or the flag is not
     // allowed, but for an "ephermal" user (see crbug.com/312324) it is not
-    // decided yet if he could add other users to his session or not.
+    // decided yet if they could add other users to their session or not.
     // TODO(skuhne): As soon as the issue above needs to be resolved, this logic
     // should change.
     logged_in_users = 1;
@@ -392,7 +395,9 @@ bool ChromeShellDelegate::IsForceMaximizeOnFirstRun() const {
 }
 
 void ChromeShellDelegate::PreInit() {
-  chromeos::LoadDisplayPreferences(IsFirstRunAfterBoot());
+  bool first_run_after_boot = base::CommandLine::ForCurrentProcess()->HasSwitch(
+      chromeos::switches::kFirstExecAfterBoot);
+  chromeos::LoadDisplayPreferences(first_run_after_boot);
   // Object owns itself, and deletes itself when Observer::OnShutdown is called:
   new policy::DisplayRotationDefaultHandler();
   // Set the observer now so that we can save the initial state
@@ -413,10 +418,17 @@ void ChromeShellDelegate::OpenUrlFromArc(const GURL& url) {
   if (!url.is_valid())
     return;
 
+  GURL url_to_open = url;
+  if (url.SchemeIs(url::kFileScheme) || url.SchemeIs(url::kContentScheme)) {
+    // Chrome cannot open this URL. Read the contents via ARC content file
+    // system with an external file URL.
+    url_to_open = arc::ArcUrlToExternalFileUrl(url_to_open);
+  }
+
   chrome::ScopedTabbedBrowserDisplayer displayer(
       ProfileManager::GetActiveUserProfile());
   chrome::AddSelectedTabWithURL(
-      displayer.browser(), url,
+      displayer.browser(), url_to_open,
       ui::PageTransitionFromInt(ui::PAGE_TRANSITION_LINK |
                                 ui::PAGE_TRANSITION_FROM_API));
 
@@ -434,8 +446,7 @@ app_list::AppListPresenter* ChromeShellDelegate::GetAppListPresenter() {
 ash::ShelfDelegate* ChromeShellDelegate::CreateShelfDelegate(
     ash::ShelfModel* model) {
   if (!shelf_delegate_) {
-    shelf_delegate_ =
-        ChromeLauncherControllerImpl::CreateInstance(nullptr, model);
+    shelf_delegate_ = new ChromeLauncherControllerImpl(nullptr, model);
     shelf_delegate_->Init();
   }
   return shelf_delegate_;
@@ -503,10 +514,6 @@ ash::AccessibilityDelegate* ChromeShellDelegate::CreateAccessibilityDelegate() {
   return new AccessibilityDelegateImpl;
 }
 
-ash::NewWindowDelegate* ChromeShellDelegate::CreateNewWindowDelegate() {
-  return new ChromeNewWindowDelegate;
-}
-
 ash::MediaDelegate* ChromeShellDelegate::CreateMediaDelegate() {
   return new MediaDelegateChromeOS;
 }
@@ -550,7 +557,7 @@ void ChromeShellDelegate::Observe(int type,
       // start.
       if (user_manager::UserManager::Get()->GetLoggedInUsers().size() < 2)
         InitAfterFirstSessionStart();
-      ash::Shell::GetInstance()->ShowShelf();
+      ash::WmShell::Get()->ShowShelf();
       break;
     default:
       NOTREACHED() << "Unexpected notification " << type;

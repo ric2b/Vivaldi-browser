@@ -34,9 +34,9 @@ java_cpp_enum("effective_connection_type_java") {
   ]
 }
 
-java_cpp_enum("chromium_url_request_java") {
+java_cpp_enum("rtt_throughput_values_java") {
   sources = [
-    "chromium_url_request.h",
+    "//net/nqe/network_quality.h",
   ]
 }
 
@@ -58,18 +58,6 @@ java_cpp_enum("url_request_error_java") {
   ]
 }
 
-# This target is a jar file containing classes that Cronet's javadocs
-# may reference but are not included in the javadocs themselves.
-android_library("cronet_javadoc_classpath") {
-  deps = [
-    "//third_party/android_tools:android_support_annotations_java",
-  ]
-  srcjar_deps = [
-    ":effective_connection_type_java",
-    ":url_request_error_java",
-  ]
-}
-
 java_cpp_enum("http_cache_type_java") {
   sources = [
     "//components/cronet/url_request_context_config.h",
@@ -78,12 +66,12 @@ java_cpp_enum("http_cache_type_java") {
 
 java_cpp_template("load_states_list") {
   sources = [
-    "java/src/org/chromium/net/LoadState.template",
+    "java/src/org/chromium/net/impl/LoadState.template",
   ]
   inputs = [
     "//net/base/load_states_list.h",
   ]
-  package_name = "org/chromium/net"
+  package_name = "org/chromium/net/impl"
 }
 
 _generated_api_version_java_dir =
@@ -168,7 +156,6 @@ template("cronet_static_tmpl") {
     defines = []
 
     deps = [
-      ":chromium_url_request_java",
       ":cronet_android_cert_proto",
       ":cronet_jni_headers",
       ":cronet_version_header",
@@ -181,7 +168,6 @@ template("cronet_static_tmpl") {
     sources = [
       "//components/cronet/android/cert/cert_verifier_cache_serializer.cc",
       "//components/cronet/android/cert/cert_verifier_cache_serializer.h",
-      "//components/cronet/android/chromium_url_request.h",
       "//components/cronet/android/cronet_bidirectional_stream_adapter.cc",
       "//components/cronet/android/cronet_bidirectional_stream_adapter.h",
       "//components/cronet/android/cronet_in_memory_pref_store.cc",
@@ -276,20 +262,23 @@ shared_library("cronet") {
   configs -= [ "//build/config/android:hide_native_jni_exports" ]
 }
 
-# cronet_api.jar defines Cronet API and provides implementation of
-# legacy api using HttpUrlConnection (not the Chromium stack).
-android_library("cronet_api") {
+cronet_api_srcjar_deps = [ ":cronet_api_version_srcjar" ]
+
+# cronet_api_java.jar defines Cronet API.
+android_library("cronet_api_java") {
+  output_name = "cronet_api"
   java_files = [
     "api/src/org/chromium/net/BidirectionalStream.java",
     "api/src/org/chromium/net/CronetEngine.java",
     "api/src/org/chromium/net/CronetException.java",
+    "api/src/org/chromium/net/ICronetEngineBuilder.java",
+    "api/src/org/chromium/net/ImplLoader.java",
+    "api/src/org/chromium/net/ExperimentalBidirectionalStream.java",
+    "api/src/org/chromium/net/ExperimentalCronetEngine.java",
+    "api/src/org/chromium/net/ExperimentalUrlRequest.java",
     "api/src/org/chromium/net/InlineExecutionProhibitedException.java",
-    "api/src/org/chromium/net/InputStreamChannel.java",
-    "api/src/org/chromium/net/JavaCronetEngine.java",
-    "api/src/org/chromium/net/JavaUrlRequest.java",
     "api/src/org/chromium/net/NetworkQualityRttListener.java",
     "api/src/org/chromium/net/NetworkQualityThroughputListener.java",
-    "api/src/org/chromium/net/Preconditions.java",
     "api/src/org/chromium/net/QuicException.java",
     "api/src/org/chromium/net/RequestFinishedInfo.java",
     "api/src/org/chromium/net/UploadDataProvider.java",
@@ -298,27 +287,71 @@ android_library("cronet_api") {
     "api/src/org/chromium/net/UrlRequest.java",
     "api/src/org/chromium/net/UrlRequestException.java",
     "api/src/org/chromium/net/UrlResponseInfo.java",
-    "api/src/org/chromium/net/UserAgent.java",
   ]
 
   deps = [
     "//third_party/android_tools:android_support_annotations_java",
   ]
 
-  srcjar_deps = [
-    ":cronet_api_version_srcjar",
-    ":effective_connection_type_java",
-    ":http_cache_type_java",
-    ":url_request_error_java",
-    ":load_states_list",
-    ":network_quality_observation_source_java",
-  ]
+  srcjar_deps = cronet_api_srcjar_deps
 
   run_findbugs_override = true
 }
 
-android_library("cronet_java") {
+cronet_impl_common_java_srcjar_deps = [
+  ":cronet_impl_version_srcjar",
+  ":effective_connection_type_java",
+  ":http_cache_type_java",
+  ":load_states_list",
+  ":rtt_throughput_values_java",
+]
+
+# cronet_impl_common_java.jar - common Cronet code that is shared
+# by all Cronet engine implementations.
+android_library("cronet_impl_common_java") {
   java_files = [
+    "java/src/org/chromium/net/impl/CronetEngineBase.java",
+    "java/src/org/chromium/net/impl/CronetEngineBuilderImpl.java",
+    "java/src/org/chromium/net/impl/Preconditions.java",
+    "java/src/org/chromium/net/impl/RequestFinishedInfoImpl.java",
+    "java/src/org/chromium/net/impl/UrlRequestBase.java",
+    "java/src/org/chromium/net/impl/UrlRequestBuilderImpl.java",
+    "java/src/org/chromium/net/impl/UrlResponseInfoImpl.java",
+    "java/src/org/chromium/net/impl/UserAgent.java",
+  ]
+
+  deps = [
+    ":cronet_api_java",
+    "//third_party/android_tools:android_support_annotations_java",
+  ]
+
+  srcjar_deps = cronet_impl_common_java_srcjar_deps
+}
+
+# cronet_impl_platform_java.jar - Java platform based implementation of the Cronet engine.
+android_library("cronet_impl_platform_java") {
+  java_files = [
+    "java/src/org/chromium/net/impl/InputStreamChannel.java",
+    "java/src/org/chromium/net/impl/JavaCronetEngine.java",
+    "java/src/org/chromium/net/impl/JavaUrlRequest.java",
+  ]
+
+  deps = [
+    ":cronet_api_java",
+    ":cronet_impl_common_java",
+  ]
+}
+
+cronet_impl_native_java_srcjar_deps = [
+  ":net_request_priority_java",
+  ":network_quality_observation_source_java",
+  ":url_request_error_java",
+]
+
+# cronet_impl_native_java.jar - native implementation of the Cronet engine.
+android_library("cronet_impl_native_java") {
+  java_files = [
+    "java/src/org/chromium/net/impl/BidirectionalStreamBuilderImpl.java",
     "java/src/org/chromium/net/impl/CronetBidirectionalStream.java",
     "java/src/org/chromium/net/impl/CronetLibraryLoader.java",
     "java/src/org/chromium/net/impl/CronetMetrics.java",
@@ -337,25 +370,32 @@ android_library("cronet_java") {
   ]
 
   deps = [
-    ":cronet_api",
+    ":cronet_api_java",
+    ":cronet_impl_common_java",
     "//base:base_java",
     "//net/android:net_java",
     "//third_party/android_tools:android_support_annotations_java",
     "//third_party/jsr-305:jsr_305_javalib",
   ]
 
-  srcjar_deps = [
-    ":cronet_impl_version_srcjar",
-    ":chromium_url_request_java",
-    ":net_request_priority_java",
-  ]
+  srcjar_deps = cronet_impl_native_java_srcjar_deps
+}
 
-  run_findbugs_override = true
+# Groups all Cronet implementations and the common code into a single Java dependency.
+java_group("cronet_impl_all_java") {
+  deps = [
+    ":cronet_impl_common_java",
+    ":cronet_impl_native_java",
+    ":cronet_impl_platform_java",
+  ]
 }
 
 android_resources("cronet_sample_apk_resources") {
   resource_dirs = [ "sample/res" ]
   android_manifest = "sample/AndroidManifest.xml"
+  deps = [
+    "//third_party/android_tools:android_support_v7_appcompat_java",
+  ]
 }
 
 android_library("cronet_sample_apk_java") {
@@ -365,10 +405,11 @@ android_library("cronet_sample_apk_java") {
   ]
 
   deps = [
-    ":cronet_api",
-    ":cronet_java",
+    ":cronet_api_java",
+    ":cronet_impl_all_java",
     ":cronet_sample_apk_resources",
     "//base:base_java",
+    "//third_party/android_tools:android_support_v7_appcompat_java",
   ]
 
   run_findbugs_override = true
@@ -417,8 +458,8 @@ instrumentation_test_apk("cronet_sample_test_apk") {
   ]
 
   deps = [
-    ":cronet_api",
-    ":cronet_java",
+    ":cronet_api_java",
+    ":cronet_impl_all_java",
     ":cronet_sample_apk_java",
     ":cronet_sample_test_apk_resources",
     "//base:base_java",
@@ -525,13 +566,13 @@ android_library("cronet_test_apk_java") {
   ]
 
   deps = [
-    ":cronet_api",
-    ":cronet_java",
+    ":cronet_api_java",
+    ":cronet_impl_all_java",
     "//base:base_java",
     "//base:base_java_test_support",
     "//net/android:net_java_test_support",
-    "//third_party/netty-tcnative:netty-tcnative",
-    "//third_party/netty4:netty_all",
+    "//third_party/netty-tcnative:netty-tcnative_java",
+    "//third_party/netty4:netty_all_java",
   ]
 
   run_findbugs_override = true
@@ -589,7 +630,7 @@ android_apk("cronet_test_apk") {
     ":cronet_test_apk_java",
     ":cronet_test_apk_resources",
     "//base:base_java",
-    "//third_party/netty-tcnative:netty-tcnative_all",
+    "//third_party/netty-tcnative:netty-tcnative-so",
   ]
 
   run_findbugs_override = true
@@ -634,8 +675,8 @@ android_library("cronet_javatests") {
   ]
 
   deps = [
-    ":cronet_api",
-    ":cronet_java",
+    ":cronet_api_java",
+    ":cronet_impl_all_java",
     ":cronet_test_apk_java",
     "//base:base_java",
     "//base:base_java_test_support",
@@ -652,8 +693,8 @@ instrumentation_test_apk("cronet_test_instrumentation_apk") {
   android_manifest = "test/javatests/AndroidManifest.xml"
 
   deps = [
-    ":cronet_api",
-    ":cronet_java",
+    ":cronet_api_java",
+    ":cronet_impl_all_java",
     ":cronet_javatests",
     ":cronet_test_apk_java",
     "//base:base_java",
@@ -676,8 +717,8 @@ android_library("cronet_perf_test_apk_java") {
       [ "test/javaperftests/src/org/chromium/net/CronetPerfTestActivity.java" ]
 
   deps = [
-    ":cronet_api",
-    ":cronet_java",
+    ":cronet_api_java",
+    ":cronet_impl_all_java",
     ":cronet_javatests",
     ":cronet_test_apk_java",
     "//base:base_java",
@@ -743,7 +784,7 @@ action("extract_cronet_jars") {
 
   sources = [
     "$root_out_dir/lib.java/base/base_java.jar",
-    "$root_out_dir/lib.java/components/cronet/android/cronet_java.jar",
+    "$root_out_dir/lib.java/components/cronet/android/cronet_impl_native_java.jar",
     "$root_out_dir/lib.java/net/android/net_java.jar",
     "$root_out_dir/lib.java/url/url_java.jar",
   ]
@@ -766,7 +807,7 @@ action("extract_cronet_jars") {
   ]
 
   deps = [
-    ":cronet_java",
+    ":cronet_impl_native_java",
     "//base:base_java",
     "//net/android:net_java",
     "//url:url_java",
@@ -774,7 +815,7 @@ action("extract_cronet_jars") {
 }
 
 action("repackage_extracted_jars") {
-  _output_jar = "$_package_dir/cronet.jar"
+  _output_jar = "$_package_dir/cronet_impl_native_java.jar"
 
   script = "//build/android/gyp/jar.py"
   outputs = [
@@ -862,11 +903,22 @@ template("jar_src") {
 
 jar_src("jar_cronet_api_source") {
   src_search_dirs = [ "api/src" ]
-
-  # Include generated Java files which should be a part of the API.
-  srcjar_deps = [ ":effective_connection_type_java" ]
-  source_deps = [ ":cronet_api" ]
+  source_deps = [ ":cronet_api_java" ]
+  srcjar_deps = cronet_api_srcjar_deps
   jar_path = "$_package_dir/cronet_api-src.jar"
+}
+
+jar_src("jar_cronet_impl_common_java_source") {
+  src_search_dirs = [ "java/src" ]
+  source_deps = [ ":cronet_impl_common_java" ]
+  srcjar_deps = cronet_impl_common_java_srcjar_deps
+  jar_path = "$_package_dir/cronet_impl_common_java-src.jar"
+}
+
+jar_src("jar_cronet_impl_platform_java_source") {
+  src_search_dirs = [ "java/src" ]
+  source_deps = [ ":cronet_impl_platform_java" ]
+  jar_path = "$_package_dir/cronet_impl_platform_java-src.jar"
 }
 
 zip("jar_cronet_sample_source") {
@@ -888,7 +940,7 @@ zip("jar_cronet_sample_source") {
   base_dir = "sample"
 }
 
-jar_src("jar_cronet_other_source") {
+jar_src("jar_cronet_impl_native_java_source") {
   src_search_dirs = [
     "//base/android/java/src",
     "//components/cronet/android/java/src",
@@ -896,12 +948,17 @@ jar_src("jar_cronet_other_source") {
     "//url/android/java/src",
   ]
   source_deps = [
-    ":cronet_java",
+    ":cronet_impl_native_java",
     "//base:base_java",
     "//net/android:net_java",
     "//url:url_java",
   ]
-  jar_path = "$_package_dir/cronet-src.jar"
+  srcjar_deps = cronet_impl_native_java_srcjar_deps + [
+                  "//base:base_android_java_enums_srcjar",
+                  "//net/android:net_android_java_enums_srcjar",
+                  "//net/android:net_errors_java",
+                ]
+  jar_path = "$_package_dir/cronet_impl_native_java-src.jar"
 }
 
 action("generate_licenses") {
@@ -946,7 +1003,6 @@ action("generate_javadoc") {
     rebase_path("$_package_dir/cronet_api-src.jar", root_build_dir),
   ]
   deps = [
-    ":cronet_javadoc_classpath",
     ":jar_cronet_api_source",
   ]
 }
@@ -954,6 +1010,8 @@ action("generate_javadoc") {
 copy("cronet_package_copy") {
   sources = [
     "$root_out_dir/lib.java/components/cronet/android/cronet_api.jar",
+    "$root_out_dir/lib.java/components/cronet/android/cronet_impl_common_java.jar",
+    "$root_out_dir/lib.java/components/cronet/android/cronet_impl_platform_java.jar",
     "//AUTHORS",
     "//chrome/VERSION",
   ]
@@ -962,7 +1020,9 @@ copy("cronet_package_copy") {
   ]
 
   deps = [
-    ":cronet_api",
+    ":cronet_api_java",
+    ":cronet_impl_common_java",
+    ":cronet_impl_platform_java",
   ]
 }
 
@@ -1040,7 +1100,9 @@ group("cronet_package") {
       ":generate_javadoc",
       ":generate_licenses",
       ":jar_cronet_api_source",
-      ":jar_cronet_other_source",
+      ":jar_cronet_impl_common_java_source",
+      ":jar_cronet_impl_native_java_source",
+      ":jar_cronet_impl_platform_java_source",
       ":jar_cronet_sample_source",
       ":repackage_extracted_jars",
     ]

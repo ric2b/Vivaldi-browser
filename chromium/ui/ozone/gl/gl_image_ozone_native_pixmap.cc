@@ -152,9 +152,9 @@ bool GLImageOzoneNativePixmap::Initialize(NativePixmap* pixmap,
     attrs.push_back(EGL_LINUX_DRM_FOURCC_EXT);
     attrs.push_back(FourCC(format));
 
-    const EGLint kLinuxDrmModifiers[] = {EGL_LINUX_DRM_PLANE0_MODIFIER0_EXT,
-                                         EGL_LINUX_DRM_PLANE1_MODIFIER0_EXT,
-                                         EGL_LINUX_DRM_PLANE2_MODIFIER0_EXT};
+    const EGLint kLinuxDrmModifiers[] = {EGL_DMA_BUF_PLANE0_MODIFIER_LO_EXT,
+                                         EGL_DMA_BUF_PLANE1_MODIFIER_LO_EXT,
+                                         EGL_DMA_BUF_PLANE2_MODIFIER_LO_EXT};
     bool has_dma_buf_import_modifier = gl::GLSurfaceEGL::HasEGLExtension(
         "EGL_EXT_image_dma_buf_import_modifiers");
 
@@ -196,10 +196,6 @@ bool GLImageOzoneNativePixmap::Initialize(NativePixmap* pixmap,
 
 unsigned GLImageOzoneNativePixmap::GetInternalFormat() {
   return internalformat_;
-}
-
-void GLImageOzoneNativePixmap::Destroy(bool have_context) {
-  GLImageEGL::Destroy(have_context);
 }
 
 bool GLImageOzoneNativePixmap::CopyTexImage(unsigned target) {
@@ -265,13 +261,14 @@ unsigned GLImageOzoneNativePixmap::GetInternalFormatForTesting(
       return GL_BGRA_EXT;
     case gfx::BufferFormat::YVU_420:
       return GL_RGB_YCRCB_420_CHROMIUM;
+    case gfx::BufferFormat::YUV_420_BIPLANAR:
+      return GL_RGB_YCBCR_420V_CHROMIUM;
     case gfx::BufferFormat::ATC:
     case gfx::BufferFormat::ATCIA:
     case gfx::BufferFormat::DXT1:
     case gfx::BufferFormat::DXT5:
     case gfx::BufferFormat::ETC1:
     case gfx::BufferFormat::RGBA_4444:
-    case gfx::BufferFormat::YUV_420_BIPLANAR:
     case gfx::BufferFormat::UYVY_422:
       NOTREACHED();
       return GL_NONE;

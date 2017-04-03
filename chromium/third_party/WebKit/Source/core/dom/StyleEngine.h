@@ -30,8 +30,12 @@
 #ifndef StyleEngine_h
 #define StyleEngine_h
 
+#include "bindings/core/v8/ScriptWrappable.h"
+#include "bindings/core/v8/TraceWrapperMember.h"
 #include "core/CoreExport.h"
+#include "core/css/ActiveStyleSheets.h"
 #include "core/css/CSSFontSelectorClient.h"
+#include "core/css/CSSGlobalRuleSet.h"
 #include "core/css/invalidation/StyleInvalidator.h"
 #include "core/css/resolver/StyleResolver.h"
 #include "core/css/resolver/StyleResolverStats.h"
@@ -55,12 +59,15 @@ class Node;
 class RuleFeatureSet;
 class ShadowTreeStyleSheetCollection;
 class StyleRuleFontFace;
+class StyleRuleUsageTracker;
 class StyleSheet;
 class StyleSheetContents;
+class ViewportStyleResolver;
 
 class CORE_EXPORT StyleEngine final
     : public GarbageCollectedFinalized<StyleEngine>,
-      public CSSFontSelectorClient {
+      public CSSFontSelectorClient,
+      public TraceWrapperBase {
   USING_GARBAGE_COLLECTED_MIXIN(StyleEngine);
 
  public:
@@ -83,29 +90,37 @@ class CORE_EXPORT StyleEngine final
 
   ~StyleEngine();
 
-  const HeapVector<Member<StyleSheet>>& styleSheetsForStyleSheetList(
-      TreeScope&);
+  const HeapVector<TraceWrapperMember<StyleSheet>>&
+  styleSheetsForStyleSheetList(TreeScope&);
 
-  const HeapVector<Member<CSSStyleSheet>>& injectedAuthorStyleSheets() const {
+  const HeapVector<TraceWrapperMember<CSSStyleSheet>>&
+  injectedAuthorStyleSheets() const {
     return m_injectedAuthorStyleSheets;
   }
   CSSStyleSheet* inspectorStyleSheet() const { return m_inspectorStyleSheet; }
 
   const HeapVector<Member<CSSStyleSheet>> activeStyleSheetsForInspector() const;
 
+  bool needsActiveStyleUpdate() const;
   void setNeedsActiveStyleUpdate(StyleSheet*, StyleResolverUpdateMode);
   void addStyleSheetCandidateNode(Node&);
   void removeStyleSheetCandidateNode(Node&);
   void removeStyleSheetCandidateNode(Node&, TreeScope&);
   void modifiedStyleSheetCandidateNode(Node&);
   void watchedSelectorsChanged();
+  void initialViewportChanged();
+  void viewportRulesChanged();
 
   void injectAuthorSheet(StyleSheetContents* authorSheet);
   CSSStyleSheet& ensureInspectorStyleSheet();
+  RuleSet* watchedSelectorsRuleSet() {
+    return m_globalRuleSet.watchedSelectorsRuleSet();
+  }
 
   void clearMediaQueryRuleSetStyleSheets();
   void updateStyleSheetsInImport(DocumentStyleSheetCollector& parentCollector);
   void updateActiveStyleSheets(StyleResolverUpdateMode);
+  void updateActiveStyle();
 
   enum ActiveSheetsUpdate { DontUpdateActiveSheets, UpdateActiveSheets };
   String preferredStylesheetSetName() const {
@@ -137,41 +152,52 @@ class CORE_EXPORT StyleEngine final
   bool ignoringPendingStylesheets() const { return m_ignorePendingStylesheets; }
 
   unsigned maxDirectAdjacentSelectors() const {
-    return m_maxDirectAdjacentSelectors;
+    return ruleFeatureSet().maxDirectAdjacentSelectors();
   }
-  bool usesSiblingRules() const { return m_usesSiblingRules; }
-  bool usesFirstLineRules() const { return m_usesFirstLineRules; }
+  bool usesSiblingRules() const { return ruleFeatureSet().usesSiblingRules(); }
+  bool usesFirstLineRules() const {
+    return ruleFeatureSet().usesFirstLineRules();
+  }
   bool usesWindowInactiveSelector() const {
-    return m_usesWindowInactiveSelector;
+    return ruleFeatureSet().usesWindowInactiveSelector();
   }
 
   bool usesRemUnits() const { return m_usesRemUnits; }
-  void setUsesRemUnit(bool b) { m_usesRemUnits = b; }
+  void setUsesRemUnit(bool usesRemUnits) { m_usesRemUnits = usesRemUnits; }
 
   void resetCSSFeatureFlags(const RuleFeatureSet&);
 
-  void didRemoveShadowRoot(ShadowRoot*);
   void shadowRootRemovedFromDocument(ShadowRoot*);
-  void appendActiveAuthorStyleSheets();
+  void addTreeBoundaryCrossingScope(const TreeScope&);
+  const DocumentOrderedList& treeBoundaryCrossingScopes() const {
+    return m_treeBoundaryCrossingScopes;
+  }
+  void resetAuthorStyle(TreeScope&);
 
-  StyleResolver* resolver() const { return m_resolver.get(); }
+  StyleResolver* resolver() const { return m_resolver; }
+
+  void setRuleUsageTracker(StyleRuleUsageTracker*);
 
   StyleResolver& ensureResolver() {
+    updateActiveStyle();
     if (!m_resolver) {
       createResolver();
     } else if (m_resolver->hasPendingAuthorStyleSheets()) {
       m_resolver->appendPendingAuthorStyleSheets();
+      finishAppendAuthorStyleSheets();
+    } else if (m_globalRuleSet.isDirty()) {
+      m_globalRuleSet.update(document());
     }
-    return *m_resolver.get();
+    return *m_resolver;
   }
 
-  bool hasResolver() const { return m_resolver.get(); }
+  bool hasResolver() const { return m_resolver; }
   void clearResolver();
   void clearMasterResolver();
 
   StyleInvalidator& styleInvalidator() { return m_styleInvalidator; }
 
-  CSSFontSelector* fontSelector() { return m_fontSelector.get(); }
+  CSSFontSelector* fontSelector() { return m_fontSelector; }
   void setFontSelector(CSSFontSelector*);
 
   void removeFontFaceRules(const HeapVector<Member<const StyleRuleFontFace>>&);
@@ -189,10 +215,12 @@ class CORE_EXPORT StyleEngine final
                              StyleEngineContext&);
 
   void collectScopedStyleFeaturesTo(RuleFeatureSet&) const;
-  void ensureFullscreenUAStyle();
+  void ensureUAStyleForFullscreen();
+  void ensureUAStyleForElement(const Element&);
 
   void platformColorsChanged();
 
+  bool hasRulesForId(const AtomicString& id) const;
   void classChangedForElement(const SpaceSplitString& changedClasses, Element&);
   void classChangedForElement(const SpaceSplitString& oldClasses,
                               const SpaceSplitString& newClasses,
@@ -211,9 +239,8 @@ class CORE_EXPORT StyleEngine final
                                               Element& removedElement,
                                               Element& afterElement);
   void scheduleNthPseudoInvalidations(ContainerNode&);
-  void scheduleInvalidationsForRuleSets(
-      TreeScope&,
-      const HeapVector<Member<const RuleSet>>&);
+  void scheduleInvalidationsForRuleSets(TreeScope&,
+                                        const HeapVector<Member<RuleSet>>&);
 
   unsigned styleForElementCount() const { return m_styleForElementCount; }
   void incStyleForElementCount() { m_styleForElementCount++; }
@@ -221,8 +248,13 @@ class CORE_EXPORT StyleEngine final
   StyleResolverStats* stats() { return m_styleResolverStats.get(); }
   void setStatsEnabled(bool);
 
-  DECLARE_VIRTUAL_TRACE();
+  PassRefPtr<ComputedStyle> findSharedStyle(const ElementResolveContext&);
 
+  void applyRuleSetChanges(TreeScope&,
+                           const ActiveStyleSheetVector& oldStyleSheets,
+                           const ActiveStyleSheetVector& newStyleSheets);
+
+  DECLARE_VIRTUAL_TRACE();
   DECLARE_TRACE_WRAPPERS();
 
  private:
@@ -248,19 +280,26 @@ class CORE_EXPORT StyleEngine final
   typedef HeapHashSet<Member<TreeScope>> UnorderedTreeScopeSet;
 
   void clearMediaQueryRuleSetOnTreeScopeStyleSheets(UnorderedTreeScopeSet&);
+  const RuleFeatureSet& ruleFeatureSet() const {
+    return m_globalRuleSet.ruleFeatureSet();
+  }
 
   void createResolver();
+  void appendActiveAuthorStyleSheets();
+  void finishAppendAuthorStyleSheets();
 
   CSSStyleSheet* parseSheet(Element&,
                             const String& text,
                             TextPosition startPosition);
 
-  const DocumentStyleSheetCollection* documentStyleSheetCollection() const {
-    return m_documentStyleSheetCollection.get();
+  const DocumentStyleSheetCollection& documentStyleSheetCollection() const {
+    DCHECK(m_documentStyleSheetCollection);
+    return *m_documentStyleSheetCollection;
   }
 
-  DocumentStyleSheetCollection* documentStyleSheetCollection() {
-    return m_documentStyleSheetCollection.get();
+  DocumentStyleSheetCollection& documentStyleSheetCollection() {
+    DCHECK(m_documentStyleSheetCollection);
+    return *m_documentStyleSheetCollection;
   }
 
   void updateActiveStyleSheetsInShadow(
@@ -271,8 +310,11 @@ class CORE_EXPORT StyleEngine final
   bool shouldSkipInvalidationFor(const Element&) const;
   void scheduleRuleSetInvalidationsForElement(
       Element&,
-      const HeapVector<Member<const RuleSet>>&);
+      const HeapVector<Member<RuleSet>>&);
   void invalidateSlottedElements(HTMLSlotElement&);
+
+  void updateViewport();
+  void updateActiveStyleSheets();
 
   Member<Document> m_document;
   bool m_isMaster;
@@ -284,10 +326,13 @@ class CORE_EXPORT StyleEngine final
   int m_pendingScriptBlockingStylesheets = 0;
   int m_pendingRenderBlockingStylesheets = 0;
 
-  HeapVector<Member<CSSStyleSheet>> m_injectedAuthorStyleSheets;
+  HeapVector<TraceWrapperMember<CSSStyleSheet>> m_injectedAuthorStyleSheets;
   Member<CSSStyleSheet> m_inspectorStyleSheet;
 
-  Member<DocumentStyleSheetCollection> m_documentStyleSheetCollection;
+  TraceWrapperMember<DocumentStyleSheetCollection>
+      m_documentStyleSheetCollection;
+
+  Member<StyleRuleUsageTracker> m_tracker;
 
   typedef HeapHashMap<WeakMember<TreeScope>,
                       Member<ShadowTreeStyleSheetCollection>>
@@ -297,20 +342,19 @@ class CORE_EXPORT StyleEngine final
   bool m_documentScopeDirty = true;
   UnorderedTreeScopeSet m_dirtyTreeScopes;
   UnorderedTreeScopeSet m_activeTreeScopes;
+  DocumentOrderedList m_treeBoundaryCrossingScopes;
 
   String m_preferredStylesheetSetName;
   String m_selectedStylesheetSetName;
 
-  bool m_usesSiblingRules = false;
-  bool m_usesFirstLineRules = false;
-  bool m_usesWindowInactiveSelector = false;
-  bool m_usesRemUnits = false;
-  unsigned m_maxDirectAdjacentSelectors = 0;
+  CSSGlobalRuleSet m_globalRuleSet;
 
+  bool m_usesRemUnits = false;
   bool m_ignorePendingStylesheets = false;
   bool m_didCalculateResolver = false;
 
   Member<StyleResolver> m_resolver;
+  Member<ViewportStyleResolver> m_viewportResolver;
   StyleInvalidator m_styleInvalidator;
 
   Member<CSSFontSelector> m_fontSelector;

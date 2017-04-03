@@ -13,9 +13,10 @@
 #include "content/public/browser/web_contents_delegate.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "services/navigation/public/interfaces/view.mojom.h"
-#include "services/shell/public/cpp/interface_factory.h"
-#include "services/shell/public/cpp/service.h"
-#include "services/shell/public/cpp/service_context_ref.h"
+#include "services/service_manager/public/cpp/connector.h"
+#include "services/service_manager/public/cpp/interface_factory.h"
+#include "services/service_manager/public/cpp/service.h"
+#include "services/service_manager/public/cpp/service_context_ref.h"
 #include "services/ui/public/cpp/window_tree_client_delegate.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/views/widget/widget_delegate.h"
@@ -33,10 +34,10 @@ class ViewImpl : public mojom::View,
                  public ui::WindowTreeClientDelegate,
                  public views::WidgetDelegate {
  public:
-  ViewImpl(std::unique_ptr<shell::Connector> connector,
+  ViewImpl(std::unique_ptr<service_manager::Connector> connector,
            const std::string& client_user_id,
            mojom::ViewClientPtr client,
-           std::unique_ptr<shell::ServiceContextRef> ref);
+           std::unique_ptr<service_manager::ServiceContextRef> ref);
   ~ViewImpl() override;
 
  private:
@@ -48,9 +49,8 @@ class ViewImpl : public mojom::View,
   void Reload(bool skip_cache) override;
   void Stop() override;
   void GetWindowTreeClient(ui::mojom::WindowTreeClientRequest request) override;
-  void ShowInterstitial(const mojo::String& html) override;
+  void ShowInterstitial(const std::string& html) override;
   void HideInterstitial() override;
-  void SetResizerSize(const gfx::Size& size) override;
 
   // content::WebContentsDelegate:
   void AddNewContents(content::WebContents* source,
@@ -70,7 +70,6 @@ class ViewImpl : public mojom::View,
   void LoadProgressChanged(content::WebContents* source,
                            double progress) override;
   void UpdateTargetURL(content::WebContents* source, const GURL& url) override;
-  gfx::Rect GetRootWindowResizerRect() const override;
 
   // content::NotificationObserver:
   void Observe(int type,
@@ -89,9 +88,9 @@ class ViewImpl : public mojom::View,
   views::Widget* GetWidget() override;
   const views::Widget* GetWidget() const override;
 
-  std::unique_ptr<shell::Connector> connector_;
+  std::unique_ptr<service_manager::Connector> connector_;
   mojom::ViewClientPtr client_;
-  std::unique_ptr<shell::ServiceContextRef> ref_;
+  std::unique_ptr<service_manager::ServiceContextRef> ref_;
 
   std::unique_ptr<ui::WindowTreeClient> window_tree_client_;
 
@@ -102,8 +101,6 @@ class ViewImpl : public mojom::View,
   content::NotificationRegistrar registrar_;
 
   std::unique_ptr<views::Widget> widget_;
-
-  gfx::Size resizer_size_;
 
   DISALLOW_COPY_AND_ASSIGN(ViewImpl);
 };

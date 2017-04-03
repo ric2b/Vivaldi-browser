@@ -28,6 +28,7 @@ class CC_EXPORT SolidColorScrollbarLayer : public ScrollbarLayerInterface,
   bool OpacityCanAnimateOnImplThread() const override;
   bool AlwaysUseActiveTreeOpacity() const override;
   ScrollbarLayerInterface* ToScrollbarLayer() override;
+  void ToLayerNodeProto(proto::LayerNode* proto) const override;
 
   void SetOpacity(float opacity) override;
   void PushPropertiesTo(LayerImpl* layer) override;
@@ -40,6 +41,18 @@ class CC_EXPORT SolidColorScrollbarLayer : public ScrollbarLayerInterface,
 
   ScrollbarOrientation orientation() const override;
 
+  int thumb_thickness() const {
+    return solid_color_scrollbar_layer_inputs_.thumb_thickness;
+  }
+
+  int track_start() const {
+    return solid_color_scrollbar_layer_inputs_.track_start;
+  }
+
+  bool is_left_side_vertical_scrollbar() const {
+    return solid_color_scrollbar_layer_inputs_.is_left_side_vertical_scrollbar;
+  }
+
  protected:
   SolidColorScrollbarLayer(ScrollbarOrientation orientation,
                            int thumb_thickness,
@@ -50,10 +63,6 @@ class CC_EXPORT SolidColorScrollbarLayer : public ScrollbarLayerInterface,
 
   // Layer overrides for proto conversions.
   void SetTypeForProtoSerialization(proto::LayerNode* proto) const override;
-  void LayerSpecificPropertiesToProto(proto::LayerProperties* proto,
-                                      bool inputs_only) override;
-  void FromLayerSpecificPropertiesProto(
-      const proto::LayerProperties& proto) override;
 
  private:
   friend class LayerSerializationTest;

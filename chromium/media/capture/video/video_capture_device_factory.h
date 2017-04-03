@@ -20,6 +20,9 @@ namespace media {
 // used to either obtain the supported formats of a device using
 // GetSupportedFormats(), or to create an instance of VideoCaptureDevice for
 // the device using CreateDevice().
+// TODO(chfremer): Add a layer on top of the platform-specific implementations
+// that uses strings instead of descriptors as keys for accessing devices.
+// crbug.com/665065
 class CAPTURE_EXPORT VideoCaptureDeviceFactory {
  public:
   static std::unique_ptr<VideoCaptureDeviceFactory> CreateFactory(
@@ -45,7 +48,6 @@ class CAPTURE_EXPORT VideoCaptureDeviceFactory {
       const VideoCaptureDeviceDescriptor& device_descriptor,
       VideoCaptureFormats* supported_formats) = 0;
 
- protected:
   // Gets descriptors of all video capture devices connected.
   // Used by the default implementation of EnumerateDevices().
   // Note: The same physical device may appear more than once if it is
@@ -53,6 +55,7 @@ class CAPTURE_EXPORT VideoCaptureDeviceFactory {
   virtual void GetDeviceDescriptors(
       VideoCaptureDeviceDescriptors* device_descriptors) = 0;
 
+ protected:
   base::ThreadChecker thread_checker_;
 
  private:

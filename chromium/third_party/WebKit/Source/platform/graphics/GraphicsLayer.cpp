@@ -109,16 +109,16 @@ GraphicsLayer::GraphicsLayer(GraphicsLayerClient* client)
       m_contentsLayer(0),
       m_contentsLayerId(0),
       m_scrollableArea(nullptr),
-      m_renderingContext3d(0) {
+      m_renderingContext3d(0),
+      m_hasPreferredRasterBounds(false) {
 #if ENABLE(ASSERT)
   if (m_client)
     m_client->verifyNotPainting();
 #endif
 
-  m_contentLayerDelegate = wrapUnique(new ContentLayerDelegate(this));
-  m_layer =
-      wrapUnique(Platform::current()->compositorSupport()->createContentLayer(
-          m_contentLayerDelegate.get()));
+  m_contentLayerDelegate = makeUnique<ContentLayerDelegate>(this);
+  m_layer = Platform::current()->compositorSupport()->createContentLayer(
+      m_contentLayerDelegate.get());
   m_layer->layer()->setDrawsContent(m_drawsContent && m_contentsVisible);
   m_layer->layer()->setLayerClient(this);
 }
@@ -148,6 +148,18 @@ LayoutRect GraphicsLayer::visualRect() const {
 
 void GraphicsLayer::setHasWillChangeTransformHint(bool hasWillChangeTransform) {
   m_layer->layer()->setHasWillChangeTransformHint(hasWillChangeTransform);
+}
+
+void GraphicsLayer::setPreferredRasterBounds(const IntSize& bounds) {
+  m_preferredRasterBounds = bounds;
+  m_hasPreferredRasterBounds = true;
+  m_layer->layer()->setPreferredRasterBounds(bounds);
+}
+
+void GraphicsLayer::clearPreferredRasterBounds() {
+  m_preferredRasterBounds = IntSize();
+  m_hasPreferredRasterBounds = false;
+  m_layer->layer()->clearPreferredRasterBounds();
 }
 
 void GraphicsLayer::setParent(GraphicsLayer* layer) {
@@ -327,8 +339,11 @@ void GraphicsLayer::notifyFirstPaintToClient() {
     DisplayItemList& itemList = m_paintController->newDisplayItemList();
     for (DisplayItem& item : itemList) {
       DisplayItem::Type type = item.getType();
+      if (type == DisplayItem::kDocumentBackground &&
+          !m_paintController->nonDefaultBackgroundColorPainted()) {
+        continue;
+      }
       if (DisplayItem::isDrawingType(type) &&
-          type != DisplayItem::kDocumentBackground &&
           static_cast<const DrawingDisplayItem&>(item).picture()) {
         m_painted = true;
         isFirstPaint = true;
@@ -504,11 +519,14 @@ void GraphicsLayer::resetTrackedRasterInvalidations() {
 }
 
 bool GraphicsLayer::hasTrackedRasterInvalidations() const {
-  RasterInvalidationTracking* tracking =
-      rasterInvalidationTrackingMap().find(this);
-  if (tracking)
+  if (auto* tracking = getRasterInvalidationTracking())
     return !tracking->trackedRasterInvalidations.isEmpty();
   return false;
+}
+
+const RasterInvalidationTracking* GraphicsLayer::getRasterInvalidationTracking()
+    const {
+  return rasterInvalidationTrackingMap().find(this);
 }
 
 void GraphicsLayer::trackRasterInvalidation(const DisplayItemClient& client,
@@ -605,15 +623,14 @@ static String pointerAsString(const void* ptr) {
 std::unique_ptr<JSONObject> GraphicsLayer::layerTreeAsJSON(
     LayerTreeFlags flags) const {
   RenderingContextMap renderingContextMap;
-  if (flags & OutputChildrenAsLayerList) {
-    std::unique_ptr<JSONObject> json = JSONObject::create();
-    std::unique_ptr<JSONArray> layersArray = JSONArray::create();
-    for (auto& child : m_children)
-      child->layersAsJSONArray(flags, renderingContextMap, layersArray.get());
-    json->setArray("layers", std::move(layersArray));
-    return json;
-  }
-  return layerTreeAsJSONInternal(flags, renderingContextMap);
+  if (flags & OutputAsLayerTree)
+    return layerTreeAsJSONInternal(flags, renderingContextMap);
+  std::unique_ptr<JSONObject> json = JSONObject::create();
+  std::unique_ptr<JSONArray> layersArray = JSONArray::create();
+  for (auto& child : m_children)
+    child->layersAsJSONArray(flags, renderingContextMap, layersArray.get());
+  json->setArray("layers", std::move(layersArray));
+  return json;
 }
 
 std::unique_ptr<JSONObject> GraphicsLayer::layerAsJSONInternal(
@@ -674,6 +691,11 @@ std::unique_ptr<JSONObject> GraphicsLayer::layerAsJSONInternal(
   if (!m_backfaceVisibility)
     json->setString("backfaceVisibility",
                     m_backfaceVisibility ? "visible" : "hidden");
+
+  if (m_hasPreferredRasterBounds) {
+    json->setArray("preferredRasterBounds",
+                   sizeAsJSONArray(m_preferredRasterBounds));
+  }
 
   if (flags & LayerTreeIncludesDebugInfo)
     json->setString("client", pointerAsString(m_client));
@@ -1041,8 +1063,8 @@ void GraphicsLayer::setContentsToImage(
 
   if (image && skImage) {
     if (!m_imageLayer) {
-      m_imageLayer = wrapUnique(
-          Platform::current()->compositorSupport()->createImageLayer());
+      m_imageLayer =
+          Platform::current()->compositorSupport()->createImageLayer();
       registerContentsLayer(m_imageLayer->layer());
     }
     m_imageLayer->setImage(skImage.get());
@@ -1117,16 +1139,16 @@ void GraphicsLayer::setScrollableArea(ScrollableArea* scrollableArea,
 
 void GraphicsLayer::didScroll() {
   if (m_scrollableArea) {
-    DoublePoint newPosition =
-        -m_scrollableArea->scrollOrigin() +
-        toDoubleSize(m_layer->layer()->scrollPositionDouble());
+    ScrollOffset newOffset =
+        toFloatSize(m_layer->layer()->scrollPositionDouble() -
+                    m_scrollableArea->scrollOrigin());
 
-    // FrameView::setScrollPosition() doesn't work for compositor commits
+    // FrameView::setScrollOffset() doesn't work for compositor commits
     // (interacts poorly with programmatic scroll animations) so we need to use
     // the ScrollableArea version. The FrameView method should go away soon
     // anyway.
-    m_scrollableArea->ScrollableArea::setScrollPosition(newPosition,
-                                                        CompositorScroll);
+    m_scrollableArea->ScrollableArea::setScrollOffset(newOffset,
+                                                      CompositorScroll);
   }
 }
 
@@ -1144,6 +1166,11 @@ void GraphicsLayer::didUpdateMainThreadScrollingReasons() {
       platformLayer()->mainThreadScrollingReasons());
 }
 
+void GraphicsLayer::didChangeScrollbarsHidden(bool hidden) {
+  if (m_scrollableArea)
+    m_scrollableArea->setScrollbarsHidden(hidden);
+}
+
 PaintController& GraphicsLayer::getPaintController() {
   RELEASE_ASSERT(drawsContent());
   if (!m_paintController)
@@ -1154,6 +1181,12 @@ PaintController& GraphicsLayer::getPaintController() {
 void GraphicsLayer::setElementId(const CompositorElementId& id) {
   if (WebLayer* layer = platformLayer())
     layer->setElementId(id);
+}
+
+CompositorElementId GraphicsLayer::elementId() const {
+  if (WebLayer* layer = platformLayer())
+    return layer->elementId();
+  return CompositorElementId();
 }
 
 void GraphicsLayer::setCompositorMutableProperties(uint32_t properties) {
@@ -1274,11 +1307,11 @@ void GraphicsLayer::checkPaintUnderInvalidations(const SkPicture& newPicture) {
 #ifndef NDEBUG
 void showGraphicsLayerTree(const blink::GraphicsLayer* layer) {
   if (!layer) {
-    fprintf(stderr, "Cannot showGraphicsLayerTree for (nil).\n");
+    LOG(INFO) << "Cannot showGraphicsLayerTree for (nil).";
     return;
   }
 
   String output = layer->layerTreeAsText(blink::LayerTreeIncludesDebugInfo);
-  fprintf(stderr, "%s\n", output.utf8().data());
+  LOG(INFO) << output.utf8().data();
 }
 #endif

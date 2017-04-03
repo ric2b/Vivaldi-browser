@@ -358,8 +358,8 @@ void OmniboxEditModel::AdjustTextForCopy(int sel_min,
   // entire host, and the user hasn't edited the host or manually removed the
   // scheme.
   GURL perm_url(PermanentURL());
-  if (perm_url.SchemeIs(url::kHttpScheme) &&
-      url->SchemeIs(url::kHttpScheme) && perm_url.host() == url->host()) {
+  if (perm_url.SchemeIs(url::kHttpScheme) && url->SchemeIs(url::kHttpScheme) &&
+      perm_url.host_piece() == url->host_piece()) {
     *write_url = true;
     base::string16 http = base::ASCIIToUTF16(url::kHttpScheme) +
         base::ASCIIToUTF16(url::kStandardSchemeSeparator);
@@ -406,45 +406,23 @@ void OmniboxEditModel::Revert() {
   client_->OnRevert();
 }
 
-void OmniboxEditModel::StartAutocomplete(
-    bool has_selected_text,
-    bool prevent_inline_autocomplete,
-    bool entering_keyword_mode) {
-  size_t cursor_position;
+void OmniboxEditModel::StartAutocomplete(bool has_selected_text,
+                                         bool prevent_inline_autocomplete) {
   const base::string16 input_text = MaybePrependKeyword(user_text_);
-  if (inline_autocomplete_text_.empty()) {
-    // Cursor position is equivalent to the current selection's end.
-    size_t start;
-    view_->GetSelectionBounds(&start, &cursor_position);
-    // For keyword searches, the text that AutocompleteInput expects is of the
-    // form "<keyword> <query>", where our query is |user_text_|.  So if we're
-    // in keyword mode, we need to adjust the cursor position forward by the
-    // length of "<keyword> ".  If we're just entering keyword mode, though, we
-    // have to avoid making this adjustment, because we haven't actually updated
-    // |user_text_| yet, but the caller has already cleared |is_keyword_hint_|,
-    // so MaybePrependKeyword() will believe we are already in keyword mode, and
-    // will thus mis-adjust the cursor position.
-    if (!entering_keyword_mode)
-      cursor_position += input_text.length() - user_text_.length();
-  } else {
-    // There are some cases where StartAutocomplete() may be called
-    // with non-empty |inline_autocomplete_text_|.  In such cases, we cannot
-    // use the current selection, because it could result with the cursor
-    // position past the last character from the user text.  Instead,
-    // we assume that the cursor is simply at the end of input.
-    // One example is when user presses Ctrl key while having a highlighted
-    // inline autocomplete text.
-    // TODO: Rethink how we are going to handle this case to avoid
-    // inconsistent behavior when user presses Ctrl key.
-    // See http://crbug.com/165961 and http://crbug.com/165968 for more details.
-    cursor_position = input_text.length();
-  }
 
-  GURL current_url;
-  if (client_->CurrentPageExists())
-    current_url = client_->GetURL();
+  size_t start, cursor_position;
+  view_->GetSelectionBounds(&start, &cursor_position);
+
+  // For keyword searches, the text that AutocompleteInput expects is
+  // of the form "<keyword> <query>", where our query is |user_text_|.
+  // So we need to adjust the cursor position forward by the length of
+  // any keyword added by MaybePrependKeyword() above.
+  if (is_keyword_selected())
+    cursor_position += input_text.length() - user_text_.length();
+
   input_ = AutocompleteInput(
-      input_text, cursor_position, std::string(), current_url, ClassifyPage(),
+      input_text, cursor_position, std::string(), client_->GetURL(),
+      ClassifyPage(),
       prevent_inline_autocomplete || just_deleted_text_ ||
           (has_selected_text && inline_autocomplete_text_.empty()) ||
           (paste_state_ != NONE),
@@ -560,13 +538,23 @@ void OmniboxEditModel::EnterKeywordModeForDefaultSearchProvider(
     KeywordModeEntryMethod entry_method) {
   autocomplete_controller()->Stop(false);
 
-  user_input_in_progress_ = true;
-  keyword_ = client_->GetTemplateURLService()->
-      GetDefaultSearchProvider()->keyword();
+  keyword_ =
+      client_->GetTemplateURLService()->GetDefaultSearchProvider()->keyword();
   is_keyword_hint_ = false;
   keyword_mode_entry_method_ = entry_method;
 
-  StartAutocomplete(false, false, true);
+  base::string16 display_text =
+      user_input_in_progress_ ? view_->GetText() : base::string16();
+  size_t caret_pos = display_text.length();
+  if (entry_method == KeywordModeEntryMethod::QUESTION_MARK) {
+    display_text.erase(0, 1);
+    caret_pos = 0;
+  }
+
+  InternalSetUserText(display_text);
+  view_->SetWindowTextAndCaretPos(display_text, caret_pos, true, false);
+  if (entry_method == KeywordModeEntryMethod::KEYBOARD_SHORTCUT)
+    view_->SelectAll(false);
 
   UMA_HISTOGRAM_ENUMERATION(
       kEnteredKeywordModeHistogram, static_cast<int>(entry_method),
@@ -593,8 +581,8 @@ void OmniboxEditModel::OpenMatch(AutocompleteMatch match,
       input_text, base::string16::npos, std::string(),
       // Somehow we can occasionally get here with no active tab.  It's not
       // clear why this happens.
-      client_->CurrentPageExists() ? client_->GetURL() : GURL(), ClassifyPage(),
-      false, false, true, true, false, client_->GetSchemeClassifier());
+      client_->GetURL(), ClassifyPage(), false, false, true, true, false,
+      client_->GetSchemeClassifier());
   std::unique_ptr<OmniboxNavigationObserver> observer(
       client_->CreateOmniboxNavigationObserver(
           input_text, match,
@@ -742,12 +730,10 @@ bool OmniboxEditModel::AcceptKeyword(
   keyword_mode_entry_method_ = entry_method;
   user_text_ = MaybeStripKeyword(user_text_);
 
-  user_text_ = MaybeStripKeyword(user_text_);
-
   if (PopupIsOpen())
     popup_model()->SetSelectedLineState(OmniboxPopupModel::KEYWORD);
   else
-    StartAutocomplete(false, true, true);
+    StartAutocomplete(false, true);
 
   // When entering keyword mode via tab, the new text to show is whatever the
   // newly-selected match in the dropdown is.  When entering via space, however,
@@ -1149,18 +1135,18 @@ bool OmniboxEditModel::OnAfterPossibleChange(
     SetFocusState(OMNIBOX_FOCUS_VISIBLE, OMNIBOX_FOCUS_CHANGE_TYPING);
   }
 
-  // Modifying the selection counts as accepting the autocompleted text.
-  const bool user_state_changesd =
-      state_changes.text_differs ||
-      (state_changes.selection_differs && !inline_autocomplete_text_.empty());
-
   // If something has changed while the control key is down, prevent
   // "ctrl-enter" until the control key is released.
   if ((state_changes.text_differs || state_changes.selection_differs) &&
       (control_key_state_ == DOWN_WITHOUT_CHANGE))
     control_key_state_ = DOWN_WITH_CHANGE;
 
-  if (!user_state_changesd) {
+  // If the user text does not need to be changed, return now, so we don't
+  // change any other state, lest arrowing around the omnibox do something like
+  // reset |just_deleted_text_|.  Note that modifying the selection accepts any
+  // inline autocompletion, which results in a user text change.
+  if (!state_changes.text_differs &&
+      (!state_changes.selection_differs || inline_autocomplete_text_.empty())) {
     if (state_changes.keyword_differs) {
       // We won't need the below logic for creating a keyword by a space at the
       // end or in the middle, or by typing a '?', but we do need to update the
@@ -1173,14 +1159,8 @@ bool OmniboxEditModel::OnAfterPossibleChange(
     return state_changes.keyword_differs;
   }
 
-  // If the user text has not changed, we do not want to change the model's
-  // state associated with the text.  Otherwise, we can get surprising behavior
-  // where the autocompleted text unexpectedly reappears, e.g. crbug.com/55983
   InternalSetUserText(*state_changes.new_text);
   has_temporary_text_ = false;
-
-  // Track when the user has deleted text so we won't allow inline
-  // autocomplete.
   just_deleted_text_ = state_changes.just_deleted_text;
 
   if (user_input_in_progress_ && user_text_.empty()) {
@@ -1224,11 +1204,8 @@ bool OmniboxEditModel::OnAfterPossibleChange(
   // If the user input a "?" at the beginning of the text, put them into
   // keyword mode for their default search provider.
   if ((state_changes.new_sel_start == 1) && (user_text_[0] == '?')) {
-    view_->SetUserText(user_text_.substr(1));
     EnterKeywordModeForDefaultSearchProvider(
         KeywordModeEntryMethod::QUESTION_MARK);
-    // Set the caret position to 0 without changing the user text.
-    view_->SetWindowTextAndCaretPos(view_->GetText(), 0, false, false);
     return false;
   }
 

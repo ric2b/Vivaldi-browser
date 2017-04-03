@@ -34,10 +34,9 @@
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/resource/resource_handle.h"
 
-#include "chrome/app/chrome_command_ids.h"
-
 #include "app/vivaldi_apptools.h"
 #include "app/vivaldi_commands.h"
+#include "chrome/app/chrome_command_ids.h"
 
 namespace {
 
@@ -157,7 +156,10 @@ void ChromeBrowserMainPartsMac::PreMainMessageLoopStart() {
                                  bundle:base::mac::FrameworkBundle()]);
     // TODO(viettrungluu): crbug.com/20504 - This currently leaks, so if you
     // change this, you'll probably need to change the Valgrind suppression.
-    [nib instantiateNibWithOwner:NSApp topLevelObjects:nil];
+    NSArray* top_level_objects = nil;
+    [nib instantiateWithOwner:NSApp topLevelObjects:&top_level_objects];
+    for (NSObject* object : top_level_objects)
+      [object retain];
   } else {
   // Now load the nib (from the right bundle).
   base::scoped_nsobject<NSNib> nib(

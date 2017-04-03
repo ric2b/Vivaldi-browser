@@ -181,6 +181,13 @@ void PopulateNativeCreditCardFromJava(
   card->set_server_id(
       ConvertJavaStringToUTF8(Java_CreditCard_getServerId(env, jcard)));
 
+  // Only set the guid if it is an existing card (java guid not empty).
+  // Otherwise, keep the generated one.
+  std::string guid =
+      ConvertJavaStringToUTF8(Java_CreditCard_getGUID(env, jcard));
+  if (!guid.empty())
+    card->set_guid(guid);
+
   if (Java_CreditCard_getIsLocal(env, jcard)) {
     card->set_record_type(CreditCard::LOCAL_CARD);
   } else {
@@ -266,7 +273,6 @@ class FullCardRequester : public payments::FullCardRequest::Delegate,
   DISALLOW_COPY_AND_ASSIGN(FullCardRequester);
 };
 
-// Self-deleting requester of address normalization.
 class AddressNormalizationRequester
     : public PersonalDataManagerAndroid::Delegate,
       public base::SupportsWeakPtr<AddressNormalizationRequester> {
@@ -285,7 +291,7 @@ class AddressNormalizationRequester
   }
 
  private:
-  virtual ~AddressNormalizationRequester() {}
+  ~AddressNormalizationRequester() override {}
 
   void OnRulesSuccessfullyLoaded() override {
     if (personal_data_manager_android_) {
@@ -294,8 +300,6 @@ class AddressNormalizationRequester
           env, jdelegate_, personal_data_manager_android_->NormalizeAddress(
                                guid_, region_code_, env));
     }
-
-    delete this;
   }
 
   ScopedJavaGlobalRef<jobject> jdelegate_;
@@ -380,11 +384,36 @@ ScopedJavaLocalRef<jstring> PersonalDataManagerAndroid::SetProfile(
   return ConvertUTF8ToJavaString(env, profile.guid());
 }
 
+ScopedJavaLocalRef<jstring> PersonalDataManagerAndroid::SetProfileToLocal(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& unused_obj,
+    const JavaParamRef<jobject>& jprofile) {
+  AutofillProfile profile;
+  PopulateNativeProfileFromJava(jprofile, env, &profile);
+
+  AutofillProfile* target_profile =
+      personal_data_manager_->GetProfileByGUID(ConvertJavaStringToUTF8(
+          env, Java_AutofillProfile_getGUID(env, jprofile).obj()));
+
+  if (target_profile != nullptr &&
+      target_profile->record_type() == AutofillProfile::LOCAL_PROFILE) {
+    profile.set_guid(target_profile->guid());
+    personal_data_manager_->UpdateProfile(profile);
+  } else {
+    personal_data_manager_->AddProfile(profile);
+  }
+
+  return ConvertUTF8ToJavaString(env, profile.guid());
+}
+
 ScopedJavaLocalRef<jobjectArray>
 PersonalDataManagerAndroid::GetProfileLabelsForSettings(
     JNIEnv* env,
     const JavaParamRef<jobject>& unused_obj) {
-  return GetProfileLabels(env, false, false,
+  return GetProfileLabels(env, false /* address_only */,
+                          false /* include_name_in_label */,
+                          true /* include_organization_in_label */,
+                          true /* include_country_in_label */,
                           personal_data_manager_->GetProfiles());
 }
 
@@ -392,8 +421,12 @@ ScopedJavaLocalRef<jobjectArray>
 PersonalDataManagerAndroid::GetProfileLabelsToSuggest(
     JNIEnv* env,
     const JavaParamRef<jobject>& unused_obj,
-    jboolean include_name) {
-  return GetProfileLabels(env, true, include_name,
+    jboolean include_name_in_label,
+    jboolean include_organization_in_label,
+    jboolean include_country_in_label) {
+  return GetProfileLabels(env, true /* address_only */, include_name_in_label,
+                          include_organization_in_label,
+                          include_country_in_label,
                           personal_data_manager_->GetProfilesToSuggest());
 }
 
@@ -492,18 +525,21 @@ void PersonalDataManagerAndroid::UpdateServerCardBillingAddress(
   personal_data_manager_->UpdateServerCardBillingAddress(card);
 }
 
-ScopedJavaLocalRef<jstring>
-PersonalDataManagerAndroid::GetBasicCardPaymentTypeIfValid(
+ScopedJavaLocalRef<jstring> PersonalDataManagerAndroid::GetBasicCardPaymentType(
     JNIEnv* env,
     const JavaParamRef<jobject>& unused_obj,
-    const JavaParamRef<jstring>& jcard_number) {
+    const JavaParamRef<jstring>& jcard_number,
+    const jboolean jempty_if_invalid) {
   base::string16 card_number = ConvertJavaStringToUTF16(env, jcard_number);
-  return ConvertUTF8ToJavaString(
-      env, IsValidCreditCardNumber(card_number)
-               ? data_util::GetPaymentRequestData(
-                     CreditCard::GetCreditCardType(card_number))
-                     .basic_card_payment_type
-               : "");
+
+  if (static_cast<bool>(jempty_if_invalid) &&
+      !IsValidCreditCardNumber(card_number)) {
+    return ConvertUTF8ToJavaString(env, "");
+  }
+  return ConvertUTF8ToJavaString(env,
+                                 data_util::GetPaymentRequestData(
+                                     CreditCard::GetCreditCardType(card_number))
+                                     .basic_card_payment_type);
 }
 
 void PersonalDataManagerAndroid::AddServerCreditCardForTest(
@@ -580,6 +616,7 @@ void PersonalDataManagerAndroid::SetProfileUseStatsForTesting(
       ConvertJavaStringToUTF8(env, jguid));
   profile->set_use_count(static_cast<size_t>(count));
   profile->set_use_date(base::Time::FromTimeT(date));
+
   personal_data_manager_->NotifyPersonalDataChangedForTest();
 }
 
@@ -623,6 +660,7 @@ void PersonalDataManagerAndroid::SetCreditCardUseStatsForTesting(
       ConvertJavaStringToUTF8(env, jguid));
   card->set_use_count(static_cast<size_t>(count));
   card->set_use_date(base::Time::FromTimeT(date));
+
   personal_data_manager_->NotifyPersonalDataChangedForTest();
 }
 
@@ -662,11 +700,10 @@ void PersonalDataManagerAndroid::OnAddressValidationRulesLoaded(
     const std::string& region_code,
     bool success) {
   // Check if an address normalization is pending.
-  std::map<std::string, Delegate*>::iterator it =
-      pending_normalization_.find(region_code);
+  auto it = pending_normalization_.find(region_code);
   if (it != pending_normalization_.end()) {
-    // The Delegate will self delete after normalizing.
-    it->second->OnRulesSuccessfullyLoaded();
+    for (size_t i = 0; i < it->second.size(); ++i)
+      it->second[i]->OnRulesSuccessfullyLoaded();
     pending_normalization_.erase(it);
   }
 }
@@ -680,8 +717,8 @@ jboolean PersonalDataManagerAndroid::StartAddressNormalization(
   const std::string region_code = ConvertJavaStringToUTF8(env, jregion_code);
   const std::string guid = ConvertJavaStringToUTF8(env, jguid);
 
-  Delegate* requester = new AddressNormalizationRequester(
-      env, jdelegate, region_code, guid, AsWeakPtr());
+  std::unique_ptr<Delegate> requester(new AddressNormalizationRequester(
+      env, jdelegate, region_code, guid, AsWeakPtr()));
 
   // Check if the rules are already loaded.
   if (AreRulesLoadedForRegion(region_code)) {
@@ -690,8 +727,17 @@ jboolean PersonalDataManagerAndroid::StartAddressNormalization(
   } else {
     // Setup the variables so the profile gets normalized when the rules have
     // finished loading.
-    pending_normalization_.insert(
-        std::pair<std::string, Delegate*>(region_code, requester));
+    auto it = pending_normalization_.find(region_code);
+    if (it == pending_normalization_.end()) {
+      // If no entry exists yet, create the entry and assign it to |it|.
+      it = pending_normalization_
+               .insert(std::make_pair(region_code,
+                                      std::vector<std::unique_ptr<Delegate>>()))
+               .first;
+    }
+
+    it->second.push_back(std::move(requester));
+
     return true;
   }
 }
@@ -723,7 +769,7 @@ ScopedJavaLocalRef<jobject> PersonalDataManagerAndroid::NormalizeAddress(
   return CreateJavaProfileFromNative(env, *profile);
 }
 
-void PersonalDataManagerAndroid::CancelPendingAddressNormalization(
+void PersonalDataManagerAndroid::CancelPendingAddressNormalizations(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& unused_obj) {
   pending_normalization_.clear();
@@ -752,15 +798,18 @@ ScopedJavaLocalRef<jobjectArray> PersonalDataManagerAndroid::GetCreditCardGUIDs(
 ScopedJavaLocalRef<jobjectArray> PersonalDataManagerAndroid::GetProfileLabels(
     JNIEnv* env,
     bool address_only,
-    bool include_name,
+    bool include_name_in_label,
+    bool include_organization_in_label,
+    bool include_country_in_label,
     std::vector<AutofillProfile*> profiles) {
   std::unique_ptr<std::vector<ServerFieldType>> suggested_fields;
   size_t minimal_fields_shown = 2;
   if (address_only) {
     suggested_fields.reset(new std::vector<ServerFieldType>);
-    if (include_name)
+    if (include_name_in_label)
       suggested_fields->push_back(NAME_FULL);
-    suggested_fields->push_back(COMPANY_NAME);
+    if (include_organization_in_label)
+      suggested_fields->push_back(COMPANY_NAME);
     suggested_fields->push_back(ADDRESS_HOME_LINE1);
     suggested_fields->push_back(ADDRESS_HOME_LINE2);
     suggested_fields->push_back(ADDRESS_HOME_DEPENDENT_LOCALITY);
@@ -768,11 +817,13 @@ ScopedJavaLocalRef<jobjectArray> PersonalDataManagerAndroid::GetProfileLabels(
     suggested_fields->push_back(ADDRESS_HOME_STATE);
     suggested_fields->push_back(ADDRESS_HOME_ZIP);
     suggested_fields->push_back(ADDRESS_HOME_SORTING_CODE);
-    suggested_fields->push_back(ADDRESS_HOME_COUNTRY);
+    if (include_country_in_label)
+      suggested_fields->push_back(ADDRESS_HOME_COUNTRY);
     minimal_fields_shown = suggested_fields->size();
   }
 
-  ServerFieldType excluded_field = include_name ? UNKNOWN_TYPE : NAME_FULL;
+  ServerFieldType excluded_field =
+      include_name_in_label ? UNKNOWN_TYPE : NAME_FULL;
 
   std::vector<base::string16> labels;
   AutofillProfile::CreateInferredLabels(

@@ -33,7 +33,6 @@
 #include "core/paint/InlineTextBoxPainter.h"
 #include "platform/fonts/CharacterRange.h"
 #include "platform/fonts/FontCache.h"
-#include "platform/fonts/shaping/SimpleShaper.h"
 #include "wtf/Vector.h"
 #include "wtf/text/StringBuilder.h"
 
@@ -361,7 +360,9 @@ LayoutUnit InlineTextBox::placeEllipsisBox(bool flowIsLTR,
                             : logicalRight() - visibleBoxWidth;
     }
 
-    int offset = offsetForPosition(ellipsisX, false);
+    // The box's width includes partial glyphs, so respect that when placing
+    // the ellipsis.
+    int offset = offsetForPosition(ellipsisX);
     if (offset == 0 && ltr == flowIsLTR) {
       // No characters should be laid out.  Set ourselves to full truncation and
       // place the ellipsis at the min of our start and the ellipsis edge.
@@ -615,6 +616,10 @@ TextRun InlineTextBox::constructTextRun(
   String string = getLineLayoutItem().text();
   unsigned startPos = start();
   unsigned length = len();
+  // Ensure |this| is in sync with the corresponding LayoutText. Checking here
+  // has less binary size/perf impact than in StringView().
+  RELEASE_ASSERT(startPos <= string.length() &&
+                 length <= string.length() - startPos);
   return constructTextRun(style, StringView(string, startPos, length),
                           getLineLayoutItem().textLength() - startPos,
                           charactersWithHyphen);

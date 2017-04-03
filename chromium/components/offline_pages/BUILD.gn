@@ -30,6 +30,8 @@ static_library("offline_pages") {
     "offline_page_model_event_logger.h",
     "offline_page_model_impl.cc",
     "offline_page_model_impl.h",
+    "offline_page_model_query.cc",
+    "offline_page_model_query.h",
     "offline_page_storage_manager.cc",
     "offline_page_storage_manager.h",
     "offline_page_types.h",
@@ -89,6 +91,7 @@ source_set("unit_tests") {
     "offline_page_metadata_store_impl_unittest.cc",
     "offline_page_model_event_logger_unittest.cc",
     "offline_page_model_impl_unittest.cc",
+    "offline_page_model_query_unittest.cc",
     "offline_page_storage_manager_unittest.cc",
     "snapshot_controller_unittest.cc",
   ]
@@ -108,7 +111,8 @@ source_set("unit_tests") {
 if (is_android) {
   java_cpp_enum("offline_page_model_enums_java") {
     sources = [
-      "background/request_queue.h",
+      "background/request_notifier.h",
+      "background/request_queue_results.h",
       "background/save_page_request.h",
       "offline_page_types.h",
       "offline_store_types.h",

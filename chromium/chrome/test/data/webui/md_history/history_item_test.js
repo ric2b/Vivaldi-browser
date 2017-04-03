@@ -4,32 +4,70 @@
 
 cr.define('md_history.history_item_test', function() {
   function registerTests() {
-    suite('history-item', function() {
+    var TEST_HISTORY_RESULTS = [
+      createHistoryEntry('2016-03-16 10:00', 'http://www.google.com'),
+      createHistoryEntry('2016-03-16 9:00', 'http://www.example.com'),
+      createHistoryEntry('2016-03-16 7:01', 'http://www.badssl.com'),
+      createHistoryEntry('2016-03-16 7:00', 'http://www.website.com'),
+      createHistoryEntry('2016-03-16 4:00', 'http://www.website.com'),
+      createHistoryEntry('2016-03-15 11:00', 'http://www.example.com'),
+    ];
+
+    var SEARCH_HISTORY_RESULTS = [
+      createSearchEntry('2016-03-16', "http://www.google.com"),
+      createSearchEntry('2016-03-14 11:00', "http://calendar.google.com"),
+      createSearchEntry('2016-03-14 10:00', "http://mail.google.com")
+    ];
+
+    suite('<history-item> unit test', function() {
+      var item;
+
+      setup(function() {
+        item = document.createElement('history-item');
+        item.item = TEST_HISTORY_RESULTS[0];
+        replaceBody(item);
+      });
+
+      test('click targets for selection', function() {
+        var selectionCount = 0;
+        item.addEventListener('history-checkbox-select', function() {
+          selectionCount++;
+        });
+
+        // Checkbox should trigger selection.
+        MockInteractions.tap(item.$.checkbox);
+        assertEquals(1, selectionCount);
+
+        // Non-interactive text should trigger selection.
+        MockInteractions.tap(item.$['time-accessed']);
+        assertEquals(2, selectionCount);
+
+        // Menu button should not trigger selection.
+        MockInteractions.tap(item.$['menu-button']);
+        assertEquals(2, selectionCount);
+      });
+
+      test('refocus checkbox on click', function() {
+        return PolymerTest.flushTasks().then(function() {
+          item.$['menu-button'].focus();
+          assertEquals(item.$['menu-button'], item.root.activeElement);
+
+          MockInteractions.tap(item.$['time-accessed']);
+          assertEquals(item.$['checkbox'], item.root.activeElement);
+        });
+      });
+    });
+
+    suite('<history-item> integration test', function() {
       var element;
-      var TEST_HISTORY_RESULTS;
-      var SEARCH_HISTORY_RESULTS;
 
-      suiteSetup(function() {
-        element = $('history-app').$['history'].$['infinite-list'];
-        TEST_HISTORY_RESULTS = [
-          createHistoryEntry('2016-03-16 10:00', 'http://www.google.com'),
-          createHistoryEntry('2016-03-16 9:00', 'http://www.example.com'),
-          createHistoryEntry('2016-03-16 7:01', 'http://www.badssl.com'),
-          createHistoryEntry('2016-03-16 7:00', 'http://www.website.com'),
-          createHistoryEntry('2016-03-16 4:00', 'http://www.website.com'),
-          createHistoryEntry('2016-03-15 11:00', 'http://www.example.com'),
-        ];
-
-        SEARCH_HISTORY_RESULTS = [
-          createSearchEntry('2016-03-16', "http://www.google.com"),
-          createSearchEntry('2016-03-14 11:00', "http://calendar.google.com"),
-          createSearchEntry('2016-03-14 10:00', "http://mail.google.com")
-        ];
+      setup(function() {
+        element = replaceApp().$['history'].$['infinite-list'];
       });
 
       test('basic separator insertion', function() {
         element.addNewResults(TEST_HISTORY_RESULTS);
-        return flush().then(function() {
+        return PolymerTest.flushTasks().then(function() {
           // Check that the correct number of time gaps are inserted.
           var items =
               Polymer.dom(element.root).querySelectorAll('history-item');
@@ -47,7 +85,7 @@ cr.define('md_history.history_item_test', function() {
         element.addNewResults(SEARCH_HISTORY_RESULTS);
         element.searchedTerm = 'search';
 
-        return flush().then(function() {
+        return PolymerTest.flushTasks().then(function() {
           var items =
               Polymer.dom(element.root).querySelectorAll('history-item');
 
@@ -59,7 +97,7 @@ cr.define('md_history.history_item_test', function() {
 
       test('separator insertion after deletion', function() {
         element.addNewResults(TEST_HISTORY_RESULTS);
-        return flush().then(function() {
+        return PolymerTest.flushTasks().then(function() {
           var items =
               Polymer.dom(element.root).querySelectorAll('history-item');
 
@@ -78,10 +116,10 @@ cr.define('md_history.history_item_test', function() {
 
       test('remove bookmarks', function() {
         element.addNewResults(TEST_HISTORY_RESULTS);
-        return flush().then(function() {
+        return PolymerTest.flushTasks().then(function() {
           element.set('historyData_.1.starred', true);
           element.set('historyData_.5.starred', true);
-          return flush();
+          return PolymerTest.flushTasks();
         }).then(function() {
 
           items = Polymer.dom(element.root).querySelectorAll('history-item');
@@ -95,11 +133,6 @@ cr.define('md_history.history_item_test', function() {
           assertEquals(element.historyData_[1].starred, false);
           assertEquals(element.historyData_[5].starred, false);
         });
-      });
-
-      teardown(function() {
-        element.historyData_ = [];
-        element.searchedTerm = '';
       });
     });
   }

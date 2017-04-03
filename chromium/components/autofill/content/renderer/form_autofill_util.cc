@@ -10,6 +10,7 @@
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/memory/scoped_vector.h"
+#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -1213,13 +1214,11 @@ bool IsFormVisible(blink::WebFrame* frame,
   blink::WebVector<WebFormElement> forms;
   frame->document().forms(forms);
 
-#if !defined(OS_ANDROID)
   // Omitting the action attribute would result in |canonical_origin| for
   // hierarchical schemes like http:, and in an empty URL for non-hierarchical
   // schemes like about: or data: etc.
   const bool action_is_empty = canonical_action.is_empty()
                                || canonical_action == canonical_origin;
-#endif
 
   // Since empty or unspecified action fields are automatically set to page URL,
   // action field for forms cannot be used for comparing (all forms with
@@ -1232,7 +1231,6 @@ bool IsFormVisible(blink::WebFrame* frame,
       continue;
 
     GURL iter_canonical_action = GetCanonicalActionForForm(form);
-#if !defined(OS_ANDROID)
     bool form_action_is_empty = iter_canonical_action.is_empty() ||
                                 iter_canonical_action == frame_origin;
     if (action_is_empty != form_action_is_empty)
@@ -1250,11 +1248,6 @@ bool IsFormVisible(blink::WebFrame* frame,
         return true;  // Form still exists.
       }
     }
-#else  // OS_ANDROID
-    if (canonical_action == iter_canonical_action) {
-      return true;  // Form still exists.
-    }
-#endif
   }
 
   return false;

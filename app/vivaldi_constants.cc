@@ -3,9 +3,16 @@
 
 #include "app/vivaldi_constants.h"
 
+#include "chrome/common/chrome_version.h"
+
 namespace vivaldi {
 
 // All constants in alphabetical order. The constants should be documented
+
+const char kExtDataKey[] = "extData";
+
+// Bookmark error message
+const char kNicknameExists[] = "Nickname exists.";
 
 // The Application ID of the Civaldi extension
 const char kVivaldiAppId[] = VIVALDI_APP_ID;
@@ -25,5 +32,9 @@ const char kVivaldiReservedApiError[] =
 const char kVivaldiUIScheme[] = "vivaldi";
 const char kVivaldiUINewTabHost[] = "newtab";
 const char kVivaldiUINewTabURL[] = "vivaldi://newtab/";
+
+const char kVivaldiVersion[] = VIVALDI_VERSION_STRING;
+
+const char kWindowExtDataKey[] = "extData";
 
 }  // namespace vivaldi

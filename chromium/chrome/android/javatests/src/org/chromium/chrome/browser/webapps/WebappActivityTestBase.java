@@ -11,9 +11,10 @@ import android.net.Uri;
 import android.view.ViewGroup;
 
 import org.chromium.base.ThreadUtils;
+import org.chromium.base.test.util.CallbackHelper;
+import org.chromium.base.test.util.UrlUtils;
 import org.chromium.chrome.browser.ShortcutHelper;
 import org.chromium.chrome.test.ChromeActivityTestCaseBase;
-import org.chromium.content.browser.test.util.CallbackHelper;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
 import org.chromium.content.browser.test.util.TestWebContentsObserver;
@@ -92,16 +93,12 @@ public abstract class WebappActivityTestBase extends ChromeActivityTestCaseBase<
     protected void setUp() throws Exception {
         super.setUp();
 
-        // Register the webapp so when the data storage is opened, the test doesn't crash. There is
-        // no race condition with the retrieval as AsyncTasks are run sequentially on the background
-        // thread.
-        WebappRegistry.registerWebapp(
-                WEBAPP_ID, new WebappRegistry.FetchWebappDataStorageCallback() {
-                    @Override
-                    public void onWebappDataStorageRetrieved(WebappDataStorage storage) {
-                        storage.updateFromShortcutIntent(createIntent());
-                    }
-                });
+        // Register the webapp so when the data storage is opened, the test doesn't crash.
+        WebappRegistry.refreshSharedPrefsForTesting();
+        TestFetchStorageCallback callback = new TestFetchStorageCallback();
+        WebappRegistry.getInstance().register(WEBAPP_ID, callback);
+        callback.waitForCallback(0);
+        callback.getStorage().updateFromShortcutIntent(createIntent());
     }
 
     /**

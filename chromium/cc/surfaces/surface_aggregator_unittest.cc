@@ -37,9 +37,12 @@ namespace {
 
 static constexpr FrameSinkId kArbitraryFrameSinkId(1, 1);
 static constexpr FrameSinkId kArbitraryChildFrameSinkId(2, 2);
+static const base::UnguessableToken kArbitraryToken =
+    base::UnguessableToken::Create();
 
 SurfaceId InvalidSurfaceId() {
-  static SurfaceId invalid(kArbitraryFrameSinkId, LocalFrameId(0xdeadbeef, 0));
+  static SurfaceId invalid(kArbitraryFrameSinkId,
+                           LocalFrameId(0xdeadbeef, kArbitraryToken));
   return invalid;
 }
 
@@ -80,7 +83,7 @@ class SurfaceAggregatorTest : public testing::Test {
 };
 
 TEST_F(SurfaceAggregatorTest, ValidSurfaceNoFrame) {
-  LocalFrameId local_frame_id(7, 0);
+  LocalFrameId local_frame_id(7, base::UnguessableToken::Create());
   SurfaceId one_id(kArbitraryFrameSinkId, local_frame_id);
   factory_.Create(local_frame_id);
 
@@ -1946,7 +1949,7 @@ void SubmitCompositorFrameWithResources(ResourceId* resource_ids,
   pass->id = RenderPassId(1, 1);
   SharedQuadState* sqs = pass->CreateAndAppendSharedQuadState();
   sqs->opacity = 1.f;
-  if (!child_id.is_null()) {
+  if (child_id.is_valid()) {
     SurfaceDrawQuad* surface_quad =
         pass->CreateAndAppendDrawQuad<SurfaceDrawQuad>();
     surface_quad->SetNew(sqs, gfx::Rect(0, 0, 1, 1), gfx::Rect(0, 0, 1, 1),
@@ -1987,7 +1990,7 @@ void SubmitCompositorFrameWithResources(ResourceId* resource_ids,
 TEST_F(SurfaceAggregatorWithResourcesTest, TakeResourcesOneSurface) {
   ResourceTrackingSurfaceFactoryClient client;
   SurfaceFactory factory(kArbitraryFrameSinkId, &manager_, &client);
-  LocalFrameId local_frame_id(7u, 0);
+  LocalFrameId local_frame_id(7u, base::UnguessableToken::Create());
   SurfaceId surface_id(kArbitraryFrameSinkId, local_frame_id);
   factory.Create(local_frame_id);
 
@@ -2018,7 +2021,7 @@ TEST_F(SurfaceAggregatorWithResourcesTest, TakeResourcesOneSurface) {
 TEST_F(SurfaceAggregatorWithResourcesTest, TakeInvalidResources) {
   ResourceTrackingSurfaceFactoryClient client;
   SurfaceFactory factory(kArbitraryFrameSinkId, &manager_, &client);
-  LocalFrameId local_frame_id(7u, 0);
+  LocalFrameId local_frame_id(7u, base::UnguessableToken::Create());
   SurfaceId surface_id(kArbitraryFrameSinkId, local_frame_id);
   factory.Create(local_frame_id);
 
@@ -2053,11 +2056,11 @@ TEST_F(SurfaceAggregatorWithResourcesTest, TakeInvalidResources) {
 TEST_F(SurfaceAggregatorWithResourcesTest, TwoSurfaces) {
   ResourceTrackingSurfaceFactoryClient client;
   SurfaceFactory factory(kArbitraryFrameSinkId, &manager_, &client);
-  LocalFrameId local_frame1_id(7u, 0);
+  LocalFrameId local_frame1_id(7u, base::UnguessableToken::Create());
   SurfaceId surface1_id(kArbitraryFrameSinkId, local_frame1_id);
   factory.Create(local_frame1_id);
 
-  LocalFrameId local_frame2_id(8u, 0);
+  LocalFrameId local_frame2_id(8u, base::UnguessableToken::Create());
   SurfaceId surface2_id(kArbitraryFrameSinkId, local_frame2_id);
   factory.Create(local_frame2_id);
 
@@ -2096,13 +2099,13 @@ TEST_F(SurfaceAggregatorWithResourcesTest, TwoSurfaces) {
 TEST_F(SurfaceAggregatorWithResourcesTest, InvalidChildSurface) {
   ResourceTrackingSurfaceFactoryClient client;
   SurfaceFactory factory(kArbitraryFrameSinkId, &manager_, &client);
-  LocalFrameId root_local_frame_id(7u, 0);
+  LocalFrameId root_local_frame_id(7u, kArbitraryToken);
   SurfaceId root_surface_id(kArbitraryFrameSinkId, root_local_frame_id);
   factory.Create(root_local_frame_id);
-  LocalFrameId middle_local_frame_id(8u, 0);
+  LocalFrameId middle_local_frame_id(8u, kArbitraryToken);
   SurfaceId middle_surface_id(kArbitraryFrameSinkId, middle_local_frame_id);
   factory.Create(middle_local_frame_id);
-  LocalFrameId child_local_frame_id(9u, 0);
+  LocalFrameId child_local_frame_id(9u, kArbitraryToken);
   SurfaceId child_surface_id(kArbitraryFrameSinkId, child_local_frame_id);
   factory.Create(child_local_frame_id);
 
@@ -2127,7 +2130,6 @@ TEST_F(SurfaceAggregatorWithResourcesTest, InvalidChildSurface) {
   ASSERT_EQ(1u, pass_list->size());
   EXPECT_EQ(1u, pass_list->back()->shared_quad_state_list.size());
   EXPECT_EQ(3u, pass_list->back()->quad_list.size());
-
   SubmitCompositorFrameWithResources(ids2, arraysize(ids), true,
                                      child_surface_id, &factory,
                                      middle_surface_id);
@@ -2147,11 +2149,11 @@ TEST_F(SurfaceAggregatorWithResourcesTest, InvalidChildSurface) {
 TEST_F(SurfaceAggregatorWithResourcesTest, SecureOutputTexture) {
   ResourceTrackingSurfaceFactoryClient client;
   SurfaceFactory factory(kArbitraryFrameSinkId, &manager_, &client);
-  LocalFrameId local_frame1_id(7u, 0);
+  LocalFrameId local_frame1_id(7u, base::UnguessableToken::Create());
   SurfaceId surface1_id(kArbitraryFrameSinkId, local_frame1_id);
   factory.Create(local_frame1_id);
 
-  LocalFrameId local_frame2_id(8u, 0);
+  LocalFrameId local_frame2_id(8u, base::UnguessableToken::Create());
   SurfaceId surface2_id(kArbitraryFrameSinkId, local_frame2_id);
   factory.Create(local_frame2_id);
 

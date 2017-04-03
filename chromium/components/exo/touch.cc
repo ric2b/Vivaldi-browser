@@ -6,6 +6,7 @@
 
 #include "components/exo/surface.h"
 #include "components/exo/touch_delegate.h"
+#include "components/exo/touch_stylus_delegate.h"
 #include "components/exo/wm_helper.h"
 #include "ui/aura/window.h"
 #include "ui/events/event.h"
@@ -26,6 +27,17 @@ bool VectorContainsItem(T& vector, U value) {
   return FindVectorItem(vector, value) != vector.end();
 }
 
+gfx::PointF EventLocationInWindow(ui::TouchEvent* event, aura::Window* window) {
+  ui::Layer* root = window->GetRootWindow()->layer();
+  ui::Layer* target = window->layer();
+
+  gfx::Transform transform;
+  target->GetTargetTransformRelativeTo(root, &transform);
+  auto point = gfx::Point3F(event->root_location_f());
+  transform.TransformPointReverse(&point);
+  return point.AsPointF();
+}
+
 }  // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -42,10 +54,20 @@ Touch::~Touch() {
   WMHelper::GetInstance()->RemovePreTargetHandler(this);
 }
 
+void Touch::SetStylusDelegate(TouchStylusDelegate* delegate) {
+  stylus_delegate_ = delegate;
+}
+
+bool Touch::HasStylusDelegate() const {
+  return !!stylus_delegate_;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // ui::EventHandler overrides:
 
 void Touch::OnTouchEvent(ui::TouchEvent* event) {
+  bool send_details = false;
+
   switch (event->type()) {
     case ui::ET_TOUCH_PRESSED: {
       // Early out if event doesn't contain a valid target for touch device.
@@ -66,60 +88,85 @@ void Touch::OnTouchEvent(ui::TouchEvent* event) {
 
       // Convert location to focus surface coordinate space.
       DCHECK(focus_);
-      gfx::Point location = event->location();
-      aura::Window::ConvertPointToTarget(target->window(), focus_->window(),
-                                         &location);
+      gfx::PointF location = EventLocationInWindow(event, focus_->window());
 
       // Generate a touch down event for the focus surface. Note that this can
       // be different from the target surface.
       delegate_->OnTouchDown(focus_, event->time_stamp(), event->touch_id(),
                              location);
+      if (stylus_delegate_ &&
+          event->pointer_details().pointer_type !=
+              ui::EventPointerType::POINTER_TYPE_TOUCH) {
+        stylus_delegate_->OnTouchTool(event->touch_id(),
+                                      event->pointer_details().pointer_type);
+      }
+      send_details = true;
     } break;
     case ui::ET_TOUCH_RELEASED: {
       auto it = FindVectorItem(touch_points_, event->touch_id());
-      if (it != touch_points_.end()) {
-        touch_points_.erase(it);
+      if (it == touch_points_.end())
+        return;
+      touch_points_.erase(it);
 
-        // Reset focus surface if this is the last touch point.
-        if (touch_points_.empty()) {
-          DCHECK(focus_);
-          focus_->RemoveSurfaceObserver(this);
-          focus_ = nullptr;
-        }
-
-        delegate_->OnTouchUp(event->time_stamp(), event->touch_id());
-      }
-    } break;
-    case ui::ET_TOUCH_MOVED: {
-      auto it = FindVectorItem(touch_points_, event->touch_id());
-      if (it != touch_points_.end()) {
-        DCHECK(focus_);
-        // Convert location to focus surface coordinate space.
-        gfx::Point location = event->location();
-        aura::Window::ConvertPointToTarget(
-            static_cast<aura::Window*>(event->target()), focus_->window(),
-            &location);
-
-        delegate_->OnTouchMotion(event->time_stamp(), event->touch_id(),
-                                 location);
-      }
-    } break;
-    case ui::ET_TOUCH_CANCELLED: {
-      auto it = FindVectorItem(touch_points_, event->touch_id());
-      if (it != touch_points_.end()) {
+      // Reset focus surface if this is the last touch point.
+      if (touch_points_.empty()) {
         DCHECK(focus_);
         focus_->RemoveSurfaceObserver(this);
         focus_ = nullptr;
-
-        // Cancel the full set of touch sequences as soon as one is canceled.
-        touch_points_.clear();
-        delegate_->OnTouchCancel();
       }
+
+      delegate_->OnTouchUp(event->time_stamp(), event->touch_id());
+    } break;
+    case ui::ET_TOUCH_MOVED: {
+      auto it = FindVectorItem(touch_points_, event->touch_id());
+      if (it == touch_points_.end())
+        return;
+
+      DCHECK(focus_);
+      // Convert location to focus surface coordinate space.
+      gfx::PointF location = EventLocationInWindow(event, focus_->window());
+      delegate_->OnTouchMotion(event->time_stamp(), event->touch_id(),
+                               location);
+      send_details = true;
+    } break;
+    case ui::ET_TOUCH_CANCELLED: {
+      auto it = FindVectorItem(touch_points_, event->touch_id());
+      if (it == touch_points_.end())
+        return;
+
+      DCHECK(focus_);
+      focus_->RemoveSurfaceObserver(this);
+      focus_ = nullptr;
+
+      // Cancel the full set of touch sequences as soon as one is canceled.
+      touch_points_.clear();
+      delegate_->OnTouchCancel();
     } break;
     default:
       NOTREACHED();
-      break;
+      return;
   }
+  if (send_details) {
+    delegate_->OnTouchShape(event->touch_id(),
+                            event->pointer_details().radius_x,
+                            event->pointer_details().radius_y);
+
+    if (stylus_delegate_ &&
+        event->pointer_details().pointer_type !=
+            ui::EventPointerType::POINTER_TYPE_TOUCH) {
+      if (!std::isnan(event->pointer_details().force)) {
+        stylus_delegate_->OnTouchForce(event->time_stamp(), event->touch_id(),
+                                       event->pointer_details().force);
+      }
+      stylus_delegate_->OnTouchTilt(
+          event->time_stamp(), event->touch_id(),
+          gfx::Vector2dF(event->pointer_details().tilt_x,
+                         event->pointer_details().tilt_y));
+    }
+  }
+  // TODO(denniskempin): Extend ui::TouchEvent to signal end of sequence of
+  // touch events to send TouchFrame once after all touches have been updated.
+  delegate_->OnTouchFrame();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

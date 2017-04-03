@@ -297,4 +297,34 @@ AutomationUtil.getTopLevelRoot = function(node) {
   return root;
 };
 
+/**
+ * @param {!AutomationNode} prevNode
+ * @param {!AutomationNode} node
+ * @return {AutomationNode}
+ */
+AutomationUtil.getLeastCommonAncestor = function(prevNode, node) {
+  if (prevNode == node)
+    return node;
+
+  var prevAncestors = AutomationUtil.getAncestors(prevNode);
+  var ancestors = AutomationUtil.getAncestors(node);
+  var divergence = AutomationUtil.getDivergence(prevAncestors, ancestors);
+  return ancestors[divergence - 1];
+};
+
+/**
+ * Gets the accessible text for this node based on its role.
+ * This text is suitable for caret navigation and selection in the node.
+ * @param {AutomationNode} node
+ * @return {string}
+ */
+AutomationUtil.getText = function(node) {
+  if (!node)
+    return '';
+
+  if (node.role === RoleType.textField)
+    return node.value;
+  return node.name || '';
+};
+
 });  // goog.scope

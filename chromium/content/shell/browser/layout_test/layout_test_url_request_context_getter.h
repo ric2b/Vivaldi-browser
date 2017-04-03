@@ -15,17 +15,11 @@
 #include "content/shell/browser/shell_url_request_context_getter.h"
 #include "net/url_request/url_request_job_factory.h"
 
-namespace base {
-class MessageLoop;
-}
-
 namespace net {
 class HostResolver;
-class MappedHostResolver;
 class NetworkDelegate;
 class NetLog;
 class ProxyConfigService;
-class URLRequestContextStorage;
 }
 
 namespace content {
@@ -48,7 +42,6 @@ class LayoutTestURLRequestContextGetter : public ShellURLRequestContextGetter {
   std::unique_ptr<net::NetworkDelegate> CreateNetworkDelegate() override;
   std::unique_ptr<net::ProxyConfigService> GetProxyConfigService() override;
   std::unique_ptr<net::ProxyService> GetProxyService() override;
-  bool ShouldEnableReferrerPolicyHeader() override;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(LayoutTestURLRequestContextGetter);

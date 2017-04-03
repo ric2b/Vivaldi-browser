@@ -2,13 +2,14 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//android_webview/system_webview_apk_tmpl.gni")
+import("//android_webview/webview_repack_locales.gni")
 import("//build/config/android/config.gni")
 import("//build/config/android/rules.gni")
 import("//build/config/locales.gni")
+import("//components/spellcheck/spellcheck_build_features.gni")
 import("//tools/grit/repack.gni")
 import("//tools/resources/generate_resource_whitelist.gni")
-import("system_webview_apk_tmpl.gni")
-import("webview_repack_locales.gni")
 
 declare_args() {
   # Package name of the system_webview_apk target.
@@ -53,7 +54,8 @@ webview_repack_locales("repack_locales") {
   }
 }
 
-locale_pak_resources("locale_paks") {
+android_assets("locale_pak_assets") {
+  disable_compression = true
   sources = []
   foreach(_locale, locales) {
     sources += [ "$root_out_dir/android_webview/locales/$_locale.pak" ]
@@ -135,6 +137,7 @@ android_assets("monochrome_webview_assets") {
 
 android_assets("assets") {
   deps = [
+    ":locale_pak_assets",
     ":monochrome_webview_assets",
     ":pak_file_assets",
   ]
@@ -164,7 +167,6 @@ android_resources("resources") {
   resource_dirs = [ "java/res" ]
   custom_package = "org.chromium.android_webview"
   deps = [
-    ":locale_paks",
     ":strings_grd",
   ]
 }
@@ -334,9 +336,6 @@ source_set("common") {
     "browser/aw_locale_manager.h",
     "browser/aw_login_delegate.cc",
     "browser/aw_login_delegate.h",
-    "browser/aw_message_port_message_filter.cc",
-    "browser/aw_message_port_message_filter.h",
-    "browser/aw_message_port_service.h",
     "browser/aw_metrics_service_client.cc",
     "browser/aw_metrics_service_client.h",
     "browser/aw_permission_manager.cc",
@@ -433,7 +432,6 @@ source_set("common") {
     "common/aw_hit_test_data.h",
     "common/aw_media_client_android.cc",
     "common/aw_media_client_android.h",
-    "common/aw_message_port_messages.h",
     "common/aw_resource.h",
     "common/aw_switches.cc",
     "common/aw_switches.h",
@@ -446,8 +444,6 @@ source_set("common") {
     "crash_reporter/aw_microdump_crash_reporter.h",
     "gpu/aw_content_gpu_client.cc",
     "gpu/aw_content_gpu_client.h",
-    "lib/aw_browser_dependency_factory_impl.cc",
-    "lib/aw_browser_dependency_factory_impl.h",
     "lib/main/aw_main_delegate.cc",
     "lib/main/aw_main_delegate.h",
     "lib/main/webview_jni_onload.cc",
@@ -459,8 +455,6 @@ source_set("common") {
     "renderer/aw_content_settings_client.h",
     "renderer/aw_key_systems.cc",
     "renderer/aw_key_systems.h",
-    "renderer/aw_message_port_client.cc",
-    "renderer/aw_message_port_client.h",
     "renderer/aw_print_web_view_helper_delegate.cc",
     "renderer/aw_print_web_view_helper_delegate.h",
     "renderer/aw_render_frame_ext.cc",
@@ -496,6 +490,7 @@ source_set("common") {
     "//components/printing/browser",
     "//components/printing/common",
     "//components/printing/renderer",
+    "//components/spellcheck:build_features",
     "//components/supervised_user_error_page",
     "//components/supervised_user_error_page:gin",
     "//components/version_info",
@@ -506,19 +501,20 @@ source_set("common") {
     "//content",
     "//content/public/app:both",
     "//content/public/browser",
+    "//content/public/common:service_names",
     "//crypto",
     "//gin",
-    "//gpu/command_buffer/client:gl_in_process_context",
     "//gpu/command_buffer/client:gles2_c_lib",
     "//gpu/command_buffer/client:gles2_implementation",
     "//gpu/command_buffer/common:gles2_utils",
     "//gpu/command_buffer/service",
+    "//gpu/ipc:gl_in_process_context",
     "//gpu/skia_bindings",
     "//media",
     "//media/midi",
     "//net:extras",
     "//printing",
-    "//services/shell/public/cpp",
+    "//services/service_manager/public/cpp",
     "//skia",
     "//third_party/WebKit/public:blink",
     "//ui/events:gesture_detection",
@@ -548,6 +544,7 @@ source_set("common") {
 android_library("android_webview_java") {
   java_files = [
     "java/src/org/chromium/android_webview/AndroidProtocolHandler.java",
+    "java/src/org/chromium/android_webview/AwActionModeCallback.java",
     "java/src/org/chromium/android_webview/AwAutofillClient.java",
     "java/src/org/chromium/android_webview/AwBrowserContext.java",
     "java/src/org/chromium/android_webview/AwBrowserProcess.java",
@@ -569,8 +566,6 @@ android_library("android_webview_java") {
     "java/src/org/chromium/android_webview/AwGLFunctor.java",
     "java/src/org/chromium/android_webview/AwHttpAuthHandler.java",
     "java/src/org/chromium/android_webview/AwLayoutSizer.java",
-    "java/src/org/chromium/android_webview/AwMessagePort.java",
-    "java/src/org/chromium/android_webview/AwMessagePortService.java",
     "java/src/org/chromium/android_webview/AwMetricsServiceClient.java",
     "java/src/org/chromium/android_webview/AwNetworkChangeNotifierRegistrationPolicy.java",
     "java/src/org/chromium/android_webview/AwPdfExporter.java",
@@ -606,7 +601,6 @@ android_library("android_webview_java") {
     "java/src/org/chromium/android_webview/NullAwViewMethods.java",
     "java/src/org/chromium/android_webview/OverScrollGlow.java",
     "java/src/org/chromium/android_webview/PlatformServiceBridge.java",
-    "java/src/org/chromium/android_webview/PostMessageSender.java",
     "java/src/org/chromium/android_webview/PopupTouchHandleDrawable.java",
     "java/src/org/chromium/android_webview/ResourcesContextWrapperFactory.java",
     "java/src/org/chromium/android_webview/ScrollAccessibilityHelper.java",

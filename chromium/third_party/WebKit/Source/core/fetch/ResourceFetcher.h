@@ -47,14 +47,9 @@
 namespace blink {
 
 class ArchiveResource;
-class CSSStyleSheetResource;
 class DocumentResource;
-class FontResource;
 class ImageResource;
 class MHTMLArchive;
-class RawResource;
-class ScriptResource;
-class XSLStyleSheetResource;
 class KURL;
 class ResourceTimingInfo;
 
@@ -114,7 +109,7 @@ class CORE_EXPORT ResourceFetcher
   int countPreloads() const { return m_preloads ? m_preloads->size() : 0; }
   void clearPreloads(ClearPreloadsPolicy = ClearAllPreloads);
   void preloadStarted(Resource*);
-  void logPreloadStats();
+  void logPreloadStats(ClearPreloadsPolicy);
   void warnUnusedPreloads();
 
   MHTMLArchive* archive() const { return m_archive.get(); }
@@ -192,6 +187,8 @@ class CORE_EXPORT ResourceFetcher
   Resource* resourceForStaticData(const FetchRequest&,
                                   const ResourceFactory&,
                                   const SubstituteData&);
+  Resource* resourceForBlockedRequest(const FetchRequest&,
+                                      const ResourceFactory&);
 
   // RevalidationPolicy enum values are used in UMAs https://crbug.com/579496.
   enum RevalidationPolicy { Use, Revalidate, Reload, Load };

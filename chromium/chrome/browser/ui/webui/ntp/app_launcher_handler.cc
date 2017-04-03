@@ -44,6 +44,7 @@
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/common/extensions/extension_metrics.h"
 #include "chrome/common/extensions/manifest_handlers/app_launch_info.h"
+#include "chrome/common/features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/common/web_application_info.h"
@@ -66,6 +67,7 @@
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_icon_set.h"
 #include "extensions/common/extension_set.h"
+#include "net/base/url_util.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/webui/web_ui_util.h"
 #include "url/gurl.h"
@@ -232,7 +234,7 @@ void AppLauncherHandler::RegisterMessages() {
       content::Source<WebContents>(web_ui()->GetWebContents()));
 
   // Some tests don't have a local state.
-#if defined(ENABLE_APP_LIST)
+#if BUILDFLAG(ENABLE_APP_LIST)
   if (g_browser_process->local_state()) {
     local_state_pref_change_registrar_.Init(g_browser_process->local_state());
     local_state_pref_change_registrar_.Add(
@@ -481,9 +483,7 @@ void AppLauncherHandler::HandleLaunchApp(const base::ListValue* args) {
   CHECK(args->GetString(0, &extension_id));
   double source = -1.0;
   CHECK(args->GetDouble(1, &source));
-  std::string url;
-  if (args->GetSize() > 2)
-    CHECK(args->GetString(2, &url));
+  GURL override_url;
 
   extension_misc::AppLaunchBucket launch_bucket =
       static_cast<extension_misc::AppLaunchBucket>(
@@ -510,6 +510,16 @@ void AppLauncherHandler::HandleLaunchApp(const base::ListValue* args) {
     extensions::RecordAppLaunchType(launch_bucket, extension->GetType());
   } else {
     extensions::RecordWebStoreLaunch();
+
+    if (args->GetSize() > 2) {
+      std::string source_value;
+      CHECK(args->GetString(2, &source_value));
+      if (!source_value.empty()) {
+        override_url = net::AppendQueryParameter(
+            extensions::AppLaunchInfo::GetFullLaunchURL(extension),
+            extension_urls::kWebstoreSourceField, source_value);
+      }
+    }
   }
 
   if (disposition == WindowOpenDisposition::NEW_FOREGROUND_TAB ||
@@ -521,7 +531,7 @@ void AppLauncherHandler::HandleLaunchApp(const base::ListValue* args) {
                                ? extensions::LAUNCH_CONTAINER_WINDOW
                                : extensions::LAUNCH_CONTAINER_TAB,
                            disposition, extensions::SOURCE_NEW_TAB_PAGE);
-    params.override_url = GURL(url);
+    params.override_url = override_url;
     OpenApplication(params);
   } else {
     // To give a more "launchy" experience when using the NTP launcher, we close
@@ -537,7 +547,7 @@ void AppLauncherHandler::HandleLaunchApp(const base::ListValue* args) {
         old_contents ? WindowOpenDisposition::CURRENT_TAB
                      : WindowOpenDisposition::NEW_FOREGROUND_TAB,
         extensions::SOURCE_NEW_TAB_PAGE);
-    params.override_url = GURL(url);
+    params.override_url = override_url;
     WebContents* new_contents = OpenApplication(params);
 
     // This will also destroy the handler, so do not perform any actions after.
@@ -737,7 +747,7 @@ void AppLauncherHandler::HandleGenerateAppForLink(const base::ListValue* args) {
 
 void AppLauncherHandler::HandleStopShowingAppLauncherPromo(
     const base::ListValue* args) {
-#if defined(ENABLE_APP_LIST)
+#if BUILDFLAG(ENABLE_APP_LIST)
   g_browser_process->local_state()->SetBoolean(
       prefs::kShowAppLauncherPromo, false);
   RecordAppLauncherPromoHistogram(apps::APP_LAUNCHER_PROMO_DISMISSED);
@@ -797,7 +807,7 @@ void AppLauncherHandler::OnExtensionPreferenceChanged() {
 }
 
 void AppLauncherHandler::OnLocalStatePreferenceChanged() {
-#if defined(ENABLE_APP_LIST)
+#if BUILDFLAG(ENABLE_APP_LIST)
   web_ui()->CallJavascriptFunctionUnsafe(
       "ntp.appLauncherPromoPrefChangeCallback",
       base::FundamentalValue(g_browser_process->local_state()->GetBoolean(

@@ -10,7 +10,7 @@
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/macros.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "google_apis/drive/auth_service_observer.h"
@@ -226,9 +226,8 @@ void AuthService::OnHandleRefreshToken(bool has_refresh_token) {
   access_token_.clear();
   has_refresh_token_ = has_refresh_token;
 
-  FOR_EACH_OBSERVER(AuthServiceObserver,
-                    observers_,
-                    OnOAuth2RefreshTokenChanged());
+  for (auto& observer : observers_)
+    observer.OnOAuth2RefreshTokenChanged();
 }
 
 }  // namespace google_apis

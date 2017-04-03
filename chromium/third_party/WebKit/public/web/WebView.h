@@ -97,9 +97,6 @@ class WebView : protected WebWidget {
   using WebWidget::applyViewportDeltas;
   using WebWidget::mouseCaptureLost;
   using WebWidget::setFocus;
-  using WebWidget::setComposition;
-  using WebWidget::commitText;
-  using WebWidget::finishComposingText;
   using WebWidget::compositionRange;
   using WebWidget::textInputInfo;
   using WebWidget::textInputType;
@@ -115,10 +112,9 @@ class WebView : protected WebWidget {
   using WebWidget::didAcquirePointerLock;
   using WebWidget::didNotAcquirePointerLock;
   using WebWidget::didLosePointerLock;
-  using WebWidget::didChangeWindowResizerRect;
   using WebWidget::backgroundColor;
   using WebWidget::pagePopup;
-  using WebWidget::updateTopControlsState;
+  using WebWidget::updateBrowserControlsState;
 
   // Initialization ------------------------------------------------------
 
@@ -197,10 +193,6 @@ class WebView : protected WebWidget {
   // is different from setFocusedFrame, which does not fire events on focused
   // elements.
   virtual void focusDocumentView(WebFrame*) = 0;
-
-  // Sets no frame as focused and fires blur events on any currently focused
-  // element.
-  virtual void unfocusDocumentView() = 0;
 
   // Focus the first (last if reverse is true) focusable node.
   virtual void setInitialFocus(bool reverse) = 0;
@@ -332,11 +324,11 @@ class WebView : protected WebWidget {
   virtual void setDeviceColorProfile(const WebVector<char>&) = 0;
 
   // Resize the view at the same time as changing the state of the top
-  // controls. If |topControlsShrinkLayout| is true, the embedder shrunk the
-  // WebView size by the top controls height.
-  virtual void resizeWithTopControls(const WebSize&,
-                                     float topControlsHeight,
-                                     bool topControlsShrinkLayout) = 0;
+  // controls. If |browserControlsShrinkLayout| is true, the embedder shrunk the
+  // WebView size by the browser controls height.
+  virtual void resizeWithBrowserControls(const WebSize&,
+                                         float browserControlsHeight,
+                                         bool browserControlsShrinkLayout) = 0;
 
   // Auto-Resize -----------------------------------------------------------
 
@@ -359,6 +351,9 @@ class WebView : protected WebWidget {
   virtual void performPluginAction(const WebPluginAction&,
                                    const WebPoint& location) = 0;
 
+  // Notifies WebView when audio is started or stopped.
+  virtual void audioStateChanged(bool isAudioPlaying) = 0;
+
   // Data exchange -------------------------------------------------------
 
   // Do a hit test at given point and return the HitTestResult.
@@ -369,10 +364,6 @@ class WebView : protected WebWidget {
   virtual WebHitTestResult hitTestResultForTap(const WebPoint& tapPoint,
                                                const WebSize& tapArea) = 0;
 
-  // Notifies the WebView that a drag has terminated.
-  virtual void dragSourceEndedAt(const WebPoint& pointInViewport,
-                                 const WebPoint& screenPoint,
-                                 WebDragOperation operation) = 0;
   // Set image visibility for the page. Loading is blocked if disabled.
   virtual void setImagesEnabled(const bool images_enabled) = 0;
 
@@ -385,28 +376,6 @@ class WebView : protected WebWidget {
   virtual void loadImageAt(const WebPoint&) = 0;
 
   virtual void vivaldiSetPinchZoom(float scale, int x, int y) {};
-
-  // Notfies the WebView that the system drag and drop operation has ended.
-  virtual void dragSourceSystemDragEnded() = 0;
-
-  // Callback methods when a drag-and-drop operation is trying to drop
-  // something on the WebView.
-  virtual WebDragOperation dragTargetDragEnter(
-      const WebDragData&,
-      const WebPoint& pointInViewport,
-      const WebPoint& screenPoint,
-      WebDragOperationsMask operationsAllowed,
-      int modifiers) = 0;
-  virtual WebDragOperation dragTargetDragOver(
-      const WebPoint& pointInViewport,
-      const WebPoint& screenPoint,
-      WebDragOperationsMask operationsAllowed,
-      int modifiers) = 0;
-  virtual void dragTargetDragLeave() = 0;
-  virtual void dragTargetDrop(const WebDragData&,
-                              const WebPoint& pointInViewport,
-                              const WebPoint& screenPoint,
-                              int modifiers) = 0;
 
   // Retrieves a list of spelling markers.
   virtual void spellingMarkers(WebVector<uint32_t>* markers) = 0;

@@ -17,19 +17,21 @@
 #include "components/autofill/content/renderer/test_password_autofill_agent.h"
 #include "components/autofill/content/renderer/test_password_generation_agent.h"
 #include "components/spellcheck/renderer/spellcheck.h"
+#include "components/spellcheck/spellcheck_build_features.h"
 #include "content/public/browser/native_web_keyboard_event.h"
 #include "content/public/common/renderer_preferences.h"
 #include "content/public/renderer/render_view.h"
+#include "extensions/features/features.h"
 #include "testing/gmock/include/gmock/gmock.h"
+#include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "third_party/WebKit/public/platform/WebURLRequest.h"
 #include "third_party/WebKit/public/web/WebFrame.h"
-#include "third_party/WebKit/public/web/WebInputEvent.h"
 #include "third_party/WebKit/public/web/WebKit.h"
 #include "third_party/WebKit/public/web/WebScriptController.h"
 #include "third_party/WebKit/public/web/WebScriptSource.h"
 #include "third_party/WebKit/public/web/WebView.h"
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "chrome/renderer/extensions/chrome_extensions_dispatcher_delegate.h"
 #include "chrome/renderer/extensions/chrome_extensions_renderer_client.h"
 #include "extensions/browser/extension_function_dispatcher.h"
@@ -106,7 +108,7 @@ void ChromeRenderViewTest::SetUp() {
   ChromeUnitTestSuite::InitializeProviders();
   ChromeUnitTestSuite::InitializeResourceBundle();
 
-  chrome_render_thread_ = new ChromeMockRenderThread();
+  chrome_render_thread_ = CreateMockRenderThread();
   render_thread_.reset(chrome_render_thread_);
 
   content::RenderViewTest::SetUp();
@@ -128,7 +130,7 @@ void ChromeRenderViewTest::SetUp() {
 
 void ChromeRenderViewTest::TearDown() {
   base::RunLoop().RunUntilIdle();
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   ChromeExtensionsRendererClient* ext_client =
       ChromeExtensionsRendererClient::GetInstance();
   ext_client->GetExtensionDispatcherForTest()->OnRenderProcessShutdown();
@@ -162,7 +164,7 @@ void ChromeRenderViewTest::RegisterMainFrameRemoteInterfaces() {}
 
 void ChromeRenderViewTest::InitChromeContentRendererClient(
     ChromeContentRendererClient* client) {
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   extension_dispatcher_delegate_.reset(
       new ChromeExtensionsDispatcherDelegate());
   ChromeExtensionsRendererClient* ext_client =
@@ -171,7 +173,7 @@ void ChromeRenderViewTest::InitChromeContentRendererClient(
       base::MakeUnique<extensions::Dispatcher>(
           extension_dispatcher_delegate_.get()));
 #endif
-#if defined(ENABLE_SPELLCHECK)
+#if BUILDFLAG(ENABLE_SPELLCHECK)
   client->SetSpellcheck(new SpellCheck());
 #endif
 }
@@ -189,4 +191,8 @@ void ChromeRenderViewTest::DisableUserGestureSimulationForAutofill() {
 void ChromeRenderViewTest::WaitForAutofillDidAssociateFormControl() {
   static_cast<MockAutofillAgent*>(autofill_agent_)
       ->WaitForAutofillDidAssociateFormControl();
+}
+
+ChromeMockRenderThread* ChromeRenderViewTest::CreateMockRenderThread() {
+  return new ChromeMockRenderThread();
 }

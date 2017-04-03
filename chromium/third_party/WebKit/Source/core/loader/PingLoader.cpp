@@ -297,11 +297,10 @@ bool PingLoaderImpl::willFollowRedirect(
   if (!m_isBeacon)
     return true;
 
-  // TODO(tyoshino): Check if setAllowStoredCredentials() should be called also
-  // for non beacon cases.
-  passedNewRequest.setAllowStoredCredentials(true);
   if (m_corsMode == NotCORSEnabled)
     return true;
+
+  DCHECK(passedNewRequest.allowStoredCredentials());
 
   ResourceRequest& newRequest(passedNewRequest.toMutableResourceRequest());
   const ResourceResponse& redirectResponse(
@@ -318,9 +317,10 @@ bool PingLoaderImpl::willFollowRedirect(
           m_origin, newRequest, redirectResponse, AllowStoredCredentials,
           options, errorDescription)) {
     if (LocalFrame* localFrame = frame()) {
-      if (localFrame->document())
+      if (localFrame->document()) {
         localFrame->document()->addConsoleMessage(ConsoleMessage::create(
             JSMessageSource, ErrorMessageLevel, errorDescription));
+      }
     }
     // Cancel the load and self destruct.
     dispose();
@@ -498,10 +498,11 @@ void PingLoader::sendLinkAuditPing(LocalFrame* frame,
 
   RefPtr<SecurityOrigin> pingOrigin = SecurityOrigin::create(pingURL);
   if (protocolIs(frame->document()->url().getString(), "http") ||
-      frame->document()->getSecurityOrigin()->canAccess(pingOrigin.get()))
+      frame->document()->getSecurityOrigin()->canAccess(pingOrigin.get())) {
     request.setHTTPHeaderField(
         HTTPNames::Ping_From,
         AtomicString(frame->document()->url().getString()));
+  }
 
   sendPingCommon(frame, request, FetchInitiatorTypeNames::ping,
                  AllowStoredCredentials, false);

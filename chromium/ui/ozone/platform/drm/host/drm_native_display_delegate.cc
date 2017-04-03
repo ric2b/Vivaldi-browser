@@ -21,8 +21,13 @@ DrmNativeDisplayDelegate::~DrmNativeDisplayDelegate() {
 }
 
 void DrmNativeDisplayDelegate::OnConfigurationChanged() {
-  FOR_EACH_OBSERVER(NativeDisplayObserver, observers_,
-                    OnConfigurationChanged());
+  for (NativeDisplayObserver& observer : observers_)
+    observer.OnConfigurationChanged();
+}
+
+void DrmNativeDisplayDelegate::OnDisplaySnapshotsInvalidated() {
+  for (NativeDisplayObserver& observer : observers_)
+    observer.OnDisplaySnapshotsInvalidated();
 }
 
 void DrmNativeDisplayDelegate::Initialize() {

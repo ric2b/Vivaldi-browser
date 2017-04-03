@@ -26,7 +26,7 @@
 #define HTMLInputElement_h
 
 #include "core/CoreExport.h"
-#include "core/html/HTMLTextFormControlElement.h"
+#include "core/html/TextControlElement.h"
 #include "core/html/forms/StepRange.h"
 #include "platform/FileChooser.h"
 
@@ -45,7 +45,7 @@ class ListAttributeTargetObserver;
 class RadioButtonGroupScope;
 struct DateTimeChooserParameters;
 
-class CORE_EXPORT HTMLInputElement : public HTMLTextFormControlElement {
+class CORE_EXPORT HTMLInputElement : public TextControlElement {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -125,6 +125,8 @@ class CORE_EXPORT HTMLInputElement : public HTMLTextFormControlElement {
   void setValue(const String&,
                 TextFieldEventBehavior = DispatchNoEvent) override;
   void setValueForUser(const String&);
+  // Update the value, and clear hasDirtyValue() flag.
+  void setNonDirtyValue(const String&);
   // Checks if the specified string would be a valid value.
   // We should not call this for types with no string value such as CHECKBOX and
   // RADIO.
@@ -148,7 +150,7 @@ class CORE_EXPORT HTMLInputElement : public HTMLTextFormControlElement {
                         ExceptionState&,
                         TextFieldEventBehavior = DispatchNoEvent);
 
-  String valueWithDefault() const;
+  String valueOrDefaultLabel() const;
 
   // This function dispatches 'input' event for non-textfield types. Callers
   // need to handle any DOM structure changes by event handlers, or need to
@@ -191,15 +193,9 @@ class CORE_EXPORT HTMLInputElement : public HTMLTextFormControlElement {
   void setSize(unsigned, ExceptionState&);
 
   KURL src() const;
-
-  int maxLength() const;
-  int minLength() const;
-  void setMaxLength(int, ExceptionState&);
-  void setMinLength(int, ExceptionState&);
-
   bool multiple() const;
 
-  FileList* files();
+  FileList* files() const;
   void setFiles(FileList*);
 
   void setFilesFromPaths(const Vector<String>&);
@@ -231,7 +227,7 @@ class CORE_EXPORT HTMLInputElement : public HTMLTextFormControlElement {
   bool isInRequiredRadioButtonGroup();
 
   // Functions for InputType classes.
-  void setValueInternal(const String&, TextFieldEventBehavior);
+  void setNonAttributeValue(const String&);
   bool valueAttributeWasUpdatedAfterParsing() const {
     return m_valueAttributeWasUpdatedAfterParsing;
   }
@@ -244,8 +240,6 @@ class CORE_EXPORT HTMLInputElement : public HTMLTextFormControlElement {
   void endColorChooser();
 
   String defaultToolTip() const override;
-
-  static const int maximumLength;
 
   unsigned height() const;
   unsigned width() const;
@@ -317,7 +311,7 @@ class CORE_EXPORT HTMLInputElement : public HTMLTextFormControlElement {
   bool supportLabels() const final;
   bool matchesDefaultPseudoClass() const override;
 
-  bool isTextFormControl() const final { return isTextField(); }
+  bool isTextControl() const final { return isTextField(); }
 
   bool canTriggerImplicitSubmission() const final { return isTextField(); }
 
@@ -395,7 +389,6 @@ class CORE_EXPORT HTMLInputElement : public HTMLTextFormControlElement {
   void resetListAttributeTargetObserver();
   void parseMaxLengthAttribute(const AtomicString&);
   void parseMinLengthAttribute(const AtomicString&);
-  void updateValueIfNeeded();
 
   // Returns null if this isn't associated with any radio button group.
   RadioButtonGroupScope* radioButtonGroupScope() const;
@@ -406,13 +399,10 @@ class CORE_EXPORT HTMLInputElement : public HTMLTextFormControlElement {
   bool shouldDispatchFormControlChangeEvent(String&, String&) override;
 
   AtomicString m_name;
-  // A dirty value.  isNull() means the value is not dirty and we should refer
-  // to |value| content attribute value.
-  String m_valueIfDirty;
+  // The value string in |value| value mode.
+  String m_nonAttributeValue;
   String m_suggestedValue;
   int m_size;
-  int m_maxLength;
-  int m_minLength;
   // https://html.spec.whatwg.org/multipage/forms.html#concept-input-value-dirty-flag
   unsigned m_hasDirtyValue : 1;
   // https://html.spec.whatwg.org/multipage/forms.html#concept-fe-checked

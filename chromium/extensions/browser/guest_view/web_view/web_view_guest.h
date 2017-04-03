@@ -15,7 +15,6 @@
 #include "content/public/browser/javascript_dialog_manager.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
-#include "content/public/common/security_style.h"
 #include "extensions/browser/guest_view/web_view/javascript_dialog_helper.h"
 #include "extensions/browser/guest_view/web_view/web_view_find_helper.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest_delegate.h"
@@ -25,6 +24,7 @@
 
 #ifdef VIVALDI_BUILD
 #include "extensions/api/guest_view/vivaldi_web_view_guest_top.inc"
+#include "third_party/WebKit/public/platform/WebSecurityStyle.h"
 #endif // VIVALDI_BUILD
 
 namespace blink {
@@ -98,6 +98,8 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest>,
 
   // Shows the context menu for the guest.
   void ShowContextMenu(int request_id);
+
+  int rules_registry_id() const { return rules_registry_id_; }
 
   // Sets the frame name of the guest.
   void SetName(const std::string& name);
@@ -213,11 +215,11 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest>,
                const content::NotificationDetails& details) final;
 
   // WebContentsDelegate implementation.
-  bool AddMessageToConsole(content::WebContents* source,
-                           int32_t level,
-                           const base::string16& message,
-                           int32_t line_no,
-                           const base::string16& source_id) final;
+  bool DidAddMessageToConsole(content::WebContents* source,
+                              int32_t level,
+                              const base::string16& message,
+                              int32_t line_no,
+                              const base::string16& source_id) final;
   void CloseContents(content::WebContents* source) final;
   bool HandleContextMenu(const content::ContextMenuParams& params) final;
   void HandleKeyboardEvent(content::WebContents* source,
@@ -226,7 +228,9 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest>,
   bool PreHandleGestureEvent(content::WebContents* source,
                              const blink::WebGestureEvent& event) final;
   void RendererResponsive(content::WebContents* source) final;
-  void RendererUnresponsive(content::WebContents* source) final;
+  void RendererUnresponsive(
+      content::WebContents* source,
+      const content::WebContentsUnresponsiveState& unresponsive_state) final;
   void RequestMediaAccessPermission(
       content::WebContents* source,
       const content::MediaStreamRequest& request,
@@ -266,27 +270,15 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest>,
   void ExitFullscreenModeForTab(content::WebContents* web_contents) final;
   bool IsFullscreenForTabOrPending(
       const content::WebContents* web_contents) const final;
-  content::SecurityStyle GetSecurityStyle(
+  blink::WebSecurityStyle GetSecurityStyle(
       content::WebContents* web_contents,
       content::SecurityStyleExplanations* security_style_explanations) override;
   void ShowCertificateViewerInDevTools(content::WebContents* web_contents,
                      scoped_refptr<net::X509Certificate> certificate) override;
 
   // WebContentsObserver implementation.
-  void DidCommitProvisionalLoadForFrame(
-      content::RenderFrameHost* render_frame_host,
-      const GURL& url,
-      ui::PageTransition transition_type) final;
-  void DidFailProvisionalLoad(content::RenderFrameHost* render_frame_host,
-                              const GURL& validated_url,
-                              int error_code,
-                              const base::string16& error_description,
-                              bool was_ignored_by_handler) final;
-  void DidStartProvisionalLoadForFrame(
-      content::RenderFrameHost* render_frame_host,
-      const GURL& validated_url,
-      bool is_error_page,
-      bool is_iframe_srcdoc) final;
+  void DidStartNavigation(content::NavigationHandle* navigation_handle) final;
+  void DidFinishNavigation(content::NavigationHandle* navigation_handle) final;
   void RenderProcessGone(base::TerminationStatus status) final;
   void UserAgentOverrideSet(const std::string& user_agent) final;
   void FrameNameChanged(content::RenderFrameHost* render_frame_host,
@@ -326,10 +318,7 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest>,
 
   // Notification that a load in the guest resulted in abort. Note that |url|
   // may be invalid.
-  void LoadAbort(bool is_top_level,
-                 const GURL& url,
-                 int error_code,
-                 const std::string& error_type);
+  void LoadAbort(bool is_top_level, const GURL& url, int error_code);
 
   // Creates a new guest window owned by this WebViewGuest.
   void CreateNewGuestWebViewWindow(const content::OpenURLParams& params);

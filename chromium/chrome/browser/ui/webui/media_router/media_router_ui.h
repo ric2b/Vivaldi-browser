@@ -23,6 +23,7 @@
 #include "chrome/browser/ui/webui/media_router/query_result_manager.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "third_party/icu/source/common/unicode/uversion.h"
+#include "url/gurl.h"
 
 namespace content {
 class WebContents;
@@ -61,6 +62,8 @@ class MediaRouterUI : public ConstrainedWebDialogUI,
 
   // Initializes internal state (e.g. starts listening for MediaSinks) for
   // targeting the default MediaSource (if any) of the initiator tab that owns
+  // |initiator|: Reference to the WebContents that initiated the dialog.
+  //              Must not be null.
   // |delegate|, as well as mirroring sources of that tab.
   // The contents of the UI will change as the default MediaSource changes.
   // If there is a default MediaSource, then DEFAULT MediaCastMode will be
@@ -70,8 +73,8 @@ class MediaRouterUI : public ConstrainedWebDialogUI,
   //             Must not be null.
   // TODO(imcheng): Replace use of impl with an intermediate abstract
   // interface.
-  void InitWithDefaultMediaSource(
-      const base::WeakPtr<PresentationServiceDelegateImpl>& delegate);
+  void InitWithDefaultMediaSource(content::WebContents* initiator,
+                                  PresentationServiceDelegateImpl* delegate);
 
   // Initializes internal state targeting the presentation specified in
   // |request|. Also sets up mirroring sources based on |initiator|.
@@ -87,7 +90,7 @@ class MediaRouterUI : public ConstrainedWebDialogUI,
   //                         ownership of it. Must not be null.
   void InitWithPresentationSessionRequest(
       content::WebContents* initiator,
-      const base::WeakPtr<PresentationServiceDelegateImpl>& delegate,
+      PresentationServiceDelegateImpl* delegate,
       std::unique_ptr<CreatePresentationConnectionRequest>
           presentation_request);
 
@@ -137,9 +140,9 @@ class MediaRouterUI : public ConstrainedWebDialogUI,
     return joinable_route_ids_;
   }
   const std::set<MediaCastMode>& cast_modes() const { return cast_modes_; }
-  const std::unordered_map<MediaRoute::Id, MediaCastMode>& current_cast_modes()
-      const {
-    return current_cast_modes_;
+  const std::unordered_map<MediaRoute::Id, MediaCastMode>&
+  routes_and_cast_modes() const {
+    return routes_and_cast_modes_;
   }
   const content::WebContents* initiator() const { return initiator_; }
 
@@ -162,10 +165,8 @@ class MediaRouterUI : public ConstrainedWebDialogUI,
  private:
   FRIEND_TEST_ALL_PREFIXES(MediaRouterUITest, SortedSinks);
   FRIEND_TEST_ALL_PREFIXES(MediaRouterUITest, SortSinksByIconType);
-  FRIEND_TEST_ALL_PREFIXES(MediaRouterUITest,
-                           UIMediaRoutesObserverFiltersNonDisplayRoutes);
-  FRIEND_TEST_ALL_PREFIXES(MediaRouterUITest,
-      UIMediaRoutesObserverFiltersNonDisplayJoinableRoutes);
+  FRIEND_TEST_ALL_PREFIXES(MediaRouterUITest, FilterNonDisplayRoutes);
+  FRIEND_TEST_ALL_PREFIXES(MediaRouterUITest, FilterNonDisplayJoinableRoutes);
   FRIEND_TEST_ALL_PREFIXES(MediaRouterUITest,
       UIMediaRoutesObserverAssignsCurrentCastModes);
   FRIEND_TEST_ALL_PREFIXES(MediaRouterUITest,
@@ -269,6 +270,10 @@ class MediaRouterUI : public ConstrainedWebDialogUI,
   // |handler_|.
   void UpdateCastModes();
 
+  // Updates the routes-to-cast-modes mapping in |routes_and_cast_modes_| to
+  // match the value of |routes_|.
+  void UpdateRoutesToCastModesMapping();
+
   // Returns the default presentation request's frame URL if there is one.
   // Otherwise returns an empty GURL.
   GURL GetFrameURL() const;
@@ -300,7 +305,7 @@ class MediaRouterUI : public ConstrainedWebDialogUI,
   std::vector<MediaRoute> routes_;
   std::vector<MediaRoute::Id> joinable_route_ids_;
   CastModeSet cast_modes_;
-  std::unordered_map<MediaRoute::Id, MediaCastMode> current_cast_modes_;
+  std::unordered_map<MediaRoute::Id, MediaCastMode> routes_and_cast_modes_;
 
   std::unique_ptr<QueryResultManager> query_result_manager_;
 

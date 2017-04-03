@@ -12,6 +12,11 @@ Polymer({
   behaviors: [settings.RouteObserverBehavior],
 
   properties: {
+    advancedOpened: {
+      type: Boolean,
+      notify: true,
+    },
+
     /** @private */
     aboutSelected_: Boolean,
 
@@ -24,24 +29,21 @@ Polymer({
     },
   },
 
-  attached: function() {
-    document.addEventListener('toggle-advanced-page', function(e) {
-      if (e.detail)
-        this.$.advancedPage.open();
-      else
-        this.$.advancedPage.close();
-    }.bind(this));
-
-    this.$.advancedPage.addEventListener('paper-submenu-open', function() {
-      this.fire('toggle-advanced-page', true);
-    }.bind(this));
-
-    this.$.advancedPage.addEventListener('paper-submenu-close', function() {
-      this.fire('toggle-advanced-page', false);
-    }.bind(this));
-
-    this.fire('toggle-advanced-page',
-              settings.Route.ADVANCED.contains(settings.getCurrentRoute()));
+  ready: function() {
+    // When a <paper-submenu> is created with the [opened] attribute as true,
+    // its _active member isn't correctly initialized. See this bug for more
+    // info: https://github.com/PolymerElements/paper-menu/issues/88. This means
+    // the first tap to close an opened Advanced section does nothing (because
+    // it calls .open() on an opened menu instead of .close(). This is a fix for
+    // that bug without changing that code through its public API.
+    //
+    // TODO(dbeam): we're currently deciding whether <paper-{,sub}menu> are
+    // right for our needs (there have been minor a11y problems). If we decide
+    // to keep <paper-{,sub}menu>, fix this bug with a local Chrome CL (ex:
+    // https://codereview.chromium.org/2412343004) or a Polymer PR (ex:
+    // https://github.com/PolymerElements/paper-menu/pull/107).
+    if (this.advancedOpened)
+      this.$.advancedPage.open();
   },
 
   /**
@@ -73,7 +75,8 @@ Polymer({
   openPage_: function(event) {
     var route = settings.getRouteForPath(event.currentTarget.dataset.path);
     assert(route, 'settings-menu has an an entry with an invalid path');
-    settings.navigateTo(route);
+    settings.navigateTo(
+        route, /* dynamicParams */ null, /* removeSearch */ true);
   },
 
   /**

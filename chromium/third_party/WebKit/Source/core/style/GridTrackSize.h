@@ -103,7 +103,8 @@ class GridTrackSize {
   bool operator==(const GridTrackSize& other) const {
     return m_type == other.m_type &&
            m_minTrackBreadth == other.m_minTrackBreadth &&
-           m_maxTrackBreadth == other.m_maxTrackBreadth;
+           m_maxTrackBreadth == other.m_maxTrackBreadth &&
+           m_fitContentTrackBreadth == other.m_fitContentTrackBreadth;
   }
 
   void cacheMinMaxTrackBreadthTypes() {
@@ -119,12 +120,23 @@ class GridTrackSize {
                                     maxTrackBreadth().length().isMinContent();
     m_maxTrackBreadthIsAuto =
         maxTrackBreadth().isLength() && maxTrackBreadth().length().isAuto();
+
+    m_minTrackBreadthIsIntrinsic = m_minTrackBreadthIsMaxContent ||
+                                   m_minTrackBreadthIsMinContent ||
+                                   m_minTrackBreadthIsAuto || isFitContent();
+    m_maxTrackBreadthIsIntrinsic = m_maxTrackBreadthIsMaxContent ||
+                                   m_maxTrackBreadthIsMinContent ||
+                                   m_maxTrackBreadthIsAuto || isFitContent();
   }
 
   bool hasIntrinsicMinTrackBreadth() const {
-    return m_minTrackBreadthIsMaxContent || m_minTrackBreadthIsMinContent ||
-           m_minTrackBreadthIsAuto;
+    return m_minTrackBreadthIsIntrinsic;
   }
+
+  bool hasIntrinsicMaxTrackBreadth() const {
+    return m_maxTrackBreadthIsIntrinsic;
+  }
+
   bool hasMinOrMaxContentMinTrackBreadth() const {
     return m_minTrackBreadthIsMaxContent || m_minTrackBreadthIsMinContent;
   }
@@ -153,8 +165,7 @@ class GridTrackSize {
   }
   bool hasAutoOrMinContentMinTrackBreadthAndIntrinsicMaxTrackBreadth() const {
     return (m_minTrackBreadthIsMinContent || m_minTrackBreadthIsAuto) &&
-           (m_maxTrackBreadthIsMaxContent || m_maxTrackBreadthIsMinContent ||
-            m_maxTrackBreadthIsAuto);
+           m_maxTrackBreadthIsIntrinsic;
   }
 
  private:
@@ -169,6 +180,8 @@ class GridTrackSize {
   bool m_minTrackBreadthIsMinContent : 1;
   bool m_maxTrackBreadthIsMaxContent : 1;
   bool m_maxTrackBreadthIsMinContent : 1;
+  bool m_minTrackBreadthIsIntrinsic : 1;
+  bool m_maxTrackBreadthIsIntrinsic : 1;
 };
 
 }  // namespace blink

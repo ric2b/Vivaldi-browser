@@ -5,17 +5,27 @@
 
 #include "base/base64.h"
 #include "base/logging.h"
+#include "base/message_loop/message_loop.h"
+#include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
+#include "base/test/histogram_tester.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "chrome/browser/safe_browsing/ping_manager.h"
+#include "components/certificate_reporting/error_reporter.h"
+#include "content/public/browser/browser_thread.h"
+#include "content/public/test/test_browser_thread.h"
 #include "google_apis/google_api_keys.h"
 #include "net/base/escape.h"
 #include "net/log/net_log.h"
 #include "net/log/net_log_source_type.h"
 #include "net/log/test_net_log.h"
 #include "net/log/test_net_log_entry.h"
+#include "net/test/url_request/url_request_failed_job.h"
+#include "net/url_request/report_sender.h"
 #include "net/url_request/test_url_fetcher_factory.h"
+#include "net/url_request/url_request_context_getter.h"
+#include "net/url_request/url_request_test_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 using base::Time;
@@ -26,6 +36,8 @@ using safe_browsing::ThreatSource;
 static const char kUrlPrefix[] = "https://prefix.com/foo";
 static const char kClient[] = "unittest";
 static const char kAppVer[] = "1.0";
+// Histogram for certificate reporting failures:
+static const char kFailureHistogramName[] = "SSL.CertificateErrorReportFailure";
 
 namespace safe_browsing {
 
@@ -76,7 +88,7 @@ TEST_F(SafeBrowsingPingManagerTest, TestSafeBrowsingHitUrl) {
     hp.threat_type = SB_THREAT_TYPE_URL_MALWARE;
     hp.threat_source = ThreatSource::LOCAL_PVER3;
     hp.is_subresource = true;
-    hp.is_extended_reporting = true;
+    hp.extended_reporting_level = SBER_LEVEL_LEGACY;
     hp.is_metrics_reporting_active = true;
 
     EXPECT_EQ(
@@ -94,7 +106,7 @@ TEST_F(SafeBrowsingPingManagerTest, TestSafeBrowsingHitUrl) {
     hp.threat_type = SB_THREAT_TYPE_URL_PHISHING;
     hp.threat_source = ThreatSource::DATA_SAVER;
     hp.is_subresource = false;
-    hp.is_extended_reporting = true;
+    hp.extended_reporting_level = SBER_LEVEL_LEGACY;
     hp.is_metrics_reporting_active = true;
     EXPECT_EQ(
         "https://prefix.com/foo/report?client=unittest&appver=1.0&"
@@ -109,9 +121,27 @@ TEST_F(SafeBrowsingPingManagerTest, TestSafeBrowsingHitUrl) {
 
   {
     HitReport hp(base_hp);
+    hp.threat_type = SB_THREAT_TYPE_URL_PHISHING;
+    hp.threat_source = ThreatSource::DATA_SAVER;
+    hp.is_subresource = false;
+    hp.extended_reporting_level = SBER_LEVEL_SCOUT;
+    hp.is_metrics_reporting_active = true;
+    EXPECT_EQ(
+        "https://prefix.com/foo/report?client=unittest&appver=1.0&"
+        "pver=3.0" +
+            key_param_ +
+            "&ext=2&evts=phishblhit&"
+            "evtd=http%3A%2F%2Fmalicious.url.com%2F&"
+            "evtr=http%3A%2F%2Fpage.url.com%2F&evhr=http%3A%2F%2Freferrer."
+            "url.com%2F&evtb=0&src=ds&m=1",
+        ping_manager()->SafeBrowsingHitUrl(hp).spec());
+  }
+
+  {
+    HitReport hp(base_hp);
     hp.threat_type = SB_THREAT_TYPE_BINARY_MALWARE_URL;
     hp.threat_source = ThreatSource::REMOTE;
-    hp.is_extended_reporting = false;
+    hp.extended_reporting_level = SBER_LEVEL_OFF;
     hp.is_metrics_reporting_active = true;
     hp.is_subresource = false;
     EXPECT_EQ(
@@ -129,7 +159,7 @@ TEST_F(SafeBrowsingPingManagerTest, TestSafeBrowsingHitUrl) {
     HitReport hp(base_hp);
     hp.threat_type = SB_THREAT_TYPE_CLIENT_SIDE_PHISHING_URL;
     hp.threat_source = ThreatSource::LOCAL_PVER4;
-    hp.is_extended_reporting = false;
+    hp.extended_reporting_level = SBER_LEVEL_OFF;
     hp.is_metrics_reporting_active = false;
     hp.is_subresource = false;
     EXPECT_EQ(
@@ -147,7 +177,7 @@ TEST_F(SafeBrowsingPingManagerTest, TestSafeBrowsingHitUrl) {
     HitReport hp(base_hp);
     hp.threat_type = SB_THREAT_TYPE_CLIENT_SIDE_MALWARE_URL;
     hp.threat_source = ThreatSource::LOCAL_PVER4;
-    hp.is_extended_reporting = false;
+    hp.extended_reporting_level = SBER_LEVEL_OFF;
     hp.is_metrics_reporting_active = false;
     hp.is_subresource = true;
     EXPECT_EQ(
@@ -166,7 +196,7 @@ TEST_F(SafeBrowsingPingManagerTest, TestSafeBrowsingHitUrl) {
     HitReport hp(base_hp);
     hp.threat_type = SB_THREAT_TYPE_CLIENT_SIDE_MALWARE_URL;
     hp.threat_source = ThreatSource::LOCAL_PVER4;
-    hp.is_extended_reporting = false;
+    hp.extended_reporting_level = SBER_LEVEL_OFF;
     hp.is_metrics_reporting_active = false;
     hp.is_subresource = true;
     hp.population_id = "foo bar";
@@ -254,7 +284,7 @@ TEST_F(SafeBrowsingPingManagerTest, TestReportSafeBrowsingHit) {
   hp.referrer_url = GURL("http://referrer.url.com");
   hp.threat_type = SB_THREAT_TYPE_CLIENT_SIDE_MALWARE_URL;
   hp.threat_source = ThreatSource::LOCAL_PVER4;
-  hp.is_extended_reporting = false;
+  hp.extended_reporting_level = SBER_LEVEL_OFF;
   hp.is_metrics_reporting_active = false;
   hp.is_subresource = true;
   hp.population_id = "foo bar";
@@ -308,6 +338,53 @@ TEST_F(SafeBrowsingPingManagerTest, TestReportSafeBrowsingHit) {
   // We don't really care what the source_dependency value is, just making sure
   // it's there.
   EXPECT_TRUE(end_entry.params->HasKey("source_dependency"));
+}
+
+class SafeBrowsingPingManagerCertReportingTest : public testing::Test {
+ public:
+  SafeBrowsingPingManagerCertReportingTest() {}
+
+ protected:
+  void SetUp() override {
+    message_loop_.reset(new base::MessageLoopForIO());
+    io_thread_.reset(new content::TestBrowserThread(content::BrowserThread::IO,
+                                                    message_loop_.get()));
+    url_request_context_getter_ =
+        new net::TestURLRequestContextGetter(message_loop_->task_runner());
+    net::URLRequestFailedJob::AddUrlHandler();
+  }
+
+  net::URLRequestContextGetter* url_request_context_getter() {
+    return url_request_context_getter_.get();
+  }
+
+ private:
+  std::unique_ptr<base::MessageLoopForIO> message_loop_;
+  std::unique_ptr<content::TestBrowserThread> io_thread_;
+
+  scoped_refptr<net::URLRequestContextGetter> url_request_context_getter_;
+};
+
+TEST_F(SafeBrowsingPingManagerCertReportingTest, UMAOnFailure) {
+  base::HistogramTester histograms;
+  histograms.ExpectTotalCount(kFailureHistogramName, 0);
+
+  SafeBrowsingProtocolConfig config;
+  config.client_name = kClient;
+  config.url_prefix = kUrlPrefix;
+  std::unique_ptr<SafeBrowsingPingManager> ping_manager(
+      new SafeBrowsingPingManager(url_request_context_getter(), config));
+  const GURL kReportURL =
+      net::URLRequestFailedJob::GetMockHttpsUrl(net::ERR_CONNECTION_FAILED);
+
+  ping_manager->certificate_error_reporter_->set_upload_url_for_testing(
+      kReportURL);
+  ping_manager->ReportInvalidCertificateChain("report");
+  base::RunLoop().RunUntilIdle();
+
+  histograms.ExpectTotalCount(kFailureHistogramName, 1);
+  histograms.ExpectBucketCount(kFailureHistogramName,
+                               -net::ERR_CONNECTION_FAILED, 1);
 }
 
 }  // namespace safe_browsing

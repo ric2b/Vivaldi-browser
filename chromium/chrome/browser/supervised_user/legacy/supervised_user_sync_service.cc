@@ -11,6 +11,7 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
@@ -22,11 +23,11 @@
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/signin/core/browser/signin_manager.h"
-#include "components/sync/api/sync_change.h"
-#include "components/sync/api/sync_data.h"
-#include "components/sync/api/sync_error.h"
-#include "components/sync/api/sync_error_factory.h"
-#include "components/sync/api/sync_merge_result.h"
+#include "components/sync/model/sync_change.h"
+#include "components/sync/model/sync_data.h"
+#include "components/sync/model/sync_error.h"
+#include "components/sync/model/sync_error_factory.h"
+#include "components/sync/model/sync_merge_result.h"
 #include "components/sync/protocol/sync.pb.h"
 
 #if defined(OS_CHROMEOS)
@@ -427,7 +428,8 @@ SyncMergeResult SupervisedUserSyncService::MergeDataAndStartSyncing(
     DCHECK_EQ(SUPERVISED_USERS, sync_data.GetDataType());
     const ManagedUserSpecifics& supervised_user =
         sync_data.GetSpecifics().managed_user();
-    base::DictionaryValue* value = new base::DictionaryValue();
+    std::unique_ptr<base::DictionaryValue> value =
+        base::MakeUnique<base::DictionaryValue>();
     value->SetString(kName, supervised_user.name());
     value->SetBoolean(kAcknowledged, supervised_user.acknowledged());
     value->SetString(kMasterKey, supervised_user.master_key());
@@ -441,7 +443,7 @@ SyncMergeResult SupervisedUserSyncService::MergeDataAndStartSyncing(
       num_items_modified++;
     else
       num_items_added++;
-    dict->SetWithoutPathExpansion(supervised_user.id(), value);
+    dict->SetWithoutPathExpansion(supervised_user.id(), std::move(value));
     seen_ids.insert(supervised_user.id());
   }
 
@@ -516,7 +518,8 @@ SyncError SupervisedUserSyncService::ProcessSyncChanges(
         if (old_value && !old_value->HasKey(kAcknowledged))
           NotifySupervisedUserAcknowledged(supervised_user.id());
 
-        base::DictionaryValue* value = new base::DictionaryValue;
+        std::unique_ptr<base::DictionaryValue> value =
+            base::MakeUnique<base::DictionaryValue>();
         value->SetString(kName, supervised_user.name());
         value->SetBoolean(kAcknowledged, supervised_user.acknowledged());
         value->SetString(kMasterKey, supervised_user.master_key());
@@ -526,7 +529,7 @@ SyncError SupervisedUserSyncService::ProcessSyncChanges(
                          supervised_user.password_signature_key());
         value->SetString(kPasswordEncryptionKey,
                          supervised_user.password_encryption_key());
-        dict->SetWithoutPathExpansion(supervised_user.id(), value);
+        dict->SetWithoutPathExpansion(supervised_user.id(), std::move(value));
 
         NotifySupervisedUsersChanged();
         break;
@@ -557,19 +560,18 @@ void SupervisedUserSyncService::GoogleSignedOut(
 
 void SupervisedUserSyncService::NotifySupervisedUserAcknowledged(
     const std::string& supervised_user_id) {
-  FOR_EACH_OBSERVER(SupervisedUserSyncServiceObserver, observers_,
-                    OnSupervisedUserAcknowledged(supervised_user_id));
+  for (SupervisedUserSyncServiceObserver& observer : observers_)
+    observer.OnSupervisedUserAcknowledged(supervised_user_id);
 }
 
 void SupervisedUserSyncService::NotifySupervisedUsersSyncingStopped() {
-  FOR_EACH_OBSERVER(SupervisedUserSyncServiceObserver, observers_,
-                    OnSupervisedUsersSyncingStopped());
+  for (SupervisedUserSyncServiceObserver& observer : observers_)
+    observer.OnSupervisedUsersSyncingStopped();
 }
 
 void SupervisedUserSyncService::NotifySupervisedUsersChanged() {
-  FOR_EACH_OBSERVER(SupervisedUserSyncServiceObserver,
-                    observers_,
-                    OnSupervisedUsersChanged());
+  for (SupervisedUserSyncServiceObserver& observer : observers_)
+    observer.OnSupervisedUsersChanged();
 }
 
 void SupervisedUserSyncService::DispatchCallbacks() {

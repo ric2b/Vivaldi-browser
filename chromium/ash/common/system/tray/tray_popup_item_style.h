@@ -50,26 +50,37 @@ class TrayPopupItemStyle {
     INACTIVE,
     // Disabled and not clickable.
     DISABLED,
+    // Color for "Connected" labels.
+    CONNECTED,
+    // Color for sub-section header rows in detailed views.
+    SUB_HEADER,
   };
 
   // The different font styles that row text can have.
   enum class FontStyle {
-    // Header rows for default view and detailed view.
+    // Topmost header rows for default view and detailed view.
     TITLE,
     // Main text used by default view rows.
     DEFAULT_VIEW_LABEL,
+    // Text in sub-section header rows in detailed views.
+    SUB_HEADER,
     // Main text used by detailed view rows.
     DETAILED_VIEW_LABEL,
     // System information text (e.g. date/time, battery status, etc).
     SYSTEM_INFO,
-    // Sub text within a row (e.g. user name in user row).
-    CAPTION,
     // Child buttons within rows that have a visible border (e.g. Cast's
     // "Stop", etc).
     BUTTON,
+    // Sub text within a row (e.g. user name in user row).
+    CAPTION,
   };
 
+  static SkColor GetIconColor(const ui::NativeTheme* theme,
+                              ColorStyle color_style);
+  static SkColor GetIconColor(ColorStyle color_style);
+
   TrayPopupItemStyle(const ui::NativeTheme* theme, FontStyle font_style);
+  explicit TrayPopupItemStyle(FontStyle font_style);
   ~TrayPopupItemStyle();
 
   const ui::NativeTheme* theme() const { return theme_; }
@@ -84,13 +95,18 @@ class TrayPopupItemStyle {
 
   void set_font_style(FontStyle font_style) { font_style_ = font_style; }
 
-  SkColor GetForegroundColor() const;
+  SkColor GetTextColor() const;
+
+  SkColor GetIconColor() const;
 
   // Configures a Label as per the style (e.g. color, font).
   void SetupLabel(views::Label* label) const;
 
  private:
   // The theme that the styles are dervied from.
+  // NOTE the styles are not currently derived from |theme_| but see TODO below.
+  // TODO(bruthig|tdanderson): Determine if TrayPopupItemStyle should depend on
+  // a NativeTheme. See http://crbug.com/665891.
   const ui::NativeTheme* theme_;
 
   FontStyle font_style_;

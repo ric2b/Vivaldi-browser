@@ -33,11 +33,11 @@
 #include "content/test/test_render_frame_host_factory.h"
 #include "content/test/test_render_view_host.h"
 #include "content/test/test_web_contents.h"
-#include "media/base/video_capture_types.h"
 #include "media/base/video_frame.h"
 #include "media/base/video_util.h"
 #include "media/base/yuv_convert.h"
 #include "media/capture/video/video_capture_buffer_pool_impl.h"
+#include "media/capture/video_capture_types.h"
 #include "skia/ext/platform_canvas.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -375,7 +375,7 @@ class StubClient : public media::VideoCaptureDevice::Client {
 
   void OnIncomingCapturedVideoFrame(
       std::unique_ptr<Buffer> buffer,
-      const scoped_refptr<media::VideoFrame>& frame) override {
+      scoped_refptr<media::VideoFrame> frame) override {
     EXPECT_FALSE(frame->visible_rect().IsEmpty());
     EXPECT_EQ(media::PIXEL_FORMAT_I420, frame->format());
     double frame_rate = 0;
@@ -442,12 +442,17 @@ class StubClient : public media::VideoCaptureDevice::Client {
       return buffer_handle_->mapped_size();
     }
     void* data(int plane) override { return buffer_handle_->data(plane); }
-    ClientBuffer AsClientBuffer(int plane) override { return nullptr; }
 #if defined(OS_POSIX) && !defined(OS_MACOSX)
     base::FileDescriptor AsPlatformFile() override {
       return base::FileDescriptor();
     }
 #endif
+    bool IsBackedByVideoFrame() const override {
+      return buffer_handle_->IsBackedByVideoFrame();
+    }
+    scoped_refptr<media::VideoFrame> GetVideoFrame() override {
+      return buffer_handle_->GetVideoFrame();
+    }
 
    private:
     ~AutoReleaseBuffer() override { pool_->RelinquishProducerReservation(id_); }
@@ -598,10 +603,14 @@ class MAYBE_WebContentsVideoCaptureDeviceTest : public testing::Test {
 
  protected:
   void SetUp() override {
-    test_screen_.display()->set_id(0x1337);
-    test_screen_.display()->set_bounds(gfx::Rect(0, 0, 2560, 1440));
-    test_screen_.display()->set_device_scale_factor(kTestDeviceScaleFactor);
-
+    const display::Display test_display = test_screen_.GetPrimaryDisplay();
+    display::Display display(test_display);
+    display.set_id(0x1337);
+    display.set_bounds(gfx::Rect(0, 0, 2560, 1440));
+    display.set_device_scale_factor(kTestDeviceScaleFactor);
+    test_screen_.display_list().RemoveDisplay(test_display.id());
+    test_screen_.display_list().AddDisplay(display,
+                                           display::DisplayList::Type::PRIMARY);
     display::Screen::SetScreenInstance(&test_screen_);
     ASSERT_EQ(&test_screen_, display::Screen::GetScreen());
 
@@ -629,10 +638,9 @@ class MAYBE_WebContentsVideoCaptureDeviceTest : public testing::Test {
     web_contents_.reset(
         TestWebContents::Create(browser_context_.get(), site_instance.get()));
     RenderFrameHost* const main_frame = web_contents_->GetMainFrame();
-    device_.reset(WebContentsVideoCaptureDevice::Create(
-        base::StringPrintf("web-contents-media-stream://%d:%d",
-                           main_frame->GetProcess()->GetID(),
-                           main_frame->GetRoutingID())));
+    device_ = WebContentsVideoCaptureDevice::Create(base::StringPrintf(
+        "web-contents-media-stream://%d:%d", main_frame->GetProcess()->GetID(),
+        main_frame->GetRoutingID()));
 
     base::RunLoop().RunUntilIdle();
   }

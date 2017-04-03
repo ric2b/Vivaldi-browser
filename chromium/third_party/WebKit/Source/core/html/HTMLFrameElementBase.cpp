@@ -23,6 +23,7 @@
 
 #include "core/html/HTMLFrameElementBase.h"
 
+#include "bindings/core/v8/BindingSecurity.h"
 #include "bindings/core/v8/ScriptController.h"
 #include "bindings/core/v8/ScriptEventListener.h"
 #include "core/HTMLNames.h"
@@ -32,6 +33,7 @@
 #include "core/frame/LocalFrame.h"
 #include "core/frame/RemoteFrame.h"
 #include "core/frame/RemoteFrameView.h"
+#include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/html/parser/HTMLParserIdioms.h"
 #include "core/loader/FrameLoader.h"
 #include "core/loader/FrameLoaderClient.h"
@@ -55,10 +57,18 @@ bool HTMLFrameElementBase::isURLAllowed() const {
 
   const KURL& completeURL = document().completeURL(m_URL);
 
-  if (protocolIsJavaScript(completeURL)) {
-    if (contentFrame() &&
-        !ScriptController::canAccessFromCurrentOrigin(toIsolate(&document()),
-                                                      contentFrame()))
+  if (contentFrame() && protocolIsJavaScript(completeURL)) {
+    // Check if the caller can execute script in the context of the content
+    // frame. NB: This check can be invoked without any JS on the stack for some
+    // parser operations. In such case, we use the origin of the frame element's
+    // containing document as the caller context.
+    v8::Isolate* isolate = toIsolate(&document());
+    LocalDOMWindow* accessingWindow = isolate->InContext()
+                                          ? currentDOMWindow(isolate)
+                                          : document().domWindow();
+    if (!BindingSecurity::shouldAllowAccessToFrame(
+            accessingWindow, contentFrame(),
+            BindingSecurity::ErrorReportOption::Report))
       return false;
   }
 
@@ -84,7 +94,21 @@ void HTMLFrameElementBase::openURL(bool replaceCurrentItem) {
   KURL scriptURL;
   KURL url = document().completeURL(m_URL);
   if (protocolIsJavaScript(m_URL)) {
-    scriptURL = url;
+    // We'll set/execute |scriptURL| iff CSP allows us to execute inline
+    // JavaScript. If CSP blocks inline JavaScript, then exit early if
+    // we're trying to execute script in an existing document. If we're
+    // executing JavaScript to create a new document (e.g.
+    // '<iframe src="javascript:...">' then continue loading 'about:blank'
+    // so that the frame is populated with something reasonable.
+    if (ContentSecurityPolicy::shouldBypassMainWorld(&document()) ||
+        document().contentSecurityPolicy()->allowJavaScriptURLs(
+            this, document().url(), OrdinalNumber::first())) {
+      scriptURL = url;
+    } else {
+      if (contentFrame())
+        return;
+    }
+
     url = blankURL();
   }
 
@@ -96,7 +120,7 @@ void HTMLFrameElementBase::openURL(bool replaceCurrentItem) {
     return;
   toLocalFrame(contentFrame())
       ->script()
-      .executeScriptIfJavaScriptURL(scriptURL);
+      .executeScriptIfJavaScriptURL(scriptURL, this);
 }
 
 void HTMLFrameElementBase::frameOwnerPropertiesChanged() {

@@ -9,7 +9,7 @@
 
 #include "ash/common/material_design/material_design_controller.h"
 #include "ash/common/system/chromeos/session/logout_confirmation_controller.h"
-#include "ash/common/system/tray/system_tray_delegate.h"
+#include "ash/common/system/tray/system_tray_controller.h"
 #include "ash/common/system/tray/system_tray_notifier.h"
 #include "ash/common/system/tray/tray_constants.h"
 #include "ash/common/system/tray/tray_utils.h"
@@ -115,12 +115,16 @@ LogoutButtonTray::LogoutButtonTray(WmShelf* wm_shelf)
     // crbug.com/623987
     button->AdjustFontSize(2);
     button_ = button;
+
+    // Since |logout_button_tray| has a red background and it is distinguished
+    // by itself, no separator is needed on its right side.
+    set_separator_visibility(false);
   } else {
     button_ = new LogoutButton(this);
   }
   tray_container()->AddChildView(button_);
   if (!MaterialDesignController::IsShelfMaterial())
-    tray_container()->SetBorder(views::Border::NullBorder());
+    tray_container()->SetBorder(views::NullBorder());
   WmShell::Get()->system_tray_notifier()->AddLogoutButtonObserver(this);
 }
 
@@ -134,7 +138,7 @@ void LogoutButtonTray::SetShelfAlignment(ShelfAlignment alignment) {
   UpdateButtonTextAndImage(login_status_, alignment);
   TrayBackgroundView::SetShelfAlignment(alignment);
   if (!MaterialDesignController::IsShelfMaterial())
-    tray_container()->SetBorder(views::Border::NullBorder());
+    tray_container()->SetBorder(views::NullBorder());
 }
 
 base::string16 LogoutButtonTray::GetAccessibleNameForTray() {
@@ -146,6 +150,22 @@ void LogoutButtonTray::HideBubbleWithView(
 
 void LogoutButtonTray::ClickedOutsideBubble() {}
 
+void LogoutButtonTray::ButtonPressed(views::Button* sender,
+                                     const ui::Event& event) {
+  if (sender != button_) {
+    TrayBackgroundView::ButtonPressed(sender, event);
+    return;
+  }
+
+  if (dialog_duration_ <= base::TimeDelta()) {
+    // Sign out immediately if |dialog_duration_| is non-positive.
+    WmShell::Get()->system_tray_controller()->SignOut();
+  } else if (WmShell::Get()->logout_confirmation_controller()) {
+    WmShell::Get()->logout_confirmation_controller()->ConfirmLogout(
+        base::TimeTicks::Now() + dialog_duration_);
+  }
+}
+
 void LogoutButtonTray::OnShowLogoutButtonInTrayChanged(bool show) {
   show_logout_button_in_tray_ = show;
   UpdateVisibility();
@@ -153,18 +173,6 @@ void LogoutButtonTray::OnShowLogoutButtonInTrayChanged(bool show) {
 
 void LogoutButtonTray::OnLogoutDialogDurationChanged(base::TimeDelta duration) {
   dialog_duration_ = duration;
-}
-
-void LogoutButtonTray::ButtonPressed(views::Button* sender,
-                                     const ui::Event& event) {
-  DCHECK_EQ(sender, button_);
-  if (dialog_duration_ <= base::TimeDelta()) {
-    // Sign out immediately if |dialog_duration_| is non-positive.
-    WmShell::Get()->system_tray_delegate()->SignOut();
-  } else if (WmShell::Get()->logout_confirmation_controller()) {
-    WmShell::Get()->logout_confirmation_controller()->ConfirmLogout(
-        base::TimeTicks::Now() + dialog_duration_);
-  }
 }
 
 void LogoutButtonTray::UpdateAfterLoginStatusChange(LoginStatus login_status) {

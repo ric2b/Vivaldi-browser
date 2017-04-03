@@ -57,13 +57,16 @@ enum PushRegistrationStatus {
   // empty.
   PUSH_REGISTRATION_STATUS_MANIFEST_EMPTY_OR_MISSING = 12,
 
+  // Registration failed because a subscription with a different sender id
+  // already exists.
+  PUSH_REGISTRATION_STATUS_SENDER_ID_MISMATCH = 13,
+
   // NOTE: Do not renumber these as that would confuse interpretation of
   // previously logged data. When making changes, also update the enum list
   // in tools/metrics/histograms/histograms.xml to keep it in sync, and
   // update PUSH_REGISTRATION_STATUS_LAST below.
 
-  PUSH_REGISTRATION_STATUS_LAST =
-      PUSH_REGISTRATION_STATUS_MANIFEST_EMPTY_OR_MISSING
+  PUSH_REGISTRATION_STATUS_LAST = PUSH_REGISTRATION_STATUS_SENDER_ID_MISMATCH
 };
 
 // Push unregistration reason for reporting in UMA. Enum values can be added,
@@ -87,13 +90,15 @@ enum PushUnregistrationReason {
   // Automatic - incoming message's service worker was not found.
   PUSH_UNREGISTRATION_REASON_DELIVERY_NO_SERVICE_WORKER = 5,
 
+  // Automatic - GCM Store reset due to corruption.
+  PUSH_UNREGISTRATION_REASON_GCM_STORE_RESET = 6,
+
   // NOTE: Do not renumber these as that would confuse interpretation of
   // previously logged data. When making changes, also update the enum list
   // in tools/metrics/histograms/histograms.xml to keep it in sync, and
   // update PUSH_UNREGISTRATION_REASON_LAST below.
 
-  PUSH_UNREGISTRATION_REASON_LAST =
-      PUSH_UNREGISTRATION_REASON_DELIVERY_NO_SERVICE_WORKER
+  PUSH_UNREGISTRATION_REASON_LAST = PUSH_UNREGISTRATION_REASON_GCM_STORE_RESET
 };
 
 // Push unregistration success/error codes for internal use & reporting in UMA.

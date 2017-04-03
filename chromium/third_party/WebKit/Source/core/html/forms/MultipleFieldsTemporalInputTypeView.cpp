@@ -133,25 +133,28 @@ bool DateTimeFormatValidator::validateFormat(
 
 DateTimeEditElement* MultipleFieldsTemporalInputTypeView::dateTimeEditElement()
     const {
-  return toDateTimeEditElement(element().userAgentShadowRoot()->getElementById(
-      ShadowElementNames::dateTimeEdit()));
+  return toDateTimeEditElementOrDie(
+      element().userAgentShadowRoot()->getElementById(
+          ShadowElementNames::dateTimeEdit()));
 }
 
 SpinButtonElement* MultipleFieldsTemporalInputTypeView::spinButtonElement()
     const {
-  return toSpinButtonElement(element().userAgentShadowRoot()->getElementById(
-      ShadowElementNames::spinButton()));
+  return toSpinButtonElementOrDie(
+      element().userAgentShadowRoot()->getElementById(
+          ShadowElementNames::spinButton()));
 }
 
 ClearButtonElement* MultipleFieldsTemporalInputTypeView::clearButtonElement()
     const {
-  return toClearButtonElement(element().userAgentShadowRoot()->getElementById(
-      ShadowElementNames::clearButton()));
+  return toClearButtonElementOrDie(
+      element().userAgentShadowRoot()->getElementById(
+          ShadowElementNames::clearButton()));
 }
 
 PickerIndicatorElement*
 MultipleFieldsTemporalInputTypeView::pickerIndicatorElement() const {
-  return toPickerIndicatorElement(
+  return toPickerIndicatorElementOrDie(
       element().userAgentShadowRoot()->getElementById(
           ShadowElementNames::pickerIndicator()));
 }
@@ -194,7 +197,7 @@ void MultipleFieldsTemporalInputTypeView::editControlValueChanged() {
   if ((oldValue.isEmpty() && newValue.isEmpty()) || oldValue == newValue) {
     element().setNeedsValidityCheck();
   } else {
-    element().setValueInternal(newValue, DispatchNoEvent);
+    element().setNonAttributeValue(newValue);
     element().setNeedsStyleRecalc(
         SubtreeStyleChange,
         StyleChangeReasonForTracing::create(StyleChangeReason::ControlValue));
@@ -482,8 +485,7 @@ void MultipleFieldsTemporalInputTypeView::restoreFormControlState(
   DateTimeFieldsState dateTimeFieldsState =
       DateTimeFieldsState::restoreFormControlState(state);
   edit->setValueAsDateTimeFieldsState(dateTimeFieldsState);
-  element().setValueInternal(m_inputType->sanitizeValue(edit->value()),
-                             DispatchNoEvent);
+  element().setNonAttributeValue(m_inputType->sanitizeValue(edit->value()));
   updateClearButtonVisibility();
 }
 

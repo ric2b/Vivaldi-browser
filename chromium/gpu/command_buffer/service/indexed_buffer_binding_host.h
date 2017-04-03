@@ -22,7 +22,9 @@ class Buffer;
 class GPU_EXPORT IndexedBufferBindingHost :
     public base::RefCounted<IndexedBufferBindingHost> {
  public:
-  // |needs_emulation| is set to true on Desktop GL 4.1 or lower.
+  // In theory |needs_emulation| needs to be true on Desktop GL 4.1 or lower.
+  // However, we set it to true everywhere, not to trust drivers to handle
+  // out-of-bounds buffer accesses.
   IndexedBufferBindingHost(uint32_t max_bindings, bool needs_emulation);
 
   // The following two functions do state update and call the underlying GL
@@ -54,6 +56,10 @@ class GPU_EXPORT IndexedBufferBindingHost :
 
   // This is used only for UNIFORM_BUFFER bindings in context switching.
   void RestoreBindings(IndexedBufferBindingHost* prev);
+
+  // Check if |buffer| is currently bound to one of the indexed binding point
+  // from 0 to |used_binding_count| - 1.
+  bool UsesBuffer(size_t used_binding_count, const Buffer* buffer) const;
 
  protected:
   friend class base::RefCounted<IndexedBufferBindingHost>;
@@ -89,7 +95,7 @@ class GPU_EXPORT IndexedBufferBindingHost :
     void Reset();
   };
 
-  // This is called on Desktop GL lower than 4.2, where the range
+  // This is called when |needs_emulation_| is true, where the range
   // (offset + size) can't go beyond the buffer's size.
   static void DoAdjustedBindBufferRange(
       GLenum target, GLuint index, GLuint service_id, GLintptr offset,

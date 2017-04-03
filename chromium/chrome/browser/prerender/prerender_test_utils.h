@@ -5,10 +5,20 @@
 #ifndef CHROME_BROWSER_PRERENDER_PRERENDER_TEST_UTILS_H_
 #define CHROME_BROWSER_PRERENDER_PRERENDER_TEST_UTILS_H_
 
+#include <deque>
+#include <functional>
+#include <memory>
+#include <set>
+#include <string>
+#include <unordered_map>
+#include <vector>
+
 #include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
+#include "base/test/histogram_tester.h"
 #include "chrome/browser/external_protocol/external_protocol_handler.h"
 #include "chrome/browser/prerender/prerender_contents.h"
+#include "chrome/browser/prerender/prerender_manager.h"
 #include "chrome/browser/safe_browsing/test_safe_browsing_service.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "components/safe_browsing_db/test_database_manager.h"
@@ -101,7 +111,6 @@ class TestPrerenderContents : public PrerenderContents {
 
   ~TestPrerenderContents() override;
 
-  void RenderProcessGone(base::TerminationStatus status) override;
   bool CheckURL(const GURL& url) override;
 
   // For tests that open the prerender in a new background tab, the RenderView
@@ -135,11 +144,13 @@ class TestPrerenderContents : public PrerenderContents {
   bool should_be_shown_;
   // If true, |expected_final_status_| and other shutdown checks are skipped.
   bool skip_final_checks_;
+
+  DISALLOW_COPY_AND_ASSIGN(TestPrerenderContents);
 };
 
 // A handle to a TestPrerenderContents whose lifetime is under the caller's
 // control. A PrerenderContents may be destroyed at any point. This allows
-// tracking the final status, etc.
+// tracking the FinalStatus.
 class TestPrerender : public PrerenderContents::Observer,
                       public base::SupportsWeakPtr<TestPrerender> {
  public:
@@ -148,10 +159,11 @@ class TestPrerender : public PrerenderContents::Observer,
 
   TestPrerenderContents* contents() const { return contents_; }
   int number_of_loads() const { return number_of_loads_; }
+  FinalStatus GetFinalStatus() const;
 
-  void WaitForCreate() { create_loop_.Run(); }
-  void WaitForStart() { start_loop_.Run(); }
-  void WaitForStop() { stop_loop_.Run(); }
+  void WaitForCreate();
+  void WaitForStart();
+  void WaitForStop();
 
   // Waits for |number_of_loads()| to be at least |expected_number_of_loads| OR
   // for the prerender to stop running (just to avoid a timeout if the prerender
@@ -170,10 +182,14 @@ class TestPrerender : public PrerenderContents::Observer,
 
  private:
   TestPrerenderContents* contents_;
+  FinalStatus final_status_;
   int number_of_loads_;
 
   int expected_number_of_loads_;
   std::unique_ptr<base::RunLoop> load_waiter_;
+
+  bool started_;
+  bool stopped_;
 
   base::RunLoop create_loop_;
   base::RunLoop start_loop_;
@@ -182,7 +198,51 @@ class TestPrerender : public PrerenderContents::Observer,
   DISALLOW_COPY_AND_ASSIGN(TestPrerender);
 };
 
-// PrerenderManager that uses TestPrerenderContents.
+// Blocks until a TestPrerenderContents has been destroyed with the given final
+// status. Should be created with a TestPrerenderContents, and then
+// WaitForDestroy should be called and its return value checked.
+class DestructionWaiter {
+ public:
+  // Does not own the prerender_contents, which must outlive any call to
+  // WaitForDestroy().
+  DestructionWaiter(TestPrerenderContents* prerender_contents,
+                    FinalStatus expected_final_status);
+
+  ~DestructionWaiter();
+
+  // Returns true if the TestPrerenderContents was destroyed with the correct
+  // final status, or false otherwise. Note this also may hang if the contents
+  // is never destroyed (which will presumably cause the test to time out).
+  bool WaitForDestroy();
+
+ private:
+  class DestructionMarker : public PrerenderContents::Observer {
+   public:
+    // Does not own the waiter which must outlive the TestPrerenderContents.
+    explicit DestructionMarker(DestructionWaiter* waiter);
+
+    ~DestructionMarker() override;
+
+    void OnPrerenderStop(PrerenderContents* contents) override;
+
+   private:
+    DestructionWaiter* waiter_;
+
+    DISALLOW_COPY_AND_ASSIGN(DestructionMarker);
+  };
+
+  // To be called by a DestructionMarker.
+  void MarkDestruction(FinalStatus reason);
+
+  base::RunLoop wait_loop_;
+  FinalStatus expected_final_status_;
+  bool saw_correct_status_;
+  std::unique_ptr<DestructionMarker> marker_;
+
+  DISALLOW_COPY_AND_ASSIGN(DestructionWaiter);
+};
+
+// PrerenderContentsFactory that uses TestPrerenderContents.
 class TestPrerenderContentsFactory : public PrerenderContents::Factory {
  public:
   TestPrerenderContentsFactory();
@@ -212,6 +272,8 @@ class TestPrerenderContentsFactory : public PrerenderContents::Factory {
   };
 
   std::deque<ExpectedContents> expected_contents_queue_;
+
+  DISALLOW_COPY_AND_ASSIGN(TestPrerenderContentsFactory);
 };
 
 class PrerenderInProcessBrowserTest : virtual public InProcessBrowserTest {
@@ -226,6 +288,11 @@ class PrerenderInProcessBrowserTest : virtual public InProcessBrowserTest {
   void SetUpOnMainThread() override;
   content::SessionStorageNamespace* GetSessionStorageNamespace() const;
 
+  // Many of the file and server manipulation commands are fussy about paths
+  // being relative or absolute. This makes path absolute if it is not
+  // already. The path must not be empty.
+  std::string MakeAbsolute(const std::string& path);
+
   bool UrlIsInPrerenderManager(const std::string& html_file) const;
   bool UrlIsInPrerenderManager(const GURL& url) const;
 
@@ -237,24 +304,18 @@ class PrerenderInProcessBrowserTest : virtual public InProcessBrowserTest {
 
   TestPrerenderContents* GetPrerenderContentsFor(const GURL& url) const;
 
-  std::unique_ptr<TestPrerender> PrerenderTestURL(
-      const std::string& html_file,
-      FinalStatus expected_final_status,
-      int expected_number_of_loads);
+  // Set up an HTTPS server.
+  void UseHttpsSrcServer();
 
-  ScopedVector<TestPrerender> PrerenderTestURL(
-      const std::string& html_file,
-      const std::vector<FinalStatus>& expected_final_status_queue,
-      int expected_number_of_loads);
-
-  std::unique_ptr<TestPrerender> PrerenderTestURL(
-      const GURL& url,
-      FinalStatus expected_final_status,
-      int expected_number_of_loads);
+  // Returns the currently active server. See |UseHttpsSrcServer|.
+  net::EmbeddedTestServer* src_server();
 
   safe_browsing::TestSafeBrowsingServiceFactory* safe_browsing_factory() const {
     return safe_browsing_factory_.get();
   }
+
+  test_utils::FakeSafeBrowsingDatabaseManager*
+  GetFakeSafeBrowsingDatabaseManager();
 
   TestPrerenderContentsFactory* prerender_contents_factory() const {
     return prerender_contents_factory_;
@@ -268,18 +329,32 @@ class PrerenderInProcessBrowserTest : virtual public InProcessBrowserTest {
     return explicitly_set_browser_ ? explicitly_set_browser_ : browser();
   }
 
- private:
-  // Implement load of a url for a prerender test. prerender_url should be
-  // loaded, and we should expect to see one prerenderer created, and exit, for
-  // each entry in expected_final_status_queue, and seeing
-  // expected_number_of_loads. Specific tests can provide additional
-  // verification. Note this should be called by one of the convenience wrappers
-  // defined above.
-  virtual ScopedVector<TestPrerender> PrerenderTestURLImpl(
-      const GURL& prerender_url,
-      const std::vector<FinalStatus>& expected_final_status_queue,
-      int expected_number_of_loads) = 0;
+  const base::HistogramTester& histogram_tester() { return histogram_tester_; }
 
+  // Returns a string for pattern-matching TaskManager tab entries.
+  base::string16 MatchTaskManagerTab(const char* page_title);
+
+  // Returns a string for pattern-matching TaskManager prerender entries.
+  base::string16 MatchTaskManagerPrerender(const char* page_title);
+
+ protected:
+  // For each FinalStatus in |expected_final_status_queue| creates a prerender
+  // that is going to verify the correctness of its FinalStatus upon
+  // destruction. Waits for creation of the first PrerenderContents.
+  std::vector<std::unique_ptr<TestPrerender>> NavigateWithPrerenders(
+      const GURL& loader_url,
+      const std::vector<FinalStatus>& expected_final_status_queue);
+
+  // Creates the URL that instructs the test server to substitute the text
+  // |replacement_variable| in the contents of the file pointed to by
+  // |loader_path| with |url_to_prerender|. Also appends the |loader_query| to
+  // the URL.
+  GURL ServeLoaderURL(const std::string& loader_path,
+                      const std::string& replacement_variable,
+                      const GURL& url_to_prerender,
+                      const std::string& loader_query);
+
+ private:
   std::unique_ptr<ExternalProtocolHandler::Delegate>
       external_protocol_handler_delegate_;
   std::unique_ptr<safe_browsing::TestSafeBrowsingServiceFactory>
@@ -287,6 +362,10 @@ class PrerenderInProcessBrowserTest : virtual public InProcessBrowserTest {
   TestPrerenderContentsFactory* prerender_contents_factory_;
   Browser* explicitly_set_browser_;
   bool autostart_test_server_;
+  base::HistogramTester histogram_tester_;
+  std::unique_ptr<net::EmbeddedTestServer> https_src_server_;
+
+  DISALLOW_COPY_AND_ASSIGN(PrerenderInProcessBrowserTest);
 };
 
 // Makes |url| respond to requests with the contents of |file|, counting the

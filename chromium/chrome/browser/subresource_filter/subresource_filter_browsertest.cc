@@ -7,16 +7,16 @@
 
 #include "base/command_line.h"
 #include "base/files/file_path.h"
-#include "base/memory/ptr_util.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
+#include "base/test/histogram_tester.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
-#include "components/subresource_filter/core/browser/ruleset_distributor.h"
+#include "components/subresource_filter/content/browser/content_ruleset_service_delegate.h"
 #include "components/subresource_filter/core/browser/ruleset_service.h"
 #include "components/subresource_filter/core/browser/subresource_filter_features.h"
 #include "components/subresource_filter/core/browser/subresource_filter_features_test_support.h"
@@ -26,33 +26,43 @@
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test_utils.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+
+namespace {
+
+const char kSubresourceFilterPromptHistogram[] =
+    "SubresourceFilter.Prompt.NumVisibility";
+
+}  // namespace
 
 namespace subresource_filter {
 
 namespace {
 
-class RulesetDistributionListener : public RulesetDistributor {
+class RulesetDistributionListener {
  public:
-  RulesetDistributionListener() {}
-  ~RulesetDistributionListener() override {}
-
-  void AwaitDistribution() {
-    base::RunLoop run_loop;
-    quit_closure_ = run_loop.QuitClosure();
-    run_loop.Run();
+  RulesetDistributionListener()
+      : delegate_(static_cast<ContentRulesetServiceDelegate*>(
+            g_browser_process->subresource_filter_ruleset_service()
+                ->delegate())) {
+    delegate_->SetRulesetPublishedCallbackForTesting(run_loop_.QuitClosure());
   }
+
+  ~RulesetDistributionListener() {
+    delegate_->SetRulesetPublishedCallbackForTesting(base::Closure());
+  }
+
+  void AwaitDistribution() { run_loop_.Run(); }
 
  private:
-  void PublishNewVersion(base::File) override {
-    if (!quit_closure_.is_null())
-      quit_closure_.Run();
-  }
-
-  base::Closure quit_closure_;
+  ContentRulesetServiceDelegate* delegate_;
+  base::RunLoop run_loop_;
 
   DISALLOW_COPY_AND_ASSIGN(RulesetDistributionListener);
 };
+
+void CloseFile(base::File) {}
 
 }  // namespace
 
@@ -135,15 +145,13 @@ class SubresourceFilterBrowserTest : public InProcessBrowserTest {
     ASSERT_NO_FATAL_FAILURE(
         ruleset_creator_.CreateRulesetToDisallowURLsWithPathSuffix(
             suffix, &test_ruleset_pair));
-    RulesetDistributionListener* listener = new RulesetDistributionListener();
-    g_browser_process->subresource_filter_ruleset_service()
-        ->RegisterDistributor(base::WrapUnique(listener));
     subresource_filter::UnindexedRulesetInfo unindexed_ruleset_info;
     unindexed_ruleset_info.content_version = test_ruleset_content_version;
     unindexed_ruleset_info.ruleset_path = test_ruleset_pair.unindexed.path;
+    RulesetDistributionListener distribution_listener;
     g_browser_process->subresource_filter_ruleset_service()
         ->IndexAndStoreAndPublishRulesetIfNeeded(unindexed_ruleset_info);
-    listener->AwaitDistribution();
+    distribution_listener.AwaitDistribution();
   }
 
  private:
@@ -175,6 +183,7 @@ IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest, SubFrameActivation) {
   GURL url(GetTestUrl("subresource_filter/frame_set.html"));
   ASSERT_NO_FATAL_FAILURE(
       SetRulesetToDisallowURLsWithPathSuffix("included_script.js"));
+  base::HistogramTester tester;
   ui_test_utils::NavigateToURL(browser(), url);
 
   const char* kSubframeNames[] = {"one", "two"};
@@ -183,6 +192,7 @@ IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest, SubFrameActivation) {
     ASSERT_TRUE(frame);
     EXPECT_FALSE(WasScriptResourceLoaded(frame));
   }
+  tester.ExpectBucketCount(kSubresourceFilterPromptHistogram, true, 1);
 }
 
 IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest,
@@ -197,6 +207,20 @@ IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest,
   // page load right after start-up.
   ui_test_utils::NavigateToURL(browser(), url);
   EXPECT_FALSE(WasScriptResourceLoaded(web_contents()->GetMainFrame()));
+}
+
+IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest,
+                       PromptShownAgainOnNextNavigation) {
+  ASSERT_NO_FATAL_FAILURE(
+      SetRulesetToDisallowURLsWithPathSuffix("included_script.js"));
+  GURL url(GetTestUrl("subresource_filter/frame_set.html"));
+  base::HistogramTester tester;
+  ui_test_utils::NavigateToURL(browser(), url);
+  EXPECT_TRUE(ExecuteScript(FindFrameByName("three"), "runny()"));
+  tester.ExpectBucketCount(kSubresourceFilterPromptHistogram, true, 1);
+  // Check that bubble is shown for new navigation.
+  ui_test_utils::NavigateToURL(browser(), url);
+  tester.ExpectBucketCount(kSubresourceFilterPromptHistogram, true, 2);
 }
 
 }  // namespace subresource_filter

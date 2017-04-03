@@ -15,11 +15,6 @@
 #include "cc/layers/content_layer_client.h"
 #include "third_party/WebKit/public/platform/WebContentLayer.h"
 
-namespace cc {
-class IntRect;
-class FloatRect;
-}
-
 namespace blink {
 class WebContentLayerClient;
 }
@@ -31,12 +26,12 @@ class WebContentLayerImpl : public blink::WebContentLayer,
  public:
   CC_BLINK_EXPORT explicit WebContentLayerImpl(blink::WebContentLayerClient*);
 
+  ~WebContentLayerImpl() override;
+
   // WebContentLayer implementation.
   blink::WebLayer* layer() override;
 
  protected:
-  ~WebContentLayerImpl() override;
-
   // ContentLayerClient implementation.
   gfx::Rect PaintableRegion() override;
   scoped_refptr<cc::DisplayItemList> PaintContentsToDisplayList(

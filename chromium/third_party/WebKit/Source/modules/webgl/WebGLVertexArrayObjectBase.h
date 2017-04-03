@@ -5,6 +5,7 @@
 #ifndef WebGLVertexArrayObjectBase_h
 #define WebGLVertexArrayObjectBase_h
 
+#include "bindings/core/v8/TraceWrapperMember.h"
 #include "modules/webgl/WebGLBuffer.h"
 #include "modules/webgl/WebGLContextObject.h"
 #include "platform/heap/Handle.h"
@@ -45,6 +46,7 @@ class WebGLVertexArrayObjectBase : public WebGLContextObject {
                                      const v8::Persistent<v8::Object>&);
 
   DECLARE_VIRTUAL_TRACE();
+  DECLARE_VIRTUAL_TRACE_WRAPPERS();
 
  protected:
   WebGLVertexArrayObjectBase(WebGLRenderingContextBase*, VaoType);
@@ -61,8 +63,8 @@ class WebGLVertexArrayObjectBase : public WebGLContextObject {
   VaoType m_type;
   bool m_hasEverBeenBound;
   bool m_destructionInProgress;
-  Member<WebGLBuffer> m_boundElementArrayBuffer;
-  HeapVector<Member<WebGLBuffer>> m_arrayBufferList;
+  TraceWrapperMember<WebGLBuffer> m_boundElementArrayBuffer;
+  HeapVector<TraceWrapperMember<WebGLBuffer>> m_arrayBufferList;
   Vector<bool> m_attribEnabled;
   bool m_isAllEnabledAttribBufferBound;
 };

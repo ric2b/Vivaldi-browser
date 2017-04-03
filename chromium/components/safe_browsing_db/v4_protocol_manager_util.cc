@@ -5,12 +5,14 @@
 #include "components/safe_browsing_db/v4_protocol_manager_util.h"
 
 #include "base/base64.h"
-#include "base/metrics/sparse_histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/rand_util.h"
+#include "base/sha1.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "crypto/sha2.h"
 #include "net/base/escape.h"
+#include "net/base/ip_address.h"
 #include "net/http/http_request_headers.h"
 #include "url/url_util.h"
 
@@ -85,17 +87,53 @@ return LINUX_PLATFORM;
 #endif
 }
 
+const ListIdentifier GetCertCsdDownloadWhitelistId() {
+  return ListIdentifier(GetCurrentPlatformType(), CERT, CSD_DOWNLOAD_WHITELIST);
+}
+
+const ListIdentifier GetChromeExtMalwareId() {
+  return ListIdentifier(CHROME_PLATFORM, CHROME_EXTENSION, MALWARE_THREAT);
+}
+
 const ListIdentifier GetChromeUrlApiId() {
   return ListIdentifier(CHROME_PLATFORM, URL, API_ABUSE);
+}
+
+const ListIdentifier GetChromeFilenameClientIncidentId() {
+  return ListIdentifier(CHROME_PLATFORM, FILENAME, CLIENT_INCIDENT);
+}
+
+const ListIdentifier GetChromeUrlClientIncidentId() {
+  return ListIdentifier(CHROME_PLATFORM, URL, CLIENT_INCIDENT);
+}
+
+const ListIdentifier GetIpMalwareId() {
+  return ListIdentifier(GetCurrentPlatformType(), IP_RANGE, MALWARE_THREAT);
+}
+
+const ListIdentifier GetUrlCsdDownloadWhitelistId() {
+  return ListIdentifier(GetCurrentPlatformType(), URL, CSD_DOWNLOAD_WHITELIST);
+}
+
+const ListIdentifier GetUrlCsdWhitelistId() {
+  return ListIdentifier(GetCurrentPlatformType(), URL, CSD_WHITELIST);
 }
 
 const ListIdentifier GetUrlMalwareId() {
   return ListIdentifier(GetCurrentPlatformType(), URL, MALWARE_THREAT);
 }
 
+const ListIdentifier GetUrlMalBinId() {
+  return ListIdentifier(GetCurrentPlatformType(), URL, MALICIOUS_BINARY);
+}
+
 const ListIdentifier GetUrlSocEngId() {
   return ListIdentifier(GetCurrentPlatformType(), URL,
                         SOCIAL_ENGINEERING_PUBLIC);
+}
+
+const ListIdentifier GetUrlUwsId() {
+  return ListIdentifier(GetCurrentPlatformType(), URL, UNWANTED_SOFTWARE);
 }
 
 // The Safe Browsing V4 server URL prefix.
@@ -159,7 +197,14 @@ ListIdentifier::ListIdentifier(const ListUpdateResponse& response)
                      response.threat_entry_type(),
                      response.threat_type()) {}
 
-V4ProtocolConfig::V4ProtocolConfig() : disable_auto_update(false) {}
+V4ProtocolConfig::V4ProtocolConfig(const std::string& client_name,
+                                   bool disable_auto_update,
+                                   const std::string& key_param,
+                                   const std::string& version)
+    : client_name(client_name),
+      disable_auto_update(disable_auto_update),
+      key_param(key_param),
+      version(version) {}
 
 V4ProtocolConfig::V4ProtocolConfig(const V4ProtocolConfig& other) = default;
 
@@ -237,7 +282,7 @@ void V4ProtocolManagerUtil::UpdateHeaders(net::HttpRequestHeaders* headers) {
 // static
 void V4ProtocolManagerUtil::UrlToFullHashes(
     const GURL& url,
-    std::unordered_set<FullHash>* full_hashes) {
+    std::vector<FullHash>* full_hashes) {
   std::string canon_host, canon_path, canon_query;
   CanonicalizeUrl(url, &canon_host, &canon_path, &canon_query);
 
@@ -252,7 +297,7 @@ void V4ProtocolManagerUtil::UrlToFullHashes(
   GeneratePathVariantsToCheck(canon_path, canon_query, &paths);
   for (const std::string& host : hosts) {
     for (const std::string& path : paths) {
-      full_hashes->insert(crypto::SHA256HashString(host + path));
+      full_hashes->push_back(crypto::SHA256HashString(host + path));
     }
   }
 }
@@ -503,6 +548,39 @@ void V4ProtocolManagerUtil::SetClientInfoFromConfig(
   DCHECK(client_info);
   client_info->set_client_id(config.client_name);
   client_info->set_client_version(config.version);
+}
+
+// static
+bool V4ProtocolManagerUtil::GetIPV6AddressFromString(
+    const std::string& ip_address,
+    net::IPAddress* address) {
+  DCHECK(address);
+  if (!address->AssignFromIPLiteral(ip_address))
+    return false;
+  if (address->IsIPv4())
+    *address = net::ConvertIPv4ToIPv4MappedIPv6(*address);
+  return address->IsIPv6();
+}
+
+// static
+bool V4ProtocolManagerUtil::IPAddressToEncodedIPV6Hash(
+    const std::string& ip_address,
+    FullHash* hashed_encoded_ip) {
+  net::IPAddress address;
+  if (!GetIPV6AddressFromString(ip_address, &address)) {
+    return false;
+  }
+  std::string packed_ip = net::IPAddressToPackedString(address);
+  if (packed_ip.empty()) {
+    return false;
+  }
+
+  const std::string hash = base::SHA1HashString(packed_ip);
+  DCHECK_EQ(20u, hash.size());
+  hashed_encoded_ip->resize(hash.size() + 1);
+  hashed_encoded_ip->replace(0, hash.size(), hash);
+  (*hashed_encoded_ip)[hash.size()] = static_cast<unsigned char>(128);
+  return true;
 }
 
 }  // namespace safe_browsing

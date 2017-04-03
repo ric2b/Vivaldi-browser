@@ -35,13 +35,22 @@ if (is_android) {
 
   if (!defined(default_android_sdk_root)) {
     default_android_sdk_root = "//third_party/android_tools/sdk"
-    default_android_sdk_version = "23"
-    default_android_sdk_build_tools_version = "23.0.1"
+    default_android_sdk_version = "24"
+    default_android_sdk_build_tools_version = "24.0.2"
   }
 
   if (!defined(default_lint_android_sdk_root)) {
-    default_lint_android_sdk_root = default_android_sdk_root
-    default_lint_android_sdk_version = default_android_sdk_version
+    # Purposefully repeated so that downstream can change
+    # default_android_sdk_root without changing lint version.
+    default_lint_android_sdk_root = "//third_party/android_tools/sdk"
+    default_lint_android_sdk_version = "24"
+  }
+
+  if (!defined(default_extras_android_sdk_root)) {
+    # Purposefully repeated so that downstream can change
+    # default_android_sdk_root without changing where we load the SDK extras
+    # from. (Google Play services, etc.)
+    default_extras_android_sdk_root = "//third_party/android_tools/sdk"
   }
 
   if (!defined(default_android_keystore_path)) {
@@ -196,6 +205,7 @@ if (is_android) {
 
   # Subdirectories inside android_ndk_root that contain the sysroot for the
   # associated platform.
+  # If you raise this, reevaluate the snprintf=snprintf in ./BUILD.gn.
   _android_api_level = 16
   x86_android_sysroot_subdir =
       "platforms/android-${_android_api_level}/arch-x86"
@@ -203,6 +213,8 @@ if (is_android) {
       "platforms/android-${_android_api_level}/arch-arm"
   mips_android_sysroot_subdir =
       "platforms/android-${_android_api_level}/arch-mips"
+
+  # If you raise this, reevaluate the snprintf=snprintf in ./BUILD.gn.
   _android64_api_level = 21
   x86_64_android_sysroot_subdir =
       "platforms/android-${_android64_api_level}/arch-x86_64"
@@ -322,10 +334,10 @@ if (is_android) {
   if (defined(android_secondary_abi_cpu)) {
     if (is_clang) {
       android_secondary_abi_toolchain =
-          "//build/toolchain/android:clang_${android_secondary_abi_cpu}"
+          "//build/toolchain/android:android_clang_${android_secondary_abi_cpu}"
     } else {
       android_secondary_abi_toolchain =
-          "//build/toolchain/android:${android_secondary_abi_cpu}"
+          "//build/toolchain/android:android_${android_secondary_abi_cpu}"
     }
   }
 }

@@ -30,10 +30,10 @@
 #include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/strings/grit/components_strings.h"
-#include "components/sync/core/network_resources.h"
-#include "components/sync/core/read_transaction.h"
+#include "components/sync/base/pref_names.h"
 #include "components/sync/driver/about_sync_util.h"
-#include "components/sync/driver/pref_names.h"
+#include "components/sync/engine/net/network_resources.h"
+#include "components/sync/syncable/read_transaction.h"
 #include "content/public/browser/browser_thread.h"
 #include "google/cacheinvalidation/types.pb.h"
 #include "google_apis/gaia/gaia_constants.h"
@@ -97,7 +97,7 @@ ProfileSyncServiceAndroid::ProfileSyncServiceAndroid(JNIEnv* env, jobject obj)
     return;
   }
 
-  sync_prefs_.reset(new syncer::SyncPrefs(profile_->GetPrefs()));
+  sync_prefs_ = base::MakeUnique<syncer::SyncPrefs>(profile_->GetPrefs());
 
   sync_service_ =
       ProfileSyncServiceFactory::GetInstance()->GetForProfile(profile_);
@@ -441,14 +441,9 @@ ProfileSyncServiceAndroid::GetCurrentSignedInAccountText(
     JNIEnv* env,
     const JavaParamRef<jobject>&) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  const std::string& sync_username =
-      SigninManagerFactory::GetForProfile(profile_)
-          ->GetAuthenticatedAccountInfo()
-          .email;
+  // TODO(maxbogue): Remove this function. This String can be used in Java.
   return base::android::ConvertUTF16ToJavaString(env,
-      l10n_util::GetStringFUTF16(
-          IDS_SYNC_ACCOUNT_SYNCING_TO_USER,
-          base::ASCIIToUTF16(sync_username)));
+      l10n_util::GetStringUTF16(IDS_SYNC_ACCOUNT_SYNCING));
 }
 
 ScopedJavaLocalRef<jstring>

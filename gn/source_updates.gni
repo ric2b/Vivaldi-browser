@@ -41,3 +41,10 @@ foreach (_target, [
     ]
   }
 }
+
+post_process_target("//components/sessions:shared") {
+  sources += [
+    "//vivaldi/components/sessions/vivaldi_session_service_commands.cc",
+    "//vivaldi/components/sessions/vivaldi_session_service_commands.h",
+  ]
+}

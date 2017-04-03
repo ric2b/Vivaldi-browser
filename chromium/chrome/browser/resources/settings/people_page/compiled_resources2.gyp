@@ -50,6 +50,13 @@
       'includes': ['../../../../../third_party/closure_compiler/compile_js2.gypi'],
     },
     {
+      'target_name': 'import_data_browser_proxy',
+      'dependencies': [
+        '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:cr',
+      ],
+      'includes': ['../../../../../third_party/closure_compiler/compile_js2.gypi'],
+    },
+    {
       'target_name': 'manage_profile',
       'dependencies': [
         '../compiled_resources2.gyp:route',
@@ -152,6 +159,7 @@
     {
       'target_name': 'user_list',
       'dependencies': [
+        '../compiled_resources2.gyp:route',
         '<(EXTERNS_GYP):settings_private',
         '<(EXTERNS_GYP):users_private',
       ],
@@ -170,6 +178,16 @@
       'dependencies': [
         'user_list',
         'users_add_user_dialog',
+      ],
+      'includes': ['../../../../../third_party/closure_compiler/compile_js2.gypi'],
+    },
+    {
+      'target_name': 'import_data_dialog',
+      'dependencies': [
+        '../prefs/compiled_resources2.gyp:prefs_behavior',
+        '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:i18n_behavior',
+        '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:web_ui_listener_behavior',
+        'import_data_browser_proxy',
       ],
       'includes': ['../../../../../third_party/closure_compiler/compile_js2.gypi'],
     },

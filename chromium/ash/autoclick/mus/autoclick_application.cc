@@ -4,10 +4,12 @@
 
 #include "ash/autoclick/mus/autoclick_application.h"
 
-#include "ash/public/interfaces/container.mojom.h"
+#include "ash/public/cpp/shell_window_ids.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "services/shell/public/cpp/connector.h"
+#include "services/service_manager/public/cpp/connector.h"
+#include "services/service_manager/public/cpp/service_context.h"
 #include "services/ui/public/cpp/property_type_converters.h"
 #include "services/ui/public/interfaces/window_manager_constants.mojom.h"
 #include "ui/views/mus/aura_init.h"
@@ -75,16 +77,18 @@ AutoclickApplication::AutoclickApplication()
 
 AutoclickApplication::~AutoclickApplication() {}
 
-void AutoclickApplication::OnStart(const shell::Identity& identity) {
-  aura_init_.reset(new views::AuraInit(connector(), "views_mus_resources.pak"));
-  window_manager_connection_ =
-      views::WindowManagerConnection::Create(connector(), identity);
+void AutoclickApplication::OnStart() {
+  aura_init_ = base::MakeUnique<views::AuraInit>(
+      context()->connector(), context()->identity(), "views_mus_resources.pak");
+  window_manager_connection_ = views::WindowManagerConnection::Create(
+      context()->connector(), context()->identity());
   autoclick_controller_common_.reset(new AutoclickControllerCommon(
       base::TimeDelta::FromMilliseconds(kDefaultAutoclickDelayMs), this));
 }
 
-bool AutoclickApplication::OnConnect(const shell::Identity& remote_identity,
-                                     shell::InterfaceRegistry* registry) {
+bool AutoclickApplication::OnConnect(
+    const service_manager::ServiceInfo& remote_info,
+    service_manager::InterfaceRegistry* registry) {
   registry->AddInterface<mash::mojom::Launchable>(this);
   registry->AddInterface<mojom::AutoclickController>(this);
   return true;
@@ -103,16 +107,16 @@ void AutoclickApplication::Launch(uint32_t what, mash::mojom::LaunchMode how) {
                                       autoclick_controller_common_.get());
 
     std::map<std::string, std::vector<uint8_t>> properties;
-    properties[ash::mojom::kWindowContainer_Property] =
+    properties[ui::mojom::WindowManager::kInitialContainerId_Property] =
         mojo::ConvertTo<std::vector<uint8_t>>(
-            static_cast<int32_t>(ash::mojom::Container::OVERLAY));
+            ash::kShellWindowId_OverlayContainer);
     properties[ui::mojom::WindowManager::kShowState_Property] =
         mojo::ConvertTo<std::vector<uint8_t>>(
             static_cast<int32_t>(ui::mojom::ShowState::FULLSCREEN));
     ui::Window* window =
-        window_manager_connection_.get()->NewWindow(properties);
+        window_manager_connection_.get()->NewTopLevelWindow(properties);
     params.native_widget = new views::NativeWidgetMus(
-        widget_.get(), window, ui::mojom::SurfaceType::DEFAULT);
+        widget_.get(), window, ui::mojom::CompositorFrameSinkType::DEFAULT);
     widget_->Init(params);
   } else {
     widget_->Close();
@@ -125,14 +129,16 @@ void AutoclickApplication::SetAutoclickDelay(uint32_t delay_in_milliseconds) {
       base::TimeDelta::FromMilliseconds(delay_in_milliseconds));
 }
 
-void AutoclickApplication::Create(const shell::Identity& remote_identity,
-                                  mash::mojom::LaunchableRequest request) {
+void AutoclickApplication::Create(
+    const service_manager::Identity& remote_identity,
+    mash::mojom::LaunchableRequest request) {
   launchable_binding_.Close();
   launchable_binding_.Bind(std::move(request));
 }
 
-void AutoclickApplication::Create(const shell::Identity& remote_identity,
-                                  mojom::AutoclickControllerRequest request) {
+void AutoclickApplication::Create(
+    const service_manager::Identity& remote_identity,
+    mojom::AutoclickControllerRequest request) {
   autoclick_binding_.Close();
   autoclick_binding_.Bind(std::move(request));
 }

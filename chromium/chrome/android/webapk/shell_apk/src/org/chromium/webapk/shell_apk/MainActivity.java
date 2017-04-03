@@ -6,7 +6,6 @@ package org.chromium.webapk.shell_apk;
 
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
-import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
@@ -18,7 +17,6 @@ import android.util.Log;
 import org.chromium.webapk.lib.common.WebApkConstants;
 import org.chromium.webapk.lib.common.WebApkMetaDataKeys;
 
-import java.lang.reflect.Method;
 import java.net.URISyntaxException;
 
 /**
@@ -32,6 +30,11 @@ public class MainActivity extends Activity {
      */
     private static final String HOST_BROWSER_LAUNCHER_CLASS_NAME =
             "org.chromium.webapk.lib.runtime_library.HostBrowserLauncher";
+
+    // Action for launching {@link WebappLauncherActivity}. Must stay in sync with
+    // {@link WebappLauncherActivity#ACTION_START_WEBAPP}.
+    public static final String ACTION_START_WEBAPK =
+            "com.google.android.apps.chrome.webapps.WebappManager.ACTION_START_WEBAPP";
 
     // Must stay in sync with
     // {@link org.chromium.chrome.browser.ShortcutHelper#REUSE_URL_MATCHING_TAB_ELSE_NEW_TAB}.
@@ -64,11 +67,11 @@ public class MainActivity extends Activity {
      * Launches WebAPK.
      */
     private void launch() {
-        if (launchHostBrowserInWebApkMode()) {
-            return;
-        }
         String startUrl = getStartUrl();
         if (startUrl == null) {
+            return;
+        }
+        if (launchHostBrowserInWebApkMode(startUrl)) {
             return;
         }
         if (launchBrowser(startUrl)) {
@@ -81,25 +84,24 @@ public class MainActivity extends Activity {
      * Launches host browser in WebAPK mode.
      * @return True if successful.
      */
-    private boolean launchHostBrowserInWebApkMode() {
-        ClassLoader webApkClassLoader = HostBrowserClassLoader.getClassLoaderInstance(
-                this, HOST_BROWSER_LAUNCHER_CLASS_NAME);
-        if (webApkClassLoader == null) {
-            Log.w(TAG, "Unable to create ClassLoader.");
-            return false;
-        }
+    private boolean launchHostBrowserInWebApkMode(String startUrl) {
+        Log.v(TAG, "Url of the WebAPK: " + startUrl);
+        String packageName = getPackageName();
+        Log.v(TAG, "Package name of the WebAPK:" + packageName);
+
+        String runtimeHost = WebApkUtils.getHostBrowserPackageName(this);
+        int source = getIntent().getIntExtra(WebApkConstants.EXTRA_SOURCE, 0);
+        Intent intent = new Intent();
+        intent.setAction(ACTION_START_WEBAPK);
+        intent.setPackage(runtimeHost);
+        intent.putExtra(WebApkConstants.EXTRA_URL, startUrl)
+                .putExtra(WebApkConstants.EXTRA_SOURCE, source)
+                .putExtra(WebApkConstants.EXTRA_WEBAPK_PACKAGE_NAME, packageName);
 
         try {
-            Class<?> hostBrowserLauncherClass =
-                    webApkClassLoader.loadClass(HOST_BROWSER_LAUNCHER_CLASS_NAME);
-            Method launchMethod = hostBrowserLauncherClass.getMethod(
-                    "launch", Context.class, Intent.class, Bundle.class);
-            Object hostBrowserLauncherInstance = hostBrowserLauncherClass.newInstance();
-            Bundle bundle = new Bundle();
-            bundle.putInt(KEY_APP_ICON_ID, R.mipmap.app_icon);
-            launchMethod.invoke(hostBrowserLauncherInstance, this, getIntent(), bundle);
+            startActivity(intent);
             return true;
-        } catch (Exception e) {
+        } catch (ActivityNotFoundException e) {
             Log.w(TAG, "Unable to launch browser in WebAPK mode.");
             e.printStackTrace();
             return false;

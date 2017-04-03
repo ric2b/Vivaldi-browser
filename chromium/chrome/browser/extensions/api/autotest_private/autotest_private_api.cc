@@ -119,8 +119,8 @@ ExtensionFunction::ResponseAction AutotestPrivateLoginStatusFunction::Run() {
       result->SetBoolean("isGuest", user_manager->IsLoggedInAsGuest());
       result->SetBoolean("isKiosk", user_manager->IsLoggedInAsKioskApp());
 
-      const user_manager::User* user = user_manager->GetLoggedInUser();
-      result->SetString("email", user->email());
+      const user_manager::User* user = user_manager->GetActiveUser();
+      result->SetString("email", user->GetAccountId().GetUserEmail());
       result->SetString("displayEmail", user->display_email());
 
       std::string user_image;

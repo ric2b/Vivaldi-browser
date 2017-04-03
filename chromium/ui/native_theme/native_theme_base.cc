@@ -51,8 +51,8 @@ const SkColor kProgressValueColor = gfx::kGoogleBlue300;
 
 const SkColor kMenuPopupBackgroundColor = SkColorSetRGB(210, 225, 246);
 
-const unsigned int kDefaultScrollbarWidth = 15;
-const unsigned int kDefaultScrollbarButtonLength = 14;
+const int kDefaultScrollbarWidth = 15;
+const int kDefaultScrollbarButtonLength = 14;
 
 const SkColor kCheckboxTinyColor = SK_ColorGRAY;
 const SkColor kCheckboxShadowColor = SkColorSetARGB(0x15, 0, 0, 0);
@@ -156,31 +156,6 @@ gfx::Size NativeThemeBase::GetPartSize(Part part,
   return gfx::Size();
 }
 
-void NativeThemeBase::PaintStateTransition(SkCanvas* canvas,
-                                           Part part,
-                                           State startState,
-                                           State endState,
-                                           double progress,
-                                           const gfx::Rect& rect) const {
-  if (rect.IsEmpty())
-    return;
-
-  // Currently state transition is animation only working for overlay scrollbars
-  // on Aura platforms.
-  switch (part) {
-    case kScrollbarHorizontalThumb:
-    case kScrollbarVerticalThumb:
-      PaintScrollbarThumbStateTransition(canvas, part, startState, endState,
-                                         progress, rect);
-      break;
-    default:
-      NOTREACHED() << "Does not support state transition for this part:"
-                   << part;
-      break;
-  }
-  return;
-}
-
 void NativeThemeBase::Paint(SkCanvas* canvas,
                             Part part,
                             State state,
@@ -227,7 +202,8 @@ void NativeThemeBase::Paint(SkCanvas* canvas,
       break;
     case kScrollbarHorizontalThumb:
     case kScrollbarVerticalThumb:
-      PaintScrollbarThumb(canvas, part, state, rect);
+      PaintScrollbarThumb(canvas, part, state, rect,
+                          extra.scrollbar_thumb.scrollbar_theme);
       break;
     case kScrollbarHorizontalTrack:
     case kScrollbarVerticalTrack:
@@ -434,9 +410,10 @@ void NativeThemeBase::PaintScrollbarTrack(SkCanvas* canvas,
 }
 
 void NativeThemeBase::PaintScrollbarThumb(SkCanvas* canvas,
-                                           Part part,
-                                           State state,
-                                           const gfx::Rect& rect) const {
+                                          Part part,
+                                          State state,
+                                          const gfx::Rect& rect,
+                                          ScrollbarOverlayColorTheme) const {
   const bool hovered = state == kHovered;
   const int midx = rect.x() + rect.width() / 2;
   const int midy = rect.y() + rect.height() / 2;
@@ -783,7 +760,7 @@ void NativeThemeBase::PaintMenuPopupBackground(
     SkCanvas* canvas,
     const gfx::Size& size,
     const MenuBackgroundExtraParams& menu_background) const {
-  canvas->drawColor(kMenuPopupBackgroundColor, SkXfermode::kSrc_Mode);
+  canvas->drawColor(kMenuPopupBackgroundColor, SkBlendMode::kSrc);
 }
 
 void NativeThemeBase::PaintMenuItemBackground(

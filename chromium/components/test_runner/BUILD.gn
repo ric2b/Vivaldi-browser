@@ -16,8 +16,8 @@ component("test_runner") {
   sources = [
     "accessibility_controller.cc",
     "accessibility_controller.h",
-    "app_banner_client.cc",
-    "app_banner_client.h",
+    "app_banner_service.cc",
+    "app_banner_service.h",
     "event_sender.cc",
     "event_sender.h",
     "gamepad_controller.cc",
@@ -107,14 +107,15 @@ component("test_runner") {
   configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
 
   deps = [
-    ":resources",
     "//base:base",
     "//base:i18n",
     "//cc",
     "//cc/blink",
+    "//content/public/common",
     "//gin",
     "//gpu",
     "//gpu/command_buffer/client:gles2_interface",
+    "//media/midi:mojo_cpp_sources",
     "//net",
     "//skia",
     "//third_party/WebKit/public:blink",
@@ -127,6 +128,10 @@ component("test_runner") {
     "//ui/gfx/geometry",
     "//url",
     "//v8",
+  ]
+
+  data_deps = [
+    ":resources",
   ]
 
   if (is_mac) {
@@ -185,31 +190,18 @@ if (is_mac) {
 }
 
 group("resources") {
-  deps = []
+  data_deps = []
 
   if (is_mac) {
-    deps += [ ":test_runner_bundle_data" ]
+    data_deps += [ ":test_runner_bundle_data" ]
   } else {
-    deps += [ ":copy_ahem" ]
+    data_deps += [ ":copy_ahem" ]
   }
 
   if (use_x11) {
-    deps += [ ":copy_x11_fonts" ]
+    data_deps += [ ":copy_x11_fonts" ]
   }
   if (is_android) {
-    deps += [ ":copy_android_fonts" ]
-  }
-}
-
-if (is_win) {
-  executable("layout_test_helper") {
-    sources = [
-      "helper/layout_test_helper_win.cc",
-    ]
-
-    deps = [
-      "//build/config/sanitizers:deps",
-      "//build/win:default_exe_manifest",
-    ]
+    data_deps += [ ":copy_android_fonts" ]
   }
 }

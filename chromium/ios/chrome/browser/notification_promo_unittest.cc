@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "base/json/json_reader.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -53,8 +54,8 @@ class NotificationPromoTest : public testing::Test {
  public:
   NotificationPromoTest()
       : notification_promo_(&local_state_),
-        field_trial_list_(
-            new base::FieldTrialList(new base::MockEntropyProvider())),
+        field_trial_list_(base::MakeUnique<base::FieldTrialList>(
+            base::MakeUnique<base::MockEntropyProvider>())),
         received_notification_(false),
         start_(0.0),
         end_(0.0),
@@ -146,8 +147,8 @@ class NotificationPromoTest : public testing::Test {
     // Check values.
     EXPECT_EQ(notification_promo_.promo_text_, promo_text_);
 
-    EXPECT_EQ(notification_promo_.start_, start_);
-    EXPECT_EQ(notification_promo_.end_, end_);
+    EXPECT_DOUBLE_EQ(notification_promo_.start_, start_);
+    EXPECT_DOUBLE_EQ(notification_promo_.end_, end_);
 
     EXPECT_EQ(notification_promo_.promo_id_, promo_id_);
     EXPECT_EQ(notification_promo_.max_views_, max_views_);
@@ -274,7 +275,7 @@ class NotificationPromoTest : public testing::Test {
   // Tests that the first view time is recorded properly in prefs when the
   // first view occurs.
   void TestFirstViewTimeRecorded() {
-    EXPECT_EQ(0, notification_promo_.first_view_time_);
+    EXPECT_DOUBLE_EQ(0, notification_promo_.first_view_time_);
     notification_promo_.HandleViewed();
 
     NotificationPromo temp_promo(&local_state_);
@@ -320,7 +321,7 @@ class NotificationPromoTest : public testing::Test {
     // Initialize promo and verify that its instance variables match the data
     // saved in the old structure.
     promo.InitFromPrefs(promo_type_);
-    EXPECT_EQ(first_view_time, promo.first_view_time_);
+    EXPECT_DOUBLE_EQ(first_view_time, promo.first_view_time_);
     EXPECT_EQ(views, promo.views_);
     EXPECT_EQ(closed, promo.closed_);
     EXPECT_FALSE(promo.CanShow());

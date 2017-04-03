@@ -25,7 +25,7 @@ var StartCachingAccessibilityTrees =
 var AddTreeChangeObserver = nativeAutomationInternal.AddTreeChangeObserver;
 var RemoveTreeChangeObserver =
     nativeAutomationInternal.RemoveTreeChangeObserver;
-var GetFocus = nativeAutomationInternal.GetFocus;
+var GetFocusNative = nativeAutomationInternal.GetFocus;
 var schema = GetSchemaAdditions();
 
 /**
@@ -74,18 +74,23 @@ automationUtil.nextTreeChangeObserverId = 1;
 automationUtil.focusedNode = null;
 
 /**
+ * Gets the currently focused AutomationNode.
+ * @return {AutomationNode}
+ */
+automationUtil.getFocus = function() {
+  var focusedNodeInfo = GetFocusNative(DESKTOP_TREE_ID);
+  if (!focusedNodeInfo)
+    return null;
+  var tree = AutomationRootNode.getOrCreate(focusedNodeInfo.treeId);
+  if (tree)
+    return privates(tree).impl.get(focusedNodeInfo.nodeId);
+};
+
+/**
  * Update automationUtil.focusedNode to be the node that currently has focus.
  */
 automationUtil.updateFocusedNode = function() {
-  automationUtil.focusedNode = null;
-  var focusedNodeInfo = GetFocus(DESKTOP_TREE_ID);
-  if (!focusedNodeInfo)
-    return;
-  var tree = AutomationRootNode.getOrCreate(focusedNodeInfo.treeId);
-  if (tree) {
-    automationUtil.focusedNode =
-        privates(tree).impl.get(focusedNodeInfo.nodeId);
-  }
+  automationUtil.focusedNode = automationUtil.getFocus();
 };
 
 automation.registerCustomHook(function(bindingsAPI) {
@@ -141,8 +146,7 @@ automation.registerCustomHook(function(bindingsAPI) {
   });
 
   apiFunctions.setHandleRequest('getFocus', function(callback) {
-    automationUtil.updateFocusedNode();
-    callback(automationUtil.focusedNode);
+    callback(automationUtil.getFocus());
   });
 
   function removeTreeChangeObserver(observer) {
@@ -208,7 +212,7 @@ automationInternal.onChildTreeID.addListener(function(treeID,
     return;
 
   var subroot = AutomationRootNode.get(childTreeID);
-  if (!subroot) {
+  if (!subroot || subroot.role == schema.EventType.unknown) {
     automationUtil.storeTreeCallback(childTreeID, function(root) {
       // Return early if the root has already been attached.
       if (root.parent)
@@ -274,10 +278,22 @@ automationInternal.onAccessibilityEvent.addListener(function(eventParams) {
   var id = eventParams.treeID;
   var targetTree = AutomationRootNode.getOrCreate(id);
 
+  // Work around an issue where Chrome sends us 'blur' events on the
+  // root node when nothing has focus, we need to treat those as focus
+  // events but otherwise not handle blur events specially.
+  var isFocusEvent = false;
+  if (eventParams.eventType == schema.EventType.focus) {
+    isFocusEvent = true;
+  } else if (eventParams.eventType == schema.EventType.blur) {
+    var node = privates(targetTree).impl.get(eventParams.targetID);
+    if (node == node.root)
+      isFocusEvent = true;
+  }
+
   // When we get a focus event, ignore the actual event target, and instead
   // check what node has focus globally. If that represents a focus change,
   // fire a focus event on the correct target.
-  if (eventParams.eventType == schema.EventType.focus) {
+  if (isFocusEvent) {
     var previousFocusedNode = automationUtil.focusedNode;
     automationUtil.updateFocusedNode();
     if (automationUtil.focusedNode &&

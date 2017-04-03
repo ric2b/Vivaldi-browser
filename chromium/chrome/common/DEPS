@@ -26,6 +26,7 @@ include_rules = [
   "+components/url_formatter",
   "+components/version_info",
   "+extensions/common",
+  "+extensions/features",
   "+gin/public",  # For profiling.cc
   "+google_apis/gaia",  # For gaia_switches.h
   "+media",
@@ -33,8 +34,14 @@ include_rules = [
   "+ppapi/shared_impl",
   "+ppapi/thunk",
   "+sandbox/linux/services/credentials.h",
+  "+third_party/boringssl/src/include",
   "+third_party/kasko",
 
   # FIXME - refactor code and remove these dependencies
   "+chrome/installer",
 ]
+specific_include_rules = {
+  "service_process_util\.h": [
+    "+mojo/edk/embedder",
+  ],
+}

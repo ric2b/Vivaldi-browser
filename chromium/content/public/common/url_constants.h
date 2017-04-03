@@ -18,7 +18,6 @@ namespace content {
 // from there.
 CONTENT_EXPORT extern const char kChromeDevToolsScheme[];
 CONTENT_EXPORT extern const char kChromeUIScheme[];  // Used for WebUIs.
-CONTENT_EXPORT extern const char kVivaldiUIScheme[];
 CONTENT_EXPORT extern const char kGuestScheme[];
 CONTENT_EXPORT extern const char kViewSourceScheme[];
 #if defined(OS_CHROMEOS)
@@ -32,6 +31,7 @@ CONTENT_EXPORT extern const char kChromeUIAccessibilityHost[];
 CONTENT_EXPORT extern const char kChromeUIAppCacheInternalsHost[];
 CONTENT_EXPORT extern const char kChromeUIBlobInternalsHost[];
 CONTENT_EXPORT extern const char kChromeUIBrowserCrashHost[];
+CONTENT_EXPORT extern const char kChromeUIDinoHost[];
 CONTENT_EXPORT extern const char kChromeUIGpuHost[];
 CONTENT_EXPORT extern const char kChromeUIHistogramHost[];
 CONTENT_EXPORT extern const char kChromeUIHistoryHost[];
@@ -72,11 +72,6 @@ CONTENT_EXPORT extern const char kUnreachableWebDataURL[];
 CONTENT_EXPORT extern const char kChromeUINetworkViewCacheURL[];
 CONTENT_EXPORT extern const char kChromeUIResourcesURL[];
 CONTENT_EXPORT extern const char kChromeUIShorthangURL[];
-
-// Special HTTP and HTTPS schemes for serialization of suborigins. See
-// https://w3c.github.io/webappsec-suborigins/.
-CONTENT_EXPORT extern const char kHttpSuboriginScheme[];
-CONTENT_EXPORT extern const char kHttpsSuboriginScheme[];
 
 }  // namespace content
 

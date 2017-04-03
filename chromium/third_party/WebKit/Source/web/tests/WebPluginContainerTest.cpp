@@ -65,7 +65,6 @@
 #include "web/WebViewImpl.h"
 #include "web/tests/FakeWebPlugin.h"
 #include "web/tests/FrameTestHelpers.h"
-#include "wtf/PtrUtil.h"
 #include <memory>
 
 using blink::testing::runPendingTasks;
@@ -679,8 +678,7 @@ class CompositedPlugin : public FakeWebPlugin {
  public:
   CompositedPlugin(WebLocalFrame* frame, const WebPluginParams& params)
       : FakeWebPlugin(frame, params),
-        m_layer(wrapUnique(
-            Platform::current()->compositorSupport()->createLayer())) {}
+        m_layer(Platform::current()->compositorSupport()->createLayer()) {}
 
   WebLayer* getWebLayer() const { return m_layer.get(); }
 
@@ -736,6 +734,12 @@ TEST_F(WebPluginContainerTest, CompositedPluginSPv2) {
       static_cast<const CompositedPlugin*>(container->plugin());
 
   std::unique_ptr<PaintController> paintController = PaintController::create();
+  PaintChunkProperties properties;
+  properties.transform = TransformPaintPropertyNode::root();
+  properties.clip = ClipPaintPropertyNode::root();
+  properties.effect = EffectPaintPropertyNode::root();
+  properties.scroll = ScrollPaintPropertyNode::root();
+  paintController->updateCurrentPaintChunkProperties(nullptr, properties);
   GraphicsContext graphicsContext(*paintController);
   container->paint(graphicsContext, CullRect(IntRect(10, 10, 400, 300)));
   paintController->commitNewDisplayItems();

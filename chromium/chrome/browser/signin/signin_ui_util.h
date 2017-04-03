@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_SIGNIN_SIGNIN_UI_UTIL_H_
 #define CHROME_BROWSER_SIGNIN_SIGNIN_UI_UTIL_H_
 
+#include <string>
 #include <vector>
 
 #include "base/strings/string16.h"
@@ -20,14 +21,9 @@ namespace signin_ui_util {
 // The maximum number of times to show the welcome tutorial for an upgrade user.
 const int kUpgradeWelcomeTutorialShowMax = 1;
 
-// Returns the label that should be displayed in the signin menu (i.e.
-// "Sign in to Chromium", "Signin Error...", etc).
-base::string16 GetSigninMenuLabel(Profile* profile);
-
-void GetStatusLabelsForAuthError(Profile* profile,
-                                 const SigninManagerBase& signin_manager,
-                                 base::string16* status_label,
-                                 base::string16* link_label);
+// Returns the username of the authenticated user or an empty string if there is
+// no authenticated user.
+base::string16 GetAuthenticatedUsername(const SigninManagerBase* signin);
 
 // Initializes signin-related preferences.
 void InitializePrefsForProfile(Profile* profile);

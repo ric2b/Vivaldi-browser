@@ -31,7 +31,7 @@ RenderViewImplTest.InsertCharacters
 RenderViewImplTest.OnHandleKeyboardEvent
 RenderViewImplTest.OnNavStateChanged
 # ZoomLevel is not used on Android
-RenderViewImplTest.ZoomLimit
+RenderFrameImplTest.ZoomLimit
 RendererAccessibilityTest.SendFullAccessibilityTreeOnReload
 RendererAccessibilityTest.HideAccessibilityObject
 RendererAccessibilityTest.ShowAccessibilityObject
@@ -42,9 +42,6 @@ IndexedDBBrowserTest.VersionChangeCrashResilience
 
 # http://crbug.com/233118
 IndexedDBBrowserTest.NullKeyPathPersistence
-
-# http://crbug.com/342525
-IndexedDBBrowserTestSingleProcess.RenderThreadShutdownTest
 
 # http://crbug.com/338421
 GinBrowserTest.GinAndGarbageCollection

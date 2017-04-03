@@ -23,7 +23,7 @@
 #include "net/dns/dns_protocol.h"
 #include "net/dns/dns_util.h"
 #include "net/dns/record_rdata.h"
-#include "net/udp/datagram_socket.h"
+#include "net/socket/datagram_socket.h"
 
 // TODO(gene): Remove this temporary method of disabling NSEC support once it
 // becomes clear whether this feature should be
@@ -323,7 +323,8 @@ void MDnsClientImpl::Core::NotifyNsecRecord(const RecordParsed* record) {
       listeners_.upper_bound(ListenerKey(record->name(), 0));
   for (; i != listeners_.end() && i->first.first == record->name(); i++) {
     if (!rdata->GetBit(i->first.second)) {
-      FOR_EACH_OBSERVER(MDnsListenerImpl, *i->second, AlertNsecRecord());
+      for (auto& observer : *i->second)
+        observer.AlertNsecRecord();
     }
   }
 }
@@ -340,8 +341,8 @@ void MDnsClientImpl::Core::AlertListeners(
   ListenerMap::iterator listener_map_iterator = listeners_.find(key);
   if (listener_map_iterator == listeners_.end()) return;
 
-  FOR_EACH_OBSERVER(MDnsListenerImpl, *listener_map_iterator->second,
-                    HandleRecordUpdate(update_type, record));
+  for (auto& observer : *listener_map_iterator->second)
+    observer.HandleRecordUpdate(update_type, record);
 }
 
 void MDnsClientImpl::Core::AddListener(

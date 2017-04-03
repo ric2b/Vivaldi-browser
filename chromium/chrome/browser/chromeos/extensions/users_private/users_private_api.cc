@@ -21,9 +21,9 @@
 #include "chrome/browser/extensions/chrome_extension_function.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/extensions/api/users_private.h"
-#include "chromeos/login/user_names.h"
 #include "chromeos/settings/cros_settings_names.h"
 #include "components/user_manager/user_manager.h"
+#include "components/user_manager/user_names.h"
 #include "extensions/browser/extension_function_registry.h"
 #include "google_apis/gaia/gaia_auth_util.h"
 
@@ -76,7 +76,7 @@ UsersPrivateGetWhitelistedUsersFunction::Run() {
     std::string whitelisted_user;
     email_list->GetString(i, &whitelisted_user);
     if (gaia::ExtractDomainName(whitelisted_user) ==
-        chromeos::login::kSupervisedUserDomain) {
+        user_manager::kSupervisedUserDomain) {
       email_list->Remove(i, NULL);
       --i;
     }
@@ -85,8 +85,8 @@ UsersPrivateGetWhitelistedUsersFunction::Run() {
   user_manager::UserManager* user_manager = user_manager::UserManager::Get();
   const user_manager::UserList& users = user_manager->GetUsers();
   for (const auto* user : users) {
-    email_list->AppendIfNotPresent(
-        base::MakeUnique<base::StringValue>(user->email()));
+    email_list->AppendIfNotPresent(base::MakeUnique<base::StringValue>(
+        user->GetAccountId().GetUserEmail()));
   }
 
   if (chromeos::OwnerSettingsServiceChromeOS* service =

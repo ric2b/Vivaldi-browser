@@ -6,7 +6,6 @@ package org.chromium.chrome.browser.preferences.website;
 
 import android.content.Intent;
 import android.os.Bundle;
-import android.os.Environment;
 import android.test.suitebuilder.annotation.SmallTest;
 
 import org.chromium.base.ThreadUtils;
@@ -45,8 +44,7 @@ public class SiteSettingsPreferencesTest extends ChromeActivityTestCaseBase<Chro
     @Override
     protected void setUp() throws Exception {
         super.setUp();
-        mTestServer = EmbeddedTestServer.createAndStartFileServer(
-                getInstrumentation().getContext(), Environment.getExternalStorageDirectory());
+        mTestServer = EmbeddedTestServer.createAndStartServer(getInstrumentation().getContext());
     }
 
     @Override
@@ -108,7 +106,7 @@ public class SiteSettingsPreferencesTest extends ChromeActivityTestCaseBase<Chro
         // Launch a page that uses geolocation and make sure an infobar shows up.
         loadUrl(mTestServer.getURL(
                 "/chrome/test/data/geolocation/geolocation_on_load.html"));
-        assertTrue("InfoBar not added.", listener.addInfoBarAnimationFinished());
+        listener.addInfoBarAnimationFinished("InfoBar not added.");
 
         assertEquals("Wrong infobar count", 1, getInfoBars().size());
     }
@@ -558,7 +556,7 @@ public class SiteSettingsPreferencesTest extends ChromeActivityTestCaseBase<Chro
         loadUrl(mTestServer.getURL("/content/test/data/media/getusermedia.html"));
         runJavaScriptCodeInCurrentTab("getUserMediaAndStop({video: true, audio: false});");
 
-        assertTrue("InfoBar not added.", listener.addInfoBarAnimationFinished());
+        listener.addInfoBarAnimationFinished("InfoBar not added.");
         assertEquals("Wrong infobar count", 1, getInfoBars().size());
     }
 
@@ -578,7 +576,7 @@ public class SiteSettingsPreferencesTest extends ChromeActivityTestCaseBase<Chro
         loadUrl(mTestServer.getURL("/content/test/data/media/getusermedia.html"));
         runJavaScriptCodeInCurrentTab("getUserMediaAndStop({video: false, audio: true});");
 
-        assertTrue("InfoBar not added.", listener.addInfoBarAnimationFinished());
+        listener.addInfoBarAnimationFinished("InfoBar not added.");
         assertEquals("Wrong infobar count", 1, getInfoBars().size());
     }
 

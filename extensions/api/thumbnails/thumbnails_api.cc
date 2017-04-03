@@ -17,6 +17,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/path_service.h"
 #include "base/values.h"
+#include "chrome/browser/platform_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/thumbnails/thumbnail_service.h"
 #include "chrome/browser/thumbnails/thumbnail_service_factory.h"
@@ -37,6 +38,8 @@
 #include "extensions/schema/thumbnails.h"
 #include "renderer/vivaldi_render_messages.h"
 #include "third_party/skia/include/core/SkBitmap.h"
+#include "ui/base/clipboard/scoped_clipboard_writer.h"
+#include "ui/display/screen.h"
 #include "ui/gfx/codec/png_codec.h"
 #include "ui/vivaldi_ui_utils.h"
 
@@ -49,7 +52,7 @@ using vivaldi::ui_tools::SmartCropAndSize;
 
 namespace {
 
-const int kMaximumPageHeight = 20000;
+const int kMaximumPageHeight = 30000;
 
 void ReleaseSharedMemoryPixels(void* addr, void* context) {
   delete reinterpret_cast<base::SharedMemory*>(context);
@@ -139,6 +142,13 @@ bool ThumbnailsCaptureUIFunction::CaptureAsync(
     // current system, increase the requested bitmap size to capture it all.
     gfx::Size bitmap_size(capture_area.width(), capture_area.height());
 
+    const gfx::NativeView native_view = view->GetNativeView();
+    display::Screen* const screen = display::Screen::GetScreen();
+    const float scale =
+      screen->GetDisplayNearestWindow(native_view).device_scale_factor();
+    if (scale > 1.0f)
+      bitmap_size = gfx::ScaleToCeiledSize(bitmap_size, scale);
+
     host->CopyFromBackingStore(capture_area, bitmap_size, callback,
                                kN32_SkColorType);
   }
@@ -150,6 +160,27 @@ bool ThumbnailsCaptureUIFunction::RunAsync() {
     vivaldi::thumbnails::CaptureUI::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
+  if (params->params.encode_format.get()) {
+    image_format_ =
+      *params->params.encode_format == "jpg"
+      ? ImageFormat::IMAGE_FORMAT_JPEG
+      : ImageFormat::IMAGE_FORMAT_PNG;
+  }
+  if (params->params.encode_quality.get()) {
+    encode_quality_ = *params->params.encode_quality.get();
+  }
+  if (params->params.save_to_base_path.get()) {
+    base_path_ = *params->params.save_to_base_path;
+  }
+  if (!base_path_.empty() && params->params.show_file_in_path) {
+    show_file_in_path_ = *params->params.show_file_in_path;
+  }
+  if (params->params.encode_to_data_url.get()) {
+    encode_to_data_url_ = *params->params.encode_to_data_url;
+  }
+  if (params->params.copy_to_clipboard.get()) {
+    copy_to_clipboard_ = *params->params.copy_to_clipboard;
+  }
   std::string app_window_id = params->params.app_window_id;
   AppWindowRegistry* registry = AppWindowRegistry::Get(GetProfile());
   for (AppWindow* app_window : registry->app_windows()) {
@@ -166,32 +197,71 @@ bool ThumbnailsCaptureUIFunction::RunAsync() {
   return false;
 }
 
-bool ThumbnailsCaptureUIFunction::EncodeBitmap(const SkBitmap& bitmap,
-                                               std::string* base64_result) {
-  DCHECK(base64_result);
-  std::vector<unsigned char> data;
-  SkAutoLockPixels screen_capture_lock(bitmap);
-  bool encoded = gfx::PNGCodec::EncodeBGRASkBitmap(bitmap, false, &data);
-  if (!encoded)
-    return false;
-
-  base::StringPiece stream_as_string(reinterpret_cast<const char*>(data.data()),
-                                     data.size());
-
-  base::Base64Encode(stream_as_string, base64_result);
-
-  return true;
-}
-
 void ThumbnailsCaptureUIFunction::OnCaptureSuccess(const SkBitmap& bitmap) {
-  std::string base64_result;
-  if (!EncodeBitmap(bitmap, &base64_result)) {
-    OnCaptureFailure(FAILURE_REASON_ENCODING_FAILED);
+  gfx::Size final_size(bitmap.width(), bitmap.height());
+  std::vector<unsigned char> data;
+  std::string mime_type;
+  std::string return_data;
+  if (copy_to_clipboard_) {
+    // Ignore everything else, we copy it raw to the clipboard.
+    ui::ScopedClipboardWriter scw(ui::CLIPBOARD_TYPE_COPY_PASTE);
+    scw.Reset();
+
+    if (!bitmap.empty() && !bitmap.isNull()) {
+      scw.WriteImage(bitmap);
+    }
+    SetResult(base::MakeUnique<base::StringValue>(return_data));
+    SendResponse(true);
     return;
   }
+  bool encoded = EncodeBitmap(bitmap, &data, mime_type, image_format_,
+                              final_size, 100, encode_quality_, false);
+  if (!encoded) {
+    error_ = "Failed to capture ui: data could not be encoded";
+    SendResponse(false);
+    return;
+  }
+  if (base_path_.empty()) {
+    // If the base path is not set, we want to encode the image as a data url.
+    base::StringPiece base64_input(reinterpret_cast<const char*>(&data[0]),
+                                   data.size());
+    Base64Encode(base64_input, &return_data);
 
-  SetResult(base::MakeUnique<base::StringValue>(base64_result));
+    if (encode_to_data_url_) {
+      if (image_format_ == ImageFormat::IMAGE_FORMAT_PNG) {
+        return_data.insert(0, "data:image/png;base64,");
+      } else {
+        return_data.insert(0, "data:image/jpg;base64,");
+      }
+    }
+  } else {
+    base::ThreadRestrictions::ScopedAllowIO allow_io;
+    base::FilePath path;
+    PathService::Get(chrome::DIR_USER_PICTURES, &path);
+    path = path.AppendASCII(base_path_);
+    if (!base::PathExists(path)) {
+      base::CreateDirectory(path);
+    }
+    path = path.AppendASCII(base::GenerateGUID());
+    if (image_format_ == ImageFormat::IMAGE_FORMAT_PNG) {
+      path = path.AddExtension(FILE_PATH_LITERAL(".png"));
+    } else {
+      path = path.AddExtension(FILE_PATH_LITERAL(".jpg"));
+    }
+#if defined(OS_POSIX)
+    return_data.assign(path.value());
+#elif defined(OS_WIN)
+    return_data.assign(base::WideToUTF8(path.value()));
+#endif
+    file_path_ = path;
+    base::WriteFile(path, reinterpret_cast<const char*>(&data[0]), data.size());
+  }
+  SetResult(base::MakeUnique<base::StringValue>(return_data));
   SendResponse(true);
+
+  if (show_file_in_path_) {
+    platform_util::ShowItemInFolder(GetProfile(), file_path_);
+  }
 }
 
 void ThumbnailsCaptureUIFunction::OnCaptureFailure(FailureReason reason) {
@@ -257,6 +327,13 @@ bool ThumbnailsCaptureTabFunction::RunAsync() {
     // Some sanity value so we don't capture an endless page.
     height_ = kMaximumPageHeight;
   }
+  height_ = std::min(kMaximumPageHeight, height_);
+  if (!base_path_.empty() && params->params.show_file_in_path) {
+    show_file_in_path_  = *params->params.show_file_in_path;
+  }
+  if (params->params.copy_to_clipboard.get()) {
+    copy_to_clipboard_ = *params->params.copy_to_clipboard;
+  }
   int tab_id = params->tab_id;
   if (tab_id) {
     content::WebContents *tabstrip_contents =
@@ -302,6 +379,7 @@ void ThumbnailsCaptureTabFunction::ScaleAndConvertImage(
 
   std::unique_ptr<base::SharedMemory> bitmap_buffer(
     new base::SharedMemory(handle, true));
+  bool resize_needed = capture_full_page_ == false;
 
   SkBitmap bitmap;
   // Let Skia do some sanity checking for (no negative widths/heights, no
@@ -328,20 +406,30 @@ void ThumbnailsCaptureTabFunction::ScaleAndConvertImage(
   // On success, SkBitmap now owns the SharedMemory.
   ignore_result(bitmap_buffer.release());
 
+  std::string return_data;
+  if (copy_to_clipboard_) {
+    BrowserThread::PostTask(
+      BrowserThread::UI, FROM_HERE,
+      base::Bind(
+        &ThumbnailsCaptureTabFunction::ScaleAndConvertImageDoneOnUIThread,
+        this, bitmap, return_data, callback_id));
+    return;
+  }
+
   if (capture_full_page_ == false && width_ && height_) {
     // Scale and crop it now.
     bitmap = SmartCropAndSize(bitmap, width_, height_);
+    resize_needed = false;
   }
-  gfx::Size final_size(width_, height_);
+  gfx::Size final_size(bitmap.width(), bitmap.height());
   std::vector<unsigned char> data;
   std::string mime_type;
   bool encoded = EncodeBitmap(bitmap, &data, mime_type, image_format_,
-                              final_size, 100, encode_quality_);
+                              final_size, 100, encode_quality_, resize_needed);
   if (!encoded) {
     DispatchError("Failed to capture tab: data could not be encoded");
     return;
   }
-  std::string return_data;
   if (base_path_.empty()) {
     // If the base path is not set, we want to encode the image as a data url.
     base::StringPiece base64_input(reinterpret_cast<const char*>(&data[0]),
@@ -371,13 +459,14 @@ void ThumbnailsCaptureTabFunction::ScaleAndConvertImage(
 #elif defined(OS_WIN)
     return_data.assign(base::WideToUTF8(path.value()));
 #endif
+    file_path_ = path;
     base::WriteFile(path, reinterpret_cast<const char*>(&data[0]), data.size());
   }
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
       base::Bind(
           &ThumbnailsCaptureTabFunction::ScaleAndConvertImageDoneOnUIThread,
-          this, return_data, callback_id));
+          this, bitmap, return_data, callback_id));
 }
 
 void ThumbnailsCaptureTabFunction::DispatchError(const std::string& error_msg) {
@@ -395,15 +484,29 @@ void ThumbnailsCaptureTabFunction::DispatchErrorOnUIThread(
 }
 
 void ThumbnailsCaptureTabFunction::ScaleAndConvertImageDoneOnUIThread(
+    const SkBitmap bitmap,
     const std::string image_data,
     int callback_id) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
+  if (copy_to_clipboard_) {
+    // Ignore everything else, we copy it raw to the clipboard.
+    ui::ScopedClipboardWriter scw(ui::CLIPBOARD_TYPE_COPY_PASTE);
+    scw.Reset();
+
+    if (!bitmap.empty() && !bitmap.isNull()) {
+      scw.WriteImage(bitmap);
+    }
+  }
   // callback_id is the tab_id
   results_ =
       vivaldi::thumbnails::CaptureTab::Results::Create(callback_id, image_data);
 
   SendResponse(true);
+
+  if (show_file_in_path_ && !image_data.empty() && !copy_to_clipboard_) {
+    platform_util::ShowItemInFolder(GetProfile(), file_path_);
+  }
 }
 
 }  // namespace extensions

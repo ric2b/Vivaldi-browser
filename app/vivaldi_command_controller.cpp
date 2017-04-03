@@ -73,6 +73,11 @@ void UpdateCommandsForVivaldi(CommandUpdater &command_updater_) {
   command_updater_.UpdateCommandEnabled(IDC_VIV_COMMAND_SAVE_SESSION, true);
   command_updater_.UpdateCommandEnabled(IDC_VIV_COMMAND_SHOW_WELCOME, true);
   command_updater_.UpdateCommandEnabled(IDC_VIV_FOCUS_ADDRESSFIELD, true);
+  command_updater_.UpdateCommandEnabled(IDC_VIV_CAPTURE_PAGE_TO_DISK, true);
+  command_updater_.UpdateCommandEnabled(IDC_VIV_CAPTURE_PAGE_TO_CLIPBOARD, true);
+  command_updater_.UpdateCommandEnabled(IDC_VIV_CAPTURE_AREA_TO_DISK, true);
+  command_updater_.UpdateCommandEnabled(IDC_VIV_CAPTURE_AREA_TO_CLIPBOARD, true);
+
 }
 
 bool ExecuteVivaldiCommands(Browser *browser, int id) {
@@ -123,6 +128,10 @@ bool ExecuteVivaldiCommands(Browser *browser, int id) {
     case IDC_VIV_COMMAND_SAVE_SESSION:
     case IDC_VIV_COMMAND_SHOW_WELCOME:
     case IDC_VIV_FOCUS_ADDRESSFIELD:
+    case IDC_VIV_CAPTURE_PAGE_TO_DISK:
+    case IDC_VIV_CAPTURE_PAGE_TO_CLIPBOARD:
+    case IDC_VIV_CAPTURE_AREA_TO_DISK:
+    case IDC_VIV_CAPTURE_AREA_TO_CLIPBOARD:
       extensions::ShowMenuAPI::GetFactoryInstance()
         ->Get(browser->profile())->CommandExecuted(id);
       break;

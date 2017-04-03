@@ -47,7 +47,7 @@ class NetErrorHelper
       public content::RenderThreadObserver,
       public error_page::NetErrorHelperCore::Delegate,
       public NetErrorPageController::Delegate,
-      public mojom::NetworkDiagnosticsClient {
+      public chrome::mojom::NetworkDiagnosticsClient {
  public:
   explicit NetErrorHelper(content::RenderFrame* render_frame);
   ~NetErrorHelper() override;
@@ -85,26 +85,24 @@ class NetErrorHelper
   bool ShouldSuppressErrorPage(const GURL& url);
 
  private:
-  mojom::NetworkDiagnostics* GetRemoteNetworkDiagnostics();
+  chrome::mojom::NetworkDiagnostics* GetRemoteNetworkDiagnostics();
 
   // NetErrorHelperCore::Delegate implementation:
   void GenerateLocalizedErrorPage(
       const blink::WebURLError& error,
       bool is_failed_post,
       bool can_use_local_diagnostics_service,
-      bool has_offline_pages,
       std::unique_ptr<error_page::ErrorPageParams> params,
       bool* reload_button_shown,
       bool* show_saved_copy_button_shown,
       bool* show_cached_copy_button_shown,
-      bool* show_offline_pages_button_shown,
+      bool* download_button_shown,
       std::string* html) const override;
   void LoadErrorPage(const std::string& html, const GURL& failed_url) override;
   void EnablePageHelperFunctions() override;
   void UpdateErrorPage(const blink::WebURLError& error,
                        bool is_failed_post,
-                       bool can_use_local_diagnostics_service,
-                       bool has_offline_pages) override;
+                       bool can_use_local_diagnostics_service) override;
   void FetchNavigationCorrections(
       const GURL& navigation_correction_url,
       const std::string& navigation_correction_request_body) override;
@@ -114,7 +112,7 @@ class NetErrorHelper
   void ReloadPage(bool bypass_cache) override;
   void LoadPageFromCache(const GURL& page_url) override;
   void DiagnoseError(const GURL& page_url) override;
-  void ShowOfflinePages() override;
+  void DownloadPageLater() override;
 
   void OnNetErrorInfo(int status);
   void OnSetNavigationCorrectionInfo(const GURL& navigation_correction_url,
@@ -130,25 +128,19 @@ class NetErrorHelper
                                  const std::string& data);
 
   void OnNetworkDiagnosticsClientRequest(
-      mojom::NetworkDiagnosticsClientAssociatedRequest request);
+      chrome::mojom::NetworkDiagnosticsClientAssociatedRequest request);
 
-  // mojom::NetworkDiagnosticsClient:
+  // chrome::mojom::NetworkDiagnosticsClient:
   void SetCanShowNetworkDiagnosticsDialog(bool can_show) override;
-
-#if defined(OS_ANDROID)
-  // Called to set whether offline pages exists, which will be used to decide
-  // if offline related button will be provided in the error page.
-  void OnSetHasOfflinePages(bool has_offline_pages);
-#endif
 
   std::unique_ptr<content::ResourceFetcher> correction_fetcher_;
   std::unique_ptr<content::ResourceFetcher> tracking_fetcher_;
 
   std::unique_ptr<error_page::NetErrorHelperCore> core_;
 
-  mojo::AssociatedBinding<mojom::NetworkDiagnosticsClient>
+  mojo::AssociatedBinding<chrome::mojom::NetworkDiagnosticsClient>
       network_diagnostics_client_binding_;
-  mojom::NetworkDiagnosticsAssociatedPtr remote_network_diagnostics_;
+  chrome::mojom::NetworkDiagnosticsAssociatedPtr remote_network_diagnostics_;
 
   // Weak factory for vending a weak pointer to a NetErrorPageController. Weak
   // pointers are invalidated on each commit, to prevent getting messages from

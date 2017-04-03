@@ -27,6 +27,7 @@
 #include "gpu/command_buffer/service/mailbox_manager.h"
 #include "gpu/command_buffer/service/memory_tracking.h"
 #include "gpu/command_buffer/service/query_manager.h"
+#include "gpu/command_buffer/service/service_utils.h"
 #include "gpu/command_buffer/service/sync_point_manager.h"
 #include "gpu/command_buffer/service/transfer_buffer_manager.h"
 #include "gpu/ipc/common/gpu_messages.h"
@@ -275,6 +276,50 @@ bool GpuCommandBufferStub::Send(IPC::Message* message) {
   return channel_->Send(message);
 }
 
+#if defined(OS_WIN)
+void GpuCommandBufferStub::DidCreateAcceleratedSurfaceChildWindow(
+    SurfaceHandle parent_window,
+    SurfaceHandle child_window) {
+  GpuChannelManager* gpu_channel_manager = channel_->gpu_channel_manager();
+  gpu_channel_manager->delegate()->SendAcceleratedSurfaceCreatedChildWindow(
+      parent_window, child_window);
+}
+#endif
+
+void GpuCommandBufferStub::DidSwapBuffersComplete(
+    SwapBuffersCompleteParams params) {
+  GpuCommandBufferMsg_SwapBuffersCompleted_Params send_params;
+#if defined(OS_MACOSX)
+  send_params.ca_context_id = params.ca_context_id;
+  send_params.fullscreen_low_power_ca_context_valid =
+      params.fullscreen_low_power_ca_context_valid;
+  send_params.fullscreen_low_power_ca_context_id =
+      params.fullscreen_low_power_ca_context_id;
+  send_params.io_surface = params.io_surface;
+  send_params.pixel_size = params.pixel_size;
+  send_params.scale_factor = params.scale_factor;
+  send_params.in_use_responses = params.in_use_responses;
+#endif
+  send_params.latency_info = std::move(params.latency_info);
+  send_params.result = params.result;
+  Send(new GpuCommandBufferMsg_SwapBuffersCompleted(route_id_, send_params));
+}
+
+const gles2::FeatureInfo* GpuCommandBufferStub::GetFeatureInfo() const {
+  return context_group_->feature_info();
+}
+
+void GpuCommandBufferStub::SetLatencyInfoCallback(
+    const LatencyInfoCallback& callback) {
+  latency_info_callback_ = callback;
+}
+
+void GpuCommandBufferStub::UpdateVSyncParameters(base::TimeTicks timebase,
+                                                 base::TimeDelta interval) {
+  Send(new GpuCommandBufferMsg_UpdateVSyncParameters(route_id_, timebase,
+                                                     interval));
+}
+
 bool GpuCommandBufferStub::IsScheduled() {
   return (!executor_.get() || executor_->scheduled());
 }
@@ -428,9 +473,8 @@ void GpuCommandBufferStub::Destroy() {
     // don't leak resources.
     have_context = decoder_->GetGLContext()->MakeCurrent(surface_.get());
   }
-  FOR_EACH_OBSERVER(DestructionObserver,
-                    destruction_observers_,
-                    OnWillDestroyStub());
+  for (auto& observer : destruction_observers_)
+    observer.OnWillDestroyStub();
 
   if (decoder_) {
     decoder_->Destroy(have_context);
@@ -525,7 +569,7 @@ bool GpuCommandBufferStub::Initialize(
     surface_ = default_surface;
   } else {
     surface_ = ImageTransportSurface::CreateNativeSurface(
-        manager, this, surface_handle_, surface_format);
+        AsWeakPtr(), surface_handle_, surface_format);
     if (!surface_ || !surface_->Initialize(surface_format)) {
       surface_ = nullptr;
       DLOG(ERROR) << "Failed to create surface.";
@@ -538,8 +582,10 @@ bool GpuCommandBufferStub::Initialize(
   if (use_virtualized_gl_context_ && gl_share_group) {
     context = gl_share_group->GetSharedContext(surface_.get());
     if (!context.get()) {
-      context = gl::init::CreateGLContext(gl_share_group, surface_.get(),
-                                          init_params.attribs.gpu_preference);
+      context = gl::init::CreateGLContext(
+          gl_share_group, surface_.get(),
+          GenerateGLContextAttribs(init_params.attribs,
+                                   context_group_->gpu_preferences()));
       if (!context.get()) {
         DLOG(ERROR) << "Failed to create shared context for virtualization.";
         return false;
@@ -556,8 +602,10 @@ bool GpuCommandBufferStub::Initialize(
            gl::GetGLImplementation() == gl::kGLImplementationMockGL);
     context = new GLContextVirtual(
         gl_share_group, context.get(), decoder_->AsWeakPtr());
-    if (!context->Initialize(surface_.get(),
-                             init_params.attribs.gpu_preference)) {
+    if (!context->Initialize(
+            surface_.get(),
+            GenerateGLContextAttribs(init_params.attribs,
+                                     context_group_->gpu_preferences()))) {
       // The real context created above for the default offscreen surface
       // might not be compatible with this surface.
       context = NULL;
@@ -566,8 +614,10 @@ bool GpuCommandBufferStub::Initialize(
     }
   }
   if (!context.get()) {
-    context = gl::init::CreateGLContext(gl_share_group, surface_.get(),
-                                        init_params.attribs.gpu_preference);
+    context = gl::init::CreateGLContext(
+        gl_share_group, surface_.get(),
+        GenerateGLContextAttribs(init_params.attribs,
+                                 context_group_->gpu_preferences()));
   }
   if (!context.get()) {
     DLOG(ERROR) << "Failed to create context.";
@@ -653,11 +703,6 @@ void GpuCommandBufferStub::OnCreateStreamTexture(uint32_t texture_id,
 #else
   *succeeded = false;
 #endif
-}
-
-void GpuCommandBufferStub::SetLatencyInfoCallback(
-    const LatencyInfoCallback& callback) {
-  latency_info_callback_ = callback;
 }
 
 void GpuCommandBufferStub::OnSetGetBuffer(int32_t shm_id,
@@ -1062,10 +1107,6 @@ void GpuCommandBufferStub::RemoveDestructionObserver(
   destruction_observers_.RemoveObserver(observer);
 }
 
-const gles2::FeatureInfo* GpuCommandBufferStub::GetFeatureInfo() const {
-  return context_group_->feature_info();
-}
-
 gles2::MemoryTracker* GpuCommandBufferStub::GetMemoryTracker() const {
   return context_group_->memory_tracker();
 }
@@ -1107,17 +1148,6 @@ void GpuCommandBufferStub::MarkContextLost() {
   if (decoder_)
     decoder_->MarkContextLost(error::kUnknown);
   command_buffer_->SetParseError(error::kLostContext);
-}
-
-void GpuCommandBufferStub::SendSwapBuffersCompleted(
-    const GpuCommandBufferMsg_SwapBuffersCompleted_Params& params) {
-  Send(new GpuCommandBufferMsg_SwapBuffersCompleted(route_id_, params));
-}
-
-void GpuCommandBufferStub::SendUpdateVSyncParameters(base::TimeTicks timebase,
-                                                     base::TimeDelta interval) {
-  Send(new GpuCommandBufferMsg_UpdateVSyncParameters(route_id_, timebase,
-                                                     interval));
 }
 
 }  // namespace gpu

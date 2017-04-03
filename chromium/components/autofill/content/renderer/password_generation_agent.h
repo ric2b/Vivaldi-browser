@@ -14,8 +14,8 @@
 
 #include "base/macros.h"
 #include "base/memory/linked_ptr.h"
-#include "components/autofill/content/public/interfaces/autofill_agent.mojom.h"
-#include "components/autofill/content/public/interfaces/autofill_driver.mojom.h"
+#include "components/autofill/content/common/autofill_agent.mojom.h"
+#include "components/autofill/content/common/autofill_driver.mojom.h"
 #include "content/public/renderer/render_frame_observer.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "third_party/WebKit/public/web/WebInputElement.h"
@@ -96,6 +96,8 @@ class PasswordGenerationAgent : public content::RenderFrameObserver,
   void OnDestruct() override;
 
   const mojom::PasswordManagerDriverPtr& GetPasswordManagerDriver();
+
+  const mojom::PasswordManagerClientAssociatedPtr& GetPasswordManagerClient();
 
   // Helper function that will try and populate |password_elements_| and
   // |possible_account_creation_form_|.
@@ -181,6 +183,8 @@ class PasswordGenerationAgent : public content::RenderFrameObserver,
   // Unowned pointer. Used to notify PassowrdAutofillAgent when values
   // in password fields are updated.
   PasswordAutofillAgent* password_agent_;
+
+  mojom::PasswordManagerClientAssociatedPtr password_manager_client_;
 
   mojo::Binding<mojom::PasswordGenerationAgent> binding_;
 

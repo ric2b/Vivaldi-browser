@@ -75,12 +75,6 @@ SESSIONS_EXPORT std::unique_ptr<SessionCommand> CreateSetWindowAppNameCommand(
 SESSIONS_EXPORT std::unique_ptr<SessionCommand> CreateLastActiveTimeCommand(
     const SessionID& tab_id,
     base::TimeTicks last_active_time);
-SESSIONS_EXPORT std::unique_ptr<SessionCommand> CreateSetWindowExtDataCommand(
-    const SessionID& window_id,
-    const std::string& ext_data);
-SESSIONS_EXPORT std::unique_ptr<SessionCommand> CreateSetExtDataCommand(
-    const SessionID& tab_id,
-    const std::string& ext_data);
 
 SESSIONS_EXPORT std::unique_ptr<SessionCommand> CreateSetWindowWorkspaceCommand(
     const SessionID& window_id,

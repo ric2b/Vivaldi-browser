@@ -64,8 +64,7 @@ FileWriter::FileWriter(ExecutionContext* context)
 
 FileWriter::~FileWriter() {
   ASSERT(!m_recursionDepth);
-  if (m_readyState == kWriting)
-    contextDestroyed();
+  DCHECK(!writer());
 }
 
 const AtomicString& FileWriter::interfaceName() const {
@@ -75,10 +74,11 @@ const AtomicString& FileWriter::interfaceName() const {
 void FileWriter::contextDestroyed() {
   // Make sure we've actually got something to stop, and haven't already called
   // abort().
-  if (!writer() || m_readyState != kWriting)
-    return;
-  doOperation(OperationAbort);
-  m_readyState = kDone;
+  if (writer() && m_readyState == kWriting) {
+    doOperation(OperationAbort);
+    m_readyState = kDone;
+  }
+  resetWriter();
 }
 
 bool FileWriter::hasPendingActivity() const {
@@ -87,6 +87,8 @@ bool FileWriter::hasPendingActivity() const {
 }
 
 void FileWriter::write(Blob* data, ExceptionState& exceptionState) {
+  if (!getExecutionContext())
+    return;
   ASSERT(data);
   ASSERT(writer());
   ASSERT(m_truncateLength == -1);
@@ -116,6 +118,8 @@ void FileWriter::write(Blob* data, ExceptionState& exceptionState) {
 }
 
 void FileWriter::seek(long long position, ExceptionState& exceptionState) {
+  if (!getExecutionContext())
+    return;
   ASSERT(writer());
   if (m_readyState == kWriting) {
     setError(FileError::kInvalidStateErr, exceptionState);
@@ -128,6 +132,8 @@ void FileWriter::seek(long long position, ExceptionState& exceptionState) {
 }
 
 void FileWriter::truncate(long long position, ExceptionState& exceptionState) {
+  if (!getExecutionContext())
+    return;
   ASSERT(writer());
   ASSERT(m_truncateLength == -1);
   if (m_readyState == kWriting || position < 0) {
@@ -155,6 +161,8 @@ void FileWriter::truncate(long long position, ExceptionState& exceptionState) {
 }
 
 void FileWriter::abort(ExceptionState& exceptionState) {
+  if (!getExecutionContext())
+    return;
   ASSERT(writer());
   if (m_readyState != kWriting)
     return;
@@ -305,6 +313,10 @@ void FileWriter::setError(FileError::ErrorCode errorCode,
   ASSERT(errorCode);
   FileError::throwDOMException(exceptionState, errorCode);
   m_error = FileError::createDOMException(errorCode);
+}
+
+void FileWriter::dispose() {
+  contextDestroyed();
 }
 
 DEFINE_TRACE(FileWriter) {

@@ -109,7 +109,7 @@ FrameTree::FrameTree(Navigator* navigator,
                               std::string(),
                               std::string(),
                               FrameOwnerProperties())),
-      focused_frame_tree_node_id_(-1),
+      focused_frame_tree_node_id_(FrameTreeNode::kFrameTreeNodeInvalidId),
       load_progress_(0.0) {}
 
 FrameTree::~FrameTree() {
@@ -264,18 +264,6 @@ void FrameTree::SetFocusedFrame(FrameTreeNode* node, SiteInstance* source) {
   if (node == GetFocusedFrame())
     return;
 
-  if (!node) {
-    // TODO(avallee): https://crbug.com/614463 Notify proxies here once
-    // <webview> supports oopifs inside itself.
-    if (GetFocusedFrame())
-      GetFocusedFrame()->current_frame_host()->ClearFocusedFrame();
-    focused_frame_tree_node_id_ = FrameTreeNode::kFrameTreeNodeInvalidId;
-
-    // TODO(avallee): https://crbug.com/610795 This line is not sufficient to
-    // make the test pass. There seems to be no focus change events generated.
-    root()->current_frame_host()->UpdateAXTreeData();
-    return;
-  }
 
   std::set<SiteInstance*> frame_tree_site_instances =
       CollectSiteInstances(this);
@@ -381,7 +369,7 @@ void FrameTree::ReleaseRenderViewHostRef(RenderViewHostImpl* render_view_host) {
 
 void FrameTree::FrameRemoved(FrameTreeNode* frame) {
   if (frame->frame_tree_node_id() == focused_frame_tree_node_id_)
-    focused_frame_tree_node_id_ = -1;
+    focused_frame_tree_node_id_ = FrameTreeNode::kFrameTreeNodeInvalidId;
 
   // No notification for the root frame.
   if (!frame->parent()) {
@@ -426,7 +414,7 @@ void FrameTree::UpdateLoadProgress() {
         // Ignore the current frame if it has not started loading,
         // if the frame is cross-origin, or about:blank.
         if (!node->has_started_loading() || !node->HasSameOrigin(*root_) ||
-            node->current_url() == GURL(url::kAboutBlankURL))
+            node->current_url() == url::kAboutBlankURL)
           continue;
         progress += node->loading_progress();
         frame_count++;

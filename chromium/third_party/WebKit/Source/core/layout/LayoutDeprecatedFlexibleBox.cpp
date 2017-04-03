@@ -366,7 +366,7 @@ void LayoutDeprecatedFlexibleBox::layoutBlock(bool relayoutChildren) {
 
   {
     // LayoutState needs this deliberate scope to pop before paint invalidation.
-    LayoutState state(*this, locationOffset());
+    LayoutState state(*this);
 
     LayoutSize previousSize = size();
 
@@ -403,10 +403,6 @@ void LayoutDeprecatedFlexibleBox::layoutBlock(bool relayoutChildren) {
 
   updateLayerTransformAfterLayout();
   updateAfterLayout();
-
-  if (view()->layoutState()->pageLogicalHeight())
-    setPageLogicalOffset(
-        view()->layoutState()->pageLogicalOffset(*this, logicalTop()));
 
   clearNeedsLayout();
 }
@@ -445,6 +441,7 @@ void LayoutDeprecatedFlexibleBox::layoutHorizontalBox(bool relayoutChildren) {
   LayoutUnit yPos = borderTop() + paddingTop();
   LayoutUnit xPos = borderLeft() + paddingLeft();
   bool heightSpecified = false;
+  bool paginated = view()->layoutState()->isPaginated();
   LayoutUnit oldHeight;
 
   LayoutUnit remainingSpace;
@@ -456,7 +453,7 @@ void LayoutDeprecatedFlexibleBox::layoutHorizontalBox(bool relayoutChildren) {
   gatherFlexChildrenInfo(iterator, relayoutChildren, highestFlexGroup,
                          lowestFlexGroup, haveFlex);
 
-  PaintLayerScrollableArea::DelayScrollPositionClampScope delayClampScope;
+  PaintLayerScrollableArea::DelayScrollOffsetClampScope delayClampScope;
 
   // We do 2 passes.  The first pass is simply to lay everyone out at
   // their preferred widths.  The second pass handles flexing the children.
@@ -514,6 +511,9 @@ void LayoutDeprecatedFlexibleBox::layoutHorizontalBox(bool relayoutChildren) {
         setHeight(std::max(size().height(), yPos + child->size().height() +
                                                 child->marginHeight()));
       }
+
+      if (paginated)
+        updateFragmentationInfoForChild(*child);
     }
 
     if (!iterator.first() && hasLineIfEmpty())
@@ -784,6 +784,7 @@ void LayoutDeprecatedFlexibleBox::layoutVerticalBox(bool relayoutChildren) {
   LayoutUnit toAdd =
       borderBottom() + paddingBottom() + horizontalScrollbarHeight();
   bool heightSpecified = false;
+  bool paginated = view()->layoutState()->isPaginated();
   LayoutUnit oldHeight;
 
   LayoutUnit remainingSpace;
@@ -802,7 +803,7 @@ void LayoutDeprecatedFlexibleBox::layoutVerticalBox(bool relayoutChildren) {
   if (haveLineClamp)
     applyLineClamp(iterator, relayoutChildren);
 
-  PaintLayerScrollableArea::DelayScrollPositionClampScope delayClampScope;
+  PaintLayerScrollableArea::DelayScrollOffsetClampScope delayClampScope;
 
   // We do 2 passes.  The first pass is simply to lay everyone out at
   // their preferred widths.  The second pass handles flexing the children.
@@ -882,6 +883,9 @@ void LayoutDeprecatedFlexibleBox::layoutVerticalBox(bool relayoutChildren) {
       placeChild(child, LayoutPoint(childX, size().height()));
       setHeight(size().height() + child->size().height() +
                 child->marginBottom());
+
+      if (paginated)
+        updateFragmentationInfoForChild(*child);
     }
 
     yPos = size().height();

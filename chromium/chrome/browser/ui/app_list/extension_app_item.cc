@@ -18,7 +18,7 @@
 #include "chrome/common/extensions/extension_metrics.h"
 #include "chrome/grit/theme_resources.h"
 #include "components/prefs/pref_service.h"
-#include "components/sync/api/string_ordinal.h"
+#include "components/sync/model/string_ordinal.h"
 #include "content/public/browser/user_metrics.h"
 #include "extensions/browser/app_sorting.h"
 #include "extensions/browser/extension_prefs.h"
@@ -95,7 +95,7 @@ class RoundedCornersImageSource : public gfx::CanvasImageSource {
         kRoundingRadius, opaque_paint);
 
     SkPaint masking_paint;
-    masking_paint.setXfermodeMode(SkXfermode::kDstIn_Mode);
+    masking_paint.setBlendMode(SkBlendMode::kDstIn);
     canvas->DrawImageInt(
         gfx::ImageSkia(masking_canvas->ExtractImageRep()), 0, 0, masking_paint);
   }

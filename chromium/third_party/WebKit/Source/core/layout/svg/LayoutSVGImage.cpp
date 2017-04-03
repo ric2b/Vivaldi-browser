@@ -88,7 +88,7 @@ FloatSize LayoutSVGImage::calculateObjectSize() const {
 }
 
 bool LayoutSVGImage::updateBoundingBox() {
-  FloatRect oldBoundaries = m_objectBoundingBox;
+  FloatRect oldObjectBoundingBox = m_objectBoundingBox;
 
   SVGLengthContext lengthContext(element());
   m_objectBoundingBox =
@@ -104,11 +104,15 @@ bool LayoutSVGImage::updateBoundingBox() {
   if (styleRef().width().isAuto() || styleRef().height().isAuto())
     m_objectBoundingBox.setSize(calculateObjectSize());
 
-  m_needsBoundariesUpdate |= oldBoundaries != m_objectBoundingBox;
+  if (oldObjectBoundingBox != m_objectBoundingBox) {
+    setShouldDoFullPaintInvalidation();
+    m_needsBoundariesUpdate = true;
+  }
+
   if (element())
     element()->setNeedsResizeObserverUpdate();
 
-  return oldBoundaries.size() != m_objectBoundingBox.size();
+  return oldObjectBoundingBox.size() != m_objectBoundingBox.size();
 }
 
 void LayoutSVGImage::layout() {
@@ -130,9 +134,8 @@ void LayoutSVGImage::layout() {
   }
 
   if (m_needsBoundariesUpdate) {
-    m_paintInvalidationBoundingBox = m_objectBoundingBox;
-    SVGLayoutSupport::intersectPaintInvalidationRectWithResources(
-        this, m_paintInvalidationBoundingBox);
+    m_localVisualRect = m_objectBoundingBox;
+    SVGLayoutSupport::adjustVisualRectWithResources(this, m_localVisualRect);
     m_needsBoundariesUpdate = false;
     updateParentBoundaries = true;
   }
@@ -170,7 +173,7 @@ bool LayoutSVGImage::nodeAtFloatPoint(HitTestResult& result,
 
     if (hitRules.canHitFill || hitRules.canHitBoundingBox) {
       if (m_objectBoundingBox.contains(localPoint)) {
-        const LayoutPoint& localLayoutPoint = roundedLayoutPoint(localPoint);
+        const LayoutPoint& localLayoutPoint = LayoutPoint(localPoint);
         updateHitTestResult(result, localLayoutPoint);
         if (result.addNodeToListBasedTestResult(element(), localLayoutPoint) ==
             StopHitTesting)
@@ -202,7 +205,7 @@ void LayoutSVGImage::addOutlineRects(Vector<LayoutRect>& rects,
                                      IncludeBlockVisualOverflowOrNot) const {
   // this is called from paint() after the localTransform has already been
   // applied
-  rects.append(LayoutRect(paintInvalidationRectInLocalSVGCoordinates()));
+  rects.append(LayoutRect(visualRectInLocalSVGCoordinates()));
 }
 
 }  // namespace blink

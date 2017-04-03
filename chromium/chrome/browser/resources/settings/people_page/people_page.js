@@ -48,6 +48,14 @@ Polymer({
      */
     profileManagesSupervisedUsers_: Boolean,
 
+<if expr="not chromeos">
+    /** @private */
+    showImportDataDialog_: {
+      type: Boolean,
+      value: false,
+    },
+</if>
+
     /** @private {!settings.SyncBrowserProxy} */
     syncBrowserProxy_: {
       type: Object,
@@ -64,7 +72,7 @@ Polymer({
     quickUnlockEnabled_: {
       type: Boolean,
       value: function() {
-        return loadTimeData.getBoolean('quickUnlockEnabled');
+        return loadTimeData.getBoolean('pinUnlockEnabled');
       },
       readOnly: true,
     },
@@ -142,10 +150,20 @@ Polymer({
 
   /** @protected */
   currentRouteChanged: function() {
-    if (settings.getCurrentRoute() == settings.Route.SIGN_OUT)
-      this.$.disconnectDialog.showModal();
-    else if (this.$.disconnectDialog.open)
+    this.showImportDataDialog_ =
+        settings.getCurrentRoute() == settings.Route.IMPORT_DATA;
+
+    if (settings.getCurrentRoute() == settings.Route.SIGN_OUT) {
+      // If the sync status has not been fetched yet, optimistically display
+      // the disconnect dialog. There is another check when the sync status is
+      // fetched. The dialog will be closed then the user is not signed in.
+      if (this.syncStatus && !this.syncStatus.signedIn)
+        settings.navigateToPreviousRoute();
+      else
+        this.$.disconnectDialog.showModal();
+    } else if (this.$.disconnectDialog.open) {
       this.$.disconnectDialog.close();
+    }
   },
 
 <if expr="chromeos">
@@ -184,9 +202,12 @@ Polymer({
    * @private
    */
   handleSyncStatus_: function(syncStatus) {
-    if (!this.syncStatus && syncStatus && !syncStatus.signedIn) {
+    if (!this.syncStatus && syncStatus && !syncStatus.signedIn)
       chrome.metricsPrivate.recordUserAction('Signin_Impression_FromSettings');
-    }
+
+    if (!syncStatus.signedIn && this.$.disconnectDialog.open)
+      this.$.disconnectDialog.close();
+
     this.syncStatus = syncStatus;
   },
 
@@ -231,6 +252,7 @@ Polymer({
   onDisconnectClosed_: function() {
     if (settings.getCurrentRoute() == settings.Route.SIGN_OUT)
       settings.navigateToPreviousRoute();
+    this.fire('signout-dialog-closed');
   },
 
   /** @private */
@@ -247,7 +269,15 @@ Polymer({
   onDisconnectConfirm_: function() {
     var deleteProfile = !!this.syncStatus.domain ||
         (this.$.deleteProfile && this.$.deleteProfile.checked);
-    this.syncBrowserProxy_.signOut(deleteProfile);
+    // Trigger the sign out event after the navigateToPreviousRoute().
+    // So that the navigation to the setting page could be finished before the
+    // sign out if navigateToPreviousRoute() returns synchronously even the
+    // browser is closed after the sign out. Otherwise, the navigation will be
+    // finshed during session restore if the browser is closed before the async
+    // callback executed.
+    listenOnce(this, 'signout-dialog-closed', function() {
+      this.syncBrowserProxy_.signOut(deleteProfile);
+    }.bind(this));
 
     this.$.disconnectDialog.close();
   },
@@ -257,10 +287,36 @@ Polymer({
     assert(this.syncStatus.signedIn);
     assert(this.syncStatus.syncSystemEnabled);
 
-    if (this.syncStatus.managed)
+    if (!this.isSyncStatusActionable_(this.syncStatus))
       return;
 
-    settings.navigateTo(settings.Route.SYNC);
+    switch (this.syncStatus.statusAction) {
+      case settings.StatusAction.REAUTHENTICATE:
+        this.syncBrowserProxy_.startSignIn();
+        break;
+      case settings.StatusAction.SIGNOUT_AND_SIGNIN:
+<if expr="chromeos">
+        this.syncBrowserProxy_.attemptUserExit();
+</if>
+<if expr="not chromeos">
+        if (this.syncStatus.domain)
+          settings.navigateTo(settings.Route.SIGN_OUT);
+        else {
+          // Silently sign the user out without deleting their profile and
+          // prompt them to sign back in.
+          this.syncBrowserProxy_.signOut(false);
+          this.syncBrowserProxy_.startSignIn();
+        }
+</if>
+        break;
+      case settings.StatusAction.UPGRADE_CLIENT:
+        settings.navigateTo(settings.Route.ABOUT);
+        break;
+      case settings.StatusAction.ENTER_PASSPHRASE:
+      case settings.StatusAction.NO_ACTION:
+      default:
+        settings.navigateTo(settings.Route.SYNC);
+    }
   },
 
 <if expr="chromeos">
@@ -306,6 +362,16 @@ Polymer({
         '<span id="managed-by-domain-name">' + domain + '</span>';
     return loadTimeData.getStringF('domainManagedProfile', innerSpan);
   },
+
+  /** @private */
+  onImportDataTap_: function() {
+    settings.navigateTo(settings.Route.IMPORT_DATA);
+  },
+
+  /** @private */
+  onImportDataDialogClosed_: function() {
+    settings.navigateToPreviousRoute();
+  },
 </if>
 
   /**
@@ -337,17 +403,43 @@ Polymer({
   /**
    * @private
    * @param {?settings.SyncStatus} syncStatus
+   * @return {boolean} Whether an action can be taken with the sync status. sync
+   *     status is actionable if sync is not managed and if there is a sync
+   *     error, there is an action associated with it.
+   */
+  isSyncStatusActionable_: function(syncStatus) {
+    return !!syncStatus && !syncStatus.managed && (!syncStatus.hasError ||
+        syncStatus.statusAction != settings.StatusAction.NO_ACTION);
+  },
+
+  /**
+   * @private
+   * @param {?settings.SyncStatus} syncStatus
    * @return {string}
    */
   getSyncIcon_: function(syncStatus) {
     if (!syncStatus)
       return '';
-    if (syncStatus.hasError)
-      return 'settings:sync-problem';
-    if (syncStatus.managed)
-      return 'settings:sync-disabled';
 
-    return 'settings:sync';
+    var syncIcon = 'settings:sync';
+
+    if (syncStatus.hasError)
+      syncIcon = 'settings:sync-problem';
+
+    // Override the icon to the disabled icon if sync is managed.
+    if (syncStatus.managed)
+      syncIcon = 'settings:sync-disabled';
+
+    return syncIcon;
+  },
+
+  /**
+   * @private
+   * @param {?settings.SyncStatus} syncStatus
+   * @return {string} The class name for the sync status text.
+   */
+  getSyncStatusTextClass_: function(syncStatus) {
+    return (!!syncStatus && syncStatus.hasError) ? 'sync-error' : '';
   },
 
   /**
@@ -360,6 +452,7 @@ Polymer({
   },
 
   /**
+   * @param {!settings.SyncStatus} syncStatus
    * @return {boolean} Whether to show the "Sign in to Chrome" button.
    * @private
    */

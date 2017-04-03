@@ -35,13 +35,8 @@ MediaStreamDevice::MediaStreamDevice()
 
 MediaStreamDevice::MediaStreamDevice(MediaStreamType type,
                                      const std::string& id,
-                                     const std::string& name,
-                                     const std::string& group_id)
-    : type(type),
-      id(id),
-      video_facing(MEDIA_VIDEO_FACING_NONE),
-      name(name),
-      group_id(group_id) {
+                                     const std::string& name)
+    : type(type), id(id), video_facing(MEDIA_VIDEO_FACING_NONE), name(name) {
 #if defined(OS_ANDROID)
   if (name.find("front") != std::string::npos) {
     video_facing = MEDIA_VIDEO_FACING_USER;
@@ -53,13 +48,7 @@ MediaStreamDevice::MediaStreamDevice(MediaStreamType type,
 
 MediaStreamDevice::MediaStreamDevice(MediaStreamType type,
                                      const std::string& id,
-                                     const std::string& name)
-    : MediaStreamDevice(type, id, name, std::string()) {}
-
-MediaStreamDevice::MediaStreamDevice(MediaStreamType type,
-                                     const std::string& id,
                                      const std::string& name,
-                                     const std::string& group_id,
                                      int sample_rate,
                                      int channel_layout,
                                      int frames_per_buffer)
@@ -67,7 +56,6 @@ MediaStreamDevice::MediaStreamDevice(MediaStreamType type,
       id(id),
       video_facing(MEDIA_VIDEO_FACING_NONE),
       name(name),
-      group_id(group_id),
       input(sample_rate, channel_layout, frames_per_buffer) {}
 
 MediaStreamDevice::MediaStreamDevice(const MediaStreamDevice& other) = default;
@@ -126,7 +114,8 @@ MediaStreamRequest::MediaStreamRequest(
     const std::string& requested_audio_device_id,
     const std::string& requested_video_device_id,
     MediaStreamType audio_type,
-    MediaStreamType video_type)
+    MediaStreamType video_type,
+    bool disable_local_echo)
     : render_process_id(render_process_id),
       render_frame_id(render_frame_id),
       page_request_id(page_request_id),
@@ -137,8 +126,8 @@ MediaStreamRequest::MediaStreamRequest(
       requested_video_device_id(requested_video_device_id),
       audio_type(audio_type),
       video_type(video_type),
-      all_ancestors_have_same_origin(false) {
-}
+      disable_local_echo(disable_local_echo),
+      all_ancestors_have_same_origin(false) {}
 
 MediaStreamRequest::MediaStreamRequest(const MediaStreamRequest& other) =
     default;

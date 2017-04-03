@@ -50,11 +50,7 @@ QuicStreamSequencerBuffer::QuicStreamSequencerBuffer(size_t max_capacity_bytes)
       blocks_count_(
           ceil(static_cast<double>(max_capacity_bytes) / kBlockSizeBytes)),
       total_bytes_read_(0),
-      reduce_sequencer_buffer_memory_life_time_(
-          FLAGS_quic_reduce_sequencer_buffer_memory_life_time),  // NOLINT
-      blocks_(reduce_sequencer_buffer_memory_life_time_
-                  ? nullptr
-                  : new BufferBlock*[blocks_count_]()) {
+      blocks_(nullptr) {
   Clear();
 }
 
@@ -63,7 +59,7 @@ QuicStreamSequencerBuffer::~QuicStreamSequencerBuffer() {
 }
 
 void QuicStreamSequencerBuffer::Clear() {
-  if (!reduce_sequencer_buffer_memory_life_time_ || blocks_ != nullptr) {
+  if (blocks_ != nullptr) {
     for (size_t i = 0; i < blocks_count_; ++i) {
       if (blocks_[i] != nullptr) {
         RetireBlock(i);
@@ -75,12 +71,12 @@ void QuicStreamSequencerBuffer::Clear() {
   // total_bytes_read_ has been consumed, and those after total_bytes_read_
   // has never arrived.
   gaps_ = std::list<Gap>(
-      1, Gap(total_bytes_read_, std::numeric_limits<QuicStreamOffset>::max())),
+      1, Gap(total_bytes_read_, std::numeric_limits<QuicStreamOffset>::max()));
   frame_arrival_time_map_.clear();
 }
 
 bool QuicStreamSequencerBuffer::RetireBlock(size_t idx) {
-  if (FLAGS_quic_stream_sequencer_buffer_debug && blocks_[idx] == nullptr) {
+  if (blocks_[idx] == nullptr) {
     QUIC_BUG << "Try to retire block twice";
     return false;
   }
@@ -181,15 +177,14 @@ QuicErrorCode QuicStreamSequencerBuffer::OnStreamData(
       bytes_avail = total_bytes_read_ + max_buffer_capacity_bytes_ - offset;
     }
 
-    if (reduce_sequencer_buffer_memory_life_time_ && blocks_ == nullptr) {
+    if (blocks_ == nullptr) {
       blocks_.reset(new BufferBlock*[blocks_count_]());
       for (size_t i = 0; i < blocks_count_; ++i) {
         blocks_[i] = nullptr;
       }
     }
 
-    if (FLAGS_quic_stream_sequencer_buffer_debug &&
-        write_block_num >= blocks_count_) {
+    if (write_block_num >= blocks_count_) {
       *error_details = StringPrintf(
           "QuicStreamSequencerBuffer error: OnStreamData() exceed array bounds."
           "write offset = %" PRIu64 " write_block_num = %" PRIuS
@@ -212,8 +207,7 @@ QuicErrorCode QuicStreamSequencerBuffer::OnStreamData(
     char* dest = blocks_[write_block_num]->buffer + write_block_offset;
     DVLOG(1) << "Write at offset: " << offset << " length: " << bytes_to_copy;
 
-    if (FLAGS_quic_stream_sequencer_buffer_debug &&
-        (dest == nullptr || source == nullptr)) {
+    if (dest == nullptr || source == nullptr) {
       *error_details = StringPrintf(
           "QuicStreamSequencerBuffer error: OnStreamData()"
           " dest == nullptr: %s"
@@ -292,8 +286,7 @@ QuicErrorCode QuicStreamSequencerBuffer::Readv(const iovec* dest_iov,
       size_t bytes_to_copy =
           min<size_t>(bytes_available_in_block, dest_remaining);
       DCHECK_GT(bytes_to_copy, 0UL);
-      if (FLAGS_quic_stream_sequencer_buffer_debug &&
-          (blocks_[block_idx] == nullptr || dest == nullptr)) {
+      if (blocks_[block_idx] == nullptr || dest == nullptr) {
         *error_details = StringPrintf(
             "QuicStreamSequencerBuffer error:"
             " Readv() dest == nullptr: %s"
@@ -316,7 +309,7 @@ QuicErrorCode QuicStreamSequencerBuffer::Readv(const iovec* dest_iov,
       // immediately.
       if (bytes_to_copy == bytes_available_in_block) {
         bool retire_successfully = RetireBlockIfEmpty(block_idx);
-        if (FLAGS_quic_stream_sequencer_buffer_debug && !retire_successfully) {
+        if (!retire_successfully) {
           *error_details = StringPrintf(
               "QuicStreamSequencerBuffer error: fail to retire block %" PRIuS
               " as the block is already released + total_bytes_read_ = %" PRIu64
@@ -465,10 +458,6 @@ size_t QuicStreamSequencerBuffer::FlushBufferedFrames() {
 }
 
 void QuicStreamSequencerBuffer::ReleaseWholeBuffer() {
-  if (!reduce_sequencer_buffer_memory_life_time_) {
-    // Don't release buffer if flag is off.
-    return;
-  }
   Clear();
   blocks_.reset(nullptr);
 }
@@ -592,16 +581,9 @@ string QuicStreamSequencerBuffer::ReceivedFramesDebugString() {
     QuicStreamOffset current_frame_begin_offset = it.first;
     QuicStreamOffset current_frame_end_offset =
         it.second.length + current_frame_begin_offset;
-    if (FLAGS_quic_stream_sequencer_buffer_debug) {
-      current_frames_string = string(StringPrintf(
-          "%s[%" PRIu64 ", %" PRIu64 ") receiving time %" PRId64 " ",
-          current_frames_string.c_str(), current_frame_begin_offset,
-          current_frame_end_offset, it.second.timestamp.ToDebuggingValue()));
-    } else {
-      current_frames_string = string(StringPrintf(
-          "%s[%" PRIu64 ", %" PRIu64 ") ", current_frames_string.c_str(),
-          current_frame_begin_offset, current_frame_end_offset));
-    }
+    current_frames_string = string(StringPrintf(
+        "%s[%" PRIu64 ", %" PRIu64 ") ", current_frames_string.c_str(),
+        current_frame_begin_offset, current_frame_end_offset));
   }
   return current_frames_string;
 }

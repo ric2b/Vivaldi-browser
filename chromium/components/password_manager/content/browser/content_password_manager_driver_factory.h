@@ -11,12 +11,13 @@
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/supports_user_data.h"
-#include "components/autofill/content/public/interfaces/autofill_driver.mojom.h"
+#include "components/autofill/content/common/autofill_driver.mojom.h"
 #include "components/password_manager/core/browser/password_autofill_manager.h"
 #include "components/password_manager/core/browser/password_generation_manager.h"
 #include "components/password_manager/core/browser/password_manager.h"
 #include "components/password_manager/core/browser/password_manager_driver.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "third_party/WebKit/public/platform/modules/sensitive_input_visibility/sensitive_input_visibility_service.mojom.h"
 
 namespace autofill {
 class AutofillManager;
@@ -48,6 +49,10 @@ class ContentPasswordManagerDriverFactory
   static void BindPasswordManagerDriver(
       content::RenderFrameHost* render_frame_host,
       autofill::mojom::PasswordManagerDriverRequest request);
+
+  static void BindSensitiveInputVisibilityService(
+      content::RenderFrameHost* render_frame_host,
+      blink::mojom::SensitiveInputVisibilityServiceRequest request);
 
   ContentPasswordManagerDriver* GetDriverForFrame(
       content::RenderFrameHost* render_frame_host);

@@ -2,58 +2,97 @@
      Use of this source code is governed by a BSD-style license that can be
      found in the LICENSE file. -->
 
-<link rel="import" href="chrome://resources/polymer/v1_0/iron-icons/iron-icons.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/iron-icon/iron-icon.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/iron-iconset-svg/iron-iconset-svg.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-fab/paper-fab.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-styles/color.html">
 
-<!--
-  Material design button that shows an icon.
-
-  Example:
-    <oobe-icon-button icon="close"></oobe-icon-button>
-
-  Attributes:
-    'icon' - a name of icon from material design set to show on button.
-    'disabled' - button is disabled when the attribute is set.
-    'aria-label' - accessibility label.
--->
-<dom-module id="oobe-icon-button">
-  <link rel="stylesheet" href="oobe_icon_button.css">
-  <template>
-    <div on-click="onClick_" on-tap="onClick_">
-      <paper-icon-button id="iconButton" icon="[[icon]]" disabled="[[disabled]]"
-          aria-label="[[ariaLabel]]">
-      </paper-icon-button>
-    </div>
-  </template>
-</dom-module>
+<iron-iconset-svg name="oobe-buttons" size="24">
+  <svg>
+    <defs>
+      <g id="arrow-back">
+        <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z">
+        </path>
+      </g>
+    </defs>
+  </svg>
+</iron-iconset-svg>
 
 <!--
   Material design square button for text-labelled buttons.
   By default, text is blue, background is white.
   |inverse| makes text white on a blue background.
+  Note, that content must have separate DOM node (i.e. a separate div).
 
   Example:
-    <oobe-icon-button label="OK" inverse></oobe-icon-button>
-    <oobe-icon-button label="CANCEL"></oobe-icon-button>
+    <oobe-icon-button inverse>
+      <div i18n-content="oobeOKButtonText"></div>
+    </oobe-icon-button>
 
   Attributes:
-    'label' - text on a button
     'disabled' - button is disabled when the attribute is set.
     'inverse' - makes text white and background blue
 -->
 <dom-module id="oobe-text-button">
   <link rel="stylesheet" href="oobe_text_button.css">
   <template>
-    <div on-click="onClick_" on-tap="onClick_">
-      <paper-button id="textButton" disabled="[[disabled]]"
-          inverse$="[[inverse]]">
-        [[label]]
+    <paper-button id="textButton" on-tap="onClick_" disabled="[[disabled]]"
+        inverse$="[[inverse]]">
+      <div id="container"
+          class="flex layout horizontal center center-justified self-stretch">
         <content></content>
-      </paper-button>
-    </div>
+      </div>
+    </paper-button>
   </template>
 </dom-module>
 
+<!--
+  Material design square "<- Back" button.
+  Text is blue, background is white.
+
+  Example:
+    <oobe-back-button on-tap="handleOnTap_">
+    </oobe-back-button>
+
+  Attributes:
+    'disabled' - button is disabled when the attribute is set.
+-->
+<dom-module id="oobe-back-button">
+  <link rel="stylesheet" href="oobe_back_button.css">
+  <template>
+    <paper-button id="button" on-tap="onClick_" disabled="[[disabled]]">
+      <div class="flex horizontal layout start center">
+        <iron-icon icon="oobe-buttons:arrow-back"></iron-icon>
+        <div id="text" i18n-content="back"></div>
+      </div>
+    </paper-button>
+  </template>
+</dom-module>
+
+<!--
+  Material design button that shows an icon and displays text.
+
+  Example:
+    <oobe-welcome-secondary-button icon="close">
+      <div i18n-content="oobeCloseButtonText"></div>
+    </oobe-welcome-secondary-button>
+
+  Attributes:
+    'icon' - a name of icon from material design set to show on button.
+    'aria-label' - accessibility label.
+-->
+<dom-module id="oobe-welcome-secondary-button">
+  <link rel="stylesheet" href="oobe_welcome_secondary_button.css">
+  <template>
+    <paper-button id="button" aria-label="[[ariaLabel]]">
+      <div id="container" class="flex layout vertical center self-stretch">
+        <div id="subcontainer"
+            class="flex layout horizontal center self-stretch">
+          <iron-icon icon="[[icon]]" class="oobe-icon"></iron-icon>
+          <content></content>
+        </div>
+      </div>
+    </paper-button>
+  </template>
+</dom-module>

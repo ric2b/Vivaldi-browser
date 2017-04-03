@@ -145,7 +145,7 @@ ApplyStyleCommand::ApplyStyleCommand(Document& document,
                                      const Position& end)
     : CompositeEditCommand(document),
       m_style(style->copy()),
-      m_inputType(InputEvent::InputType::ChangeAttributes),
+      m_inputType(InputEvent::InputType::None),
       m_propertyLevel(PropertyDefault),
       m_start(start),
       m_end(end),
@@ -157,7 +157,7 @@ ApplyStyleCommand::ApplyStyleCommand(Document& document,
 ApplyStyleCommand::ApplyStyleCommand(Element* element, bool removeOnly)
     : CompositeEditCommand(element->document()),
       m_style(EditingStyle::create()),
-      m_inputType(InputEvent::InputType::ChangeAttributes),
+      m_inputType(InputEvent::InputType::None),
       m_propertyLevel(PropertyDefault),
       m_start(mostForwardCaretPosition(endingSelection().start())),
       m_end(mostBackwardCaretPosition(endingSelection().end())),
@@ -189,10 +189,11 @@ void ApplyStyleCommand::updateStartEnd(const Position& newStart,
   if (!m_useEndingSelection && (newStart != m_start || newEnd != m_end))
     m_useEndingSelection = true;
 
-  document().updateStyleAndLayoutIgnorePendingStylesheets();
-  setEndingSelection(createVisibleSelection(newStart, newEnd,
-                                            VP_DEFAULT_AFFINITY,
-                                            endingSelection().isDirectional()));
+  setEndingSelection(SelectionInDOMTree::Builder()
+                         .collapse(newStart)
+                         .extend(newEnd)
+                         .setIsDirectional(endingSelection().isDirectional())
+                         .build());
   m_start = newStart;
   m_end = newEnd;
 }
@@ -836,6 +837,7 @@ void ApplyStyleCommand::applyInlineStyle(EditingStyle* style,
     }
   }
 
+  document().updateStyleAndLayoutIgnorePendingStylesheets();
   fixRangeAndApplyInlineStyle(styleToApply, start, end, editingState);
   if (editingState->isAborted())
     return;
@@ -981,7 +983,7 @@ void ApplyStyleCommand::applyInlineStyleToNodeRange(
       if (node->contains(pastEndNode) || containsNonEditableRegion(*node) ||
           !hasEditableStyle(*node->parentNode()))
         continue;
-      if (editingIgnoresContent(node)) {
+      if (editingIgnoresContent(*node)) {
         next = NodeTraversal::nextSkippingChildren(*node);
         continue;
       }
@@ -1082,7 +1084,7 @@ void ApplyStyleCommand::removeConflictingInlineStyleFromRun(
   Node* next = runStart;
   for (Node* node = next; node && node->isConnected() && node != pastEndNode;
        node = next) {
-    if (editingIgnoresContent(node)) {
+    if (editingIgnoresContent(*node)) {
       DCHECK(!node->contains(pastEndNode)) << node << " " << pastEndNode;
       next = NodeTraversal::nextSkippingChildren(*node);
     } else {
@@ -1447,7 +1449,7 @@ void ApplyStyleCommand::removeInlineStyle(EditingStyle* style,
   Node* node = start.anchorNode();
   while (node) {
     Node* next = nullptr;
-    if (editingIgnoresContent(node)) {
+    if (editingIgnoresContent(*node)) {
       DCHECK(node == end.anchorNode() || !node->contains(end.anchorNode()))
           << node << " " << end;
       next = NodeTraversal::nextSkippingChildren(*node);

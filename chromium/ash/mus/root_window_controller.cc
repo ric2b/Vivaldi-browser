@@ -14,7 +14,6 @@
 #include <vector>
 
 #include "ash/common/shelf/shelf_layout_manager.h"
-#include "ash/common/shell_window_ids.h"
 #include "ash/common/wm/container_finder.h"
 #include "ash/common/wm/dock/docked_window_layout_manager.h"
 #include "ash/common/wm/panels/panel_layout_manager.h"
@@ -23,16 +22,16 @@
 #include "ash/mus/bridge/wm_shelf_mus.h"
 #include "ash/mus/bridge/wm_shell_mus.h"
 #include "ash/mus/bridge/wm_window_mus.h"
-#include "ash/mus/container_ids.h"
 #include "ash/mus/non_client_frame_controller.h"
 #include "ash/mus/property_util.h"
 #include "ash/mus/screenlock_layout.h"
 #include "ash/mus/window_manager.h"
+#include "ash/public/cpp/shell_window_ids.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/memory/ptr_util.h"
 #include "mojo/public/cpp/bindings/type_converter.h"
-#include "services/shell/public/cpp/connector.h"
+#include "services/service_manager/public/cpp/connector.h"
 #include "services/ui/common/switches.h"
 #include "services/ui/common/util.h"
 #include "services/ui/public/cpp/property_type_converters.h"
@@ -41,8 +40,6 @@
 #include "services/ui/public/cpp/window_tree_client.h"
 #include "ui/display/display_list.h"
 #include "ui/display/screen_base.h"
-
-using ash::mojom::Container;
 
 namespace ash {
 namespace mus {
@@ -54,9 +51,9 @@ RootWindowController::RootWindowController(WindowManager* window_manager,
       root_(root),
       window_count_(0),
       display_(display),
-      wm_root_window_controller_(
-          base::MakeUnique<WmRootWindowControllerMus>(window_manager_->shell(),
-                                                      this)) {
+      wm_shelf_(base::MakeUnique<WmShelfMus>()) {
+  wm_root_window_controller_ = base::MakeUnique<WmRootWindowControllerMus>(
+      window_manager_->shell(), this);
   wm_root_window_controller_->CreateContainers();
   wm_root_window_controller_->CreateLayoutManagers();
   CreateLayoutManagers();
@@ -84,13 +81,12 @@ void RootWindowController::Shutdown() {
   wm_root_window_controller_->CloseChildWindows();
 }
 
-shell::Connector* RootWindowController::GetConnector() {
+service_manager::Connector* RootWindowController::GetConnector() {
   return window_manager_->connector();
 }
 
 ui::Window* RootWindowController::NewTopLevelWindow(
     std::map<std::string, std::vector<uint8_t>>* properties) {
-  // TODO(sky): panels need a different frame, http:://crbug.com/614362.
   const bool provide_non_client_frame =
       GetWindowType(*properties) == ui::mojom::WindowType::WINDOW ||
       GetWindowType(*properties) == ui::mojom::WindowType::PANEL;
@@ -102,9 +98,9 @@ ui::Window* RootWindowController::NewTopLevelWindow(
   window->SetBounds(CalculateDefaultBounds(window));
 
   ui::Window* container_window = nullptr;
-  mojom::Container container;
-  if (GetRequestedContainer(window, &container)) {
-    container_window = GetWindowForContainer(container);
+  int container_id = kShellWindowId_Invalid;
+  if (GetRequestedContainer(window, &container_id)) {
+    container_window = GetWindowByShellWindowId(container_id)->mus_window();
   } else {
     // TODO(sky): window->bounds() isn't quite right.
     container_window = WmWindowMus::GetMusWindow(wm::GetDefaultParent(
@@ -124,31 +120,31 @@ ui::Window* RootWindowController::NewTopLevelWindow(
   return window;
 }
 
-ui::Window* RootWindowController::GetWindowForContainer(Container container) {
-  WmWindowMus* wm_window =
-      GetWindowByShellWindowId(MashContainerToAshShellWindowId(container));
-  DCHECK(wm_window);
-  return wm_window->mus_window();
-}
-
 WmWindowMus* RootWindowController::GetWindowByShellWindowId(int id) {
   return WmWindowMus::AsWmWindowMus(
       WmWindowMus::Get(root_)->GetChildByShellWindowId(id));
 }
 
 void RootWindowController::SetWorkAreaInests(const gfx::Insets& insets) {
+  gfx::Rect old_work_area = display_.work_area();
   display_.UpdateWorkAreaFromInsets(insets);
-  display::DisplayList* display_list =
-      window_manager_->screen()->display_list();
-  auto iter = display_list->FindDisplayById(display_.id());
-  DCHECK(iter != display_list->displays().end());
-  const display::DisplayList::Type display_type =
-      iter == display_list->GetPrimaryDisplayIterator()
-          ? display::DisplayList::Type::PRIMARY
-          : display::DisplayList::Type::NOT_PRIMARY;
-  display_list->UpdateDisplay(display_, display_type);
-  // TODO(kylechar): needs to push to DisplayController.
-  NOTIMPLEMENTED();
+
+  if (old_work_area == display_.work_area())
+    return;
+
+  window_manager_->screen()->display_list().UpdateDisplay(display_);
+
+  // Push new display insets to service:ui if we have a connection.
+  auto* display_controller = window_manager_->GetDisplayController();
+  if (display_controller)
+    display_controller->SetDisplayWorkArea(display_.id(),
+                                           display_.bounds().size(), insets);
+}
+
+void RootWindowController::SetDisplay(const display::Display& display) {
+  DCHECK_EQ(display.id(), display_.id());
+  display_ = display;
+  window_manager_->screen()->display_list().UpdateDisplay(display_);
 }
 
 gfx::Rect RootWindowController::CalculateDefaultBounds(
@@ -184,9 +180,6 @@ void RootWindowController::CreateLayoutManagers() {
       GetWindowByShellWindowId(kShellWindowId_LockScreenContainer);
   layout_managers_[lock_screen_container->mus_window()].reset(
       new ScreenlockLayout(lock_screen_container->mus_window()));
-
-  // Creating the shelf also creates the status area and both layout managers.
-  wm_shelf_.reset(new WmShelfMus(wm_root_window_controller_->GetWindow()));
 }
 
 }  // namespace mus

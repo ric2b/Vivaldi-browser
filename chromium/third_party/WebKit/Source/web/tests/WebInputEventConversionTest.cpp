@@ -56,8 +56,11 @@ namespace blink {
 
 KeyboardEvent* createKeyboardEventWithLocation(
     KeyboardEvent::KeyLocationCode location) {
-  return KeyboardEvent::create("keydown", true, true, 0, "", "", location,
-                               PlatformEvent::NoModifiers, 0);
+  KeyboardEventInit keyEventInit;
+  keyEventInit.setBubbles(true);
+  keyEventInit.setCancelable(true);
+  keyEventInit.setLocation(location);
+  return new KeyboardEvent("keydown", keyEventInit);
 }
 
 int getModifiersForKeyLocationCode(KeyboardEvent::KeyLocationCode location) {
@@ -146,7 +149,8 @@ TEST(WebInputEventConversionTest, WebTouchEventBuilder) {
     touchList->append(touch0);
     TouchEvent* touchEvent = TouchEvent::create(
         touchList, touchList, touchList, EventTypeNames::touchstart, domWindow,
-        PlatformEvent::NoModifiers, false, false, true, 0);
+        PlatformEvent::NoModifiers, false, false, true, 0, TouchActionAuto,
+        WebPointerProperties::PointerType::Touch);
 
     WebTouchEventBuilder webTouchBuilder(documentLayoutView, *touchEvent);
     ASSERT_EQ(1u, webTouchBuilder.touchesLength);
@@ -162,6 +166,8 @@ TEST(WebInputEventConversionTest, WebTouchEventBuilder) {
     EXPECT_FLOAT_EQ(p0.radiusY, webTouchBuilder.touches[0].radiusY);
     EXPECT_FLOAT_EQ(p0.rotationAngle, webTouchBuilder.touches[0].rotationAngle);
     EXPECT_FLOAT_EQ(p0.force, webTouchBuilder.touches[0].force);
+    EXPECT_EQ(WebPointerProperties::PointerType::Touch,
+              webTouchBuilder.touches[0].pointerType);
     EXPECT_EQ(WebInputEvent::EventNonBlocking, webTouchBuilder.dispatchType);
   }
 
@@ -171,7 +177,8 @@ TEST(WebInputEventConversionTest, WebTouchEventBuilder) {
     touchList->append(touch0);
     TouchEvent* touchEvent = TouchEvent::create(
         touchList, touchList, touchList, EventTypeNames::touchstart, domWindow,
-        PlatformEvent::NoModifiers, true, false, true, 0);
+        PlatformEvent::NoModifiers, true, false, true, 0, TouchActionAuto,
+        WebPointerProperties::PointerType::Touch);
 
     WebTouchEventBuilder webTouchBuilder(documentLayoutView, *touchEvent);
     EXPECT_EQ(WebInputEvent::Blocking, webTouchBuilder.dispatchType);
@@ -184,10 +191,11 @@ TEST(WebInputEventConversionTest, WebTouchEventBuilder) {
     activeTouchList->append(touch0);
     activeTouchList->append(touch1);
     movedTouchList->append(touch0);
-    TouchEvent* touchEvent =
-        TouchEvent::create(activeTouchList, activeTouchList, movedTouchList,
-                           EventTypeNames::touchmove, domWindow,
-                           PlatformEvent::NoModifiers, false, false, true, 0);
+    TouchEvent* touchEvent = TouchEvent::create(
+        activeTouchList, activeTouchList, movedTouchList,
+        EventTypeNames::touchmove, domWindow, PlatformEvent::NoModifiers, false,
+        false, true, 0, TouchActionAuto,
+        WebPointerProperties::PointerType::Touch);
 
     WebTouchEventBuilder webTouchBuilder(documentLayoutView, *touchEvent);
     ASSERT_EQ(2u, webTouchBuilder.touchesLength);
@@ -206,10 +214,11 @@ TEST(WebInputEventConversionTest, WebTouchEventBuilder) {
     activeTouchList->append(touch0);
     activeTouchList->append(touch1);
     movedTouchList->append(touch1);
-    TouchEvent* touchEvent =
-        TouchEvent::create(activeTouchList, activeTouchList, movedTouchList,
-                           EventTypeNames::touchmove, domWindow,
-                           PlatformEvent::NoModifiers, false, false, true, 0);
+    TouchEvent* touchEvent = TouchEvent::create(
+        activeTouchList, activeTouchList, movedTouchList,
+        EventTypeNames::touchmove, domWindow, PlatformEvent::NoModifiers, false,
+        false, true, 0, TouchActionAuto,
+        WebPointerProperties::PointerType::Touch);
 
     WebTouchEventBuilder webTouchBuilder(documentLayoutView, *touchEvent);
     ASSERT_EQ(2u, webTouchBuilder.touchesLength);
@@ -227,10 +236,11 @@ TEST(WebInputEventConversionTest, WebTouchEventBuilder) {
     TouchList* releasedTouchList = TouchList::create();
     activeTouchList->append(touch0);
     releasedTouchList->append(touch1);
-    TouchEvent* touchEvent =
-        TouchEvent::create(activeTouchList, activeTouchList, releasedTouchList,
-                           EventTypeNames::touchend, domWindow,
-                           PlatformEvent::NoModifiers, false, false, false, 0);
+    TouchEvent* touchEvent = TouchEvent::create(
+        activeTouchList, activeTouchList, releasedTouchList,
+        EventTypeNames::touchend, domWindow, PlatformEvent::NoModifiers, false,
+        false, false, 0, TouchActionAuto,
+        WebPointerProperties::PointerType::Touch);
 
     WebTouchEventBuilder webTouchBuilder(documentLayoutView, *touchEvent);
     ASSERT_EQ(2u, webTouchBuilder.touchesLength);
@@ -248,10 +258,11 @@ TEST(WebInputEventConversionTest, WebTouchEventBuilder) {
     TouchList* cancelledTouchList = TouchList::create();
     cancelledTouchList->append(touch0);
     cancelledTouchList->append(touch1);
-    TouchEvent* touchEvent =
-        TouchEvent::create(activeTouchList, activeTouchList, cancelledTouchList,
-                           EventTypeNames::touchcancel, domWindow,
-                           PlatformEvent::NoModifiers, false, false, false, 0);
+    TouchEvent* touchEvent = TouchEvent::create(
+        activeTouchList, activeTouchList, cancelledTouchList,
+        EventTypeNames::touchcancel, domWindow, PlatformEvent::NoModifiers,
+        false, false, false, 0, TouchActionAuto,
+        WebPointerProperties::PointerType::Touch);
 
     WebTouchEventBuilder webTouchBuilder(documentLayoutView, *touchEvent);
     ASSERT_EQ(2u, webTouchBuilder.touchesLength);
@@ -278,7 +289,8 @@ TEST(WebInputEventConversionTest, WebTouchEventBuilder) {
     }
     TouchEvent* touchEvent = TouchEvent::create(
         touchList, touchList, touchList, EventTypeNames::touchstart, domWindow,
-        PlatformEvent::NoModifiers, false, false, true, 0);
+        PlatformEvent::NoModifiers, false, false, true, 0, TouchActionAuto,
+        WebPointerProperties::PointerType::Touch);
 
     WebTouchEventBuilder webTouchBuilder(documentLayoutView, *touchEvent);
     ASSERT_EQ(static_cast<unsigned>(WebTouchEvent::kTouchesLengthCap),
@@ -556,7 +568,8 @@ TEST(WebInputEventConversionTest, InputEventsScaling) {
     touchList->append(touch);
     TouchEvent* touchEvent = TouchEvent::create(
         touchList, touchList, touchList, EventTypeNames::touchmove, domWindow,
-        PlatformEvent::NoModifiers, false, false, true, 0);
+        PlatformEvent::NoModifiers, false, false, true, 0, TouchActionAuto,
+        WebPointerProperties::PointerType::Touch);
 
     WebTouchEventBuilder webTouchBuilder(documentLayoutView, *touchEvent);
     ASSERT_EQ(1u, webTouchBuilder.touchesLength);

@@ -20,11 +20,11 @@
 #include "content/common/platform_notification_messages.h"
 #include "content/public/child/worker_thread.h"
 #include "third_party/WebKit/public/platform/modules/notifications/WebNotificationManager.h"
+#include "url/gurl.h"
 
 namespace content {
 
 struct NotificationResources;
-struct PlatformNotificationData;
 class ThreadSafeSender;
 
 class NotificationManager : public blink::WebNotificationManager,

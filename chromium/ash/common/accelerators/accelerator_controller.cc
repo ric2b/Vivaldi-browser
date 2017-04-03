@@ -13,7 +13,6 @@
 #include "ash/common/ime_control_delegate.h"
 #include "ash/common/media_delegate.h"
 #include "ash/common/multi_profile_uma.h"
-#include "ash/common/new_window_delegate.h"
 #include "ash/common/session/session_state_delegate.h"
 #include "ash/common/shelf/shelf_widget.h"
 #include "ash/common/shelf/wm_shelf.h"
@@ -23,7 +22,6 @@
 #include "ash/common/system/status_area_widget.h"
 #include "ash/common/system/tray/system_tray_delegate.h"
 #include "ash/common/system/tray/system_tray_notifier.h"
-#include "ash/common/system/volume_control_delegate.h"
 #include "ash/common/system/web_notification/web_notification_tray.h"
 #include "ash/common/wm/mru_window_tracker.h"
 #include "ash/common/wm/overview/window_selector_controller.h"
@@ -34,8 +32,10 @@
 #include "ash/common/wm_root_window_controller.h"
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
+#include "ash/public/interfaces/new_window.mojom.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
+#include "services/service_manager/public/cpp/connector.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/accelerators/accelerator_manager.h"
 #include "ui/keyboard/keyboard_controller.h"
@@ -47,12 +47,18 @@
 #include "ash/common/system/chromeos/palette/palette_tray.h"
 #include "ash/common/system/chromeos/palette/palette_utils.h"
 #include "ash/common/system/status_area_widget.h"
+#include "ash/common/system/system_notifier.h"
 #include "ash/common/wm_root_window_controller.h"
 #include "ash/common/wm_window.h"
+#include "ash/resources/vector_icons/vector_icons.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/power_manager_client.h"
+#include "grit/ash_strings.h"
 #include "ui/base/ime/chromeos/ime_keyboard.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
+#include "ui/base/l10n/l10n_util.h"
+#include "ui/gfx/paint_vector_icon.h"
+#include "ui/message_center/message_center.h"
 #endif  // defined(OS_CHROMEOS)
 
 namespace ash {
@@ -143,18 +149,18 @@ bool CanHandleNewIncognitoWindow() {
 
 void HandleNewIncognitoWindow() {
   base::RecordAction(UserMetricsAction("Accel_New_Incognito_Window"));
-  WmShell::Get()->new_window_delegate()->NewWindow(true /* is_incognito */);
+  WmShell::Get()->new_window_client()->NewWindow(true /* is_incognito */);
 }
 
 void HandleNewTab(const ui::Accelerator& accelerator) {
   if (accelerator.key_code() == ui::VKEY_T)
     base::RecordAction(UserMetricsAction("Accel_NewTab_T"));
-  WmShell::Get()->new_window_delegate()->NewTab();
+  WmShell::Get()->new_window_client()->NewTab();
 }
 
 void HandleNewWindow() {
   base::RecordAction(UserMetricsAction("Accel_New_Window"));
-  WmShell::Get()->new_window_delegate()->NewWindow(false /* is_incognito */);
+  WmShell::Get()->new_window_client()->NewWindow(false /* is_incognito */);
 }
 
 bool CanHandleNextIme(ImeControlDelegate* ime_control_delegate) {
@@ -197,7 +203,7 @@ void HandleNextIme(ImeControlDelegate* ime_control_delegate) {
 
 void HandleOpenFeedbackPage() {
   base::RecordAction(UserMetricsAction("Accel_Open_Feedback_Page"));
-  WmShell::Get()->new_window_delegate()->OpenFeedbackPage();
+  WmShell::Get()->new_window_client()->OpenFeedbackPage();
 }
 
 bool CanHandlePreviousIme(ImeControlDelegate* ime_control_delegate) {
@@ -214,12 +220,12 @@ void HandlePreviousIme(ImeControlDelegate* ime_control_delegate,
 
 void HandleRestoreTab() {
   base::RecordAction(UserMetricsAction("Accel_Restore_Tab"));
-  WmShell::Get()->new_window_delegate()->RestoreTab();
+  WmShell::Get()->new_window_client()->RestoreTab();
 }
 
 void HandleShowKeyboardOverlay() {
   base::RecordAction(UserMetricsAction("Accel_Show_Keyboard_Overlay"));
-  WmShell::Get()->new_window_delegate()->ShowKeyboardOverlay();
+  WmShell::Get()->new_window_client()->ShowKeyboardOverlay();
 }
 
 bool CanHandleShowMessageCenterBubble() {
@@ -245,7 +251,7 @@ void HandleShowMessageCenterBubble() {
 
 void HandleShowTaskManager() {
   base::RecordAction(UserMetricsAction("Accel_Show_Task_Manager"));
-  WmShell::Get()->new_window_delegate()->ShowTaskManager();
+  WmShell::Get()->new_window_client()->ShowTaskManager();
 }
 
 bool CanHandleSwitchIme(ImeControlDelegate* ime_control_delegate,
@@ -339,6 +345,13 @@ void HandlePositionCenter() {
 }
 
 #if defined(OS_CHROMEOS)
+
+using message_center::Notification;
+
+// Identifier for the high contrast toggle accelerator notification.
+const char kHighContrastToggleAccelNotificationId[] =
+    "chrome://settings/accessibility/highcontrast";
+
 void HandleShowImeMenuBubble() {
   base::RecordAction(UserMetricsAction("Accel_Show_Ime_Menu_Bubble"));
 
@@ -357,7 +370,7 @@ void HandleShowImeMenuBubble() {
 void HandleCrosh() {
   base::RecordAction(UserMetricsAction("Accel_Open_Crosh"));
 
-  WmShell::Get()->new_window_delegate()->OpenCrosh();
+  WmShell::Get()->new_window_client()->OpenCrosh();
 }
 
 bool CanHandleDisableCapsLock(const ui::Accelerator& previous_accelerator) {
@@ -387,11 +400,11 @@ void HandleDisableCapsLock() {
 void HandleFileManager() {
   base::RecordAction(UserMetricsAction("Accel_Open_File_Manager"));
 
-  WmShell::Get()->new_window_delegate()->OpenFileManager();
+  WmShell::Get()->new_window_client()->OpenFileManager();
 }
 
 void HandleGetHelp() {
-  WmShell::Get()->new_window_delegate()->OpenGetHelp();
+  WmShell::Get()->new_window_client()->OpenGetHelp();
 }
 
 bool CanHandleLock() {
@@ -466,6 +479,27 @@ void HandleToggleCapsLock() {
   keyboard->SetCapsLockEnabled(!keyboard->CapsLockIsEnabled());
 }
 
+void HandleToggleHighContrast() {
+  base::RecordAction(UserMetricsAction("Accel_Toggle_High_Contrast"));
+
+  // Show a notification so the user knows that this accelerator toggled
+  // high contrast mode, and that they can press it again to toggle back.
+  // The message center automatically only shows this once per session.
+  std::unique_ptr<Notification> notification(new Notification(
+      message_center::NOTIFICATION_TYPE_SIMPLE,
+      kHighContrastToggleAccelNotificationId, base::string16() /* title */,
+      l10n_util::GetStringUTF16(IDS_HIGH_CONTRAST_ACCEL_MSG),
+      gfx::Image(CreateVectorIcon(kSystemMenuAccessibilityIcon, SK_ColorBLACK)),
+      base::string16() /* display source */, GURL(),
+      message_center::NotifierId(message_center::NotifierId::SYSTEM_COMPONENT,
+                                 system_notifier::kNotifierAccessibility),
+      message_center::RichNotificationData(), nullptr));
+  message_center::MessageCenter::Get()->AddNotification(
+      std::move(notification));
+
+  WmShell::Get()->accessibility_delegate()->ToggleHighContrast();
+}
+
 void HandleToggleSpokenFeedback() {
   base::RecordAction(UserMetricsAction("Accel_Toggle_Spoken_Feedback"));
 
@@ -473,25 +507,31 @@ void HandleToggleSpokenFeedback() {
       A11Y_NOTIFICATION_SHOW);
 }
 
-void HandleVolumeDown(const ui::Accelerator& accelerator) {
-  VolumeControlDelegate* volume_delegate =
-      WmShell::Get()->system_tray_delegate()->GetVolumeControlDelegate();
-  if (volume_delegate)
-    volume_delegate->HandleVolumeDown(accelerator);
+void HandleVolumeDown(mojom::VolumeController* volume_controller,
+                      const ui::Accelerator& accelerator) {
+  if (accelerator.key_code() == ui::VKEY_VOLUME_DOWN)
+    base::RecordAction(UserMetricsAction("Accel_VolumeDown_F9"));
+
+  if (volume_controller)
+    volume_controller->VolumeDown();
 }
 
-void HandleVolumeMute(const ui::Accelerator& accelerator) {
-  VolumeControlDelegate* volume_delegate =
-      WmShell::Get()->system_tray_delegate()->GetVolumeControlDelegate();
-  if (volume_delegate)
-    volume_delegate->HandleVolumeMute(accelerator);
+void HandleVolumeMute(mojom::VolumeController* volume_controller,
+                      const ui::Accelerator& accelerator) {
+  if (accelerator.key_code() == ui::VKEY_VOLUME_MUTE)
+    base::RecordAction(UserMetricsAction("Accel_VolumeMute_F8"));
+
+  if (volume_controller)
+    volume_controller->VolumeMute();
 }
 
-void HandleVolumeUp(const ui::Accelerator& accelerator) {
-  VolumeControlDelegate* volume_delegate =
-      WmShell::Get()->system_tray_delegate()->GetVolumeControlDelegate();
-  if (volume_delegate)
-    volume_delegate->HandleVolumeUp(accelerator);
+void HandleVolumeUp(mojom::VolumeController* volume_controller,
+                    const ui::Accelerator& accelerator) {
+  if (accelerator.key_code() == ui::VKEY_VOLUME_UP)
+    base::RecordAction(UserMetricsAction("Accel_VolumeUp_F10"));
+
+  if (volume_controller)
+    volume_controller->VolumeUp();
 }
 
 #endif  // defined(OS_CHROMEOS)
@@ -826,6 +866,7 @@ bool AcceleratorController::CanPerformAction(
     case OPEN_GET_HELP:
     case SHOW_IME_MENU_BUBBLE:
     case SUSPEND:
+    case TOGGLE_HIGH_CONTRAST:
     case TOGGLE_SPOKEN_FEEDBACK:
     case TOGGLE_WIFI:
     case VOLUME_DOWN:
@@ -1043,6 +1084,9 @@ void AcceleratorController::PerformAction(AcceleratorAction action,
     case TOGGLE_CAPS_LOCK:
       HandleToggleCapsLock();
       break;
+    case TOGGLE_HIGH_CONTRAST:
+      HandleToggleHighContrast();
+      break;
     case TOGGLE_SPOKEN_FEEDBACK:
       HandleToggleSpokenFeedback();
       break;
@@ -1050,13 +1094,13 @@ void AcceleratorController::PerformAction(AcceleratorAction action,
       WmShell::Get()->system_tray_notifier()->NotifyRequestToggleWifi();
       break;
     case VOLUME_DOWN:
-      HandleVolumeDown(accelerator);
+      HandleVolumeDown(GetVolumeController(), accelerator);
       break;
     case VOLUME_MUTE:
-      HandleVolumeMute(accelerator);
+      HandleVolumeMute(GetVolumeController(), accelerator);
       break;
     case VOLUME_UP:
-      HandleVolumeUp(accelerator);
+      HandleVolumeUp(GetVolumeController(), accelerator);
       break;
 #else
     case DUMMY_FOR_RESERVED:
@@ -1117,6 +1161,21 @@ AcceleratorController::GetAcceleratorProcessingRestriction(int action) {
     return RESTRICTION_PREVENT_PROCESSING_AND_PROPAGATION;
   }
   return RESTRICTION_NONE;
+}
+
+mojom::VolumeController* AcceleratorController::GetVolumeController() {
+  if (!volume_controller_ && WmShell::Get()->delegate()->GetShellConnector()) {
+    WmShell::Get()->delegate()->GetShellConnector()->ConnectToInterface(
+        "content_browser", &volume_controller_);
+    volume_controller_.set_connection_error_handler(
+        base::Bind(&AcceleratorController::OnVolumeControllerConnectionError,
+                   base::Unretained(this)));
+  }
+  return volume_controller_.get();
+}
+
+void AcceleratorController::OnVolumeControllerConnectionError() {
+  volume_controller_.reset();
 }
 
 }  // namespace ash

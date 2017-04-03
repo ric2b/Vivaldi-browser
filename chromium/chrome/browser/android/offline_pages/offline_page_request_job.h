@@ -5,7 +5,11 @@
 #ifndef CHROME_BROWSER_ANDROID_OFFLINE_PAGES_OFFLINE_PAGE_REQUEST_JOB_H_
 #define CHROME_BROWSER_ANDROID_OFFLINE_PAGES_OFFLINE_PAGE_REQUEST_JOB_H_
 
+#include <memory>
+
+#include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/time/time.h"
 #include "content/public/browser/resource_request_info.h"
 #include "content/public/common/resource_type.h"
 #include "net/url_request/url_request_file_job.h"
@@ -46,6 +50,10 @@ class OfflinePageRequestJob : public net::URLRequestFileJob {
     NO_TAB_ID,
     NO_WEB_CONTENTS,
     SHOW_NET_ERROR_PAGE,
+    REDIRECTED_ON_DISCONNECTED_NETWORK,
+    REDIRECTED_ON_FLAKY_NETWORK,
+    REDIRECTED_ON_PROHIBITIVELY_SLOW_NETWORK,
+    REDIRECTED_ON_CONNECTED_NETWORK,
     AGGREGATED_REQUEST_RESULT_MAX
   };
 
@@ -79,8 +87,14 @@ class OfflinePageRequestJob : public net::URLRequestFileJob {
   // net::URLRequestJob overrides:
   void Start() override;
   void Kill() override;
+  bool IsRedirectResponse(GURL* location, int* http_status_code) override;
+  void GetResponseInfo(net::HttpResponseInfo* info) override;
+  void GetLoadTimingInfo(net::LoadTimingInfo* load_timing_info) const override;
+  bool CopyFragmentOnRedirect(const GURL& location) const override;
+  int GetResponseCode() const override;
 
   void OnOfflineFilePathAvailable(const base::FilePath& offline_file_path);
+  void OnOfflineRedirectAvailabe(const GURL& redirected_url);
 
   void SetDelegateForTesting(std::unique_ptr<Delegate> delegate);
 
@@ -95,6 +109,11 @@ class OfflinePageRequestJob : public net::URLRequestFileJob {
   void FallbackToDefault();
 
   std::unique_ptr<Delegate> delegate_;
+
+  // For redirect simulation.
+  scoped_refptr<net::HttpResponseHeaders> fake_headers_for_redirect_;
+  base::TimeTicks receive_redirect_headers_end_;
+  base::Time redirect_response_time_;
 
   // Used to determine if an URLRequest is eligible for offline previews.
   previews::PreviewsDecider* previews_decider_;

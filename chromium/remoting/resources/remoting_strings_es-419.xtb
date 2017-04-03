@@ -27,13 +27,15 @@ Para obtener más información sobre la privacidad, consulta la política de pri
 <translation id="1654128982815600832">Habilitando conexiones remotas para esta computadora…</translation>
 <translation id="170207782578677537">No se pudo registrar esta computadora.</translation>
 <translation id="1704090719919187045">Preferencias del host de Chromoting</translation>
+<translation id="1730409684442507495">• Mejor calidad de la imagen del escritorio, capacidad de respuesta y consumo de la batería.
+• Mejor capacidad de respuesta en operaciones para hacer clic y arrastrar.
+• Mejoras en varios efectos de animación en la IU.</translation>
 <translation id="174018511426417793">No tienes ninguna computadora registrada. Para habilitar conexiones remotas con una computadora, instala allí Escritorio remoto de Chrome y haz clic en "<ph name="BUTTON_NAME" />".</translation>
 <translation id="1742469581923031760">Conectando…</translation>
 <translation id="1770394049404108959">No puedo abrir la aplicación.</translation>
 <translation id="177096447311351977">IP de canal para cliente: <ph name="CLIENT_GAIA_IDENTIFIER" /> ip='<ph name="CLIENT_IP_ADDRESS_AND_PORT" />' host_ip='<ph name="HOST_IP_ADDRESS_AND_PORT" />' channel='<ph name="CHANNEL_TYPE" />' connection='<ph name="CONNECTION_TYPE" />'.</translation>
 <translation id="1779766957982586368">Cerrar ventana</translation>
 <translation id="1841799852846221389">Inhabilitando conexiones remotas con esta computadora…</translation>
-<translation id="189172778771606813">Cerrar panel lateral de navegación</translation>
 <translation id="1897488610212723051">Borrar</translation>
 <translation id="195619862187186579">Diseños de teclado</translation>
 <translation id="1996161829609978754">Chrome está descargando el instalador del host de  Chromoting. Cuando termine la descarga, abre el instalador antes de continuar.</translation>
@@ -74,7 +76,6 @@ Para obtener más información sobre la privacidad, consulta la política de pri
 <translation id="2699970397166997657">Chromoting</translation>
 <translation id="2747641796667576127">Las actualizaciones de software, por lo general, se realizan de forma automática, pero puede haber errores en casos excepcionales. La actualización del software no debe tardar más de unos minutos y se puede hacer mientras estás conectado a tu computadora de forma remota.</translation>
 <translation id="2841013758207633010">Hora</translation>
-<translation id="2851674870054673688">Una vez que se haya ingresado el código, se iniciará la sesión compartida.</translation>
 <translation id="2851754573186462851">Chromium App Streaming</translation>
 <translation id="2855866366045322178">Sin conexión</translation>
 <translation id="2888969873284818612">Se produjo un error en la red. Reiniciaremos la aplicación cuando el dispositivo esté en línea nuevamente.</translation>
@@ -114,6 +115,7 @@ Para obtener más información sobre la privacidad, consulta la política de pri
 Chromoting</translation>
 <translation id="3870154837782082782">Google Inc.</translation>
 <translation id="3884839335308961732">Confirma la cuenta y el PIN a continuación para permitir el acceso del Escritorio remoto de Chrome.</translation>
+<translation id="3897092660631435901">Menú</translation>
 <translation id="3905196214175737742">Dominio del propietario del host no válido</translation>
 <translation id="3908017899227008678">Ajustar tamaño a ventana de navegador</translation>
 <translation id="3931191050278863510">Se detuvo el host.</translation>
@@ -126,6 +128,7 @@ Chromoting</translation>
 <translation id="409800995205263688">NOTA: La configuración de la política solo permite conexiones entre computadoras que estén dentro de tu red.</translation>
 <translation id="4155497795971509630">Faltan algunos de los componentes necesarios. Asegúrate de tener instalada la última versión del software y vuelve a intentarlo.</translation>
 <translation id="4156740505453712750">Debes elegir un PIN de <ph name="BOLD_START" />al menos seis dígitos<ph name="BOLD_END" /> para proteger el acceso a esta computadora. Se solicitará ese PIN cada vez que se establezca una conexión con esa computadora desde otra ubicación.</translation>
+<translation id="4156741816461781891">Accediste como <ph name="EMAIL_ADDRESS" />.</translation>
 <translation id="4176825807642096119">Código de acceso</translation>
 <translation id="4207623512727273241">Ejecuta el instalador antes de continuar.</translation>
 <translation id="4227991223508142681">Utilidad de aprovisionamiento de host</translation>
@@ -166,7 +169,6 @@ remoto de Chrome</translation>
 <translation id="5070121137485264635">El host remoto requiere la autenticación de un sitio web de terceros. Para continuar, debes otorgar permisos adicionales al Escritorio remoto de Chrome para acceder a la siguiente dirección:</translation>
 <translation id="507204348399810022">¿Seguro que deseas inhabilitar las conexiones remotas a <ph name="HOSTNAME" />?</translation>
 <translation id="5156271271724754543">Ingresa el mismo PIN en ambos cuadros.</translation>
-<translation id="5168917394043976756">Abrir panel lateral de navegación</translation>
 <translation id="5170982930780719864">ID de host no válido</translation>
 <translation id="518094545883702183">Esta información solo se usa con el fin de diagnosticar el problema informado, solo está disponible para la persona que investiga el informe y se guarda por no más de 30 días.</translation>
 <translation id="5222676887888702881">Salir</translation>
@@ -209,10 +211,6 @@ remoto de Chrome</translation>
 <translation id="6304318647555713317">Cliente</translation>
 <translation id="6381670701864002291">Tengo otro problema.</translation>
 <translation id="6398765197997659313">Salir de pantalla completa</translation>
-<translation id="6408143143164565232">• Escucha audio de computadoras Windows o Linux.
-• Mantén presionado el nombre de la computadora para quitar conexiones no deseadas.
-• Obtén funciones de pellizcar para acercar y desplazamiento con dos dedos más sencillas.
-• Utiliza la nueva pantalla de ayuda y comentarios.</translation>
 <translation id="6441316101718669559">Esta plataforma no admite la integración de escritorio. Puedes usar la aplicación, pero se verá afectada la experiencia del usuario.</translation>
 <translation id="652218476070540101">Se está actualizando el PIN para esta computadora…</translation>
 <translation id="6527303717912515753">Compartir</translation>
@@ -225,6 +223,7 @@ remoto de Chrome</translation>
 <translation id="6640610550128933069">Última vez en línea el <ph name="DATE" /></translation>
 <translation id="6668065415969892472">Se actualizó tu PIN.</translation>
 <translation id="6681800064886881394">Copyright 2013 Google Inc. Todos los derechos reservados.</translation>
+<translation id="6705482892455291412">Después de ingresar el código, se te pedirá que aceptes la conexión e inicies la sesión de uso compartido.</translation>
 <translation id="6746493157771801606">Borrar historial</translation>
 <translation id="6748108480210050150">De</translation>
 <translation id="677755392401385740">Host iniciado para usuario: <ph name="HOST_USERNAME" /></translation>
@@ -301,6 +300,7 @@ remoto de Chrome</translation>
 <translation id="9188433529406846933">Autorizar</translation>
 <translation id="9213184081240281106">Configuración del host no válida</translation>
 <translation id="951991426597076286">Rechazar</translation>
+<translation id="962733587145768554">Selecciona "<ph name="SHARE" />" en el cuadro de diálogo de conexión para completar el proceso.</translation>
 <translation id="979100198331752041">La aplicación Escritorio remoto de Chrome en <ph name="HOSTNAME" /> está desactualizada y debe actualizarse.</translation>
 <translation id="985602178874221306">Los creadores de Chromium</translation>
 <translation id="992215271654996353"><ph name="HOSTNAME" /> (en línea por última vez: <ph name="DATE_OR_TIME" />)</translation>

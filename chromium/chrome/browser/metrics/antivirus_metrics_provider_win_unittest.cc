@@ -7,12 +7,12 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/feature_list.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/test/histogram_tester.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_checker.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/version.h"
@@ -25,20 +25,10 @@
 
 namespace {
 
-// Helper function to toggle whether the ReportFullAVProductDetails feature is
-// enabled or not.
-void SetFullNamesFeatureEnabled(bool enabled) {
-  base::FeatureList::ClearInstanceForTesting();
-  std::unique_ptr<base::FeatureList> feature_list(new base::FeatureList);
-  if (enabled) {
-    feature_list->InitializeFromCommandLine(
-        AntiVirusMetricsProvider::kReportNamesFeature.name, std::string());
-  } else {
-    feature_list->InitializeFromCommandLine(
-        std::string(), AntiVirusMetricsProvider::kReportNamesFeature.name);
-  }
-  base::FeatureList::SetInstance(std::move(feature_list));
-}
+struct Testcase {
+  const char* input;
+  const char* output;
+};
 
 void VerifySystemProfileData(const metrics::SystemProfileProto& system_profile,
                              bool expect_unhashed_value) {
@@ -63,6 +53,8 @@ void VerifySystemProfileData(const metrics::SystemProfileProto& system_profile,
 }
 
 }  // namespace
+
+class AntiVirusMetricsProviderSimpleTest : public ::testing::Test {};
 
 class AntiVirusMetricsProviderTest : public ::testing::TestWithParam<bool> {
  public:
@@ -96,10 +88,23 @@ class AntiVirusMetricsProviderTest : public ::testing::TestWithParam<bool> {
     VerifySystemProfileData(system_profile, expect_unhashed_value_);
   }
 
+  // Helper function to toggle whether the ReportFullAVProductDetails feature is
+  // enabled or not.
+  void SetFullNamesFeatureEnabled(bool enabled) {
+    if (enabled) {
+      scoped_feature_list_.InitAndEnableFeature(
+          AntiVirusMetricsProvider::kReportNamesFeature);
+    } else {
+      scoped_feature_list_.InitAndDisableFeature(
+          AntiVirusMetricsProvider::kReportNamesFeature);
+    }
+  }
+
   bool got_results_;
   bool expect_unhashed_value_;
   std::unique_ptr<AntiVirusMetricsProvider> provider_;
   content::TestBrowserThreadBundle thread_bundle_;
+  base::test::ScopedFeatureList scoped_feature_list_;
   base::RunLoop run_loop_;
   base::ThreadChecker thread_checker_;
   base::WeakPtrFactory<AntiVirusMetricsProviderTest> weak_ptr_factory_;
@@ -132,3 +137,26 @@ TEST_P(AntiVirusMetricsProviderTest, GetMetricsFullName) {
 }
 
 INSTANTIATE_TEST_CASE_P(, AntiVirusMetricsProviderTest, ::testing::Bool());
+
+TEST_F(AntiVirusMetricsProviderSimpleTest, StripProductVersion) {
+  Testcase testcases[] = {
+      {"", ""},
+      {" ", ""},
+      {"1.0 AV 2.0", "1.0 AV"},
+      {"Anti  Virus", "Anti Virus"},
+      {"Windows Defender", "Windows Defender"},
+      {"McAfee AntiVirus has a space at the end ",
+       "McAfee AntiVirus has a space at the end"},
+      {"ESET NOD32 Antivirus 8.0", "ESET NOD32 Antivirus"},
+      {"Norton 360", "Norton 360"},
+      {"ESET Smart Security 9.0.381.1", "ESET Smart Security"},
+      {"Trustwave AV 3_0_2547", "Trustwave AV"},
+      {"nProtect Anti-Virus/Spyware V4.0", "nProtect Anti-Virus/Spyware"},
+      {"ESET NOD32 Antivirus 9.0.349.15P", "ESET NOD32 Antivirus"}};
+
+  for (const auto testcase : testcases) {
+    auto output =
+        AntiVirusMetricsProvider::TrimVersionOfAvProductName(testcase.input);
+    EXPECT_STREQ(testcase.output, output.c_str());
+  }
+}

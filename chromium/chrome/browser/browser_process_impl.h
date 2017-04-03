@@ -25,6 +25,8 @@
 #include "chrome/browser/lifetime/keep_alive_state_observer.h"
 #include "chrome/common/features.h"
 #include "components/prefs/pref_change_registrar.h"
+#include "extensions/features/features.h"
+#include "printing/features/features.h"
 
 class ChromeChildProcessWatcher;
 class ChromeDeviceClient;
@@ -33,7 +35,7 @@ class DevToolsAutoOpener;
 class RemoteDebuggingServer;
 class PrefRegistrySimple;
 
-#if defined(ENABLE_PLUGIN_INSTALLATION)
+#if BUILDFLAG(ENABLE_PLUGIN_INSTALLATION)
 class PluginsResourceService;
 #endif
 
@@ -217,7 +219,7 @@ class BrowserProcessImpl : public BrowserProcess,
 
   std::unique_ptr<GpuModeManager> gpu_mode_manager_;
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   std::unique_ptr<extensions::ExtensionsBrowserClient>
       extensions_browser_client_;
 
@@ -232,7 +234,7 @@ class BrowserProcessImpl : public BrowserProcess,
   std::unique_ptr<DevToolsAutoOpener> devtools_auto_opener_;
 #endif
 
-#if defined(ENABLE_PRINT_PREVIEW)
+#if BUILDFLAG(ENABLE_PRINT_PREVIEW)
   scoped_refptr<printing::PrintPreviewDialogController>
       print_preview_dialog_controller_;
 
@@ -315,7 +317,7 @@ class BrowserProcessImpl : public BrowserProcess,
   std::unique_ptr<component_updater::SupervisedUserWhitelistInstaller>
       supervised_user_whitelist_installer_;
 
-#if defined(ENABLE_PLUGIN_INSTALLATION)
+#if BUILDFLAG(ENABLE_PLUGIN_INSTALLATION)
   std::unique_ptr<PluginsResourceService> plugins_resource_service_;
 #endif
 

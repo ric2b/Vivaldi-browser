@@ -59,7 +59,7 @@ class PLATFORM_EXPORT WebScrollbarThemeClientImpl
   IntRect frameRect() const override;
   void invalidate() override;
   void invalidateRect(const IntRect&) override;
-  ScrollbarOverlayStyle getScrollbarOverlayStyle() const override;
+  ScrollbarOverlayColorTheme getScrollbarOverlayColorTheme() const override;
   void getTickmarks(Vector<IntRect>&) const override;
   bool isScrollableAreaActive() const override;
   IntPoint convertFromRootFrame(const IntPoint&) const override;
@@ -75,7 +75,7 @@ class PLATFORM_EXPORT WebScrollbarThemeClientImpl
   ScrollbarPart pressedPart() const override;
   ScrollbarPart hoveredPart() const override;
   void styleChanged() override;
-  void visibilityChanged() override;
+  void setScrollbarsHidden(bool) override;
   bool enabled() const override;
   void setEnabled(bool) override;
   bool isOverlayScrollbar() const override;

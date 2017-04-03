@@ -62,6 +62,7 @@ class HTMLTreeBuilderSimulator {
 
   HTMLParserOptions m_options;
   State m_namespaceStack;
+  bool m_inSelectInsertionMode;
 };
 
 }  // namespace blink

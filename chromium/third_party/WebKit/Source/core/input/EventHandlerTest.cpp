@@ -52,8 +52,7 @@ void EventHandlerTest::SetUp() {
 }
 
 void EventHandlerTest::setHtmlInnerHTML(const char* htmlContent) {
-  document().documentElement()->setInnerHTML(String::fromUTF8(htmlContent),
-                                             ASSERT_NO_EXCEPTION);
+  document().documentElement()->setInnerHTML(String::fromUTF8(htmlContent));
   document().view()->updateAllLifecyclePhases();
 }
 
@@ -73,7 +72,8 @@ TEST_F(EventHandlerTest, dragSelectionAfterScroll) {
       "</div>");
 
   FrameView* frameView = document().view();
-  frameView->setScrollPosition(DoublePoint(0, 400), ProgrammaticScroll);
+  frameView->layoutViewportScrollableArea()->setScrollOffset(
+      ScrollOffset(0, 400), ProgrammaticScroll);
 
   PlatformMouseEvent mouseDownEvent(
       IntPoint(0, 0), IntPoint(100, 200), WebPointerProperties::Button::Left,
@@ -236,15 +236,16 @@ TEST_F(EventHandlerTest, sendContextMenuEventWithHover) {
       "<style>*:hover { color: red; }</style>"
       "<div>foo</div>");
   document().settings()->setScriptEnabled(true);
-  Element* script = document().createElement("script", ASSERT_NO_EXCEPTION);
+  Element* script = document().createElement("script");
   script->setInnerHTML(
       "document.addEventListener('contextmenu', event => "
-      "event.preventDefault());",
-      ASSERT_NO_EXCEPTION);
+      "event.preventDefault());");
   document().body()->appendChild(script);
   document().updateStyleAndLayout();
   document().frame()->selection().setSelection(
-      createVisibleSelection(Position(document().body(), 0)));
+      SelectionInDOMTree::Builder()
+          .collapse(Position(document().body(), 0))
+          .build());
   PlatformMouseEvent mouseDownEvent(
       IntPoint(0, 0), IntPoint(100, 200), WebPointerProperties::Button::Right,
       PlatformEvent::MousePressed, 1, PlatformEvent::Modifiers::RightButtonDown,

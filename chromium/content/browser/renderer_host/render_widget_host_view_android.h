@@ -32,17 +32,17 @@
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/android/view_android.h"
 #include "ui/android/window_android_observer.h"
+#include "ui/events/android/motion_event_android.h"
 #include "ui/events/gesture_detection/filtered_gesture_provider.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/geometry/vector2d_f.h"
 #include "ui/gfx/selection_bound.h"
 #include "ui/touch_selection/touch_selection_controller.h"
 
+class GURL;
+
 namespace cc {
-class CopyOutputResult;
 class Layer;
-class SurfaceFactory;
-class SurfaceIdAllocator;
 }
 
 namespace ui {
@@ -50,8 +50,6 @@ struct DidOverscrollParams;
 }
 
 namespace blink {
-class WebExternalTextureLayer;
-class WebTouchEvent;
 class WebMouseEvent;
 }
 
@@ -61,11 +59,11 @@ class DelegatedFrameHostAndroid;
 
 namespace content {
 class ContentViewCoreImpl;
-class ContentViewCoreObserver;
 class OverscrollControllerAndroid;
 class RenderWidgetHost;
 class RenderWidgetHostImpl;
 class SynchronousCompositorHost;
+class SynchronousCompositorClient;
 struct NativeWebKeyboardEvent;
 struct TextInputState;
 
@@ -108,7 +106,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   gfx::Rect GetViewBounds() const override;
   gfx::Size GetVisibleViewportSize() const override;
   gfx::Size GetPhysicalBackingSize() const override;
-  bool DoTopControlsShrinkBlinkSize() const override;
+  bool DoBrowserControlsShrinkBlinkSize() const override;
   float GetTopControlsHeight() const override;
   float GetBottomControlsHeight() const override;
   void UpdateCursor(const WebCursor& cursor) override;
@@ -208,7 +206,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   void SetContentViewCore(ContentViewCoreImpl* content_view_core);
   SkColor GetCachedBackgroundColor() const;
   void SendKeyEvent(const NativeWebKeyboardEvent& event);
-  void SendMouseEvent(const blink::WebMouseEvent& event);
+  void SendMouseEvent(const ui::MotionEventAndroid&, int changed_button);
   void SendMouseWheelEvent(const blink::WebMouseWheelEvent& event);
   void SendGestureEvent(const blink::WebGestureEvent& event);
 
@@ -237,10 +235,15 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   void MoveCaret(const gfx::Point& point);
   void DismissTextHandles();
   void SetTextHandlesTemporarilyHidden(bool hidden);
-  void OnShowingPastePopup(const gfx::PointF& point);
   void OnShowUnhandledTapUIIfNeeded(int x_dip, int y_dip);
 
   void SynchronousFrameMetadata(cc::CompositorFrameMetadata frame_metadata);
+
+  void SetSynchronousCompositorClient(SynchronousCompositorClient* client);
+
+  SynchronousCompositorClient* synchronous_compositor_client() const {
+    return synchronous_compositor_client_;
+  }
 
   static void OnContextLost();
 
@@ -355,6 +358,8 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
 
   const bool using_browser_compositor_;
   std::unique_ptr<SynchronousCompositorHost> sync_compositor_;
+
+  SynchronousCompositorClient* synchronous_compositor_client_;
 
   std::unique_ptr<DelegatedFrameEvictor> frame_evictor_;
 

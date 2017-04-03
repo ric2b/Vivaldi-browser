@@ -14,11 +14,9 @@
 #include "third_party/WebKit/public/platform/WebURLLoader.h"
 #include "url/gurl.h"
 
-namespace base {
-
-class SingleThreadTaskRunner;
-
-}  // namespace base
+namespace mojo {
+class AssociatedGroup;
+}  // namespace mojo
 
 namespace content {
 
@@ -44,19 +42,18 @@ class CONTENT_EXPORT WebURLLoaderImpl
 
   // Takes ownership of |web_task_runner|.
   WebURLLoaderImpl(ResourceDispatcher* resource_dispatcher,
-                   mojom::URLLoaderFactory* url_loader_factory);
+                   mojom::URLLoaderFactory* url_loader_factory,
+                   mojo::AssociatedGroup* associated_group);
   ~WebURLLoaderImpl() override;
 
   static void PopulateURLResponse(const GURL& url,
                                   const ResourceResponseInfo& info,
                                   blink::WebURLResponse* response,
                                   bool report_security_info);
-  static void PopulateURLRequestForRedirect(
+  static blink::WebURLRequest PopulateURLRequestForRedirect(
       const blink::WebURLRequest& request,
       const net::RedirectInfo& redirect_info,
-      blink::WebReferrerPolicy referrer_policy,
-      blink::WebURLRequest::SkipServiceWorker skip_service_worker,
-      blink::WebURLRequest* new_request);
+      blink::WebURLRequest::SkipServiceWorker skip_service_worker);
 
   // WebURLLoader methods:
   void loadSynchronously(const blink::WebURLRequest& request,
@@ -71,13 +68,8 @@ class CONTENT_EXPORT WebURLLoaderImpl
   void setDefersLoading(bool value) override;
   void didChangePriority(blink::WebURLRequest::Priority new_priority,
                          int intra_priority_value) override;
-  void setLoadingTaskRunner(blink::WebTaskRunner* loading_task_runner) override;
-
-  // This is a utility function for multipart image resources.
-  static bool ParseMultipartHeadersFromBody(const char* bytes,
-                                            size_t size,
-                                            blink::WebURLResponse* response,
-                                            size_t* end);
+  void setLoadingTaskRunner(
+      base::SingleThreadTaskRunner* loading_task_runner) override;
 
  private:
   class Context;

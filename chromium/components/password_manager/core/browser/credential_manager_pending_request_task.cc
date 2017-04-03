@@ -5,6 +5,7 @@
 #include "components/password_manager/core/browser/credential_manager_pending_request_task.h"
 
 #include <algorithm>
+#include <iterator>
 #include <map>
 #include <utility>
 
@@ -25,7 +26,8 @@ namespace {
 
 // Send a UMA histogram about if |local_results| has empty or duplicate
 // usernames.
-void ReportAccountChooserMetrics(bool had_duplicates, bool had_empty_username) {
+void ReportAccountChooserUsabilityMetrics(bool had_duplicates,
+                                          bool had_empty_username) {
   metrics_util::AccountChooserUsabilityMetric metric;
   if (had_empty_username && had_duplicates)
     metric = metrics_util::ACCOUNT_CHOOSER_EMPTY_USERNAME_AND_DUPLICATES;
@@ -50,26 +52,25 @@ bool IsBetterMatch(const autofill::PasswordForm& form1,
 }
 
 // Remove duplicates in |forms| before displaying them in the account chooser.
-void FilterDuplicates(ScopedVector<autofill::PasswordForm>* forms) {
-  ScopedVector<autofill::PasswordForm> federated_forms;
+void FilterDuplicates(
+    std::vector<std::unique_ptr<autofill::PasswordForm>>* forms) {
+  std::vector<std::unique_ptr<autofill::PasswordForm>> federated_forms;
   std::map<base::string16, std::unique_ptr<autofill::PasswordForm>> credentials;
   for (auto& form : *forms) {
     if (!form->federation_origin.unique()) {
-      federated_forms.push_back(form);
-      form = nullptr;
+      federated_forms.push_back(std::move(form));
     } else {
       auto it = credentials.find(form->username_value);
       if (it == credentials.end() || IsBetterMatch(*form, *it->second)) {
-        credentials[form->username_value] = base::WrapUnique(form);
-        form = nullptr;
+        credentials[form->username_value] = std::move(form);
       }
     }
   }
   forms->clear();
   for (auto& form_pair : credentials)
     forms->push_back(std::move(form_pair.second));
-  forms->insert(forms->end(), federated_forms.begin(), federated_forms.end());
-  federated_forms.weak_clear();
+  std::move(federated_forms.begin(), federated_forms.end(),
+            std::back_inserter(*forms));
 }
 
 }  // namespace
@@ -98,14 +99,19 @@ CredentialManagerPendingRequestTask::~CredentialManagerPendingRequestTask() =
 
 void CredentialManagerPendingRequestTask::OnGetPasswordStoreResults(
     std::vector<std::unique_ptr<autofill::PasswordForm>> results) {
+  using metrics_util::LogCredentialManagerGetResult;
+  metrics_util::CredentialManagerGetMediation mediation_status =
+      zero_click_only_ ? metrics_util::CREDENTIAL_MANAGER_GET_UNMEDIATED
+                       : metrics_util::CREDENTIAL_MANAGER_GET_MEDIATED;
   if (delegate_->GetOrigin() != origin_) {
+    LogCredentialManagerGetResult(metrics_util::CREDENTIAL_MANAGER_GET_NONE,
+                                  mediation_status);
     delegate_->SendCredential(send_callback_, CredentialInfo());
     return;
   }
 
-  ScopedVector<autofill::PasswordForm> local_results;
+  std::vector<std::unique_ptr<autofill::PasswordForm>> local_results;
   std::vector<std::unique_ptr<autofill::PasswordForm>> affiliated_results;
-  ScopedVector<autofill::PasswordForm> federated_results;
   for (auto& form : results) {
     // Ensure that the form we're looking at matches the password and
     // federation filters provided.
@@ -120,36 +126,27 @@ void CredentialManagerPendingRequestTask::OnGetPasswordStoreResults(
     // GURL definition: scheme, host, and port.
     // So we can't compare them directly.
     if (form->origin.GetOrigin() == origin_.GetOrigin()) {
-      local_results.push_back(form.release());
+      local_results.push_back(std::move(form));
     } else if (affiliated_realms_.count(form->signon_realm) &&
                AffiliatedMatchHelper::IsValidAndroidCredential(
                    PasswordStore::FormDigest(*form))) {
       form->is_affiliation_based_match = true;
       affiliated_results.push_back(std::move(form));
     }
-
-    // TODO(mkwst): We're debating whether or not federations ought to be
-    // available at this point, as it's not clear that the user experience
-    // is at all reasonable. Until that's resolved, we'll drop the forms that
-    // match |federations_| on the floor rather than pushing them into
-    // 'federated_results'. Since we don't touch the reference in |results|,
-    // they will be safely deleted after this task executes.
   }
 
   if (!affiliated_results.empty()) {
     password_manager_util::TrimUsernameOnlyCredentials(&affiliated_results);
-    size_t local_count = local_results.size();
-    local_results.resize(local_count + affiliated_results.size());
-    for (auto& affiliated : affiliated_results) {
-      local_results[local_count++] = affiliated.release();
-    }
+    std::move(affiliated_results.begin(), affiliated_results.end(),
+              std::back_inserter(local_results));
   }
 
   // Remove empty usernames from the list.
-  auto begin_empty = std::partition(local_results.begin(), local_results.end(),
-                                    [](autofill::PasswordForm* form) {
-                                      return !form->username_value.empty();
-                                    });
+  auto begin_empty =
+      std::remove_if(local_results.begin(), local_results.end(),
+                     [](const std::unique_ptr<autofill::PasswordForm>& form) {
+                       return form->username_value.empty();
+                     });
   const bool has_empty_username = (begin_empty != local_results.end());
   local_results.erase(begin_empty, local_results.end());
 
@@ -157,7 +154,10 @@ void CredentialManagerPendingRequestTask::OnGetPasswordStoreResults(
   FilterDuplicates(&local_results);
   const bool has_duplicates = (local_results_size != local_results.size());
 
-  if ((local_results.empty() && federated_results.empty())) {
+  if (local_results.empty()) {
+    LogCredentialManagerGetResult(
+        metrics_util::CREDENTIAL_MANAGER_GET_NONE_EMPTY_STORE,
+        mediation_status);
     delegate_->SendCredential(send_callback_, CredentialInfo());
     return;
   }
@@ -180,6 +180,8 @@ void CredentialManagerPendingRequestTask::OnGetPasswordStoreResults(
     delegate_->client()->NotifyUserAutoSignin(std::move(local_results),
                                               origin_);
     base::RecordAction(base::UserMetricsAction("CredentialManager_Autosignin"));
+    LogCredentialManagerGetResult(
+        metrics_util::CREDENTIAL_MANAGER_GET_AUTOSIGNIN, mediation_status);
     delegate_->SendCredential(send_callback_, info);
     return;
   }
@@ -191,23 +193,33 @@ void CredentialManagerPendingRequestTask::OnGetPasswordStoreResults(
       can_use_autosignin ? new autofill::PasswordForm(*local_results[0])
                          : nullptr);
   if (!zero_click_only_)
-    ReportAccountChooserMetrics(has_duplicates, has_empty_username);
+    ReportAccountChooserUsabilityMetrics(has_duplicates, has_empty_username);
   if (zero_click_only_ ||
       !delegate_->client()->PromptUserToChooseCredentials(
-          std::move(local_results), std::move(federated_results), origin_,
+          std::move(local_results), origin_,
           base::Bind(
               &CredentialManagerPendingRequestTaskDelegate::SendPasswordForm,
               base::Unretained(delegate_), send_callback_))) {
+    metrics_util::CredentialManagerGetResult get_result =
+        metrics_util::CREDENTIAL_MANAGER_GET_NONE;
+    if (zero_click_only_) {
+      if (!can_use_autosignin)
+        get_result = metrics_util::CREDENTIAL_MANAGER_GET_NONE_MANY_CREDENTIALS;
+      else if (potential_autosignin_form->skip_zero_click)
+        get_result = metrics_util::CREDENTIAL_MANAGER_GET_NONE_SIGNED_OUT;
+      else
+        get_result = metrics_util::CREDENTIAL_MANAGER_GET_NONE_FIRST_RUN;
+    }
     if (can_use_autosignin) {
       // The user had credentials, but either chose not to share them with the
       // site, or was prevented from doing so by lack of zero-click (or the
       // first-run experience). So, notify the client that we could potentially
-      // have used zero-click; if the user signs in with the same form via
-      // autofill, we'll toggle the flag for them.
+      // have used zero-click.
       delegate_->client()->NotifyUserCouldBeAutoSignedIn(
           std::move(potential_autosignin_form));
     }
 
+    LogCredentialManagerGetResult(get_result, mediation_status);
     delegate_->SendCredential(send_callback_, CredentialInfo());
   }
 }

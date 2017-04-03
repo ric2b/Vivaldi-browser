@@ -40,7 +40,6 @@
 #include "core/fetch/ImageResource.h"
 #include "core/fetch/MemoryCache.h"
 #include "core/fetch/ResourceFetcher.h"
-#include "core/fetch/ScriptResource.h"
 #include "core/frame/FrameHost.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
@@ -58,9 +57,11 @@
 #include "core/loader/NetworkHintsInterface.h"
 #include "core/loader/ProgressTracker.h"
 #include "core/loader/appcache/ApplicationCacheHost.h"
+#include "core/loader/resource/ScriptResource.h"
 #include "core/page/FrameTree.h"
 #include "core/page/Page.h"
 #include "platform/HTTPNames.h"
+#include "platform/MIMETypeRegistry.h"
 #include "platform/UserGestureIndicator.h"
 #include "platform/mhtml/ArchiveResource.h"
 #include "platform/network/ContentSecurityPolicyResponseHeaders.h"
@@ -70,7 +71,6 @@
 #include "platform/weborigin/SecurityPolicy.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebDocumentSubresourceFilter.h"
-#include "public/platform/WebMimeRegistry.h"
 #include "wtf/Assertions.h"
 #include "wtf/AutoReset.h"
 #include "wtf/text/WTFString.h"
@@ -96,13 +96,15 @@ static bool shouldInheritSecurityOriginFromOwner(const KURL& url) {
 
 DocumentLoader::DocumentLoader(LocalFrame* frame,
                                const ResourceRequest& req,
-                               const SubstituteData& substituteData)
+                               const SubstituteData& substituteData,
+                               ClientRedirectPolicy clientRedirectPolicy)
     : m_frame(frame),
       m_fetcher(FrameFetchContext::createContextAndFetcher(this, nullptr)),
       m_originalRequest(req),
       m_substituteData(substituteData),
       m_request(req),
-      m_isClientRedirect(false),
+      m_isClientRedirect(clientRedirectPolicy ==
+                         ClientRedirectPolicy::ClientRedirect),
       m_replacesCurrentHistoryItem(false),
       m_dataReceived(false),
       m_navigationType(NavigationTypeOther),
@@ -112,7 +114,12 @@ DocumentLoader::DocumentLoader(LocalFrame* frame,
       m_wasBlockedAfterXFrameOptionsOrCSP(false),
       m_state(NotStarted),
       m_inDataReceived(false),
-      m_dataBuffer(SharedBuffer::create()) {}
+      m_dataBuffer(SharedBuffer::create()) {
+  // The document URL needs to be added to the head of the list as that is
+  // where the redirects originated.
+  if (m_isClientRedirect)
+    appendRedirect(m_frame->document()->url());
+}
 
 FrameLoader* DocumentLoader::frameLoader() const {
   if (!m_frame)
@@ -163,6 +170,10 @@ Resource* DocumentLoader::startPreload(Resource::Type type,
   Resource* resource = nullptr;
   switch (type) {
     case Resource::Image:
+      if (m_frame && m_frame->settings() &&
+          m_frame->settings()->fetchImagePlaceholders()) {
+        request.setAllowImagePlaceholder();
+      }
       resource = ImageResource::fetch(request, fetcher());
       break;
     case Resource::Script:
@@ -190,7 +201,10 @@ Resource* DocumentLoader::startPreload(Resource::Type type,
       NOTREACHED();
   }
 
-  if (resource)
+  // CSP layout tests verify that preloads are subject to access checks by
+  // seeing if they are in the `preload started` list. Therefore do not add
+  // them to the list if the load is immediately denied.
+  if (resource && !resource->resourceError().isAccessCheck())
     fetcher()->preloadStarted(resource);
   return resource;
 }
@@ -273,7 +287,7 @@ void DocumentLoader::notifyFinished(Resource* resource) {
 
 void DocumentLoader::finishedLoading(double finishTime) {
   DCHECK(m_frame->loader().stateMachine()->creatingInitialEmptyDocument() ||
-         !m_frame->page()->defersLoading() ||
+         !m_frame->page()->suspended() ||
          InspectorInstrumentation::isDebuggerPaused(m_frame));
 
   double responseEndTime = finishTime;
@@ -299,7 +313,7 @@ void DocumentLoader::finishedLoading(double finishTime) {
     return;
 
   m_applicationCacheHost->finishedLoadingMainResource();
-  endWriting(m_writer.get());
+  endWriting();
   if (m_state < MainResourceDone)
     m_state = MainResourceDone;
   clearMainResourceHandle();
@@ -340,8 +354,7 @@ bool DocumentLoader::redirectReceived(
 }
 
 static bool canShowMIMEType(const String& mimeType, LocalFrame* frame) {
-  if (Platform::current()->mimeRegistry()->supportsMIMEType(mimeType) ==
-      WebMimeRegistry::IsSupported)
+  if (MIMETypeRegistry::isSupportedMIMEType(mimeType))
     return true;
   PluginData* pluginData = frame->pluginData();
   return !mimeType.isEmpty() && pluginData &&
@@ -387,7 +400,7 @@ void DocumentLoader::cancelLoadAfterXFrameOptionsOrCSPDenied(
   KURL blockedURL = SecurityOrigin::urlWithUniqueSecurityOrigin();
   m_originalRequest.setURL(blockedURL);
   m_request.setURL(blockedURL);
-  m_redirectChain.removeLast();
+  m_redirectChain.pop_back();
   appendRedirect(blockedURL);
   m_response = ResourceResponse(blockedURL, "text/html", 0, nullAtom, String());
   finishedLoading(monotonicallyIncreasingTime());
@@ -445,7 +458,30 @@ void DocumentLoader::responseReceived(
     }
   }
 
-  DCHECK(!m_frame->page()->defersLoading());
+  if (RuntimeEnabledFeatures::embedderCSPEnforcementEnabled() &&
+      !frameLoader()->requiredCSP().isEmpty()) {
+    SecurityOrigin* parentSecurityOrigin =
+        frame()->tree().parent()->securityContext()->getSecurityOrigin();
+    if (ContentSecurityPolicy::shouldEnforceEmbeddersPolicy(
+            response, parentSecurityOrigin)) {
+      m_contentSecurityPolicy->addPolicyFromHeaderValue(
+          frameLoader()->requiredCSP(), ContentSecurityPolicyHeaderTypeEnforce,
+          ContentSecurityPolicyHeaderSourceHTTP);
+    } else {
+      String message = "Refused to display '" + response.url().elidedString() +
+                       "' because it has not opted-into the following policy "
+                       "required by its embedder: '" +
+                       frameLoader()->requiredCSP() + "'.";
+      ConsoleMessage* consoleMessage = ConsoleMessage::createForRequest(
+          SecurityMessageSource, ErrorMessageLevel, message, response.url(),
+          mainResourceIdentifier());
+      frame()->document()->addConsoleMessage(consoleMessage);
+      cancelLoadAfterXFrameOptionsOrCSPDenied(response);
+      return;
+    }
+  }
+
+  DCHECK(!m_frame->page()->suspended());
 
   m_response = response;
 
@@ -527,7 +563,7 @@ void DocumentLoader::dataReceived(Resource* resource,
   DCHECK(length);
   DCHECK_EQ(resource, m_mainResource);
   DCHECK(!m_response.isNull());
-  DCHECK(!m_frame->page()->defersLoading());
+  DCHECK(!m_frame->page()->suspended());
 
   if (m_inDataReceived) {
     // If this function is reentered, defer processing of the additional data to
@@ -681,7 +717,13 @@ void DocumentLoader::startLoadingMainResource() {
                             mainResourceLoadOptions);
   m_mainResource =
       RawResource::fetchMainResource(fetchRequest, fetcher(), m_substituteData);
-  if (!m_mainResource) {
+
+  // PlzNavigate:
+  // The final access checks are still performed here, potentially rejecting
+  // the "provisional" load, but the browser side already expects the renderer
+  // to be able to unconditionally commit.
+  if (!m_mainResource || (m_frame->settings()->browserSideNavigationEnabled() &&
+                          m_mainResource->errorOccurred())) {
     m_request = ResourceRequest(blankURL());
     maybeLoadEmpty();
     return;
@@ -694,8 +736,7 @@ void DocumentLoader::startLoadingMainResource() {
   m_mainResource->addClient(this);
 }
 
-void DocumentLoader::endWriting(DocumentWriter* writer) {
-  DCHECK_EQ(m_writer, writer);
+void DocumentLoader::endWriting() {
   m_writer->end();
   m_writer.clear();
 }
@@ -753,7 +794,7 @@ void DocumentLoader::replaceDocumentWhileExecutingJavaScriptURL(
                              ForceSynchronousParsing);
   if (!source.isNull())
     m_writer->appendReplacingData(source);
-  endWriting(m_writer.get());
+  endWriting();
 }
 
 DEFINE_WEAK_IDENTIFIER_MAP(DocumentLoader);

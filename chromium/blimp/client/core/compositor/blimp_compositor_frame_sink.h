@@ -32,6 +32,8 @@ class BlimpCompositorFrameSink : public cc::CompositorFrameSink,
   BlimpCompositorFrameSink(
       scoped_refptr<cc::ContextProvider> compositor_context_provider,
       scoped_refptr<cc::ContextProvider> worker_context_provider,
+      gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
+      cc::SharedBitmapManager* shared_bitmap_manager,
       scoped_refptr<base::SingleThreadTaskRunner> main_task_runner,
       base::WeakPtr<BlimpCompositorFrameSinkProxy> main_thread_proxy);
 
@@ -40,17 +42,16 @@ class BlimpCompositorFrameSink : public cc::CompositorFrameSink,
   // cc::CompositorFrameSink implementation.
   bool BindToClient(cc::CompositorFrameSinkClient* client) override;
   void DetachFromClient() override;
-  void SwapBuffers(cc::CompositorFrame frame) override;
+  void SubmitCompositorFrame(cc::CompositorFrame frame) override;
 
   // BlimpCompositorFrameSinkProxyClient implementation.
   void ReclaimCompositorResources(
       const cc::ReturnedResourceArray& resources) override;
+  void SubmitCompositorFrameAck() override;
 
  private:
   scoped_refptr<base::SingleThreadTaskRunner> main_task_runner_;
   base::WeakPtr<BlimpCompositorFrameSinkProxy> main_thread_proxy_;
-
-  bool bound_to_client_;
 
   // This CompositorFrameSink is responsible for providing the BeginFrameSource
   // to drive frame creation.  This will be built on the compositor impl thread

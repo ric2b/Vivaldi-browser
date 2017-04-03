@@ -95,8 +95,9 @@ class PDFExtensionTest : public ExtensionApiTest,
   void SetUpOnMainThread() override {
     ExtensionApiTest::SetUpOnMainThread();
     host_resolver()->AddRule("*", "127.0.0.1");
-    ASSERT_TRUE(embedded_test_server()->Start());
+    ASSERT_TRUE(embedded_test_server()->InitializeAndListen());
     content::SetupCrossSiteRedirector(embedded_test_server());
+    embedded_test_server()->StartAcceptingConnections();
   }
 
   void TearDownOnMainThread() override {
@@ -397,6 +398,10 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionTest, ParamsParser) {
 
 IN_PROC_BROWSER_TEST_F(PDFExtensionTest, ZoomManager) {
   RunTestsInFile("zoom_manager_test.js", "test.pdf");
+}
+
+IN_PROC_BROWSER_TEST_F(PDFExtensionTest, GestureDetector) {
+  RunTestsInFile("gesture_detector_test.js", "test.pdf");
 }
 
 IN_PROC_BROWSER_TEST_F(PDFExtensionTest, Elements) {
@@ -908,4 +913,11 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionTest, LinkShiftLeftClick) {
 
   const GURL& url = active_web_contents->GetURL();
   ASSERT_EQ(std::string("http://www.example.com/"), url.spec());
+}
+
+// Test that if the plugin tries to load a URL that redirects then it will fail
+// to load. This is to avoid the source origin of the document changing during
+// the redirect, which can have security implications. https://crbug.com/653749.
+IN_PROC_BROWSER_TEST_F(PDFExtensionTest, RedirectsFailInPlugin) {
+  RunTestsInFile("redirects_fail_test.js", "test.pdf");
 }

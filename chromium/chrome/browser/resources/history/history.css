@@ -504,7 +504,7 @@ html .expand .site-domain-arrow {
   -webkit-margin-end: 3px;
   -webkit-margin-start: 8px;
   background: no-repeat center
-      url(../../../../../app/other_resources/webui/star_small.png);
+      url(../../../../ui/webui/resources/images/star_small.png);
   border: none;
   display: inline-block;
   height: 15px;

@@ -10,6 +10,7 @@
 #include "content/public/renderer/document_state.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_view.h"
+#include "extensions/features/features.h"
 #include "third_party/WebKit/public/platform/URLConversion.h"
 #include "third_party/WebKit/public/platform/WebContentSettingCallbacks.h"
 #include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
@@ -19,9 +20,10 @@
 #include "third_party/WebKit/public/web/WebFrameClient.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
 #include "third_party/WebKit/public/web/WebView.h"
+#include "url/origin.h"
 #include "url/url_constants.h"
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "extensions/common/constants.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/permissions/api_permission.h"
@@ -44,15 +46,15 @@ using content::NavigationState;
 namespace {
 
 GURL GetOriginOrURL(const WebFrame* frame) {
-  WebString top_origin = frame->top()->getSecurityOrigin().toString();
+  url::Origin top_origin = url::Origin(frame->top()->getSecurityOrigin());
   // The |top_origin| is unique ("null") e.g., for file:// URLs. Use the
   // document URL as the primary URL in those cases.
   // TODO(alexmos): This is broken for --site-per-process, since top() can be a
   // WebRemoteFrame which does not have a document(), and the WebRemoteFrame's
   // URL is not replicated.  See https://crbug.com/628759.
-  if (top_origin == "null" && frame->top()->isWebLocalFrame())
+  if (top_origin.unique() && frame->top()->isWebLocalFrame())
     return frame->top()->document().url();
-  return blink::WebStringToGURL(top_origin);
+  return top_origin.GetURL();
 }
 
 ContentSetting GetContentSettingFromRules(
@@ -87,7 +89,7 @@ ContentSettingsObserver::ContentSettingsObserver(
     : content::RenderFrameObserver(render_frame),
       content::RenderFrameObserverTracker<ContentSettingsObserver>(
           render_frame),
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
       extension_dispatcher_(extension_dispatcher),
 #endif
       allow_running_insecure_content_(false),
@@ -209,10 +211,9 @@ bool ContentSettingsObserver::allowDatabase(const WebString& name,
 
   bool result = false;
   Send(new ChromeViewHostMsg_AllowDatabase(
-      routing_id(),
-      blink::WebStringToGURL(frame->getSecurityOrigin().toString()),
-      blink::WebStringToGURL(frame->top()->getSecurityOrigin().toString()),
-      name, display_name, &result));
+      routing_id(), url::Origin(frame->getSecurityOrigin()).GetURL(),
+      url::Origin(frame->top()->getSecurityOrigin()).GetURL(), name,
+      display_name, &result));
   return result;
 }
 
@@ -235,8 +236,8 @@ void ContentSettingsObserver::requestFileSystemAccessAsync(
 
   Send(new ChromeViewHostMsg_RequestFileSystemAccessAsync(
       routing_id(), current_request_id_,
-      blink::WebStringToGURL(frame->getSecurityOrigin().toString()),
-      blink::WebStringToGURL(frame->top()->getSecurityOrigin().toString())));
+      url::Origin(frame->getSecurityOrigin()).GetURL(),
+      url::Origin(frame->top()->getSecurityOrigin()).GetURL()));
 }
 
 bool ContentSettingsObserver::allowImage(bool enabled_per_settings,
@@ -271,10 +272,8 @@ bool ContentSettingsObserver::allowIndexedDB(const WebString& name,
 
   bool result = false;
   Send(new ChromeViewHostMsg_AllowIndexedDB(
-      routing_id(),
-      blink::WebStringToGURL(frame->getSecurityOrigin().toString()),
-      blink::WebStringToGURL(frame->top()->getSecurityOrigin().toString()),
-      name, &result));
+      routing_id(), url::Origin(frame->getSecurityOrigin()).GetURL(),
+      url::Origin(frame->top()->getSecurityOrigin()).GetURL(), name, &result));
   return result;
 }
 
@@ -300,8 +299,7 @@ bool ContentSettingsObserver::allowScript(bool enabled_per_settings) {
   if (content_setting_rules_) {
     ContentSetting setting = GetContentSettingFromRules(
         content_setting_rules_->script_rules, frame,
-        blink::WebStringToGURL(
-            frame->document().getSecurityOrigin().toString()));
+        url::Origin(frame->document().getSecurityOrigin()).GetURL());
     allow = setting != CONTENT_SETTING_BLOCK;
   }
   allow = allow || IsWhitelistedForContentSettings();
@@ -342,25 +340,22 @@ bool ContentSettingsObserver::allowStorage(bool local) {
     DCHECK(false);
 
   StoragePermissionsKey key(
-      blink::WebStringToGURL(frame->document().getSecurityOrigin().toString()),
-      local);
+      url::Origin(frame->document().getSecurityOrigin()).GetURL(), local);
   const auto permissions = cached_storage_permissions_.find(key);
   if (permissions != cached_storage_permissions_.end())
     return permissions->second;
 
   bool result = false;
   Send(new ChromeViewHostMsg_AllowDOMStorage(
-      render_frame_id,
-      blink::WebStringToGURL(frame->getSecurityOrigin().toString()),
-      blink::WebStringToGURL(frame->top()->getSecurityOrigin().toString()),
-      local, &result));
+      render_frame_id, url::Origin(frame->getSecurityOrigin()).GetURL(),
+      url::Origin(frame->top()->getSecurityOrigin()).GetURL(), local, &result));
   cached_storage_permissions_[key] = result;
   return result;
 }
 
 bool ContentSettingsObserver::allowReadFromClipboard(bool default_value) {
   bool allowed = default_value;
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   extensions::ScriptContext* current_context =
       extension_dispatcher_->script_context_set().GetCurrent();
   if (current_context) {
@@ -373,7 +368,7 @@ bool ContentSettingsObserver::allowReadFromClipboard(bool default_value) {
 
 bool ContentSettingsObserver::allowWriteToClipboard(bool default_value) {
   bool allowed = default_value;
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   // All blessed extension pages could historically write to the clipboard, so
   // preserve that for compatibility.
   extensions::ScriptContext* current_context =
@@ -416,8 +411,7 @@ bool ContentSettingsObserver::allowAutoplay(bool default_value) {
   WebFrame* frame = render_frame()->GetWebFrame();
   return GetContentSettingFromRules(
              content_setting_rules_->autoplay_rules, frame,
-             blink::WebStringToGURL(
-                 frame->document().getSecurityOrigin().toString())) ==
+             url::Origin(frame->document().getSecurityOrigin()).GetURL()) ==
          CONTENT_SETTING_ALLOW;
 }
 
@@ -430,8 +424,7 @@ void ContentSettingsObserver::passiveInsecureContentFound(
 void ContentSettingsObserver::didUseKeygen() {
   WebFrame* frame = render_frame()->GetWebFrame();
   Send(new ChromeViewHostMsg_DidUseKeygen(
-      routing_id(),
-      blink::WebStringToGURL(frame->getSecurityOrigin().toString())));
+      routing_id(), url::Origin(frame->getSecurityOrigin()).GetURL()));
 }
 
 void ContentSettingsObserver::didNotAllowPlugins() {
@@ -485,7 +478,7 @@ void ContentSettingsObserver::ClearBlockedContentSettings() {
 }
 
 bool ContentSettingsObserver::IsPlatformApp() {
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   WebFrame* frame = render_frame()->GetWebFrame();
   WebSecurityOrigin origin = frame->document().getSecurityOrigin();
   const extensions::Extension* extension = GetExtension(origin);
@@ -495,7 +488,7 @@ bool ContentSettingsObserver::IsPlatformApp() {
 #endif
 }
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 const extensions::Extension* ContentSettingsObserver::GetExtension(
     const WebSecurityOrigin& origin) const {
   if (!base::EqualsASCII(base::StringPiece16(origin.protocol()),
@@ -527,7 +520,7 @@ bool ContentSettingsObserver::IsWhitelistedForContentSettings() const {
 bool ContentSettingsObserver::IsWhitelistedForContentSettings(
     const WebSecurityOrigin& origin,
     const GURL& document_url) {
-  if (document_url == GURL(content::kUnreachableWebDataURL))
+  if (document_url == content::kUnreachableWebDataURL)
     return true;
 
   if (origin.isUnique())
@@ -540,7 +533,7 @@ bool ContentSettingsObserver::IsWhitelistedForContentSettings(
   if (base::EqualsASCII(protocol, content::kChromeDevToolsScheme))
     return true;  // DevTools UI elements should still work.
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   if (base::EqualsASCII(protocol, extensions::kExtensionScheme))
     return true;
 #endif

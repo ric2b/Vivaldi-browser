@@ -31,37 +31,33 @@
 #ifndef WebMIDIAccessorClient_h
 #define WebMIDIAccessorClient_h
 
+#include "media/midi/midi_service.mojom-shared.h"
 #include "public/platform/WebString.h"
 
 namespace blink {
 
 class WebMIDIAccessorClient {
  public:
-  enum MIDIPortState {
-    MIDIPortStateDisconnected,
-    MIDIPortStateConnected,
-  };
-
   // didAddInputPort() and didAddOutputPort() can be called before and after
   // didStartSession() is called. But |id| should be unique in each function.
   virtual void didAddInputPort(const WebString& id,
                                const WebString& manufacturer,
                                const WebString& name,
                                const WebString& version,
-                               MIDIPortState) = 0;
+                               midi::mojom::PortState) = 0;
   virtual void didAddOutputPort(const WebString& id,
                                 const WebString& manufacturer,
                                 const WebString& name,
                                 const WebString& version,
-                                MIDIPortState) = 0;
+                                midi::mojom::PortState) = 0;
   // didSetInputPortState() and didSetOutputPortState() should not be called
   // until didStartSession() is called.
-  virtual void didSetInputPortState(unsigned portIndex, MIDIPortState) = 0;
-  virtual void didSetOutputPortState(unsigned portIndex, MIDIPortState) = 0;
+  virtual void didSetInputPortState(unsigned portIndex,
+                                    midi::mojom::PortState) = 0;
+  virtual void didSetOutputPortState(unsigned portIndex,
+                                     midi::mojom::PortState) = 0;
 
-  virtual void didStartSession(bool success,
-                               const WebString& error,
-                               const WebString& message) = 0;
+  virtual void didStartSession(midi::mojom::Result) = 0;
 
   // |timeStamp| is in milliseconds according to the Web MIDI API.
   virtual void didReceiveMIDIData(unsigned portIndex,

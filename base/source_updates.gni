@@ -14,3 +14,10 @@ post_process_target("//base:base_static") {
     "//vivaldi/base/vivaldi_switches.h",
   ]
 }
+
+post_process_target("//chrome/browser:test_support") {
+  sources += [
+    "//vivaldi/base/vivaldi_paths.cc",
+    "//vivaldi/base/vivaldi_paths.h",
+  ]
+}

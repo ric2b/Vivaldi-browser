@@ -10,6 +10,7 @@
 #include "blimp/client/core/compositor/blob_image_serialization_processor.h"
 #include "blimp/client/core/render_widget/blimp_document.h"
 #include "blimp/client/core/render_widget/mock_render_widget_feature.h"
+#include "blimp/client/test/compositor/blimp_compositor_with_fake_host.h"
 #include "blimp/client/test/compositor/mock_compositor_dependencies.h"
 #include "cc/proto/compositor_message.pb.h"
 #include "cc/surfaces/surface_manager.h"
@@ -27,38 +28,19 @@ namespace {
 
 const int kDummyBlimpContentsId = 0;
 
-class MockBlimpCompositor : public BlimpCompositor {
- public:
-  explicit MockBlimpCompositor(
-      BlimpCompositorDependencies* compositor_dependencies,
-      BlimpCompositorClient* client)
-      : BlimpCompositor(compositor_dependencies, client) {}
-
-  MOCK_METHOD1(SetVisible, void(bool));
-  MOCK_METHOD1(OnTouchEvent, bool(const ui::MotionEvent& motion_event));
-
-  void OnCompositorMessageReceived(
-      std::unique_ptr<cc::proto::CompositorMessage> message) override {
-    MockableOnCompositorMessageReceived(*message);
-  }
-  MOCK_METHOD1(MockableOnCompositorMessageReceived,
-               void(const cc::proto::CompositorMessage&));
-};
-
 class MockBlimpDocument : public BlimpDocument {
  public:
-  explicit MockBlimpDocument(const int render_widget_id,
+  explicit MockBlimpDocument(const int document_id,
                              BlimpCompositorDependencies* compositor_deps,
                              BlimpDocumentManager* document_manager)
-      : BlimpDocument(render_widget_id, compositor_deps, document_manager) {
-    SetCompositorForTest(
-        base::MakeUnique<MockBlimpCompositor>(compositor_deps, this));
-  }
-
-  using BlimpDocument::GetCompositor;
+      : BlimpDocument(
+            document_id,
+            BlimpCompositorWithFakeHost::Create(compositor_deps, this),
+            compositor_deps,
+            document_manager) {}
 
   MOCK_METHOD1(SetVisible, void(bool));
-  MOCK_METHOD1(OnTouchEvent, bool(const ui::MotionEvent& motion_event));
+  MOCK_METHOD1(OnTouchEvent, bool(const ui::MotionEvent&));
 };
 
 class BlimpDocumentManagerForTesting : public BlimpDocumentManager {
@@ -74,9 +56,9 @@ class BlimpDocumentManagerForTesting : public BlimpDocumentManager {
   using BlimpDocumentManager::GetDocument;
 
   std::unique_ptr<BlimpDocument> CreateBlimpDocument(
-      int render_widget_id,
+      int document_id,
       BlimpCompositorDependencies* compositor_dependencies) override {
-    return base::MakeUnique<MockBlimpDocument>(render_widget_id,
+    return base::MakeUnique<MockBlimpDocument>(document_id,
                                                compositor_dependencies, this);
   }
 };
@@ -96,8 +78,6 @@ class BlimpDocumentManagerTest : public testing::Test {
   }
 
   void TearDown() override {
-    mock_compositor1_ = nullptr;
-    mock_compositor2_ = nullptr;
     document_manager_.reset();
     compositor_dependencies_.reset();
   }
@@ -110,14 +90,6 @@ class BlimpDocumentManagerTest : public testing::Test {
         static_cast<MockBlimpDocument*>(document_manager_->GetDocument(1));
     mock_document2_ =
         static_cast<MockBlimpDocument*>(document_manager_->GetDocument(2));
-
-    mock_compositor1_ =
-        static_cast<MockBlimpCompositor*>(mock_document1_->GetCompositor());
-    mock_compositor2_ =
-        static_cast<MockBlimpCompositor*>(mock_document2_->GetCompositor());
-
-    EXPECT_NE(mock_compositor1_, nullptr);
-    EXPECT_NE(mock_compositor2_, nullptr);
 
     EXPECT_EQ(mock_document1_->document_id(), 1);
     EXPECT_EQ(mock_document2_->document_id(), 2);
@@ -136,8 +108,6 @@ class BlimpDocumentManagerTest : public testing::Test {
   MockRenderWidgetFeature render_widget_feature_;
   MockBlimpDocument* mock_document1_;
   MockBlimpDocument* mock_document2_;
-  MockBlimpCompositor* mock_compositor1_;
-  MockBlimpCompositor* mock_compositor2_;
 };
 
 TEST_F(BlimpDocumentManagerTest, IncomingMessagesToCompositor) {
@@ -145,19 +115,23 @@ TEST_F(BlimpDocumentManagerTest, IncomingMessagesToCompositor) {
 
   // When receiving a compositor message from the engine, ensure that the
   // messages are forwarded to the correct compositor.
-  EXPECT_CALL(*mock_compositor1_, MockableOnCompositorMessageReceived(_))
-      .Times(2);
-  EXPECT_CALL(*mock_compositor2_, MockableOnCompositorMessageReceived(_))
-      .Times(1);
-  EXPECT_CALL(*mock_compositor1_, SetVisible(false)).Times(1);
+  BlimpCompositorWithFakeHost* fake_compositor =
+      static_cast<BlimpCompositorWithFakeHost*>(
+          mock_document1_->GetCompositor());
 
+  EXPECT_FALSE(
+      mock_document1_->GetCompositor()->HasPendingFrameUpdateFromEngine());
   delegate()->OnCompositorMessageReceived(
-      1, base::WrapUnique(new cc::proto::CompositorMessage));
-  delegate()->OnRenderWidgetInitialized(1);
+      1, fake_compositor->CreateFakeUpdate(cc::Layer::Create()));
+  EXPECT_TRUE(
+      mock_document1_->GetCompositor()->HasPendingFrameUpdateFromEngine());
+
+  EXPECT_FALSE(
+      mock_document2_->GetCompositor()->HasPendingFrameUpdateFromEngine());
   delegate()->OnCompositorMessageReceived(
-      2, base::WrapUnique(new cc::proto::CompositorMessage));
-  delegate()->OnCompositorMessageReceived(
-      1, base::WrapUnique(new cc::proto::CompositorMessage));
+      2, fake_compositor->CreateFakeUpdate(cc::Layer::Create()));
+  EXPECT_TRUE(
+      mock_document2_->GetCompositor()->HasPendingFrameUpdateFromEngine());
 
   delegate()->OnRenderWidgetDeleted(1);
   EXPECT_EQ(document_manager_->GetDocument(1), nullptr);
@@ -179,55 +153,45 @@ TEST_F(BlimpDocumentManagerTest, OutgoingMessagesToMessageProcessor) {
 }
 
 TEST_F(BlimpDocumentManagerTest, ForwardsViewEventsToCorrectCompositor) {
-  InSequence sequence;
   SetUpDocuments();
 
-  EXPECT_CALL(*mock_compositor1_, SetVisible(true));
-  EXPECT_CALL(*mock_compositor1_, OnTouchEvent(_));
-  EXPECT_CALL(*mock_compositor1_, SetVisible(false));
-
-  EXPECT_CALL(*mock_compositor2_, SetVisible(true));
-  EXPECT_CALL(*mock_compositor2_, SetVisible(false));
-
-  // Make the compositor manager visible while we don't have any render widget
+  // Make the document manager visible while we don't have any render widget
   // initialized.
   document_manager_->SetVisible(true);
 
   // Initialize the first render widget. This should propagate the visibility,
-  // and the touch events to the corresponding compositor.
+  // and the touch events to the corresponding document.
   delegate()->OnRenderWidgetInitialized(1);
-
-  // Ensure the |document_manager_| holds the correct compositor layer.
-  // And the root layer only has one child.
-  EXPECT_EQ(document_manager_->layer(), mock_compositor1_->layer()->parent());
-  EXPECT_EQ(static_cast<int>(document_manager_->layer()->children().size()), 1);
-
+  EXPECT_TRUE(mock_document1_->GetCompositor()->IsVisible());
+  EXPECT_CALL(*mock_document1_, OnTouchEvent(_));
   document_manager_->OnTouchEvent(
       ui::MotionEventGeneric(ui::MotionEvent::Action::ACTION_NONE,
                              base::TimeTicks::Now(), ui::PointerProperties()));
 
-  // Now initialize the second render widget. This should swap the compositors
-  // and make the first one invisible.
-  delegate()->OnRenderWidgetInitialized(2);
-
-  // Ensure the |document_manager_| swaps to another compositor.
-  EXPECT_EQ(document_manager_->layer(), mock_compositor2_->layer()->parent());
+  // Ensure the |document_manager_| holds the correct compositor layer.
+  // And the root layer only has one child.
+  EXPECT_EQ(document_manager_->layer(),
+            mock_document1_->GetCompositor()->layer()->parent());
   EXPECT_EQ(static_cast<int>(document_manager_->layer()->children().size()), 1);
 
-  // Now make the compositor manager invisible. This should make the current
-  // compositor invisible.
-  document_manager_->SetVisible(false);
+  // Now initialize the second render widget. This should swap the documents
+  // and make the first one invisible.
+  delegate()->OnRenderWidgetInitialized(2);
+  EXPECT_FALSE(mock_document1_->GetCompositor()->IsVisible());
+  EXPECT_TRUE(mock_document2_->GetCompositor()->IsVisible());
 
-  // Destroy all the widgets. We should not be receiving any calls for the view
-  // events forwarded after this.
+  // Ensure the content layer corresponds to the initialized document.
+  EXPECT_EQ(document_manager_->layer(),
+            mock_document2_->GetCompositor()->layer()->parent());
+  EXPECT_EQ(static_cast<int>(document_manager_->layer()->children().size()), 1);
+
+  // Destroy all the widgets.
   delegate()->OnRenderWidgetDeleted(1);
   delegate()->OnRenderWidgetDeleted(2);
 
   // The |document_manager_| should detach the compositor layer after active
   // document is destroyed.
   EXPECT_EQ(static_cast<int>(document_manager_->layer()->children().size()), 0);
-
-  document_manager_->SetVisible(true);
 }
 
 }  // namespace

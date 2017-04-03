@@ -25,7 +25,12 @@ QuicClientPromisedInfo::~QuicClientPromisedInfo() {}
 
 void QuicClientPromisedInfo::CleanupAlarm::OnAlarm() {
   DVLOG(1) << "self GC alarm for stream " << promised_->id_;
-  promised_->Reset(QUIC_STREAM_CANCELLED);
+  promised_->session()->OnPushStreamTimedOut(promised_->id_);
+  if (FLAGS_quic_send_push_stream_timed_out_error) {
+    promised_->Reset(QUIC_PUSH_STREAM_TIMED_OUT);
+  } else {
+    promised_->Reset(QUIC_STREAM_CANCELLED);
+  }
 }
 
 void QuicClientPromisedInfo::Init() {
@@ -106,6 +111,15 @@ QuicAsyncStatus QuicClientPromisedInfo::HandleClientRequest(
     session_->DeletePromised(this);
     return QUIC_FAILURE;
   }
+
+  if (is_validating()) {
+    // The push promise has already been matched to another request though
+    // pending for validation. Returns QUIC_FAILURE to the caller as it couldn't
+    // match a new request any more. This will not affect the validation of the
+    // other request.
+    return QUIC_FAILURE;
+  }
+
   client_request_delegate_ = delegate;
   client_request_headers_.reset(new SpdyHeaderBlock(request_headers.Clone()));
   if (!response_headers_) {

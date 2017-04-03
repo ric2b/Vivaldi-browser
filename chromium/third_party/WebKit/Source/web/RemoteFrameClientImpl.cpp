@@ -9,8 +9,8 @@
 #include "core/events/WheelEvent.h"
 #include "core/frame/RemoteFrame.h"
 #include "core/frame/RemoteFrameView.h"
-#include "core/layout/LayoutPart.h"
 #include "core/layout/api/LayoutItem.h"
+#include "core/layout/api/LayoutPartItem.h"
 #include "platform/exported/WrappedResourceRequest.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "platform/weborigin/SecurityPolicy.h"
@@ -87,20 +87,12 @@ Frame* RemoteFrameClientImpl::top() const {
   return toCoreFrame(m_webFrame->top());
 }
 
-Frame* RemoteFrameClientImpl::previousSibling() const {
-  return toCoreFrame(m_webFrame->previousSibling());
-}
-
 Frame* RemoteFrameClientImpl::nextSibling() const {
   return toCoreFrame(m_webFrame->nextSibling());
 }
 
 Frame* RemoteFrameClientImpl::firstChild() const {
   return toCoreFrame(m_webFrame->firstChild());
-}
-
-Frame* RemoteFrameClientImpl::lastChild() const {
-  return toCoreFrame(m_webFrame->lastChild());
 }
 
 void RemoteFrameClientImpl::frameFocused() const {
@@ -155,7 +147,7 @@ void RemoteFrameClientImpl::forwardInputEvent(Event* event) {
   // implemented, since this code path will need to be removed or refactored
   // anyway.
   // See https://crbug.com/520705.
-  if (!m_webFrame->toImplBase()->frame()->ownerLayoutObject())
+  if (m_webFrame->toImplBase()->frame()->ownerLayoutItem().isNull())
     return;
 
   // This is only called when we have out-of-process iframes, which
@@ -168,7 +160,7 @@ void RemoteFrameClientImpl::forwardInputEvent(Event* event) {
   else if (event->isMouseEvent())
     webEvent = wrapUnique(new WebMouseEventBuilder(
         m_webFrame->frame()->view(),
-        LayoutItem(m_webFrame->toImplBase()->frame()->ownerLayoutObject()),
+        m_webFrame->toImplBase()->frame()->ownerLayoutItem(),
         *static_cast<MouseEvent*>(event)));
 
   // Other or internal Blink events should not be forwarded.
@@ -190,6 +182,10 @@ void RemoteFrameClientImpl::advanceFocus(WebFocusType type,
 
 void RemoteFrameClientImpl::visibilityChanged(bool visible) {
   m_webFrame->client()->visibilityChanged(visible);
+}
+
+void RemoteFrameClientImpl::setHasReceivedUserGesture() {
+  m_webFrame->client()->setHasReceivedUserGesture();
 }
 
 }  // namespace blink

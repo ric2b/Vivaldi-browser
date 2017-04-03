@@ -19,12 +19,12 @@ import java.util.List;
  * the Java counterpart of content::MediaMetadata.
  */
 @JNINamespace("content")
-public class MediaMetadata {
+public final class MediaMetadata {
     /**
-     * The Artwork class carries the artwork information in MediaMetadata. It is the Java
-     * counterpart of content::MediaMetadata::Artwork.
+     * The MediaImage class carries the artwork information in MediaMetadata. It is the Java
+     * counterpart of content::MediaMetadata::MediaImage.
      */
-    public static class Artwork {
+    public static final class MediaImage {
         @NonNull
         private String mSrc;
 
@@ -34,16 +34,16 @@ public class MediaMetadata {
         private List<Rect> mSizes = new ArrayList<Rect>();
 
         /**
-         * Creates a new Artwork.
+         * Creates a new MediaImage.
          */
-        public Artwork(@NonNull String src, String type, List<Rect> sizes) {
+        public MediaImage(@NonNull String src, @NonNull String type, @NonNull List<Rect> sizes) {
             mSrc = src;
             mType = type;
             mSizes = sizes;
         }
 
         /**
-         * Returns the URL of this Artwork.
+         * @return The URL of this MediaImage.
          */
         @NonNull
         public String getSrc() {
@@ -51,38 +51,61 @@ public class MediaMetadata {
         }
 
         /**
-         * Returns the MIME type of this Artwork.
+         * @return The MIME type of this MediaImage.
          */
         public String getType() {
             return mType;
         }
 
         /**
-         * Returns the hinted sizes of this Artwork.
+         * @return The hinted sizes of this MediaImage.
          */
         public List<Rect> getSizes() {
             return mSizes;
         }
 
         /**
-         * Sets the URL of this Artwork.
+         * Sets the URL of this MediaImage.
          */
-        public void setSrc(String src) {
+        public void setSrc(@NonNull String src) {
             mSrc = src;
         }
 
         /**
-         * Sets the MIME type of this Artwork.
+         * Sets the MIME type of this MediaImage.
          */
-        public void setType(String type) {
+        public void setType(@NonNull String type) {
             mType = type;
         }
 
         /**
-         * Sets the sizes of this Artwork.
+         * Sets the sizes of this MediaImage.
          */
-        public void setSizes(List<Rect> sizes) {
+        public void setSizes(@NonNull List<Rect> sizes) {
             mSizes = sizes;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (obj == this) return true;
+            if (!(obj instanceof MediaImage)) return false;
+
+            MediaImage other = (MediaImage) obj;
+            return TextUtils.equals(mSrc, other.mSrc)
+                    && TextUtils.equals(mType, other.mType)
+                    && mSizes.equals(other.mSizes);
+        }
+
+        /**
+         * @return The hash code of this {@link MediaImage}. The method uses the same algorithm in
+         * {@link java.util.List} for combinine hash values.
+         */
+        @Override
+        public int hashCode() {
+            int result = mSrc.hashCode();
+            result = 31 * result + mType.hashCode();
+            result = 31 * result + mSizes.hashCode();
+            return result;
         }
     }
 
@@ -96,7 +119,7 @@ public class MediaMetadata {
     private String mAlbum;
 
     @NonNull
-    private List<Artwork> mArtwork = new ArrayList<Artwork>();
+    private List<MediaImage> mArtwork = new ArrayList<MediaImage>();
 
     /**
      * Returns the title associated with the media session.
@@ -119,7 +142,7 @@ public class MediaMetadata {
         return mAlbum;
     }
 
-    public List<Artwork> getArtwork() {
+    public List<MediaImage> getArtwork() {
         return mArtwork;
     }
 
@@ -127,7 +150,7 @@ public class MediaMetadata {
      * Sets the title associated with the media session.
      * @param title The title to use for the media session.
      */
-    public void setTitle(String title) {
+    public void setTitle(@NonNull String title) {
         mTitle = title;
     }
 
@@ -135,7 +158,7 @@ public class MediaMetadata {
      * Sets the arstist name associated with the media session.
      * @param arstist The artist name to use for the media session.
      */
-    public void setArtist(String artist) {
+    public void setArtist(@NonNull String artist) {
         mArtist = artist;
     }
 
@@ -143,25 +166,25 @@ public class MediaMetadata {
      * Sets the album name associated with the media session.
      * @param album The album name to use for the media session.
      */
-    public void setAlbum(String album) {
+    public void setAlbum(@NonNull String album) {
         mAlbum = album;
     }
 
     /**
-     * Create a new MediaArtwork from the C++ code, and add it to the Metadata.
-     * @param src The URL of the artwork.
-     * @param type The MIME type of the artwork.
-     * @param flattenedSizes The flattened array of Artwork sizes. In native code, it is of type
+     * Create a new {@link MediaImage} from the C++ code, and add it to the Metadata.
+     * @param src The URL of the image.
+     * @param type The MIME type of the image.
+     * @param flattenedSizes The flattened array of image sizes. In native code, it is of type
      *         `std::vector<gfx::Size>` before flattening.
      */
     @CalledByNative
-    private void createAndAddArtwork(String src, String type, int[] flattenedSizes) {
+    private void createAndAddMediaImage(String src, String type, int[] flattenedSizes) {
         assert (flattenedSizes.length % 2) == 0;
         List<Rect> sizes = new ArrayList<Rect>();
         for (int i = 0; (i + 1) < flattenedSizes.length; i += 2) {
             sizes.add(new Rect(0, 0, flattenedSizes[i], flattenedSizes[i + 1]));
         }
-        mArtwork.add(new Artwork(src, type, sizes));
+        mArtwork.add(new MediaImage(src, type, sizes));
     }
 
     /**
@@ -184,12 +207,8 @@ public class MediaMetadata {
     }
 
     /**
-     * Copy constructor.
+     * Comparing MediaMetadata is expensive and should be used sparingly
      */
-    public MediaMetadata(MediaMetadata other) {
-        this(other.mTitle, other.mArtist, other.mAlbum);
-    }
-
     @Override
     public boolean equals(Object obj) {
         if (obj == this) return true;
@@ -198,14 +217,20 @@ public class MediaMetadata {
         MediaMetadata other = (MediaMetadata) obj;
         return TextUtils.equals(mTitle, other.mTitle)
                 && TextUtils.equals(mArtist, other.mArtist)
-                && TextUtils.equals(mAlbum, other.mAlbum);
+                && TextUtils.equals(mAlbum, other.mAlbum)
+                && mArtwork.equals(other.mArtwork);
     }
 
+    /**
+     * @return The hash code of this {@link MediaMetadata}. The method uses the same algorithm in
+     * {@link java.util.List} for combinine hash values.
+     */
     @Override
     public int hashCode() {
         int result = mTitle.hashCode();
         result = 31 * result + mArtist.hashCode();
         result = 31 * result + mAlbum.hashCode();
+        result = 31 * result + mArtwork.hashCode();
         return result;
     }
 }

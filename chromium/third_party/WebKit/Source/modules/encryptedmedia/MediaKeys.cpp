@@ -25,15 +25,17 @@
 
 #include "modules/encryptedmedia/MediaKeys.h"
 
+#include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptState.h"
+#include "bindings/core/v8/V8ThrowException.h"
 #include "core/dom/DOMArrayBuffer.h"
 #include "core/dom/DOMException.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/html/HTMLMediaElement.h"
+#include "modules/encryptedmedia/ContentDecryptionModuleResultPromise.h"
 #include "modules/encryptedmedia/EncryptedMediaUtils.h"
 #include "modules/encryptedmedia/MediaKeySession.h"
-#include "modules/encryptedmedia/SimpleContentDecryptionModuleResultPromise.h"
 #include "platform/Timer.h"
 #include "public/platform/WebContentDecryptionModule.h"
 #include "wtf/RefPtr.h"
@@ -82,17 +84,26 @@ class MediaKeys::PendingAction final
 class SetCertificateResultPromise
     : public ContentDecryptionModuleResultPromise {
  public:
-  SetCertificateResultPromise(ScriptState* scriptState)
-      : ContentDecryptionModuleResultPromise(scriptState) {}
+  SetCertificateResultPromise(ScriptState* scriptState, MediaKeys* mediaKeys)
+      : ContentDecryptionModuleResultPromise(scriptState),
+        m_mediaKeys(mediaKeys) {}
 
   ~SetCertificateResultPromise() override {}
 
   // ContentDecryptionModuleResult implementation.
-  void complete() override { resolve(true); }
+  void complete() override {
+    if (!isValidToFulfillPromise())
+      return;
+
+    resolve(true);
+  }
 
   void completeWithError(WebContentDecryptionModuleException exceptionCode,
                          unsigned long systemCode,
                          const WebString& errorMessage) override {
+    if (!isValidToFulfillPromise())
+      return;
+
     // The EME spec specifies that "If the Key System implementation does
     // not support server certificates, return a promise resolved with
     // false." So convert any NOTSUPPORTEDERROR into resolving with false.
@@ -104,6 +115,14 @@ class SetCertificateResultPromise
     ContentDecryptionModuleResultPromise::completeWithError(
         exceptionCode, systemCode, errorMessage);
   }
+
+  DEFINE_INLINE_TRACE() {
+    visitor->trace(m_mediaKeys);
+    ContentDecryptionModuleResultPromise::trace(visitor);
+  }
+
+ private:
+  Member<MediaKeys> m_mediaKeys;
 };
 
 MediaKeys* MediaKeys::create(
@@ -173,19 +192,20 @@ ScriptPromise MediaKeys::setServerCertificate(
   // The setServerCertificate(serverCertificate) method provides a server
   // certificate to be used to encrypt messages to the license server.
   // It must run the following steps:
-  // 1. If serverCertificate is an empty array, return a promise rejected
-  //    with a new DOMException whose name is "InvalidAccessError".
+  // 1. If the Key System implementation represented by this object's cdm
+  //    implementation value does not support server certificates, return
+  //    a promise resolved with false.
+  // TODO(jrummell): Provide a way to determine if the CDM supports this.
+  // http://crbug.com/647816.
+  //
+  // 2. If serverCertificate is an empty array, return a promise rejected
+  //    with a new a newly created TypeError.
   if (!serverCertificate.byteLength()) {
-    return ScriptPromise::rejectWithDOMException(
-        scriptState,
-        DOMException::create(InvalidAccessError,
-                             "The serverCertificate parameter is empty."));
+    return ScriptPromise::reject(
+        scriptState, V8ThrowException::createTypeError(
+                         scriptState->isolate(),
+                         "The serverCertificate parameter is empty."));
   }
-
-  // 2. If the keySystem does not support server certificates, return a
-  //    promise rejected with a new DOMException whose name is
-  //    "NotSupportedError".
-  //    (Let the CDM decide whether to support this or not.)
 
   // 3. Let certificate be a copy of the contents of the serverCertificate
   //    parameter.
@@ -194,7 +214,7 @@ ScriptPromise MediaKeys::setServerCertificate(
 
   // 4. Let promise be a new promise.
   SetCertificateResultPromise* result =
-      new SetCertificateResultPromise(scriptState);
+      new SetCertificateResultPromise(scriptState, this);
   ScriptPromise promise = result->promise();
 
   // 5. Run the following steps asynchronously (documented in timerFired()).
@@ -277,8 +297,7 @@ DEFINE_TRACE(MediaKeys) {
 }
 
 void MediaKeys::contextDestroyed() {
-  if (m_timer.isActive())
-    m_timer.stop();
+  m_timer.stop();
   m_pendingActions.clear();
 
   // We don't need the CDM anymore. Only destroyed after all related

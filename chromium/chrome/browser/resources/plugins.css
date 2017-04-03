@@ -5,27 +5,11 @@
 body {
   margin: 10px;
   min-width: 47em;
-  width: 80%;
-  margin: 0 auto;
-  background-color: #F6F6F6;
-  color: #666;
-}
-
-#body-container {
-  background-color: white;
-  padding: 20px;
-  margin-top: 40px;
-  border: 1px solid #E6E6E6;
 }
 
 a {
-  color: #006BDA;
+  color: blue;
   font-size: 103%;
-}
-
-a:hover {
-  color: #333;
-  text-decoration: underline;
 }
 
 #header {
@@ -54,18 +38,9 @@ h1 {
   padding: 0;
 }
 
-td {
-  padding: 5px;
-}
-
-span {
-  margin-left: 5px;
-}
-
 #disabled-container {
   font-size: 120%;
   padding-bottom: 1.5em;
-  opacity: 0.5;
 }
 
 #disabled-header {
@@ -79,10 +54,11 @@ div.content {
 
 .section-header {
   -webkit-padding-start: 5px;
-  background: #F6F6F6;
+  background: rgb(235, 239, 249);
+  border-top: 1px solid rgb(181, 199, 222);
   font-size: 99%;
-  padding-bottom: 4px;
-  padding-top: 6px;
+  padding-bottom: 2px;
+  padding-top: 3px;
   width: 100%;
 }
 
@@ -117,25 +93,13 @@ div.content {
   overflow: hidden;
 }
 
-/* START Custom styling for details in expanded view */
-.show-in-tmi-mode.plugin-file {
-  padding: 0 !important;
-}
-
-.show-in-tmi-mode.plugin-details {
-  padding: 0 !important;
-  background-color: #F6F6F6;
-}
-/* END Custom styling for details in expanded view */
-
-
 body.hide-tmi-mode-initial .show-in-tmi-mode {
   height: 0 !important;
   opacity: 0;
 }
 
 body.hide-tmi-mode .show-in-tmi-mode {
-  -webkit-transition: all 50ms ease-out;
+  -webkit-transition: all 100ms ease-out;
   height: 0 !important;
   opacity: 0;
 }
@@ -145,7 +109,7 @@ body.show-tmi-mode-initial .show-in-tmi-mode {
 }
 
 body.show-tmi-mode .show-in-tmi-mode {
-  -webkit-transition: all 50ms ease-in;
+  -webkit-transition: all 100ms ease-in;
   opacity: 1;
 }
 
@@ -180,7 +144,8 @@ body.show-tmi-mode .show-in-tmi-mode {
 }
 
 .plugin-disabled {
-  color: #cccccc;
+  background-color: #f0f0f0;
+  color: #a0a0a0;
 }
 
 .plugin > tr > td {
@@ -194,7 +159,7 @@ body.show-tmi-mode .show-in-tmi-mode {
 }
 
 .plugin {
-
+  border-bottom: 1px solid #cdcdcd;
 }
 
 .critical {
@@ -203,18 +168,11 @@ body.show-tmi-mode .show-in-tmi-mode {
 
 /* Indent the text related to each plug-in. */
 .plugin-text {
-  margin-top: 10px;
-  border-top: 1px solid #E6E6E6;
-  border-left: 1px solid #E6E6E6;
-  border-right: 1px solid #E6E6E6;
-  margin-bottom: 10px;
-  padding-top: 5px;
+  -webkit-padding-start: 5px;
 }
 
 .plugin-name {
   font-weight: bold;
-  color: #006BDA;
-  margin-left: 5px;
 }
 
 .no-plugins {
@@ -230,10 +188,7 @@ body.show-tmi-mode .show-in-tmi-mode {
 }
 
 .plugin-details {
-  margin-top: 10px;
-  background-color: #F6F6F6;
-  border-top: 1px solid #e6e6e6;
-  box-shadow: inset 0px -1px 0px 0px #e6e6e6;
+  -webkit-padding-start: 1em;
 }
 
 /* Separate the inital line, Description, Location, and MIME Types lines. */
@@ -258,7 +213,7 @@ body.show-tmi-mode .show-in-tmi-mode {
 
 /* Separate the header from the contents in each MIME Types table. */
 .plugin-details .mime-types .header td {
-  border-bottom: 1px solid #ccc;
+  border-bottom: 1px solid black;
   padding-bottom: 0.1em;
 }
 
@@ -269,15 +224,9 @@ body.show-tmi-mode .show-in-tmi-mode {
 
 /* Match the indentation of .plugin-text. */
 .plugin-actions {
+  -webkit-padding-start: 5px;
   margin-bottom: 0.2em;
-  margin-top: 18px;
-  margin-right: 10px;
-  float: right;
-}
-
-.always-allow {
-  -webkit-margin-start: 30px;
-  margin-bottom: 10px;
+  margin-top: 0.2em;
 }
 
 button {

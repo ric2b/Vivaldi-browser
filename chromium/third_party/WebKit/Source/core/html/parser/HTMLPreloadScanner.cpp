@@ -241,21 +241,18 @@ class TokenPreloadScanner::StartTagScanner {
     ReferrerPolicy referrerPolicy = (m_referrerPolicy != ReferrerPolicyDefault)
                                         ? m_referrerPolicy
                                         : documentReferrerPolicy;
-    std::unique_ptr<PreloadRequest> request = PreloadRequest::create(
+    auto request = PreloadRequest::createIfNeeded(
         initiatorFor(m_tagImpl), position, m_urlToLoad, predictedBaseURL, type,
         referrerPolicy, resourceWidth, clientHintsPreferences, requestType);
+    if (!request)
+      return nullptr;
+
     request->setCrossOrigin(m_crossOrigin);
     request->setNonce(m_nonce);
     request->setCharset(charset());
     request->setDefer(m_defer);
     request->setIntegrityMetadata(m_integrityMetadata);
 
-    // TODO(csharrison): Once this is deprecated, just abort the request here.
-    if (match(m_tagImpl, scriptTag) &&
-        !ScriptLoader::isValidScriptTypeAndLanguage(
-            m_typeAttributeValue, m_languageAttributeValue,
-            ScriptLoader::AllowLegacyTypeInTypeAttribute))
-      request->setScriptHasInvalidTypeOrLanguage();
     return request;
   }
 
@@ -356,6 +353,12 @@ class TokenPreloadScanner::StartTagScanner {
     } else if (match(attributeName, typeAttr)) {
       m_matched &= MIMETypeRegistry::isSupportedStyleSheetMIMEType(
           ContentType(attributeValue).type());
+    } else if (!m_referrerPolicySet &&
+               match(attributeName, referrerpolicyAttr) &&
+               !attributeValue.isNull()) {
+      m_referrerPolicySet = true;
+      SecurityPolicy::referrerPolicyFromString(attributeValue,
+                                               &m_referrerPolicy);
     }
   }
 
@@ -399,6 +402,8 @@ class TokenPreloadScanner::StartTagScanner {
                              const String& attributeValue) {
     if (match(attributeName, posterAttr))
       setUrlToLoad(attributeValue, DisallowURLReplacement);
+    else if (match(attributeName, crossoriginAttr))
+      setCrossOrigin(attributeValue);
   }
 
   template <typename NameType>
@@ -481,6 +486,12 @@ class TokenPreloadScanner::StartTagScanner {
       return false;
     if (match(m_tagImpl, inputTag) && !m_inputIsImage)
       return false;
+    if (match(m_tagImpl, scriptTag) &&
+        !ScriptLoader::isValidScriptTypeAndLanguage(
+            m_typeAttributeValue, m_languageAttributeValue,
+            ScriptLoader::AllowLegacyTypeInTypeAttribute)) {
+      return false;
+    }
     return true;
   }
 
@@ -806,7 +817,10 @@ void TokenPreloadScanner::scanCommon(const Token& token,
 
       StartTagScanner scanner(tagImpl, m_mediaValues);
       scanner.processAttributes(token.attributes());
-      if (m_inPicture)
+      // TODO(yoav): ViewportWidth is currently racy and might be zero in some
+      // cases, at least in tests. That problem will go away once
+      // ParseHTMLOnMainThread lands and MediaValuesCached is eliminated.
+      if (m_inPicture && m_mediaValues->viewportWidth())
         scanner.handlePictureSourceURL(m_pictureData);
       std::unique_ptr<PreloadRequest> request = scanner.createPreloadRequest(
           m_predictedBaseElementURL, source, m_clientHintsPreferences,

@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "skia/ext/analysis_canvas.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkPicture.h"
@@ -153,7 +154,7 @@ TEST(AnalysisCanvasTest, SimpleDrawRect) {
 
   EXPECT_FALSE(canvas.GetColorIfSolid(&outputColor));
 
-  paint.setXfermodeMode(SkXfermode::kClear_Mode);
+  paint.setBlendMode(SkBlendMode::kClear);
   canvas.drawRect(SkRect::MakeWH(382, 382), paint);
 
   EXPECT_FALSE(canvas.GetColorIfSolid(&outputColor));
@@ -166,7 +167,7 @@ TEST(AnalysisCanvasTest, SimpleDrawRect) {
   canvas.translate(128, 128);
   color = SkColorSetARGB(255, 11, 22, 33);
   paint.setColor(color);
-  paint.setXfermodeMode(SkXfermode::kSrcOver_Mode);
+  paint.setBlendMode(SkBlendMode::kSrcOver);
   canvas.drawRect(SkRect::MakeWH(255, 255), paint);
 
   EXPECT_TRUE(canvas.GetColorIfSolid(&outputColor));
@@ -239,7 +240,7 @@ TEST(AnalysisCanvasTest, SaveLayerWithXfermode) {
   TransparentFill(canvas);
   EXPECT_TRUE(canvas.GetColorIfSolid(&outputColor));
   EXPECT_EQ(static_cast<SkColor>(SK_ColorTRANSPARENT), outputColor);
-  paint.setXfermodeMode(SkXfermode::kSrc_Mode);
+  paint.setBlendMode(SkBlendMode::kSrc);
   canvas.saveLayer(&bounds, &paint);
   canvas.restore();
   EXPECT_FALSE(canvas.GetColorIfSolid(&outputColor));
@@ -247,7 +248,7 @@ TEST(AnalysisCanvasTest, SaveLayerWithXfermode) {
   TransparentFill(canvas);
   EXPECT_TRUE(canvas.GetColorIfSolid(&outputColor));
   EXPECT_EQ(static_cast<SkColor>(SK_ColorTRANSPARENT), outputColor);
-  paint.setXfermodeMode(SkXfermode::kSrcOver_Mode);
+  paint.setBlendMode(SkBlendMode::kSrcOver);
   canvas.saveLayer(&bounds, &paint);
   canvas.restore();
   EXPECT_FALSE(canvas.GetColorIfSolid(&outputColor));
@@ -257,7 +258,7 @@ TEST(AnalysisCanvasTest, SaveLayerWithXfermode) {
   TransparentFill(canvas);
   EXPECT_TRUE(canvas.GetColorIfSolid(&outputColor));
   EXPECT_EQ(static_cast<SkColor>(SK_ColorTRANSPARENT), outputColor);
-  paint.setXfermodeMode(SkXfermode::kDst_Mode);
+  paint.setBlendMode(SkBlendMode::kDst);
   canvas.saveLayer(&bounds, &paint);
   canvas.restore();
   EXPECT_TRUE(canvas.GetColorIfSolid(&outputColor));
@@ -274,7 +275,7 @@ TEST(AnalysisCanvasTest, SaveLayerRestore) {
   SkRect bounds = SkRect::MakeWH(255, 255);
   SkPaint paint;
   paint.setColor(SkColorSetARGB(255, 255, 255, 255));
-  paint.setXfermodeMode(SkXfermode::kSrcOver_Mode);
+  paint.setBlendMode(SkBlendMode::kSrcOver);
 
   // This should force non-transparency
   canvas.saveLayer(&bounds, &paint);
@@ -288,7 +289,7 @@ TEST(AnalysisCanvasTest, SaveLayerRestore) {
   EXPECT_TRUE(canvas.GetColorIfSolid(&outputColor));
   EXPECT_NE(static_cast<SkColor>(SK_ColorTRANSPARENT), outputColor);
 
-  paint.setXfermodeMode(SkXfermode::kDst_Mode);
+  paint.setBlendMode(SkBlendMode::kDst);
 
   // This should force non-solid color
   canvas.saveLayer(&bounds, &paint);
@@ -335,7 +336,7 @@ TEST(AnalysisCanvasTest, EarlyOutNotSolid) {
 
   SkPaint paint;
   paint.setColor(SkColorSetARGB(255, 255, 255, 255));
-  paint.setXfermodeMode(SkXfermode::kSrcOver_Mode);
+  paint.setBlendMode(SkBlendMode::kSrcOver);
 
   record_canvas->drawRect(SkRect::MakeWH(256, 256), paint);
   record_canvas->drawRect(SkRect::MakeWH(256, 256), paint);
@@ -386,6 +387,69 @@ TEST(AnalysisCanvasTest, ClipComplexRegion) {
 
   SolidColorFill(canvas);
   EXPECT_FALSE(canvas.GetColorIfSolid(&outputColor));
+}
+
+TEST(AnalysisCanvasTest, ClipRRectCoversCanvas) {
+
+  SkVector radii[4] = {
+    SkVector::Make(10.0, 15.0),
+    SkVector::Make(20.0, 25.0),
+    SkVector::Make(30.0, 35.0),
+    SkVector::Make(40.0, 45.0),
+  };
+
+  int rr_size = 600;
+  int canvas_size = 255;
+
+  struct {
+    SkVector offset;
+    bool expected;
+  } cases [] = {
+    // Not within bounding box of |rr|.
+    { SkVector::Make(100.0, 100.0), false },
+
+    // Intersects UL corner.
+    { SkVector::Make(0.0, 0.0), false },
+
+    // Between UL and UR.
+    { SkVector::Make(-50.0, 0), true },
+
+    // Intersects UR corner.
+    { SkVector::Make(canvas_size - rr_size, 0), false },
+
+    // Between UR and LR.
+    { SkVector::Make(canvas_size - rr_size, -50.0), true },
+
+    // Intersects LR corner.
+    { SkVector::Make(canvas_size - rr_size, canvas_size - rr_size), false },
+
+    // Between LL and LR
+    { SkVector::Make(-50, canvas_size - rr_size), true },
+
+    // Intersects LL corner
+    { SkVector::Make(0, canvas_size - rr_size), false },
+
+    // Between UL and LL
+    { SkVector::Make(0, -50), true },
+
+    // In center
+    { SkVector::Make(-100, -100), true},
+  };
+
+  SkColor outputColor;
+
+  for (size_t i = 0; i < arraysize(cases); ++i) {
+    skia::AnalysisCanvas canvas(canvas_size, canvas_size);
+
+    SkRect bounding_rect = SkRect::MakeXYWH(
+        cases[i].offset.x(), cases[i].offset.y(), rr_size, rr_size);
+
+    SkRRect rr;
+    rr.setRectRadii(bounding_rect, radii);
+
+    canvas.clipRRect(rr);
+    EXPECT_EQ(cases[i].expected, canvas.GetColorIfSolid(&outputColor)) << i;
+  }
 }
 
 }  // namespace skia

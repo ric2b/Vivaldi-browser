@@ -5,6 +5,7 @@
 #ifndef CC_TEST_TEST_COMPOSITOR_FRAME_SINK_H_
 #define CC_TEST_TEST_COMPOSITOR_FRAME_SINK_H_
 
+#include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "cc/output/compositor_frame_sink.h"
 #include "cc/output/renderer_settings.h"
@@ -16,6 +17,10 @@
 #include "cc/surfaces/surface_id_allocator.h"
 #include "cc/surfaces/surface_manager.h"
 
+namespace base {
+class SingleThreadTaskRunner;
+}
+
 namespace cc {
 class CopyOutputRequest;
 class OutputSurface;
@@ -23,6 +28,11 @@ class OutputSurface;
 class TestCompositorFrameSinkClient {
  public:
   virtual ~TestCompositorFrameSinkClient() {}
+
+  // This passes the ContextProvider being used by LayerTreeHostImpl which
+  // can be used for the OutputSurface optionally.
+  virtual std::unique_ptr<OutputSurface> CreateDisplayOutputSurface(
+      scoped_refptr<ContextProvider> compositor_context_provider) = 0;
 
   virtual void DisplayReceivedCompositorFrame(const CompositorFrame& frame) = 0;
   virtual void DisplayWillDrawAndSwap(bool will_draw_and_swap,
@@ -40,15 +50,15 @@ class TestCompositorFrameSink : public CompositorFrameSink,
   TestCompositorFrameSink(
       scoped_refptr<ContextProvider> compositor_context_provider,
       scoped_refptr<ContextProvider> worker_context_provider,
-      std::unique_ptr<OutputSurface> display_output_surface,
       SharedBitmapManager* shared_bitmap_manager,
       gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
       const RendererSettings& renderer_settings,
-      base::SingleThreadTaskRunner* task_runner,
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner,
       bool synchronous_composite,
       bool force_disable_reclaim_resources);
   ~TestCompositorFrameSink() override;
 
+  // This client must be set before BindToClient() happens.
   void SetClient(TestCompositorFrameSinkClient* client) {
     test_client_ = client;
   }
@@ -58,13 +68,13 @@ class TestCompositorFrameSink : public CompositorFrameSink,
 
   Display* display() const { return display_.get(); }
 
-  // Will be submitted with the next SwapBuffers.
+  // Will be included with the next SubmitCompositorFrame.
   void RequestCopyOfOutput(std::unique_ptr<CopyOutputRequest> request);
 
   // CompositorFrameSink implementation.
   bool BindToClient(CompositorFrameSinkClient* client) override;
   void DetachFromClient() override;
-  void SwapBuffers(CompositorFrame frame) override;
+  void SubmitCompositorFrame(CompositorFrame frame) override;
   void ForceReclaimResources() override;
 
   // SurfaceFactoryClient implementation.
@@ -78,7 +88,12 @@ class TestCompositorFrameSink : public CompositorFrameSink,
   void DisplayDidDrawAndSwap() override;
 
  private:
-  void DidDrawCallback(bool synchronous);
+  void DidDrawCallback();
+
+  const bool synchronous_composite_;
+  const RendererSettings renderer_settings_;
+
+  scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
 
   FrameSinkId frame_sink_id_;
   // TODO(danakj): These don't need to be stored in unique_ptrs when
@@ -93,15 +108,13 @@ class TestCompositorFrameSink : public CompositorFrameSink,
   // Uses surface_manager_.
   std::unique_ptr<Display> display_;
 
-  const bool display_context_shared_with_compositor_;
-
   bool bound_ = false;
   TestCompositorFrameSinkClient* test_client_ = nullptr;
   gfx::Size enlarge_pass_texture_amount_;
 
   std::vector<std::unique_ptr<CopyOutputRequest>> copy_requests_;
 
-  base::WeakPtrFactory<TestCompositorFrameSink> weak_ptrs_;
+  base::WeakPtrFactory<TestCompositorFrameSink> weak_ptr_factory_;
 };
 
 }  // namespace cc

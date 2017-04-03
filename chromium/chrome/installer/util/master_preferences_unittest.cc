@@ -313,10 +313,7 @@ TEST_F(MasterPreferencesTest, TestMultiInstallConfig) {
   using installer::switches::kMultiInstall;
   using installer::switches::kChrome;
 
-  std::wstringstream chrome_cmd;
-#ifndef OMIT_CHROME_FRAME
-  std::wstringstream cf_cmd, chrome_cf_cmd;
-#endif
+  std::wstringstream chrome_cmd, cf_cmd, chrome_cf_cmd;
   chrome_cmd << "setup.exe --" << kMultiInstall << " --" << kChrome;
 
   base::CommandLine chrome_install(

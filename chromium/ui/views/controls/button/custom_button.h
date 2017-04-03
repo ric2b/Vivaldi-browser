@@ -39,9 +39,14 @@ class VIEWS_EXPORT CustomButton : public Button, public gfx::AnimationDelegate {
 
   // Get/sets the current display state of the button.
   ButtonState state() const { return state_; }
+  // Clients passing in STATE_DISABLED should consider calling
+  // SetEnabled(false) instead because the enabled flag can affect other things
+  // like event dispatching, focus traversals, etc. Calling SetEnabled(false)
+  // will also set the state of |this| to STATE_DISABLED.
   void SetState(ButtonState state);
 
   // Starts throbbing. See HoverAnimation for a description of cycles_til_stop.
+  // This method does nothing if |animate_on_state_change_| is false.
   void StartThrobbing(int cycles_til_stop);
 
   // Stops throbbing immediately.
@@ -106,9 +111,11 @@ class VIEWS_EXPORT CustomButton : public Button, public gfx::AnimationDelegate {
   void ShowContextMenu(const gfx::Point& p,
                        ui::MenuSourceType source_type) override;
   void OnDragDone() override;
-  void GetAccessibleState(ui::AXViewState* state) override;
+  void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
   void VisibilityChanged(View* starting_from, bool is_visible) override;
-  std::unique_ptr<InkDropHighlight> CreateInkDropHighlight() const override;
+
+  // Overridden from InkDropHostView:
+  std::unique_ptr<InkDrop> CreateInkDrop() override;
   SkColor GetInkDropBaseColor() const override;
 
   // Overridden from gfx::AnimationDelegate:
@@ -118,14 +125,13 @@ class VIEWS_EXPORT CustomButton : public Button, public gfx::AnimationDelegate {
   void ViewHierarchyChanged(
       const ViewHierarchyChangedDetails& details) override;
   void OnBlur() override;
-  bool ShouldShowInkDropForFocus() const override;
 
  protected:
   // Construct the Button with a Listener. See comment for Button's ctor.
   explicit CustomButton(ButtonListener* listener);
 
   // Invoked from SetState() when SetState() is passed a value that differs from
-  // the current state. CustomButton's implementation of StateChanged() does
+  // the current node_data. CustomButton's implementation of StateChanged() does
   // nothing; this method is provided for subclasses that wish to do something
   // on state changes.
   virtual void StateChanged();
@@ -139,9 +145,6 @@ class VIEWS_EXPORT CustomButton : public Button, public gfx::AnimationDelegate {
   // we simply return IsTriggerableEvent(event).
   virtual bool ShouldEnterPushedState(const ui::Event& event);
 
-  // Returns true if highlight effect should be visible.
-  virtual bool ShouldShowInkDropHighlight() const;
-
   void set_has_ink_drop_action_on_click(bool has_ink_drop_action_on_click) {
     has_ink_drop_action_on_click_ = has_ink_drop_action_on_click;
   }
@@ -149,7 +152,7 @@ class VIEWS_EXPORT CustomButton : public Button, public gfx::AnimationDelegate {
   // Returns true if the button should enter hovered state; that is, if the
   // mouse is over the button, and no other window has capture (which would
   // prevent the button from receiving MouseExited events and updating its
-  // state). This does not take into account enabled state.
+  // node_data). This does not take into account enabled node_data.
   bool ShouldEnterHoveredState();
 
   // Overridden from Button:
@@ -165,8 +168,8 @@ class VIEWS_EXPORT CustomButton : public Button, public gfx::AnimationDelegate {
 
   gfx::ThrobAnimation hover_animation_;
 
-  // Should we animate when the state changes? Defaults to true.
-  bool animate_on_state_change_;
+  // Should we animate when the state changes?
+  bool animate_on_state_change_ = false;
 
   // Is the hover animation running because StartThrob was invoked?
   bool is_throbbing_;

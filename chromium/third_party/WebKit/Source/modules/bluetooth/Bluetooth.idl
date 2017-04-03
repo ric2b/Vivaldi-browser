@@ -6,9 +6,9 @@
 
 [
     NoInterfaceObject,
-    OriginTrialEnabled=WebBluetooth,
+    RuntimeEnabled=WebBluetooth,
 ] interface Bluetooth {
-    [CallWith=ScriptState, RaisesException] Promise<BluetoothDevice> requestDevice (
+    [CallWith=ScriptState, RaisesException, MeasureAs=WebBluetoothRequestDevice] Promise<BluetoothDevice> requestDevice (
         RequestDeviceOptions options
         );
 };

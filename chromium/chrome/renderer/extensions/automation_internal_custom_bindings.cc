@@ -496,6 +496,12 @@ AutomationInternalCustomBindings::AutomationInternalCustomBindings(
                                             v8::ReturnValue<v8::Value> result,
                                             TreeCache* cache) {
     result.Set(v8::Number::New(isolate, cache->tree.data().sel_anchor_offset));
+                                         });
+  RouteTreeIDFunction("GetAnchorAffinity", [](v8::Isolate* isolate,
+                                           v8::ReturnValue<v8::Value> result,
+                                           TreeCache* cache) {
+    result.Set(CreateV8String(isolate,
+          ToString(cache->tree.data().sel_anchor_affinity)));
   });
   RouteTreeIDFunction("GetFocusObjectID",
                       [](v8::Isolate* isolate,
@@ -507,6 +513,12 @@ AutomationInternalCustomBindings::AutomationInternalCustomBindings(
                                            v8::ReturnValue<v8::Value> result,
                                            TreeCache* cache) {
     result.Set(v8::Number::New(isolate, cache->tree.data().sel_focus_offset));
+  });
+  RouteTreeIDFunction("GetFocusAffinity", [](v8::Isolate* isolate,
+                                           v8::ReturnValue<v8::Value> result,
+                                           TreeCache* cache) {
+    result.Set(CreateV8String(isolate,
+          ToString(cache->tree.data().sel_focus_affinity)));
   });
 
   // Bindings that take a Tree ID and Node ID and return a property of the node.
@@ -1173,6 +1185,10 @@ void AutomationInternalCustomBindings::OnAccessibilityEvent(
                     CreateV8String(isolate, ToString(params.event_type)));
   event_params->Set(CreateV8String(isolate, "eventFrom"),
                     CreateV8String(isolate, ToString(params.event_from)));
+  event_params->Set(CreateV8String(isolate, "mouseX"),
+                    v8::Integer::New(GetIsolate(), params.mouse_location.x()));
+  event_params->Set(CreateV8String(isolate, "mouseY"),
+                    v8::Integer::New(GetIsolate(), params.mouse_location.y()));
   args->Set(0U, event_params);
   context()->DispatchEvent("automationInternal.onAccessibilityEvent", args);
 }

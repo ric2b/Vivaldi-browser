@@ -66,10 +66,19 @@ namespace {
 const unsigned char* g_graph = kDafsa;
 size_t g_graph_length = sizeof(kDafsa);
 
+struct MappedHostComponent {
+  size_t original_begin;
+  size_t original_end;
+
+  size_t canonical_begin;
+  size_t canonical_end;
+};
+
 size_t GetRegistryLengthImpl(base::StringPiece host,
                              UnknownRegistryFilter unknown_filter,
                              PrivateRegistryFilter private_filter) {
-  DCHECK(!host.empty());
+  if (host.empty())
+    return std::string::npos;
 
   // Skip leading dots.
   const size_t host_check_begin = host.find_first_not_of('.');
@@ -148,22 +157,23 @@ size_t GetRegistryLengthImpl(base::StringPiece host,
       (host.length() - curr_start) : 0;
 }
 
-std::string GetDomainAndRegistryImpl(base::StringPiece host,
-                                     PrivateRegistryFilter private_filter) {
+base::StringPiece GetDomainAndRegistryImpl(
+    base::StringPiece host,
+    PrivateRegistryFilter private_filter) {
   DCHECK(!host.empty());
 
   // Find the length of the registry for this host.
   const size_t registry_length =
       GetRegistryLengthImpl(host, INCLUDE_UNKNOWN_REGISTRIES, private_filter);
   if ((registry_length == std::string::npos) || (registry_length == 0))
-    return std::string();  // No registry.
+    return base::StringPiece();  // No registry.
   // The "2" in this next line is 1 for the dot, plus a 1-char minimum preceding
   // subcomponent length.
   DCHECK(host.length() >= 2);
   if (registry_length > (host.length() - 2)) {
     NOTREACHED() <<
         "Host does not have at least one subcomponent before registry!";
-    return std::string();
+    return base::StringPiece();
   }
 
   // Move past the dot preceding the registry, and search for the next previous
@@ -171,19 +181,139 @@ std::string GetDomainAndRegistryImpl(base::StringPiece host,
   // no dot.
   const size_t dot = host.rfind('.', host.length() - registry_length - 2);
   if (dot == std::string::npos)
-    return host.as_string();
-  return host.substr(dot + 1).as_string();
+    return host;
+  return host.substr(dot + 1);
 }
 
-}  // namespace
-
-std::string GetDomainAndRegistry(
+// Same as GetDomainAndRegistry, but returns the domain and registry as a
+// StringPiece that references the underlying string of the passed-in |gurl|.
+// TODO(pkalinnikov): Eliminate this helper by exposing StringPiece as the
+// interface type for all the APIs.
+base::StringPiece GetDomainAndRegistryAsStringPiece(
     const GURL& gurl,
     PrivateRegistryFilter filter) {
   base::StringPiece host = gurl.host_piece();
   if (host.empty() || gurl.HostIsIPAddress())
-    return std::string();
+    return base::StringPiece();
   return GetDomainAndRegistryImpl(host, filter);
+}
+
+// These two functions append the given string as-is to the given output,
+// converting to UTF-8 if necessary.
+void AppendInvalidString(base::StringPiece str, url::CanonOutput* output) {
+  output->Append(str.data(), static_cast<int>(str.length()));
+}
+void AppendInvalidString(base::StringPiece16 str, url::CanonOutput* output) {
+  std::string utf8 = base::UTF16ToUTF8(str);
+  output->Append(utf8.data(), static_cast<int>(utf8.length()));
+}
+
+// Backend for PermissiveGetHostRegistryLength that handles both UTF-8 and
+// UTF-16 input. The template type is the std::string type to use (it makes the
+// typedefs easier than using the character type).
+template <typename Str>
+size_t DoPermissiveGetHostRegistryLength(base::BasicStringPiece<Str> host,
+                                         UnknownRegistryFilter unknown_filter,
+                                         PrivateRegistryFilter private_filter) {
+  std::string canonical_host;  // Do not modify outside of canon_output.
+  canonical_host.reserve(host.length());
+  url::StdStringCanonOutput canon_output(&canonical_host);
+
+  std::vector<MappedHostComponent> components;
+
+  for (size_t current = 0; current < host.length(); current++) {
+    size_t begin = current;
+
+    // Advance to next "." or end.
+    current = host.find('.', begin);
+    if (current == std::string::npos)
+      current = host.length();
+
+    MappedHostComponent mapping;
+    mapping.original_begin = begin;
+    mapping.original_end = current;
+    mapping.canonical_begin = static_cast<size_t>(canon_output.length());
+
+    // Try to append the canonicalized version of this component.
+    int current_len = static_cast<int>(current - begin);
+    if (!url::CanonicalizeHostSubstring(
+            host.data(), url::Component(static_cast<int>(begin), current_len),
+            &canon_output)) {
+      // Failed to canonicalize this component; append as-is.
+      AppendInvalidString(host.substr(begin, current_len), &canon_output);
+    }
+
+    mapping.canonical_end = static_cast<size_t>(canon_output.length());
+    components.push_back(mapping);
+
+    if (current < host.length())
+      canon_output.push_back('.');
+  }
+  canon_output.Complete();
+
+  size_t canonical_rcd_len =
+      GetRegistryLengthImpl(canonical_host, unknown_filter, private_filter);
+  if (canonical_rcd_len == 0 || canonical_rcd_len == std::string::npos)
+    return canonical_rcd_len;  // Error or no registry controlled domain.
+
+  // Find which host component the result started in.
+  size_t canonical_rcd_begin = canonical_host.length() - canonical_rcd_len;
+  for (const auto& mapping : components) {
+    // In the common case, GetRegistryLengthImpl will identify the beginning
+    // of a component and we can just return where that component was in the
+    // original string.
+    if (canonical_rcd_begin == mapping.canonical_begin)
+      return host.length() - mapping.original_begin;
+
+    if (canonical_rcd_begin >= mapping.canonical_end)
+      continue;
+
+    // The registry controlled domain begin was identified as being in the
+    // middle of this dot-separated domain component in the non-canonical
+    // input. This indicates some form of escaped dot, or a non-ASCII
+    // character that was canonicalized to a dot.
+    //
+    // Brute-force search from the end by repeatedly canonicalizing longer
+    // substrings until we get a match for the canonicalized version. This
+    // can't be done with binary search because canonicalization might increase
+    // or decrease the length of the produced string depending on where it's
+    // split. This depends on the canonicalization process not changing the
+    // order of the characters. Punycode can change the order of characters,
+    // but it doesn't work across dots so this is safe.
+
+    // Expected canonical registry controlled domain.
+    base::StringPiece canonical_rcd(&canonical_host[canonical_rcd_begin],
+                                    canonical_rcd_len);
+
+    for (int current_try = static_cast<int>(mapping.original_end) - 1;
+         current_try >= static_cast<int>(mapping.original_begin);
+         current_try--) {
+      std::string try_string;
+      url::StdStringCanonOutput try_output(&try_string);
+
+      if (!url::CanonicalizeHostSubstring(
+              host.data(),
+              url::Component(
+                  current_try,
+                  static_cast<int>(mapping.original_end) - current_try),
+              &try_output))
+        continue;  // Invalid substring, skip.
+
+      try_output.Complete();
+      if (try_string == canonical_rcd)
+        return host.length() - current_try;
+    }
+  }
+
+  NOTREACHED();
+  return canonical_rcd_len;
+}
+
+}  // namespace
+
+std::string GetDomainAndRegistry(const GURL& gurl,
+                                 PrivateRegistryFilter filter) {
+  return GetDomainAndRegistryAsStringPiece(gurl, filter).as_string();
 }
 
 std::string GetDomainAndRegistry(base::StringPiece host,
@@ -192,59 +322,104 @@ std::string GetDomainAndRegistry(base::StringPiece host,
   const std::string canon_host(CanonicalizeHost(host, &host_info));
   if (canon_host.empty() || host_info.IsIPAddress())
     return std::string();
-  return GetDomainAndRegistryImpl(canon_host, filter);
+  return GetDomainAndRegistryImpl(canon_host, filter).as_string();
 }
 
 bool SameDomainOrHost(
     const GURL& gurl1,
     const GURL& gurl2,
     PrivateRegistryFilter filter) {
-  // See if both URLs have a known domain + registry, and those values are the
-  // same.
-  const std::string domain1(GetDomainAndRegistry(gurl1, filter));
-  const std::string domain2(GetDomainAndRegistry(gurl2, filter));
-  if (!domain1.empty() || !domain2.empty())
-    return domain1 == domain2;
-
-  // No domains.  See if the hosts are identical.
-  const url::Component host1 = gurl1.parsed_for_possibly_invalid_spec().host;
-  const url::Component host2 = gurl2.parsed_for_possibly_invalid_spec().host;
-  if ((host1.len <= 0) || (host1.len != host2.len))
+  // Quickly reject cases where either host is empty.
+  if (!gurl1.has_host() || !gurl2.has_host())
     return false;
-  return !strncmp(gurl1.possibly_invalid_spec().data() + host1.begin,
-                  gurl2.possibly_invalid_spec().data() + host2.begin,
-                  host1.len);
+
+  // Check for exact host matches, which is faster than looking up the domain
+  // and registry.
+  if (gurl1.host_piece() == gurl2.host_piece())
+    return true;
+
+  // Check for a domain and registry match.
+  const base::StringPiece& domain1 =
+      GetDomainAndRegistryAsStringPiece(gurl1, filter);
+  return !domain1.empty() &&
+         (domain1 == GetDomainAndRegistryAsStringPiece(gurl2, filter));
 }
 
 bool SameDomainOrHost(const url::Origin& origin1,
                       const url::Origin& origin2,
                       PrivateRegistryFilter filter) {
-  return SameDomainOrHost(GURL(origin1.Serialize()), GURL(origin2.Serialize()),
-                          filter);
+  return SameDomainOrHost(origin1.GetURL(), origin2.GetURL(), filter);
+}
+
+bool SameDomainOrHost(const url::Origin& origin1,
+                      const base::Optional<url::Origin>& origin2,
+                      PrivateRegistryFilter filter) {
+  if (!origin2.has_value())
+    return false;
+  return SameDomainOrHost(origin1, origin2.value(), filter);
 }
 
 size_t GetRegistryLength(
     const GURL& gurl,
     UnknownRegistryFilter unknown_filter,
     PrivateRegistryFilter private_filter) {
-  base::StringPiece host = gurl.host_piece();
-  if (host.empty())
-    return std::string::npos;
-  if (gurl.HostIsIPAddress())
-    return 0;
-  return GetRegistryLengthImpl(host, unknown_filter, private_filter);
+  return GetRegistryLengthImpl(gurl.host_piece(), unknown_filter,
+                               private_filter);
 }
 
-size_t GetRegistryLength(base::StringPiece host,
-                         UnknownRegistryFilter unknown_filter,
-                         PrivateRegistryFilter private_filter) {
+bool HostHasRegistryControlledDomain(base::StringPiece host,
+                                     UnknownRegistryFilter unknown_filter,
+                                     PrivateRegistryFilter private_filter) {
   url::CanonHostInfo host_info;
   const std::string canon_host(CanonicalizeHost(host, &host_info));
-  if (canon_host.empty())
-    return std::string::npos;
-  if (host_info.IsIPAddress())
-    return 0;
+
+  size_t rcd_length;
+  switch (host_info.family) {
+    case url::CanonHostInfo::IPV4:
+    case url::CanonHostInfo::IPV6:
+      // IP addresses don't have R.C.D.'s.
+      return false;
+    case url::CanonHostInfo::BROKEN:
+      // Host is not canonicalizable. Fall back to the slower "permissive"
+      // version.
+      rcd_length =
+          PermissiveGetHostRegistryLength(host, unknown_filter, private_filter);
+      break;
+    case url::CanonHostInfo::NEUTRAL:
+      rcd_length =
+          GetRegistryLengthImpl(canon_host, unknown_filter, private_filter);
+      break;
+    default:
+      NOTREACHED();
+      return false;
+  }
+  return (rcd_length != 0) && (rcd_length != std::string::npos);
+}
+
+size_t GetCanonicalHostRegistryLength(base::StringPiece canon_host,
+                                      UnknownRegistryFilter unknown_filter,
+                                      PrivateRegistryFilter private_filter) {
+#ifndef NDEBUG
+  // Ensure passed-in host name is canonical.
+  url::CanonHostInfo host_info;
+  DCHECK_EQ(net::CanonicalizeHost(canon_host, &host_info), canon_host);
+#endif
+
   return GetRegistryLengthImpl(canon_host, unknown_filter, private_filter);
+}
+
+size_t PermissiveGetHostRegistryLength(base::StringPiece host,
+                                       UnknownRegistryFilter unknown_filter,
+                                       PrivateRegistryFilter private_filter) {
+  return DoPermissiveGetHostRegistryLength<std::string>(host, unknown_filter,
+                                                        private_filter);
+}
+
+size_t PermissiveGetHostRegistryLength(base::StringPiece16 host,
+                                       UnknownRegistryFilter unknown_filter,
+                                       PrivateRegistryFilter private_filter) {
+  return DoPermissiveGetHostRegistryLength<base::string16>(host, unknown_filter,
+                                                           private_filter);
 }
 
 void SetFindDomainGraph() {

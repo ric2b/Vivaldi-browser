@@ -10,7 +10,6 @@
 
 #include "base/files/file_path.h"
 #include "base/memory/ptr_util.h"
-#include "base/stl_util.h"
 #include "base/values.h"
 #include "chrome/browser/chromeos/file_system_provider/mount_path_util.h"
 #include "chrome/browser/chromeos/file_system_provider/observer.h"
@@ -38,11 +37,11 @@ namespace {
 const size_t kMaxFileSystems = 16;
 
 // Default factory for provided file systems. |profile| must not be NULL.
-ProvidedFileSystemInterface* CreateProvidedFileSystem(
+std::unique_ptr<ProvidedFileSystemInterface> CreateProvidedFileSystem(
     Profile* profile,
     const ProvidedFileSystemInfo& file_system_info) {
   DCHECK(profile);
-  return new ThrottledFileSystem(
+  return base::MakeUnique<ThrottledFileSystem>(
       base::MakeUnique<ProvidedFileSystem>(profile, file_system_info));
 }
 
@@ -71,7 +70,7 @@ Service::~Service() {
   // OnExtensionUnload calls for each installed extension. However, for tests
   // we may still have mounted extensions.
   // TODO(mtomasz): Create a TestingService class and remove this code.
-  ProvidedFileSystemMap::iterator it = file_system_map_.begin();
+  auto it = file_system_map_.begin();
   while (it != file_system_map_.end()) {
     const std::string file_system_id =
         it->second->GetFileSystemInfo().file_system_id();
@@ -84,7 +83,6 @@ Service::~Service() {
   }
 
   DCHECK_EQ(0u, file_system_map_.size());
-  base::STLDeleteValues(&file_system_map_);
 }
 
 // static
@@ -128,19 +126,20 @@ base::File::Error Service::MountFileSystemInternal(
   // If already exists a file system provided by the same extension with this
   // id, then abort.
   if (GetProvidedFileSystem(extension_id, options.file_system_id)) {
-    FOR_EACH_OBSERVER(
-        Observer, observers_,
-        OnProvidedFileSystemMount(ProvidedFileSystemInfo(), context,
-                                  base::File::FILE_ERROR_EXISTS));
+    for (auto& observer : observers_) {
+      observer.OnProvidedFileSystemMount(ProvidedFileSystemInfo(), context,
+                                         base::File::FILE_ERROR_EXISTS);
+    }
     return base::File::FILE_ERROR_EXISTS;
   }
 
   // Restrict number of file systems to prevent system abusing.
   if (file_system_map_.size() + 1 > kMaxFileSystems) {
-    FOR_EACH_OBSERVER(
-        Observer, observers_,
-        OnProvidedFileSystemMount(ProvidedFileSystemInfo(), context,
-                                  base::File::FILE_ERROR_TOO_MANY_OPENED));
+    for (auto& observer : observers_) {
+      observer.OnProvidedFileSystemMount(
+          ProvidedFileSystemInfo(), context,
+          base::File::FILE_ERROR_TOO_MANY_OPENED);
+    }
     return base::File::FILE_ERROR_TOO_MANY_OPENED;
   }
 
@@ -159,10 +158,11 @@ base::File::Error Service::MountFileSystemInternal(
           storage::FileSystemMountOption(
               storage::FlushPolicy::FLUSH_ON_COMPLETION),
           mount_path)) {
-    FOR_EACH_OBSERVER(
-        Observer, observers_,
-        OnProvidedFileSystemMount(ProvidedFileSystemInfo(), context,
-                                  base::File::FILE_ERROR_INVALID_OPERATION));
+    for (auto& observer : observers_) {
+      observer.OnProvidedFileSystemMount(
+          ProvidedFileSystemInfo(), context,
+          base::File::FILE_ERROR_INVALID_OPERATION);
+    }
     return base::File::FILE_ERROR_INVALID_OPERATION;
   }
 
@@ -186,18 +186,21 @@ base::File::Error Service::MountFileSystemInternal(
       provider_info.capabilities.watchable(),
       provider_info.capabilities.source());
 
-  ProvidedFileSystemInterface* file_system =
+  std::unique_ptr<ProvidedFileSystemInterface> file_system =
       file_system_factory_.Run(profile_, file_system_info);
   DCHECK(file_system);
+  ProvidedFileSystemInterface* file_system_ptr = file_system.get();
   file_system_map_[FileSystemKey(extension_id, options.file_system_id)] =
-      file_system;
+      std::move(file_system);
   mount_point_name_to_key_map_[mount_point_name] =
       FileSystemKey(extension_id, options.file_system_id);
-  registry_->RememberFileSystem(file_system_info, *file_system->GetWatchers());
+  registry_->RememberFileSystem(file_system_info,
+                                *file_system_ptr->GetWatchers());
 
-  FOR_EACH_OBSERVER(Observer, observers_,
-                    OnProvidedFileSystemMount(file_system_info, context,
-                                              base::File::FILE_OK));
+  for (auto& observer : observers_) {
+    observer.OnProvidedFileSystemMount(file_system_info, context,
+                                       base::File::FILE_OK);
+  }
 
   return base::File::FILE_OK;
 }
@@ -207,15 +210,14 @@ base::File::Error Service::UnmountFileSystem(const std::string& extension_id,
                                              UnmountReason reason) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  const ProvidedFileSystemMap::iterator file_system_it =
+  const auto file_system_it =
       file_system_map_.find(FileSystemKey(extension_id, file_system_id));
   if (file_system_it == file_system_map_.end()) {
     const ProvidedFileSystemInfo empty_file_system_info;
-    FOR_EACH_OBSERVER(
-        Observer,
-        observers_,
-        OnProvidedFileSystemUnmount(empty_file_system_info,
-                                    base::File::FILE_ERROR_NOT_FOUND));
+    for (auto& observer : observers_) {
+      observer.OnProvidedFileSystemUnmount(empty_file_system_info,
+                                           base::File::FILE_ERROR_NOT_FOUND);
+    }
     return base::File::FILE_ERROR_NOT_FOUND;
   }
 
@@ -229,18 +231,15 @@ base::File::Error Service::UnmountFileSystem(const std::string& extension_id,
   const std::string mount_point_name =
       file_system_info.mount_path().BaseName().value();
   if (!mount_points->RevokeFileSystem(mount_point_name)) {
-    FOR_EACH_OBSERVER(
-        Observer,
-        observers_,
-        OnProvidedFileSystemUnmount(file_system_info,
-                                    base::File::FILE_ERROR_INVALID_OPERATION));
+    for (auto& observer : observers_) {
+      observer.OnProvidedFileSystemUnmount(
+          file_system_info, base::File::FILE_ERROR_INVALID_OPERATION);
+    }
     return base::File::FILE_ERROR_INVALID_OPERATION;
   }
 
-  FOR_EACH_OBSERVER(
-      Observer,
-      observers_,
-      OnProvidedFileSystemUnmount(file_system_info, base::File::FILE_OK));
+  for (auto& observer : observers_)
+    observer.OnProvidedFileSystemUnmount(file_system_info, base::File::FILE_OK);
 
   mount_point_name_to_key_map_.erase(mount_point_name);
 
@@ -249,7 +248,6 @@ base::File::Error Service::UnmountFileSystem(const std::string& extension_id,
                                 file_system_info.file_system_id());
   }
 
-  delete file_system_it->second;
   file_system_map_.erase(file_system_it);
 
   return base::File::FILE_OK;
@@ -259,7 +257,7 @@ bool Service::RequestUnmount(const std::string& extension_id,
                              const std::string& file_system_id) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  ProvidedFileSystemMap::iterator file_system_it =
+  auto file_system_it =
       file_system_map_.find(FileSystemKey(extension_id, file_system_id));
   if (file_system_it == file_system_map_.end())
     return false;
@@ -298,9 +296,7 @@ std::vector<ProvidedFileSystemInfo> Service::GetProvidedFileSystemInfoList() {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   std::vector<ProvidedFileSystemInfo> result;
-  for (ProvidedFileSystemMap::const_iterator it = file_system_map_.begin();
-       it != file_system_map_.end();
-       ++it) {
+  for (auto it = file_system_map_.begin(); it != file_system_map_.end(); ++it) {
     result.push_back(it->second->GetFileSystemInfo());
   }
   return result;
@@ -311,12 +307,12 @@ ProvidedFileSystemInterface* Service::GetProvidedFileSystem(
     const std::string& file_system_id) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  const ProvidedFileSystemMap::const_iterator file_system_it =
+  const auto file_system_it =
       file_system_map_.find(FileSystemKey(extension_id, file_system_id));
   if (file_system_it == file_system_map_.end())
     return NULL;
 
-  return file_system_it->second;
+  return file_system_it->second.get();
 }
 
 std::vector<ProvidingExtensionInfo> Service::GetProvidingExtensionInfoList()
@@ -365,7 +361,7 @@ void Service::OnExtensionUnloaded(
     const extensions::Extension* extension,
     extensions::UnloadedExtensionInfo::Reason reason) {
   // Unmount all of the provided file systems associated with this extension.
-  ProvidedFileSystemMap::iterator it = file_system_map_.begin();
+  auto it = file_system_map_.begin();
   while (it != file_system_map_.end()) {
     const ProvidedFileSystemInfo& file_system_info =
         it->second->GetFileSystemInfo();
@@ -417,17 +413,15 @@ ProvidedFileSystemInterface* Service::GetProvidedFileSystem(
     const std::string& mount_point_name) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  const MountPointNameToKeyMap::const_iterator mapping_it =
-      mount_point_name_to_key_map_.find(mount_point_name);
+  const auto mapping_it = mount_point_name_to_key_map_.find(mount_point_name);
   if (mapping_it == mount_point_name_to_key_map_.end())
     return NULL;
 
-  const ProvidedFileSystemMap::const_iterator file_system_it =
-      file_system_map_.find(mapping_it->second);
+  const auto file_system_it = file_system_map_.find(mapping_it->second);
   if (file_system_it == file_system_map_.end())
     return NULL;
 
-  return file_system_it->second;
+  return file_system_it->second.get();
 }
 
 void Service::OnRequestUnmountStatus(
@@ -437,9 +431,8 @@ void Service::OnRequestUnmountStatus(
   // called by the provided file system. In case of success mount() will be
   // invoked, and observers notified, so there is no need to call them now.
   if (error != base::File::FILE_OK) {
-    FOR_EACH_OBSERVER(Observer,
-                      observers_,
-                      OnProvidedFileSystemUnmount(file_system_info, error));
+    for (auto& observer : observers_)
+      observer.OnProvidedFileSystemUnmount(file_system_info, error);
   }
 }
 

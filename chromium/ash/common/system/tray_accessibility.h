@@ -27,6 +27,7 @@ struct VectorIcon;
 
 namespace views {
 class Button;
+class CustomButton;
 class ImageView;
 class Label;
 class View;
@@ -64,6 +65,13 @@ class AccessibilityDetailedView : public TrayDetailsView,
   void HandleViewClicked(views::View* view) override;
   void HandleButtonPressed(views::Button* sender,
                            const ui::Event& event) override;
+  void CreateExtraTitleRowButtons() override;
+
+  // Launches the WebUI settings in a browser and closes the system menu.
+  void ShowSettings();
+
+  // Launches the a11y help article in a browser and closes the system menu.
+  void ShowHelp();
 
   // Add the accessibility feature list.
   void AppendAccessibilityList();
@@ -82,8 +90,8 @@ class AccessibilityDetailedView : public TrayDetailsView,
   views::View* high_contrast_view_;
   views::View* screen_magnifier_view_;
   views::View* large_cursor_view_;
-  views::View* help_view_;
-  views::View* settings_view_;
+  views::CustomButton* help_view_;
+  views::CustomButton* settings_view_;
   views::View* autoclick_view_;
   views::View* virtual_keyboard_view_;
 

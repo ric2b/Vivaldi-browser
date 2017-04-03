@@ -23,15 +23,15 @@ function buy() {  // eslint-disable-line no-unused-vars
             selected: true
           }]
         },
-        {requestPayerEmail: true, requestPayerPhone: true,
-         requestShipping: true});
+        {requestPayerName: true, requestPayerEmail: true,
+         requestPayerPhone: true, requestShipping: true});
     request.show()
         .then(function(resp) {
           resp.complete('success')
               .then(function() {
                 print(
-                    resp.payerEmail + '<br>' + resp.payerPhone + '<br>' +
-                    resp.shippingOption + '<br>' +
+                    resp.payerName + '<br>' + resp.payerEmail + '<br>' +
+                    resp.payerPhone + '<br>' + resp.shippingOption + '<br>' +
                     JSON.stringify(
                         toDictionary(resp.shippingAddress), undefined, 2) +
                     '<br>' + resp.methodName + '<br>' +

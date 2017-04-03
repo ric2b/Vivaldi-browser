@@ -19,10 +19,6 @@
 #include "ipc/ipc_channel.h"
 #include "ipc/message_filter.h"
 
-#if defined(OS_POSIX)
-#include "ipc/ipc_channel_posix.h"
-#endif
-
 namespace gpu {
 
 ProprietaryMediaGpuChannel::ProprietaryMediaGpuChannel(

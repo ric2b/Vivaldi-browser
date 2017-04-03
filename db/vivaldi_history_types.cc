@@ -15,12 +15,12 @@ Visit::Visit(std::string id,
              base::Time visit_time,
              GURL url,
              base::string16 title,
-             std::string transition)
-    : id_(id),
-      visit_time_(visit_time),
-      url_(url),
-      title_(title),
-      transition_(transition) {}
+             ui::PageTransition transition)
+    : id(id),
+      visit_time(visit_time),
+      url(url),
+      title(title),
+      transition(transition) {}
 
 Visit::~Visit() {}
 

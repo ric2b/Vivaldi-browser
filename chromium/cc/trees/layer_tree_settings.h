@@ -9,6 +9,7 @@
 
 #include <vector>
 
+#include "base/time/time.h"
 #include "cc/base/cc_export.h"
 #include "cc/debug/layer_tree_debug_state.h"
 #include "cc/output/managed_memory_policy.h"
@@ -56,9 +57,10 @@ class CC_EXPORT LayerTreeSettings {
     THINNING,
   };
   ScrollbarAnimator scrollbar_animator = NO_ANIMATOR;
-  int scrollbar_fade_delay_ms = 0;
-  int scrollbar_fade_resize_delay_ms = 0;
-  int scrollbar_fade_duration_ms = 0;
+  base::TimeDelta scrollbar_fade_delay;
+  base::TimeDelta scrollbar_fade_resize_delay;
+  base::TimeDelta scrollbar_fade_duration;
+  base::TimeDelta scrollbar_thinning_duration;
   SkColor solid_color_scrollbar_color = SK_ColorWHITE;
   bool timeout_and_draw_when_animation_checkerboards = true;
   bool layer_transforms_should_scale_layer_contents = false;
@@ -86,7 +88,6 @@ class CC_EXPORT LayerTreeSettings {
   size_t scheduled_raster_task_limit = 32;
   bool use_occlusion_for_tile_prioritization = false;
   bool verify_clip_tree_calculations = false;
-  bool verify_transform_tree_calculations = false;
   bool image_decode_tasks_enabled = false;
   bool abort_commit_before_compositor_frame_sink_creation = true;
   bool use_layer_lists = false;

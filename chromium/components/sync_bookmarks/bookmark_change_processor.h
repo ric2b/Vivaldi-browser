@@ -16,8 +16,8 @@
 #include "base/threading/thread_checker.h"
 #include "components/bookmarks/browser/bookmark_model_observer.h"
 #include "components/bookmarks/browser/bookmark_node.h"
-#include "components/sync/api/data_type_error_handler.h"
-#include "components/sync/driver/change_processor.h"
+#include "components/sync/model/change_processor.h"
+#include "components/sync/model/data_type_error_handler.h"
 #include "components/sync_bookmarks/bookmark_model_associator.h"
 
 class Profile;
@@ -243,7 +243,7 @@ class BookmarkChangeProcessor : public bookmarks::BookmarkModelObserver,
 
   base::ThreadChecker thread_checker_;
 
-  // The bookmark model we are processing changes from.  Non-NULL when
+  // The bookmark model we are processing changes from.  Non-null when
   // |running_| is true.
   bookmarks::BookmarkModel* bookmark_model_;
 

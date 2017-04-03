@@ -97,6 +97,8 @@ class TypedefResolver(Visitor):
         self._update_dependencies_include_paths(definition_name)
 
     def _update_dependencies_include_paths(self, definition_name):
+        if definition_name not in self.info_provider.interfaces_info:
+            return
         interface_info = self.info_provider.interfaces_info[definition_name]
         interface_info['additional_header_includes'] = set(
             self.additional_header_includes)
@@ -138,7 +140,6 @@ class CodeGeneratorV8Base(CodeGeneratorBase):
         if not self.should_generate_code(definitions):
             return set()
 
-        IdlType.set_callback_functions(definitions.callback_functions.keys())
         # Resolve typedefs
         self.typedef_resolver.resolve(definitions, definition_name)
         return self.generate_code_internal(definitions, definition_name)
@@ -341,8 +342,10 @@ class CodeGeneratorCallbackFunction(CodeGeneratorBase):
     def __init__(self, info_provider, cache_dir, output_dir, target_component):
         CodeGeneratorBase.__init__(self, MODULE_PYNAME, info_provider, cache_dir, output_dir)
         self.target_component = target_component
+        self.typedef_resolver = TypedefResolver(info_provider)
 
     def generate_code_internal(self, callback_function, path):
+        self.typedef_resolver.resolve(callback_function, callback_function.name)
         header_template = self.jinja_env.get_template('callback_function.h.tmpl')
         cpp_template = self.jinja_env.get_template('callback_function.cpp.tmpl')
         template_context = v8_callback_function.callback_function_context(
@@ -373,6 +376,8 @@ class CodeGeneratorCallbackFunction(CodeGeneratorBase):
             if callback_function_dict['component_dir'] != self.target_component:
                 continue
             callback_function = callback_function_dict['callback_function']
+            if 'Custom' in callback_function.extended_attributes:
+                continue
             path = callback_function_dict['full_path']
             outputs.update(self.generate_code_internal(callback_function, path))
         return outputs

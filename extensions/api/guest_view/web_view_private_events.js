@@ -32,7 +32,11 @@ var EVENTS_PRIVATE = {
   },
   'pasteandgo': {
     evt: CreateEvent('webViewPrivate.onPasteAndGo'),
-    fields: ['clipBoardText']
+    fields: ['clipBoardText', 'pasteTarget', 'modifiers']
+  },
+  'simpleAction': {
+    evt: CreateEvent('webViewPrivate.onSimpleAction'),
+    fields: ['command', 'text', 'url', 'modifiers']
   },
   'contentsdiscarded': {
     evt: CreateEvent('webViewPrivate.onWebcontentsDiscarded')

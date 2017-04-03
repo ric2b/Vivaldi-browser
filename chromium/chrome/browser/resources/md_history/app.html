@@ -1,7 +1,6 @@
 <link rel="import" href="chrome://resources/html/polymer.html">
 <link rel="import" href="chrome://resources/html/cr/ui.html">
 <link rel="import" href="chrome://resources/html/cr/ui/command.html">
-<link rel="import" href="chrome://resources/html/web_ui_listener_behavior.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-media-query/iron-media-query.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-pages/iron-pages.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-scroll-target-behavior/iron-scroll-target-behavior.html">
@@ -21,10 +20,12 @@
         display: block;
         height: 100%;
         overflow: hidden;
+        z-index: 0;
       }
 
       history-toolbar {
         background: var(--md-toolbar-color);
+        z-index: 2;
       }
 
       /* Sizing this with flex causes slow load performance, see
@@ -32,6 +33,7 @@
       #main-container {
         height: calc(100% - var(--toolbar-height));
         position: relative;
+        z-index: 1;
       }
 
       :host([grouped_]) #main-container {
@@ -55,12 +57,16 @@
         display: none;
       }
 
+      #drawer {
+        z-index: 3;
+      }
+
       #drawer-header {
         align-items: center;
         border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+        box-sizing: border-box;
         display: flex;
         height: var(--toolbar-height);
-        margin-bottom: 5px;
       }
 
       h1 {
@@ -99,7 +105,8 @@
         query-start-time="[[queryResult_.info.queryStartTime]]"
         query-end-time="[[queryResult_.info.queryEndTime]]"
         has-drawer="[[hasDrawer_]]"
-        show-sync-notice="[[showSyncNotice_(hasSyncedResults, selectedPage_)]]">
+        show-sync-notice="[[showSyncNotice_(hasSyncedResults, selectedPage_)]]"
+        show-menu-promo="[[showMenuPromo_]]">
     </history-toolbar>
 
     <div id="main-container">

@@ -6,12 +6,14 @@
 
 #include <string>
 
+#include "ash/common/material_design/material_design_controller.h"
 #include "ash/common/system/date/date_default_view.h"
 #include "ash/common/system/date/date_view.h"
+#include "ash/common/system/date/system_info_default_view.h"
 #include "ash/common/system/date/tray_date.h"
-#include "ash/display/display_manager.h"
+#include "ash/common/system/date/tray_system_info.h"
+#include "ash/common/system/tray/system_tray.h"
 #include "ash/shell.h"
-#include "ash/test/display_manager_test_api.h"
 #include "base/macros.h"
 #include "chrome/browser/chromeos/login/login_manager_test.h"
 #include "chrome/browser/chromeos/login/session/user_session_manager.h"
@@ -19,17 +21,11 @@
 #include "chrome/browser/chromeos/login/ui/user_adding_screen.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/ui/browser.h"
-#include "chrome/browser/ui/chrome_pages.h"
-#include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/pref_names.h"
-#include "chrome/common/url_constants.h"
 #include "chrome/test/base/in_process_browser_test.h"
-#include "chrome/test/base/ui_test_utils.h"
 #include "components/prefs/pref_service.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/test/test_utils.h"
-#include "ui/message_center/message_center.h"
-#include "ui/message_center/notification_list.h"
 
 namespace chromeos {
 
@@ -42,6 +38,17 @@ const char kUser1[] = "user1@gmail.com";
 const char kUser2[] = "user2@gmail.com";
 
 base::HourClockType GetHourType() {
+  if (ash::MaterialDesignController::IsSystemTrayMenuMaterial()) {
+    const ash::TraySystemInfo* tray_system_info =
+        ash::Shell::GetInstance()
+            ->GetPrimarySystemTray()
+            ->GetTraySystemInfoForTesting();
+    const ash::SystemInfoDefaultView* system_info_default_view =
+        tray_system_info->GetDefaultViewForTesting();
+
+    return system_info_default_view->GetDateView()->GetHourTypeForTesting();
+  }
+
   const ash::TrayDate* tray_date = ash::Shell::GetInstance()
                                        ->GetPrimarySystemTray()
                                        ->GetTrayDateForTesting();
@@ -52,32 +59,21 @@ base::HourClockType GetHourType() {
 }
 
 void CreateDefaultView() {
-  ash::TrayDate* tray_date = ash::Shell::GetInstance()
-                                 ->GetPrimarySystemTray()
-                                 ->GetTrayDateForTesting();
-  tray_date->CreateDefaultViewForTesting(ash::LoginStatus::NOT_LOGGED_IN);
+  if (ash::MaterialDesignController::IsSystemTrayMenuMaterial()) {
+    ash::TraySystemInfo* tray_system_info = ash::Shell::GetInstance()
+                                                ->GetPrimarySystemTray()
+                                                ->GetTraySystemInfoForTesting();
+    tray_system_info->CreateDefaultViewForTesting(
+        ash::LoginStatus::NOT_LOGGED_IN);
+  } else {
+    ash::TrayDate* tray_date = ash::Shell::GetInstance()
+                                   ->GetPrimarySystemTray()
+                                   ->GetTrayDateForTesting();
+    tray_date->CreateDefaultViewForTesting(ash::LoginStatus::NOT_LOGGED_IN);
+  }
 }
 
 }  // namespace
-
-class DisplayNotificationsTest : public InProcessBrowserTest {
- public:
-  DisplayNotificationsTest() {}
-  ~DisplayNotificationsTest() override {}
-
-  void SetUp() override { InProcessBrowserTest::SetUp(); }
-
-  void UpdateDisplay(const std::string& display_specs) {
-    ash::test::DisplayManagerTestApi(
-        ash::Shell::GetInstance()->display_manager())
-        .UpdateDisplay(display_specs);
-  }
-
-  message_center::NotificationList::Notifications GetVisibleNotifications()
-      const {
-    return message_center::MessageCenter::Get()->GetVisibleNotifications();
-  }
-};
 
 class SystemTrayDelegateChromeOSTest : public LoginManagerTest {
  protected:
@@ -131,40 +127,6 @@ IN_PROC_BROWSER_TEST_F(SystemTrayDelegateChromeOSTest,
   content::RunAllPendingInMessageLoop();
   CreateDefaultView();
   EXPECT_EQ(base::k24HourClock, GetHourType());
-}
-
-// Makes sure that no notifications are shown when rotating the
-// display on display settings URLs.
-IN_PROC_BROWSER_TEST_F(DisplayNotificationsTest,
-                       TestDisplayOrientationChangeNotification) {
-  // Open the display settings page.
-  ui_test_utils::NavigateToURL(browser(),
-                               GURL("chrome://settings-frame/display"));
-  // Rotate the display 90 degrees.
-  UpdateDisplay("400x400/r");
-  // Ensure that no notification was displayed.
-  EXPECT_TRUE(GetVisibleNotifications().empty());
-
-  // Reset the display.
-  UpdateDisplay("400x400");
-
-  ui_test_utils::NavigateToURL(browser(), GURL("chrome://settings/display"));
-  UpdateDisplay("400x400/r");
-  EXPECT_TRUE(GetVisibleNotifications().empty());
-
-  UpdateDisplay("400x400");
-
-  ui_test_utils::NavigateToURL(browser(),
-                               GURL("chrome://settings/displayOverscan"));
-  UpdateDisplay("400x400/r");
-  EXPECT_TRUE(GetVisibleNotifications().empty());
-
-  UpdateDisplay("400x400");
-
-  ui_test_utils::NavigateToURL(browser(), GURL("chrome://version"));
-  UpdateDisplay("400x400/r");
-  // Ensure that there is a notification that is shown.
-  EXPECT_FALSE(GetVisibleNotifications().empty());
 }
 
 }  // namespace chromeos

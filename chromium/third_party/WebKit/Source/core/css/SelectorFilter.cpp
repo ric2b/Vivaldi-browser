@@ -85,7 +85,7 @@ void SelectorFilter::popParentStackFrame() {
   size_t count = parentFrame.identifierHashes.size();
   for (size_t i = 0; i < count; ++i)
     m_ancestorIdentifierFilter->remove(parentFrame.identifierHashes[i]);
-  m_parentStack.removeLast();
+  m_parentStack.pop_back();
   if (m_parentStack.isEmpty()) {
     ASSERT(m_ancestorIdentifierFilter->likelyEmpty());
     m_ancestorIdentifierFilter.reset();
@@ -178,6 +178,7 @@ void SelectorFilter::collectIdentifierHashes(const CSSSelector& selector,
       // Fall through.
       case CSSSelector::ShadowPseudo:
       case CSSSelector::ShadowDeep:
+      case CSSSelector::ShadowPiercingDescendant:
         skipOverSubselectors = false;
         collectDescendantSelectorIdentifierHashes(*current, hash);
         break;

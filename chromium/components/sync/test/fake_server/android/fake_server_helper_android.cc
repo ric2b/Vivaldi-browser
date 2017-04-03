@@ -13,7 +13,7 @@
 #include "base/android/jni_string.h"
 #include "base/logging.h"
 #include "components/sync/base/model_type.h"
-#include "components/sync/core/network_resources.h"
+#include "components/sync/engine/net/network_resources.h"
 #include "components/sync/protocol/sync.pb.h"
 #include "components/sync/test/fake_server/bookmark_entity_builder.h"
 #include "components/sync/test/fake_server/fake_server.h"
@@ -173,7 +173,7 @@ void FakeServerHelperAndroid::DeserializeEntitySpecifics(
     sync_pb::EntitySpecifics* entity_specifics) {
   int specifics_bytes_length = env->GetArrayLength(serialized_entity_specifics);
   jbyte* specifics_bytes =
-      env->GetByteArrayElements(serialized_entity_specifics, NULL);
+      env->GetByteArrayElements(serialized_entity_specifics, nullptr);
   std::string specifics_string(reinterpret_cast<char*>(specifics_bytes),
                                specifics_bytes_length);
 

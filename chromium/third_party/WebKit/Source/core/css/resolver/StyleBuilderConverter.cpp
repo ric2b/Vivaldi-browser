@@ -45,10 +45,13 @@
 #include "core/css/CSSURIValue.h"
 #include "core/css/CSSValuePair.h"
 #include "core/css/resolver/FilterOperationResolver.h"
+#include "core/css/resolver/TransformBuilder.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/UseCounter.h"
 #include "core/style/ClipPathOperation.h"
 #include "core/style/TextSizeAdjust.h"
 #include "core/svg/SVGURIReference.h"
+#include "platform/fonts/FontCache.h"
 #include "platform/transforms/RotateTransformOperation.h"
 #include "platform/transforms/ScaleTransformOperation.h"
 #include "platform/transforms/TranslateTransformOperation.h"
@@ -135,17 +138,11 @@ PassRefPtr<ClipPathOperation> StyleBuilderConverter::convertClipPath(
   if (value.isBasicShapeValue())
     return ShapeClipPathOperation::create(basicShapeForValue(state, value));
   if (value.isURIValue()) {
-    SVGURLReferenceResolver resolver(toCSSURIValue(value).value(),
-                                     state.document());
-    // If the reference is non-local, then the fragment will remain as a
-    // null string, which makes the element lookup fail.
-    AtomicString fragmentIdentifier;
-    if (resolver.isLocal())
-      fragmentIdentifier = resolver.fragmentIdentifier();
-    // TODO(fs): Doesn't work with forward or external SVG references
-    // (crbug.com/391604, crbug.com/109212, ...)
-    return ReferenceClipPathOperation::create(toCSSURIValue(value).value(),
-                                              fragmentIdentifier);
+    const CSSURIValue& urlValue = toCSSURIValue(value);
+    SVGElementProxy& elementProxy =
+        state.elementStyleResources().cachedOrPendingFromValue(urlValue);
+    // TODO(fs): Doesn't work with external SVG references (crbug.com/109212.)
+    return ReferenceClipPathOperation::create(urlValue.value(), elementProxy);
   }
   DCHECK(value.isIdentifierValue() &&
          toCSSIdentifierValue(value).getValueID() == CSSValueNone);
@@ -188,6 +185,12 @@ static bool convertFontFamilyName(
   if (value.isFontFamilyValue()) {
     genericFamily = FontDescription::NoFamily;
     familyName = AtomicString(toCSSFontFamilyValue(value).value());
+#if OS(MACOSX)
+    if (familyName == FontCache::legacySystemFontFamily()) {
+      UseCounter::count(state.document(), UseCounter::BlinkMacSystemFont);
+      familyName = FontFamilyNames::system_ui;
+    }
+#endif
   } else if (state.document().settings()) {
     genericFamily =
         convertGenericFamily(toCSSIdentifierValue(value).getValueID());
@@ -539,8 +542,6 @@ GridPosition StyleBuilderConverter::convertGridPosition(StyleResolverState&,
   GridPosition position;
 
   if (value.isCustomIdentValue()) {
-    // We translate <custom-ident> to <string> during parsing as it
-    // makes handling it more simple.
     position.setNamedGridArea(toCSSCustomIdentValue(value).value());
     return position;
   }
@@ -1135,6 +1136,13 @@ TextSizeAdjust StyleBuilderConverter::convertTextSizeAdjust(
   return TextSizeAdjust(primitiveValue.getFloatValue() / 100.0f);
 }
 
+TransformOperations StyleBuilderConverter::convertTransformOperations(
+    StyleResolverState& state,
+    const CSSValue& value) {
+  return TransformBuilder::createTransformOperations(
+      value, state.cssToLengthConversionData());
+}
+
 TransformOrigin StyleBuilderConverter::convertTransformOrigin(
     StyleResolverState& state,
     const CSSValue& value) {
@@ -1161,7 +1169,7 @@ ScrollSnapPoints StyleBuilderConverter::convertSnapPoints(
     return points;
 
   const CSSFunctionValue& repeatFunction = toCSSFunctionValue(value);
-  ASSERT_WITH_SECURITY_IMPLICATION(repeatFunction.length() == 1);
+  SECURITY_DCHECK(repeatFunction.length() == 1);
   points.repeatOffset =
       convertLength(state, toCSSPrimitiveValue(repeatFunction.item(0)));
   points.hasRepeat = true;

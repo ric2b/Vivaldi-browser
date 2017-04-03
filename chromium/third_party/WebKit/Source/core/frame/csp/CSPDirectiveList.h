@@ -14,7 +14,6 @@
 #include "platform/network/HTTPParsers.h"
 #include "platform/network/ResourceRequest.h"
 #include "platform/weborigin/KURL.h"
-#include "platform/weborigin/ReferrerPolicy.h"
 #include "wtf/Vector.h"
 #include "wtf/text/AtomicString.h"
 #include "wtf/text/WTFString.h"
@@ -42,19 +41,22 @@ class CORE_EXPORT CSPDirectiveList
     return m_headerSource;
   }
 
-  bool allowJavaScriptURLs(const String& contextURL,
+  bool allowJavaScriptURLs(Element*,
+                           const String& contextURL,
                            const WTF::OrdinalNumber& contextLine,
                            ContentSecurityPolicy::ReportingStatus) const;
-  bool allowInlineEventHandlers(const String& contextURL,
+  bool allowInlineEventHandlers(Element*,
+                                const String& contextURL,
                                 const WTF::OrdinalNumber& contextLine,
                                 ContentSecurityPolicy::ReportingStatus) const;
-  bool allowInlineScript(const String& contextURL,
+  bool allowInlineScript(Element*,
+                         const String& contextURL,
                          const String& nonce,
-                         ParserDisposition,
                          const WTF::OrdinalNumber& contextLine,
                          ContentSecurityPolicy::ReportingStatus,
                          const String& scriptContent) const;
-  bool allowInlineStyle(const String& contextURL,
+  bool allowInlineStyle(Element*,
+                        const String& contextURL,
                         const String& nonce,
                         const WTF::OrdinalNumber& contextLine,
                         ContentSecurityPolicy::ReportingStatus,
@@ -81,9 +83,9 @@ class CORE_EXPORT CSPDirectiveList
   bool allowObjectFromSource(const KURL&,
                              ResourceRequest::RedirectStatus,
                              ContentSecurityPolicy::ReportingStatus) const;
-  bool allowChildFrameFromSource(const KURL&,
-                                 ResourceRequest::RedirectStatus,
-                                 ContentSecurityPolicy::ReportingStatus) const;
+  bool allowFrameFromSource(const KURL&,
+                            ResourceRequest::RedirectStatus,
+                            ContentSecurityPolicy::ReportingStatus) const;
   bool allowImageFromSource(const KURL&,
                             ResourceRequest::RedirectStatus,
                             ContentSecurityPolicy::ReportingStatus) const;
@@ -105,10 +107,9 @@ class CORE_EXPORT CSPDirectiveList
   bool allowBaseURI(const KURL&,
                     ResourceRequest::RedirectStatus,
                     ContentSecurityPolicy::ReportingStatus) const;
-  bool allowChildContextFromSource(
-      const KURL&,
-      ResourceRequest::RedirectStatus,
-      ContentSecurityPolicy::ReportingStatus) const;
+  bool allowWorkerFromSource(const KURL&,
+                             ResourceRequest::RedirectStatus,
+                             ContentSecurityPolicy::ReportingStatus) const;
   // |allowAncestors| does not need to know whether the resource was a
   // result of a redirect. After a redirect, source paths are usually
   // ignored to stop a page from learning the path to which the
@@ -139,11 +140,6 @@ class CORE_EXPORT CSPDirectiveList
   const String& evalDisabledErrorMessage() const {
     return m_evalDisabledErrorMessage;
   }
-  ReflectedXSSDisposition getReflectedXSSDisposition() const {
-    return m_reflectedXSSDisposition;
-  }
-  ReferrerPolicy getReferrerPolicy() const { return m_referrerPolicy; }
-  bool didSetReferrerPolicy() const { return m_didSetReferrerPolicy; }
   bool isReportOnly() const {
     return m_headerType == ContentSecurityPolicyHeaderTypeReport;
   }
@@ -178,8 +174,6 @@ class CORE_EXPORT CSPDirectiveList
   void parseRequireSRIFor(const String& name, const String& value);
   void parseReportURI(const String& name, const String& value);
   void parsePluginTypes(const String& name, const String& value);
-  void parseReflectedXSS(const String& name, const String& value);
-  void parseReferrer(const String& name, const String& value);
   void addDirective(const String& name, const String& value);
   void applySandboxPolicy(const String& name, const String& sandboxPolicy);
   void enforceStrictMixedContentChecking(const String& name,
@@ -210,7 +204,8 @@ class CORE_EXPORT CSPDirectiveList
                                    const String& consoleMessage,
                                    const KURL& blockedURL,
                                    const String& contextURL,
-                                   const WTF::OrdinalNumber& contextLine) const;
+                                   const WTF::OrdinalNumber& contextLine,
+                                   Element*) const;
   void reportViolationWithState(
       const String& directiveText,
       const String& effectiveDirective,
@@ -246,6 +241,7 @@ class CORE_EXPORT CSPDirectiveList
           ContentSecurityPolicy::WillNotThrowException) const;
   bool checkInlineAndReportViolation(SourceListDirective*,
                                      const String& consoleMessage,
+                                     Element*,
                                      const String& contextURL,
                                      const WTF::OrdinalNumber& contextLine,
                                      bool isScript,
@@ -276,10 +272,6 @@ class CORE_EXPORT CSPDirectiveList
   ContentSecurityPolicyHeaderSource m_headerSource;
 
   bool m_hasSandboxPolicy;
-  ReflectedXSSDisposition m_reflectedXSSDisposition;
-
-  bool m_didSetReferrerPolicy;
-  ReferrerPolicy m_referrerPolicy;
 
   bool m_strictMixedContentCheckingEnforced;
 
@@ -301,6 +293,7 @@ class CORE_EXPORT CSPDirectiveList
   Member<SourceListDirective> m_objectSrc;
   Member<SourceListDirective> m_scriptSrc;
   Member<SourceListDirective> m_styleSrc;
+  Member<SourceListDirective> m_workerSrc;
 
   uint8_t m_requireSRIFor;
 

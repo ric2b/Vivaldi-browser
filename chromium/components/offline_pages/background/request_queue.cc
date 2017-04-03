@@ -4,10 +4,17 @@
 
 #include "components/offline_pages/background/request_queue.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/offline_pages/background/change_requests_state_task.h"
+#include "components/offline_pages/background/mark_attempt_aborted_task.h"
+#include "components/offline_pages/background/mark_attempt_completed_task.h"
+#include "components/offline_pages/background/mark_attempt_started_task.h"
+#include "components/offline_pages/background/pick_request_task.h"
+#include "components/offline_pages/background/pick_request_task_factory.h"
 #include "components/offline_pages/background/remove_requests_task.h"
 #include "components/offline_pages/background/request_queue_store.h"
 #include "components/offline_pages/background/save_page_request.h"
@@ -19,9 +26,8 @@ namespace {
 void GetRequestsDone(const RequestQueue::GetRequestsCallback& callback,
                      bool success,
                      std::vector<std::unique_ptr<SavePageRequest>> requests) {
-  RequestQueue::GetRequestsResult result =
-      success ? RequestQueue::GetRequestsResult::SUCCESS
-              : RequestQueue::GetRequestsResult::STORE_FAILURE;
+  GetRequestsResult result =
+      success ? GetRequestsResult::SUCCESS : GetRequestsResult::STORE_FAILURE;
   // TODO(fgorski): Filter out expired requests based on policy.
   // This may trigger the purging if necessary.
   // Also this may be turned into a method on the request queue or add a policy
@@ -33,16 +39,16 @@ void GetRequestsDone(const RequestQueue::GetRequestsCallback& callback,
 void AddRequestDone(const RequestQueue::AddRequestCallback& callback,
                     const SavePageRequest& request,
                     ItemActionStatus status) {
-  RequestQueue::AddRequestResult result;
+  AddRequestResult result;
   switch (status) {
     case ItemActionStatus::SUCCESS:
-      result = RequestQueue::AddRequestResult::SUCCESS;
+      result = AddRequestResult::SUCCESS;
       break;
     case ItemActionStatus::ALREADY_EXISTS:
-      result = RequestQueue::AddRequestResult::ALREADY_EXISTS;
+      result = AddRequestResult::ALREADY_EXISTS;
       break;
     case ItemActionStatus::STORE_ERROR:
-      result = RequestQueue::AddRequestResult::STORE_FAILURE;
+      result = AddRequestResult::STORE_FAILURE;
       break;
     case ItemActionStatus::NOT_FOUND:
     default:
@@ -50,28 +56,6 @@ void AddRequestDone(const RequestQueue::AddRequestCallback& callback,
       return;
   }
   callback.Run(result, request);
-}
-
-// Completes the update request call.
-// TODO(fgorski): For specific cases, check that appropriate items were updated.
-void UpdateRequestsDone(const RequestQueue::UpdateRequestCallback& callback,
-                        std::unique_ptr<UpdateRequestsResult> store_result) {
-  RequestQueue::UpdateRequestResult result;
-  if (store_result->store_state != StoreState::LOADED) {
-    result = RequestQueue::UpdateRequestResult::STORE_FAILURE;
-  } else if (store_result->item_statuses.size() == 0) {
-    result = RequestQueue::UpdateRequestResult::REQUEST_DOES_NOT_EXIST;
-  } else {
-    ItemActionStatus status = store_result->item_statuses.begin()->second;
-    if (status == ItemActionStatus::STORE_ERROR)
-      result = RequestQueue::UpdateRequestResult::STORE_FAILURE;
-    else if (status == ItemActionStatus::NOT_FOUND)
-      result = RequestQueue::UpdateRequestResult::REQUEST_DOES_NOT_EXIST;
-    else
-      result = RequestQueue::UpdateRequestResult::SUCCESS;
-  }
-
-  callback.Run(result);
 }
 
 }  // namespace
@@ -92,57 +76,6 @@ void RequestQueue::AddRequest(const SavePageRequest& request,
   store_->AddRequest(request, base::Bind(&AddRequestDone, callback, request));
 }
 
-void RequestQueue::UpdateRequest(const SavePageRequest& update_request,
-                                 const UpdateRequestCallback& update_callback) {
-  // We have to pass the update_callback *through* the get callback.  We do this
-  // by currying the update_callback as a parameter to be used when calling
-  // GetForUpdateDone.  The actual request queue store get operation will not
-  // see this bound parameter, but just pass it along.  GetForUpdateDone then
-  // passes it into the UpdateRequests method, where it ends up calling back
-  // to the request queue client.
-  // TODO(petewil): This would be more efficient if the store supported a call
-  // to get a single item by ID.  Change this code to use that API when added.
-  // crbug.com/630657.
-  store_->GetRequests(base::Bind(
-      &RequestQueue::GetForUpdateDone, weak_ptr_factory_.GetWeakPtr(),
-      update_callback, update_request));
-}
-
-// We need a different version of the GetCallback that can take the curried
-// update_callback as a parameter, and call back into the request queue store
-// implementation.  This must be a member function because we need access to
-// the store pointer to call UpdateRequests.
-void RequestQueue::GetForUpdateDone(
-    const UpdateRequestCallback& update_callback,
-    const SavePageRequest& update_request,
-    bool success,
-    std::vector<std::unique_ptr<SavePageRequest>> found_requests) {
-  // If the result was not found, return now.
-  if (!success) {
-    update_callback.Run(
-        RequestQueue::UpdateRequestResult::REQUEST_DOES_NOT_EXIST);
-    return;
-  }
-  // If the found result does not contain the request we are looking for, return
-  // now.
-  bool found = false;
-  std::vector<std::unique_ptr<SavePageRequest>>::const_iterator iter;
-  for (iter = found_requests.begin(); iter != found_requests.end(); ++iter) {
-    if ((*iter)->request_id() == update_request.request_id())
-      found = true;
-  }
-  if (!found) {
-    update_callback.Run(
-        RequestQueue::UpdateRequestResult::REQUEST_DOES_NOT_EXIST);
-    return;
-  }
-
-  // Since the request exists, update it.
-  std::vector<SavePageRequest> update_requests{update_request};
-  store_->UpdateRequests(update_requests,
-                         base::Bind(&UpdateRequestsDone, update_callback));
-}
-
 void RequestQueue::RemoveRequests(const std::vector<int64_t>& request_ids,
                                   const UpdateCallback& callback) {
   std::unique_ptr<Task> task(
@@ -159,6 +92,43 @@ void RequestQueue::ChangeRequestsState(
   task_queue_.AddTask(std::move(task));
 }
 
+void RequestQueue::MarkAttemptStarted(int64_t request_id,
+                                      const UpdateCallback& callback) {
+  std::unique_ptr<Task> task(
+      new MarkAttemptStartedTask(store_.get(), request_id, callback));
+  task_queue_.AddTask(std::move(task));
+}
+
+void RequestQueue::MarkAttemptAborted(int64_t request_id,
+                                      const UpdateCallback& callback) {
+  std::unique_ptr<Task> task(
+      new MarkAttemptAbortedTask(store_.get(), request_id, callback));
+  task_queue_.AddTask(std::move(task));
+}
+
+void RequestQueue::MarkAttemptCompleted(int64_t request_id,
+                                        const UpdateCallback& callback) {
+  std::unique_ptr<Task> task(
+      new MarkAttemptCompletedTask(store_.get(), request_id, callback));
+  task_queue_.AddTask(std::move(task));
+}
+
 void RequestQueue::PurgeRequests(const PurgeRequestsCallback& callback) {}
+
+void RequestQueue::PickNextRequest(
+    PickRequestTask::RequestPickedCallback picked_callback,
+    PickRequestTask::RequestNotPickedCallback not_picked_callback,
+    PickRequestTask::RequestCountCallback request_count_callback,
+    DeviceConditions& conditions,
+    std::set<int64_t>& disabled_requests) {
+  // Using the PickerContext, create a picker task.
+  std::unique_ptr<Task> task(picker_factory_->CreatePickerTask(
+      store_.get(), picked_callback, not_picked_callback,
+      request_count_callback, conditions, disabled_requests));
+
+  // Queue up the picking task, it will call one of the callbacks when it
+  // completes.
+  task_queue_.AddTask(std::move(task));
+}
 
 }  // namespace offline_pages

@@ -32,23 +32,25 @@ WindowSelectorController::~WindowSelectorController() {
 bool WindowSelectorController::CanSelect() {
   // Don't allow a window overview if the screen is locked or a modal dialog is
   // open or running in kiosk app session.
+  WmShell* wm_shell = WmShell::Get();
   SessionStateDelegate* session_state_delegate =
-      WmShell::Get()->GetSessionStateDelegate();
+      wm_shell->GetSessionStateDelegate();
+  SystemTrayDelegate* system_tray_delegate = wm_shell->system_tray_delegate();
   return session_state_delegate->IsActiveUserSessionStarted() &&
          !session_state_delegate->IsScreenLocked() &&
-         !WmShell::Get()->IsSystemModalWindowOpen() &&
-         !WmShell::Get()->IsPinned() &&
-         WmShell::Get()->system_tray_delegate()->GetUserLoginStatus() !=
-             LoginStatus::KIOSK_APP;
+         !wm_shell->IsSystemModalWindowOpen() && !wm_shell->IsPinned() &&
+         system_tray_delegate->GetUserLoginStatus() != LoginStatus::KIOSK_APP &&
+         system_tray_delegate->GetUserLoginStatus() !=
+             LoginStatus::ARC_KIOSK_APP;
 }
 
-void WindowSelectorController::ToggleOverview() {
+bool WindowSelectorController::ToggleOverview() {
   if (IsSelecting()) {
     OnSelectionEnded();
   } else {
     // Don't start overview if window selection is not allowed.
     if (!CanSelect())
-      return;
+      return false;
 
     std::vector<WmWindow*> windows =
         WmShell::Get()->mru_window_tracker()->BuildMruWindowList();
@@ -59,13 +61,14 @@ void WindowSelectorController::ToggleOverview() {
 
     // Don't enter overview mode with no windows.
     if (windows.empty())
-      return;
+      return false;
 
     WmShell::Get()->OnOverviewModeStarting();
     window_selector_.reset(new WindowSelector(this));
     window_selector_->Init(windows);
     OnSelectionStarted();
   }
+  return true;
 }
 
 bool WindowSelectorController::IsSelecting() const {

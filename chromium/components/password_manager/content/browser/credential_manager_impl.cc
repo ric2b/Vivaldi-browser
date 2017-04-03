@@ -16,6 +16,7 @@
 #include "components/password_manager/core/browser/affiliated_match_helper.h"
 #include "components/password_manager/core/browser/credential_manager_logger.h"
 #include "components/password_manager/core/browser/password_manager_client.h"
+#include "components/password_manager/core/browser/password_manager_metrics_util.h"
 #include "components/password_manager/core/browser/password_manager_util.h"
 #include "components/password_manager/core/browser/password_store.h"
 #include "components/password_manager/core/common/credential_manager_types.h"
@@ -63,7 +64,8 @@ void CredentialManagerImpl::Store(const CredentialInfo& credential,
   // Send acknowledge response back.
   callback.Run();
 
-  if (!client_->IsSavingAndFillingEnabledForCurrentPage())
+  if (!client_->IsSavingAndFillingEnabledForCurrentPage() ||
+      !client_->OnCredentialManagerUsed())
     return;
 
   client_->NotifyStorePasswordCalled();
@@ -117,7 +119,8 @@ void CredentialManagerImpl::RequireUserMediation(
         .LogRequireUserMediation(web_contents()->GetLastCommittedURL());
   }
   PasswordStore* store = GetPasswordStore();
-  if (!store || !IsUpdatingCredentialAllowed()) {
+  if (!store || !client_->IsSavingAndFillingEnabledForCurrentPage() ||
+      !client_->OnCredentialManagerUsed()) {
     callback.Run();
     return;
   }
@@ -161,6 +164,10 @@ void CredentialManagerImpl::Get(bool zero_click_only,
                                 bool include_passwords,
                                 const std::vector<GURL>& federations,
                                 const GetCallback& callback) {
+  using metrics_util::LogCredentialManagerGetResult;
+  metrics_util::CredentialManagerGetMediation mediation_status =
+      zero_click_only ? metrics_util::CREDENTIAL_MANAGER_GET_UNMEDIATED
+                      : metrics_util::CREDENTIAL_MANAGER_GET_MEDIATED;
   PasswordStore* store = GetPasswordStore();
   if (password_manager_util::IsLoggingActive(client_)) {
     CredentialManagerLogger(client_->GetLogManager())
@@ -173,15 +180,27 @@ void CredentialManagerImpl::Get(bool zero_click_only,
                      ? mojom::CredentialManagerError::PENDINGREQUEST
                      : mojom::CredentialManagerError::PASSWORDSTOREUNAVAILABLE,
                  base::nullopt);
+    LogCredentialManagerGetResult(metrics_util::CREDENTIAL_MANAGER_GET_REJECTED,
+                                  mediation_status);
     return;
   }
 
-  // Return an empty credential if zero-click is required but disabled, or if
-  // the current page has TLS errors.
-  if ((zero_click_only && !IsZeroClickAllowed()) ||
-      client_->DidLastPageLoadEncounterSSLErrors()) {
+  // Return an empty credential if the current page has TLS errors, or if the
+  // page is being prerendered.
+  if (!client_->IsFillingEnabledForCurrentPage() ||
+      !client_->OnCredentialManagerUsed()) {
+    callback.Run(mojom::CredentialManagerError::SUCCESS, CredentialInfo());
+    LogCredentialManagerGetResult(metrics_util::CREDENTIAL_MANAGER_GET_NONE,
+                                  mediation_status);
+    return;
+  }
+  // Return an empty credential if zero-click is required but disabled.
+  if (zero_click_only && !IsZeroClickAllowed()) {
     // Callback with empty credential info.
     callback.Run(mojom::CredentialManagerError::SUCCESS, CredentialInfo());
+    LogCredentialManagerGetResult(
+        metrics_util::CREDENTIAL_MANAGER_GET_NONE_ZERO_CLICK_OFF,
+        mediation_status);
     return;
   }
 
@@ -262,7 +281,6 @@ void CredentialManagerImpl::SendPasswordForm(
     info = CredentialInfo(*form, type_to_return);
     if (PasswordStore* store = GetPasswordStore()) {
       if (form->skip_zero_click && IsZeroClickAllowed()) {
-        DCHECK(IsUpdatingCredentialAllowed());
         autofill::PasswordForm update_form = *form;
         update_form.skip_zero_click = false;
         store->UpdateLogin(update_form);
@@ -270,9 +288,15 @@ void CredentialManagerImpl::SendPasswordForm(
     }
     base::RecordAction(
         base::UserMetricsAction("CredentialManager_AccountChooser_Accepted"));
+    metrics_util::LogCredentialManagerGetResult(
+        metrics_util::CREDENTIAL_MANAGER_GET_ACCOUNT_CHOOSER,
+        metrics_util::CREDENTIAL_MANAGER_GET_MEDIATED);
   } else {
     base::RecordAction(
         base::UserMetricsAction("CredentialManager_AccountChooser_Dismissed"));
+    metrics_util::LogCredentialManagerGetResult(
+        metrics_util::CREDENTIAL_MANAGER_GET_NONE,
+        metrics_util::CREDENTIAL_MANAGER_GET_MEDIATED);
   }
   SendCredential(send_callback, info);
 }
@@ -293,11 +317,6 @@ PasswordStore::FormDigest CredentialManagerImpl::GetSynthesizedFormForOrigin()
 void CredentialManagerImpl::DoneRequiringUserMediation() {
   DCHECK(pending_require_user_mediation_);
   pending_require_user_mediation_.reset();
-}
-
-bool CredentialManagerImpl::IsUpdatingCredentialAllowed() const {
-  return !client_->DidLastPageLoadEncounterSSLErrors() &&
-         !client_->IsOffTheRecord();
 }
 
 }  // namespace password_manager

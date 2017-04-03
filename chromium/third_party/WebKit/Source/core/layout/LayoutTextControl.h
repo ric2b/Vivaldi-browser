@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 2006, 2007 Apple Inc. All rights reserved.
- *           (C) 2008 Torch Mobile Inc. All rights reserved. (http://www.torchmobile.com/)
+ *           (C) 2008 Torch Mobile Inc. All rights reserved.
+ *               (http://www.torchmobile.com/)
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -28,20 +29,20 @@
 
 namespace blink {
 
-class HTMLTextFormControlElement;
+class TextControlElement;
 
 class CORE_EXPORT LayoutTextControl : public LayoutBlockFlow {
  public:
   ~LayoutTextControl() override;
 
-  HTMLTextFormControlElement* textFormControlElement() const;
+  TextControlElement* textControlElement() const;
   virtual PassRefPtr<ComputedStyle> createInnerEditorStyle(
       const ComputedStyle& startStyle) const = 0;
 
   const char* name() const override { return "LayoutTextControl"; }
 
  protected:
-  LayoutTextControl(HTMLTextFormControlElement*);
+  LayoutTextControl(TextControlElement*);
 
   // This convenience function should not be made public because
   // innerEditorElement may outlive the layout tree.
@@ -76,9 +77,11 @@ class CORE_EXPORT LayoutTextControl : public LayoutBlockFlow {
   LayoutObject* layoutSpecialExcludedChild(bool relayoutChildren,
                                            SubtreeLayoutScope&) override;
 
-  // We need to override this function because we don't want overflow:hidden on an <input>
-  // to affect the baseline calculation. This is necessary because we are an inline-block
-  // element as an implementation detail which would normally be affected by this.
+  int firstLineBoxBaseline() const override;
+  // We need to override this function because we don't want overflow:hidden on
+  // an <input> to affect the baseline calculation. This is necessary because we
+  // are an inline-block element as an implementation detail which would
+  // normally be affected by this.
   bool shouldIgnoreOverflowPropertyForInlineBlockBaseline() const override {
     return true;
   }

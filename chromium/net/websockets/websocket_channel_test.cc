@@ -37,7 +37,6 @@
 #include "net/websockets/websocket_handshake_request_info.h"
 #include "net/websockets/websocket_handshake_response_info.h"
 #include "net/websockets/websocket_handshake_stream_create_helper.h"
-#include "net/websockets/websocket_mux.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
@@ -167,6 +166,7 @@ class MockWebSocketEventInterface : public WebSocketEventInterface {
                              std::vector<char>(data, data + buffer_size));
   }
 
+  MOCK_METHOD1(OnCreateURLRequest, void(URLRequest*));
   MOCK_METHOD2(OnAddChannelResponse,
                ChannelState(const std::string&,
                             const std::string&));  // NOLINT
@@ -211,6 +211,7 @@ class MockWebSocketEventInterface : public WebSocketEventInterface {
 // This fake EventInterface is for tests which need a WebSocketEventInterface
 // implementation but are not verifying how it is used.
 class FakeWebSocketEventInterface : public WebSocketEventInterface {
+  void OnCreateURLRequest(URLRequest* request) override {}
   ChannelState OnAddChannelResponse(const std::string& selected_protocol,
                                     const std::string& extensions) override {
     return CHANNEL_ALIVE;

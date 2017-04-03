@@ -14,6 +14,7 @@
 #include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/process/launch.h"
+#include "base/sys_info.h"
 #include "content/public/browser/browser_thread.h"
 
 using content::BrowserThread;
@@ -57,16 +58,6 @@ void ExecuteCommandLines(system_logs::SystemLogsResponse* response) {
   command = base::CommandLine((base::FilePath("/usr/bin/printenv")));
   commands.push_back(std::make_pair("env", command));
 
-  command = base::CommandLine(base::FilePath("/usr/bin/setxkbmap"));
-  command.AppendArg("-print");
-  command.AppendArg("-query");
-  commands.push_back(std::make_pair("setxkbmap", command));
-
-  command = base::CommandLine(base::FilePath("/usr/bin/xinput"));
-  command.AppendArg("list");
-  command.AppendArg("--long");
-  commands.push_back(std::make_pair("xinput", command));
-
 #if defined(USE_X11)
   command = base::CommandLine(base::FilePath("/usr/bin/xrandr"));
   command.AppendArg("--verbose");
@@ -76,13 +67,17 @@ void ExecuteCommandLines(system_logs::SystemLogsResponse* response) {
   commands.push_back(std::make_pair("modetest", command));
 #endif
 
-  // Get a list of file sizes for the logged in user (excluding the names of
-  // the files in the Downloads directory for privay reasons).
-  command = base::CommandLine(base::FilePath("/bin/sh"));
-  command.AppendArg("-c");
-  command.AppendArg("/usr/bin/du -h /home/chronos/user |"
-                    " grep -v -e \\/home\\/chronos\\/user\\/Downloads\\/");
-  commands.push_back(std::make_pair("user_files", command));
+  // Get a list of file sizes for the whole system (excluding the names of the
+  // files in the Downloads directory for privay reasons).
+  if (base::SysInfo::IsRunningOnChromeOS()) {
+    // The following command would hang if run in Linux Chrome OS build on a
+    // Linux Workstation.
+    command = base::CommandLine(base::FilePath("/bin/sh"));
+    command.AppendArg("-c");
+    command.AppendArg(
+        "/usr/bin/du -h / | grep -v -e \\/home\\/.*\\/Downloads\\/");
+    commands.push_back(std::make_pair("system_files", command));
+  }
 
   // Get disk space usage information
   command = base::CommandLine(base::FilePath("/bin/df"));

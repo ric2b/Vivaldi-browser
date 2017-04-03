@@ -762,6 +762,8 @@ String CSSSelector::selectorText(const String& rightSide) const {
       case ShadowDeep:
         return tagHistory->selectorText(" /deep/ " + str.toString() +
                                         rightSide);
+      case ShadowPiercingDescendant:
+        return tagHistory->selectorText(" >>> " + str.toString() + rightSide);
       case DirectAdjacent:
         return tagHistory->selectorText(" + " + str.toString() + rightSide);
       case IndirectAdjacent:
@@ -969,6 +971,7 @@ bool CSSSelector::hasDeepCombinatorOrShadowPseudo() const {
   return forEachTagHistory(
       [](const CSSSelector& selector) -> bool {
         return selector.relation() == CSSSelector::ShadowDeep ||
+               selector.relation() == CSSSelector::ShadowPiercingDescendant ||
                selector.getPseudoType() == CSSSelector::PseudoShadow;
       },
       *this);

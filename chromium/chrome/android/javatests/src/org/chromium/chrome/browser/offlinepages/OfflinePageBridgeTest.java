@@ -5,7 +5,6 @@
 package org.chromium.chrome.browser.offlinepages;
 
 import android.content.Context;
-import android.os.Environment;
 import android.test.suitebuilder.annotation.SmallTest;
 
 import org.chromium.base.Callback;
@@ -94,8 +93,7 @@ public class OfflinePageBridgeTest extends ChromeActivityTestCaseBase<ChromeActi
 
         initializeBridgeForProfile(false);
 
-        mTestServer = EmbeddedTestServer.createAndStartFileServer(
-                getInstrumentation().getContext(), Environment.getExternalStorageDirectory());
+        mTestServer = EmbeddedTestServer.createAndStartServer(getInstrumentation().getContext());
         mTestPage = mTestServer.getURL(TEST_PAGE);
     }
 
@@ -162,18 +160,6 @@ public class OfflinePageBridgeTest extends ChromeActivityTestCaseBase<ChromeActi
         deletePage(BOOKMARK_ID, DeletePageResult.SUCCESS);
         assertNull("Offline page should be gone, but it is available.",
                 getPageByClientId(BOOKMARK_ID));
-    }
-
-    @CommandLineFlags.Add("disable-features=OfflinePagesBackgroundLoading")
-    @SmallTest
-    public void testBackgroundLoadSwitch() throws Exception {
-        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
-            @Override
-            public void run() {
-                assertFalse("If background loading is off, we should see the feature disabled",
-                        OfflinePageBridge.isBackgroundLoadingEnabled());
-            }
-        });
     }
 
     @CommandLineFlags.Add("disable-features=OfflinePagesSharing")

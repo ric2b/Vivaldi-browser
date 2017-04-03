@@ -8,14 +8,13 @@ This command interacts with the Rietveld API to get information about try jobs
 with layout test results.
 """
 
+import json
 import logging
 import optparse
 
-from webkitpy.common.net.buildbot import Build
 from webkitpy.common.net.rietveld import Rietveld
 from webkitpy.common.net.web import Web
 from webkitpy.common.net.git_cl import GitCL
-from webkitpy.common.webkit_finder import WebKitFinder
 from webkitpy.layout_tests.models.test_expectations import BASELINE_SUFFIX_LIST
 from webkitpy.tool.commands.rebaseline import AbstractParallelRebaselineCommand
 
@@ -59,11 +58,10 @@ class RebaselineCL(AbstractParallelRebaselineCommand):
 
         builds = self.rietveld.latest_try_jobs(issue_number, self._try_bots())
         if options.trigger_jobs:
-            self.trigger_jobs_for_missing_builds(builds)
+            if self.trigger_jobs_for_missing_builds(builds):
+                _log.info('Please re-run webkit-patch rebaseline-cl once all pending try jobs have finished.')
+                return
         if not builds:
-            # TODO(qyearsley): Also check that there are *finished* builds.
-            # The current behavior would still proceed if there are queued
-            # or started builds.
             _log.info('No builds to download baselines from.')
 
         if args:
@@ -74,31 +72,11 @@ class RebaselineCL(AbstractParallelRebaselineCommand):
             test_prefix_list = self._test_prefix_list(
                 issue_number, only_changed_tests=options.only_changed_tests)
 
-        # TODO(qyearsley): Fix places where non-existing tests may be added:
-        #  1. Make sure that the tests obtained when passing --only-changed-tests include only existing tests.
-        #  2. Make sure that update-w3c-test-expectations doesn't specify non-existing tests (http://crbug.com/649691).
-        test_prefix_list = self._filter_existing(test_prefix_list)
-
         self._log_test_prefix_list(test_prefix_list)
 
         if options.dry_run:
             return
-        # NOTE(qyearsley): If this is changed to stage all new files with git,
-        # e.g. if update_scm is not False, then update_w3c_test_expectations.py
-        # should be changed to not call git add --all.
-        self.rebaseline(options, test_prefix_list, update_scm=False)
-
-    def _filter_existing(self, test_prefix_list):
-        """Filters out entries in |test_prefix_list| for tests that don't exist."""
-        new_test_prefix_list = {}
-        port = self._tool.port_factory.get()
-        for test in test_prefix_list:
-            path = port.abspath_for_test(test)
-            if self._tool.filesystem.exists(path):
-                new_test_prefix_list[test] = test_prefix_list[test]
-            else:
-                _log.warning('%s not found, removing from list.', path)
-        return new_test_prefix_list
+        self.rebaseline(options, test_prefix_list)
 
     def _get_issue_number(self, options):
         """Gets the Rietveld CL number from either |options| or from the current local branch."""
@@ -118,21 +96,33 @@ class RebaselineCL(AbstractParallelRebaselineCommand):
         return GitCL(self._tool)
 
     def trigger_jobs_for_missing_builds(self, builds):
+        """Triggers try jobs for any builders that have no builds started.
+
+        Args:
+          builds: A list of Build objects; if the build number of a Build is None,
+              then that indicates that the job is pending.
+
+        Returns:
+            True if there are pending jobs to wait for, including jobs just started.
+        """
         builders_with_builds = {b.builder_name for b in builds}
         builders_without_builds = set(self._try_bots()) - builders_with_builds
-        if not builders_without_builds:
-            return
+        builders_with_pending_builds = {b.builder_name for b in builds if b.build_number is None}
 
-        _log.info('Triggering try jobs for:')
-        for builder in sorted(builders_without_builds):
-            _log.info('  %s', builder)
+        if builders_with_pending_builds:
+            _log.info('There are existing pending builds for:')
+            for builder in sorted(builders_with_pending_builds):
+                _log.info('  %s', builder)
 
-        # If the builders may be under different masters, then they cannot
-        # all be started in one invocation of git cl try without providing
-        # master names. Doing separate invocations is slower, but always works
-        # even when there are builders under different master names.
-        for builder in sorted(builders_without_builds):
-            self.git_cl().run(['try', '-b', builder])
+        if builders_without_builds:
+            _log.info('Triggering try jobs for:')
+            command = ['try']
+            for builder in sorted(builders_without_builds):
+                _log.info('  %s', builder)
+                command.extend(['-b', builder])
+            self.git_cl().run(command)
+
+        return bool(builders_with_pending_builds or builders_without_builds)
 
     def _test_prefix_list(self, issue_number, only_changed_tests):
         """Returns a collection of test, builder and file extensions to get new baselines for.
@@ -149,8 +139,11 @@ class RebaselineCL(AbstractParallelRebaselineCommand):
         builds_to_tests = self._builds_to_tests(issue_number)
         if only_changed_tests:
             files_in_cl = self.rietveld.changed_files(issue_number)
-            finder = WebKitFinder(self._tool.filesystem)
-            tests_in_cl = [finder.layout_test_name(f) for f in files_in_cl]
+            # Note, in the changed files list from Rietveld, paths always
+            # use / as the separator, and they're always relative to repo root.
+            # TODO(qyearsley): Do this without using a hard-coded constant.
+            test_base = 'third_party/WebKit/LayoutTests/'
+            tests_in_cl = [f[len(test_base):] for f in files_in_cl if f.startswith(test_base)]
         result = {}
         for build, tests in builds_to_tests.iteritems():
             for test in tests:
@@ -164,29 +157,48 @@ class RebaselineCL(AbstractParallelRebaselineCommand):
     def _builds_to_tests(self, issue_number):
         """Fetches a list of try bots, and for each, fetches tests with new baselines."""
         _log.debug('Getting results for Rietveld issue %d.', issue_number)
-        try_jobs = self.rietveld.latest_try_jobs(issue_number, self._try_bots())
-        if not try_jobs:
+        builds = self.rietveld.latest_try_jobs(issue_number, self._try_bots())
+        if not builds:
             _log.debug('No try job results for builders in: %r.', self._try_bots())
-        builds_to_tests = {}
-        for job in try_jobs:
-            test_results = self._unexpected_mismatch_results(job)
-            build = Build(job.builder_name, job.build_number)
-            builds_to_tests[build] = sorted(r.test_name() for r in test_results)
-        return builds_to_tests
+        return {build: self._tests_to_rebaseline(build) for build in builds}
 
     def _try_bots(self):
         """Returns a collection of try bot builders to fetch results for."""
         return self._tool.builders.all_try_builder_names()
 
-    def _unexpected_mismatch_results(self, try_job):
-        """Fetches a list of LayoutTestResult objects for unexpected results with new baselines."""
+    def _tests_to_rebaseline(self, build):
+        """Fetches a list of tests that should be rebaselined."""
         buildbot = self._tool.buildbot
-        results_url = buildbot.results_url(try_job.builder_name, try_job.build_number)
+        results_url = buildbot.results_url(build.builder_name, build.build_number)
+
         layout_test_results = buildbot.fetch_layout_test_results(results_url)
         if layout_test_results is None:
             _log.warning('Failed to request layout test results from "%s".', results_url)
             return []
-        return layout_test_results.unexpected_mismatch_results()
+
+        unexpected_results = layout_test_results.didnt_run_as_expected_results()
+        tests = sorted(r.test_name() for r in unexpected_results
+                       if r.is_missing_baseline() or r.has_mismatch_result())
+
+        new_failures = self._fetch_tests_with_new_failures(build)
+        if new_failures is None:
+            _log.warning('No retry summary available for build %s.', build)
+        else:
+            tests = [t for t in tests if t in new_failures]
+        return tests
+
+    def _fetch_tests_with_new_failures(self, build):
+        """Fetches a list of tests that failed with a patch in a given try job but not without."""
+        buildbot = self._tool.buildbot
+        content = buildbot.fetch_retry_summary_json(build)
+        if content is None:
+            return None
+        try:
+            retry_summary = json.loads(content)
+            return retry_summary['failures']
+        except (ValueError, KeyError):
+            _log.warning('Unexepected retry summary content:\n%s', content)
+            return None
 
     @staticmethod
     def _log_test_prefix_list(test_prefix_list):
@@ -194,7 +206,8 @@ class RebaselineCL(AbstractParallelRebaselineCommand):
         if not test_prefix_list:
             _log.info('No tests to rebaseline; exiting.')
             return
-        _log.info('Tests to rebaseline:')
+        _log.debug('Tests to rebaseline:')
         for test, builds in test_prefix_list.iteritems():
-            builds_str = ', '.join(sorted('%s (%s)' % (b.builder_name, b.build_number) for b in builds))
-            _log.info('  %s: %s', test, builds_str)
+            _log.debug('  %s:', test)
+            for build in sorted(builds):
+                _log.debug('    %s', build)

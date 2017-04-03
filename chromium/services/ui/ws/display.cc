@@ -8,10 +8,9 @@
 #include <utility>
 #include <vector>
 
-#include "base/debug/debugger.h"
 #include "base/strings/utf_string_conversions.h"
 #include "mojo/common/common_type_converters.h"
-#include "services/shell/public/interfaces/connector.mojom.h"
+#include "services/service_manager/public/interfaces/connector.mojom.h"
 #include "services/ui/common/types.h"
 #include "services/ui/public/interfaces/cursor.mojom.h"
 #include "services/ui/ws/display_binding.h"
@@ -32,13 +31,8 @@
 namespace ui {
 namespace ws {
 
-Display::Display(WindowServer* window_server,
-                 const PlatformDisplayInitParams& platform_display_init_params)
-    : window_server_(window_server),
-      platform_display_(PlatformDisplay::Create(platform_display_init_params)),
-      last_cursor_(mojom::Cursor::CURSOR_NULL) {
-  platform_display_->Init(this);
-
+Display::Display(WindowServer* window_server)
+    : window_server_(window_server), last_cursor_(mojom::Cursor::CURSOR_NULL) {
   window_server_->window_manager_window_tree_factory_set()->AddObserver(this);
   window_server_->user_id_tracker()->AddObserver(this);
 }
@@ -54,9 +48,6 @@ Display::~Display() {
     focus_controller_.reset();
   }
 
-  for (ServerWindow* window : windows_needing_frame_destruction_)
-    window->RemoveObserver(this);
-
   if (!binding_) {
     for (auto& pair : window_manager_display_root_map_)
       pair.second->window_manager_state()->OnDisplayDestroying(this);
@@ -69,11 +60,17 @@ Display::~Display() {
   }
 }
 
-void Display::Init(std::unique_ptr<DisplayBinding> binding) {
-  init_called_ = true;
+void Display::Init(const PlatformDisplayInitParams& init_params,
+                   std::unique_ptr<DisplayBinding> binding) {
   binding_ = std::move(binding);
   display_manager()->AddDisplay(this);
-  InitWindowManagerDisplayRootsIfNecessary();
+
+  CreateRootWindow(init_params.metrics.pixel_size);
+  PlatformDisplayInitParams params_copy = init_params;
+  params_copy.root_window = root_.get();
+
+  platform_display_ = PlatformDisplay::Create(params_copy);
+  platform_display_->Init(this);
 }
 
 int64_t Display::GetId() const {
@@ -88,54 +85,25 @@ const DisplayManager* Display::display_manager() const {
   return window_server_->display_manager();
 }
 
-mojom::WsDisplayPtr Display::ToWsDisplay() const {
-  mojom::WsDisplayPtr display_ptr = mojom::WsDisplay::New();
-
-  display_ptr->display = ToDisplay();
-  display_ptr->is_primary = platform_display_->IsPrimaryDisplay();
-
-  // TODO(sky): make this real.
-  display_ptr->frame_decoration_values = mojom::FrameDecorationValues::New();
-  return display_ptr;
-}
-
 display::Display Display::ToDisplay() const {
   display::Display display(GetId());
 
-  display.set_bounds(platform_display_->GetBounds());
-  // TODO(sky): window manager needs an API to set the work area.
-  display.set_work_area(display.bounds());
-  display.set_device_scale_factor(platform_display_->GetDeviceScaleFactor());
-  display.set_rotation(platform_display_->GetRotation());
+  const display::ViewportMetrics& metrics =
+      platform_display_->GetViewportMetrics();
+
+  display.set_bounds(metrics.bounds);
+  display.set_work_area(metrics.work_area);
+  display.set_device_scale_factor(metrics.device_scale_factor);
+  display.set_rotation(metrics.rotation);
   display.set_touch_support(
       display::Display::TouchSupport::TOUCH_SUPPORT_UNKNOWN);
 
   return display;
 }
 
-void Display::SchedulePaint(const ServerWindow* window,
-                            const gfx::Rect& bounds) {
-  DCHECK(root_->Contains(window));
-  platform_display_->SchedulePaint(window, bounds);
-}
-
-void Display::ScheduleSurfaceDestruction(ServerWindow* window) {
-  if (!platform_display_->IsFramePending()) {
-    window->DestroySurfacesScheduledForDestruction();
-    return;
-  }
-  if (windows_needing_frame_destruction_.count(window))
-    return;
-  windows_needing_frame_destruction_.insert(window);
-  window->AddObserver(this);
-}
-
-display::Display::Rotation Display::GetRotation() const {
-  return platform_display_->GetRotation();
-}
-
 gfx::Size Display::GetSize() const {
-  return platform_display_->GetBounds().size();
+  DCHECK(root_);
+  return root_->bounds().size();
 }
 
 ServerWindow* Display::GetRootWithId(const WindowId& id) {
@@ -236,18 +204,14 @@ void Display::SetTitle(const mojo::String& title) {
   platform_display_->SetTitle(title.To<base::string16>());
 }
 
-void Display::InitWindowManagerDisplayRootsIfNecessary() {
-  if (!init_called_ || !root_)
-    return;
-
-  display_manager()->OnDisplayAcceleratedWidgetAvailable(this);
+void Display::InitWindowManagerDisplayRoots() {
   if (binding_) {
     std::unique_ptr<WindowManagerDisplayRoot> display_root_ptr(
         new WindowManagerDisplayRoot(this));
     WindowManagerDisplayRoot* display_root = display_root_ptr.get();
     // For this case we never create additional displays roots, so any
     // id works.
-    window_manager_display_root_map_[shell::mojom::kRootUserID] =
+    window_manager_display_root_map_[service_manager::mojom::kRootUserID] =
         display_root_ptr.get();
     WindowTree* window_tree = binding_->CreateWindowTree(display_root->root());
     display_root->window_manager_state_ = window_tree->window_manager_state();
@@ -296,11 +260,15 @@ void Display::CreateRootWindow(const gfx::Size& size) {
   root_->SetVisible(true);
   focus_controller_ = base::MakeUnique<FocusController>(this, root_.get());
   focus_controller_->AddObserver(this);
-  InitWindowManagerDisplayRootsIfNecessary();
 }
 
 ServerWindow* Display::GetRootWindow() {
   return root_.get();
+}
+
+void Display::OnAcceleratedWidgetAvailable() {
+  display_manager()->OnDisplayAcceleratedWidgetAvailable(this);
+  InitWindowManagerDisplayRoots();
 }
 
 bool Display::IsInHighContrastMode() {
@@ -323,26 +291,15 @@ void Display::OnNativeCaptureLost() {
     display_root->window_manager_state()->SetCapture(nullptr, kInvalidClientId);
 }
 
-void Display::OnViewportMetricsChanged(const ViewportMetrics& old_metrics,
-                                       const ViewportMetrics& new_metrics) {
-  if (!root_)
+void Display::OnViewportMetricsChanged(
+    const display::ViewportMetrics& metrics) {
+  if (root_->bounds().size() == metrics.pixel_size)
     return;
 
-  gfx::Rect new_bounds(new_metrics.bounds.size());
+  gfx::Rect new_bounds(metrics.pixel_size);
   root_->SetBounds(new_bounds);
   for (auto& pair : window_manager_display_root_map_)
     pair.second->root()->SetBounds(new_bounds);
-
-  display_manager()->OnDisplayUpdate(this);
-}
-
-void Display::OnCompositorFrameDrawn() {
-  std::set<ServerWindow*> windows;
-  windows.swap(windows_needing_frame_destruction_);
-  for (ServerWindow* window : windows) {
-    window->RemoveObserver(this);
-    window->DestroySurfacesScheduledForDestruction();
-  }
 }
 
 bool Display::CanHaveActiveChildren(ServerWindow* window) const {
@@ -416,11 +373,6 @@ void Display::OnFocusChanged(FocusControllerChangeSource change_source,
 
   UpdateTextInputState(new_focused_window,
                        new_focused_window->text_input_state());
-}
-
-void Display::OnWindowDestroyed(ServerWindow* window) {
-  windows_needing_frame_destruction_.erase(window);
-  window->RemoveObserver(this);
 }
 
 void Display::OnUserIdRemoved(const UserId& id) {

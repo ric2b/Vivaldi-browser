@@ -12,7 +12,7 @@
 
 #include "chrome/browser/media/router/issue.h"
 #include "chrome/browser/media/router/media_route.h"
-#include "chrome/browser/media/router/media_router.h"
+#include "chrome/browser/media/router/media_router_base.h"
 #include "chrome/browser/media/router/media_sink.h"
 #include "chrome/browser/media/router/media_source.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -20,7 +20,7 @@
 namespace media_router {
 
 // Media Router mock class. Used for testing purposes.
-class MockMediaRouter : public MediaRouter {
+class MockMediaRouter : public MediaRouterBase {
  public:
   MockMediaRouter();
   ~MockMediaRouter() override;
@@ -85,6 +85,7 @@ class MockMediaRouter : public MediaRouter {
     OnAddPresentationConnectionStateChangedCallbackInvoked(callback);
     return connection_state_callbacks_.Add(callback);
   }
+  MOCK_CONST_METHOD0(GetCurrentRoutes, std::vector<MediaRoute>());
 
   MOCK_METHOD0(OnIncognitoProfileShutdown, void());
   MOCK_METHOD1(OnAddPresentationConnectionStateChangedCallbackInvoked,

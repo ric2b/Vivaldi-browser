@@ -35,7 +35,7 @@ class DictionaryValue;
 class Value;
 }
 
-namespace shell {
+namespace service_manager {
 class InterfaceRegistry;
 }
 
@@ -126,6 +126,9 @@ class WebState : public base::SupportsUserData {
   // Opens a URL with the given disposition.  The transition specifies how this
   // navigation should be recorded in the history system (for example, typed).
   virtual void OpenURL(const OpenURLParams& params) = 0;
+
+  // Stops any pending navigation.
+  virtual void Stop() = 0;
 
   // Gets the NavigationManager associated with this WebState. Can never return
   // null.
@@ -238,7 +241,7 @@ class WebState : public base::SupportsUserData {
                             const ImageDownloadCallback& callback) = 0;
 
   // Returns Mojo interface registry for this WebState.
-  virtual shell::InterfaceRegistry* GetMojoInterfaceRegistry() = 0;
+  virtual service_manager::InterfaceRegistry* GetMojoInterfaceRegistry() = 0;
 
  protected:
   friend class WebStateObserver;

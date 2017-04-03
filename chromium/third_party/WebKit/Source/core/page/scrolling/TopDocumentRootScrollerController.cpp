@@ -81,7 +81,7 @@ void TopDocumentRootScrollerController::recomputeGlobalRootScroller() {
     m_globalRootScroller->removeApplyScroll();
 
   // Use disable-native-scroll since the ViewportScrollCallback needs to
-  // apply scroll actions both before (TopControls) and after (overscroll)
+  // apply scroll actions both before (BrowserControls) and after (overscroll)
   // scrolling the element so it will apply scroll to the element itself.
   target->setApplyScroll(m_viewportApplyScroll, "disable-native-scroll");
 
@@ -94,6 +94,11 @@ void TopDocumentRootScrollerController::recomputeGlobalRootScroller() {
   // changes.
   setNeedsCompositingInputsUpdateOnGlobalRootScroller();
 
+  ScrollableArea* oldRootScrollerArea =
+      m_globalRootScroller
+          ? RootScrollerUtil::scrollableAreaFor(*m_globalRootScroller.get())
+          : nullptr;
+
   m_globalRootScroller = target;
 
   setNeedsCompositingInputsUpdateOnGlobalRootScroller();
@@ -104,6 +109,13 @@ void TopDocumentRootScrollerController::recomputeGlobalRootScroller() {
   // ViewportScrollCallback to swap the target into the layout viewport
   // in RootFrameViewport.
   m_viewportApplyScroll->setScroller(targetScroller);
+
+  // The scrollers may need to stop using their own scrollbars as Android
+  // Chrome's VisualViewport provides the scrollbars for the root scroller.
+  if (oldRootScrollerArea)
+    oldRootScrollerArea->didChangeGlobalRootScroller();
+
+  targetScroller->didChangeGlobalRootScroller();
 }
 
 Document* TopDocumentRootScrollerController::topDocument() const {
@@ -146,7 +158,7 @@ void TopDocumentRootScrollerController::initializeViewportScrollCallback(
     RootFrameViewport& rootFrameViewport) {
   DCHECK(m_frameHost);
   m_viewportApplyScroll = ViewportScrollCallback::create(
-      &m_frameHost->topControls(), &m_frameHost->overscrollController(),
+      &m_frameHost->browserControls(), &m_frameHost->overscrollController(),
       rootFrameViewport);
 
   recomputeGlobalRootScroller();

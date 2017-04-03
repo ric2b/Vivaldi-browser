@@ -41,7 +41,6 @@ class HostWindow;
 class IntRect;
 class PlatformGestureEvent;
 class PlatformMouseEvent;
-class ScrollAnimatorBase;
 class ScrollableArea;
 class ScrollbarTheme;
 
@@ -81,7 +80,7 @@ class PLATFORM_EXPORT Scrollbar : public Widget,
   void setFrameRect(const IntRect&) override;
   IntRect frameRect() const override { return Widget::frameRect(); }
 
-  ScrollbarOverlayStyle getScrollbarOverlayStyle() const override;
+  ScrollbarOverlayColorTheme getScrollbarOverlayColorTheme() const override;
   void getTickmarks(Vector<IntRect>&) const override;
   bool isScrollableAreaActive() const override;
 
@@ -105,7 +104,7 @@ class PLATFORM_EXPORT Scrollbar : public Widget,
   ScrollbarPart hoveredPart() const override { return m_hoveredPart; }
 
   void styleChanged() override {}
-  void visibilityChanged() override;
+  void setScrollbarsHidden(bool) override;
   bool enabled() const override { return m_enabled; }
   void setEnabled(bool) override;
 
@@ -173,11 +172,6 @@ class PLATFORM_EXPORT Scrollbar : public Widget,
   bool thumbNeedsRepaint() const { return m_thumbNeedsRepaint; }
   void clearThumbNeedsRepaint() { m_thumbNeedsRepaint = false; }
 
-  bool overlapsResizer() const { return m_overlapsResizer; }
-  void setOverlapsResizer(bool overlapsResizer) {
-    m_overlapsResizer = overlapsResizer;
-  }
-
   // DisplayItemClient methods.
   String debugName() const final {
     return m_orientation == HorizontalScrollbar ? "HorizontalScrollbar"
@@ -239,7 +233,6 @@ class PLATFORM_EXPORT Scrollbar : public Widget,
   bool m_enabled;
 
   Timer<Scrollbar> m_scrollTimer;
-  bool m_overlapsResizer;
 
   float m_elasticOverscroll;
 
@@ -255,6 +248,7 @@ class PLATFORM_EXPORT Scrollbar : public Widget,
   float scrollableAreaTargetPos() const;
   bool thumbWillBeUnderMouse() const;
 
+  int m_themeScrollbarThickness;
   bool m_trackNeedsRepaint;
   bool m_thumbNeedsRepaint;
 };

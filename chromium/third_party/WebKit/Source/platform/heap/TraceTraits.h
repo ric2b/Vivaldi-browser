@@ -31,6 +31,8 @@ class CrossThreadWeakPersistent;
 template <typename T>
 class Member;
 template <typename T>
+class TraceEagerlyTrait;
+template <typename T>
 class TraceTrait;
 template <typename T>
 class WeakMember;
@@ -346,6 +348,14 @@ class TraceEagerlyTrait<Member<T>> {
 };
 
 template <typename T>
+class TraceEagerlyTrait<TraceWrapperMember<T>> {
+  STATIC_ONLY(TraceEagerlyTrait);
+
+ public:
+  static const bool value = TraceEagerlyTrait<T>::value;
+};
+
+template <typename T>
 class TraceEagerlyTrait<WeakMember<T>> {
   STATIC_ONLY(TraceEagerlyTrait);
 
@@ -483,8 +493,10 @@ struct TraceInCollectionTrait<NoWeakHandlingInCollections,
     // elements to trace.
     size_t length = header->payloadSize() / sizeof(T);
     if (std::is_polymorphic<T>::value) {
-      for (size_t i = 0; i < length; ++i) {
-        if (blink::vTableInitialized(&array[i]))
+      char* pointer = reinterpret_cast<char*>(array);
+      for (unsigned i = 0; i < length; ++i) {
+        char* element = pointer + i * sizeof(T);
+        if (blink::vTableInitialized(element))
           blink::TraceIfEnabled<
               T, IsTraceableInCollectionTrait<Traits>::value>::trace(visitor,
                                                                      array[i]);

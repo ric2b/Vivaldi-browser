@@ -4,13 +4,13 @@
 
 #include "platform/graphics/RecordingImageBufferSurface.h"
 
+#include "platform/WebTaskRunner.h"
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/ImageBuffer.h"
 #include "platform/graphics/ImageBufferClient.h"
 #include "platform/graphics/UnacceleratedImageBufferSurface.h"
 #include "platform/testing/TestingPlatformSupport.h"
 #include "public/platform/Platform.h"
-#include "public/platform/WebTaskRunner.h"
 #include "public/platform/WebThread.h"
 #include "public/platform/WebTraceLocation.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -77,10 +77,12 @@ class MockSurfaceFactory : public RecordingImageBufferFallbackSurfaceFactory {
   virtual std::unique_ptr<ImageBufferSurface> createSurface(
       const IntSize& size,
       OpacityMode opacityMode,
-      sk_sp<SkColorSpace> colorSpace) {
+      sk_sp<SkColorSpace> colorSpace,
+      SkColorType colorType) {
     m_createSurfaceCount++;
     return wrapUnique(new UnacceleratedImageBufferSurface(
-        size, opacityMode, InitializeImagePixels, std::move(colorSpace)));
+        size, opacityMode, InitializeImagePixels, std::move(colorSpace),
+        colorType));
   }
 
   virtual ~MockSurfaceFactory() {}
@@ -95,7 +97,7 @@ class RecordingImageBufferSurfaceTest : public Test {
  protected:
   RecordingImageBufferSurfaceTest() {
     std::unique_ptr<MockSurfaceFactory> surfaceFactory =
-        wrapUnique(new MockSurfaceFactory());
+        makeUnique<MockSurfaceFactory>();
     m_surfaceFactory = surfaceFactory.get();
     std::unique_ptr<RecordingImageBufferSurface> testSurface =
         wrapUnique(new RecordingImageBufferSurface(
@@ -201,7 +203,7 @@ class RecordingImageBufferSurfaceTest : public Test {
     m_testSurface->initializeCurrentFrame();
     m_testSurface->getPicture();
     SkPaint clearPaint;
-    clearPaint.setXfermodeMode(SkXfermode::kClear_Mode);
+    clearPaint.setBlendMode(SkBlendMode::kClear);
     m_imageBuffer->canvas()->drawRect(
         SkRect::MakeWH(m_testSurface->size().width(),
                        m_testSurface->size().height()),

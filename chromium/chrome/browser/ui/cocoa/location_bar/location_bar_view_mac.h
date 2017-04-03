@@ -20,7 +20,7 @@
 #include "chrome/browser/ui/omnibox/chrome_omnibox_edit_controller.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/prefs/pref_member.h"
-#include "components/security_state/security_state_model.h"
+#include "components/security_state/core/security_state.h"
 #include "components/zoom/zoom_event_manager_observer.h"
 
 @class AutocompleteTextField;
@@ -106,21 +106,13 @@ class LocationBarViewMac : public LocationBar,
   // Checks if the bookmark star should be enabled or not.
   bool IsStarEnabled() const;
 
-  // Get the point in window coordinates on the star for the bookmark bubble to
-  // aim at. Only works if IsStarEnabled returns YES.
-  NSPoint GetBookmarkBubblePoint() const;
+  // Get the point in window coordinates in the |decoration| at which the
+  // associate bubble aims.
+  NSPoint GetBubblePointForDecoration(LocationBarDecoration* decoration) const;
 
   // Get the point in window coordinates in the save credit card icon for the
   //  save credit card bubble to aim at.
   NSPoint GetSaveCreditCardBubblePoint() const;
-
-  // Get the point in window coordinates on the star for the Translate bubble to
-  // aim at.
-  NSPoint GetTranslateBubblePoint() const;
-
-  // Get the point in window coordinates in the lock icon for the Manage
-  // Passwords bubble to aim at.
-  NSPoint GetManagePasswordsBubblePoint() const;
 
   // Get the point in window coordinates in the security icon at which the page
   // info bubble aims.
@@ -199,8 +191,17 @@ class LocationBarViewMac : public LocationBar,
   // Returns true if the location bar is dark.
   bool IsLocationBarDark() const;
 
+  // Returns the decoration for the page info bubble.
+  LocationBarDecoration* GetPageInfoDecoration() const;
+
   ManagePasswordsDecoration* manage_passwords_decoration() {
     return manage_passwords_decoration_.get();
+  }
+
+  StarDecoration* star_decoration() const { return star_decoration_.get(); }
+
+  TranslateDecoration* translate_decoration() const {
+    return translate_decoration_.get();
   }
 
   Browser* browser() const { return browser_; }
@@ -254,9 +255,11 @@ class LocationBarViewMac : public LocationBar,
   // Updates the security state bubble decoration.
   void UpdateSecurityState(bool tab_changed);
 
+  // Returns true if the security state can animate for the |level|.
+  bool CanAnimateSecurityLevel(security_state::SecurityLevel level) const;
+
   // Returns true if |level| is SECURE or EV_SECURE.
-  bool IsSecureConnection(
-      security_state::SecurityStateModel::SecurityLevel level) const;
+  bool IsSecureConnection(security_state::SecurityLevel level) const;
 
   // Returns pointers to all of the LocationBarDecorations owned by this
   // LocationBarViewMac. This helper function is used for positioning and
@@ -315,20 +318,20 @@ class LocationBarViewMac : public LocationBar,
   // Indicates whether or not the location bar is currently visible.
   bool location_bar_visible_;
 
-  // True if the HTTPS (non EV cert) state should be displayed on the security
-  // state decoration.
+  // True if the HTTPS state should be displayed on the security state
+  // decoration. This does not apply to the EV cert.
   bool should_show_secure_verbose_;
 
   // True if the non-secure state should be displayed on the security state
   // decoration.
   bool should_show_nonsecure_verbose_;
 
-  // True if the security state decoration should be animated for the
-  // transition to the secure state.
+  // True if the security state decoration should be animated for a secure
+  // security level.
   bool should_animate_secure_verbose_;
 
-  // True if the security state decoration should be animated for the
-  // transition to the nonsecure state.
+  // True if the security state decoration should be animated for a non-secure
+  // security level.
   bool should_animate_nonsecure_verbose_;
 
   // True if there's enough room for the omnibox to show the security verbose.
@@ -336,7 +339,7 @@ class LocationBarViewMac : public LocationBar,
   bool is_width_available_for_security_verbose_;
 
   // The security level of the location bar icon.
-  security_state::SecurityStateModel::SecurityLevel security_level_;
+  security_state::SecurityLevel security_level_;
 
   // Used to schedule a task for the first run info bubble.
   base::WeakPtrFactory<LocationBarViewMac> weak_ptr_factory_;

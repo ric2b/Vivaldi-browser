@@ -8,6 +8,7 @@
 #include "base/callback_helpers.h"
 #include "base/path_service.h"
 #include "chrome/browser/chromeos/login/lock/screen_locker.h"
+#include "chrome/browser/chromeos/login/lock/webui_screen_locker.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host.h"
 #include "chrome/browser/chromeos/login/ui/webui_login_view.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
@@ -131,7 +132,9 @@ AccessibilityExtensionLoader::AccessibilityExtensionLoader(
 
 AccessibilityExtensionLoader::~AccessibilityExtensionLoader() {}
 
-void AccessibilityExtensionLoader::SetProfile(Profile* profile) {
+void AccessibilityExtensionLoader::SetProfile(
+    Profile* profile,
+    const base::Closure& done_callback) {
   profile_ = profile;
 
   if (!loaded_on_user_screen_ && !loaded_on_lock_screen_)
@@ -143,7 +146,7 @@ void AccessibilityExtensionLoader::SetProfile(Profile* profile) {
       extensions::ExtensionSystem::Get(profile_)->extension_service();
   auto* component_loader = extension_service->component_loader();
   if (!component_loader->Exists(extension_id_))
-    LoadExtension(profile_, nullptr, base::Closure());
+    LoadExtension(profile_, nullptr, done_callback);
 }
 
 void AccessibilityExtensionLoader::Load(Profile* profile,
@@ -214,7 +217,7 @@ void AccessibilityExtensionLoader::LoadToLockScreen(
 
   ScreenLocker* screen_locker = ScreenLocker::default_screen_locker();
   if (screen_locker && screen_locker->locked()) {
-    content::WebUI* lock_web_ui = screen_locker->GetAssociatedWebUI();
+    content::WebUI* lock_web_ui = screen_locker->web_ui()->GetWebUI();
     if (lock_web_ui) {
       Profile* profile = Profile::FromWebUI(lock_web_ui);
       loaded_on_lock_screen_ = true;

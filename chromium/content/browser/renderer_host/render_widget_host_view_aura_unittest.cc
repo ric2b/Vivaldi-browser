@@ -40,6 +40,7 @@
 #include "content/browser/renderer_host/render_view_host_factory.h"
 #include "content/browser/renderer_host/render_widget_host_delegate.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
+#include "content/browser/renderer_host/render_widget_host_view_event_handler.h"
 #include "content/browser/renderer_host/resize_lock.h"
 #include "content/browser/renderer_host/text_input_manager.h"
 #include "content/browser/web_contents/web_contents_view_aura.h"
@@ -63,7 +64,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/screen_position_client.h"
-#include "ui/aura/client/window_tree_client.h"
+#include "ui/aura/client/window_parenting_client.h"
 #include "ui/aura/env.h"
 #include "ui/aura/layout_manager.h"
 #include "ui/aura/test/aura_test_helper.h"
@@ -84,6 +85,7 @@
 #include "ui/events/event.h"
 #include "ui/events/event_utils.h"
 #include "ui/events/gesture_detection/gesture_configuration.h"
+#include "ui/events/gestures/motion_event_aura.h"
 #include "ui/events/keycodes/dom/dom_code.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
 #include "ui/events/test/event_generator.h"
@@ -248,8 +250,12 @@ class TestWindowObserver : public aura::WindowObserver {
   DISALLOW_COPY_AND_ASSIGN(TestWindowObserver);
 };
 
-class FakeSurfaceDamageObserver : public cc::SurfaceDamageObserver {
+class FakeSurfaceObserver : public cc::SurfaceObserver {
  public:
+  void OnSurfaceCreated(const cc::SurfaceId& surface_id,
+                        const gfx::Size& frame,
+                        float device_scale_factor) override {}
+
   void OnSurfaceDamaged(const cc::SurfaceId& id, bool* changed) override {
     *changed = true;
   }
@@ -370,7 +376,7 @@ class FakeRenderWidgetHostViewAura : public RenderWidgetHostViewAura {
     return GetDelegatedFrameHost()->LocalFrameIdForTesting();
   }
 
-  bool HasFrameData() const { return !GetLocalFrameId().is_null(); }
+  bool HasFrameData() const { return GetLocalFrameId().is_valid(); }
 
   bool released_front_lock_active() const {
     return GetDelegatedFrameHost()->ReleasedFrontLockActiveForTesting();
@@ -391,7 +397,7 @@ class FakeRenderWidgetHostViewAura : public RenderWidgetHostViewAura {
   };
 
   const ui::MotionEventAura& pointer_state_for_test() {
-    return pointer_state();
+    return event_handler()->pointer_state();
   }
 
   bool can_create_resize_lock_;
@@ -435,6 +441,39 @@ class MockWindowObserver : public aura::WindowObserver {
   MOCK_METHOD2(OnDelegatedFrameDamage, void(aura::Window*, const gfx::Rect&));
 };
 
+class MockRenderWidgetHostImpl : public RenderWidgetHostImpl {
+ public:
+  MockRenderWidgetHostImpl(RenderWidgetHostDelegate* delegate,
+                           RenderProcessHost* process,
+                           int32_t routing_id)
+      : RenderWidgetHostImpl(delegate, process, routing_id, false) {
+    set_renderer_initialized(true);
+    lastWheelOrTouchEventLatencyInfo = ui::LatencyInfo();
+  }
+
+  // Extracts |latency_info| for wheel event, and stores it in
+  // |lastWheelOrTouchEventLatencyInfo|.
+  void ForwardWheelEventWithLatencyInfo(
+      const blink::WebMouseWheelEvent& wheel_event,
+      const ui::LatencyInfo& ui_latency) override {
+    RenderWidgetHostImpl::ForwardWheelEventWithLatencyInfo(wheel_event,
+                                                           ui_latency);
+    lastWheelOrTouchEventLatencyInfo = ui::LatencyInfo(ui_latency);
+  }
+
+  // Extracts |latency_info| for touch event, and stores it in
+  // |lastWheelOrTouchEventLatencyInfo|.
+  void ForwardTouchEventWithLatencyInfo(
+      const blink::WebTouchEvent& touch_event,
+      const ui::LatencyInfo& ui_latency) override {
+    RenderWidgetHostImpl::ForwardTouchEventWithLatencyInfo(touch_event,
+                                                           ui_latency);
+    lastWheelOrTouchEventLatencyInfo = ui::LatencyInfo(ui_latency);
+  }
+
+  ui::LatencyInfo lastWheelOrTouchEventLatencyInfo;
+};
+
 const WebInputEvent* GetInputEventFromMessage(const IPC::Message& message) {
   base::PickleIterator iter(message);
   const char* data;
@@ -450,14 +489,14 @@ class RenderWidgetHostViewAuraTest : public testing::Test {
  public:
   RenderWidgetHostViewAuraTest()
       : widget_host_uses_shutdown_to_destroy_(false),
-        is_guest_view_hack_(false),
-        browser_thread_for_ui_(BrowserThread::UI, &message_loop_) {}
+        is_guest_view_hack_(false) {}
 
   void SetUpEnvironment() {
     ImageTransportFactory::InitializeForUnitTests(
         std::unique_ptr<ImageTransportFactory>(
             new NoTransportImageTransportFactory));
-    aura_test_helper_.reset(new aura::test::AuraTestHelper(&message_loop_));
+    aura_test_helper_.reset(
+        new aura::test::AuraTestHelper(base::MessageLoopForUI::current()));
     aura_test_helper_->SetUp(
         ImageTransportFactory::GetInstance()->GetContextFactory());
     new wm::DefaultActivationClient(aura_test_helper_->root_window());
@@ -482,8 +521,8 @@ class RenderWidgetHostViewAuraTest : public testing::Test {
 
     routing_id = process_host_->GetNextRoutingID();
     delegates_.push_back(base::WrapUnique(new MockRenderWidgetHostDelegate));
-    widget_host_ = new RenderWidgetHostImpl(delegates_.back().get(),
-                                            process_host_, routing_id, false);
+    widget_host_ = new MockRenderWidgetHostImpl(delegates_.back().get(),
+                                                process_host_, routing_id);
     delegates_.back()->set_widget_host(widget_host_);
     widget_host_->Init();
     view_ = new FakeRenderWidgetHostViewAura(widget_host_, is_guest_view_hack_);
@@ -514,8 +553,6 @@ class RenderWidgetHostViewAuraTest : public testing::Test {
     browser_context_.reset();
     aura_test_helper_->TearDown();
 
-    message_loop_.task_runner()->DeleteSoon(FROM_HERE,
-                                            browser_context_.release());
     base::RunLoop().RunUntilIdle();
     ImageTransportFactory::Terminate();
   }
@@ -544,7 +581,7 @@ class RenderWidgetHostViewAuraTest : public testing::Test {
   void SendInputEventACK(WebInputEvent::Type type,
       InputEventAckState ack_result) {
     DCHECK(!WebInputEvent::isTouchEventType(type));
-    InputEventAck ack(type, ack_result);
+    InputEventAck ack(InputEventAckSource::COMPOSITOR_THREAD, type, ack_result);
     InputHostMsg_HandleInputEvent_ACK response(0, ack);
     widget_host_->OnMessageReceived(response);
   }
@@ -553,7 +590,8 @@ class RenderWidgetHostViewAuraTest : public testing::Test {
                          InputEventAckState ack_result,
                          uint32_t event_id) {
     DCHECK(WebInputEvent::isTouchEventType(type));
-    InputEventAck ack(type, ack_result, event_id);
+    InputEventAck ack(InputEventAckSource::COMPOSITOR_THREAD, type, ack_result,
+                      event_id);
     InputHostMsg_HandleInputEvent_ACK response(0, ack);
     widget_host_->OnMessageReceived(response);
   }
@@ -629,8 +667,7 @@ class RenderWidgetHostViewAuraTest : public testing::Test {
 
   bool is_guest_view_hack_;
 
-  base::MessageLoopForUI message_loop_;
-  BrowserThreadImpl browser_thread_for_ui_;
+  TestBrowserThreadBundle thread_bundle_;
   std::unique_ptr<aura::test::AuraTestHelper> aura_test_helper_;
   std::unique_ptr<BrowserContext> browser_context_;
   std::vector<std::unique_ptr<MockRenderWidgetHostDelegate>> delegates_;
@@ -643,7 +680,7 @@ class RenderWidgetHostViewAuraTest : public testing::Test {
 
   // Tests should set these to nullptr if they've already triggered their
   // destruction.
-  RenderWidgetHostImpl* widget_host_;
+  MockRenderWidgetHostImpl* widget_host_;
   FakeRenderWidgetHostViewAura* view_;
 
   IPC::TestSink* sink_;
@@ -1303,9 +1340,9 @@ TEST_F(RenderWidgetHostViewAuraTest, TouchEventState) {
   widget_host_->OnMessageReceived(ViewHostMsg_HasTouchEventHandlers(0, false));
 
   // Ack'ing the outstanding event should flush the pending touch queue.
-  InputEventAck ack(blink::WebInputEvent::TouchStart,
-                    INPUT_EVENT_ACK_STATE_NO_CONSUMER_EXISTS,
-                    press.unique_event_id());
+  InputEventAck ack(
+      InputEventAckSource::COMPOSITOR_THREAD, blink::WebInputEvent::TouchStart,
+      INPUT_EVENT_ACK_STATE_NO_CONSUMER_EXISTS, press.unique_event_id());
   widget_host_->OnMessageReceived(InputHostMsg_HandleInputEvent_ACK(0, ack));
   EXPECT_EQ(0U, GetSentMessageCountAndResetSink());
 
@@ -1475,7 +1512,11 @@ TEST_F(RenderWidgetHostViewAuraTest, PhysicalBackingSizeWithScale) {
   aura_test_helper_->test_screen()->SetDeviceScaleFactor(2.0f);
   EXPECT_EQ("200x200", view_->GetPhysicalBackingSize().ToString());
   // Extra ScreenInfoChanged message for |parent_view_|.
-  EXPECT_EQ(0u, sink_->message_count());
+  // Changing the device scale factor triggers the
+  // RenderWidgetHostViewAura::OnDisplayMetricsChanged() observer callback,
+  // which sends a ViewMsg_Resize::ID message to the renderer.
+  EXPECT_EQ(1u, sink_->message_count());
+  EXPECT_EQ(ViewMsg_Resize::ID, sink_->GetMessageAt(0)->type());
   auto view_delegate = static_cast<MockRenderWidgetHostDelegate*>(
       static_cast<RenderWidgetHostImpl*>(view_->GetRenderWidgetHost())
           ->delegate());
@@ -1486,7 +1527,8 @@ TEST_F(RenderWidgetHostViewAuraTest, PhysicalBackingSizeWithScale) {
 
   aura_test_helper_->test_screen()->SetDeviceScaleFactor(1.0f);
   // Extra ScreenInfoChanged message for |parent_view_|.
-  EXPECT_EQ(0u, sink_->message_count());
+  EXPECT_EQ(1u, sink_->message_count());
+  EXPECT_EQ(ViewMsg_Resize::ID, sink_->GetMessageAt(0)->type());
   EXPECT_EQ(1.0f, view_delegate->get_last_device_scale_factor());
   EXPECT_EQ("100x100", view_->GetPhysicalBackingSize().ToString());
 }
@@ -1642,10 +1684,10 @@ cc::CompositorFrame MakeDelegatedFrame(float scale_factor,
 // client in response to the swap. This test verifies that the returned
 // resources are indeed reported as being in response to a swap.
 TEST_F(RenderWidgetHostViewAuraTest, ResettingCompositorReturnsResources) {
-  FakeSurfaceDamageObserver damage_observer;
+  FakeSurfaceObserver manager_observer;
   ImageTransportFactory* factory = ImageTransportFactory::GetInstance();
   cc::SurfaceManager* manager = factory->GetSurfaceManager();
-  manager->AddObserver(&damage_observer);
+  manager->AddObserver(&manager_observer);
 
   gfx::Size view_size(100, 100);
   gfx::Rect view_rect(view_size);
@@ -1673,7 +1715,7 @@ TEST_F(RenderWidgetHostViewAuraTest, ResettingCompositorReturnsResources) {
     EXPECT_EQ(0u, std::get<0>(params));  // compositor_frame_sink_id
     EXPECT_TRUE(std::get<1>(params));    // is_swap_ack
   }
-  manager->RemoveObserver(&damage_observer);
+  manager->RemoveObserver(&manager_observer);
 }
 
 // This test verifies that returned resources do not require a pending ack.
@@ -1709,10 +1751,10 @@ TEST_F(RenderWidgetHostViewAuraTest, ReturnedResources) {
 // This test verifies that when the compositor_frame_sink_id changes, then
 // DelegateFrameHost returns compositor resources without a swap ack.
 TEST_F(RenderWidgetHostViewAuraTest, TwoOutputSurfaces) {
-  FakeSurfaceDamageObserver damage_observer;
+  FakeSurfaceObserver manager_observer;
   ImageTransportFactory* factory = ImageTransportFactory::GetInstance();
   cc::SurfaceManager* manager = factory->GetSurfaceManager();
-  manager->AddObserver(&damage_observer);
+  manager->AddObserver(&manager_observer);
 
   gfx::Size view_size(100, 100);
   gfx::Rect view_rect(view_size);
@@ -1766,7 +1808,7 @@ TEST_F(RenderWidgetHostViewAuraTest, TwoOutputSurfaces) {
     EXPECT_EQ(true, std::get<1>(params));  // is_swap_ack
   }
 
-  manager->RemoveObserver(&damage_observer);
+  manager->RemoveObserver(&manager_observer);
 }
 
 // Resizing in fullscreen mode should send the up-to-date screen info.
@@ -1874,7 +1916,7 @@ TEST_F(RenderWidgetHostViewAuraTest, MirrorLayers) {
       view_->GetNativeView(), false /* sync_bounds */));
 
   cc::SurfaceId id = view_->GetDelegatedFrameHost()->SurfaceIdForTesting();
-  if (!id.is_null()) {
+  if (id.is_valid()) {
     ImageTransportFactory* factory = ImageTransportFactory::GetInstance();
     cc::SurfaceManager* manager = factory->GetSurfaceManager();
     cc::Surface* surface = manager->GetSurfaceForId(id);
@@ -2005,7 +2047,7 @@ TEST_F(RenderWidgetHostViewAuraTest, Resize) {
   view_->OnSwapCompositorFrame(
       0, MakeDelegatedFrame(1.f, size2, gfx::Rect(size2)));
   cc::SurfaceId surface_id = view_->surface_id();
-  if (surface_id.is_null()) {
+  if (!surface_id.is_valid()) {
     // No frame ack yet.
     EXPECT_EQ(0u, sink_->message_count());
   } else {
@@ -2521,6 +2563,28 @@ TEST_F(RenderWidgetHostViewAuraTest, SoftwareDPIChange) {
   EXPECT_NE(surface_id, view_->surface_id());
 }
 
+TEST_F(RenderWidgetHostViewAuraTest, SourceEventTypeExistsInLatencyInfo) {
+  // WHEEL source exists.
+  ui::ScrollEvent scroll(ui::ET_SCROLL, gfx::Point(2, 2), ui::EventTimeForNow(),
+                         0, 0, 0, 0, 0, 2);
+  view_->OnScrollEvent(&scroll);
+  EXPECT_EQ(widget_host_->lastWheelOrTouchEventLatencyInfo.source_event_type(),
+            ui::SourceEventType::WHEEL);
+
+  // TOUCH source exists.
+  ui::TouchEvent press(ui::ET_TOUCH_PRESSED, gfx::Point(30, 30), 0,
+                       ui::EventTimeForNow());
+  ui::TouchEvent move(ui::ET_TOUCH_MOVED, gfx::Point(20, 20), 0,
+                      ui::EventTimeForNow());
+  ui::TouchEvent release(ui::ET_TOUCH_RELEASED, gfx::Point(20, 20), 0,
+                         ui::EventTimeForNow());
+  view_->OnTouchEvent(&press);
+  view_->OnTouchEvent(&move);
+  EXPECT_EQ(widget_host_->lastWheelOrTouchEventLatencyInfo.source_event_type(),
+            ui::SourceEventType::TOUCH);
+  view_->OnTouchEvent(&release);
+}
+
 class RenderWidgetHostViewAuraCopyRequestTest
     : public RenderWidgetHostViewAuraShutdownTest {
  public:
@@ -2577,7 +2641,7 @@ class RenderWidgetHostViewAuraCopyRequestTest
         1, MakeDelegatedFrame(1.f, view_rect_.size(), view_rect_));
     cc::SurfaceId surface_id =
         view_->GetDelegatedFrameHost()->SurfaceIdForTesting();
-    if (!surface_id.is_null())
+    if (surface_id.is_valid())
       view_->GetDelegatedFrameHost()->WillDrawSurface(
           surface_id.local_frame_id(), view_rect_);
     ASSERT_TRUE(view_->last_copy_request_);
@@ -4068,24 +4132,6 @@ TEST_F(RenderWidgetHostViewAuraTest, ForwardMouseEvent) {
   view_ = nullptr;
 }
 
-// Tests the RenderWidgetHostImpl sends the correct surface ID namespace to
-// the renderer process.
-TEST_F(RenderWidgetHostViewAuraTest, FrameSinkIdInitialized) {
-  gfx::Size size(5, 5);
-
-  const IPC::Message* msg =
-      sink_->GetUniqueMessageMatching(ViewMsg_SetFrameSinkId::ID);
-  EXPECT_TRUE(msg);
-  ViewMsg_SetFrameSinkId::Param params;
-  ViewMsg_SetFrameSinkId::Read(msg, &params);
-  view_->InitAsChild(nullptr);
-  view_->Show();
-  view_->SetSize(size);
-  view_->OnSwapCompositorFrame(0,
-                               MakeDelegatedFrame(1.f, size, gfx::Rect(size)));
-  EXPECT_EQ(view_->GetFrameSinkId(), std::get<0>(params));
-}
-
 // This class provides functionality to test a RenderWidgetHostViewAura
 // instance which has been hooked up to a test RenderViewHost instance and
 // a WebContents instance.
@@ -4443,8 +4489,8 @@ TEST_F(InputMethodResultAuraTest, CommitText) {
 // is in response to a mouse click during an ongoing composition.
 TEST_F(InputMethodResultAuraTest, FinishImeCompositionSession) {
   base::Closure ime_finish_session_call =
-      base::Bind(&RenderWidgetHostViewAura::FinishImeCompositionSession,
-                 base::Unretained(tab_view()));
+      base::Bind(&RenderWidgetHostViewEventHandler::FinishImeCompositionSession,
+                 base::Unretained(tab_view()->event_handler()));
   for (auto index : active_view_sequence_) {
     ActivateViewForTextInputManager(views_[index], ui::TEXT_INPUT_TYPE_TEXT);
     SetHasCompositionTextToTrue();

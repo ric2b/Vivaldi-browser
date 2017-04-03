@@ -13,6 +13,7 @@
 #include "base/location.h"
 #include "base/metrics/histogram_base.h"
 #include "base/metrics/histogram_delta_serialization.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/process/kill.h"
 #include "base/process/launch.h"
 #include "base/single_thread_task_runner.h"
@@ -72,8 +73,7 @@ void ServiceProcessControl::ConnectInternal() {
   mojo::MessagePipe pipe;
   BrowserThread::PostBlockingPoolTask(
       FROM_HERE, base::Bind(&ConnectOnBlockingPool, base::Passed(&pipe.handle1),
-                            mojo::edk::NamedPlatformHandle(
-                                GetServiceProcessChannel().name)));
+                            GetServiceProcessChannel()));
   // TODO(hclam): Handle error connecting to channel.
   auto io_task_runner =
       BrowserThread::GetTaskRunnerForThread(BrowserThread::IO);

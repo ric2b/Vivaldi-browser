@@ -4,10 +4,10 @@
 
 #include "ash/aura/wm_window_aura.h"
 #include "ash/common/accessibility_delegate.h"
-#include "ash/common/shell_window_ids.h"
 #include "ash/common/wm/window_state.h"
 #include "ash/common/wm/wm_event.h"
 #include "ash/common/wm_shell.h"
+#include "ash/public/cpp/shell_window_ids.h"
 #include "ash/wm/window_state_aura.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/utf_string_conversions.h"
@@ -126,6 +126,11 @@ TEST_F(ShellSurfaceTest, Minimize) {
   std::unique_ptr<Surface> surface(new Surface);
   std::unique_ptr<ShellSurface> shell_surface(new ShellSurface(surface.get()));
 
+  // Minimizing can be performed before the surface is committed.
+  shell_surface->Minimize();
+  EXPECT_TRUE(shell_surface->GetWidget()->IsMinimized());
+
+  // Confirm that attaching and commiting doesn't reset the state.
   surface->Attach(buffer.get());
   surface->Commit();
   shell_surface->Minimize();
@@ -203,12 +208,14 @@ TEST_F(ShellSurfaceTest, SetApplicationId) {
   std::unique_ptr<Surface> surface(new Surface);
   std::unique_ptr<ShellSurface> shell_surface(new ShellSurface(surface.get()));
 
+  EXPECT_EQ(nullptr, shell_surface->GetWidget());
+  shell_surface->SetApplicationId("pre-widget-id");
+
   surface->Commit();
-  EXPECT_EQ("", ShellSurface::GetApplicationId(
-                    shell_surface->GetWidget()->GetNativeWindow()));
+  aura::Window* window = shell_surface->GetWidget()->GetNativeWindow();
+  EXPECT_EQ("pre-widget-id", ShellSurface::GetApplicationId(window));
   shell_surface->SetApplicationId("test");
-  EXPECT_EQ("test", ShellSurface::GetApplicationId(
-                        shell_surface->GetWidget()->GetNativeWindow()));
+  EXPECT_EQ("test", ShellSurface::GetApplicationId(window));
 }
 
 TEST_F(ShellSurfaceTest, Move) {
@@ -442,6 +449,46 @@ TEST_F(ShellSurfaceTest, ModalWindow) {
 
   shell_surface->SetSystemModal(false);
   EXPECT_FALSE(ash::WmShell::Get()->IsSystemModalWindowOpen());
+}
+
+TEST_F(ShellSurfaceTest, PopupWindow) {
+  Surface parent_surface;
+  ShellSurface parent(&parent_surface);
+  const gfx::Rect parent_bounds(100, 100, 300, 300);
+
+  Buffer parent_buffer(
+      exo_test_helper()->CreateGpuMemoryBuffer(parent_bounds.size()));
+  parent_surface.Attach(&parent_buffer);
+  parent_surface.Commit();
+
+  parent.GetWidget()->SetBounds(parent_bounds);
+
+  Display display;
+  Surface popup_surface;
+  const gfx::Rect popup_bounds(10, 10, 100, 100);
+  std::unique_ptr<ShellSurface> popup = display.CreatePopupShellSurface(
+      &popup_surface, &parent, popup_bounds.origin());
+
+  Buffer popup_buffer(
+      exo_test_helper()->CreateGpuMemoryBuffer(popup_bounds.size()));
+  popup_surface.Attach(&popup_buffer);
+  popup_surface.Commit();
+
+  // Popup bounds are relative to parent.
+  EXPECT_EQ(gfx::Rect(parent_bounds.origin() + popup_bounds.OffsetFromOrigin(),
+                      popup_bounds.size()),
+            popup->GetWidget()->GetWindowBoundsInScreen());
+
+  const gfx::Rect geometry(5, 5, 90, 90);
+  popup->SetGeometry(geometry);
+  popup_surface.Commit();
+
+  // Popup position is fixed, and geometry is relative to it.
+  EXPECT_EQ(gfx::Rect(parent_bounds.origin() +
+                      popup_bounds.OffsetFromOrigin() +
+                      geometry.OffsetFromOrigin(),
+                      geometry.size()),
+            popup->GetWidget()->GetWindowBoundsInScreen());
 }
 
 TEST_F(ShellSurfaceTest, Shadow) {
@@ -726,7 +773,7 @@ TEST_F(ShellSurfaceTest, SpokenFeedbackFullscreenBackground) {
   // Enable spoken feedback.
   ash::WmShell::Get()->accessibility_delegate()->ToggleSpokenFeedback(
       ash::A11Y_NOTIFICATION_NONE);
-  shell_surface.OnAccessibilityModeChanged(ash::A11Y_NOTIFICATION_NONE);
+  shell_surface.OnAccessibilityModeChanged();
 
   EXPECT_EQ(display::Screen::GetScreen()->GetPrimaryDisplay().bounds(),
             shell_surface.shadow_underlay()->bounds());
@@ -762,8 +809,8 @@ TEST_F(ShellSurfaceTest, SpokenFeedbackFullscreenBackground) {
   // Disable spoken feedback. Shadow underlay is restored.
   ash::WmShell::Get()->accessibility_delegate()->ToggleSpokenFeedback(
       ash::A11Y_NOTIFICATION_NONE);
-  shell_surface.OnAccessibilityModeChanged(ash::A11Y_NOTIFICATION_NONE);
-  shell_surface2.OnAccessibilityModeChanged(ash::A11Y_NOTIFICATION_NONE);
+  shell_surface.OnAccessibilityModeChanged();
+  shell_surface2.OnAccessibilityModeChanged();
 
   EXPECT_TRUE(shell_surface.shadow_underlay()->IsVisible());
   EXPECT_EQ(shadow_bounds, shell_surface.shadow_underlay()->bounds());

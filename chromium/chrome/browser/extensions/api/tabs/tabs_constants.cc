@@ -56,9 +56,6 @@ const char kWindowTypeLongKey[] = "windowType";
 const char kWindowTypesKey[] = "windowTypes";
 const char kZoomSettingsMode[] = "mode";
 const char kZoomSettingsScope[] = "scope";
-const char kExtDataKey[] = "extData";
-const char kLastActiveTimeKey[] = "lastActiveTime";
-const char kWindowExtDataKey[] = "extData";
 
 const char kShowStateValueNormal[] = "normal";
 const char kShowStateValueMinimized[] = "minimized";
@@ -70,7 +67,6 @@ const char kStatusValueLoading[] = "loading";
 const char kWindowTypeValueNormal[] = "normal";
 const char kWindowTypeValuePopup[] = "popup";
 const char kWindowTypeValuePanel[] = "panel";
-const char kWindowTypeValueDetachedPanel[] = "detached_panel";
 const char kWindowTypeValueApp[] = "app";
 const char kWindowTypeValueDevTools[] = "devtools";
 

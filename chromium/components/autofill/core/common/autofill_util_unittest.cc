@@ -49,17 +49,17 @@ TEST(AutofillUtilTest, FieldIsSuggestionSubstringStartingOnTokenBoundary) {
       {"ab",      "",     true,  true},
   };
 
-  for (size_t i = 0; i < arraysize(kTestCases); ++i) {
+  for (const auto& test_case : kTestCases) {
     SCOPED_TRACE(testing::Message()
-                 << "suggestion = " << kTestCases[i].field_suggestion
-                 << ", contents = " << kTestCases[i].field_contents
-                 << ", case_sensitive = " << kTestCases[i].case_sensitive);
+                 << "suggestion = " << test_case.field_suggestion
+                 << ", contents = " << test_case.field_contents
+                 << ", case_sensitive = " << test_case.case_sensitive);
 
-    EXPECT_EQ(kTestCases[i].expected_result,
+    EXPECT_EQ(test_case.expected_result,
               FieldIsSuggestionSubstringStartingOnTokenBoundary(
-                  base::ASCIIToUTF16(kTestCases[i].field_suggestion),
-                  base::ASCIIToUTF16(kTestCases[i].field_contents),
-                  kTestCases[i].case_sensitive));
+                  base::ASCIIToUTF16(test_case.field_suggestion),
+                  base::ASCIIToUTF16(test_case.field_contents),
+                  test_case.case_sensitive));
   }
 }
 
@@ -85,18 +85,46 @@ TEST(AutofillUtilTest, GetTextSelectionStart) {
       {"texample@example.com", "example", false, 16},
   };
 
-  for (size_t i = 0; i < arraysize(kTestCases); ++i) {
+  for (const auto& test_case : kTestCases) {
     SCOPED_TRACE(testing::Message()
-                 << "suggestion = " << kTestCases[i].field_suggestion
-                 << ", contents = " << kTestCases[i].field_contents
-                 << ", case_sensitive = " << kTestCases[i].case_sensitive);
+                 << "suggestion = " << test_case.field_suggestion
+                 << ", contents = " << test_case.field_contents
+                 << ", case_sensitive = " << test_case.case_sensitive);
 
-    EXPECT_EQ(kTestCases[i].expected_start,
-              GetTextSelectionStart(
-                  base::ASCIIToUTF16(kTestCases[i].field_suggestion),
-                  base::ASCIIToUTF16(kTestCases[i].field_contents),
-                  kTestCases[i].case_sensitive));
+    EXPECT_EQ(
+        test_case.expected_start,
+        GetTextSelectionStart(base::ASCIIToUTF16(test_case.field_suggestion),
+                              base::ASCIIToUTF16(test_case.field_contents),
+                              test_case.case_sensitive));
   }
 }
 
+// Tests for LowercaseAndTokenizeAttributeString
+TEST(AutofillUtilTest, LowercaseAndTokenizeAttributeString) {
+  const struct {
+    const char* const attribute;
+    std::vector<std::string> tokens;
+  } kTestCases[] = {
+      // Test leading and trailing whitespace, test tabs and newlines
+      {"foo bar baz", {"foo", "bar", "baz"}},
+      {" foo bar baz ", {"foo", "bar", "baz"}},
+      {"foo\tbar baz ", {"foo", "bar", "baz"}},
+      {"foo\nbar baz ", {"foo", "bar", "baz"}},
+
+      // Test different forms of capitalization
+      {"FOO BAR BAZ", {"foo", "bar", "baz"}},
+      {"foO baR bAz", {"foo", "bar", "baz"}},
+
+      // Test collapsing of multiple whitespace characters in a row
+      {"  \t\t\n\n   ", std::vector<std::string>()},
+      {"foO    baR bAz", {"foo", "bar", "baz"}},
+  };
+
+  for (const auto& test_case : kTestCases) {
+    SCOPED_TRACE(testing::Message() << "attribute = " << test_case.attribute);
+
+    EXPECT_EQ(test_case.tokens,
+              LowercaseAndTokenizeAttributeString(test_case.attribute));
+  }
+}
 }  // namespace autofill

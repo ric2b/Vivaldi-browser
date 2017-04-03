@@ -8,9 +8,10 @@
 
 #include <vector>
 
+#include "base/memory/ptr_util.h"
 #include "components/sync/base/data_type_histogram.h"
 #include "components/sync/engine_impl/conflict_resolver.h"
-#include "components/sync/engine_impl/cycle/directory_type_debug_info_emitter.h"
+#include "components/sync/engine_impl/cycle/data_type_debug_info_emitter.h"
 #include "components/sync/engine_impl/cycle/status_controller.h"
 #include "components/sync/engine_impl/update_applicator.h"
 #include "components/sync/syncable/directory.h"
@@ -27,7 +28,7 @@ DirectoryUpdateHandler::DirectoryUpdateHandler(
     syncable::Directory* dir,
     ModelType type,
     scoped_refptr<ModelSafeWorker> worker,
-    DirectoryTypeDebugInfoEmitter* debug_info_emitter)
+    DataTypeDebugInfoEmitter* debug_info_emitter)
     : dir_(dir),
       type_(type),
       worker_(worker),
@@ -285,8 +286,9 @@ void DirectoryUpdateHandler::ExpireEntriesIfNeeded(
     sync_pb::DataTypeProgressMarker current_marker;
     GetDownloadProgress(&current_marker);
     if (current_marker.has_gc_directive()) {
-      cached_gc_directive_.reset(new sync_pb::GarbageCollectionDirective(
-          current_marker.gc_directive()));
+      cached_gc_directive_ =
+          base::MakeUnique<sync_pb::GarbageCollectionDirective>(
+              current_marker.gc_directive());
     }
   }
 
@@ -304,8 +306,8 @@ void DirectoryUpdateHandler::ExpireEntriesIfNeeded(
                            new_gc_directive.version_watermark());
   }
 
-  cached_gc_directive_.reset(
-      new sync_pb::GarbageCollectionDirective(new_gc_directive));
+  cached_gc_directive_ =
+      base::MakeUnique<sync_pb::GarbageCollectionDirective>(new_gc_directive);
 }
 
 }  // namespace syncer

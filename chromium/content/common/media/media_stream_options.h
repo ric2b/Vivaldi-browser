@@ -24,8 +24,8 @@ CONTENT_EXPORT extern const char kMediaStreamSourceSystem[];
 struct CONTENT_EXPORT TrackControls {
  public:
   TrackControls();
-  TrackControls(bool request);
-  TrackControls(const TrackControls& other);
+  explicit TrackControls(bool request);
+  explicit TrackControls(const TrackControls& other);
   ~TrackControls();
   bool requested;
 
@@ -57,6 +57,7 @@ struct CONTENT_EXPORT StreamControls {
   // Hotword functionality (chromeos only)
   // See crbug.com/564574 for discussion on possibly #ifdef'ing this out.
   bool hotword_enabled;  // kMediaStreamAudioHotword = "googHotword";
+  bool disable_local_echo;
 };
 
 // StreamDeviceInfo describes information about a device.
@@ -70,11 +71,6 @@ struct CONTENT_EXPORT StreamDeviceInfo {
   StreamDeviceInfo(MediaStreamType service_param,
                    const std::string& name_param,
                    const std::string& device_param,
-                   const std::string& group_param);
-  StreamDeviceInfo(MediaStreamType service_param,
-                   const std::string& name_param,
-                   const std::string& device_param,
-                   const std::string& group_param,
                    int sample_rate,
                    int channel_layout,
                    int frames_per_buffer);

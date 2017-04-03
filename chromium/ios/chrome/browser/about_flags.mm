@@ -19,11 +19,13 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/sys_info.h"
+#include "base/task_scheduler/switches.h"
 #include "components/dom_distiller/core/dom_distiller_switches.h"
 #include "components/flags_ui/feature_entry.h"
 #include "components/flags_ui/feature_entry_macros.h"
 #include "components/flags_ui/flags_storage.h"
 #include "components/flags_ui/flags_ui_switches.h"
+#include "components/ntp_tiles/switches.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/sync/driver/sync_driver_switches.h"
 #include "google_apis/gaia/gaia_switches.h"
@@ -57,6 +59,10 @@ const flags_ui::FeatureEntry kFeatureEntries[] = {
      IDS_IOS_FLAGS_PHYSICAL_WEB_DESCRIPTION, flags_ui::kOsIos,
      ENABLE_DISABLE_VALUE_TYPE(switches::kEnableIOSPhysicalWeb,
                                switches::kDisableIOSPhysicalWeb)},
+    {"browser-task-scheduler", IDS_IOS_FLAGS_BROWSER_TASK_SCHEDULER_NAME,
+     IDS_IOS_FLAGS_BROWSER_TASK_SCHEDULER_DESCRIPTION, flags_ui::kOsIos,
+     ENABLE_DISABLE_VALUE_TYPE(switches::kEnableBrowserTaskScheduler,
+                               switches::kDisableBrowserTaskScheduler)},
 };
 
 // Add all switches from experimental flags to |command_line|.
@@ -185,6 +191,14 @@ void AppendSwitchesFromExperimentalSettings(base::CommandLine* command_line) {
     }
   }
 
+  // Populate command line flags from EnablePopularSites.
+  NSString* EnablePopularSites = [defaults stringForKey:@"EnablePopularSites"];
+  if ([EnablePopularSites isEqualToString:@"Enabled"]) {
+    command_line->AppendSwitch(ntp_tiles::switches::kEnableNTPPopularSites);
+  } else if ([EnablePopularSites isEqualToString:@"Disabled"]) {
+    command_line->AppendSwitch(ntp_tiles::switches::kDisableNTPPopularSites);
+  }
+
   // Set the UA flag if UseMobileSafariUA is enabled.
   if ([defaults boolForKey:@"UseMobileSafariUA"]) {
     // Safari uses "Vesion/", followed by the OS version excluding bugfix, where
@@ -213,6 +227,13 @@ void AppendSwitchesFromExperimentalSettings(base::CommandLine* command_line) {
     command_line->AppendSwitch(switches::kEnablePaymentRequest);
   } else if ([enable_payment_request isEqualToString:@"Disabled"]) {
     command_line->AppendSwitch(switches::kDisablePaymentRequest);
+  }
+
+  // Populate command line flags from Reading List.
+  if ([defaults boolForKey:@"EnableReadingList"]) {
+    command_line->AppendSwitch(switches::kEnableReadingList);
+  } else {
+    command_line->AppendSwitch(switches::kDisableReadingList);
   }
 
   // Populate command line flag for Spotlight Actions.

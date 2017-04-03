@@ -94,10 +94,10 @@ void WebScrollbarThemeClientImpl::invalidateRect(const IntRect&) {
   ASSERT_NOT_REACHED();
 }
 
-ScrollbarOverlayStyle WebScrollbarThemeClientImpl::getScrollbarOverlayStyle()
-    const {
-  return static_cast<ScrollbarOverlayStyle>(
-      m_scrollbar.scrollbarOverlayStyle());
+ScrollbarOverlayColorTheme
+WebScrollbarThemeClientImpl::getScrollbarOverlayColorTheme() const {
+  return static_cast<ScrollbarOverlayColorTheme>(
+      m_scrollbar.scrollbarOverlayColorTheme());
 }
 
 void WebScrollbarThemeClientImpl::getTickmarks(
@@ -168,7 +168,9 @@ void WebScrollbarThemeClientImpl::styleChanged() {
   ASSERT_NOT_REACHED();
 }
 
-void WebScrollbarThemeClientImpl::visibilityChanged() {}
+void WebScrollbarThemeClientImpl::setScrollbarsHidden(bool hidden) {
+  ASSERT_NOT_REACHED();
+}
 
 bool WebScrollbarThemeClientImpl::enabled() const {
   return m_scrollbar.enabled();

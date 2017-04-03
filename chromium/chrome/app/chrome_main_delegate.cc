@@ -51,6 +51,7 @@
 #include "content/public/common/content_paths.h"
 #include "content/public/common/content_switches.h"
 #include "extensions/common/constants.h"
+#include "printing/features/features.h"
 #include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/ui_base_switches.h"
@@ -66,7 +67,6 @@
 #include "components/crash/content/app/crashpad.h"
 #include "sandbox/win/src/sandbox.h"
 #include "ui/base/resource/resource_bundle_win.h"
-#include "browser/win/vivaldi_standalone.h"
 #endif
 
 #if defined(OS_MACOSX)
@@ -146,6 +146,14 @@
 #if !defined(CHROME_MULTIPLE_DLL_CHILD)
 #include "components/startup_metric_utils/browser/startup_metric_utils.h"
 #endif
+
+#if defined(OS_WIN)
+#include "base/files/file_util.h"
+#include "base/base_paths.h"
+#endif
+
+#include "app/vivaldi_apptools.h"
+#include "browser/win/vivaldi_standalone.h"
 
 #if !defined(CHROME_MULTIPLE_DLL_BROWSER)
 #include "chrome/child/pdf_child_init.h"
@@ -305,7 +313,7 @@ bool HandleVersionSwitches(const base::CommandLine& command_line) {
 #if !defined(OS_MACOSX)
   if (command_line.HasSwitch(switches::kProductVersion)) {
 #if defined(VIVALDI_BUILD)
-    printf("%s\n", chrome::GetVivaldiVersionString().c_str());
+    printf("%s\n", vivaldi::GetVivaldiVersionString().c_str());
 #else
     printf("%s\n", version_info::GetVersionNumber().c_str());
 #endif
@@ -317,7 +325,7 @@ bool HandleVersionSwitches(const base::CommandLine& command_line) {
     printf("%s %s %s\n",
            version_info::GetProductName().c_str(),
 #if defined(VIVALDI_BUILD)
-           chrome::GetVivaldiVersionString().c_str(),
+           vivaldi::GetVivaldiVersionString().c_str(),
 #else
            version_info::GetVersionNumber().c_str(),
 #endif
@@ -923,7 +931,7 @@ int ChromeMainDelegate::RunProcess(
   // doesn't support empty array. So we comment out the block for Android.
 #if !defined(OS_ANDROID)
   static const MainFunction kMainFunctions[] = {
-#if defined(ENABLE_PRINT_PREVIEW) && !defined(CHROME_MULTIPLE_DLL_CHILD)
+#if BUILDFLAG(ENABLE_PRINT_PREVIEW) && !defined(CHROME_MULTIPLE_DLL_CHILD)
     { switches::kServiceProcess,     ServiceProcessMain },
 #endif
 

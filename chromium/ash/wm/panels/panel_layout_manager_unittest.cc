@@ -11,21 +11,18 @@
 #include "ash/common/shelf/shelf_view.h"
 #include "ash/common/shelf/shelf_widget.h"
 #include "ash/common/shelf/wm_shelf.h"
-#include "ash/common/shell_window_ids.h"
 #include "ash/common/system/web_notification/web_notification_tray.h"
+#include "ash/common/test/test_shelf_delegate.h"
 #include "ash/common/wm/mru_window_tracker.h"
 #include "ash/common/wm/window_state.h"
 #include "ash/common/wm_root_window_controller.h"
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window_property.h"
-#include "ash/display/display_manager.h"
 #include "ash/public/cpp/shelf_types.h"
-#include "ash/screen_util.h"
+#include "ash/public/cpp/shell_window_ids.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
-#include "ash/test/display_manager_test_api.h"
 #include "ash/test/shelf_view_test_api.h"
-#include "ash/test/test_shelf_delegate.h"
 #include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
 #include "base/command_line.h"
@@ -37,7 +34,9 @@
 #include "ui/aura/test/test_windows.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
+#include "ui/display/manager/display_manager.h"
 #include "ui/display/manager/managed_display_info.h"
+#include "ui/display/test/display_manager_test_api.h"
 #include "ui/events/event_utils.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/views/widget/widget.h"
@@ -57,10 +56,6 @@ display::ManagedDisplayInfo CreateDisplayInfo(int64_t id,
   return info;
 }
 
-DisplayManager* display_manager() {
-  return Shell::GetInstance()->display_manager();
-}
-
 }  // namespace
 
 using aura::test::WindowIsAbove;
@@ -72,7 +67,6 @@ class PanelLayoutManagerTest : public test::AshTestBase {
 
   void SetUp() override {
     test::AshTestBase::SetUp();
-    ASSERT_TRUE(test::TestShelfDelegate::instance());
 
     shelf_view_test_.reset(new test::ShelfViewTestAPI(
         GetPrimaryShelf()->GetShelfViewForTesting()));
@@ -95,9 +89,8 @@ class PanelLayoutManagerTest : public test::AshTestBase {
                                               const gfx::Rect& bounds) {
     aura::Window* window = CreateTestWindowInShellWithDelegateAndType(
         delegate, ui::wm::WINDOW_TYPE_PANEL, 0, bounds);
-    test::TestShelfDelegate* shelf_delegate =
-        test::TestShelfDelegate::instance();
-    shelf_delegate->AddShelfItem(window);
+    test::TestShelfDelegate::instance()->AddShelfItem(
+        WmWindowAura::Get(window));
     shelf_view_test()->RunMessageLoopUntilAnimationsDone();
     return window;
   }
@@ -127,7 +120,7 @@ class PanelLayoutManagerTest : public test::AshTestBase {
     gfx::Rect panel_bounds = panel->GetBoundsInRootWindow();
     gfx::Point root_point = gfx::Point(panel_bounds.x(), panel_bounds.y());
     display::Display display =
-        ScreenUtil::FindDisplayContainingPoint(root_point);
+        display_manager()->FindDisplayContainingPoint(root_point);
 
     gfx::Rect panel_bounds_in_screen = panel->GetBoundsInScreen();
     gfx::Point screen_bottom_right = gfx::Point(
@@ -313,7 +306,8 @@ TEST_F(PanelLayoutManagerTest, UndockTest) {
   std::vector<display::ManagedDisplayInfo> info_list;
 
   const int64_t internal_display_id =
-      test::DisplayManagerTestApi(Shell::GetInstance()->display_manager())
+      display::test::DisplayManagerTestApi(
+          Shell::GetInstance()->display_manager())
           .SetFirstDisplayAsInternalDisplay();
 
   // Create the primary display info.
@@ -344,7 +338,8 @@ TEST_F(PanelLayoutManagerTest, DockUndockTest) {
   std::vector<display::ManagedDisplayInfo> info_list;
 
   const int64_t internal_display_id =
-      test::DisplayManagerTestApi(Shell::GetInstance()->display_manager())
+      display::test::DisplayManagerTestApi(
+          Shell::GetInstance()->display_manager())
           .SetFirstDisplayAsInternalDisplay();
 
   // Create the primary display info.

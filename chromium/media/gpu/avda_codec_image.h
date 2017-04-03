@@ -25,13 +25,11 @@ class VideoCodecBridge;
 // needed in order to draw them.
 class AVDACodecImage : public gpu::gles2::GLStreamTextureImage {
  public:
-  AVDACodecImage(int picture_buffer_id,
-                 const scoped_refptr<AVDASharedState>& shared_state,
+  AVDACodecImage(const scoped_refptr<AVDASharedState>& shared_state,
                  VideoCodecBridge* codec,
                  const base::WeakPtr<gpu::gles2::GLES2Decoder>& decoder);
 
   // gl::GLImage implementation
-  void Destroy(bool have_context) override;
   gfx::Size GetSize() override;
   unsigned GetInternalFormat() override;
   bool BindTexImage(unsigned target) override;
@@ -76,13 +74,14 @@ class AVDACodecImage : public gpu::gles2::GLStreamTextureImage {
 
   void set_texture(gpu::gles2::Texture* texture) { texture_ = texture; }
 
-  // Decoded buffer index that has the image for us to display.
-  void set_media_codec_buffer_index(int buffer_index) {
-    codec_buffer_index_ = buffer_index;
-  }
+  // Sets up the properties necessary for the image to render. |buffer_index| is
+  // supplied to ReleaseOutputBuffer(), |has_surface_texture| controls which
+  // rendering path is used, and |size| is used by the compositor.
+  void SetBufferMetadata(int buffer_index,
+                         bool has_surface_texture,
+                         const gfx::Size& size);
 
-  // Set the size of the current image.
-  void set_size(const gfx::Size& size) { size_ = size; }
+  bool SetSharedState(scoped_refptr<AVDASharedState> shared_state);
 
   // Indicates if the codec buffer has been released to the back buffer.
   bool was_rendered_to_back_buffer() const {
@@ -93,6 +92,8 @@ class AVDACodecImage : public gpu::gles2::GLStreamTextureImage {
   bool was_rendered_to_front_buffer() const {
     return codec_buffer_index_ == kRendered;
   }
+
+  bool is_unrendered() const { return codec_buffer_index_ >= kUpdateOnly; }
 
  protected:
   ~AVDACodecImage() override;
@@ -143,14 +144,12 @@ class AVDACodecImage : public gpu::gles2::GLStreamTextureImage {
 
   const base::WeakPtr<gpu::gles2::GLES2Decoder> decoder_;
 
-  // Indicates if we're rendering to a SurfaceTexture or not.
-  const bool has_surface_texture_;
+  // Indicates if we're rendering to a SurfaceTexture or not. Set during the
+  // call to SetBufferMetadata().
+  bool has_surface_texture_;
 
   // The texture that we're attached to.
   gpu::gles2::Texture* texture_;
-
-  // The picture buffer id attached to this image.
-  int picture_buffer_id_;
 
   DISALLOW_COPY_AND_ASSIGN(AVDACodecImage);
 };

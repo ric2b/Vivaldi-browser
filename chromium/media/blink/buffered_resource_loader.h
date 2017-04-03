@@ -16,8 +16,8 @@
 #include "media/blink/active_loader.h"
 #include "media/blink/media_blink_export.h"
 #include "media/blink/url_index.h"  // for kPositionNotSpecified
+#include "third_party/WebKit/public/web/WebAssociatedURLLoaderClient.h"
 #include "third_party/WebKit/public/platform/WebURLLoader.h"
-#include "third_party/WebKit/public/platform/WebURLLoaderClient.h"
 #include "third_party/WebKit/public/platform/WebURLRequest.h"
 #include "third_party/WebKit/public/web/WebFrame.h"
 #include "url/gurl.h"
@@ -31,7 +31,7 @@ class SeekableBuffer;
 // pausing resource loading when the in-memory buffer is full and resuming
 // resource loading when there is available capacity.
 class MEDIA_BLINK_EXPORT BufferedResourceLoader
-    : NON_EXPORTED_BASE(public blink::WebURLLoaderClient) {
+    : NON_EXPORTED_BASE(public blink::WebAssociatedURLLoaderClient) {
  public:
   // kNeverDefer - Aggresively buffer; never defer loading while paused.
   // kReadThenDefer - Request only enough data to fulfill read requests.
@@ -139,34 +139,17 @@ class MEDIA_BLINK_EXPORT BufferedResourceLoader
   bool range_supported();
 
   // blink::WebURLLoaderClient implementation.
-  bool willFollowRedirect(blink::WebURLLoader* loader,
-                          blink::WebURLRequest& newRequest,
+  bool willFollowRedirect(const blink::WebURLRequest& newRequest,
                           const blink::WebURLResponse& redirectResponse) override;
-  void didSendData(
-      blink::WebURLLoader* loader,
-      unsigned long long bytesSent,
+  void didSendData(unsigned long long bytesSent,
       unsigned long long totalBytesToBeSent) override;
-  void didReceiveResponse(
-      blink::WebURLLoader* loader,
-      const blink::WebURLResponse& response) override;
-  void didDownloadData(
-      blink::WebURLLoader* loader,
-      int data_length,
-      int encoded_data_length) override;
-  void didReceiveData(blink::WebURLLoader* loader,
-                      const char* data,
-                      int data_length,
-                      int encoded_data_length,
-                      int encoded_body_length) override;
-  void didReceiveCachedMetadata(
-      blink::WebURLLoader* loader,
-      const char* data, int dataLength) override;
-  void didFinishLoading(blink::WebURLLoader* loader,
-                        double finishTime,
-                        int64_t total_encoded_data_length) override;
-  void didFail(
-      blink::WebURLLoader* loader,
-      const blink::WebURLError&) override;
+  void didReceiveResponse(const blink::WebURLResponse& response) override;
+  void didDownloadData(int data_length) override;
+  void didReceiveData(const char* data,
+                      int data_length) override;
+  void didReceiveCachedMetadata(const char* data, int dataLength) override;
+  void didFinishLoading(double finishTime) override;
+  void didFail(const blink::WebURLError&) override;
 
   // Returns true if the media resource has a single origin, false otherwise.
   // Only valid to call after Start() has completed.
@@ -328,7 +311,7 @@ class MEDIA_BLINK_EXPORT BufferedResourceLoader
   int last_offset_;
 
   // Injected WebURLLoader instance for testing purposes.
-  std::unique_ptr<blink::WebURLLoader> test_loader_;
+  std::unique_ptr<blink::WebAssociatedURLLoader> test_loader_;
 
   // Bitrate of the media. Set to 0 if unknown.
   int bitrate_;

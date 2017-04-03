@@ -15,11 +15,11 @@
 #include "chrome/common/importer/imported_bookmark_entry.h"
 #include "chrome/common/importer/importer_data_types.h"
 #include "chrome/common/importer/profile_import_process_messages.h"
-#include "importer/vivaldi_profile_import_process_messages.h"
 #include "components/autofill/core/common/password_form.h"
 #include "ipc/ipc_sender.h"
 
 #include "importer/viv_importer.h"
+#include "importer/vivaldi_profile_import_process_messages.h"
 
 namespace {
 

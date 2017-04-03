@@ -10,6 +10,7 @@
 #include "base/macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/media/router/media_router.h"
 #include "chrome/browser/media/router/media_router_factory.h"
 #include "chrome/browser/media/router/media_router_feature.h"
@@ -18,11 +19,14 @@
 #include "chrome/browser/media/router/media_source_helper.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/common/url_constants.h"
+#include "content/public/browser/notification_service.h"
+#include "content/public/browser/notification_source.h"
 
 namespace {
 
 media_router::MediaRouter* media_router_for_test_ = nullptr;
 
+// Returns the MediaRouter instance for the current primary profile.
 media_router::MediaRouter* GetMediaRouter() {
   if (media_router_for_test_)
     return media_router_for_test_;
@@ -103,8 +107,9 @@ void CastDeviceCache::OnSinksReceived(const MediaSinks& sinks) {
     if (sink.name().empty())
       continue;
 
-    // Temporarily hide sinks that have a domain. This is to meet cast privacy
-    // requirements. See bug/28691645.
+    // Hide all sinks which have a domain (ie, castouts) to meet privacy
+    // requirements. This will be enabled once UI can display the domain. See
+    // crbug.com/624016.
     if (!sink.domain().empty())
       continue;
 
@@ -124,35 +129,29 @@ void CastDeviceCache::OnRoutesUpdated(
 ////////////////////////////////////////////////////////////////////////////////
 // CastConfigDelegateMediaRouter:
 
-// static
-bool CastConfigDelegateMediaRouter::IsEnabled() {
-  return media_router::MediaRouterEnabled(
-             ProfileManager::GetPrimaryUserProfile()) ||
-         media_router_for_test_;
-}
-
 void CastConfigDelegateMediaRouter::SetMediaRouterForTest(
     media_router::MediaRouter* media_router) {
   media_router_for_test_ = media_router;
 }
 
-CastConfigDelegateMediaRouter::CastConfigDelegateMediaRouter() {}
+CastConfigDelegateMediaRouter::CastConfigDelegateMediaRouter() {
+  // TODO(jdufault): This should use a callback interface once there is an
+  // equivalent. See crbug.com/666005.
+  registrar_.Add(this, chrome::NOTIFICATION_LOGIN_USER_PROFILE_PREPARED,
+                 content::NotificationService::AllSources());
+}
 
 CastConfigDelegateMediaRouter::~CastConfigDelegateMediaRouter() {}
 
 CastDeviceCache* CastConfigDelegateMediaRouter::devices() {
   // The CastDeviceCache instance is lazily allocated because the MediaRouter
   // component is not ready when the constructor is invoked.
-  if (!devices_ && GetMediaRouter() != nullptr) {
-    devices_.reset(new CastDeviceCache(this));
+  if (!devices_ && GetMediaRouter()) {
+    devices_ = base::MakeUnique<CastDeviceCache>(this);
     devices_->Init();
   }
 
   return devices_.get();
-}
-
-bool CastConfigDelegateMediaRouter::HasCastExtension() const {
-  return true;
 }
 
 void CastConfigDelegateMediaRouter::RequestDeviceRefresh() {
@@ -160,75 +159,58 @@ void CastConfigDelegateMediaRouter::RequestDeviceRefresh() {
   if (!devices())
     return;
 
-  // Build the old-style ReceiverAndActivity set out of the MediaRouter
+  // Build the old-style SinkAndRoute set out of the MediaRouter
   // source/sink/route setup. We first map the existing sinks, and then we
   // update those sinks with activity information.
 
-  ReceiversAndActivities items;
+  SinksAndRoutes items;
 
   for (const media_router::MediaSink& sink : devices()->sinks()) {
-    ReceiverAndActivity ra;
-    ra.receiver.id = sink.id();
-    ra.receiver.name = base::UTF8ToUTF16(sink.name());
-    items.push_back(ra);
+    SinkAndRoute sr;
+    sr.sink.id = sink.id();
+    sr.sink.name = base::UTF8ToUTF16(sink.name());
+    sr.sink.domain = base::UTF8ToUTF16(sink.domain());
+    items.push_back(sr);
   }
 
   for (const media_router::MediaRoute& route : devices()->routes()) {
     if (!route.for_display())
       continue;
 
-    for (ReceiverAndActivity& item : items) {
-      if (item.receiver.id == route.media_sink_id()) {
-        item.activity.id = route.media_route_id();
-        item.activity.title =
+    for (SinkAndRoute& item : items) {
+      if (item.sink.id == route.media_sink_id()) {
+        item.route.id = route.media_route_id();
+        item.route.title =
             base::UTF8ToUTF16(StripEndingTab(route.description()));
-        item.activity.is_local_source = route.is_local();
+        item.route.is_local_source = route.is_local();
 
-        if (route.is_local()) {
-          // TODO(jdufault): Once the extension backend is removed, we can
-          // remove tab_id and specify the Desktop/Tab capture directly.
-          // crbug.com/551132.
-          // TODO(jdufault): We currently don't actually display DIAL casts to
-          // the user even though we have all the information necessary. We'll
-          // do this once the extension backend is gone because supporting both
-          // introduces extra complexity. crbug.com/551132.
-
-          // Default to a tab/app capture. This will display the media router
-          // description. This means we will properly support DIAL casts.
-          item.activity.tab_id = 0;
-          if (media_router::IsDesktopMirroringMediaSource(route.media_source()))
-            item.activity.tab_id = Activity::TabId::DESKTOP;
-        }
+        // Default to a tab/app capture. This will display the media router
+        // description. This means we will properly support DIAL casts.
+        item.route.content_source = Route::ContentSource::TAB;
+        if (media_router::IsDesktopMirroringMediaSource(route.media_source()))
+          item.route.content_source = Route::ContentSource::DESKTOP;
 
         break;
       }
     }
   }
 
-  FOR_EACH_OBSERVER(ash::CastConfigDelegate::Observer, observer_list_,
-                    OnDevicesUpdated(items));
+  for (ash::CastConfigDelegate::Observer& observer : observer_list_)
+    observer.OnDevicesUpdated(items);
 }
 
-void CastConfigDelegateMediaRouter::CastToReceiver(
-    const std::string& receiver_id) {
+void CastConfigDelegateMediaRouter::CastToSink(const Sink& sink) {
   // TODO(imcheng): Pass in tab casting timeout.
   GetMediaRouter()->CreateRoute(
-      media_router::MediaSourceForDesktop().id(), receiver_id,
+      media_router::MediaSourceForDesktop().id(), sink.id,
       GURL("http://cros-cast-origin/"), nullptr,
       std::vector<media_router::MediaRouteResponseCallback>(),
       base::TimeDelta(), false);
 }
 
-void CastConfigDelegateMediaRouter::StopCasting(const std::string& route_id) {
-  GetMediaRouter()->TerminateRoute(route_id);
+void CastConfigDelegateMediaRouter::StopCasting(const Route& route) {
+  GetMediaRouter()->TerminateRoute(route.id);
 }
-
-bool CastConfigDelegateMediaRouter::HasOptions() const {
-  // There are no plans to have an options page for the MediaRouter.
-  return false;
-}
-
-void CastConfigDelegateMediaRouter::LaunchCastOptions() {}
 
 void CastConfigDelegateMediaRouter::AddObserver(
     ash::CastConfigDelegate::Observer* observer) {
@@ -238,4 +220,19 @@ void CastConfigDelegateMediaRouter::AddObserver(
 void CastConfigDelegateMediaRouter::RemoveObserver(
     ash::CastConfigDelegate::Observer* observer) {
   observer_list_.RemoveObserver(observer);
+}
+
+void CastConfigDelegateMediaRouter::Observe(
+    int type,
+    const content::NotificationSource& source,
+    const content::NotificationDetails& details) {
+  switch (type) {
+    case chrome::NOTIFICATION_LOGIN_USER_PROFILE_PREPARED:
+      // The active profile has changed, which means that the media router has
+      // as well. Reset the device cache to ensure we are using up-to-date
+      // object instances.
+      devices_.reset();
+      RequestDeviceRefresh();
+      break;
+  }
 }

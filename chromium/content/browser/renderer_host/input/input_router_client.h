@@ -7,9 +7,10 @@
 
 #include "content/browser/renderer_host/event_with_latency_info.h"
 #include "content/common/content_export.h"
+#include "content/common/input/input_event_ack_source.h"
 #include "content/common/input/input_event_ack_state.h"
 #include "content/public/browser/native_web_keyboard_event.h"
-#include "third_party/WebKit/public/web/WebInputEvent.h"
+#include "third_party/WebKit/public/platform/WebInputEvent.h"
 
 namespace ui {
 class LatencyInfo;
@@ -33,10 +34,10 @@ class CONTENT_EXPORT InputRouterClient {
       const ui::LatencyInfo& latency_info) = 0;
 
   // Called each time a WebInputEvent IPC is sent.
-  virtual void IncrementInFlightEventCount() = 0;
+  virtual void IncrementInFlightEventCount(blink::WebInputEvent::Type type) = 0;
 
   // Called each time a WebInputEvent ACK IPC is received.
-  virtual void DecrementInFlightEventCount() = 0;
+  virtual void DecrementInFlightEventCount(InputEventAckSource ack_source) = 0;
 
   // Called when the renderer notifies that it has touch event handlers.
   virtual void OnHasTouchEventHandlers(bool has_handlers) = 0;

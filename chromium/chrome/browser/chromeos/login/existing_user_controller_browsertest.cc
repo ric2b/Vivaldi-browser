@@ -40,7 +40,6 @@
 #include "chromeos/login/auth/key.h"
 #include "chromeos/login/auth/mock_url_fetchers.h"
 #include "chromeos/login/auth/user_context.h"
-#include "chromeos/login/user_names.h"
 #include "chromeos/settings/cros_settings_names.h"
 #include "chromeos/settings/cros_settings_provider.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
@@ -213,7 +212,7 @@ class ExistingUserControllerTest : public policy::DevicePolicyCrosBrowserTest {
   }
 
   int auto_login_delay() const {
-    return existing_user_controller()->public_session_auto_login_delay_;
+    return existing_user_controller()->auto_login_delay_;
   }
 
   bool is_login_in_progress() const {
@@ -455,7 +454,7 @@ class ExistingUserControllerPublicSessionTest
   void SetAutoLoginPolicy(const std::string& user_email, int delay) {
     // Wait until ExistingUserController has finished auto-login
     // configuration by observing the same settings that trigger
-    // ConfigurePublicSessionAutoLogin.
+    // ConfigureAutoLogin.
 
     em::ChromeDeviceSettingsProto& proto(device_policy()->payload());
 
@@ -495,7 +494,7 @@ class ExistingUserControllerPublicSessionTest
   }
 
   void ConfigureAutoLogin() {
-    existing_user_controller()->ConfigurePublicSessionAutoLogin();
+    existing_user_controller()->ConfigureAutoLogin();
   }
 
   void FireAutoLogin() {
@@ -593,8 +592,9 @@ IN_PROC_BROWSER_TEST_F(ExistingUserControllerPublicSessionTest,
   content::RunAllPendingInMessageLoop();
 }
 
+// See http://crbug.com/654719
 IN_PROC_BROWSER_TEST_F(ExistingUserControllerPublicSessionTest,
-                       LoginStopsAutoLogin) {
+                       DISABLED_LoginStopsAutoLogin) {
   // Set up mocks to check login success.
   UserContext user_context(account_id_);
   user_context.SetKey(Key(kPassword));

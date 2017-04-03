@@ -34,17 +34,10 @@ AmbientLightSensorReading* AmbientLightSensor::reading() const {
   return static_cast<AmbientLightSensorReading*>(Sensor::reading());
 }
 
-SensorReading* AmbientLightSensor::createSensorReading(SensorProxy* proxy) {
-  return AmbientLightSensorReading::create(proxy);
-}
-
-auto AmbientLightSensor::createSensorConfig(
-    const SensorOptions& options,
-    const SensorConfiguration& defaultConfig) -> SensorConfigurationPtr {
-  auto result = device::mojom::blink::SensorConfiguration::New();
-  result->frequency =
-      options.hasFrequency() ? options.frequency() : defaultConfig.frequency;
-  return result;
+std::unique_ptr<SensorReadingFactory>
+AmbientLightSensor::createSensorReadingFactory() {
+  return std::unique_ptr<SensorReadingFactory>(
+      new SensorReadingFactoryImpl<AmbientLightSensorReading>());
 }
 
 DEFINE_TRACE(AmbientLightSensor) {

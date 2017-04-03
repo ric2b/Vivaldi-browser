@@ -9,12 +9,12 @@ regression sheriff role is now entirely focused on performance.
 
 ## Key Responsibilities
 
- * [Triage Regressions on the Perf Dashboard](#triage)
- * [Triaging Data Stoppage Alerts](#datastoppage)
- * [Follow up on Performance Regressions](#followup)
- * [Give Feedback on our Infrastructure](#feedback)
+ * [Triage Regressions on the Perf Dashboard](#Triage-Regressions-on-the-Perf-Dashboard)
+ * [Triaging Data Stoppage Alerts](#Triaging-Data-Stoppage-Alerts)
+ * [Follow up on Performance Regressions](#Follow-up-on-Performance-Regressions)
+ * [Give Feedback on our Infrastructure](#Give-Feedback-on-our-Infrastructure)
 
-## <a name="triage">Triage Regressions on the Perf Dashboard</a>
+## Triage Regressions on the Perf Dashboard
 
 Open the perf dashboard [alerts page](https://chromeperf.appspot.com/alerts).
 
@@ -79,7 +79,7 @@ below it the dashboard shows graphs of all the alerts checked in that table.
    bisects as you feel are necessary to investigate; [give feedback](#feedback)
    below if you feel that is not the case.
 
-## <a name="datastoppage">Triaging Data Stoppage Alerts</a>
+## Triaging Data Stoppage Alerts
 
 Data stoppage alerts are listed on the
 [perf dashboard alerts page](https://chromeperf.appspot.com/alerts). Whenever
@@ -118,7 +118,7 @@ some diagnosis:
      sent to the perf dashboard. Are there null values? Sometimes it lists a
      reason as well. Please put your finding in the bug.
 
-## <a name="followup">Follow up on Performance Regressions</a>
+## Follow up on Performance Regressions
 
 During your shift, you should try to follow up on each of the bugs you filed.
 Once you've triaged all the alerts, check to see if the bisects have come back,
@@ -128,10 +128,20 @@ file a bug on it (see [feedback](#feedback) links below).
 
 Also during your shift, please spend any spare time driving down bugs from the
 [regression backlog](http://go/triage-backlog). Treat these bugs as you would
-your own - investigate the regressions, find out what the next step should be,
-and then move the bug along. As the backlog only contains bugs that haven't been
-modified in some time, you should be able to end your shift with an empty
-backlog.
+your own -- investigate the regressions, find out what the next step should be,
+and then move the bug along. Some possible next steps and questions to answer
+are:
+
+*   Should the bug be closed?
+*   Are there questions that need to be answered?
+*   Are there people that should be added to the CC list?
+*   Is the correct owner assigned?
+
+When a bug does need to be pinged, rather than adding a generic "ping", it's
+much much more effective to include the username and action item.
+
+You should aim to end your shift with an empty backlog, but it's important to
+still advance each bug in a meaningful way.
 
 After your shift, please try to follow up on the bugs you filed weekly. Kick off
 new bisects if the previous ones failed, and if the bisect picks a likely
@@ -139,7 +149,7 @@ culprit follow up to ensure the CL author addresses the problem. If you are
 certain that a specific CL caused a performance regression, and the author does
 not have an immediate plan to address the problem, please revert the CL.
 
-## <a name="feedback">Give Feedback on our Infrastructure</a>
+## Give Feedback on our Infrastructure
 
 Perf regression sheriffs have their eyes on the perf dashboard and bisects
 more than anyone else, and their feedback is invaluable for making sure these
@@ -153,6 +163,10 @@ as you see them:
   [go/bad-bisects](https://docs.google.com/spreadsheets/d/13PYIlRGE8eZzsrSocA3SR2LEHdzc8n9ORUoOE2vtO6I/edit#gid=0).
   The team triages these regularly. If you spot a really clear bug (bisect
   job red, bugs not being updated with bisect results) please file it in
-  crbug with label `Cr-Tests-AutoBisect`.
+  crbug with label `Cr-Tests-AutoBisect`. If a bisect problem is blocking a
+  perf regression bug triage, **please file a new bug with label
+  `Cr-Tests-AutoBisect` and block the regression bug on the bisect bug**. This
+  makes it much easier for the team to triage, dupe, and close bugs on the
+  infrastructure without affecting the state of the perf regression bugs.
 * **Noisy Tests**: Please file a bug in crbug with label `Cr-Tests-Telemetry`
   and [cc the owner](http://go/perf-owners).

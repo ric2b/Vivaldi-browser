@@ -151,6 +151,13 @@ Polymer({
 
   /** @private */
   closePopupMenu_: function() {
-    this.$$('iron-dropdown').close();
+    this.$$('dialog[is=cr-action-menu]').close();
+  },
+
+  /** @private */
+  onDotsTap_: function() {
+    var actionMenu = /** @type {!CrActionMenuElement} */(
+        this.$.menu.get());
+    actionMenu.showAt(assert(this.$$('paper-icon-button')));
   },
 });

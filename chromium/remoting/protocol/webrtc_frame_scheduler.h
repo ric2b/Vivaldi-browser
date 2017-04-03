@@ -6,11 +6,16 @@
 #define REMOTING_PROTOCOL_WEBRTC_FRAME_SCHEDULER_H_
 
 #include "base/callback_forward.h"
+#include "base/memory/weak_ptr.h"
 #include "remoting/codec/webrtc_video_encoder.h"
 #include "third_party/webrtc/video_encoder.h"
 
 namespace remoting {
 namespace protocol {
+
+struct HostFrameStats;
+class VideoChannelStateObserver;
+class WebrtcDummyVideoEncoderFactory;
 
 // An abstract interface for frame schedulers, which are responsible for
 // scheduling when video frames are captured and for defining encoding
@@ -22,16 +27,11 @@ class WebrtcFrameScheduler {
 
   // Starts the scheduler. |capture_callback| will be called whenever a new
   // frame should be captured.
-  virtual void Start(const base::Closure& capture_callback) = 0;
+  virtual void Start(WebrtcDummyVideoEncoderFactory* video_encoder_factory,
+                     const base::Closure& capture_callback) = 0;
 
   // Pause and resumes the scheduler.
   virtual void Pause(bool pause) = 0;
-
-  // Requests a key frame.
-  virtual void SetKeyFrameRequest() = 0;
-
-  // Sets network bitrate estimate.
-  virtual void SetTargetBitrate(int bitrate_kbps) = 0;
 
   // Called after |frame| has been captured to get encoding parameters for the
   // frame. Returns false if the frame should be dropped (e.g. when there are
@@ -40,10 +40,13 @@ class WebrtcFrameScheduler {
       const webrtc::DesktopFrame& frame,
       WebrtcVideoEncoder::FrameParams* params_out) = 0;
 
-  // Called after a frame has been encoded and passed to the sender.
+  // Called after a frame has been encoded and passed to the sender. If
+  // |frame_stats| is not null then sets send_pending_delay, rtt_estimate and
+  // bandwidth_estimate_kbps fields.
   virtual void OnFrameEncoded(
       const WebrtcVideoEncoder::EncodedFrame& encoded_frame,
-      const webrtc::EncodedImageCallback::Result& send_result) = 0;
+      const webrtc::EncodedImageCallback::Result& send_result,
+      HostFrameStats* frame_stats) = 0;
 };
 
 }  // namespace protocol

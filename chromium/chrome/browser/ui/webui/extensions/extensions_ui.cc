@@ -119,6 +119,8 @@ content::WebUIDataSource* CreateMdExtensionsSource() {
                              IDS_MD_EXTENSIONS_SIDEBAR_DEVELOPER_MODE);
   source->AddLocalizedString("dropToInstall",
                              IDS_EXTENSIONS_INSTALL_DROP_TARGET);
+  source->AddLocalizedString("errorsPageHeading",
+                             IDS_MD_EXTENSIONS_ERROR_PAGE_HEADING);
   source->AddLocalizedString("getMoreExtensions",
                              IDS_MD_EXTENSIONS_SIDEBAR_GET_MORE_EXTENSIONS);
   source->AddLocalizedString("keyboardShortcuts",
@@ -135,6 +137,7 @@ content::WebUIDataSource* CreateMdExtensionsSource() {
   source->AddLocalizedString("itemDependentEntry",
                              IDS_MD_EXTENSIONS_DEPENDENT_ENTRY);
   source->AddLocalizedString("itemDetails", IDS_MD_EXTENSIONS_ITEM_DETAILS);
+  source->AddLocalizedString("itemErrors", IDS_MD_EXTENSIONS_ITEM_ERRORS);
   source->AddLocalizedString("itemPermissions",
                              IDS_MD_EXTENSIONS_ITEM_PERMISSIONS);
   source->AddLocalizedString("itemPermissionsEmpty",
@@ -166,6 +169,8 @@ content::WebUIDataSource* CreateMdExtensionsSource() {
       l10n_util::GetStringFUTF16(
           IDS_EXTENSIONS_ADDED_WITHOUT_KNOWLEDGE,
           l10n_util::GetStringUTF16(IDS_EXTENSION_WEB_STORE_TITLE)));
+  source->AddLocalizedString("noErrorsToShow",
+                             IDS_EXTENSIONS_ERROR_NO_ERRORS_CODE_MESSAGE);
   source->AddLocalizedString("packDialogTitle",
                              IDS_MD_EXTENSIONS_PACK_DIALOG_TITLE);
   source->AddLocalizedString("packDialogBrowse",
@@ -210,6 +215,9 @@ content::WebUIDataSource* CreateMdExtensionsSource() {
                           IDR_MD_EXTENSIONS_ANIMATION_HELPER_HTML);
   source->AddResourcePath("animation_helper.js",
                           IDR_MD_EXTENSIONS_ANIMATION_HELPER_JS);
+  source->AddResourcePath("code_section.html",
+                          IDR_MD_EXTENSIONS_CODE_SECTION_HTML);
+  source->AddResourcePath("code_section.js", IDR_MD_EXTENSIONS_CODE_SECTION_JS);
   source->AddResourcePath("extensions.js", IDR_MD_EXTENSIONS_EXTENSIONS_JS);
   source->AddResourcePath("drag_and_drop_handler.html",
                           IDR_EXTENSIONS_DRAG_AND_DROP_HANDLER_HTML);
@@ -221,6 +229,8 @@ content::WebUIDataSource* CreateMdExtensionsSource() {
   source->AddResourcePath("drop_overlay.html",
                           IDR_MD_EXTENSIONS_DROP_OVERLAY_HTML);
   source->AddResourcePath("drop_overlay.js", IDR_MD_EXTENSIONS_DROP_OVERLAY_JS);
+  source->AddResourcePath("error_page.html", IDR_MD_EXTENSIONS_ERROR_PAGE_HTML);
+  source->AddResourcePath("error_page.js", IDR_MD_EXTENSIONS_ERROR_PAGE_JS);
   source->AddResourcePath("keyboard_shortcuts.html",
                           IDR_MD_EXTENSIONS_KEYBOARD_SHORTCUTS_HTML);
   source->AddResourcePath("keyboard_shortcuts.js",

@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include <openssl/evp.h>
-#include <openssl/rsa.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -33,11 +31,12 @@
 #include "content/public/test/test_navigation_observer.h"
 #include "content/public/test/test_utils.h"
 #include "crypto/rsa_private_key.h"
-#include "crypto/scoped_openssl_types.h"
 #include "extensions/common/extension.h"
 #include "extensions/test/result_catcher.h"
 #include "net/test/spawned_test_server/spawned_test_server.h"
 #include "testing/gmock/include/gmock/gmock.h"
+#include "third_party/boringssl/src/include/openssl/evp.h"
+#include "third_party/boringssl/src/include/openssl/rsa.h"
 
 using testing::Return;
 using testing::_;
@@ -82,7 +81,7 @@ void StoreDigest(std::vector<uint8_t>* digest,
 bool RsaSign(const std::vector<uint8_t>& digest,
              crypto::RSAPrivateKey* key,
              std::vector<uint8_t>* signature) {
-  crypto::ScopedRSA rsa_key(EVP_PKEY_get1_RSA(key->key()));
+  RSA* rsa_key = EVP_PKEY_get0_RSA(key->key());
   if (!rsa_key)
     return false;
 
@@ -94,9 +93,9 @@ bool RsaSign(const std::vector<uint8_t>& digest,
     return false;
   }
   size_t len = 0;
-  signature->resize(RSA_size(rsa_key.get()));
+  signature->resize(RSA_size(rsa_key));
   const int rv =
-      RSA_sign_raw(rsa_key.get(), &len, signature->data(), signature->size(),
+      RSA_sign_raw(rsa_key, &len, signature->data(), signature->size(),
                    prefixed_digest, prefixed_digest_len, RSA_PKCS1_PADDING);
   if (is_alloced)
     free(prefixed_digest);

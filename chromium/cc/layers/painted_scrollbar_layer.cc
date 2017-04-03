@@ -26,7 +26,8 @@ namespace cc {
 std::unique_ptr<LayerImpl> PaintedScrollbarLayer::CreateLayerImpl(
     LayerTreeImpl* tree_impl) {
   return PaintedScrollbarLayerImpl::Create(
-      tree_impl, id(), scrollbar_->Orientation());
+      tree_impl, id(), scrollbar_->Orientation(),
+      scrollbar_->IsLeftSideVerticalScrollbar(), scrollbar_->IsOverlay());
 }
 
 scoped_refptr<PaintedScrollbarLayer> PaintedScrollbarLayer::Create(
@@ -277,7 +278,7 @@ UIResourceBitmap PaintedScrollbarLayer::RasterizeScrollbarPart(
   SkRect layer_skrect = RectToSkRect(layer_rect);
   SkPaint paint;
   paint.setAntiAlias(false);
-  paint.setXfermodeMode(SkXfermode::kClear_Mode);
+  paint.setBlendMode(SkBlendMode::kClear);
   skcanvas.drawRect(layer_skrect, paint);
   skcanvas.clipRect(layer_skrect);
 

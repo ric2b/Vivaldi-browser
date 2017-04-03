@@ -25,9 +25,7 @@
 #include "cc/test/fake_tile_manager.h"
 #include "cc/test/fake_tile_task_manager.h"
 #include "cc/test/layer_tree_settings_for_testing.h"
-#include "cc/test/test_gpu_memory_buffer_manager.h"
 #include "cc/test/test_layer_tree_host_base.h"
-#include "cc/test/test_shared_bitmap_manager.h"
 #include "cc/test/test_task_graph_runner.h"
 #include "cc/test/test_tile_priorities.h"
 #include "cc/tiles/eviction_tile_priority_queue.h"
@@ -332,7 +330,7 @@ TEST_F(TileManagerTilePriorityQueueTest,
   std::set<Tile*> all_expected_tiles;
   for (size_t i = 0; i < pending_layer()->num_tilings(); ++i) {
     PictureLayerTiling* tiling = pending_layer()->tilings()->tiling_at(i);
-    if (tiling->contents_scale() == 1.f) {
+    if (tiling->contents_scale_key() == 1.f) {
       tiling->set_resolution(HIGH_RESOLUTION);
       const auto& all_tiles = tiling->AllTilesForTesting();
       all_expected_tiles.insert(all_tiles.begin(), all_tiles.end());
@@ -343,7 +341,7 @@ TEST_F(TileManagerTilePriorityQueueTest,
 
   for (size_t i = 0; i < active_layer()->num_tilings(); ++i) {
     PictureLayerTiling* tiling = active_layer()->tilings()->tiling_at(i);
-    if (tiling->contents_scale() == 1.5f) {
+    if (tiling->contents_scale_key() == 1.5f) {
       tiling->set_resolution(HIGH_RESOLUTION);
       const auto& all_tiles = tiling->AllTilesForTesting();
       all_expected_tiles.insert(all_tiles.begin(), all_tiles.end());
@@ -351,7 +349,7 @@ TEST_F(TileManagerTilePriorityQueueTest,
       tiling->set_resolution(NON_IDEAL_RESOLUTION);
       // Non ideal tilings with a high res pending twin have to be processed
       // because of possible activation tiles.
-      if (tiling->contents_scale() == 1.f) {
+      if (tiling->contents_scale_key() == 1.f) {
         tiling->UpdateAndGetAllPrioritizedTilesForTesting();
         const auto& all_tiles = tiling->AllTilesForTesting();
         for (auto* tile : all_tiles)
@@ -399,7 +397,7 @@ TEST_F(TileManagerTilePriorityQueueTest,
   std::set<Tile*> all_expected_tiles;
   for (size_t i = 0; i < pending_layer()->num_tilings(); ++i) {
     PictureLayerTiling* tiling = pending_layer()->tilings()->tiling_at(i);
-    if (tiling->contents_scale() == 1.f) {
+    if (tiling->contents_scale_key() == 1.f) {
       tiling->set_resolution(HIGH_RESOLUTION);
       const auto& all_tiles = tiling->AllTilesForTesting();
       all_expected_tiles.insert(all_tiles.begin(), all_tiles.end());
@@ -410,7 +408,7 @@ TEST_F(TileManagerTilePriorityQueueTest,
 
   for (size_t i = 0; i < active_layer()->num_tilings(); ++i) {
     PictureLayerTiling* tiling = active_layer()->tilings()->tiling_at(i);
-    if (tiling->contents_scale() == 1.5f) {
+    if (tiling->contents_scale_key() == 1.5f) {
       tiling->set_resolution(HIGH_RESOLUTION);
       const auto& all_tiles = tiling->AllTilesForTesting();
       all_expected_tiles.insert(all_tiles.begin(), all_tiles.end());
@@ -418,7 +416,7 @@ TEST_F(TileManagerTilePriorityQueueTest,
       tiling->set_resolution(LOW_RESOLUTION);
       // Low res tilings with a high res pending twin have to be processed
       // because of possible activation tiles.
-      if (tiling->contents_scale() == 1.f) {
+      if (tiling->contents_scale_key() == 1.f) {
         tiling->UpdateAndGetAllPrioritizedTilesForTesting();
         const auto& all_tiles = tiling->AllTilesForTesting();
         for (auto* tile : all_tiles)
@@ -876,8 +874,8 @@ TEST_F(TileManagerTilePriorityQueueTest,
 
         EXPECT_TRUE((tile_priority_bin < last_tile_priority_bin) ||
                     prioritized_tile.tile()->required_for_activation() ||
-                    (prioritized_tile.tile()->contents_scale() !=
-                     last_tile.tile()->contents_scale()));
+                    (prioritized_tile.tile()->contents_scale_key() !=
+                     last_tile.tile()->contents_scale_key()));
       }
     }
     last_tile = prioritized_tile;
@@ -1090,7 +1088,6 @@ TEST_F(TileManagerTilePriorityQueueTest,
   client.SetTileSize(gfx::Size(30, 30));
   LayerTreeSettings settings;
   settings.verify_clip_tree_calculations = true;
-  settings.verify_transform_tree_calculations = true;
 
   std::unique_ptr<PictureLayerTilingSet> tiling_set =
       PictureLayerTilingSet::Create(
@@ -1203,7 +1200,6 @@ TEST_F(TileManagerTilePriorityQueueTest,
   client.SetTileSize(gfx::Size(30, 30));
   LayerTreeSettings settings;
   settings.verify_clip_tree_calculations = true;
-  settings.verify_transform_tree_calculations = true;
 
   std::unique_ptr<PictureLayerTilingSet> tiling_set =
       PictureLayerTilingSet::Create(
@@ -1477,31 +1473,24 @@ class TileManagerTest : public TestLayerTreeHostBase {
   // MockLayerTreeHostImpl allows us to intercept tile manager callbacks.
   class MockLayerTreeHostImpl : public FakeLayerTreeHostImpl {
    public:
-    MockLayerTreeHostImpl(
-        const LayerTreeSettings& settings,
-        TaskRunnerProvider* task_runner_provider,
-        SharedBitmapManager* manager,
-        TaskGraphRunner* task_graph_runner,
-        gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager)
+    MockLayerTreeHostImpl(const LayerTreeSettings& settings,
+                          TaskRunnerProvider* task_runner_provider,
+                          TaskGraphRunner* task_graph_runner)
         : FakeLayerTreeHostImpl(settings,
                                 task_runner_provider,
-                                manager,
-                                task_graph_runner,
-                                gpu_memory_buffer_manager) {}
+                                task_graph_runner) {}
 
-    MOCK_METHOD0(NotifyAllTileTasksCompleted, void());
+    MOCK_METHOD0(NotifyReadyToActivate, void());
     MOCK_METHOD0(NotifyReadyToDraw, void());
+    MOCK_METHOD0(NotifyAllTileTasksCompleted, void());
   };
 
   std::unique_ptr<FakeLayerTreeHostImpl> CreateHostImpl(
       const LayerTreeSettings& settings,
       TaskRunnerProvider* task_runner_provider,
-      SharedBitmapManager* shared_bitmap_manager,
-      TaskGraphRunner* task_graph_runner,
-      gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager) override {
+      TaskGraphRunner* task_graph_runner) override {
     return base::MakeUnique<MockLayerTreeHostImpl>(
-        settings, task_runner_provider, shared_bitmap_manager,
-        task_graph_runner, gpu_memory_buffer_manager);
+        settings, task_runner_provider, task_graph_runner);
   }
 
   // By default use software compositing (no context provider).
@@ -1516,12 +1505,14 @@ class TileManagerTest : public TestLayerTreeHostBase {
 
 // Test to ensure that we call NotifyAllTileTasksCompleted when PrepareTiles is
 // called.
-TEST_F(TileManagerTest, AllWorkFinishedTest) {
+TEST_F(TileManagerTest, AllWorkFinished) {
   // Check with no tile work enqueued.
   {
     base::RunLoop run_loop;
     EXPECT_FALSE(
         host_impl()->tile_manager()->HasScheduledTileTasksForTesting());
+    EXPECT_CALL(MockHostImpl(), NotifyReadyToActivate());
+    EXPECT_CALL(MockHostImpl(), NotifyReadyToDraw());
     EXPECT_CALL(MockHostImpl(), NotifyAllTileTasksCompleted())
         .WillOnce(testing::Invoke([&run_loop]() { run_loop.Quit(); }));
     host_impl()->tile_manager()->PrepareTiles(host_impl()->global_tile_state());
@@ -1535,11 +1526,29 @@ TEST_F(TileManagerTest, AllWorkFinishedTest) {
     base::RunLoop run_loop;
     EXPECT_FALSE(
         host_impl()->tile_manager()->HasScheduledTileTasksForTesting());
+    EXPECT_CALL(MockHostImpl(), NotifyReadyToActivate());
+    EXPECT_CALL(MockHostImpl(), NotifyReadyToDraw());
     EXPECT_CALL(MockHostImpl(), NotifyAllTileTasksCompleted())
         .WillOnce(testing::Invoke([&run_loop]() { run_loop.Quit(); }));
     host_impl()->tile_manager()->PrepareTiles(host_impl()->global_tile_state());
     host_impl()->tile_manager()->SetMoreTilesNeedToBeRasterizedForTesting();
     EXPECT_TRUE(host_impl()->tile_manager()->HasScheduledTileTasksForTesting());
+    run_loop.Run();
+  }
+
+  // Check that if callbacks are called by CheckIfMoreTilesNeedToBePrepared if
+  // they haven't been called already.
+  {
+    base::RunLoop run_loop;
+    EXPECT_FALSE(
+        host_impl()->tile_manager()->HasScheduledTileTasksForTesting());
+    EXPECT_CALL(MockHostImpl(), NotifyReadyToActivate());
+    EXPECT_CALL(MockHostImpl(), NotifyReadyToDraw());
+    EXPECT_CALL(MockHostImpl(), NotifyAllTileTasksCompleted())
+        .WillOnce(testing::Invoke([&run_loop]() { run_loop.Quit(); }));
+    host_impl()->tile_manager()->ResetSignalsForTesting();
+    host_impl()->tile_manager()->SetMoreTilesNeedToBeRasterizedForTesting();
+    host_impl()->tile_manager()->CheckIfMoreTilesNeedToBePreparedForTesting();
     run_loop.Run();
   }
 }
@@ -1555,6 +1564,8 @@ TEST_F(TileManagerTest, ActivateAndDrawWhenOOM) {
     base::RunLoop run_loop;
     EXPECT_FALSE(
         host_impl()->tile_manager()->HasScheduledTileTasksForTesting());
+    EXPECT_CALL(MockHostImpl(), NotifyReadyToActivate());
+    EXPECT_CALL(MockHostImpl(), NotifyReadyToDraw());
     EXPECT_CALL(MockHostImpl(), NotifyAllTileTasksCompleted())
         .WillOnce(testing::Invoke([&run_loop]() { run_loop.Quit(); }));
     host_impl()->tile_manager()->PrepareTiles(global_state);
@@ -1571,6 +1582,8 @@ TEST_F(TileManagerTest, ActivateAndDrawWhenOOM) {
   {
     base::RunLoop run_loop;
     host_impl()->set_notify_tile_state_changed_called(false);
+    EXPECT_CALL(MockHostImpl(), NotifyReadyToActivate());
+    EXPECT_CALL(MockHostImpl(), NotifyReadyToDraw());
     EXPECT_CALL(MockHostImpl(), NotifyAllTileTasksCompleted())
         .WillOnce(testing::Invoke([&run_loop]() { run_loop.Quit(); }));
     host_impl()->tile_manager()->PrepareTiles(global_state);
@@ -1744,8 +1757,8 @@ TEST_F(PartialRasterTileManagerTest, CancelledTasksHaveNoContentId) {
   // Create a FakeTileTaskManagerImpl and set it on the tile manager so that all
   // scheduled work is immediately cancelled.
 
-  FakeTileTaskManagerImpl tile_task_manager;
-  host_impl()->tile_manager()->SetTileTaskManagerForTesting(&tile_task_manager);
+  host_impl()->tile_manager()->SetTileTaskManagerForTesting(
+      base::MakeUnique<FakeTileTaskManagerImpl>());
 
   // Pick arbitrary IDs - they don't really matter as long as they're constant.
   const int kLayerId = 7;
@@ -1833,8 +1846,8 @@ void RunPartialRasterCheck(std::unique_ptr<LayerTreeHostImpl> host_impl,
 
   // Create a VerifyResourceContentIdTileTaskManager to ensure that the
   // raster task we see is created with |kExpectedId|.
-  FakeTileTaskManagerImpl tile_task_manager;
-  host_impl->tile_manager()->SetTileTaskManagerForTesting(&tile_task_manager);
+  host_impl->tile_manager()->SetTileTaskManagerForTesting(
+      base::MakeUnique<FakeTileTaskManagerImpl>());
 
   VerifyResourceContentIdRasterBufferProvider raster_buffer_provider(
       kExpectedId);

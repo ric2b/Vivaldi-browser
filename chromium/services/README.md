@@ -9,7 +9,7 @@ foundational "system services" layer.
 
 Roughly each subdirectory here corresponds to a service that:
 
-  * is a client of `//services/shell` with its own unique Identity.
+  * is a client of `//services/service_manager` with its own unique Identity.
   * could logically run a standalone process for security/performance isolation
     benefits depending on the constraints of the host OS.
 
@@ -18,7 +18,7 @@ Roughly each subdirectory here corresponds to a service that:
 Individual services are structured like so:
 
     //services/foo/                   <-- Implementation code, may have subdirs.
-                  /public/    
+                  /public/
                          /cpp/        <-- C++ client libraries (optional)
                          /interfaces/ <-- Mojom interfaces
 
@@ -50,4 +50,4 @@ provide.
 Not everything in //components is automatically a service in its own right.
 Think of //components as sort of like a //lib. Individual //components can
 define, implement and use mojom interfaces, but only //services have unique
-identities with the Mojo Shell.
+identities with the Service Manager.

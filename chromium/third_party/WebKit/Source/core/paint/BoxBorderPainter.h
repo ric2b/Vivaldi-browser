@@ -13,8 +13,6 @@ namespace blink {
 
 class ComputedStyle;
 class GraphicsContext;
-class IntRect;
-class LayoutBox;
 class LayoutRect;
 struct PaintInfo;
 class Path;
@@ -94,7 +92,7 @@ class BoxBorderPainter {
                                     bool antialias);
 
   const BorderEdge& firstEdge() const {
-    ASSERT(m_visibleEdgeSet);
+    DCHECK(m_visibleEdgeSet);
     return m_edges[m_firstVisibleEdge];
   }
 

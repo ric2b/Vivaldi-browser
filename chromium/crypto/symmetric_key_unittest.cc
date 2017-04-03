@@ -12,16 +12,10 @@
 #include "testing/gtest/include/gtest/gtest.h"
 
 TEST(SymmetricKeyTest, GenerateRandomKey) {
-  std::unique_ptr<crypto::SymmetricKey> key_des(
-      crypto::SymmetricKey::GenerateRandomKey(crypto::SymmetricKey::DES_EDE3, 192));
-  ASSERT_TRUE(NULL != key_des.get());
-  std::string raw_key;
-  EXPECT_TRUE(key_des->GetRawKey(&raw_key));
-  EXPECT_EQ(24U, raw_key.size());
-
   std::unique_ptr<crypto::SymmetricKey> key(
       crypto::SymmetricKey::GenerateRandomKey(crypto::SymmetricKey::AES, 256));
   ASSERT_TRUE(key);
+  std::string raw_key;
   EXPECT_TRUE(key->GetRawKey(&raw_key));
   EXPECT_EQ(32U, raw_key.size());
 

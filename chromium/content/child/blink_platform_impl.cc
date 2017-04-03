@@ -49,7 +49,6 @@
 #include "content/child/web_url_request_util.h"
 #include "content/child/worker_thread_registry.h"
 #include "content/public/common/content_client.h"
-#include "net/base/data_url.h"
 #include "net/base/net_errors.h"
 #include "third_party/WebKit/public/platform/WebData.h"
 #include "third_party/WebKit/public/platform/WebFloatPoint.h"
@@ -420,31 +419,9 @@ WebString BlinkPlatformImpl::userAgent() {
   return blink::WebString::fromUTF8(GetContentClient()->GetUserAgent());
 }
 
-WebData BlinkPlatformImpl::parseDataURL(const WebURL& url,
-                                        WebString& mimetype_out,
-                                        WebString& charset_out) {
-  std::string mime_type, char_set, data;
-  if (net::DataURL::Parse(url, &mime_type, &char_set, &data) &&
-      mime_util::IsSupportedMimeType(mime_type)) {
-    mimetype_out = WebString::fromUTF8(mime_type);
-    charset_out = WebString::fromUTF8(char_set);
-    return data;
-  }
-  return WebData();
-}
-
 WebURLError BlinkPlatformImpl::cancelledError(
     const WebURL& unreachableURL) const {
   return CreateWebURLError(unreachableURL, false, net::ERR_ABORTED);
-}
-
-bool BlinkPlatformImpl::parseMultipartHeadersFromBody(
-    const char* bytes,
-    size_t size,
-    blink::WebURLResponse* response,
-    size_t* end) const {
-  return WebURLLoaderImpl::ParseMultipartHeadersFromBody(
-      bytes, size, response, end);
 }
 
 blink::WebThread* BlinkPlatformImpl::createThread(const char* name) {
@@ -539,64 +516,29 @@ struct DataResource {
 const DataResource kDataResources[] = {
     {"missingImage", IDR_BROKENIMAGE, ui::SCALE_FACTOR_100P},
     {"missingImage@2x", IDR_BROKENIMAGE, ui::SCALE_FACTOR_200P},
-    {"mediaplayerPause", IDR_MEDIAPLAYER_PAUSE_BUTTON, ui::SCALE_FACTOR_100P},
-    {"mediaplayerPauseNew",
-     IDR_MEDIAPLAYER_PAUSE_BUTTON_NEW,
+    {"mediaplayerPause",
+     IDR_MEDIAPLAYER_PAUSE_BUTTON,
      ui::SCALE_FACTOR_100P},
-    {"mediaplayerPlay", IDR_MEDIAPLAYER_PLAY_BUTTON, ui::SCALE_FACTOR_100P},
-    {"mediaplayerPlayNew",
-     IDR_MEDIAPLAYER_PLAY_BUTTON_NEW,
+    {"mediaplayerPlay",
+     IDR_MEDIAPLAYER_PLAY_BUTTON,
      ui::SCALE_FACTOR_100P},
-    {"mediaplayerPlayDisabled",
-     IDR_MEDIAPLAYER_PLAY_BUTTON_DISABLED,
+    {"mediaplayerSoundNotMuted",
+     IDR_MEDIAPLAYER_SOUND_NOT_MUTED_BUTTON,
      ui::SCALE_FACTOR_100P},
-    {"mediaplayerSoundLevel3",
-     IDR_MEDIAPLAYER_SOUND_LEVEL3_BUTTON,
-     ui::SCALE_FACTOR_100P},
-    {"mediaplayerSoundLevel3New",
-     IDR_MEDIAPLAYER_SOUND_LEVEL3_BUTTON_NEW,
-     ui::SCALE_FACTOR_100P},
-    {"mediaplayerSoundLevel2",
-     IDR_MEDIAPLAYER_SOUND_LEVEL2_BUTTON,
-     ui::SCALE_FACTOR_100P},
-    {"mediaplayerSoundLevel1",
-     IDR_MEDIAPLAYER_SOUND_LEVEL1_BUTTON,
-     ui::SCALE_FACTOR_100P},
-    {"mediaplayerSoundLevel0",
-     IDR_MEDIAPLAYER_SOUND_LEVEL0_BUTTON,
-     ui::SCALE_FACTOR_100P},
-    {"mediaplayerSoundLevel0New",
-     IDR_MEDIAPLAYER_SOUND_LEVEL0_BUTTON_NEW,
-     ui::SCALE_FACTOR_100P},
-    {"mediaplayerSoundDisabled",
-     IDR_MEDIAPLAYER_SOUND_DISABLED,
+    {"mediaplayerSoundMuted",
+     IDR_MEDIAPLAYER_SOUND_MUTED_BUTTON,
      ui::SCALE_FACTOR_100P},
     {"mediaplayerSliderThumb",
      IDR_MEDIAPLAYER_SLIDER_THUMB,
      ui::SCALE_FACTOR_100P},
-    {"mediaplayerSliderThumbNew",
-     IDR_MEDIAPLAYER_SLIDER_THUMB_NEW,
-     ui::SCALE_FACTOR_100P},
     {"mediaplayerVolumeSliderThumb",
      IDR_MEDIAPLAYER_VOLUME_SLIDER_THUMB,
-     ui::SCALE_FACTOR_100P},
-    {"mediaplayerVolumeSliderThumbNew",
-     IDR_MEDIAPLAYER_VOLUME_SLIDER_THUMB_NEW,
-     ui::SCALE_FACTOR_100P},
-    {"mediaplayerVolumeSliderThumbDisabled",
-     IDR_MEDIAPLAYER_VOLUME_SLIDER_THUMB_DISABLED,
      ui::SCALE_FACTOR_100P},
     {"mediaplayerClosedCaption",
      IDR_MEDIAPLAYER_CLOSEDCAPTION_BUTTON,
      ui::SCALE_FACTOR_100P},
-    {"mediaplayerClosedCaptionNew",
-     IDR_MEDIAPLAYER_CLOSEDCAPTION_BUTTON_NEW,
-     ui::SCALE_FACTOR_100P},
     {"mediaplayerClosedCaptionDisabled",
      IDR_MEDIAPLAYER_CLOSEDCAPTION_BUTTON_DISABLED,
-     ui::SCALE_FACTOR_100P},
-    {"mediaplayerClosedCaptionDisabledNew",
-     IDR_MEDIAPLAYER_CLOSEDCAPTION_BUTTON_DISABLED_NEW,
      ui::SCALE_FACTOR_100P},
     {"mediaplayerEnterFullscreen",
      IDR_MEDIAPLAYER_ENTER_FULLSCREEN_BUTTON,
@@ -604,53 +546,26 @@ const DataResource kDataResources[] = {
     {"mediaplayerExitFullscreen",
      IDR_MEDIAPLAYER_EXIT_FULLSCREEN_BUTTON,
      ui::SCALE_FACTOR_100P},
-    {"mediaplayerFullscreen",
-     IDR_MEDIAPLAYER_FULLSCREEN_BUTTON,
-     ui::SCALE_FACTOR_100P},
     {"mediaplayerCastOff",
      IDR_MEDIAPLAYER_CAST_BUTTON_OFF,
      ui::SCALE_FACTOR_100P},
     {"mediaplayerCastOn",
      IDR_MEDIAPLAYER_CAST_BUTTON_ON,
      ui::SCALE_FACTOR_100P},
-    {"mediaplayerCastOffNew",
-     IDR_MEDIAPLAYER_CAST_BUTTON_OFF_NEW,
-     ui::SCALE_FACTOR_100P},
-    {"mediaplayerCastOnNew",
-     IDR_MEDIAPLAYER_CAST_BUTTON_ON_NEW,
-     ui::SCALE_FACTOR_100P},
-    {"mediaplayerFullscreenDisabled",
-     IDR_MEDIAPLAYER_FULLSCREEN_BUTTON_DISABLED,
-     ui::SCALE_FACTOR_100P},
     {"mediaplayerOverlayCastOff",
      IDR_MEDIAPLAYER_OVERLAY_CAST_BUTTON_OFF,
-     ui::SCALE_FACTOR_100P},
-    {"mediaplayerOverlayCastOffNew",
-     IDR_MEDIAPLAYER_OVERLAY_CAST_BUTTON_OFF_NEW,
      ui::SCALE_FACTOR_100P},
     {"mediaplayerOverlayPlay",
      IDR_MEDIAPLAYER_OVERLAY_PLAY_BUTTON,
      ui::SCALE_FACTOR_100P},
-    {"mediaplayerOverlayPlayNew",
-     IDR_MEDIAPLAYER_OVERLAY_PLAY_BUTTON_NEW,
-     ui::SCALE_FACTOR_100P},
     {"mediaplayerTrackSelectionCheckmark",
      IDR_MEDIAPLAYER_TRACKSELECTION_CHECKMARK,
-     ui::SCALE_FACTOR_100P},
-    {"mediaplayerTrackSelectionCheckmarkNew",
-     IDR_MEDIAPLAYER_TRACKSELECTION_CHECKMARK_NEW,
      ui::SCALE_FACTOR_100P},
     {"mediaplayerClosedCaptionsIcon",
      IDR_MEDIAPLAYER_CLOSEDCAPTIONS_ICON,
      ui::SCALE_FACTOR_100P},
-    {"mediaplayerClosedCaptionsIconNew",
-     IDR_MEDIAPLAYER_CLOSEDCAPTIONS_ICON_NEW,
-     ui::SCALE_FACTOR_100P},
     {"mediaplayerSubtitlesIcon",
      IDR_MEDIAPLAYER_SUBTITLES_ICON,
-     ui::SCALE_FACTOR_100P},
-    {"mediaplayerSubtitlesIconNew",
-     IDR_MEDIAPLAYER_SUBTITLES_ICON_NEW,
      ui::SCALE_FACTOR_100P},
     {"mediaplayerOverflowMenu",
      IDR_MEDIAPLAYER_OVERFLOW_MENU_ICON,
@@ -681,10 +596,6 @@ const DataResource kDataResources[] = {
     {"mediaControlsAndroid.css",
      IDR_UASTYLE_MEDIA_CONTROLS_ANDROID_CSS,
      ui::SCALE_FACTOR_NONE},
-    // Not limited to Android since it's used for mobile layouts in inspector.
-    {"mediaControlsAndroidNew.css",
-     IDR_UASTYLE_MEDIA_CONTROLS_ANDROID_NEW_CSS,
-     ui::SCALE_FACTOR_NONE},
     // Not limited to Linux since it's used for mobile layouts in inspector.
     {"themeChromiumLinux.css",
      IDR_UASTYLE_THEME_CHROMIUM_LINUX_CSS,
@@ -703,9 +614,6 @@ const DataResource kDataResources[] = {
     {"mathml.css", IDR_UASTYLE_MATHML_CSS, ui::SCALE_FACTOR_NONE},
     {"mediaControls.css",
      IDR_UASTYLE_MEDIA_CONTROLS_CSS,
-     ui::SCALE_FACTOR_NONE},
-    {"mediaControlsNew.css",
-     IDR_UASTYLE_MEDIA_CONTROLS_NEW_CSS,
      ui::SCALE_FACTOR_NONE},
     {"fullscreen.css", IDR_UASTYLE_FULLSCREEN_CSS, ui::SCALE_FACTOR_NONE},
     {"xhtmlmp.css", IDR_UASTYLE_XHTMLMP_CSS, ui::SCALE_FACTOR_NONE},

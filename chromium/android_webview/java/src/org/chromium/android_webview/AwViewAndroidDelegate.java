@@ -11,7 +11,7 @@ import android.widget.FrameLayout;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.content.browser.RenderCoordinates;
 import org.chromium.ui.base.ViewAndroidDelegate;
-import org.chromium.ui.gfx.DeviceDisplayInfo;
+import org.chromium.ui.display.DisplayAndroid;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -88,7 +88,7 @@ public class AwViewAndroidDelegate extends ViewAndroidDelegate {
     * Updates the current container view to which this class delegates. Existing anchor views
     * are transferred from the old to the new container view.
     */
-    public void updateCurrentContainerView(ViewGroup containerView) {
+    public void updateCurrentContainerView(ViewGroup containerView, DisplayAndroid display) {
         ViewGroup oldContainerView = getContainerView();
         mContainerView = containerView;
         for (Entry<View, Position> entry : mAnchorViews.entrySet()) {
@@ -99,8 +99,7 @@ public class AwViewAndroidDelegate extends ViewAndroidDelegate {
             }
             containerView.addView(anchorView);
             if (position != null) {
-                float scale = (float) DeviceDisplayInfo.create(containerView.getContext())
-                        .getDIPScale();
+                float scale = display.getDipScale();
                 setViewPosition(anchorView, position.mX, position.mY,
                         position.mWidth, position.mHeight, scale,
                         position.mLeftMargin, position.mTopMargin);

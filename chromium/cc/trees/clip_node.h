@@ -16,10 +16,6 @@ class TracedValue;
 
 namespace cc {
 
-namespace proto {
-class TreeNode;
-}  // namespace proto
-
 struct CC_EXPORT ClipNode {
   ClipNode();
   ClipNode(const ClipNode& other);
@@ -28,11 +24,22 @@ struct CC_EXPORT ClipNode {
   int parent_id;
   int owner_id;
 
+  enum class ClipType {
+    // The node doesn't contribute a new clip. It exists only for caching clips
+    // or for resetting clipping state.
+    NONE,
+
+    // The node contributes a new clip (that is, |clip| needs to be applied).
+    APPLIES_LOCAL_CLIP
+  };
+
+  ClipType clip_type;
+
   // The clip rect that this node contributes, expressed in the space of its
   // transform node.
   gfx::RectF clip;
 
-  // Clip nodes are uses for two reasons. First, they are used for determining
+  // Clip nodes are used for two reasons. First, they are used for determining
   // which parts of each layer are visible. Second, they are used for
   // determining whether a clip needs to be applied when drawing a layer, and if
   // so, the rect that needs to be used. These can be different since not all
@@ -54,10 +61,6 @@ struct CC_EXPORT ClipNode {
   // The id of the effect node that defines the clip node's target space.
   int target_effect_id;
 
-  // Whether this node contributes a new clip (that is, whether |clip| needs to
-  // be applied), rather than only inheriting ancestor clips.
-  bool applies_local_clip : 1;
-
   // When true, |clip_in_target_space| does not include clips from ancestor
   // nodes.
   bool layer_clipping_uses_only_local_clip : 1;
@@ -75,8 +78,6 @@ struct CC_EXPORT ClipNode {
 
   bool operator==(const ClipNode& other) const;
 
-  void ToProtobuf(proto::TreeNode* proto) const;
-  void FromProtobuf(const proto::TreeNode& proto);
   void AsValueInto(base::trace_event::TracedValue* value) const;
 };
 

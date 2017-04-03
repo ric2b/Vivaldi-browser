@@ -36,6 +36,7 @@
 #include "core/dom/shadow/ShadowRoot.h"
 #include "core/events/MouseEvent.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/Settings.h"
 #include "core/html/HTMLAnchorElement.h"
 #include "core/html/HTMLLabelElement.h"
 #include "core/html/HTMLMediaSource.h"
@@ -46,6 +47,7 @@
 #include "core/html/track/TextTrackList.h"
 #include "core/input/EventHandler.h"
 #include "core/layout/api/LayoutSliderItem.h"
+#include "core/page/Page.h"
 #include "platform/EventDispatchForbiddenScope.h"
 #include "platform/Histogram.h"
 #include "platform/RuntimeEnabledFeatures.h"
@@ -159,8 +161,7 @@ void MediaControlPanelElement::startTimer() {
 }
 
 void MediaControlPanelElement::stopTimer() {
-  if (m_transitionTimer.isActive())
-    m_transitionTimer.stop();
+  m_transitionTimer.stop();
 }
 
 void MediaControlPanelElement::transitionTimerFired(TimerBase*) {
@@ -298,7 +299,12 @@ void MediaControlMuteButtonElement::defaultEventHandler(Event* event) {
 }
 
 void MediaControlMuteButtonElement::updateDisplayType() {
-  setDisplayType(mediaElement().muted() ? MediaUnMuteButton : MediaMuteButton);
+  // TODO(mlamouri): checking for volume == 0 because the mute button will look
+  // 'muted' when the volume is 0 even if the element is not muted. This allows
+  // the painting and the display type to actually match.
+  setDisplayType((mediaElement().muted() || mediaElement().volume() == 0)
+                     ? MediaUnMuteButton
+                     : MediaMuteButton);
   updateOverflowString();
 }
 
@@ -424,7 +430,17 @@ void MediaControlToggleClosedCaptionsButtonElement::updateDisplayType() {
 void MediaControlToggleClosedCaptionsButtonElement::defaultEventHandler(
     Event* event) {
   if (event->type() == EventTypeNames::click) {
-    mediaControls().toggleTextTrackList();
+    if (mediaElement().textTracks()->length() == 1) {
+      // If only one track exists, toggle it on/off
+      if (mediaElement().textTracks()->hasShowingTracks()) {
+        mediaControls().disableShowingTextTracks();
+      } else {
+        mediaControls().showTextTrackAtIndex(0);
+      }
+    } else {
+      mediaControls().toggleTextTrackList();
+    }
+
     updateDisplayType();
     event->setDefaultHandled();
   }
@@ -460,12 +476,12 @@ void MediaControlTextTrackListElement::defaultEventHandler(Event* event) {
     if (!target || !target->isElementNode())
       return;
 
-    disableShowingTextTracks();
+    mediaControls().disableShowingTextTracks();
     int trackIndex =
         toElement(target)->getIntegralAttribute(trackIndexAttrName());
     if (trackIndex != trackIndexOffValue) {
       DCHECK_GE(trackIndex, 0);
-      showTextTrackAtIndex(trackIndex);
+      mediaControls().showTextTrackAtIndex(trackIndex);
       mediaElement().disableAutomaticTextTrackSelection();
     }
 
@@ -483,35 +499,22 @@ void MediaControlTextTrackListElement::setVisible(bool visible) {
   }
 }
 
-void MediaControlTextTrackListElement::showTextTrackAtIndex(
-    unsigned indexToEnable) {
-  TextTrackList* trackList = mediaElement().textTracks();
-  if (indexToEnable >= trackList->length())
-    return;
-  TextTrack* track = trackList->anonymousIndexedGetter(indexToEnable);
-  if (track && track->canBeRendered())
-    track->setMode(TextTrack::showingKeyword());
-}
-
-void MediaControlTextTrackListElement::disableShowingTextTracks() {
-  TextTrackList* trackList = mediaElement().textTracks();
-  for (unsigned i = 0; i < trackList->length(); ++i) {
-    TextTrack* track = trackList->anonymousIndexedGetter(i);
-    if (track->mode() == TextTrack::showingKeyword())
-      track->setMode(TextTrack::disabledKeyword());
-  }
-}
-
 String MediaControlTextTrackListElement::getTextTrackLabel(TextTrack* track) {
-  if (!track)
+  if (!track) {
     return mediaElement().locale().queryString(
         WebLocalizedString::TextTracksOff);
+  }
 
   String trackLabel = track->label();
 
   if (trackLabel.isEmpty())
+    trackLabel = track->language();
+
+  if (trackLabel.isEmpty()) {
     trackLabel = String(mediaElement().locale().queryString(
-        WebLocalizedString::TextTracksNoLabel));
+        WebLocalizedString::TextTracksNoLabel,
+        String::number(track->trackIndex() + 1)));
+  }
 
   return trackLabel;
 }
@@ -660,6 +663,10 @@ MediaControlDownloadButtonElement::getOverflowStringName() {
 
 bool MediaControlDownloadButtonElement::shouldDisplayDownloadButton() {
   const KURL& url = mediaElement().currentSrc();
+
+  // Check page settings to see if download is disabled.
+  if (document().page() && document().page()->settings().hideDownloadUI())
+    return false;
 
   // URLs that lead to nowhere are ignored.
   if (url.isNull() || url.isEmpty())
@@ -830,7 +837,7 @@ void MediaControlVolumeSliderElement::defaultEventHandler(Event* event) {
         UserMetricsAction("Media.Controls.VolumeChangeEnd"));
 
   double volume = value().toDouble();
-  mediaElement().setVolume(volume, ASSERT_NO_EXCEPTION);
+  mediaElement().setVolume(volume);
   mediaElement().setMuted(false);
 }
 
@@ -849,8 +856,12 @@ bool MediaControlVolumeSliderElement::willRespondToMouseClickEvents() {
 }
 
 void MediaControlVolumeSliderElement::setVolume(double volume) {
-  if (value().toDouble() != volume)
-    setValue(String::number(volume));
+  if (value().toDouble() == volume)
+    return;
+
+  setValue(String::number(volume));
+  if (LayoutObject* layoutObject = this->layoutObject())
+    layoutObject->setShouldDoFullPaintInvalidation();
 }
 
 bool MediaControlVolumeSliderElement::keepEventInNode(Event* event) {

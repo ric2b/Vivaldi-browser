@@ -34,7 +34,6 @@
 #include "chrome/common/url_constants.h"
 #include "components/autofill/content/browser/content_autofill_driver.h"
 #include "components/autofill/content/browser/content_autofill_driver_factory.h"
-#include "components/autofill/content/common/autofill_messages.h"
 #include "components/autofill/core/browser/ui/card_unmask_prompt_view.h"
 #include "components/autofill/core/common/autofill_pref_names.h"
 #include "components/autofill/core/common/autofill_switches.h"
@@ -385,7 +384,10 @@ bool ChromeAutofillClient::IsContextSecure(const GURL& form_origin) {
   ssl_status = navigation_entry->GetSSL();
   // Note: If changing the implementation below, also change
   // AwAutofillClient::IsContextSecure. See crbug.com/505388
-  return ssl_status.security_style == content::SECURITY_STYLE_AUTHENTICATED &&
+  return navigation_entry->GetURL().SchemeIsCryptographic() &&
+         ssl_status.certificate &&
+         (!net::IsCertStatusError(ssl_status.cert_status) ||
+          net::IsCertStatusMinorError(ssl_status.cert_status)) &&
          !(ssl_status.content_status &
            content::SSLStatus::RAN_INSECURE_CONTENT);
 }

@@ -139,10 +139,11 @@ void History::go(ExecutionContext* context, int delta) {
     return;
 
   if (!activeDocument->frame() ||
-      !activeDocument->frame()->canNavigate(*frame()))
+      !activeDocument->frame()->canNavigate(*frame()) ||
+      !activeDocument->frame()->isNavigationAllowed() ||
+      !NavigationDisablerForBeforeUnload::isNavigationAllowed()) {
     return;
-  if (!NavigationDisablerForUnload::isNavigationAllowed())
-    return;
+  }
 
   // We intentionally call reload() for the current frame if delta is zero.
   // Otherwise, navigation happens on the root frame.

@@ -41,6 +41,7 @@ class WebMediaPlayerCast : public RendererMediaPlayerInterface {
 
   void requestRemotePlayback();
   void requestRemotePlaybackControl();
+  void requestRemotePlaybackStop();
 
   void SetMediaPlayerManager(
       RendererMediaPlayerManagerInterface* media_player_manager);
@@ -75,10 +76,12 @@ class WebMediaPlayerCast : public RendererMediaPlayerInterface {
       const std::string& remote_playback_message) override;
   void OnDisconnectedFromRemoteDevice() override;
   void OnCancelledRemotePlaybackRequest() override;
+  void OnRemotePlaybackStarted() override;
   void OnDidExitFullscreen() override;
   void OnMediaPlayerPlay() override;
   void OnMediaPlayerPause() override;
-  void OnRemoteRouteAvailabilityChanged(bool routes_available) override;
+  void OnRemoteRouteAvailabilityChanged(
+      blink::WebRemotePlaybackAvailability availability) override;
 
   // Getters of playback state.
   // bool paused() const override;

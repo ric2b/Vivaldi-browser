@@ -6,9 +6,9 @@
 
 #include "base/memory/ptr_util.h"
 #include "base/values.h"
-#include "components/sync/core/base_transaction.h"
-#include "components/sync/core/user_share.h"
 #include "components/sync/driver/data_type_controller.h"
+#include "components/sync/syncable/base_transaction.h"
+#include "components/sync/syncable/user_share.h"
 
 namespace syncer {
 
@@ -174,7 +174,7 @@ SyncCycleSnapshot FakeSyncService::GetLastCycleSnapshot() const {
   return SyncCycleSnapshot();
 }
 
-base::Value* FakeSyncService::GetTypeStatusMap() const {
+base::Value* FakeSyncService::GetTypeStatusMap() {
   return new base::ListValue();
 }
 

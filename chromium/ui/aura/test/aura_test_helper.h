@@ -8,12 +8,9 @@
 #include <memory>
 
 #include "base/macros.h"
+#include "ui/aura/env.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/aura/window_tree_host.h"
-
-namespace aura {
-class Env;
-}
 
 namespace base {
 class MessageLoopForUI;
@@ -21,18 +18,30 @@ class MessageLoopForUI;
 
 namespace ui {
 class ContextFactory;
-class InputMethod;
 class ScopedAnimationDurationScaleMode;
 }
 
+namespace wm {
+class WMState;
+}
+
 namespace aura {
+class Env;
 class TestScreen;
+class TestWindowTree;
+class TestWindowTreeClientSetup;
+class Window;
+class WindowManagerDelegate;
+class WindowTreeClient;
+class WindowTreeClientDelegate;
+
 namespace client {
+class CaptureClient;
 class DefaultCaptureClient;
 class FocusClient;
 }
 namespace test {
-class TestWindowTreeClient;
+class TestWindowParentingClient;
 
 // A helper class owned by tests that does common initialization required for
 // Aura use. This class creates a root window with clients and other objects
@@ -41,6 +50,16 @@ class AuraTestHelper {
  public:
   explicit AuraTestHelper(base::MessageLoopForUI* message_loop);
   ~AuraTestHelper();
+
+  // Makes aura target mus with a mock WindowTree (TestWindowTree). Must be
+  // called before SetUp().
+  void EnableMusWithTestWindowTree(
+      WindowTreeClientDelegate* window_tree_delegate,
+      WindowManagerDelegate* window_manager_delegate);
+
+  // Makes aura target mus with the specified WindowTreeClient. Must be called
+  // before SetUp().
+  void EnableMusWithWindowTreeClient(WindowTreeClient* window_tree_client);
 
   // Creates and initializes (shows and sizes) the RootWindow for use in tests.
   void SetUp(ui::ContextFactory* context_factory);
@@ -58,17 +77,51 @@ class AuraTestHelper {
 
   TestScreen* test_screen() { return test_screen_.get(); }
 
+  // This function only returns a valid value if EnableMusWithTestWindowTree()
+  // was called.
+  TestWindowTree* window_tree();
+
+  // Returns a WindowTreeClient only if one of the EnableMus functions is
+  // called.
+  WindowTreeClient* window_tree_client();
+
+  client::FocusClient* focus_client() { return focus_client_.get(); }
+  client::CaptureClient* capture_client();
+
  private:
-  base::MessageLoopForUI* message_loop_;
+  enum class Mode {
+    // Classic aura.
+    LOCAL,
+
+    // Mus with a test WindowTree implementation that does not target the real
+    // service:ui.
+    MUS_CREATE_WINDOW_TREE_CLIENT,
+
+    // Mus without creating a WindowTree. This is used when the test wants to
+    // create the WindowTreeClient itself. This mode is enabled by way of
+    // EnableMusWithWindowTreeClient().
+    MUS,
+  };
+
+  // Initializes a WindowTreeClient with a test WindowTree.
+  void InitWindowTreeClient();
+
+  Mode mode_ = Mode::LOCAL;
   bool setup_called_;
   bool teardown_called_;
+  std::unique_ptr<TestWindowTreeClientSetup> window_tree_client_setup_;
   std::unique_ptr<aura::Env> env_;
+  std::unique_ptr<wm::WMState> wm_state_;
   std::unique_ptr<WindowTreeHost> host_;
-  std::unique_ptr<TestWindowTreeClient> stacking_client_;
+  std::unique_ptr<TestWindowParentingClient> parenting_client_;
   std::unique_ptr<client::DefaultCaptureClient> capture_client_;
   std::unique_ptr<client::FocusClient> focus_client_;
   std::unique_ptr<TestScreen> test_screen_;
   std::unique_ptr<ui::ScopedAnimationDurationScaleMode> zero_duration_mode_;
+  WindowTreeClientDelegate* window_tree_delegate_ = nullptr;
+  WindowManagerDelegate* window_manager_delegate_ = nullptr;
+
+  WindowTreeClient* window_tree_client_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(AuraTestHelper);
 };

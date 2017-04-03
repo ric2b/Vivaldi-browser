@@ -36,7 +36,12 @@
 
 /** @polymerBehavior */
 var CrScrollableBehavior = {
-  attached: function() {
+  properties: {
+    /** @private */
+    intervalId_: Number,
+  },
+
+  ready: function() {
     var scrollableElements = this.root.querySelectorAll('[scrollable]');
 
     // Setup the intial scrolling related classes for each scrollable container.
@@ -51,12 +56,8 @@ var CrScrollableBehavior = {
   },
 
   detached: function() {
-    // Remove 'scroll' event listeners.
-    var scrollableElements = this.root.querySelectorAll('[scrollable]');
-    for (let scrollable of scrollableElements) {
-      scrollable.removeEventListener(
-          'scroll', this.updateScrollEvent_.bind(this));
-    }
+    if (this.intervalId_)
+      clearInterval(this.intervalId_);
   },
 
   /**
@@ -67,7 +68,7 @@ var CrScrollableBehavior = {
   updateScrollableContents() {
     let nodeList = this.root.querySelectorAll('[scrollable] iron-list');
     // Use setTimeout to avoid initial render / sizing issues.
-    let intervalId = setInterval(function() {
+    this.intervalId_ = setInterval(function() {
       let unreadyNodes = [];
       for (let node of nodeList) {
         if (node.parentNode.scrollHeight == 0) {
@@ -78,10 +79,10 @@ var CrScrollableBehavior = {
         ironList.notifyResize();
       }
       if (unreadyNodes.length == 0)
-        clearInterval(intervalId);
+        clearInterval(this.intervalId_);
       else
         nodeList = unreadyNodes;
-    }, 10);
+    }.bind(this), 10);
   },
 
   /**

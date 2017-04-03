@@ -23,7 +23,10 @@ void ShellBrowserMainParts::PreMainMessageLoopStart() {
     base::scoped_nsobject<NSNib> nib(
         [[NSNib alloc] initWithNibNamed:@"VivaldiMainMenu"
                                  bundle:base::mac::FrameworkBundle()]);
-    [nib instantiateNibWithOwner:NSApp topLevelObjects:nil];
+    NSArray* top_level_objects = nil;
+    [nib instantiateWithOwner:NSApp topLevelObjects:nil];
+    for (NSObject* object : top_level_objects)
+      [object retain];
   } else {
   base::scoped_nsobject<NSNib> nib(
       [[NSNib alloc] initWithNibNamed:@"MainMenu"

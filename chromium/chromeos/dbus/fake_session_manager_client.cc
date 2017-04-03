@@ -124,7 +124,8 @@ void FakeSessionManagerClient::StoreDevicePolicy(
   device_policy_ = policy_blob;
   base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
                                                 base::Bind(callback, true));
-  FOR_EACH_OBSERVER(Observer, observers_, PropertyChangeComplete(true));
+  for (auto& observer : observers_)
+    observer.PropertyChangeComplete(true);
 }
 
 void FakeSessionManagerClient::StorePolicyForUser(
@@ -164,9 +165,12 @@ void FakeSessionManagerClient::CheckArcAvailability(
 void FakeSessionManagerClient::StartArcInstance(
     const cryptohome::Identification& cryptohome_id,
     bool disable_boot_completed_broadcast,
-    const ArcCallback& callback) {
+    const StartArcInstanceCallback& callback) {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(callback, arc_available_));
+      FROM_HERE,
+      base::Bind(callback, arc_available_
+                               ? StartArcInstanceResult::SUCCESS
+                               : StartArcInstanceResult::UNKNOWN_ERROR));
 }
 
 void FakeSessionManagerClient::StopArcInstance(const ArcCallback& callback) {
@@ -234,7 +238,8 @@ void FakeSessionManagerClient::set_device_local_account_policy(
 }
 
 void FakeSessionManagerClient::OnPropertyChangeComplete(bool success) {
-  FOR_EACH_OBSERVER(Observer, observers_, PropertyChangeComplete(success));
+  for (auto& observer : observers_)
+    observer.PropertyChangeComplete(success);
 }
 
 }  // namespace chromeos

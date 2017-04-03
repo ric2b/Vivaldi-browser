@@ -109,7 +109,7 @@ void AsyncRevalidationManager::BeginAsyncRevalidation(
 
   // Construct the request.
   std::unique_ptr<net::URLRequest> new_request = request_context->CreateRequest(
-      for_request.url(), net::MINIMUM_PRIORITY, nullptr);
+      for_request.url(), net::IDLE, nullptr);
 
   new_request->set_method(for_request.method());
   new_request->set_first_party_for_cookies(
@@ -169,7 +169,7 @@ bool AsyncRevalidationManager::QualifiesForAsyncRevalidation(
     const ResourceRequest& request) {
   if (request.load_flags &
       (net::LOAD_BYPASS_CACHE | net::LOAD_DISABLE_CACHE |
-       net::LOAD_VALIDATE_CACHE | net::LOAD_PREFERRING_CACHE |
+       net::LOAD_VALIDATE_CACHE | net::LOAD_SKIP_CACHE_VALIDATION |
        net::LOAD_ONLY_FROM_CACHE | net::LOAD_IGNORE_LIMITS |
        net::LOAD_PREFETCH)) {
     return false;

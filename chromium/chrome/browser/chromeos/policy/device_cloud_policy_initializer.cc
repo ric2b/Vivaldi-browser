@@ -101,6 +101,7 @@ void DeviceCloudPolicyInitializer::StartEnrollment(
   DCHECK(!enrollment_handler_);
 
   manager_->core()->Disconnect();
+
   enrollment_handler_.reset(new EnrollmentHandlerChromeOS(
       device_store_, install_attributes_, state_keys_broker_,
       attestation_flow_.get(), CreateClient(device_management_service),
@@ -131,6 +132,11 @@ EnrollmentConfig DeviceCloudPolicyInitializer::GetPrescribedEnrollmentConfig()
 
     case ZeroTouchEnrollmentMode::FORCED:
       // Only use attestation to authenticate since zero-touch is forced.
+      config.auth_mechanism = EnrollmentConfig::AUTH_MECHANISM_ATTESTATION;
+      break;
+
+    case ZeroTouchEnrollmentMode::HANDS_OFF:
+      // Hands-off implies the same authentication method as Forced.
       config.auth_mechanism = EnrollmentConfig::AUTH_MECHANISM_ATTESTATION;
       break;
   }

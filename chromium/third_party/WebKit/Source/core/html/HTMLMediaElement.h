@@ -29,6 +29,7 @@
 
 #include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "bindings/core/v8/ScriptPromise.h"
+#include "bindings/core/v8/TraceWrapperMember.h"
 #include "core/CoreExport.h"
 #include "core/dom/ActiveDOMObject.h"
 #include "core/dom/ExceptionCode.h"
@@ -36,11 +37,11 @@
 #include "core/html/AutoplayExperimentHelper.h"
 #include "core/html/HTMLElement.h"
 #include "core/html/track/TextTrack.h"
+#include "platform/MIMETypeRegistry.h"
 #include "platform/Supplementable.h"
 #include "platform/audio/AudioSourceProvider.h"
 #include "public/platform/WebAudioSourceProviderClient.h"
 #include "public/platform/WebMediaPlayerClient.h"
-#include "public/platform/WebMimeRegistry.h"
 #include <memory>
 
 namespace blink {
@@ -84,7 +85,7 @@ class CORE_EXPORT HTMLMediaElement : public HTMLElement,
   USING_PRE_FINALIZER(HTMLMediaElement, dispose);
 
  public:
-  static WebMimeRegistry::SupportsType supportsType(const ContentType&);
+  static MIMETypeRegistry::SupportsType supportsType(const ContentType&);
 
   enum class RecordMetricsBehavior { DoNotRecord, DoRecord };
 
@@ -116,7 +117,7 @@ class CORE_EXPORT HTMLMediaElement : public HTMLElement,
   };
   void scheduleTextTrackResourceLoad();
 
-  bool hasRemoteRoutes() const { return m_remoteRoutesAvailable; }
+  bool hasRemoteRoutes() const;
   bool isPlayingRemotely() const { return m_playingRemotely; }
 
   // error state
@@ -180,6 +181,7 @@ class CORE_EXPORT HTMLMediaElement : public HTMLElement,
   void pause();
   void requestRemotePlayback();
   void requestRemotePlaybackControl();
+  void requestRemotePlaybackStop();
 
   // statistics
   unsigned webkitAudioDecodedByteCount() const;
@@ -193,7 +195,7 @@ class CORE_EXPORT HTMLMediaElement : public HTMLElement,
   bool shouldShowControls(
       const RecordMetricsBehavior = RecordMetricsBehavior::DoNotRecord) const;
   double volume() const;
-  void setVolume(double, ExceptionState&);
+  void setVolume(double, ExceptionState& = ASSERT_NO_EXCEPTION);
   bool muted() const;
   void setMuted(bool);
 
@@ -297,6 +299,8 @@ class CORE_EXPORT HTMLMediaElement : public HTMLElement,
   virtual bool isHTMLAudioElement() const { return false; }
   virtual bool isHTMLVideoElement() const { return false; }
 
+  void videoWillBeDrawnToCanvas() const;
+
   // Temporary callback for crbug.com/487345,402044
   void notifyPositionMayHaveChanged(const IntRect&);
   void updatePositionNotificationRegistration();
@@ -304,7 +308,9 @@ class CORE_EXPORT HTMLMediaElement : public HTMLElement,
   WebRemotePlaybackClient* remotePlaybackClient() {
     return m_remotePlaybackClient;
   }
-  void setRemotePlaybackClient(WebRemotePlaybackClient*);
+  const WebRemotePlaybackClient* remotePlaybackClient() const {
+    return m_remotePlaybackClient;
+  }
 
  protected:
   HTMLMediaElement(const QualifiedName&, Document&);
@@ -347,7 +353,6 @@ class CORE_EXPORT HTMLMediaElement : public HTMLElement,
   void didBecomeFullscreenElement() final;
   void willStopBeingFullscreenElement() final;
   bool isInteractiveContent() const final;
-  void defaultEventHandler(Event*) final;
 
   // ActiveDOMObject functions.
   void contextDestroyed() final;
@@ -383,10 +388,11 @@ class CORE_EXPORT HTMLMediaElement : public HTMLElement,
   void removeTextTrack(WebInbandTextTrack*) final;
   void mediaSourceOpened(WebMediaSource*) final;
   void requestSeek(double) final;
-  void remoteRouteAvailabilityChanged(bool) final;
+  void remoteRouteAvailabilityChanged(WebRemotePlaybackAvailability) final;
   void connectedToRemoteDevice() final;
   void disconnectedFromRemoteDevice() final;
   void cancelledRemotePlaybackRequest() final;
+  void remotePlaybackStarted() final;
   bool isAutoplayingMuted() final;
   void requestReload(const WebURL&) final;
 
@@ -463,8 +469,12 @@ class CORE_EXPORT HTMLMediaElement : public HTMLElement,
   bool endedPlayback(LoopCondition = LoopCondition::Included) const;
 
   void setShouldDelayLoadEvent(bool);
-  void invalidateCachedTime();
-  void refreshCachedTime() const;
+
+  double earliestPossiblePosition() const;
+  double currentPlaybackPosition() const;
+  double officialPlaybackPosition() const;
+  void setOfficialPlaybackPosition(double) const;
+  void requireOfficialPlaybackPositionUpdate() const;
 
   void ensureMediaControls();
   void configureMediaControls();
@@ -476,8 +486,6 @@ class CORE_EXPORT HTMLMediaElement : public HTMLElement,
   void changeNetworkStateFromLoadingToIdle();
 
   bool isAutoplaying() const { return m_autoplaying; }
-
-  void setAllowHiddenVolumeControls(bool);
 
   WebMediaPlayer::CORSMode corsMode() const;
 
@@ -565,7 +573,7 @@ class CORE_EXPORT HTMLMediaElement : public HTMLElement,
   double m_lastTimeUpdateEventWallTime;
 
   // The last time a timeupdate event was sent in movie time.
-  double m_lastTimeUpdateEventMovieTime;
+  double m_lastTimeUpdateEventMediaTime;
 
   // The default playback start position.
   double m_defaultPlaybackStartPosition;
@@ -604,9 +612,11 @@ class CORE_EXPORT HTMLMediaElement : public HTMLElement,
 
   Member<HTMLMediaSource> m_mediaSource;
 
-  // Cached time value. Only valid when ready state is kHaveMetadata or
-  // higher, otherwise the current time is assumed to be zero.
-  mutable double m_cachedTime;
+  // Stores "official playback position", updated periodically from "current
+  // playback position". Official playback position should not change while
+  // scripts are running. See setOfficialPlaybackPosition().
+  mutable double m_officialPlaybackPosition;
+  mutable bool m_officialPlaybackPositionNeedsUpdate;
 
   double m_fragmentEndTime;
 
@@ -633,14 +643,13 @@ class CORE_EXPORT HTMLMediaElement : public HTMLElement,
 
   bool m_tracksAreReady : 1;
   bool m_processingPreferenceChange : 1;
-  bool m_remoteRoutesAvailable : 1;
   bool m_playingRemotely : 1;
   // Whether this element is in overlay fullscreen mode.
   bool m_inOverlayFullscreenVideo : 1;
 
-  Member<AudioTrackList> m_audioTracks;
-  Member<VideoTrackList> m_videoTracks;
-  Member<TextTrackList> m_textTracks;
+  TraceWrapperMember<AudioTrackList> m_audioTracks;
+  TraceWrapperMember<VideoTrackList> m_videoTracks;
+  TraceWrapperMember<TextTrackList> m_textTracks;
   HeapVector<Member<TextTrack>> m_textTracksWhenResourceSelectionBegan;
 
   Member<CueTimeline> m_cueTimeline;

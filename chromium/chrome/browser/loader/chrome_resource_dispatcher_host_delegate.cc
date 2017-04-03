@@ -66,6 +66,7 @@
 #include "content/public/browser/stream_info.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/resource_response.h"
+#include "extensions/features/features.h"
 #include "net/base/load_flags.h"
 #include "net/base/load_timing_info.h"
 #include "net/base/request_priority.h"
@@ -77,10 +78,11 @@
 #include "chrome/browser/component_updater/pnacl_component_installer.h"
 #endif
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "chrome/browser/apps/app_url_redirector.h"
 #include "chrome/browser/extensions/api/streams_private/streams_private_api.h"
 #include "chrome/browser/extensions/user_script_listener.h"
+#include "chrome/browser/renderer_host/chrome_navigation_ui_data.h"
 #include "extensions/browser/extension_throttle_manager.h"
 #include "extensions/browser/guest_view/web_view/web_view_renderer_state.h"
 #include "extensions/browser/info_map.h"
@@ -90,7 +92,7 @@
 #include "extensions/common/user_script.h"
 #endif
 
-#if defined(ENABLE_SUPERVISED_USERS)
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
 #include "chrome/browser/supervised_user/supervised_user_resource_throttle.h"
 #endif
 
@@ -118,7 +120,7 @@ using content::ResourceDispatcherHostLoginDelegate;
 using content::ResourceRequestInfo;
 using content::ResourceType;
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 using extensions::Extension;
 using extensions::StreamsPrivateAPI;
 #endif
@@ -173,7 +175,7 @@ void UpdatePrerenderNetworkBytesCallback(content::WebContents* web_contents,
     prerender_manager->AddProfileNetworkBytesIfEnabled(bytes);
 }
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 void SendExecuteMimeTypeHandlerEvent(
     std::unique_ptr<content::StreamInfo> stream,
     int64_t expected_content_size,
@@ -215,7 +217,7 @@ void SendExecuteMimeTypeHandlerEvent(
       extension_id, std::move(stream), view_id, expected_content_size, embedded,
       frame_tree_node_id, render_process_id, render_frame_id);
 }
-#endif  // !defined(ENABLE_EXTENSIONS)
+#endif  // !BUILDFLAG(ENABLE_EXTENSIONS)
 
 void LaunchURL(
     const GURL& url,
@@ -378,7 +380,7 @@ void NotifyUIThreadOfRequestComplete(
 ChromeResourceDispatcherHostDelegate::ChromeResourceDispatcherHostDelegate()
     : download_request_limiter_(g_browser_process->download_request_limiter()),
       safe_browsing_(g_browser_process->safe_browsing_service())
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
       , user_script_listener_(new extensions::UserScriptListener())
 #endif
       {
@@ -389,7 +391,7 @@ ChromeResourceDispatcherHostDelegate::ChromeResourceDispatcherHostDelegate()
 }
 
 ChromeResourceDispatcherHostDelegate::~ChromeResourceDispatcherHostDelegate() {
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   CHECK(stream_target_info_.empty());
 #endif
 }
@@ -480,8 +482,11 @@ void ChromeResourceDispatcherHostDelegate::RequestBeginning(
     net::HttpRequestHeaders headers;
     headers.CopyFrom(request->extra_request_headers());
     bool is_off_the_record = io_data->IsOffTheRecord();
+    bool is_signed_in =
+        !is_off_the_record &&
+        !io_data->google_services_account_id()->GetValue().empty();
     variations::AppendVariationHeaders(
-        request->url(), is_off_the_record,
+        request->url(), is_off_the_record, is_signed_in,
         !is_off_the_record && io_data->GetMetricsEnabledStateOnIOThread(),
         &headers);
     request->SetExtraRequestHeaders(headers);
@@ -560,14 +565,10 @@ ResourceDispatcherHostLoginDelegate*
 
 bool ChromeResourceDispatcherHostDelegate::HandleExternalProtocol(
     const GURL& url,
-    int child_id,
-    const content::ResourceRequestInfo::WebContentsGetter& web_contents_getter,
-    bool is_main_frame,
-    ui::PageTransition page_transition,
-    bool has_user_gesture,
-    content::ResourceContext* resource_context) {
+    content::ResourceRequestInfo* info) {
   // Get the state, if |url| is in blacklist, whitelist or in none of those.
-  ProfileIOData* io_data = ProfileIOData::FromResourceContext(resource_context);
+  ProfileIOData* io_data =
+      ProfileIOData::FromResourceContext(info->GetContext());
   const policy::URLBlacklist::URLBlacklistState url_state =
       io_data->GetURLBlacklistState(url);
   if (url_state == policy::URLBlacklist::URLBlacklistState::URL_IN_BLACKLIST) {
@@ -577,20 +578,25 @@ bool ChromeResourceDispatcherHostDelegate::HandleExternalProtocol(
     // content page.
     return false;
   }
-#if defined(ENABLE_EXTENSIONS)
+  int child_id = info->GetChildID();
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   // External protocols are disabled for guests. An exception is made for the
   // "mailto" protocol, so that pages that utilize it work properly in a
   // WebView.
-  if (extensions::WebViewRendererState::GetInstance()->IsGuest(child_id) &&
+  ChromeNavigationUIData* navigation_data =
+      static_cast<ChromeNavigationUIData*>(info->GetNavigationUIData());
+  if ((extensions::WebViewRendererState::GetInstance()->IsGuest(child_id) ||
+      (navigation_data &&
+       navigation_data->GetExtensionNavigationUIData()->is_web_view())) &&
       !url.SchemeIs(url::kMailToScheme)) {
     return false;
   }
-#endif  // defined(ENABLE_EXTENSIONS)
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
 #if defined(OS_ANDROID)
   // Main frame external protocols are handled by
   // InterceptNavigationResourceThrottle.
-  if (is_main_frame)
+  if (info->IsMainFrame())
     return false;
 #endif  // defined(ANDROID)
 
@@ -598,8 +604,10 @@ bool ChromeResourceDispatcherHostDelegate::HandleExternalProtocol(
       url_state == policy::URLBlacklist::URLBlacklistState::URL_IN_WHITELIST;
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
-      base::Bind(&LaunchURL, url, child_id, web_contents_getter,
-                 page_transition, has_user_gesture, is_whitelisted));
+      base::Bind(&LaunchURL, url, child_id,
+                 info->GetWebContentsGetterForRequest(),
+                 info->GetPageTransition(), info->HasUserGesture(),
+                 is_whitelisted));
   return true;
 }
 
@@ -628,7 +636,7 @@ void ChromeResourceDispatcherHostDelegate::AppendStandardResourceThrottles(
   if (first_throttle)
     throttles->push_back(first_throttle);
 
-#if defined(ENABLE_SUPERVISED_USERS)
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
   bool is_subresource_request =
       resource_type != content::RESOURCE_TYPE_MAIN_FRAME;
   throttles->push_back(new SupervisedUserResourceThrottle(
@@ -636,7 +644,7 @@ void ChromeResourceDispatcherHostDelegate::AppendStandardResourceThrottles(
         io_data->supervised_user_url_filter()));
 #endif
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   content::ResourceThrottle* wait_for_extensions_init_throttle =
       user_script_listener_->CreateResourceThrottle(request->url(),
                                                     resource_type);
@@ -666,7 +674,7 @@ void ChromeResourceDispatcherHostDelegate::AppendStandardResourceThrottles(
 
 bool ChromeResourceDispatcherHostDelegate::ShouldForceDownloadResource(
     const GURL& url, const std::string& mime_type) {
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   // Special-case user scripts to get downloaded instead of viewed.
   return extensions::UserScript::IsURLUserScript(url, mime_type);
 #else
@@ -680,7 +688,7 @@ bool ChromeResourceDispatcherHostDelegate::ShouldInterceptResourceAsStream(
     const std::string& mime_type,
     GURL* origin,
     std::string* payload) {
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   const ResourceRequestInfo* info = ResourceRequestInfo::ForRequest(request);
   ProfileIOData* io_data =
       ProfileIOData::FromResourceContext(info->GetContext());
@@ -734,7 +742,7 @@ bool ChromeResourceDispatcherHostDelegate::ShouldInterceptResourceAsStream(
 void ChromeResourceDispatcherHostDelegate::OnStreamCreated(
     net::URLRequest* request,
     std::unique_ptr<content::StreamInfo> stream) {
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   const ResourceRequestInfo* info = ResourceRequestInfo::ForRequest(request);
   std::map<net::URLRequest*, StreamTargetInfo>::iterator ix =
       stream_target_info_.find(request);
@@ -765,7 +773,7 @@ void ChromeResourceDispatcherHostDelegate::OnResponseStarted(
                                               info->GetRouteID());
 
   // Built-in additional protection for the chrome web store origin.
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   GURL webstore_url(extension_urls::GetWebstoreLaunchURL());
   if (request->url().SchemeIsHTTPOrHTTPS() &&
       request->url().DomainIs(webstore_url.host().c_str())) {
@@ -818,14 +826,16 @@ void ChromeResourceDispatcherHostDelegate::RequestComplete(
     net::URLRequest* url_request) {
   if (!url_request)
     return;
+  // TODO(maksims): remove this and use net_error argument in RequestComplete
+  // once ResourceDispatcherHostDelegate is modified.
+  int net_error = url_request->status().error();
   const ResourceRequestInfo* info =
       ResourceRequestInfo::ForRequest(url_request);
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
       base::Bind(&NotifyUIThreadOfRequestComplete,
                  info->GetWebContentsGetterForRequest(), url_request->url(),
-                 info->GetResourceType(), url_request->was_cached(),
-                 url_request->status().error(),
+                 info->GetResourceType(), url_request->was_cached(), net_error,
                  url_request->GetTotalReceivedBytes(),
                  base::TimeTicks::Now() - url_request->creation_time()));
 }

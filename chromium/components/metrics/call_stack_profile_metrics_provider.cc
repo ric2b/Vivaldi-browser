@@ -39,8 +39,10 @@ namespace {
 // with them.
 struct ProfilesState {
   ProfilesState(const CallStackProfileParams& params,
-                const base::StackSamplingProfiler::CallStackProfiles& profiles,
+                base::StackSamplingProfiler::CallStackProfiles profiles,
                 base::TimeTicks start_timestamp);
+  ProfilesState(ProfilesState&&);
+  ProfilesState& operator=(ProfilesState&&);
 
   // The metrics-related parameters provided to
   // CallStackProfileMetricsProvider::GetProfilerCallback().
@@ -54,16 +56,23 @@ struct ProfilesState {
   // via CallStackProfileMetricsProvider::GetProfilerCallback(). Used to
   // determine if collection was disabled during the collection of the profile.
   base::TimeTicks start_timestamp;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(ProfilesState);
 };
 
 ProfilesState::ProfilesState(
     const CallStackProfileParams& params,
-    const base::StackSamplingProfiler::CallStackProfiles& profiles,
+    base::StackSamplingProfiler::CallStackProfiles profiles,
     base::TimeTicks start_timestamp)
     : params(params),
-      profiles(profiles),
-      start_timestamp(start_timestamp) {
-}
+      profiles(std::move(profiles)),
+      start_timestamp(start_timestamp) {}
+
+ProfilesState::ProfilesState(ProfilesState&&) = default;
+
+// Some versions of GCC need this for push_back to work with std::move.
+ProfilesState& ProfilesState::operator=(ProfilesState&&) = default;
 
 // PendingProfiles ------------------------------------------------------------
 
@@ -80,7 +89,6 @@ class PendingProfiles {
  public:
   static PendingProfiles* GetInstance();
 
-  void Clear();
   void Swap(std::vector<ProfilesState>* profiles);
 
   // Enables the collection of profiles by CollectProfilesIfCollectionEnabled if
@@ -91,8 +99,9 @@ class PendingProfiles {
   // True if profiles are being collected.
   bool IsCollectionEnabled() const;
 
-  // Adds |profile| to the list of profiles if collection is enabled.
-  void CollectProfilesIfCollectionEnabled(const ProfilesState& profiles);
+  // Adds |profiles| to the list of profiles if collection is enabled; it is
+  // not const& because it must be passed with std::move.
+  void CollectProfilesIfCollectionEnabled(ProfilesState profiles);
 
   // Allows testing against the initial state multiple times.
   void ResetToDefaultStateForTesting();
@@ -126,11 +135,6 @@ PendingProfiles* PendingProfiles::GetInstance() {
                          base::LeakySingletonTraits<PendingProfiles>>::get();
 }
 
-void PendingProfiles::Clear() {
-  base::AutoLock scoped_lock(lock_);
-  profiles_.clear();
-}
-
 void PendingProfiles::Swap(std::vector<ProfilesState>* profiles) {
   base::AutoLock scoped_lock(lock_);
   profiles_.swap(*profiles);
@@ -153,7 +157,7 @@ bool PendingProfiles::IsCollectionEnabled() const {
 }
 
 void PendingProfiles::CollectProfilesIfCollectionEnabled(
-    const ProfilesState& profiles) {
+    ProfilesState profiles) {
   base::AutoLock scoped_lock(lock_);
 
   // Only collect if collection is not disabled and hasn't been disabled
@@ -164,7 +168,7 @@ void PendingProfiles::CollectProfilesIfCollectionEnabled(
     return;
   }
 
-  profiles_.push_back(profiles);
+  profiles_.push_back(std::move(profiles));
 }
 
 void PendingProfiles::ResetToDefaultStateForTesting() {
@@ -191,15 +195,14 @@ PendingProfiles::~PendingProfiles() {}
 void ReceiveCompletedProfilesImpl(
     const CallStackProfileParams& params,
     base::TimeTicks start_timestamp,
-    const StackSamplingProfiler::CallStackProfiles& profiles) {
+    StackSamplingProfiler::CallStackProfiles profiles) {
   PendingProfiles::GetInstance()->CollectProfilesIfCollectionEnabled(
-      ProfilesState(params, profiles, start_timestamp));
+      ProfilesState(params, std::move(profiles), start_timestamp));
 }
 
 // Invoked on an arbitrary thread. Ignores the provided profiles.
 void IgnoreCompletedProfiles(
-    const StackSamplingProfiler::CallStackProfiles& profiles) {
-}
+    StackSamplingProfiler::CallStackProfiles profiles) {}
 
 // Functions to encode protobufs ----------------------------------------------
 
@@ -398,8 +401,8 @@ CallStackProfileMetricsProvider::GetProfilerCallback(
 void CallStackProfileMetricsProvider::ReceiveCompletedProfiles(
     const CallStackProfileParams& params,
     base::TimeTicks start_timestamp,
-    const base::StackSamplingProfiler::CallStackProfiles& profiles) {
-  ReceiveCompletedProfilesImpl(params, start_timestamp, profiles);
+    base::StackSamplingProfiler::CallStackProfiles profiles) {
+  ReceiveCompletedProfilesImpl(params, start_timestamp, std::move(profiles));
 }
 
 void CallStackProfileMetricsProvider::OnRecordingEnabled() {

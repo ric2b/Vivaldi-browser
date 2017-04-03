@@ -96,7 +96,7 @@ MainThreadDebugger* MainThreadDebugger::s_instance = nullptr;
 
 MainThreadDebugger::MainThreadDebugger(v8::Isolate* isolate)
     : ThreadDebugger(isolate),
-      m_taskRunner(wrapUnique(new InspectorTaskRunner())),
+      m_taskRunner(makeUnique<InspectorTaskRunner>()),
       m_paused(false) {
   MutexLocker locker(creationMutex());
   ASSERT(!s_instance);
@@ -243,7 +243,7 @@ void MainThreadDebugger::runMessageLoopOnPause(int contextGroupId) {
   m_paused = true;
 
   if (UserGestureToken* token = UserGestureIndicator::currentToken())
-    token->setPauseInDebugger();
+    token->setTimeoutPolicy(UserGestureToken::HasPaused);
   // Wait for continue or step command.
   if (m_clientMessageLoop)
     m_clientMessageLoop->run(pausedFrame);

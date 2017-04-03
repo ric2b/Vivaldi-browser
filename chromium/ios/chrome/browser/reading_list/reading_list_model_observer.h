@@ -31,7 +31,8 @@ class ReadingListModelObserver {
       const ReadingListModel* model) {}
 
   // Invoked from the destructor of the model. The model is no longer valid
-  // after this call.
+  // after this call. There is no need to call RemoveObserver on the model from
+  // here, as the observers are automatically deleted.
   virtual void ReadingListModelBeingDeleted(const ReadingListModel* model) {}
 
   // Invoked when elements are about to be removed from the read or unread list.
@@ -39,10 +40,9 @@ class ReadingListModelObserver {
                                                 size_t index) {}
   virtual void ReadingListWillRemoveReadEntry(const ReadingListModel* model,
                                               size_t index) {}
-  // Invoked when elements are moved from unread to read. (The opposite does not
-  // exist as moving an element from read to unread is considered akin to
-  // deleting and re-adding it.) |index| is the original position in the unread
-  // list. The element will be added to the beginning of the read list.
+  // Invoked when elements are moved from unread to read or from read to unread.
+  // |index| is the original position in the origin list. The element will be
+  // added to the beginning of the target list.
   virtual void ReadingListWillMoveEntry(const ReadingListModel* model,
                                         size_t index) {}
 

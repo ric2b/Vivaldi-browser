@@ -27,13 +27,15 @@ Pentru informații privind confidențialitatea, accesați Politica de confidenț
 <translation id="1654128982815600832">Se activează conexiunile la distanță pentru acest computer…</translation>
 <translation id="170207782578677537">Înregistrarea acestui computer nu a reușit.</translation>
 <translation id="1704090719919187045">Preferințe gazdă Chromoting</translation>
+<translation id="1730409684442507495">• S-au îmbunătățit calitatea imaginii pe desktop, viteza de răspuns și consumul bateriei.
+• S-a îmbunătățit viteza de răspuns a operațiilor de tipul „dă clic-trage”.
+• S-au îmbunătățit mai multe efecte de animație pentru interfața de utilizare.</translation>
 <translation id="174018511426417793">Nu aveți niciun computer înregistrat. Pentru a activa conexiunile la distanță pentru un alt computer, instalați Desktop la distanță Chrome pe acesta și dați clic pe „<ph name="BUTTON_NAME" />”.</translation>
 <translation id="1742469581923031760">Se conectează…</translation>
 <translation id="1770394049404108959">Nu pot deschide aplicația.</translation>
 <translation id="177096447311351977">IP canal pentru client: <ph name="CLIENT_GAIA_IDENTIFIER" /> ip=„<ph name="CLIENT_IP_ADDRESS_AND_PORT" />” host_ip=„<ph name="HOST_IP_ADDRESS_AND_PORT" />” channel=„<ph name="CHANNEL_TYPE" />” connection=„<ph name="CONNECTION_TYPE" />”.</translation>
 <translation id="1779766957982586368">Închide fereastra</translation>
 <translation id="1841799852846221389">Se dezactivează conexiunile la distanță pentru acest computer…</translation>
-<translation id="189172778771606813">Închide panoul de navigare</translation>
 <translation id="1897488610212723051">Șterge</translation>
 <translation id="195619862187186579">Aspecte de tastatură</translation>
 <translation id="1996161829609978754">Chrome descarcă programul de instalare a gazdei pentru Chromoting. După ce se descarcă, rulați programul de instalare înainte de a continua.</translation>
@@ -74,7 +76,6 @@ Pentru informații privind confidențialitatea, accesați Politica de confidenț
 <translation id="2699970397166997657">Chromoting</translation>
 <translation id="2747641796667576127">Actualizările de software au loc de obicei în mod automat, dar în anumite cazuri pot să nu reușească. Actualizarea software-ului nu trebuie să dureze mai mult de câteva minute și poate fi realizată cât timp sunteți conectat(ă) la computer de la distanță.</translation>
 <translation id="2841013758207633010">Oră</translation>
-<translation id="2851674870054673688">După ce persoana respectivă introduce codul, sesiunea de permitere a accesului va începe.</translation>
 <translation id="2851754573186462851">Chromium App Streaming</translation>
 <translation id="2855866366045322178">offline</translation>
 <translation id="2888969873284818612">A apărut o eroare de rețea. Vom reporni aplicația când dispozitivul va fi online din nou.</translation>
@@ -114,6 +115,7 @@ Pentru informații privind confidențialitatea, accesați Politica de confidenț
 Chromoting</translation>
 <translation id="3870154837782082782">Google Inc.</translation>
 <translation id="3884839335308961732">Confirmați mai jos contul și codul PIN pentru a permite accesarea prin intermediul aplicației Desktop la distanță Chrome.</translation>
+<translation id="3897092660631435901">Meniu</translation>
 <translation id="3905196214175737742">Domeniu nevalid pentru proprietarul gazdei.</translation>
 <translation id="3908017899227008678">Potriviți prin micșorare</translation>
 <translation id="3931191050278863510">Gazda s-a oprit.</translation>
@@ -126,6 +128,7 @@ Chromoting</translation>
 <translation id="409800995205263688">NOTĂ: setările politicii permit conexiuni numai între computerele din rețeaua dvs.</translation>
 <translation id="4155497795971509630">Unele componente necesare lipsesc. Asigură-te că ai instalată cea mai recentă versiune a software-ului și încearcă din nou.</translation>
 <translation id="4156740505453712750">Pentru a proteja accesul la acest computer, alegeți un cod PIN format din <ph name="BOLD_START" />cel puțin șase cifre<ph name="BOLD_END" />. Acest cod PIN va fi necesar când vă conectați din altă locație.</translation>
+<translation id="4156741816461781891">Conectat(ă) ca <ph name="EMAIL_ADDRESS" />.</translation>
 <translation id="4176825807642096119">Cod de acces</translation>
 <translation id="4207623512727273241">Rulați programul de instalare înainte de a continua.</translation>
 <translation id="4227991223508142681">Utilitarul de configurare a gazdei</translation>
@@ -166,7 +169,6 @@ la distanță Chrome</translation>
 <translation id="5070121137485264635">Gazda la distanță solicită să vă autentificați pe un site terță parte. Pentru a continua, trebuie să acordați permisiuni suplimentare aplicației Desktop la distanță Chrome pentru a accesa această adresă:</translation>
 <translation id="507204348399810022">Sigur dorești să dezactivezi conexiunile la distanță la <ph name="HOSTNAME" />?</translation>
 <translation id="5156271271724754543">Introduceți același cod PIN în ambele casete.</translation>
-<translation id="5168917394043976756">Deschide panoul de navigare</translation>
 <translation id="5170982930780719864">ID de gazdă nevalid.</translation>
 <translation id="518094545883702183">Această informație este folosită numai pentru diagnosticarea problemei pe care o raportezi, este disponibilă numai pentru persoana care îți examinează raportul și nu este păstrată pentru mai mult de 30 de zile.</translation>
 <translation id="5222676887888702881">Deconectează-te</translation>
@@ -209,10 +211,6 @@ la distanță Chrome</translation>
 <translation id="6304318647555713317">Client</translation>
 <translation id="6381670701864002291">Altă problemă.</translation>
 <translation id="6398765197997659313">Ieși din ecranul complet</translation>
-<translation id="6408143143164565232">• Ascultă conținut audio de pe computerele Windows sau Linux.
-• Elimină conexiunile nedorite apăsând lung pe numele computerului.
-• Gestul „ciupește pentru zoom” și derularea cu două degete sunt mai fine.
-• Un nou ecran pentru Ajutor și feedback.</translation>
 <translation id="6441316101718669559">Integrarea desktop nu este compatibilă cu această platformă. Poți să folosești în continuare această aplicație, însă experiența de utilizare va fi inferioară.</translation>
 <translation id="652218476070540101">Se actualizează codul PIN pentru acest computer…</translation>
 <translation id="6527303717912515753">Trimite</translation>
@@ -225,6 +223,7 @@ la distanță Chrome</translation>
 <translation id="6640610550128933069">ultima conectare online <ph name="DATE" /></translation>
 <translation id="6668065415969892472">Codul PIN a fost actualizat.</translation>
 <translation id="6681800064886881394">Copyright 2013 Google Inc. Toate drepturile rezervate.</translation>
+<translation id="6705482892455291412">După ce codul este introdus, ți se va solicita să accepți conexiunea și să începi sesiunea de permitere a accesului.</translation>
 <translation id="6746493157771801606">Goliți istoricul</translation>
 <translation id="6748108480210050150">De la</translation>
 <translation id="677755392401385740">Gazda a fost inițiată pentru utilizatorul: <ph name="HOST_USERNAME" />.</translation>
@@ -301,6 +300,7 @@ la distanță Chrome</translation>
 <translation id="9188433529406846933">Autorizați</translation>
 <translation id="9213184081240281106">Configurație nevalidă a gazdei.</translation>
 <translation id="951991426597076286">Refuză</translation>
+<translation id="962733587145768554">Selectează „<ph name="SHARE" />” în caseta de dialog a conexiunii pentru a finaliza procesul.</translation>
 <translation id="979100198331752041">Desktop la distanță Chrome de pe <ph name="HOSTNAME" /> este învechit și trebuie actualizat.</translation>
 <translation id="985602178874221306">The Chromium Authors</translation>
 <translation id="992215271654996353"><ph name="HOSTNAME" /> (online ultima dată la <ph name="DATE_OR_TIME" />)</translation>

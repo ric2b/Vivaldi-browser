@@ -7,14 +7,14 @@
 #include <list>
 #include <map>
 
-#include "ash/common/shell_window_ids.h"
 #include "ash/common/wm/mru_window_tracker.h"
 #include "ash/common/wm/window_state.h"
 #include "ash/common/wm_root_window_controller.h"
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
+#include "ash/public/cpp/shell_window_ids.h"
 #include "base/command_line.h"
-#include "ui/accessibility/ax_view_state.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
@@ -119,8 +119,8 @@ class WindowPreviewView : public views::View, public WmWindowObserver {
         window_title_->font_list().DeriveWithSizeDelta(kLabelSizeDelta));
     const int kAboveLabelPadding = 5;
     const int kBelowLabelPadding = 10;
-    window_title_->SetBorder(views::Border::CreateEmptyBorder(
-        kAboveLabelPadding, 0, kBelowLabelPadding, 0));
+    window_title_->SetBorder(
+        views::CreateEmptyBorder(kAboveLabelPadding, 0, kBelowLabelPadding, 0));
     AddChildView(window_title_);
 
     // Preview padding is black at 50% opacity.
@@ -167,9 +167,9 @@ class WindowPreviewView : public views::View, public WmWindowObserver {
     mirror_view_->SetPosition(preview_area_bounds.origin());
   }
 
-  void GetAccessibleState(ui::AXViewState* state) override {
-    state->role = ui::AX_ROLE_WINDOW;
-    state->name = window_title_->text();
+  void GetAccessibleNodeData(ui::AXNodeData* node_data) override {
+    node_data->role = ui::AX_ROLE_WINDOW;
+    node_data->SetName(window_title_->text());
   }
 
   // WmWindowObserver:
@@ -329,6 +329,11 @@ class WindowCycleView : public views::WidgetDelegateView {
     // works correctly when it's calculating highlight bounds.
     parent->Layout();
     SetTargetWindow(new_target);
+  }
+
+  void DestroyContents() {
+    window_view_map_.clear();
+    RemoveAllChildViews(true);
   }
 
   // views::WidgetDelegateView overrides:
@@ -498,6 +503,14 @@ WindowCycleList::~WindowCycleList() {
 
   if (cycle_ui_widget_)
     cycle_ui_widget_->Close();
+
+  // |this| is responsible for notifying |cycle_view_| when windows are
+  // destroyed. Since |this| is going away, clobber |cycle_view_|. Otherwise
+  // there will be a race where a window closes after now but before the
+  // Widget::Close() call above actually destroys |cycle_view_|. See
+  // crbug.com/681207
+  if (cycle_view_)
+    cycle_view_->DestroyContents();
 }
 
 void WindowCycleList::Step(WindowCycleController::Direction direction) {

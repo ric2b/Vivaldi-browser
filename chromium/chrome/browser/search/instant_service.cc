@@ -6,9 +6,7 @@
 
 #include <stddef.h>
 
-#include "base/metrics/field_trial.h"
 #include "base/strings/string_util.h"
-#include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/favicon/fallback_icon_service_factory.h"
@@ -86,7 +84,7 @@ InstantService::InstantService(Profile* profile)
     }
   }
 
-  ResetInstantSearchPrerenderer();
+  ResetInstantSearchPrerendererIfNecessary();
 
   registrar_.Add(this,
                  content::NOTIFICATION_RENDERER_PROCESS_CREATED,
@@ -199,14 +197,26 @@ void InstantService::UpdateThemeInfo() {
   if (!theme_info_) {
     OnThemeChanged();
   } else {
-    FOR_EACH_OBSERVER(InstantServiceObserver, observers_,
-                      ThemeInfoChanged(*theme_info_));
+    for (InstantServiceObserver& observer : observers_)
+      observer.ThemeInfoChanged(*theme_info_);
   }
 #endif  // defined(ENABLE_THEMES)
 }
 
 void InstantService::UpdateMostVisitedItemsInfo() {
   NotifyAboutMostVisitedItems();
+}
+
+void InstantService::SendSearchURLsToRenderer(content::RenderProcessHost* rph) {
+  rph->Send(new ChromeViewMsg_SetSearchURLs(
+      search::GetSearchURLs(profile_), search::GetNewTabPageURL(profile_)));
+}
+
+InstantSearchPrerenderer* InstantService::GetInstantSearchPrerenderer() {
+  // The Instant prefetch base URL may have changed (see e.g. crbug.com/660923).
+  // If so, recreate the prerenderer.
+  ResetInstantSearchPrerendererIfNecessary();
+  return instant_prerenderer_.get();
 }
 
 void InstantService::Shutdown() {
@@ -249,11 +259,6 @@ void InstantService::Observe(int type,
   }
 }
 
-void InstantService::SendSearchURLsToRenderer(content::RenderProcessHost* rph) {
-  rph->Send(new ChromeViewMsg_SetSearchURLs(
-      search::GetSearchURLs(profile_), search::GetNewTabPageURL(profile_)));
-}
-
 void InstantService::OnRendererProcessTerminated(int process_id) {
   process_ids_.erase(process_id);
 
@@ -280,8 +285,8 @@ void InstantService::OnMostVisitedItemsReceived(
 }
 
 void InstantService::NotifyAboutMostVisitedItems() {
-  FOR_EACH_OBSERVER(InstantServiceObserver, observers_,
-                    MostVisitedItemsChanged(most_visited_items_));
+  for (InstantServiceObserver& observer : observers_)
+    observer.MostVisitedItemsChanged(most_visited_items_);
 }
 
 #if defined(ENABLE_THEMES)
@@ -372,7 +377,7 @@ void InstantService::OnThemeChanged() {
     else
       theme_info_->image_vertical_alignment = THEME_BKGRND_IMAGE_ALIGN_CENTER;
 
-    // Set theme backgorund image tiling.
+    // Set theme background image tiling.
     int tiling = theme_provider.GetDisplayProperty(
         ThemeProperties::NTP_BACKGROUND_TILING);
     switch (tiling) {
@@ -400,8 +405,8 @@ void InstantService::OnThemeChanged() {
         theme_provider.HasCustomImage(IDR_THEME_NTP_ATTRIBUTION);
   }
 
-  FOR_EACH_OBSERVER(InstantServiceObserver, observers_,
-                    ThemeInfoChanged(*theme_info_));
+  for (InstantServiceObserver& observer : observers_)
+    observer.ThemeInfoChanged(*theme_info_);
 }
 #endif  // defined(ENABLE_THEMES)
 
@@ -425,16 +430,16 @@ void InstantService::OnTemplateURLServiceChanged() {
   GURL google_base_url(UIThreadSearchTermsData(profile_).GoogleBaseURLValue());
   if (google_base_url != previous_google_base_url_) {
     previous_google_base_url_ = google_base_url;
-    if (template_url && template_url->HasGoogleBaseURLs(
-            UIThreadSearchTermsData(profile_)))
+    if (template_url &&
+        template_url->HasGoogleBaseURLs(UIThreadSearchTermsData(profile_))) {
       google_base_url_domain_changed = true;
+    }
   }
 
   if (default_search_provider_changed || google_base_url_domain_changed) {
-    ResetInstantSearchPrerenderer();
-    FOR_EACH_OBSERVER(
-        InstantServiceObserver, observers_,
-        DefaultSearchProviderChanged(google_base_url_domain_changed));
+    ResetInstantSearchPrerendererIfNecessary();
+    for (InstantServiceObserver& observer : observers_)
+      observer.DefaultSearchProviderChanged(google_base_url_domain_changed);
   }
 }
 
@@ -452,11 +457,13 @@ void InstantService::TopSitesChanged(history::TopSites* top_sites,
       false);
 }
 
-void InstantService::ResetInstantSearchPrerenderer() {
+void InstantService::ResetInstantSearchPrerendererIfNecessary() {
   if (!search::ShouldPrefetchSearchResults())
     return;
 
   GURL url(search::GetSearchResultPrefetchBaseURL(profile_));
-  instant_prerenderer_.reset(
-      url.is_valid() ? new InstantSearchPrerenderer(profile_, url) : NULL);
+  if (!instant_prerenderer_ || instant_prerenderer_->prerender_url() != url) {
+    instant_prerenderer_.reset(
+        url.is_valid() ? new InstantSearchPrerenderer(profile_, url) : nullptr);
+  }
 }

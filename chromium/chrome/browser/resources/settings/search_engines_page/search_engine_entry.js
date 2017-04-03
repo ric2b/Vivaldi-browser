@@ -43,6 +43,7 @@ Polymer({
   /** @private */
   onDeleteTap_: function() {
     this.browserProxy_.removeSearchEngine(this.engine.modelIndex);
+    this.closePopupMenu_();
   },
 
   /** @private */
@@ -69,7 +70,7 @@ Polymer({
 
   /** @private */
   closePopupMenu_: function() {
-    this.$$('iron-dropdown').close();
+    this.$$('dialog[is=cr-action-menu]').close();
   },
 
   /**
@@ -80,5 +81,12 @@ Polymer({
   getIconSet_: function(url) {
     // Force default icon, if no |engine.iconURL| is available.
     return cr.icon.getFavicon(url || '');
+  },
+
+  /** @private */
+  onDotsTap_: function() {
+    /** @type {!CrActionMenuElement} */ (
+        this.$$('dialog[is=cr-action-menu]')).showAt(
+            assert(this.$$('paper-icon-button')));
   },
 });

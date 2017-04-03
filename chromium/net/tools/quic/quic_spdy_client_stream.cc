@@ -14,7 +14,6 @@
 #include "net/quic/core/spdy_utils.h"
 #include "net/spdy/spdy_protocol.h"
 #include "net/tools/quic/quic_client_session.h"
-#include "net/tools/quic/spdy_balsa_utils.h"
 
 using base::StringPiece;
 using std::string;
@@ -29,45 +28,17 @@ QuicSpdyClientStream::QuicSpdyClientStream(QuicStreamId id,
       response_code_(0),
       header_bytes_read_(0),
       header_bytes_written_(0),
-      allow_bidirectional_data_(false),
       session_(session) {}
 
 QuicSpdyClientStream::~QuicSpdyClientStream() {}
 
 void QuicSpdyClientStream::OnStreamFrame(const QuicStreamFrame& frame) {
-  if (!allow_bidirectional_data_ && !write_side_closed()) {
+  if (!allow_bidirectional_data() && !write_side_closed()) {
     DVLOG(1) << "Got a response before the request was complete.  "
              << "Aborting request.";
     CloseWriteSide();
   }
   QuicSpdyStream::OnStreamFrame(frame);
-}
-
-void QuicSpdyClientStream::OnInitialHeadersComplete(bool fin,
-                                                    size_t frame_len) {
-  QuicSpdyStream::OnInitialHeadersComplete(fin, frame_len);
-
-  DCHECK(headers_decompressed());
-  header_bytes_read_ += frame_len;
-  if (!SpdyUtils::ParseHeaders(decompressed_headers().data(),
-                               decompressed_headers().length(),
-                               &content_length_, &response_headers_)) {
-    DLOG(ERROR) << "Failed to parse headers: " << decompressed_headers();
-    Reset(QUIC_BAD_APPLICATION_PAYLOAD);
-    return;
-  }
-
-  if (!ParseHeaderStatusCode(response_headers_, &response_code_)) {
-    DLOG(ERROR) << "Received invalid response code: "
-                << response_headers_[":status"].as_string();
-    Reset(QUIC_BAD_APPLICATION_PAYLOAD);
-    return;
-  }
-
-  MarkHeadersConsumed(decompressed_headers().length());
-  DVLOG(1) << "headers complete for stream " << id();
-
-  session_->OnInitialHeadersComplete(id(), response_headers_);
 }
 
 void QuicSpdyClientStream::OnInitialHeadersComplete(
@@ -104,27 +75,6 @@ void QuicSpdyClientStream::OnTrailingHeadersComplete(
     const QuicHeaderList& header_list) {
   QuicSpdyStream::OnTrailingHeadersComplete(fin, frame_len, header_list);
   MarkTrailersConsumed();
-}
-
-void QuicSpdyClientStream::OnPromiseHeadersComplete(QuicStreamId promised_id,
-                                                    size_t frame_len) {
-  header_bytes_read_ += frame_len;
-  int64_t content_length = -1;
-  SpdyHeaderBlock promise_headers;
-  if (!SpdyUtils::ParseHeaders(decompressed_headers().data(),
-                               decompressed_headers().length(), &content_length,
-                               &promise_headers)) {
-    DLOG(ERROR) << "Failed to parse promise headers: "
-                << decompressed_headers();
-    Reset(QUIC_BAD_APPLICATION_PAYLOAD);
-    return;
-  }
-  MarkHeadersConsumed(decompressed_headers().length());
-
-  session_->HandlePromised(id(), promised_id, promise_headers);
-  if (visitor() != nullptr) {
-    visitor()->OnPromiseHeadersComplete(promised_id, frame_len);
-  }
 }
 
 void QuicSpdyClientStream::OnPromiseHeaderList(

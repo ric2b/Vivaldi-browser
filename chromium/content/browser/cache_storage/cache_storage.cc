@@ -127,12 +127,12 @@ class CacheStorage::CacheLoader {
   // the cache if necessary.
   virtual void NotifyCacheCreated(
       const std::string& cache_name,
-      std::unique_ptr<CacheStorageCacheHandle> cache_handle) {};
+      std::unique_ptr<CacheStorageCacheHandle> cache_handle) {}
 
   // Notification that the cache for |cache_handle| has been doomed. If the
   // loader is holding a handle to the cache, it should drop it now.
   virtual void NotifyCacheDoomed(
-      std::unique_ptr<CacheStorageCacheHandle> cache_handle) {};
+      std::unique_ptr<CacheStorageCacheHandle> cache_handle) {}
 
  protected:
   scoped_refptr<base::SequencedTaskRunner> cache_task_runner_;
@@ -309,13 +309,13 @@ class CacheStorage::SimpleCacheLoader : public CacheStorage::CacheLoader {
     // 1. Create the index file as a string. (WriteIndex)
     // 2. Write the file to disk. (WriteIndexWriteToFileInPool)
 
-    CacheStorageIndex index;
+    proto::CacheStorageIndex index;
     index.set_origin(origin_.spec());
 
     for (size_t i = 0u, max = cache_names.size(); i < max; ++i) {
       DCHECK(base::ContainsKey(cache_name_to_cache_dir_, cache_names[i]));
 
-      CacheStorageIndex::Cache* index_cache = index.add_cache();
+      proto::CacheStorageIndex::Cache* index_cache = index.add_cache();
       index_cache->set_name(cache_names[i]);
       index_cache->set_cache_dir(cache_name_to_cache_dir_[cache_names[i]]);
     }
@@ -374,10 +374,10 @@ class CacheStorage::SimpleCacheLoader : public CacheStorage::CacheLoader {
     std::unique_ptr<std::set<std::string>> cache_dirs(
         new std::set<std::string>);
 
-    CacheStorageIndex index;
+    proto::CacheStorageIndex index;
     if (index.ParseFromString(serialized)) {
       for (int i = 0, max = index.cache_size(); i < max; ++i) {
-        const CacheStorageIndex::Cache& cache = index.cache(i);
+        const proto::CacheStorageIndex::Cache& cache = index.cache(i);
         DCHECK(cache.has_cache_dir());
         names->push_back(cache.name());
         cache_name_to_cache_dir_[cache.name()] = cache.cache_dir();
@@ -427,7 +427,7 @@ class CacheStorage::SimpleCacheLoader : public CacheStorage::CacheLoader {
   static std::string MigrateCachesIfNecessaryInPool(
       const std::string& body,
       const base::FilePath& index_path) {
-    CacheStorageIndex index;
+    proto::CacheStorageIndex index;
     if (!index.ParseFromString(body))
       return body;
 
@@ -438,7 +438,7 @@ class CacheStorage::SimpleCacheLoader : public CacheStorage::CacheLoader {
     // Look for caches that have no cache_dir. Give any such caches a directory
     // with a random name and move them there. Then, rewrite the index file.
     for (int i = 0, max = index.cache_size(); i < max; ++i) {
-      const CacheStorageIndex::Cache& cache = index.cache(i);
+      const proto::CacheStorageIndex::Cache& cache = index.cache(i);
       if (!cache.has_cache_dir()) {
         // Find a new home for the cache.
         base::FilePath legacy_cache_path =
@@ -570,7 +570,7 @@ void CacheStorage::DeleteCache(const std::string& cache_name,
                  cache_name, scheduler_->WrapCallbackToRunNext(callback)));
 }
 
-void CacheStorage::EnumerateCaches(const StringsAndErrorCallback& callback) {
+void CacheStorage::EnumerateCaches(const StringsCallback& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
   if (!initialized_)
@@ -835,9 +835,8 @@ void CacheStorage::DeleteCacheDidGetSize(
   cache_loader_->CleanUpDeletedCache(cache.get());
 }
 
-void CacheStorage::EnumerateCachesImpl(
-    const StringsAndErrorCallback& callback) {
-  callback.Run(ordered_cache_names_, CACHE_STORAGE_OK);
+void CacheStorage::EnumerateCachesImpl(const StringsCallback& callback) {
+  callback.Run(ordered_cache_names_);
 }
 
 void CacheStorage::MatchCacheImpl(
@@ -946,10 +945,11 @@ void CacheStorage::DropCacheHandleRef(CacheStorageCache* cache) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   auto iter = cache_handle_counts_.find(cache);
   DCHECK(iter != cache_handle_counts_.end());
-  DCHECK(iter->second >= 1);
+  DCHECK_GE(iter->second, 1U);
 
   iter->second -= 1;
   if (iter->second == 0) {
+    cache_handle_counts_.erase(iter);
     auto doomed_caches_iter = doomed_caches_.find(cache);
     if (doomed_caches_iter != doomed_caches_.end()) {
       // The last reference to a doomed cache is gone, perform clean up.
@@ -962,7 +962,6 @@ void CacheStorage::DropCacheHandleRef(CacheStorageCache* cache) {
     DCHECK(cache_map_iter != cache_map_.end());
 
     cache_map_iter->second.reset();
-    cache_handle_counts_.erase(iter);
   }
 }
 

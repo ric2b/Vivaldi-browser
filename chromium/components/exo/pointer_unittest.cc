@@ -3,9 +3,9 @@
 // found in the LICENSE file.
 
 #include "ash/aura/wm_window_aura.h"
-#include "ash/common/shell_window_ids.h"
 #include "ash/common/wm/window_positioning_utils.h"
 #include "ash/common/wm_shell.h"
+#include "ash/public/cpp/shell_window_ids.h"
 #include "ash/shell.h"
 #include "components/exo/buffer.h"
 #include "components/exo/pointer.h"
@@ -321,6 +321,7 @@ TEST_F(PointerTest, IgnorePointerEventDuringModal) {
   shell_surface2->SetSystemModal(true);
   EXPECT_TRUE(ash::WmShell::Get()->IsSystemModalWindowOpen());
 
+  EXPECT_CALL(delegate, OnPointerFrame()).Times(testing::AnyNumber());
   EXPECT_CALL(delegate, CanAcceptPointerEventsForSurface(surface.get()))
       .WillRepeatedly(testing::Return(true));
   EXPECT_CALL(delegate, CanAcceptPointerEventsForSurface(surface2.get()))

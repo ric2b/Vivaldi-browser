@@ -17,7 +17,6 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
-#include "content/browser/browser_thread_impl.h"
 #include "content/browser/gpu/compositor_util.h"
 #include "content/browser/renderer_host/input/input_router_impl.h"
 #include "content/browser/renderer_host/render_widget_host_delegate.h"
@@ -29,6 +28,7 @@
 #include "content/public/common/content_switches.h"
 #include "content/public/test/mock_render_process_host.h"
 #include "content/public/test/test_browser_context.h"
+#include "content/public/test/test_browser_thread_bundle.h"
 #include "content/test/test_render_view_host.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/display/screen.h"
@@ -40,6 +40,7 @@
 #include "content/browser/renderer_host/context_provider_factory_impl_android.h"
 #include "content/browser/renderer_host/render_widget_host_view_android.h"
 #include "content/test/mock_gpu_channel_establish_factory.h"
+#include "ui/android/screen_android.h"
 #endif
 
 #if defined(USE_AURA) || defined(OS_MACOSX)
@@ -476,6 +477,7 @@ class RenderWidgetHostTest : public testing::Test {
     ContextProviderFactoryImpl::Initialize(&gpu_channel_factory_);
     ui::ContextProviderFactory::SetInstance(
         ContextProviderFactoryImpl::GetInstance());
+    ui::SetScreenAndroid();  // calls display::Screen::SetScreenInstance().
 #endif
 #if defined(USE_AURA)
     screen_.reset(aura::TestScreen::Create(gfx::Size()));
@@ -506,6 +508,7 @@ class RenderWidgetHostTest : public testing::Test {
     ImageTransportFactory::Terminate();
 #endif
 #if defined(OS_ANDROID)
+    display::Screen::SetScreenInstance(nullptr);
     ui::ContextProviderFactory::SetInstance(nullptr);
     ContextProviderFactoryImpl::Terminate();
 #endif
@@ -528,7 +531,7 @@ class RenderWidgetHostTest : public testing::Test {
   void SendInputEventACK(WebInputEvent::Type type,
                          InputEventAckState ack_result) {
     DCHECK(!WebInputEvent::isTouchEventType(type));
-    InputEventAck ack(type, ack_result);
+    InputEventAck ack(InputEventAckSource::COMPOSITOR_THREAD, type, ack_result);
     host_->OnMessageReceived(InputHostMsg_HandleInputEvent_ACK(0, ack));
   }
 
@@ -641,8 +644,6 @@ class RenderWidgetHostTest : public testing::Test {
     return reinterpret_cast<const WebInputEvent*>(data);
   }
 
-  base::MessageLoopForUI message_loop_;
-
   std::unique_ptr<TestBrowserContext> browser_context_;
   RenderWidgetHostProcess* process_;  // Deleted automatically by the widget.
   std::unique_ptr<MockRenderWidgetHostDelegate> delegate_;
@@ -660,6 +661,8 @@ class RenderWidgetHostTest : public testing::Test {
 
  private:
   SyntheticWebTouchEvent touch_event_;
+
+  TestBrowserThreadBundle thread_bundle_;
 
   DISALLOW_COPY_AND_ASSIGN(RenderWidgetHostTest);
 };
@@ -896,7 +899,6 @@ TEST_F(RenderWidgetHostTest, Background) {
 // Test that we don't paint when we're hidden, but we still send the ACK. Most
 // of the rest of the painting is tested in the GetBackingStore* ones.
 TEST_F(RenderWidgetHostTest, HiddenPaint) {
-  BrowserThreadImpl ui_thread(BrowserThread::UI, base::MessageLoop::current());
   // Hide the widget, it should have sent out a message to the renderer.
   EXPECT_FALSE(host_->is_hidden_);
   host_->WasHidden();
@@ -966,18 +968,23 @@ TEST_F(RenderWidgetHostTest, PreHandleRawKeyDownEvent) {
   // Forward the KeyUp event.
   SimulateKeyboardEvent(WebInputEvent::KeyUp);
 
-  // Make sure only KeyUp was sent to the renderer.
+  // Make sure the KeyUp event is suppressed.
+  EXPECT_EQ(0U, process_->sink().message_count());
+
+  // Simulate a new RawKeyDown event.
+  SimulateKeyboardEvent(WebInputEvent::RawKeyDown);
   EXPECT_EQ(1U, process_->sink().message_count());
   EXPECT_EQ(InputMsg_HandleInputEvent::ID,
             process_->sink().GetMessageAt(0)->type());
   process_->sink().ClearMessages();
 
   // Send the simulated response from the renderer back.
-  SendInputEventACK(WebInputEvent::KeyUp,
+  SendInputEventACK(WebInputEvent::RawKeyDown,
                     INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
 
   EXPECT_TRUE(delegate_->unhandled_keyboard_event_called());
-  EXPECT_EQ(WebInputEvent::KeyUp, delegate_->unhandled_keyboard_event_type());
+  EXPECT_EQ(WebInputEvent::RawKeyDown,
+            delegate_->unhandled_keyboard_event_type());
 }
 
 TEST_F(RenderWidgetHostTest, RawKeyDownShortcutEvent) {
@@ -1092,14 +1099,14 @@ TEST_F(RenderWidgetHostTest, UnhandledGestureEvent) {
 TEST_F(RenderWidgetHostTest, DontPostponeHangMonitorTimeout) {
   // Start with a short timeout.
   host_->StartHangMonitorTimeout(
-      TimeDelta::FromMilliseconds(10),
-      RenderWidgetHostDelegate::RENDERER_UNRESPONSIVE_UNKNOWN);
+      TimeDelta::FromMilliseconds(10), WebInputEvent::Undefined,
+      RendererUnresponsiveType::RENDERER_UNRESPONSIVE_UNKNOWN);
 
   // Immediately try to add a long 30 second timeout.
   EXPECT_FALSE(delegate_->unresponsive_timer_fired());
   host_->StartHangMonitorTimeout(
-      TimeDelta::FromSeconds(30),
-      RenderWidgetHostDelegate::RENDERER_UNRESPONSIVE_UNKNOWN);
+      TimeDelta::FromSeconds(30), WebInputEvent::Undefined,
+      RendererUnresponsiveType::RENDERER_UNRESPONSIVE_UNKNOWN);
 
   // Wait long enough for first timeout and see if it fired.
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
@@ -1114,15 +1121,15 @@ TEST_F(RenderWidgetHostTest, DontPostponeHangMonitorTimeout) {
 TEST_F(RenderWidgetHostTest, StopAndStartHangMonitorTimeout) {
   // Start with a short timeout, then stop it.
   host_->StartHangMonitorTimeout(
-      TimeDelta::FromMilliseconds(10),
-      RenderWidgetHostDelegate::RENDERER_UNRESPONSIVE_UNKNOWN);
+      TimeDelta::FromMilliseconds(10), WebInputEvent::Undefined,
+      RendererUnresponsiveType::RENDERER_UNRESPONSIVE_UNKNOWN);
   host_->StopHangMonitorTimeout();
 
   // Start it again to ensure it still works.
   EXPECT_FALSE(delegate_->unresponsive_timer_fired());
   host_->StartHangMonitorTimeout(
-      TimeDelta::FromMilliseconds(10),
-      RenderWidgetHostDelegate::RENDERER_UNRESPONSIVE_UNKNOWN);
+      TimeDelta::FromMilliseconds(10), WebInputEvent::Undefined,
+      RendererUnresponsiveType::RENDERER_UNRESPONSIVE_UNKNOWN);
 
   // Wait long enough for first timeout and see if it fired.
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
@@ -1137,14 +1144,14 @@ TEST_F(RenderWidgetHostTest, StopAndStartHangMonitorTimeout) {
 TEST_F(RenderWidgetHostTest, ShorterDelayHangMonitorTimeout) {
   // Start with a timeout.
   host_->StartHangMonitorTimeout(
-      TimeDelta::FromMilliseconds(100),
-      RenderWidgetHostDelegate::RENDERER_UNRESPONSIVE_UNKNOWN);
+      TimeDelta::FromMilliseconds(100), WebInputEvent::Undefined,
+      RendererUnresponsiveType::RENDERER_UNRESPONSIVE_UNKNOWN);
 
   // Start it again with shorter delay.
   EXPECT_FALSE(delegate_->unresponsive_timer_fired());
   host_->StartHangMonitorTimeout(
-      TimeDelta::FromMilliseconds(20),
-      RenderWidgetHostDelegate::RENDERER_UNRESPONSIVE_UNKNOWN);
+      TimeDelta::FromMilliseconds(20), WebInputEvent::Undefined,
+      RendererUnresponsiveType::RENDERER_UNRESPONSIVE_UNKNOWN);
 
   // Wait long enough for the second timeout and see if it fired.
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
@@ -1628,7 +1635,8 @@ TEST_F(RenderWidgetHostTest, InputEventRWHLatencyComponent) {
   // Tests RWHI::ForwardTouchEventWithLatencyInfo().
   PressTouchPoint(0, 1);
   uint32_t touch_event_id = SendTouchEvent();
-  InputEventAck ack(WebInputEvent::TouchStart, INPUT_EVENT_ACK_STATE_CONSUMED,
+  InputEventAck ack(InputEventAckSource::COMPOSITOR_THREAD,
+                    WebInputEvent::TouchStart, INPUT_EVENT_ACK_STATE_CONSUMED,
                     touch_event_id);
   host_->OnMessageReceived(InputHostMsg_HandleInputEvent_ACK(0, ack));
   CheckLatencyInfoComponentInMessage(

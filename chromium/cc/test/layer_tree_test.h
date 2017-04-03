@@ -8,7 +8,6 @@
 #include "base/memory/ref_counted.h"
 #include "base/threading/thread.h"
 #include "cc/animation/animation_delegate.h"
-#include "cc/test/remote_proto_channel_bridge.h"
 #include "cc/test/test_gpu_memory_buffer_manager.h"
 #include "cc/test/test_hooks.h"
 #include "cc/test/test_task_graph_runner.h"
@@ -18,22 +17,17 @@
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace cc {
+
+class AnimationHost;
 class AnimationPlayer;
-class FakeLayerTreeHostClient;
 class LayerImpl;
 class LayerTreeHost;
 class LayerTreeHostForTesting;
-class LayerTreeHostClient;
-class LayerTreeHostImpl;
 class LayerTreeTestCompositorFrameSinkClient;
 class Proxy;
-class ProxyImpl;
-class ProxyMain;
 class TestContextProvider;
 class TestCompositorFrameSink;
-class TestGpuMemoryBufferManager;
 class TestTaskGraphRunner;
-class TestWebGraphicsContext3D;
 
 // Creates the virtual viewport layer hierarchy under the given root_layer.
 // Convenient overload of the method below that creates a scrolling layer as
@@ -52,9 +46,7 @@ void CreateVirtualViewportLayers(Layer* root_layer,
                                  const gfx::Size& scroll_bounds,
                                  LayerTreeHost* host);
 
-class BeginTask;
 class LayerTreeHostClientForTesting;
-class TimeoutTask;
 
 // The LayerTreeTests runs with the main loop running. It instantiates a single
 // LayerTreeHostForTesting and associated LayerTreeHostImplForTesting and
@@ -95,26 +87,14 @@ class LayerTreeTest : public testing::Test, public TestHooks {
   void DoBeginTest();
   void Timeout();
 
+  AnimationHost* animation_host() const { return animation_host_.get(); }
+
  protected:
   LayerTreeTest();
 
   virtual void InitializeSettings(LayerTreeSettings* settings) {}
 
   void RealEndTest();
-
-  virtual void DispatchAddAnimationToPlayer(
-      AnimationPlayer* player_to_receive_animation,
-      double animation_duration);
-  void DispatchSetDeferCommits(bool defer_commits);
-  void DispatchSetNeedsCommit();
-  void DispatchSetNeedsUpdateLayers();
-  void DispatchSetNeedsRedraw();
-  void DispatchSetNeedsRedrawRect(const gfx::Rect& damage_rect);
-  void DispatchSetVisible(bool visible);
-  void DispatchSetNextCommitForcesRedraw();
-  void DispatchDidAddAnimation();
-  void DispatchCompositeImmediately();
-  void DispatchNextCommitWaitsForActivation();
 
   std::unique_ptr<CompositorFrameSink>
   ReleaseCompositorFrameSinkOnLayerTreeHost();
@@ -134,9 +114,7 @@ class LayerTreeTest : public testing::Test, public TestHooks {
   base::SingleThreadTaskRunner* MainThreadTaskRunner() {
     return main_task_runner_.get();
   }
-  Proxy* proxy() const {
-    return layer_tree_host_ ? layer_tree_host_->proxy() : NULL;
-  }
+  Proxy* proxy();
   TaskRunnerProvider* task_runner_provider() const;
   TaskGraphRunner* task_graph_runner() const {
     return task_graph_runner_.get();
@@ -168,20 +146,36 @@ class LayerTreeTest : public testing::Test, public TestHooks {
   // CompositorFrameSink. Or override it and create your own OutputSurface to
   // change what type of OutputSurface is used, such as a real OutputSurface for
   // pixel tests or a software-compositing OutputSurface.
-  virtual std::unique_ptr<OutputSurface> CreateDisplayOutputSurface(
-      scoped_refptr<ContextProvider> compositor_context_provider);
+  std::unique_ptr<OutputSurface> CreateDisplayOutputSurfaceOnThread(
+      scoped_refptr<ContextProvider> compositor_context_provider) override;
 
   bool IsRemoteTest() const;
 
   gfx::Vector2dF ScrollDelta(LayerImpl* layer_impl);
 
  private:
+  virtual void DispatchAddAnimationToPlayer(
+      AnimationPlayer* player_to_receive_animation,
+      double animation_duration);
+  void DispatchSetDeferCommits(bool defer_commits);
+  void DispatchSetNeedsCommit();
+  void DispatchSetNeedsUpdateLayers();
+  void DispatchSetNeedsRedraw();
+  void DispatchSetNeedsRedrawRect(const gfx::Rect& damage_rect);
+  void DispatchSetVisible(bool visible);
+  void DispatchSetNextCommitForcesRedraw();
+  void DispatchDidAddAnimation();
+  void DispatchCompositeImmediately();
+  void DispatchNextCommitWaitsForActivation();
+
   LayerTreeSettings settings_;
 
   CompositorMode mode_;
 
   std::unique_ptr<LayerTreeHostClientForTesting> client_;
-  std::unique_ptr<LayerTreeHostInProcess> layer_tree_host_;
+  std::unique_ptr<LayerTreeHost> layer_tree_host_;
+  std::unique_ptr<AnimationHost> animation_host_;
+  LayerTreeHostInProcess* layer_tree_host_in_process_;
 
   bool beginning_ = false;
   bool end_when_begin_returns_ = false;
@@ -220,9 +214,23 @@ class LayerTreeTest : public testing::Test, public TestHooks {
   }                                                              \
   class MultiThreadDelegatingImplNeedsSemicolon##TEST_FIXTURE_NAME {}
 
+#define REMOTE_TEST_F(TEST_FIXTURE_NAME)                    \
+  TEST_F(TEST_FIXTURE_NAME, RunRemote_DelegatingRenderer) { \
+    RunTest(CompositorMode::REMOTE);                        \
+  }                                                         \
+  class RemoteDelegatingImplNeedsSemicolon##TEST_FIXTURE_NAME {}
+
 #define SINGLE_AND_MULTI_THREAD_TEST_F(TEST_FIXTURE_NAME) \
   SINGLE_THREAD_TEST_F(TEST_FIXTURE_NAME);                \
   MULTI_THREAD_TEST_F(TEST_FIXTURE_NAME)
+
+#define REMOTE_AND_MULTI_THREAD_TEST_F(TEST_FIXTURE_NAME) \
+  MULTI_THREAD_TEST_F(TEST_FIXTURE_NAME);                 \
+  REMOTE_TEST_F(TEST_FIXTURE_NAME)
+
+#define SINGLE_MULTI_AND_REMOTE_TEST_F(TEST_FIXTURE_NAME) \
+  SINGLE_AND_MULTI_THREAD_TEST_F(TEST_FIXTURE_NAME);      \
+  REMOTE_TEST_F(TEST_FIXTURE_NAME)
 
 // Some tests want to control when notify ready for activation occurs,
 // but this is not supported in the single-threaded case.

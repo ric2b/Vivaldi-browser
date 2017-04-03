@@ -14,7 +14,7 @@
 #include "chrome/browser/themes/theme_service_factory.h"
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
-#include "ui/accessibility/ax_view_state.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/models/menu_model.h"
 #include "ui/display/display.h"
@@ -136,11 +136,12 @@ void ToolbarButton::OnGestureEvent(ui::GestureEvent* event) {
   LabelButton::OnGestureEvent(event);
 }
 
-void ToolbarButton::GetAccessibleState(ui::AXViewState* state) {
-  CustomButton::GetAccessibleState(state);
-  state->role = ui::AX_ROLE_BUTTON_DROP_DOWN;
-  state->default_action = l10n_util::GetStringUTF16(IDS_APP_ACCACTION_PRESS);
-  state->AddStateFlag(ui::AX_STATE_HASPOPUP);
+void ToolbarButton::GetAccessibleNodeData(ui::AXNodeData* node_data) {
+  CustomButton::GetAccessibleNodeData(node_data);
+  node_data->role = ui::AX_ROLE_BUTTON_DROP_DOWN;
+  node_data->AddStringAttribute(
+      ui::AX_ATTR_ACTION, l10n_util::GetStringUTF8(IDS_APP_ACCACTION_PRESS));
+  node_data->AddStateFlag(ui::AX_STATE_HASPOPUP);
 }
 
 std::unique_ptr<views::LabelButtonBorder> ToolbarButton::CreateDefaultBorder()
@@ -232,11 +233,6 @@ void ToolbarButton::OnMenuClosed() {
   AnimateInkDrop(views::InkDropState::DEACTIVATED, nullptr /* event */);
 
   menu_showing_ = false;
-
-  // Need to explicitly clear mouse handler so that events get sent
-  // properly after the menu finishes running. If we don't do this, then
-  // the first click to other parts of the UI is eaten.
-  SetMouseHandler(nullptr);
 
   // Set the state back to normal after the drop down menu is closed.
   if (state() != STATE_DISABLED)

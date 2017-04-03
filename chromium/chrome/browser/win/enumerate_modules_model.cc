@@ -17,6 +17,7 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/debug/crash_logging.h"
 #include "base/debug/leak_annotations.h"
 #include "base/environment.h"
 #include "base/file_version_info.h"
@@ -35,6 +36,7 @@
 #include "base/win/windows_version.h"
 #include "chrome/browser/net/service_providers_win.h"
 #include "chrome/common/chrome_constants.h"
+#include "chrome/common/crash_keys.h"
 #include "chrome/grit/generated_resources.h"
 #include "crypto/sha2.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -60,6 +62,12 @@ static bool ModuleSort(const ModuleEnumerator::Module& a,
 
 namespace {
 
+// The default amount of time between module inspections. This prevents
+// certificate inspection and validation from using a large amount of CPU and
+// battery immediately after startup.
+constexpr base::TimeDelta kDefaultPerModuleDelay =
+    base::TimeDelta::FromSeconds(1);
+
 // A struct to help de-duping modules before adding them to the enumerated
 // modules vector.
 struct FindModule {
@@ -67,8 +75,7 @@ struct FindModule {
   explicit FindModule(const ModuleEnumerator::Module& x)
     : module(x) {}
   bool operator()(const ModuleEnumerator::Module& module_in) const {
-    return (module.location == module_in.location) &&
-           (module.name == module_in.name);
+    return (module.location == module_in.location);
   }
 
   const ModuleEnumerator::Module& module;
@@ -354,9 +361,7 @@ ModuleEnumerator::Module::Module(ModuleType type,
       description(description),
       version(version),
       recommended_action(recommended_action),
-      duplicate_count(0),
-      normalized(false) {
-}
+      duplicate_count(0) {}
 
 ModuleEnumerator::Module::~Module() {
 }
@@ -382,18 +387,25 @@ void ModuleEnumerator::NormalizeModule(Module* module) {
     module->location.clear();
   }
 
+  // Some version strings use ", " instead ".". Convert those.
+  base::ReplaceSubstringsAfterOffset(&module->version, 0, L", ", L".");
+
   // Some version strings have things like (win7_rtm.090713-1255) appended
   // to them. Remove that.
   size_t first_space = module->version.find_first_of(L" ");
   if (first_space != base::string16::npos)
     module->version = module->version.substr(0, first_space);
 
-  module->normalized = true;
+  // The signer may be returned with trailing nulls.
+  size_t first_null = module->cert_info.subject.find(L'\0');
+  if (first_null != base::string16::npos)
+    module->cert_info.subject.resize(first_null);
 }
 
 ModuleEnumerator::ModuleEnumerator(EnumerateModulesModel* observer)
     : enumerated_modules_(nullptr),
-      observer_(observer) {
+      observer_(observer),
+      per_module_delay_(kDefaultPerModuleDelay) {
 }
 
 ModuleEnumerator::~ModuleEnumerator() {
@@ -408,12 +420,17 @@ void ModuleEnumerator::ScanNow(ModulesVector* list) {
   // scanning has not been finished before shutdown.
   BrowserThread::GetBlockingPool()->PostWorkerTaskWithShutdownBehavior(
       FROM_HERE,
-      base::Bind(&ModuleEnumerator::ScanImpl,
+      base::Bind(&ModuleEnumerator::ScanImplStart,
                  base::Unretained(this)),
       base::SequencedWorkerPool::CONTINUE_ON_SHUTDOWN);
 }
 
-void ModuleEnumerator::ScanImpl() {
+void ModuleEnumerator::SetPerModuleDelayToZero() {
+  // Set the delay to zero so the modules enumerate as quickly as possible.
+  per_module_delay_ = base::TimeDelta::FromSeconds(0);
+}
+
+void ModuleEnumerator::ScanImplStart() {
   base::TimeTicks start_time = base::TimeTicks::Now();
 
   // The provided destination for the enumerated modules should be empty, as it
@@ -444,6 +461,62 @@ void ModuleEnumerator::ScanImpl() {
   UMA_HISTOGRAM_TIMES("Conflicts.EnumerateWinsockModules",
                       checkpoint2 - checkpoint);
 
+  enumeration_total_time_ = base::TimeTicks::Now() - start_time;
+
+  // Post a delayed task to scan the first module. This forwards directly to
+  // ScanImplFinish if there are no modules to scan.
+  BrowserThread::GetBlockingPool()->PostDelayedWorkerTask(
+      FROM_HERE,
+      base::Bind(&ModuleEnumerator::ScanImplModule,
+                 base::Unretained(this),
+                 0),
+      per_module_delay_);
+}
+
+void ModuleEnumerator::ScanImplDelay(size_t index) {
+  // Bounce this over to a CONTINUE_ON_SHUTDOWN task in the same pool. This is
+  // necessary to prevent shutdown hangs while inspecting a module.
+  BrowserThread::GetBlockingPool()->PostWorkerTaskWithShutdownBehavior(
+      FROM_HERE,
+      base::Bind(&ModuleEnumerator::ScanImplModule,
+                 base::Unretained(this),
+                 index),
+      base::SequencedWorkerPool::CONTINUE_ON_SHUTDOWN);
+}
+
+void ModuleEnumerator::ScanImplModule(size_t index) {
+  while (index < enumerated_modules_->size()) {
+    base::TimeTicks start_time = base::TimeTicks::Now();
+    Module& entry = enumerated_modules_->at(index);
+    PopulateModuleInformation(&entry);
+    NormalizeModule(&entry);
+    CollapsePath(&entry);
+    base::TimeDelta elapsed = base::TimeTicks::Now() - start_time;
+    enumeration_inspection_time_ += elapsed;
+    enumeration_total_time_ += elapsed;
+
+    // With a non-zero delay, bounce back over to ScanImplDelay, which will
+    // bounce back to this function and inspect the next module.
+    if (!per_module_delay_.is_zero()) {
+      BrowserThread::GetBlockingPool()->PostDelayedWorkerTask(
+          FROM_HERE,
+          base::Bind(&ModuleEnumerator::ScanImplDelay,
+                     base::Unretained(this),
+                     index + 1),
+          per_module_delay_);
+      return;
+    }
+
+    // If the delay has been set to zero then simply finish the rest of the
+    // enumeration in this already started task.
+    ++index;
+  }
+
+  // Getting here means that all of the modules have been inspected.
+  return ScanImplFinish();
+}
+
+void ModuleEnumerator::ScanImplFinish() {
   // TODO(chrisha): Annotate any modules that are suspicious/bad.
 
   ReportThirdPartyMetrics();
@@ -451,8 +524,10 @@ void ModuleEnumerator::ScanImpl() {
   std::sort(enumerated_modules_->begin(),
             enumerated_modules_->end(), ModuleSort);
 
+  UMA_HISTOGRAM_TIMES("Conflicts.EnumerationInspectionTime",
+                      enumeration_inspection_time_);
   UMA_HISTOGRAM_TIMES("Conflicts.EnumerationTotalTime",
-                      base::TimeTicks::Now() - start_time);
+                      enumeration_total_time_);
 
   // Send a reply back on the UI thread. The |observer_| outlives this
   // enumerator, so posting a raw pointer is safe. This is done last as
@@ -482,10 +557,6 @@ void ModuleEnumerator::EnumerateLoadedModules() {
     Module entry;
     entry.type = LOADED_MODULE;
     entry.location = module.szExePath;
-    PopulateModuleInformation(&entry);
-
-    NormalizeModule(&entry);
-    CollapsePath(&entry);
     enumerated_modules_->push_back(entry);
   } while (::Module32Next(snap.Get(), &module));
 }
@@ -515,10 +586,6 @@ void ModuleEnumerator::ReadShellExtensions(HKEY parent) {
     Module entry;
     entry.type = SHELL_EXTENSION;
     entry.location = dll;
-    PopulateModuleInformation(&entry);
-
-    NormalizeModule(&entry);
-    CollapsePath(&entry);
     AddToListWithoutDuplicating(entry);
 
     ++registration;
@@ -533,7 +600,6 @@ void ModuleEnumerator::EnumerateWinsockModules() {
     Module entry;
     entry.type = WINSOCK_MODULE_REGISTRATION;
     entry.status = NOT_MATCHED;
-    entry.normalized = false;
     entry.location = layered_providers[i].path;
     entry.description = layered_providers[i].name;
     entry.recommended_action = NONE;
@@ -542,13 +608,9 @@ void ModuleEnumerator::EnumerateWinsockModules() {
     wchar_t expanded[MAX_PATH];
     DWORD size = ExpandEnvironmentStrings(
         entry.location.c_str(), expanded, MAX_PATH);
-    if (size != 0 && size <= MAX_PATH) {
-      GetCertificateInfo(base::FilePath(expanded), &entry.cert_info);
-    }
+    if (size != 0 && size <= MAX_PATH)
+      entry.location = expanded;
     entry.version = base::IntToString16(layered_providers[i].version);
-
-    // Paths have already been collapsed.
-    NormalizeModule(&entry);
     AddToListWithoutDuplicating(entry);
   }
 }
@@ -556,7 +618,6 @@ void ModuleEnumerator::EnumerateWinsockModules() {
 void ModuleEnumerator::PopulateModuleInformation(Module* module) {
   module->status = NOT_MATCHED;
   module->duplicate_count = 0;
-  module->normalized = false;
   GetCertificateInfo(base::FilePath(module->location), &module->cert_info);
   module->recommended_action = NONE;
   std::unique_ptr<FileVersionInfo> version_info(
@@ -569,7 +630,6 @@ void ModuleEnumerator::PopulateModuleInformation(Module* module) {
 }
 
 void ModuleEnumerator::AddToListWithoutDuplicating(const Module& module) {
-  DCHECK(module.normalized);
   // These are registered modules, not loaded modules so the same module
   // can be registered multiple times, often dozens of times. There is no need
   // to list each registration, so we just increment the count for each module
@@ -636,6 +696,7 @@ void ModuleEnumerator::CollapsePath(Module* entry) {
 
 void ModuleEnumerator::ReportThirdPartyMetrics() {
   static const wchar_t kMicrosoft[] = L"Microsoft ";
+  static const wchar_t kGoogle[] = L"Google Inc";
 
   // Used for counting unique certificates that need to be validated. A
   // catalog counts as a single certificate, as does a file with a baked in
@@ -645,6 +706,8 @@ void ModuleEnumerator::ReportThirdPartyMetrics() {
   size_t signed_modules = 0;
   size_t microsoft_modules = 0;
   size_t catalog_modules = 0;
+  size_t third_party_loaded = 0;
+  size_t third_party_not_loaded = 0;
   for (const auto& module : *enumerated_modules_) {
     if (module.cert_info.type != ModuleEnumerator::NO_CERTIFICATE) {
       ++signed_modules;
@@ -665,15 +728,37 @@ void ModuleEnumerator::ReportThirdPartyMetrics() {
         ++microsoft_modules;
         if (new_certificate)
           ++microsoft_certificates;
+      } else if (module.cert_info.subject == kGoogle) {
+        // No need to count these explicitly.
+      } else {
+        // Count modules that are neither signed by Google nor Microsoft.
+        // These are considered "third party" modules.
+        if (module.type & LOADED_MODULE) {
+          ++third_party_loaded;
+        } else {
+          ++third_party_not_loaded;
+        }
       }
     }
   }
+
+  // Indicate the presence of third party modules in crash data. This allows
+  // comparing how much third party modules affect crash rates compared to
+  // the regular user distribution.
+  base::debug::SetCrashKeyValue(crash_keys::kThirdPartyModulesLoaded,
+                                base::SizeTToString(third_party_loaded));
+  base::debug::SetCrashKeyValue(crash_keys::kThirdPartyModulesNotLoaded,
+                                base::SizeTToString(third_party_not_loaded));
 
   // Report back some metrics regarding third party modules and certificates.
   UMA_HISTOGRAM_CUSTOM_COUNTS("ThirdPartyModules.Certificates.Total",
                               unique_certificates.size(), 1, 500, 50);
   UMA_HISTOGRAM_CUSTOM_COUNTS("ThirdPartyModules.Certificates.Microsoft",
                               microsoft_certificates, 1, 500, 50);
+  UMA_HISTOGRAM_CUSTOM_COUNTS("ThirdPartyModules.Modules.Loaded",
+                              third_party_loaded, 1, 500, 50);
+  UMA_HISTOGRAM_CUSTOM_COUNTS("ThirdPartyModules.Modules.NotLoaded",
+                              third_party_not_loaded, 1, 500, 50);
   UMA_HISTOGRAM_CUSTOM_COUNTS("ThirdPartyModules.Modules.Signed",
                               signed_modules, 1, 500, 50);
   UMA_HISTOGRAM_CUSTOM_COUNTS("ThirdPartyModules.Modules.Signed.Microsoft",
@@ -727,7 +812,8 @@ void EnumerateModulesModel::AcknowledgeConflictNotification() {
 
   if (!conflict_notification_acknowledged_) {
     conflict_notification_acknowledged_ = true;
-    FOR_EACH_OBSERVER(Observer, observers_, OnConflictsAcknowledged());
+    for (Observer& observer : observers_)
+      observer.OnConflictsAcknowledged();
   }
 }
 
@@ -756,31 +842,43 @@ void EnumerateModulesModel::MaybePostScanningTask() {
     BrowserThread::PostAfterStartupTask(
         FROM_HERE,
         BrowserThread::GetTaskRunnerForThread(BrowserThread::UI),
-        base::Bind(&EnumerateModulesModel::ScanNow, base::Unretained(this)));
+        base::Bind(&EnumerateModulesModel::ScanNow,
+                   base::Unretained(this),
+                   true));
     done = true;
   }
 }
 
-void EnumerateModulesModel::ScanNow() {
+void EnumerateModulesModel::ScanNow(bool background_mode) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   // |module_enumerator_| is used as a lock to know whether or not there are
   // active/pending blocking pool tasks. If a module enumerator exists then a
   // scan is already underway. Otherwise, either no scan has been completed or
   // a scan has terminated.
-  if (module_enumerator_)
+  if (module_enumerator_) {
+    // If a scan is in progress and this request is for immediate results, then
+    // inform the background scan. This is done without any locks because the
+    // other thread only reads from the value that is being modified, and on
+    // Windows its an atomic write.
+    if (!background_mode)
+      module_enumerator_->SetPerModuleDelayToZero();
     return;
+  }
 
   // Only allow a single scan per process lifetime. Immediately notify any
   // observers that the scan is complete. At this point |enumerated_modules_| is
   // safe to access as no potentially racing blocking pool task can exist.
   if (!enumerated_modules_.empty()) {
-    FOR_EACH_OBSERVER(Observer, observers_, OnScanCompleted());
+    for (Observer& observer : observers_)
+      observer.OnScanCompleted();
     return;
   }
 
   // ScanNow does not block, rather it simply schedules a task.
   module_enumerator_.reset(new ModuleEnumerator(this));
+  if (!background_mode)
+    module_enumerator_->SetPerModuleDelayToZero();
   module_enumerator_->ScanNow(&enumerated_modules_);
 }
 
@@ -917,5 +1015,6 @@ void EnumerateModulesModel::DoneScanning() {
                            confirmed_bad_modules_detected_);
 
   // Forward the callback to any registered observers.
-  FOR_EACH_OBSERVER(Observer, observers_, OnScanCompleted());
+  for (Observer& observer : observers_)
+    observer.OnScanCompleted();
 }

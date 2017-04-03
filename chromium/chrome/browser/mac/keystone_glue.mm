@@ -32,6 +32,8 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/l10n/l10n_util_mac.h"
 
+#include "app/vivaldi_constants.h"
+
 namespace {
 
 namespace ksr = keystone_registration;
@@ -734,7 +736,7 @@ NSString* const kVersionKey = @"KSVersion";
   } else {
     NSString* currentVersion =
 #if defined(VIVALDI_BUILD)
-        [NSString stringWithUTF8String:chrome::kVivaldiVersion];
+        [NSString stringWithUTF8String:vivaldi::kVivaldiVersion];
 #else
         [NSString stringWithUTF8String:chrome::kChromeVersion];
 #endif

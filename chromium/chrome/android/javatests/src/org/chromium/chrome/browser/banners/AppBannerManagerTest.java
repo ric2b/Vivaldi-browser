@@ -12,7 +12,6 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageInfo;
 import android.graphics.Bitmap;
-import android.os.Environment;
 import android.test.mock.MockPackageManager;
 import android.test.suitebuilder.annotation.MediumTest;
 import android.test.suitebuilder.annotation.SmallTest;
@@ -128,7 +127,7 @@ public class AppBannerManagerTest extends ChromeTabbedActivityTestBase {
     }
 
     private static class TestDataStorageFactory extends WebappDataStorage.Factory {
-        public Bitmap mSplashImage;
+        public String mSplashImage;
 
         @Override
         public WebappDataStorage create(final String webappId) {
@@ -142,7 +141,7 @@ public class AppBannerManagerTest extends ChromeTabbedActivityTestBase {
             }
 
             @Override
-            public void updateSplashScreenImage(Bitmap splashScreenImage) {
+            public void updateSplashScreenImage(String splashScreenImage) {
                 assertNull(mSplashImage);
                 mSplashImage = splashScreenImage;
             }
@@ -194,14 +193,11 @@ public class AppBannerManagerTest extends ChromeTabbedActivityTestBase {
             }
         });
 
-        AppBannerManager.disableSecureSchemeCheckForTesting();
-
         // Navigations in this test are all of type ui::PAGE_TRANSITION_LINK, i.e. indirect.
         // Force indirect navigations to be worth the same as direct for testing.
         AppBannerManager.setEngagementWeights(1, 1);
 
-        mTestServer = EmbeddedTestServer.createAndStartFileServer(
-                getInstrumentation().getContext(), Environment.getExternalStorageDirectory());
+        mTestServer = EmbeddedTestServer.createAndStartServer(getInstrumentation().getContext());
         mNativeAppUrl = mTestServer.getURL(NATIVE_APP_PATH);
         mWebAppUrl = mTestServer.getURL(WEB_APP_PATH);
     }
@@ -539,7 +535,8 @@ public class AppBannerManagerTest extends ChromeTabbedActivityTestBase {
         // Test that bitmap sizes match expectations.
         int idealSize = getActivity().getResources().getDimensionPixelSize(
                 R.dimen.webapp_splash_image_size_ideal);
-        assertEquals(idealSize, dataStorageFactory.mSplashImage.getWidth());
-        assertEquals(idealSize, dataStorageFactory.mSplashImage.getHeight());
+        Bitmap splashImage = ShortcutHelper.decodeBitmapFromString(dataStorageFactory.mSplashImage);
+        assertEquals(idealSize, splashImage.getWidth());
+        assertEquals(idealSize, splashImage.getHeight());
     }
 }

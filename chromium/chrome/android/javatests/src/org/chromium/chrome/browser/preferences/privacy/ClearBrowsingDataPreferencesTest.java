@@ -6,7 +6,6 @@ package org.chromium.chrome.browser.preferences.privacy;
 
 import android.content.Intent;
 import android.os.AsyncTask;
-import android.os.Environment;
 import android.preference.CheckBoxPreference;
 import android.preference.Preference;
 import android.preference.PreferenceScreen;
@@ -19,6 +18,7 @@ import android.widget.ListView;
 
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeFeatureList;
@@ -27,6 +27,7 @@ import org.chromium.chrome.browser.preferences.ButtonPreference;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.preferences.Preferences;
 import org.chromium.chrome.browser.preferences.privacy.ClearBrowsingDataPreferences.DialogOption;
+import org.chromium.chrome.browser.webapps.TestFetchStorageCallback;
 import org.chromium.chrome.browser.webapps.WebappDataStorage;
 import org.chromium.chrome.browser.webapps.WebappRegistry;
 import org.chromium.chrome.test.ChromeActivityTestCaseBase;
@@ -39,7 +40,6 @@ import java.net.URL;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 
 /**
  * Integration tests for ClearBrowsingDataPreferences.
@@ -48,28 +48,11 @@ import java.util.Set;
 public class ClearBrowsingDataPreferencesTest
         extends ChromeActivityTestCaseBase<ChromeActivity> {
     private EmbeddedTestServer mTestServer;
-    private boolean mCallbackCalled;
-
-    private class CallbackCriteria extends Criteria {
-        public CallbackCriteria() {
-            mCallbackCalled = false;
-        }
-
-        @Override
-        public boolean isSatisfied() {
-            if (mCallbackCalled) {
-                mCallbackCalled = false;
-                return true;
-            }
-            return false;
-        }
-    }
 
     @Override
     protected void setUp() throws Exception {
         super.setUp();
-        mTestServer = EmbeddedTestServer.createAndStartFileServer(
-                getInstrumentation().getContext(), Environment.getExternalStorageDirectory());
+        mTestServer = EmbeddedTestServer.createAndStartServer(getInstrumentation().getContext());
     }
 
     @Override
@@ -104,15 +87,11 @@ public class ClearBrowsingDataPreferencesTest
      */
     @MediumTest
     public void testClearingSiteDataClearsWebapps() throws Exception {
-        WebappRegistry.registerWebapp("first", null);
-        WebappRegistry.getRegisteredWebappIds(new WebappRegistry.FetchCallback() {
-            @Override
-            public void onWebappIdsRetrieved(Set<String> ids) {
-                assertEquals(new HashSet<String>(Arrays.asList("first")), ids);
-                mCallbackCalled = true;
-            }
-        });
-        CriteriaHelper.pollUiThread(new CallbackCriteria());
+        TestFetchStorageCallback callback = new TestFetchStorageCallback();
+        WebappRegistry.getInstance().register("first", callback);
+        callback.waitForCallback(0);
+        assertEquals(new HashSet<String>(Arrays.asList("first")),
+                WebappRegistry.getRegisteredWebappIdsForTesting());
 
         setDataTypesToClear(Arrays.asList(DialogOption.CLEAR_COOKIES_AND_SITE_DATA));
         final ClearBrowsingDataPreferences preferences =
@@ -131,14 +110,7 @@ public class ClearBrowsingDataPreferencesTest
         });
         waitForProgressToComplete(preferences);
 
-        WebappRegistry.getRegisteredWebappIds(new WebappRegistry.FetchCallback() {
-            @Override
-            public void onWebappIdsRetrieved(Set<String> ids) {
-                assertTrue(ids.isEmpty());
-                mCallbackCalled = true;
-            }
-        });
-        CriteriaHelper.pollUiThread(new CallbackCriteria());
+        assertTrue(WebappRegistry.getRegisteredWebappIdsForTesting().isEmpty());
     }
 
     /**
@@ -155,23 +127,13 @@ public class ClearBrowsingDataPreferencesTest
         };
         final Intent shortcutIntent = shortcutIntentTask.execute().get();
 
-        WebappRegistry.registerWebapp("first", new WebappRegistry.FetchWebappDataStorageCallback() {
-            @Override
-            public void onWebappDataStorageRetrieved(WebappDataStorage storage) {
-                storage.updateFromShortcutIntent(shortcutIntent);
-                mCallbackCalled = true;
-            }
-        });
-        CriteriaHelper.pollUiThread(new CallbackCriteria());
+        TestFetchStorageCallback callback = new TestFetchStorageCallback();
+        WebappRegistry.getInstance().register("first", callback);
+        callback.waitForCallback(0);
+        callback.getStorage().updateFromShortcutIntent(shortcutIntent);
 
-        WebappRegistry.getRegisteredWebappIds(new WebappRegistry.FetchCallback() {
-            @Override
-            public void onWebappIdsRetrieved(Set<String> ids) {
-                assertEquals(new HashSet<String>(Arrays.asList("first")), ids);
-                mCallbackCalled = true;
-            }
-        });
-        CriteriaHelper.pollUiThread(new CallbackCriteria());
+        assertEquals(new HashSet<String>(Arrays.asList("first")),
+                WebappRegistry.getRegisteredWebappIdsForTesting());
 
         setDataTypesToClear(Arrays.asList(DialogOption.CLEAR_HISTORY));
         final ClearBrowsingDataPreferences preferences =
@@ -190,45 +152,14 @@ public class ClearBrowsingDataPreferencesTest
         });
         waitForProgressToComplete(preferences);
 
-        // The web app should still exist in the registry.
-        WebappRegistry.getRegisteredWebappIds(new WebappRegistry.FetchCallback() {
-            @Override
-            public void onWebappIdsRetrieved(Set<String> ids) {
-                assertEquals(new HashSet<String>(Arrays.asList("first")), ids);
-                mCallbackCalled = true;
-            }
-        });
-        CriteriaHelper.pollUiThread(new CallbackCriteria());
+        assertEquals(new HashSet<String>(Arrays.asList("first")),
+                WebappRegistry.getRegisteredWebappIdsForTesting());
 
-        // URL and scope should be empty.
-        WebappDataStorage.getScope("first", new WebappDataStorage.FetchCallback<String>() {
-            @Override
-            public void onDataRetrieved(String readObject) {
-                assertEquals(readObject, "");
-                mCallbackCalled = true;
-            }
-        });
-        CriteriaHelper.pollUiThread(new CallbackCriteria());
-
-        WebappDataStorage.getUrl("first", new WebappDataStorage.FetchCallback<String>() {
-            @Override
-            public void onDataRetrieved(String readObject) {
-                assertEquals(readObject, "");
-                mCallbackCalled = true;
-            }
-        });
-        CriteriaHelper.pollUiThread(new CallbackCriteria());
-
-        // The last used time should be 0.
-        WebappDataStorage.getLastUsedTime("first", new WebappDataStorage.FetchCallback<Long>() {
-            @Override
-            public void onDataRetrieved(Long readObject) {
-                long lastUsed = readObject;
-                assertEquals(lastUsed, 0);
-                mCallbackCalled = true;
-            }
-        });
-        CriteriaHelper.pollUiThread(new CallbackCriteria());
+        // URL and scope should be empty, and last used time should be 0.
+        WebappDataStorage storage = WebappRegistry.getInstance().getWebappDataStorage("first");
+        assertEquals("", storage.getScope());
+        assertEquals("", storage.getUrl());
+        assertEquals(0, storage.getLastUsedTime());
     }
 
     /**
@@ -524,6 +455,7 @@ public class ClearBrowsingDataPreferencesTest
      */
     @CommandLineFlags.Add({"enable-features=ImportantSitesInCBD", "enable-site-engagement"})
     @MediumTest
+    @Feature({"SiteEngagement"})
     public void testImportantSitesDialogNoFiltering() throws Exception {
         // Sign in.
         SigninTestUtil.addAndSignInTestAccount();
@@ -570,6 +502,7 @@ public class ClearBrowsingDataPreferencesTest
      */
     @CommandLineFlags.Add({"enable-features=ImportantSitesInCBD", "enable-site-engagement"})
     @MediumTest
+    @Feature({"SiteEngagement"})
     public void testImportantSitesDialogNoopOnCancel() throws Exception {
         // Sign in.
         SigninTestUtil.addAndSignInTestAccount();
@@ -608,6 +541,7 @@ public class ClearBrowsingDataPreferencesTest
      */
     @CommandLineFlags.Add({"enable-features=ImportantSitesInCBD", "enable-site-engagement"})
     @MediumTest
+    @Feature({"SiteEngagement"})
     public void testImportantSitesDialog() throws Exception {
         // Sign in.
         SigninTestUtil.addAndSignInTestAccount();

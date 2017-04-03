@@ -81,7 +81,7 @@ void BaseRenderingContext2D::restore() {
   if (m_stateStack.size() <= 1)
     return;
   m_path.transform(state().transform());
-  m_stateStack.removeLast();
+  m_stateStack.pop_back();
   m_stateStack.last()->clearResolvedFilter();
   m_path.transform(state().transform().inverse());
   SkCanvas* c = drawingCanvas();
@@ -105,6 +105,37 @@ void BaseRenderingContext2D::restoreMatrixClipStack(SkCanvas* c) const {
     c->save();
   }
   c->restore();
+  validateStateStack();
+}
+
+void BaseRenderingContext2D::unwindStateStack() {
+  if (size_t stackSize = m_stateStack.size()) {
+    if (SkCanvas* skCanvas = existingDrawingCanvas()) {
+      while (--stackSize)
+        skCanvas->restore();
+    }
+  }
+}
+
+void BaseRenderingContext2D::reset() {
+  validateStateStack();
+  unwindStateStack();
+  m_stateStack.resize(1);
+  m_stateStack.first() = CanvasRenderingContext2DState::create();
+  m_path.clear();
+  if (SkCanvas* c = existingDrawingCanvas()) {
+    // The canvas should always have an initial/unbalanced save frame, which
+    // we use to reset the top level matrix and clip here.
+    DCHECK_EQ(c->getSaveCount(), 2);
+    c->restore();
+    c->save();
+    DCHECK(c->getTotalMatrix().isIdentity());
+#if DCHECK_IS_ON()
+    SkIRect clipBounds;
+    DCHECK(c->getClipDeviceBounds(&clipBounds));
+    DCHECK(clipBounds == c->imageInfo().bounds());
+#endif
+  }
   validateStateStack();
 }
 
@@ -355,7 +386,7 @@ void BaseRenderingContext2D::setGlobalCompositeOperation(
   WebBlendMode blendMode = WebBlendModeNormal;
   if (!parseCompositeAndBlendOperator(operation, op, blendMode))
     return;
-  SkXfermode::Mode xfermode = WebCoreCompositeToSkiaComposite(op, blendMode);
+  SkBlendMode xfermode = WebCoreCompositeToSkiaComposite(op, blendMode);
   if (state().globalComposite() == xfermode)
     return;
   modifiableState().setGlobalComposite(xfermode);
@@ -553,12 +584,12 @@ static bool validateRectForCanvas(double& x,
   return true;
 }
 
-bool BaseRenderingContext2D::isFullCanvasCompositeMode(SkXfermode::Mode op) {
+bool BaseRenderingContext2D::isFullCanvasCompositeMode(SkBlendMode op) {
   // See 4.8.11.1.3 Compositing
   // CompositeSourceAtop and CompositeDestinationOut are not listed here as the
   // platforms already implement the specification's behavior.
-  return op == SkXfermode::kSrcIn_Mode || op == SkXfermode::kSrcOut_Mode ||
-         op == SkXfermode::kDstIn_Mode || op == SkXfermode::kDstATop_Mode;
+  return op == SkBlendMode::kSrcIn || op == SkBlendMode::kSrcOut ||
+         op == SkBlendMode::kDstIn || op == SkBlendMode::kDstATop;
 }
 
 static bool isPathExpensive(const Path& path) {
@@ -816,7 +847,7 @@ void BaseRenderingContext2D::clearRect(double x,
     return;
 
   SkPaint clearPaint;
-  clearPaint.setXfermodeMode(SkXfermode::kClear_Mode);
+  clearPaint.setBlendMode(SkBlendMode::kClear);
   clearPaint.setStyle(SkPaint::kFill_Style);
   FloatRect rect(x, y, width, height);
 
@@ -875,8 +906,11 @@ static inline CanvasImageSource* toImageSourceInternal(
   }
   if (value.isHTMLImageElement())
     return value.getAsHTMLImageElement();
-  if (value.isHTMLVideoElement())
-    return value.getAsHTMLVideoElement();
+  if (value.isHTMLVideoElement()) {
+    HTMLVideoElement* video = value.getAsHTMLVideoElement();
+    video->videoWillBeDrawnToCanvas();
+    return video;
+  }
   if (value.isHTMLCanvasElement())
     return value.getAsHTMLCanvasElement();
   if (value.isImageBitmap()) {
@@ -1029,12 +1063,12 @@ void BaseRenderingContext2D::drawImageInternal(SkCanvas* c,
     SkRect bounds = dstRect;
     ctm.mapRect(&bounds);
     SkPaint layerPaint;
-    layerPaint.setXfermode(sk_ref_sp(paint->getXfermode()));
-    layerPaint.setImageFilter(paint->getImageFilter());
+    layerPaint.setBlendMode(paint->getBlendMode());
+    layerPaint.setImageFilter(sk_ref_sp(paint->getImageFilter()));
 
     c->saveLayer(&bounds, &layerPaint);
     c->concat(ctm);
-    imagePaint.setXfermodeMode(SkXfermode::kSrcOver_Mode);
+    imagePaint.setBlendMode(SkBlendMode::kSrcOver);
     imagePaint.setImageFilter(nullptr);
   }
 
@@ -1715,21 +1749,12 @@ void BaseRenderingContext2D::checkOverdraw(
     if (paint->getLooper() || paint->getImageFilter() || paint->getMaskFilter())
       return;
 
-    SkXfermode* xfermode = paint->getXfermode();
-    if (xfermode) {
-      SkXfermode::Mode mode;
-      if (xfermode->asMode(&mode)) {
-        isSourceOver = mode == SkXfermode::kSrcOver_Mode;
-        if (!isSourceOver && mode != SkXfermode::kSrc_Mode &&
-            mode != SkXfermode::kClear_Mode)
-          return;  // The code below only knows how to handle Src, SrcOver, and
-                   // Clear
-      } else {
-        // unknown xfermode
-        ASSERT_NOT_REACHED();
-        return;
-      }
-    }
+    SkBlendMode mode = paint->getBlendMode();
+    isSourceOver = mode == SkBlendMode::kSrcOver;
+    if (!isSourceOver && mode != SkBlendMode::kSrc &&
+        mode != SkBlendMode::kClear)
+      return;  // The code below only knows how to handle Src, SrcOver, and
+               // Clear
 
     alpha = paint->getAlpha();
 

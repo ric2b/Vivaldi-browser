@@ -5,18 +5,25 @@
 #ifndef DEVICE_GENERIC_SENSOR_PLATFORM_SENSOR_PROVIDER_H_
 #define DEVICE_GENERIC_SENSOR_PLATFORM_SENSOR_PROVIDER_H_
 
+#include "device/generic_sensor/generic_sensor_export.h"
 #include "device/generic_sensor/platform_sensor_provider_base.h"
 
 namespace device {
 
 // This a singleton class returning the actual sensor provider
 // implementation for the current platform.
-class PlatformSensorProvider : public PlatformSensorProviderBase {
+class DEVICE_GENERIC_SENSOR_EXPORT PlatformSensorProvider
+    : public PlatformSensorProviderBase {
  public:
   // Returns the PlatformSensorProvider singleton.
   // Note: returns 'nullptr' if there is no available implementation for
   // the current platform.
   static PlatformSensorProvider* GetInstance();
+
+  // This method allows to set a provider for testing and therefore
+  // skip the default platform provider. This allows testing without
+  // relying on the platform provider.
+  static void SetProviderForTesting(PlatformSensorProvider* provider);
 
  protected:
   PlatformSensorProvider() = default;

@@ -39,17 +39,17 @@ scoped_refptr<TaskQueue> FakeRendererScheduler::TimerTaskRunner() {
 }
 
 scoped_refptr<TaskQueue> FakeRendererScheduler::NewLoadingTaskRunner(
-    const char* name) {
+    TaskQueue::QueueType queue_type) {
   return nullptr;
 }
 
 scoped_refptr<TaskQueue> FakeRendererScheduler::NewTimerTaskRunner(
-    const char* name) {
+    TaskQueue::QueueType queue_type) {
   return nullptr;
 }
 
 scoped_refptr<TaskQueue> FakeRendererScheduler::NewUnthrottledTaskRunner(
-    const char* name) {
+    TaskQueue::QueueType queue_type) {
   return nullptr;
 }
 
@@ -82,6 +82,8 @@ void FakeRendererScheduler::OnRendererBackgrounded() {}
 void FakeRendererScheduler::OnRendererForegrounded() {}
 
 void FakeRendererScheduler::SuspendRenderer() {}
+
+void FakeRendererScheduler::ResumeRenderer() {}
 
 void FakeRendererScheduler::AddPendingNavigation(
     blink::WebScheduler::NavigatingFrameType type) {}

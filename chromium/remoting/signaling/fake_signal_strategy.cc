@@ -13,6 +13,7 @@
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "remoting/signaling/jid_util.h"
 #include "third_party/webrtc/libjingle/xmllite/xmlelement.h"
 #include "third_party/webrtc/libjingle/xmpp/constants.h"
 
@@ -63,16 +64,21 @@ void FakeSignalStrategy::SetLocalJid(const std::string& jid) {
   jid_ = jid;
 }
 
+void FakeSignalStrategy::SimulateMessageReordering() {
+  DCHECK(CalledOnValidThread());
+  simulate_reorder_ = true;
+}
+
 void FakeSignalStrategy::Connect() {
   DCHECK(CalledOnValidThread());
-  FOR_EACH_OBSERVER(Listener, listeners_,
-                    OnSignalStrategyStateChange(CONNECTED));
+  for (auto& observer : listeners_)
+    observer.OnSignalStrategyStateChange(CONNECTED);
 }
 
 void FakeSignalStrategy::Disconnect() {
   DCHECK(CalledOnValidThread());
-  FOR_EACH_OBSERVER(Listener, listeners_,
-                    OnSignalStrategyStateChange(DISCONNECTED));
+  for (auto& observer : listeners_)
+    observer.OnSignalStrategyStateChange(DISCONNECTED);
 }
 
 SignalStrategy::State FakeSignalStrategy::GetState() const {
@@ -135,21 +141,39 @@ void FakeSignalStrategy::OnIncomingMessage(
     std::unique_ptr<buzz::XmlElement> stanza) {
   DCHECK(CalledOnValidThread());
 
+  if (!simulate_reorder_) {
+    NotifyListeners(std::move(stanza));
+    return;
+  }
+
+  // Simulate IQ messages re-ordering by swapping the delivery order of
+  // next pair of messages.
+  if (pending_stanza_) {
+    NotifyListeners(std::move(stanza));
+    NotifyListeners(std::move(pending_stanza_));
+    pending_stanza_.reset();
+  } else {
+    pending_stanza_ = std::move(stanza);
+  }
+}
+
+void FakeSignalStrategy::NotifyListeners(
+    std::unique_ptr<buzz::XmlElement> stanza) {
+  DCHECK(CalledOnValidThread());
+
   buzz::XmlElement* stanza_ptr = stanza.get();
   received_messages_.push_back(stanza.release());
 
   const std::string& to_field = stanza_ptr->Attr(buzz::QN_TO);
-  if (to_field != jid_) {
+  if (NormalizeJid(to_field) != NormalizeJid(jid_)) {
     LOG(WARNING) << "Dropping stanza that is addressed to " << to_field
                  << ". Local jid: " << jid_
                  << ". Message content: " << stanza_ptr->Str();
     return;
   }
 
-  base::ObserverListBase<Listener>::Iterator it(&listeners_);
-  Listener* listener;
-  while ((listener = it.GetNext()) != nullptr) {
-    if (listener->OnSignalStrategyIncomingStanza(stanza_ptr))
+  for (auto& listener : listeners_) {
+    if (listener.OnSignalStrategyIncomingStanza(stanza_ptr))
       break;
   }
 }

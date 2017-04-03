@@ -160,8 +160,7 @@ ResourceRequestInfoImpl::ResourceRequestInfoImpl(
     const std::string& original_headers,
     const scoped_refptr<ResourceRequestBodyImpl> body,
     bool initiated_in_secure_context)
-    : cross_site_handler_(NULL),
-      detachable_handler_(NULL),
+    : detachable_handler_(NULL),
       process_type_(process_type),
       child_id_(child_id),
       route_id_(route_id),
@@ -231,6 +230,10 @@ int ResourceRequestInfoImpl::GetChildID() const {
 
 int ResourceRequestInfoImpl::GetRouteID() const {
   return route_id_;
+}
+
+GlobalRequestID ResourceRequestInfoImpl::GetGlobalRequestID() const {
+  return GlobalRequestID(child_id_, request_id_);
 }
 
 int ResourceRequestInfoImpl::GetOriginPID() const {
@@ -323,10 +326,6 @@ void ResourceRequestInfoImpl::AssociateWithRequest(net::URLRequest* request) {
 
 int ResourceRequestInfoImpl::GetRequestID() const {
   return request_id_;
-}
-
-GlobalRequestID ResourceRequestInfoImpl::GetGlobalRequestID() const {
-  return GlobalRequestID(child_id_, request_id_);
 }
 
 GlobalRoutingID ResourceRequestInfoImpl::GetGlobalRoutingID() const {

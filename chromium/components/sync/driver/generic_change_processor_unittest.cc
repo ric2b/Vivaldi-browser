@@ -8,27 +8,28 @@
 
 #include <utility>
 
+#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
-#include "components/sync/api/attachments/attachment_id.h"
-#include "components/sync/api/data_type_error_handler_mock.h"
-#include "components/sync/api/fake_syncable_service.h"
-#include "components/sync/api/sync_change.h"
 #include "components/sync/base/model_type.h"
-#include "components/sync/core/attachments/attachment_service_impl.h"
-#include "components/sync/core/attachments/fake_attachment_downloader.h"
-#include "components/sync/core/attachments/fake_attachment_uploader.h"
-#include "components/sync/core/read_node.h"
-#include "components/sync/core/read_transaction.h"
-#include "components/sync/core/sync_encryption_handler.h"
-#include "components/sync/core/test/test_user_share.h"
-#include "components/sync/core/user_share.h"
-#include "components/sync/core/write_node.h"
-#include "components/sync/core/write_transaction.h"
 #include "components/sync/device_info/local_device_info_provider.h"
 #include "components/sync/driver/fake_sync_client.h"
 #include "components/sync/driver/sync_api_component_factory.h"
+#include "components/sync/engine/attachments/fake_attachment_downloader.h"
+#include "components/sync/engine/attachments/fake_attachment_uploader.h"
+#include "components/sync/engine/sync_encryption_handler.h"
+#include "components/sync/model/attachments/attachment_id.h"
+#include "components/sync/model/attachments/attachment_service.h"
+#include "components/sync/model/data_type_error_handler_mock.h"
+#include "components/sync/model/fake_syncable_service.h"
+#include "components/sync/model/sync_change.h"
+#include "components/sync/syncable/read_node.h"
+#include "components/sync/syncable/read_transaction.h"
+#include "components/sync/syncable/test_user_share.h"
+#include "components/sync/syncable/user_share.h"
+#include "components/sync/syncable/write_node.h"
+#include "components/sync/syncable/write_transaction.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -37,39 +38,26 @@ namespace syncer {
 namespace {
 
 // A mock that keeps track of attachments passed to UploadAttachments.
-class MockAttachmentService : public AttachmentServiceImpl {
+class MockAttachmentService : public AttachmentService {
  public:
-  MockAttachmentService(
-      std::unique_ptr<AttachmentStoreForSync> attachment_store);
-  ~MockAttachmentService() override;
-  void UploadAttachments(const AttachmentIdList& attachment_ids) override;
-  std::vector<AttachmentIdList>* attachment_id_lists();
+  MockAttachmentService() {}
+  ~MockAttachmentService() override {}
+
+  void GetOrDownloadAttachments(
+      const AttachmentIdList& attachment_ids,
+      const GetOrDownloadCallback& callback) override {}
+
+  void UploadAttachments(const AttachmentIdList& attachment_ids) override {
+    attachment_id_lists_.push_back(attachment_ids);
+  }
+
+  std::vector<AttachmentIdList>* attachment_id_lists() {
+    return &attachment_id_lists_;
+  }
 
  private:
   std::vector<AttachmentIdList> attachment_id_lists_;
 };
-
-MockAttachmentService::MockAttachmentService(
-    std::unique_ptr<AttachmentStoreForSync> attachment_store)
-    : AttachmentServiceImpl(
-          std::move(attachment_store),
-          std::unique_ptr<AttachmentUploader>(new FakeAttachmentUploader),
-          std::unique_ptr<AttachmentDownloader>(new FakeAttachmentDownloader),
-          NULL,
-          base::TimeDelta(),
-          base::TimeDelta()) {}
-
-MockAttachmentService::~MockAttachmentService() {}
-
-void MockAttachmentService::UploadAttachments(
-    const AttachmentIdList& attachment_ids) {
-  attachment_id_lists_.push_back(attachment_ids);
-  AttachmentServiceImpl::UploadAttachments(attachment_ids);
-}
-
-std::vector<AttachmentIdList>* MockAttachmentService::attachment_id_lists() {
-  return &attachment_id_lists_;
-}
 
 // MockSyncApiComponentFactory needed to initialize GenericChangeProcessor and
 // pass MockAttachmentService to it.
@@ -112,8 +100,7 @@ class MockSyncApiComponentFactory : public SyncApiComponentFactory {
       const std::string& store_birthday,
       ModelType model_type,
       AttachmentService::Delegate* delegate) override {
-    std::unique_ptr<MockAttachmentService> attachment_service(
-        new MockAttachmentService(std::move(attachment_store)));
+    auto attachment_service = base::MakeUnique<MockAttachmentService>();
     // GenericChangeProcessor takes ownership of the AttachmentService, but we
     // need to have a pointer to it so we can see that it was used properly.
     // Take a pointer and trust that GenericChangeProcessor does not prematurely
@@ -138,7 +125,7 @@ class SyncGenericChangeProcessorTest : public testing::Test {
 
   SyncGenericChangeProcessorTest()
       : syncable_service_ptr_factory_(&fake_syncable_service_),
-        mock_attachment_service_(NULL),
+        mock_attachment_service_(nullptr),
         sync_client_(&sync_factory_) {}
 
   void SetUp() override {
@@ -149,7 +136,7 @@ class SyncGenericChangeProcessorTest : public testing::Test {
   }
 
   void TearDown() override {
-    mock_attachment_service_ = NULL;
+    mock_attachment_service_ = nullptr;
     if (test_user_share_) {
       test_user_share_->TearDown();
     }
@@ -159,11 +146,12 @@ class SyncGenericChangeProcessorTest : public testing::Test {
   // model type |type|.
   void InitializeForType(ModelType type) {
     TearDown();
-    test_user_share_.reset(new TestUserShare);
+    test_user_share_ = base::MakeUnique<TestUserShare>();
     test_user_share_->SetUp();
-    sync_merge_result_.reset(new SyncMergeResult(type));
-    merge_result_ptr_factory_.reset(
-        new base::WeakPtrFactory<SyncMergeResult>(sync_merge_result_.get()));
+    sync_merge_result_ = base::MakeUnique<SyncMergeResult>(type);
+    merge_result_ptr_factory_ =
+        base::MakeUnique<base::WeakPtrFactory<SyncMergeResult>>(
+            sync_merge_result_.get());
 
     ModelTypeSet types = ProtocolTypes();
     for (ModelTypeSet::Iterator iter = types.First(); iter.Good(); iter.Inc()) {
@@ -176,11 +164,11 @@ class SyncGenericChangeProcessorTest : public testing::Test {
   void ConstructGenericChangeProcessor(ModelType type) {
     std::unique_ptr<AttachmentStore> attachment_store =
         AttachmentStore::CreateInMemoryStore();
-    change_processor_.reset(new GenericChangeProcessor(
+    change_processor_ = base::MakeUnique<GenericChangeProcessor>(
         type, base::MakeUnique<DataTypeErrorHandlerMock>(),
         syncable_service_ptr_factory_.GetWeakPtr(),
         merge_result_ptr_factory_->GetWeakPtr(), test_user_share_->user_share(),
-        &sync_client_, attachment_store->CreateAttachmentStoreForSync()));
+        &sync_client_, attachment_store->CreateAttachmentStoreForSync());
     mock_attachment_service_ = sync_factory_.GetMockAttachmentService();
   }
 

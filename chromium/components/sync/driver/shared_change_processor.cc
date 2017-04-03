@@ -7,34 +7,32 @@
 #include <utility>
 
 #include "base/threading/thread_task_runner_handle.h"
-#include "components/sync/api/sync_change.h"
-#include "components/sync/api/syncable_service.h"
 #include "components/sync/base/data_type_histogram.h"
 #include "components/sync/driver/generic_change_processor.h"
 #include "components/sync/driver/generic_change_processor_factory.h"
 #include "components/sync/driver/shared_change_processor_ref.h"
 #include "components/sync/driver/sync_client.h"
+#include "components/sync/model/sync_change.h"
+#include "components/sync/model/syncable_service.h"
 
 using base::AutoLock;
 
 namespace syncer {
-class AttachmentService;
-}  // namespace syncer
 
-namespace syncer {
+class AttachmentService;
 
 SharedChangeProcessor::SharedChangeProcessor(ModelType type)
     : disconnected_(false),
       type_(type),
       frontend_task_runner_(base::ThreadTaskRunnerHandle::Get()),
-      generic_change_processor_(NULL) {
+      generic_change_processor_(nullptr) {
   DCHECK_NE(type_, UNSPECIFIED);
 }
 
 SharedChangeProcessor::~SharedChangeProcessor() {
   // We can either be deleted when the DTC is destroyed (on UI
   // thread), or when the SyncableService stops syncing (datatype
-  // thread).  |generic_change_processor_|, if non-NULL, must be
+  // thread).  |generic_change_processor_|, if non-null, must be
   // deleted on |backend_loop_|.
   if (backend_task_runner_.get()) {
     if (backend_task_runner_->BelongsToCurrentThread()) {

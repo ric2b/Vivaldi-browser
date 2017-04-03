@@ -8,7 +8,16 @@ if (is_android) {
 }
 
 source_set("context") {
+  visibility = [
+    ":unit_tests",
+    "//blimp/client/app:session",  # TODO(nyquist): Remove this. See crbug/651964.
+    "//blimp/client/core",
+    "//blimp/engine:browser_tests",  # TODO(nyquist): Remove this. See crbug/653789.
+  ]
+
   sources = [
+    "assignment_fetcher.cc",
+    "assignment_fetcher.h",
     "blimp_client_context_impl.cc",
     "blimp_client_context_impl.h",
   ]
@@ -28,6 +37,7 @@ source_set("context") {
     "//blimp/client/core/geolocation",
     "//blimp/client/core/settings",
     "//blimp/client/core/switches",
+    "//components/prefs:prefs",
   ]
 
   if (is_android) {
@@ -71,6 +81,8 @@ source_set("dummy") {
 }
 
 source_set("unit_tests") {
+  visibility = [ "//blimp/client/core:unit_tests" ]
+
   testonly = true
 
   sources = [
@@ -79,15 +91,17 @@ source_set("unit_tests") {
 
   deps = [
     ":context",
+    "//blimp/client/core/settings",
     "//blimp/client/public:public_headers",
     "//blimp/client/test",
+    "//components/prefs:test_support",
     "//testing/gtest",
   ]
 }
 
 if (is_android) {
   android_library("context_java") {
-    visibility = [ "//blimp/client/*" ]
+    visibility = [ "//blimp/client/core/*" ]
 
     java_files = [ "android/java/src/org/chromium/blimp/core/BlimpClientContextImpl.java" ]
 
@@ -104,7 +118,7 @@ if (is_android) {
   }
 
   android_library("dummy_context_java") {
-    visibility = [ "//blimp/client/*" ]
+    visibility = [ "//blimp/client/core/*" ]
 
     java_files = [ "android/java/src/org/chromium/blimp/core/DummyBlimpClientContext.java" ]
 

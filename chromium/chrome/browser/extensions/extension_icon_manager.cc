@@ -7,7 +7,6 @@
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/stl_util.h"
-#include "extensions/api/extension_action_utils/extension_action_utils_api.h"
 #include "extensions/browser/image_loader.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/extension.h"
@@ -27,6 +26,8 @@
 #include "ui/gfx/vector_icons_public.h"
 #include "ui/native_theme/common_theme.h"
 #include "ui/native_theme/native_theme.h"
+
+#include "extensions/api/extension_action_utils/extension_action_utils_api.h"
 
 namespace {
 

@@ -172,6 +172,11 @@ class LayoutItem {
     m_layoutObject->computeLayerHitTestRects(layerRects);
   }
 
+  FloatPoint localToAbsolute(const FloatPoint& localPoint = FloatPoint(),
+                             MapCoordinatesFlags mode = 0) const {
+    return m_layoutObject->localToAbsolute(localPoint, mode);
+  }
+
   FloatQuad localToAbsoluteQuad(const FloatQuad& quad,
                                 MapCoordinatesFlags mode = 0) const {
     return m_layoutObject->localToAbsoluteQuad(quad, mode);
@@ -214,8 +219,8 @@ class LayoutItem {
     return m_layoutObject->resolveColor(colorProperty);
   }
 
-  const ObjectPaintProperties* objectPaintProperties() const {
-    return m_layoutObject->objectPaintProperties();
+  const ObjectPaintProperties* paintProperties() const {
+    return m_layoutObject->paintProperties();
   }
 
   void invalidatePaintRectangle(const LayoutRect& dirtyRect) const {

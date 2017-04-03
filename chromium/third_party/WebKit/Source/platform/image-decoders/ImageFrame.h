@@ -119,11 +119,10 @@ class PLATFORM_EXPORT ImageFrame final {
   }
 
   // Allocates space for the pixel data.  Must be called before any pixels
-  // are written.  Must only be called once.  Returns whether allocation
-  // succeeded.
-  bool setSizeAndColorProfile(int newWidth,
-                              int newHeight,
-                              const ICCProfile& newIccProfile);
+  // are written.  Must only be called once. The specified color space may
+  // be nullptr if and only if color correct rendering is enabled. Returns
+  // whether allocation succeeded.
+  bool setSizeAndColorSpace(int newWidth, int newHeight, sk_sp<SkColorSpace>);
 
   bool hasAlpha() const;
   const IntRect& originalFrameRect() const { return m_originalFrameRect; }
@@ -219,6 +218,36 @@ class PLATFORM_EXPORT ImageFrame final {
     *dest = SkPackARGB32NoCheck(a, r, g, b);
   }
 
+  // Blend the RGBA pixel provided by |r|, |g|, |b|, |a| over the pixel in
+  // |dest|, without premultiplication, and overwrite |dest| with the result.
+  static inline void blendRGBARaw(PixelData* dest,
+                                  unsigned r,
+                                  unsigned g,
+                                  unsigned b,
+                                  unsigned a) {
+    blendSrcOverDstRaw(dest, SkPackARGB32NoCheck(a, r, g, b));
+  }
+
+  // Blend the pixel, without premultiplication, in |src| over |dst| and
+  // overwrite |src| with the result.
+  static void blendSrcOverDstRaw(PixelData* src, PixelData dst);
+
+  // Blend the RGBA pixel provided by |r|, |g|, |b|, |a| over the pixel in
+  // |dest| and overwrite |dest| with the result.
+  static inline void blendRGBAPremultiplied(PixelData* dest,
+                                            unsigned r,
+                                            unsigned g,
+                                            unsigned b,
+                                            unsigned a) {
+    blendSrcOverDstPremultiplied(dest, SkPackARGB32NoCheck(a, r, g, b));
+  }
+
+  // Blend the pixel in |src| over |dst| and overwrite |src| with the result.
+  static inline void blendSrcOverDstPremultiplied(PixelData* src,
+                                                  PixelData dst) {
+    *src = SkPMSrcOver(*src, dst);
+  }
+
   // Notifies the SkBitmap if any pixels changed and resets the flag.
   inline void notifyBitmapIfPixelsChanged() {
     if (m_pixelsChanged)
@@ -246,6 +275,10 @@ class PLATFORM_EXPORT ImageFrame final {
   bool m_premultiplyAlpha;
   // True if the pixels changed, but the bitmap has not yet been notified.
   bool m_pixelsChanged;
+
+  // The color space of the image. This will never be null. If a color profile
+  // was not embedded in the image, this will be set to sRGB.
+  sk_sp<SkColorSpace> m_colorSpace;
 
   // The frame that must be decoded before this frame can be decoded.
   // WTF::kNotFound if this frame doesn't require any previous frame.

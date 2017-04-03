@@ -25,8 +25,8 @@
 #include "components/invalidation/public/invalidation_handler.h"
 #include "components/invalidation/public/invalidation_util.h"
 #include "components/invalidation/public/object_id_invalidation_map.h"
+#include "components/sync/base/invalidation_helper.h"
 #include "components/sync/base/model_type.h"
-#include "components/sync/driver/invalidation_helper.h"
 #include "components/sync/tools/null_invalidation_state_tracker.h"
 #include "jingle/notifier/base/notification_method.h"
 #include "jingle/notifier/base/notifier_options.h"
@@ -82,7 +82,7 @@ class MyTestURLRequestContext : public net::TestURLRequestContext {
  public:
   MyTestURLRequestContext() : TestURLRequestContext(true) {
     context_storage_.set_host_resolver(
-        net::HostResolver::CreateDefaultResolver(NULL));
+        net::HostResolver::CreateDefaultResolver(nullptr));
     context_storage_.set_transport_security_state(
         base::MakeUnique<net::TransportSecurityState>());
     Init();
@@ -101,7 +101,7 @@ class MyTestURLRequestContextGetter : public net::TestURLRequestContextGetter {
     // Construct |context_| lazily so it gets constructed on the right
     // thread (the IO thread).
     if (!context_)
-      context_.reset(new MyTestURLRequestContext());
+      context_ = base::MakeUnique<MyTestURLRequestContext>();
     return context_.get();
   }
 

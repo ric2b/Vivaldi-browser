@@ -32,6 +32,7 @@
 #include "content/public/browser/resource_request_info.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/origin_util.h"
+#include "extensions/features/features.h"
 #include "net/base/auth.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/load_flags.h"
@@ -41,10 +42,15 @@
 #include "net/url_request/url_request_context.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/text_elider.h"
+#include "url/origin.h"
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "components/guest_view/browser/guest_view_base.h"
 #include "extensions/browser/view_type_utils.h"
+#endif
+
+#if !defined(OS_ANDROID)
+#include "chrome/browser/ui/blocked_content/app_modal_dialog_helper.h"
 #endif
 
 using autofill::PasswordForm;
@@ -111,14 +117,14 @@ LoginHandler::LoginHandler(net::AuthChallengeInfo* auth_info,
 
   AddRef();  // matched by LoginHandler::ReleaseSoon().
 
-  BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE,
-      base::Bind(&LoginHandler::AddObservers, this));
-
   const content::ResourceRequestInfo* info =
       ResourceRequestInfo::ForRequest(request);
   DCHECK(info);
   web_contents_getter_ = info->GetWebContentsGetterForRequest();
+
+  BrowserThread::PostTask(
+      BrowserThread::UI, FROM_HERE,
+      base::Bind(&LoginHandler::AddObservers, this));
 }
 
 void LoginHandler::OnRequestCancelled() {
@@ -331,6 +337,12 @@ void LoginHandler::AddObservers() {
                   content::NotificationService::AllBrowserContextsAndSources());
   registrar_->Add(this, chrome::NOTIFICATION_AUTH_CANCELLED,
                   content::NotificationService::AllBrowserContextsAndSources());
+
+#if !defined(OS_ANDROID)
+  WebContents* requesting_contents = GetWebContentsForLogin();
+  if (requesting_contents)
+    dialog_helper_.reset(new AppModalDialogHelper(requesting_contents));
+#endif
 }
 
 void LoginHandler::RemoveObservers() {
@@ -438,6 +450,9 @@ void LoginHandler::CloseContentsDeferred() {
   CloseDialog();
   if (interstitial_delegate_)
     interstitial_delegate_->Proceed();
+#if !defined(OS_ANDROID)
+  dialog_helper_.reset();
+#endif
 }
 
 // static
@@ -449,7 +464,7 @@ std::string LoginHandler::GetSignonRealm(
     // Historically we've been storing the signon realm for proxies using
     // net::HostPortPair::ToString().
     net::HostPortPair host_port_pair =
-        net::HostPortPair::FromURL(GURL(auth_info.challenger.Serialize()));
+        net::HostPortPair::FromURL(auth_info.challenger.GetURL());
     signon_realm = host_port_pair.ToString();
     signon_realm.append("/");
   } else {
@@ -474,14 +489,9 @@ PasswordForm LoginHandler::MakeInputForPasswordManager(
   } else {
     dialog_form.scheme = PasswordForm::SCHEME_OTHER;
   }
-  if (auth_info.is_proxy) {
-    dialog_form.origin = GURL(auth_info.challenger.Serialize());
-  } else if (!auth_info.challenger.IsSameOriginWith(url::Origin(request_url))) {
-    dialog_form.origin = GURL();
-    NOTREACHED();  // crbug.com/32718
-  } else {
-    dialog_form.origin = GURL(auth_info.challenger.Serialize());
-  }
+  dialog_form.origin = auth_info.challenger.GetURL();
+  DCHECK(auth_info.is_proxy ||
+         auth_info.challenger.IsSameOriginWith(url::Origin(request_url)));
   dialog_form.signon_realm = GetSignonRealm(dialog_form.origin, auth_info);
   return dialog_form;
 }
@@ -498,7 +508,7 @@ void LoginHandler::GetDialogStrings(const GURL& request_url,
         IDS_LOGIN_DIALOG_PROXY_AUTHORITY,
         url_formatter::FormatOriginForSecurityDisplay(
             auth_info.challenger, url_formatter::SchemeDisplay::SHOW));
-    authority_url = GURL(auth_info.challenger.Serialize());
+    authority_url = auth_info.challenger.GetURL();
   } else {
     *authority = l10n_util::GetStringFUTF16(
         IDS_LOGIN_DIALOG_AUTHORITY,
@@ -539,7 +549,7 @@ void LoginHandler::ShowLoginPrompt(const GURL& request_url,
       handler->GetPasswordManagerForLogin();
 
   if (!password_manager) {
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
     // A WebContents in a <webview> (a GuestView type) does not have a password
     // manager, but still needs to be able to show login prompts.
     const auto* guest =

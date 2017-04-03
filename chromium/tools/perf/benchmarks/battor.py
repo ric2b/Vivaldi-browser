@@ -18,13 +18,11 @@ class _BattOrBenchmark(perf_benchmark.PerfBenchmark):
         filter_string='toplevel')
     options = timeline_based_measurement.Options(category_filter)
     options.config.chrome_trace_config.category_filter.AddFilterString('rail')
-    # TODO(charliea): Reenable the CPU tracing agent once it no longer causes
-    # indefinite hangs on Windows.
-    # https://crbug.com/647443
-    options.config.enable_battor_trace = True
-    options.config.enable_chrome_trace = True
     options.config.enable_atrace_trace = True
     options.config.atrace_config.categories = ['sched']
+    options.config.enable_battor_trace = True
+    options.config.enable_chrome_trace = True
+    options.config.enable_cpu_trace = True
     options.SetTimelineBasedMetrics(
         ['powerMetric', 'clockSyncLatencyMetric', 'cpuTimeMetric'])
     return options
@@ -57,47 +55,6 @@ class BattOrToughVideoCases(_BattOrBenchmark):
   @classmethod
   def Name(cls):
     return 'battor.tough_video_cases'
-
-
-# TODO(rnephew): Add a version that scrolls.
-class BattOrSystemHealthLoadingDesktop(_BattOrBenchmark):
-  """Desktop Chrome Memory System Health Benchmark."""
-
-  def CreateStorySet(self, options):
-    return page_sets.SystemHealthStorySet(platform='desktop', case='load')
-
-  @classmethod
-  def ShouldDisable(cls, possible_browser):
-    return (
-        super(BattOrSystemHealthLoadingDesktop, cls).ShouldDisable(
-            possible_browser) or
-        possible_browser.platform.GetDeviceTypeName() != 'Desktop')
-
-  @classmethod
-  def Name(cls):
-    return 'battor.system_health_loading_desktop'
-
-
-class BattOrSystemHealthLoadingMobile(_BattOrBenchmark):
-  """Mobile Chrome Memory System Health Benchmark."""
-
-  def CreateStorySet(self, options):
-    return page_sets.SystemHealthStorySet(platform='mobile', case='load')
-
-  @classmethod
-  def ShouldDisable(cls, possible_browser):
-    if possible_browser.platform.GetDeviceTypeName() == 'Desktop':
-      return True
-    if (possible_browser.browser_type == 'reference' and
-        possible_browser.platform.GetDeviceTypeName() == 'Nexus 5X'):
-      return True
-
-    return super(BattOrSystemHealthLoadingMobile, cls).ShouldDisable(
-        possible_browser)
-
-  @classmethod
-  def Name(cls):
-    return 'battor.system_health_loading_mobile'
 
 
 class BattOrPowerCases(_BattOrBenchmark):

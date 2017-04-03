@@ -13,6 +13,39 @@
 namespace blink {
 namespace scheduler {
 
+// static
+const char* TaskQueue::NameForQueueType(TaskQueue::QueueType queue_type) {
+  switch (queue_type) {
+    case TaskQueue::QueueType::CONTROL:
+      return "control_tq";
+    case TaskQueue::QueueType::DEFAULT:
+      return "default_tq";
+    case TaskQueue::QueueType::DEFAULT_LOADING:
+      return "default_loading_tq";
+    case TaskQueue::QueueType::DEFAULT_TIMER:
+      return "default_timer_tq";
+    case TaskQueue::QueueType::UNTHROTTLED:
+      return "unthrottled_tq";
+    case TaskQueue::QueueType::FRAME_LOADING:
+      return "frame_loading_tq";
+    case TaskQueue::QueueType::FRAME_TIMER:
+      return "frame_timer_tq";
+    case TaskQueue::QueueType::FRAME_UNTHROTTLED:
+      return "frame_unthrottled_tq";
+    case TaskQueue::QueueType::COMPOSITOR:
+      return "compositor_tq";
+    case TaskQueue::QueueType::IDLE:
+      return "idle_tq";
+    case TaskQueue::QueueType::TEST:
+      return "test_tq";
+    case TaskQueue::QueueType::COUNT:
+      DCHECK(false);
+      return nullptr;
+  }
+  DCHECK(false);
+  return nullptr;
+}
+
 namespace internal {
 
 TaskQueueImpl::TaskQueueImpl(
@@ -23,7 +56,8 @@ TaskQueueImpl::TaskQueueImpl(
     const char* disabled_by_default_verbose_tracing_category)
     : thread_id_(base::PlatformThread::CurrentId()),
       any_thread_(task_queue_manager, time_domain),
-      name_(spec.name),
+      type_(spec.type),
+      name_(NameForQueueType(spec.type)),
       disabled_by_default_tracing_category_(
           disabled_by_default_tracing_category),
       disabled_by_default_verbose_tracing_category_(
@@ -321,6 +355,17 @@ bool TaskQueueImpl::IsEmpty() const {
   return any_thread().immediate_incoming_queue.empty();
 }
 
+size_t TaskQueueImpl::GetNumberOfPendingTasks() const {
+  size_t task_count = 0;
+  task_count += main_thread_only().delayed_work_queue->Size();
+  task_count += main_thread_only().delayed_incoming_queue.size();
+  task_count += main_thread_only().immediate_work_queue->Size();
+
+  base::AutoLock lock(any_thread_lock_);
+  task_count += any_thread().immediate_incoming_queue.size();
+  return task_count;
+}
+
 bool TaskQueueImpl::HasPendingImmediateWork() const {
   // Any work queue tasks count as immediate work.
   if (!main_thread_only().delayed_work_queue->Empty() ||
@@ -417,6 +462,10 @@ const char* TaskQueueImpl::GetName() const {
   return name_;
 }
 
+TaskQueue::QueueType TaskQueueImpl::GetQueueType() const {
+  return type_;
+}
+
 void TaskQueueImpl::SetQueuePriority(QueuePriority priority) {
   if (!main_thread_only().task_queue_manager || priority == GetQueuePriority())
     return;
@@ -507,17 +556,15 @@ void TaskQueueImpl::NotifyWillProcessTask(
   DCHECK(should_notify_observers_);
   if (main_thread_only().blame_context)
     main_thread_only().blame_context->Enter();
-  FOR_EACH_OBSERVER(base::MessageLoop::TaskObserver,
-                    main_thread_only().task_observers,
-                    WillProcessTask(pending_task));
+  for (auto& observer : main_thread_only().task_observers)
+    observer.WillProcessTask(pending_task);
 }
 
 void TaskQueueImpl::NotifyDidProcessTask(
     const base::PendingTask& pending_task) {
   DCHECK(should_notify_observers_);
-  FOR_EACH_OBSERVER(base::MessageLoop::TaskObserver,
-                    main_thread_only().task_observers,
-                    DidProcessTask(pending_task));
+  for (auto& observer : main_thread_only().task_observers)
+    observer.DidProcessTask(pending_task);
   if (main_thread_only().blame_context)
     main_thread_only().blame_context->Leave();
 }
@@ -558,13 +605,15 @@ void TaskQueueImpl::SetBlameContext(
   main_thread_only().blame_context = blame_context;
 }
 
-void TaskQueueImpl::InsertFence() {
+void TaskQueueImpl::InsertFence(TaskQueue::InsertFencePosition position) {
   if (!main_thread_only().task_queue_manager)
     return;
 
   EnqueueOrder previous_fence = main_thread_only().current_fence;
   main_thread_only().current_fence =
-      main_thread_only().task_queue_manager->GetNextSequenceNumber();
+      position == TaskQueue::InsertFencePosition::NOW
+          ? main_thread_only().task_queue_manager->GetNextSequenceNumber()
+          : static_cast<EnqueueOrder>(EnqueueOrderValues::BLOCKING_FENCE);
 
   // Tasks posted after this point will have a strictly higher enqueue order
   // and will be blocked from running.
@@ -573,7 +622,8 @@ void TaskQueueImpl::InsertFence() {
   task_unblocked |= main_thread_only().delayed_work_queue->InsertFence(
       main_thread_only().current_fence);
 
-  if (!task_unblocked && previous_fence) {
+  if (!task_unblocked && previous_fence &&
+      previous_fence < main_thread_only().current_fence) {
     base::AutoLock lock(any_thread_lock_);
     if (!any_thread().immediate_incoming_queue.empty() &&
         any_thread().immediate_incoming_queue.front().enqueue_order() >
@@ -646,6 +696,10 @@ bool TaskQueueImpl::BlockedByFenceLocked() const {
 
   return any_thread().immediate_incoming_queue.front().enqueue_order() >
          main_thread_only().current_fence;
+}
+
+EnqueueOrder TaskQueueImpl::GetFenceForTest() const {
+  return main_thread_only().current_fence;
 }
 
 // static

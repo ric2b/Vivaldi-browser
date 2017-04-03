@@ -57,15 +57,13 @@ class USER_MANAGER_EXPORT UserManagerBase : public UserManager {
                     bool browser_restart) override;
   void SwitchActiveUser(const AccountId& account_id) override;
   void SwitchToLastActiveUser() override;
-  void SessionStarted() override;
+  void OnSessionStarted() override;
   void RemoveUser(const AccountId& account_id,
                   RemoveUserDelegate* delegate) override;
   void RemoveUserFromList(const AccountId& account_id) override;
   bool IsKnownUser(const AccountId& account_id) const override;
   const User* FindUser(const AccountId& account_id) const override;
   User* FindUserAndModify(const AccountId& account_id) override;
-  const User* GetLoggedInUser() const override;
-  User* GetLoggedInUser() override;
   const User* GetActiveUser() const override;
   User* GetActiveUser() override;
   const User* GetPrimaryUser() const override;
@@ -95,8 +93,8 @@ class USER_MANAGER_EXPORT UserManagerBase : public UserManager {
   bool IsLoggedInAsGuest() const override;
   bool IsLoggedInAsSupervisedUser() const override;
   bool IsLoggedInAsKioskApp() const override;
+  bool IsLoggedInAsArcKioskApp() const override;
   bool IsLoggedInAsStub() const override;
-  bool IsSessionStarted() const override;
   bool IsUserNonCryptohomeDataEphemeral(
       const AccountId& account_id) const override;
   bool IsUserCryptohomeDataEphemeral(
@@ -224,6 +222,9 @@ class USER_MANAGER_EXPORT UserManagerBase : public UserManager {
   // Indicates that a kiosk app robot just logged in.
   virtual void KioskAppLoggedIn(User* user) = 0;
 
+  // Indicates that an ARC kiosk app robot just logged in.
+  virtual void ArcKioskAppLoggedIn(User* user) = 0;
+
   // Indicates that a user just logged into a public session.
   virtual void PublicAccountUserLoggedIn(User* user) = 0;
 
@@ -335,9 +336,6 @@ class USER_MANAGER_EXPORT UserManagerBase : public UserManager {
 
   // Indicates stage of loading user from prefs.
   UserLoadStage user_loading_stage_ = STAGE_NOT_LOADED;
-
-  // True if SessionStarted() has been called.
-  bool session_started_ = false;
 
   // Cached flag of whether currently logged-in user is owner or not.
   // May be accessed on different threads, requires locking.

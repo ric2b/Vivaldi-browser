@@ -18,7 +18,6 @@
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_source.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/browser/web_contents_delegate.h"
 #include "content/public/common/frame_navigate_params.h"
 #include "content/public/test/web_contents_tester.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -31,6 +30,8 @@
 #include "chrome/browser/permissions/permission_request_manager.h"
 #include "chrome/browser/ui/website_settings/mock_permission_prompt_factory.h"
 #endif
+
+#include "content/public/browser/web_contents_delegate.h"
 
 using content::WebContents;
 
@@ -361,7 +362,7 @@ TEST_F(DownloadRequestLimiterTest, DownloadRequestLimiter_RendererInitiated) {
   // Set up a renderer-initiated navigation to the same host.
   content::RenderFrameHostTester* rfh_tester =
       content::RenderFrameHostTester::For(web_contents()->GetMainFrame());
-  rfh_tester->NavigateAndCommitRendererInitiated(1, true,
+  rfh_tester->NavigateAndCommitRendererInitiated(true,
                                                  GURL("http://foo.com/bar2"));
   LoadCompleted();
 
@@ -370,7 +371,7 @@ TEST_F(DownloadRequestLimiterTest, DownloadRequestLimiter_RendererInitiated) {
             download_request_limiter_->GetDownloadStatus(web_contents()));
 
   // Renderer-initiated nav to a different host shouldn't reset the state.
-  rfh_tester->NavigateAndCommitRendererInitiated(2, true,
+  rfh_tester->NavigateAndCommitRendererInitiated(true,
                                                  GURL("http://fooey.com/bar"));
   LoadCompleted();
   ASSERT_EQ(DownloadRequestLimiter::PROMPT_BEFORE_DOWNLOAD,
@@ -398,12 +399,12 @@ TEST_F(DownloadRequestLimiterTest, DownloadRequestLimiter_RendererInitiated) {
   // The state should not be reset on a renderer-initiated load to either the
   // same host or a different host, in either the main frame or the subframe.
   rfh_tester->NavigateAndCommitRendererInitiated(
-      3, true, GURL("http://fooeybar.com/bar"));
+      true, GURL("http://fooeybar.com/bar"));
   LoadCompleted();
   ASSERT_EQ(DownloadRequestLimiter::DOWNLOADS_NOT_ALLOWED,
             download_request_limiter_->GetDownloadStatus(web_contents()));
 
-  rfh_tester->NavigateAndCommitRendererInitiated(4, true,
+  rfh_tester->NavigateAndCommitRendererInitiated(true,
                                                  GURL("http://foo.com/bar"));
   LoadCompleted();
   ASSERT_EQ(DownloadRequestLimiter::DOWNLOADS_NOT_ALLOWED,
@@ -444,7 +445,7 @@ TEST_F(DownloadRequestLimiterTest, DownloadRequestLimiter_RendererInitiated) {
   // the same host.
   rfh_tester =
       content::RenderFrameHostTester::For(web_contents()->GetMainFrame());
-  rfh_tester->NavigateAndCommitRendererInitiated(5, true,
+  rfh_tester->NavigateAndCommitRendererInitiated(true,
                                                  GURL("http://foobar.com/bar"));
   LoadCompleted();
   ASSERT_EQ(DownloadRequestLimiter::ALLOW_ALL_DOWNLOADS,
@@ -465,7 +466,7 @@ TEST_F(DownloadRequestLimiterTest, DownloadRequestLimiter_RendererInitiated) {
 
   // But a pending load to a different host in the main frame should reset the
   // state.
-  rfh_tester->NavigateAndCommitRendererInitiated(6, true,
+  rfh_tester->NavigateAndCommitRendererInitiated(true,
                                                  GURL("http://foo.com"));
   LoadCompleted();
   ASSERT_EQ(DownloadRequestLimiter::ALLOW_ONE_DOWNLOAD,
@@ -497,8 +498,8 @@ TEST_F(DownloadRequestLimiterTest, DownloadRequestLimiter_ResetOnUserGesture) {
   ASSERT_EQ(DownloadRequestLimiter::PROMPT_BEFORE_DOWNLOAD,
             download_request_limiter_->GetDownloadStatus(web_contents()));
 
-  // Do a user gesture with gesture tap, which should reset back to allow one.
-  OnUserInteraction(blink::WebInputEvent::GestureTapDown);
+  // Do a touch event, which should reset back to allow one.
+  OnUserInteraction(blink::WebInputEvent::TouchStart);
   ASSERT_EQ(DownloadRequestLimiter::ALLOW_ONE_DOWNLOAD,
             download_request_limiter_->GetDownloadStatus(web_contents()));
 
@@ -612,7 +613,7 @@ TEST_F(DownloadRequestLimiterTest, DownloadRequestLimiter_RawWebContents) {
   EXPECT_EQ(DownloadRequestLimiter::PROMPT_BEFORE_DOWNLOAD,
             download_request_limiter_->GetDownloadStatus(web_contents.get()));
   OnUserInteractionFor(web_contents.get(),
-                       blink::WebInputEvent::GestureTapDown);
+                       blink::WebInputEvent::TouchStart);
   EXPECT_EQ(DownloadRequestLimiter::ALLOW_ONE_DOWNLOAD,
             download_request_limiter_->GetDownloadStatus(web_contents.get()));
   CanDownloadFor(web_contents.get());

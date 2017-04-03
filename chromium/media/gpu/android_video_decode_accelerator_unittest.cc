@@ -70,7 +70,7 @@ class AndroidVideoDecodeAcceleratorTest : public testing::Test {
     ASSERT_TRUE(gl::init::InitializeGLOneOff());
     surface_ = gl::init::CreateOffscreenGLSurface(gfx::Size(1024, 1024));
     context_ = gl::init::CreateGLContext(nullptr, surface_.get(),
-                                         gl::PreferDiscreteGpu);
+                                         gl::GLContextAttribs());
     context_->MakeCurrent(surface_.get());
 
     // Start a message loop because AVDA starts a timer task.
@@ -107,12 +107,8 @@ TEST_F(AndroidVideoDecodeAcceleratorTest, ConfigureUnsupportedCodec) {
 TEST_F(AndroidVideoDecodeAcceleratorTest, ConfigureSupportedCodec) {
   if (!MediaCodecUtil::IsMediaCodecAvailable())
     return;
-  ASSERT_TRUE(Initialize(VP8PROFILE_ANY));
+  // H264 is always supported by AVDA.
+  ASSERT_TRUE(Initialize(H264PROFILE_BASELINE));
 }
 
 }  // namespace media
-
-int main(int argc, char** argv) {
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

@@ -30,12 +30,11 @@
 #include "base/task_scheduler/post_task.h"
 #include "base/task_scheduler/task_scheduler.h"
 #include "base/threading/platform_thread.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 #include "base/threading/simple_thread.h"
 #include "base/threading/thread_local.h"
 #include "base/threading/thread_restrictions.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
-#include "base/trace_event/heap_profiler.h"
 #include "base/trace_event/trace_event.h"
 #include "base/tracked_objects.h"
 #include "base/tracking_info.h"
@@ -849,9 +848,9 @@ SequencedWorkerPool::Inner::GetTaskSchedulerTaskRunner(
   // same shutdown behavior.
 
   if (!task_runner) {
-    ExecutionMode execution_mode =
-        sequence_token_id ? ExecutionMode::SEQUENCED : ExecutionMode::PARALLEL;
-    task_runner = CreateTaskRunnerWithTraits(traits, execution_mode);
+    task_runner = sequence_token_id
+                      ? CreateSequencedTaskRunnerWithTraits(traits)
+                      : CreateTaskRunnerWithTraits(traits);
   }
 
   return task_runner;
@@ -863,8 +862,7 @@ bool SequencedWorkerPool::Inner::RunsTasksOnCurrentThread() const {
       AllPoolsState::REDIRECTED_TO_TASK_SCHEDULER) {
     if (!runs_tasks_on_verifier_) {
       runs_tasks_on_verifier_ = CreateTaskRunnerWithTraits(
-          TaskTraits().WithFileIO().WithPriority(task_priority_),
-          ExecutionMode::PARALLEL);
+          TaskTraits().WithFileIO().WithPriority(task_priority_));
     }
     return runs_tasks_on_verifier_->RunsTasksOnCurrentThread();
   } else {
@@ -992,14 +990,11 @@ void SequencedWorkerPool::Inner::ThreadLoop(Worker* this_worker) {
       GetWorkStatus status =
           GetWork(&task, &wait_time, &delete_these_outside_lock);
       if (status == GET_WORK_FOUND) {
-        TRACE_EVENT_WITH_FLOW2(TRACE_DISABLED_BY_DEFAULT("toplevel.flow"),
-            "SequencedWorkerPool::Inner::ThreadLoop",
+        TRACE_TASK_EXECUTION("SequencedWorkerPool::Inner::ThreadLoop", task);
+        TRACE_EVENT_WITH_FLOW0(TRACE_DISABLED_BY_DEFAULT("toplevel.flow"),
+            "SequencedWorkerPool::Inner::PostTask",
             TRACE_ID_MANGLE(GetTaskTraceID(task, static_cast<void*>(this))),
-            TRACE_EVENT_FLAG_FLOW_IN,
-            "src_file", task.posted_from.file_name(),
-            "src_func", task.posted_from.function_name());
-        TRACE_HEAP_PROFILER_API_SCOPED_TASK_EXECUTION task_event(
-            task.posted_from.file_name());
+            TRACE_EVENT_FLAG_FLOW_IN);
         int new_thread_id = WillRunWorkerTask(task);
         {
           AutoUnlock unlock(lock_);
@@ -1467,7 +1462,7 @@ void SequencedWorkerPool::ResetRedirectToTaskSchedulerForProcessForTesting() {
 SequencedWorkerPool::SequencedWorkerPool(size_t max_threads,
                                          const std::string& thread_name_prefix,
                                          base::TaskPriority task_priority)
-    : constructor_task_runner_(ThreadTaskRunnerHandle::Get()),
+    : constructor_task_runner_(SequencedTaskRunnerHandle::Get()),
       inner_(new Inner(this,
                        max_threads,
                        thread_name_prefix,
@@ -1478,7 +1473,7 @@ SequencedWorkerPool::SequencedWorkerPool(size_t max_threads,
                                          const std::string& thread_name_prefix,
                                          base::TaskPriority task_priority,
                                          TestingObserver* observer)
-    : constructor_task_runner_(ThreadTaskRunnerHandle::Get()),
+    : constructor_task_runner_(SequencedTaskRunnerHandle::Get()),
       inner_(new Inner(this,
                        max_threads,
                        thread_name_prefix,
@@ -1614,7 +1609,7 @@ void SequencedWorkerPool::SignalHasWorkForTesting() {
 }
 
 void SequencedWorkerPool::Shutdown(int max_new_blocking_tasks_after_shutdown) {
-  DCHECK(constructor_task_runner_->BelongsToCurrentThread());
+  DCHECK(constructor_task_runner_->RunsTasksOnCurrentThread());
   inner_->Shutdown(max_new_blocking_tasks_after_shutdown);
 }
 

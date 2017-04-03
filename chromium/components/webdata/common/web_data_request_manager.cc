@@ -30,9 +30,6 @@ WebDataRequest::~WebDataRequest() {
   if (manager_) {
     manager_->CancelRequest(handle_);
   }
-  if (result_.get()) {
-    result_->Destroy();
-  }
 }
 
 WebDataServiceBase::Handle WebDataRequest::GetHandle() const {
@@ -84,10 +81,8 @@ WebDataRequestManager::WebDataRequestManager()
 
 WebDataRequestManager::~WebDataRequestManager() {
   base::AutoLock l(pending_lock_);
-  for (RequestMap::iterator i = pending_requests_.begin();
-       i != pending_requests_.end(); ++i) {
+  for (auto i = pending_requests_.begin(); i != pending_requests_.end(); ++i)
     i->second->Cancel();
-  }
   pending_requests_.clear();
 }
 
@@ -103,11 +98,8 @@ int WebDataRequestManager::GetNextRequestHandle() {
 
 void WebDataRequestManager::CancelRequest(WebDataServiceBase::Handle h) {
   base::AutoLock l(pending_lock_);
-  RequestMap::iterator i = pending_requests_.find(h);
-  if (i == pending_requests_.end()) {
-    NOTREACHED() << "Canceling a nonexistent web data service request";
-    return;
-  }
+  auto i = pending_requests_.find(h);
+  DCHECK(i != pending_requests_.end());
   i->second->Cancel();
   pending_requests_.erase(i);
 }
@@ -133,11 +125,8 @@ void WebDataRequestManager::RequestCompletedOnThread(
           "422460 WebDataRequestManager::RequestCompletedOnThread::UpdateMap"));
   {
     base::AutoLock l(pending_lock_);
-    RequestMap::iterator i = pending_requests_.find(request->GetHandle());
-    if (i == pending_requests_.end()) {
-      NOTREACHED() << "Request completed called for an unknown request";
-      return;
-    }
+    auto i = pending_requests_.find(request->GetHandle());
+    DCHECK(i != pending_requests_.end());
 
     // Take ownership of the request object and remove it from the map.
     pending_requests_.erase(i);
@@ -155,8 +144,8 @@ void WebDataRequestManager::RequestCompletedOnThread(
     WebDataServiceConsumer* consumer = request->GetConsumer();
     request->OnComplete();
     if (consumer) {
-      std::unique_ptr<WDTypedResult> r = request->GetResult();
-      consumer->OnWebDataServiceRequestDone(request->GetHandle(), r.get());
+      consumer->OnWebDataServiceRequestDone(request->GetHandle(),
+                                            request->GetResult());
     }
   }
 

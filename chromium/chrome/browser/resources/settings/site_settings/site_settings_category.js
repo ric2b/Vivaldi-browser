@@ -140,8 +140,7 @@ Polymer({
     settings.SiteSettingsPrefsBrowserProxyImpl.getInstance()
         .getDefaultValueForContentType(
             this.category).then(function(setting) {
-              this.categoryEnabled =
-                  this.computeIsSettingEnabled(this.category, setting);
+              this.categoryEnabled = this.computeIsSettingEnabled(setting);
 
               // Flash only shows ALLOW or BLOCK descriptions on the slider.
               var sliderSetting = setting;
@@ -191,12 +190,6 @@ Polymer({
    */
   isPluginCategory_: function(category) {
     return category == settings.ContentSettingsTypes.PLUGINS;
-  },
-
-  /** @private */
-  onLearnMoreClicked_: function() {
-    window.open(
-        'https://support.google.com/chrome/?p=settings_manage_exceptions');
   },
 
   /** @private */

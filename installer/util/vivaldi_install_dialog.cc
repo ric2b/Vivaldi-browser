@@ -36,8 +36,8 @@ std::map<const std::wstring, const std::wstring>  kLanguages = {
   { L"be",    L"Belarusian" },
   { L"bg",    L"Bulgarian" },
   { L"ca",    L"Catalan" },
-  { L"zh_CN", L"Chinese (China)" },
-  { L"zh_TW", L"Chinese (Taiwan)" },
+  { L"zh_CN", L"Chinese (Simplified)" },
+  { L"zh_TW", L"Chinese (Traditional)" },
   { L"hr",    L"Croatian" },
   { L"cs",    L"Czech" },
   { L"da",    L"Danish" },
@@ -234,13 +234,18 @@ bool VivaldiInstallDialog::GetLastInstallValues() {
   base::win::RegKey key(HKEY_CURRENT_USER, kVivaldiKey, KEY_QUERY_VALUE);
   if (key.Valid()) {
     std::wstring str_dest_folder;
-    key.ReadValue(kVivaldiInstallerDestinationFolder, &str_dest_folder);
-    destination_folder_ = base::FilePath(str_dest_folder);
+    if (key.ReadValue(kVivaldiInstallerDestinationFolder, &str_dest_folder)
+        == ERROR_SUCCESS) {
+      destination_folder_ = base::FilePath(str_dest_folder);
+    }
+
     key.ReadValueDW(kVivaldiInstallerInstallType, (DWORD*)&install_type_);
     key.ReadValueDW(kVivaldiInstallerDefaultBrowser,
         (DWORD*)&set_as_default_browser_);
+
     if (install_type_ == INSTALL_STANDALONE)
       last_standalone_folder_ = destination_folder_;
+
     return true;
   }
   return false;

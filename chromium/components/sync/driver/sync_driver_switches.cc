@@ -25,6 +25,13 @@ const char kSyncServiceURL[] = "sync-url";
 const char kSyncShortInitialRetryOverride[] =
     "sync-short-initial-retry-override";
 
+// This flag significantly shortens the delay between nudge cycles. Its primary
+// purpose is to speed up integration tests. The normal delay allows coalescing
+// and prevention of server overload, so don't use this unless you're really
+// sure
+// that it's what you want.
+const char kSyncShortNudgeDelayForTest[] = "sync-short-nudge-delay-for-test";
+
 // Enables clearing of sync data when a user enables passphrase encryption.
 const base::Feature kSyncClearDataOnPassphraseEncryption{
     "ClearSyncDataOnPassphraseEncryption", base::FEATURE_DISABLED_BY_DEFAULT};

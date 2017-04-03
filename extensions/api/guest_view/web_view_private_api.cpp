@@ -87,6 +87,7 @@ void WebViewInternalThumbnailFunction::SendResultFromBitmap(
   std::string mime_type;
   gfx::Size dst_size_pixels;
   SkBitmap bitmap;
+  bool need_resize = true;
 
   if (scale_ != kDefaultThumbnailScale) {
     // Scale has changed, use that.
@@ -95,14 +96,16 @@ void WebViewInternalThumbnailFunction::SendResultFromBitmap(
     bitmap = skia::ImageOperations::Resize(
         screen_capture, skia::ImageOperations::RESIZE_BEST,
         dst_size_pixels.width(), dst_size_pixels.height());
+    need_resize = false;
   } else if (width_ != 0 && height_ != 0) {
     bitmap = SmartCropAndSize(screen_capture, width_, height_);
+    need_resize = false;
   } else {
     bitmap = screen_capture;
   }
   gfx::Size size(width_, height_);
   bool encoded = EncodeBitmap(bitmap, &data, mime_type, image_format_, size,
-                              scale_, image_quality_);
+                              scale_, image_quality_, need_resize);
   if (!encoded) {
     error_ = "Internal Thumbnail error";
     SendResponse(false);
@@ -495,12 +498,26 @@ bool WebViewPrivateGetFocusedElementInfoFunction::RunAsyncSafe(
   std::string tagname = "";
   std::string type = "";
   bool editable = false;
+  std::string role = "";
   if(frame_observer != NULL) {
-    frame_observer->GetFocusedElementInfo(&tagname, &type, &editable);
+    frame_observer->GetFocusedElementInfo(&tagname, &type, &editable, &role);
   }
   results_ =
       vivaldi::web_view_private::GetFocusedElementInfo
-             ::Results::Create(tagname, type, editable);
+             ::Results::Create(tagname, type, editable, role);
+  SendResponse(true);
+  return true;
+}
+
+WebViewPrivateResetGestureStateFunction::
+    WebViewPrivateResetGestureStateFunction() {}
+
+WebViewPrivateResetGestureStateFunction::
+    ~WebViewPrivateResetGestureStateFunction() {}
+
+bool WebViewPrivateResetGestureStateFunction::RunAsyncSafe(
+    WebViewGuest *guest) {
+  guest->ResetGestureState();
   SendResponse(true);
   return true;
 }

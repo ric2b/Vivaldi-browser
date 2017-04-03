@@ -6,10 +6,10 @@
 
 #include "ui/aura/client/screen_position_client.h"
 #include "ui/aura/test/aura_test_helper.h"
+#include "ui/views/test/platform_test_helper.h"
 #include "ui/wm/core/capture_controller.h"
 #include "ui/wm/core/default_activation_client.h"
 #include "ui/wm/core/default_screen_position_client.h"
-#include "ui/wm/core/wm_state.h"
 
 namespace views {
 
@@ -28,11 +28,20 @@ ViewsTestHelperAura::ViewsTestHelperAura(base::MessageLoopForUI* message_loop,
 ViewsTestHelperAura::~ViewsTestHelperAura() {
 }
 
+void ViewsTestHelperAura::EnableMusWithWindowTreeClient(
+    aura::WindowTreeClient* window_tree_client) {
+  aura_test_helper_->EnableMusWithWindowTreeClient(window_tree_client);
+}
+
 void ViewsTestHelperAura::SetUp() {
   aura_test_helper_->SetUp(context_factory_);
+
+  // GetContext() may return null. See comment in GetContext().
   gfx::NativeWindow root_window = GetContext();
+  if (!root_window)
+    return;
+
   new wm::DefaultActivationClient(root_window);
-  wm_state_.reset(new wm::WMState);
 
   if (!aura::client::GetScreenPositionClient(root_window)) {
     screen_position_client_.reset(new wm::DefaultScreenPositionClient);
@@ -42,25 +51,36 @@ void ViewsTestHelperAura::SetUp() {
 }
 
 void ViewsTestHelperAura::TearDown() {
-  // Ensure all Widgets (and windows) are closed in unit tests. This is done
-  // automatically when the RootWindow is torn down, but is an error on
-  // platforms that must ensure no Compositors are alive when the ContextFactory
-  // is torn down.
-  // So, although it's optional, check the root window to detect failures before
-  // they hit the CQ on other platforms.
-  DCHECK(aura_test_helper_->root_window()->children().empty())
-      << "Not all windows were closed.";
+  // GetContext() may return null. See comment in GetContext().
+  if (GetContext()) {
+    // Ensure all Widgets (and windows) are closed in unit tests. This is done
+    // automatically when the RootWindow is torn down, but is an error on
+    // platforms that must ensure no Compositors are alive when the
+    // ContextFactory is torn down.
+    // So, although it's optional, check the root window to detect failures
+    // before they hit the CQ on other platforms.
+    DCHECK(aura_test_helper_->root_window()->children().empty())
+        << "Not all windows were closed.";
 
-  if (screen_position_client_.get() ==
-      aura::client::GetScreenPositionClient(GetContext()))
-    aura::client::SetScreenPositionClient(GetContext(), nullptr);
+    if (screen_position_client_.get() ==
+        aura::client::GetScreenPositionClient(GetContext()))
+      aura::client::SetScreenPositionClient(GetContext(), nullptr);
+  }
 
   aura_test_helper_->TearDown();
-  wm_state_.reset();
-  CHECK(!wm::ScopedCaptureClient::IsActive());
+  CHECK(!wm::CaptureController::Get() ||
+        !wm::CaptureController::Get()->is_active());
 }
 
 gfx::NativeWindow ViewsTestHelperAura::GetContext() {
+  if (PlatformTestHelper::IsAuraMusClient()) {
+    // GetContext() returns the root of a WindowTreeHost associated with a
+    // single display that is intended for an ash like environment. Such a
+    // configuration doesn't make sense for aura-mus-client, where it's testing
+    // DesktopNativeWidgetAura.
+    return nullptr;
+  }
+
   return aura_test_helper_->root_window();
 }
 

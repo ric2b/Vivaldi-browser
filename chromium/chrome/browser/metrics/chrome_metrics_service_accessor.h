@@ -24,6 +24,10 @@ class CrashesDOMHandler;
 class FlashDOMHandler;
 }
 
+namespace arc {
+class ArcOptInPreferenceHandler;
+}
+
 namespace chrome {
 void AttemptRestart();
 namespace android {
@@ -47,6 +51,10 @@ class FileManagerPrivateIsUMAEnabledFunction;
 
 namespace options {
 class BrowserOptionsHandler;
+}
+
+namespace precache {
+void RegisterPrecacheSyntheticFieldTrial(base::Time);
 }
 
 namespace prerender {
@@ -90,7 +98,7 @@ class ChromeMetricsServiceAccessor : public metrics::MetricsServiceAccessor {
  private:
   friend class ::CrashesDOMHandler;
   friend class ::FlashDOMHandler;
-  friend class ArcSupportHost;
+  friend class arc::ArcOptInPreferenceHandler;
   friend class BrowserProcessImpl;
   friend void chrome::AttemptRestart();
   friend class chrome::android::ExternalDataUseObserverBridge;
@@ -107,6 +115,7 @@ class ChromeMetricsServiceAccessor : public metrics::MetricsServiceAccessor {
       bool,
       const OnMetricsReportingCallbackType&);
   friend class options::BrowserOptionsHandler;
+  friend void precache::RegisterPrecacheSyntheticFieldTrial(base::Time);
   friend bool prerender::IsOmniboxEnabled(Profile* profile);
   friend class settings::MetricsReportingHandler;
   friend class speech::ChromeSpeechRecognitionManagerDelegate;

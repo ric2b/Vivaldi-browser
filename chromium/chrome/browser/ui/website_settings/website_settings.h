@@ -10,7 +10,7 @@
 #include "chrome/browser/content_settings/tab_specific_content_settings.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_types.h"
-#include "components/security_state/security_state_model.h"
+#include "components/security_state/core/security_state.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "url/gurl.h"
 
@@ -68,9 +68,6 @@ class WebsiteSettings : public TabSpecificContentSettings::SiteDataObserver,
     SITE_IDENTITY_STATUS_NO_CERT,
     // An error occured while verifying the site identity.
     SITE_IDENTITY_STATUS_ERROR,
-    // The website provided a valid certificate but all signed
-    // certificate timestamps failed to validate.
-    SITE_IDENTITY_STATUS_CT_ERROR,
     // The site is a trusted internal chrome page.
     SITE_IDENTITY_STATUS_INTERNAL_PAGE,
     // The profile has accessed data using an administrator-provided
@@ -80,6 +77,11 @@ class WebsiteSettings : public TabSpecificContentSettings::SiteDataObserver,
     // is using a deprecated signature algorithm.
     SITE_IDENTITY_STATUS_DEPRECATED_SIGNATURE_ALGORITHM_MINOR,
     SITE_IDENTITY_STATUS_DEPRECATED_SIGNATURE_ALGORITHM_MAJOR,
+    // The website has been flagged by Safe Browsing as dangerous for
+    // containing malware, social engineering, or unwanted software.
+    SITE_IDENTITY_STATUS_MALWARE,
+    SITE_IDENTITY_STATUS_SOCIAL_ENGINEERING,
+    SITE_IDENTITY_STATUS_UNWANTED_SOFTWARE,
   };
 
   // UMA statistics for WebsiteSettings. Do not reorder or remove existing
@@ -114,13 +116,12 @@ class WebsiteSettings : public TabSpecificContentSettings::SiteDataObserver,
   // Creates a WebsiteSettings for the passed |url| using the given |ssl| status
   // object to determine the status of the site's connection. The
   // |WebsiteSettings| takes ownership of the |ui|.
-  WebsiteSettings(
-      WebsiteSettingsUI* ui,
-      Profile* profile,
-      TabSpecificContentSettings* tab_specific_content_settings,
-      content::WebContents* web_contents,
-      const GURL& url,
-      const security_state::SecurityStateModel::SecurityInfo& security_info);
+  WebsiteSettings(WebsiteSettingsUI* ui,
+                  Profile* profile,
+                  TabSpecificContentSettings* tab_specific_content_settings,
+                  content::WebContents* web_contents,
+                  const GURL& url,
+                  const security_state::SecurityInfo& security_info);
   ~WebsiteSettings() override;
 
   void RecordWebsiteSettingsAction(WebsiteSettingsAction action);
@@ -159,9 +160,7 @@ class WebsiteSettings : public TabSpecificContentSettings::SiteDataObserver,
 
  private:
   // Initializes the |WebsiteSettings|.
-  void Init(
-      const GURL& url,
-      const security_state::SecurityStateModel::SecurityInfo& security_info);
+  void Init(const GURL& url, const security_state::SecurityInfo& security_info);
 
   // Sets (presents) the information about the site's permissions in the |ui_|.
   void PresentSitePermissions();
@@ -235,6 +234,8 @@ class WebsiteSettings : public TabSpecificContentSettings::SiteDataObserver,
   bool did_revoke_user_ssl_decisions_;
 
   Profile* profile_;
+
+  security_state::SecurityLevel security_level_;
 
   DISALLOW_COPY_AND_ASSIGN(WebsiteSettings);
 };

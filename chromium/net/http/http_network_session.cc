@@ -11,11 +11,12 @@
 #include "base/debug/stack_trace.h"
 #include "base/logging.h"
 #include "base/memory/memory_coordinator_client_registry.h"
+#include "base/memory/ptr_util.h"
 #include "base/profiler/scoped_tracker.h"
-#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
+#include "net/base/network_throttle_manager.h"
 #include "net/http/http_auth_handler_factory.h"
 #include "net/http/http_response_body_drainer.h"
 #include "net/http/http_stream_factory_impl.h"
@@ -126,7 +127,7 @@ HttpNetworkSession::Params::Params()
       quic_do_not_fragment(false),
       proxy_delegate(NULL),
       enable_token_binding(false),
-      http_09_on_non_default_ports_enabled(false) {
+      http_09_on_non_default_ports_enabled(true) {
   quic_supported_versions.push_back(QUIC_VERSION_35);
 }
 
@@ -198,6 +199,7 @@ HttpNetworkSession::HttpNetworkSession(const Params& params)
                          params.proxy_delegate),
       http_stream_factory_(new HttpStreamFactoryImpl(this, false)),
       http_stream_factory_for_websocket_(new HttpStreamFactoryImpl(this, true)),
+      network_stream_throttler_(NetworkThrottleManager::CreateThrottler()),
       params_(params) {
   DCHECK(proxy_service_);
   DCHECK(ssl_config_service_.get());
@@ -225,19 +227,22 @@ HttpNetworkSession::HttpNetworkSession(const Params& params)
 }
 
 HttpNetworkSession::~HttpNetworkSession() {
-  base::STLDeleteElements(&response_drainers_);
+  response_drainers_.clear();
   spdy_session_pool_.CloseAllSessions();
   base::MemoryCoordinatorClientRegistry::GetInstance()->Unregister(this);
 }
 
-void HttpNetworkSession::AddResponseDrainer(HttpResponseBodyDrainer* drainer) {
-  DCHECK(!base::ContainsKey(response_drainers_, drainer));
-  response_drainers_.insert(drainer);
+void HttpNetworkSession::AddResponseDrainer(
+    std::unique_ptr<HttpResponseBodyDrainer> drainer) {
+  DCHECK(!base::ContainsKey(response_drainers_, drainer.get()));
+  HttpResponseBodyDrainer* drainer_ptr = drainer.get();
+  response_drainers_[drainer_ptr] = std::move(drainer);
 }
 
 void HttpNetworkSession::RemoveResponseDrainer(
     HttpResponseBodyDrainer* drainer) {
   DCHECK(base::ContainsKey(response_drainers_, drainer));
+  response_drainers_[drainer].release();
   response_drainers_.erase(drainer);
 }
 
@@ -342,15 +347,17 @@ void HttpNetworkSession::CloseIdleConnections() {
   spdy_session_pool_.CloseCurrentIdleSessions();
 }
 
-bool HttpNetworkSession::IsProtocolEnabled(AlternateProtocol protocol) const {
+bool HttpNetworkSession::IsProtocolEnabled(NextProto protocol) const {
   switch (protocol) {
-    case NPN_HTTP_2:
-      return params_.enable_http2;
-    case QUIC:
-      return params_.enable_quic;
-    case UNINITIALIZED_ALTERNATE_PROTOCOL:
+    case kProtoUnknown:
       NOTREACHED();
       return false;
+    case kProtoHTTP11:
+      return true;
+    case kProtoHTTP2:
+      return params_.enable_http2;
+    case kProtoQUIC:
+      return params_.enable_quic;
   }
   NOTREACHED();
   return false;

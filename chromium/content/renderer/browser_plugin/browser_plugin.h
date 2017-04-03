@@ -16,11 +16,8 @@
 #include "content/renderer/render_view_impl.h"
 #include "third_party/WebKit/public/web/WebCompositionUnderline.h"
 #include "third_party/WebKit/public/web/WebDragStatus.h"
+#include "third_party/WebKit/public/web/WebInputMethodController.h"
 #include "third_party/WebKit/public/web/WebNode.h"
-#include "third_party/WebKit/public/web/WebWidget.h"
-
-struct BrowserPluginHostMsg_ResizeGuest_Params;
-struct FrameMsg_BuffersSwapped_Params;
 
 namespace cc {
 class SurfaceId;
@@ -121,7 +118,8 @@ class CONTENT_EXPORT BrowserPlugin :
   bool commitText(const blink::WebString& text,
                   int relative_cursor_pos) override;
   bool finishComposingText(
-      blink::WebWidget::ConfirmCompositionBehavior selection_behavior) override;
+      blink::WebInputMethodController::ConfirmCompositionBehavior
+          selection_behavior) override;
 
   void extendSelectionAndDelete(int before, int after) override;
 
@@ -154,6 +152,7 @@ class CONTENT_EXPORT BrowserPlugin :
   // Please keep in alphabetical order.
   void OnAdvanceFocus(int instance_id, bool reverse);
   void OnGuestGone(int instance_id);
+  void OnGuestReady(int instance_id);
   void OnSetChildFrameSurface(int instance_id,
                               const cc::SurfaceId& surface_id,
                               const gfx::Size& frame_size,

@@ -37,6 +37,7 @@
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
+#include "extensions/features/features.h"
 
 #if defined(USE_ASH)
 #include "chrome/browser/ui/ash/multi_user/multi_user_window_manager.h"
@@ -47,7 +48,7 @@
 #include "ui/aura/window.h"
 #endif
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "chrome/browser/extensions/tab_helper.h"
 #include "chrome/browser/web_applications/web_app.h"
 #include "extensions/browser/extension_registry.h"
@@ -158,7 +159,7 @@ Browser* GetBrowserForDisposition(chrome::NavigateParams* params) {
       // Make a new popup window.
       // Coerce app-style if |source| represents an app.
       std::string app_name;
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
       if (!params->extension_app_id.empty()) {
         app_name = web_app::GenerateApplicationNameFromExtensionId(
             params->extension_app_id);
@@ -378,7 +379,7 @@ content::WebContents* CreateTargetContents(const chrome::NavigateParams& params,
   // tab helpers, so the entire set of tab helpers needs to be set up
   // immediately.
   BrowserNavigatorWebContentsAdoption::AttachTabHelpers(target_contents);
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   extensions::TabHelper::FromWebContents(target_contents)->
       SetExtensionAppById(params.extension_app_id);
 #endif
@@ -417,7 +418,7 @@ void Navigate(NavigateParams* params) {
   if (!AdjustNavigateParamsForURL(params))
     return;
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   const extensions::Extension* extension =
     extensions::ExtensionRegistry::Get(params->initiating_profile)->
         enabled_extensions().GetExtensionOrAppByURL(params->url);
@@ -636,33 +637,33 @@ bool IsURLAllowedInIncognito(const GURL& url,
   // chrome://extensions is on the list because it redirects to
   // chrome://settings.
   if (url.scheme() == content::kChromeUIScheme &&
-      (url.host() == chrome::kChromeUISettingsHost ||
-       url.host() == chrome::kChromeUIMdSettingsHost ||
-       url.host() == chrome::kChromeUISettingsFrameHost ||
-       url.host() == chrome::kChromeUIHelpHost ||
-       url.host() == chrome::kChromeUIHistoryHost ||
-       url.host() == chrome::kChromeUIExtensionsHost ||
-       url.host() == chrome::kChromeUIBookmarksHost ||
+      (url.host_piece() == chrome::kChromeUISettingsHost ||
+       url.host_piece() == chrome::kChromeUIMdSettingsHost ||
+       url.host_piece() == chrome::kChromeUISettingsFrameHost ||
+       url.host_piece() == chrome::kChromeUIHelpHost ||
+       url.host_piece() == chrome::kChromeUIHistoryHost ||
+       url.host_piece() == chrome::kChromeUIExtensionsHost ||
+       url.host_piece() == chrome::kChromeUIBookmarksHost ||
 #if !defined(OS_CHROMEOS)
-       url.host() == chrome::kChromeUIChromeSigninHost ||
+       url.host_piece() == chrome::kChromeUIChromeSigninHost ||
 #endif
-       url.host() == chrome::kChromeUIUberHost ||
-       url.host() == chrome::kChromeUIThumbnailHost ||
-       url.host() == chrome::kChromeUIThumbnailHost2 ||
-       url.host() == chrome::kChromeUIThumbnailListHost ||
-       url.host() == chrome::kChromeUISuggestionsHost ||
+       url.host_piece() == chrome::kChromeUIUberHost ||
+       url.host_piece() == chrome::kChromeUIThumbnailHost ||
+       url.host_piece() == chrome::kChromeUIThumbnailHost2 ||
+       url.host_piece() == chrome::kChromeUIThumbnailListHost ||
+       url.host_piece() == chrome::kChromeUISuggestionsHost ||
 #if defined(OS_CHROMEOS)
-       url.host() == chrome::kChromeUIVoiceSearchHost ||
+       url.host_piece() == chrome::kChromeUIVoiceSearchHost ||
 #endif
-       url.host() == chrome::kChromeUIDevicesHost)) {
+       url.host_piece() == chrome::kChromeUIDevicesHost)) {
     return false;
   }
 
   if (url.scheme() == chrome::kChromeSearchScheme &&
-      (url.host() == chrome::kChromeUIThumbnailHost ||
-       url.host() == chrome::kChromeUIThumbnailHost2 ||
-       url.host() == chrome::kChromeUIThumbnailListHost ||
-       url.host() == chrome::kChromeUISuggestionsHost)) {
+      (url.host_piece() == chrome::kChromeUIThumbnailHost ||
+       url.host_piece() == chrome::kChromeUIThumbnailHost2 ||
+       url.host_piece() == chrome::kChromeUIThumbnailListHost ||
+       url.host_piece() == chrome::kChromeUISuggestionsHost)) {
     return false;
   }
 
@@ -672,8 +673,8 @@ bool IsURLAllowedInIncognito(const GURL& url,
       &rewritten_url, browser_context, &reverse_on_redirect);
 
   // Some URLs are mapped to uber subpages. Do not allow them in incognito.
-  return !(rewritten_url.scheme() == content::kChromeUIScheme &&
-           rewritten_url.host() == chrome::kChromeUIUberHost);
+  return !(rewritten_url.scheme_piece() == content::kChromeUIScheme &&
+           rewritten_url.host_piece() == chrome::kChromeUIUberHost);
 }
 
 }  // namespace chrome

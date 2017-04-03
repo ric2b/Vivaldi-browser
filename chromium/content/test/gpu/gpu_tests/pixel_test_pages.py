@@ -46,10 +46,7 @@ def CopyPagesWithNewBrowserArgsAndPrefix(pages, browser_args, prefix):
     p.CopyWithNewBrowserArgsAndPrefix(browser_args, prefix) for p in pages]
 
 
-# Pages that should be run both with and without --enable-unsafe-es3-apis.
-# TODO(kbr): eliminate the "ES3" versions of these tests once WebGL 2.0
-# is enabled by default. crbug.com/295792
-def ES2AndES3Pages(base_name):
+def DefaultPages(base_name):
   return [
     PixelTestPage(
       'pixel_canvas2d.html',
@@ -120,7 +117,7 @@ def ES2AndES3Pages(base_name):
       'pixel_canvas2d_webgl.html',
       base_name + '_2DCanvasWebGL',
       test_rect=[0, 0, 300, 300],
-      revision=2),
+      revision=3),
 
     PixelTestPage(
       'pixel_background.html',
@@ -154,74 +151,95 @@ def ExperimentalCanvasFeaturesPages(base_name):
 
     PixelTestPage(
       'pixel_offscreenCanvas_webgl_commit_main.html',
-      base_name + '_OffscreenCanvasWebGLGreenBox',
-      test_rect=[0, 0, 300, 300],
-      revision=2,
+      base_name + '_OffscreenCanvasWebGLDefault',
+      test_rect=[0, 0, 350, 350],
+      revision=1,
       browser_args=browser_args),
 
     PixelTestPage(
       'pixel_offscreenCanvas_webgl_commit_worker.html',
-      base_name + '_OffscreenCanvasWebGLRedBoxWorker',
-      test_rect=[0, 0, 300, 300],
-      revision=3,
+      base_name + '_OffscreenCanvasWebGLDefaultWorker',
+      test_rect=[0, 0, 350, 350],
+      revision=1,
       browser_args=browser_args),
 
     PixelTestPage(
       'pixel_offscreenCanvas_webgl_commit_main.html',
       base_name + '_OffscreenCanvasWebGLSoftwareCompositing',
-      test_rect=[0, 0, 300, 300],
-      revision=1,
+      test_rect=[0, 0, 350, 350],
+      revision=2,
       browser_args=browser_args + ['--disable-gpu-compositing']),
 
     PixelTestPage(
       'pixel_offscreenCanvas_webgl_commit_worker.html',
       base_name + '_OffscreenCanvasWebGLSoftwareCompositingWorker',
-      test_rect=[0, 0, 300, 300],
-      revision=1,
+      test_rect=[0, 0, 350, 350],
+      revision=2,
       browser_args=browser_args + ['--disable-gpu-compositing']),
 
     PixelTestPage(
       'pixel_offscreenCanvas_2d_commit_main.html',
       base_name + '_OffscreenCanvasAccelerated2D',
-      test_rect=[0, 0, 350, 350],
-      revision=1,
+      test_rect=[0, 0, 300, 300],
+      revision=2,
       browser_args=browser_args),
 
     PixelTestPage(
       'pixel_offscreenCanvas_2d_commit_worker.html',
       base_name + '_OffscreenCanvasAccelerated2DWorker',
-      test_rect=[0, 0, 350, 350],
-      revision=1,
+      test_rect=[0, 0, 300, 300],
+      revision=2,
       browser_args=browser_args),
 
     PixelTestPage(
       'pixel_offscreenCanvas_2d_commit_main.html',
       base_name + '_OffscreenCanvasUnaccelerated2D',
-      test_rect=[0, 0, 350, 350],
-      revision=1,
+      test_rect=[0, 0, 300, 300],
+      revision=2,
       browser_args=browser_args + unaccelerated_args),
 
     PixelTestPage(
       'pixel_offscreenCanvas_2d_commit_worker.html',
       base_name + '_OffscreenCanvasUnaccelerated2DWorker',
-      test_rect=[0, 0, 350, 350],
-      revision=1,
+      test_rect=[0, 0, 300, 300],
+      revision=2,
       browser_args=browser_args + unaccelerated_args),
 
     PixelTestPage(
       'pixel_offscreenCanvas_2d_commit_main.html',
       base_name + '_OffscreenCanvasUnaccelerated2DGPUCompositing',
-      test_rect=[0, 0, 350, 350],
-      revision=1,
+      test_rect=[0, 0, 300, 300],
+      revision=4,
       browser_args=browser_args + ['--disable-accelerated-2d-canvas']),
 
     PixelTestPage(
       'pixel_offscreenCanvas_2d_commit_worker.html',
       base_name + '_OffscreenCanvasUnaccelerated2DGPUCompositingWorker',
-      test_rect=[0, 0, 350, 350],
+      test_rect=[0, 0, 300, 300],
+      revision=4,
+      browser_args=browser_args + ['--disable-accelerated-2d-canvas']),
+
+    PixelTestPage(
+      'pixel_canvas_display_linear-rgb.html',
+      base_name + '_CanvasDisplayLinearRGBAccelerated2D',
+      test_rect=[0, 0, 140, 140],
+      revision=1,
+      browser_args=browser_args),
+
+    PixelTestPage(
+      'pixel_canvas_display_linear-rgb.html',
+      base_name + '_CanvasDisplayLinearRGBUnaccelerated2D',
+      test_rect=[0, 0, 140, 140],
+      revision=1,
+      browser_args=browser_args + unaccelerated_args),
+
+    PixelTestPage(
+      'pixel_canvas_display_linear-rgb.html',
+      base_name + '_CanvasDisplayLinearRGBUnaccelerated2DGPUCompositing',
+      test_rect=[0, 0, 140, 140],
       revision=1,
       browser_args=browser_args + ['--disable-accelerated-2d-canvas']),
-  ]
+]
 
 
 # Pages that should be run with various macOS specific command line

@@ -24,6 +24,7 @@
 #include "chrome/browser/ui/browser_instant_controller.h"
 #include "chrome/browser/ui/search/instant_search_prerenderer.h"
 #include "chrome/common/chrome_switches.h"
+#include "chrome/common/features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/search/search_urls.h"
 #include "chrome/common/url_constants.h"
@@ -38,7 +39,7 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
 
-#if defined(ENABLE_SUPERVISED_USERS)
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
 #include "chrome/browser/supervised_user/supervised_user_service.h"
 #include "chrome/browser/supervised_user/supervised_user_service_factory.h"
 #include "chrome/browser/supervised_user/supervised_user_url_filter.h"
@@ -149,7 +150,7 @@ bool IsInstantURL(const GURL& url, Profile* profile) {
 }
 
 bool IsURLAllowedForSupervisedUser(const GURL& url, Profile* profile) {
-#if defined(ENABLE_SUPERVISED_USERS)
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
   SupervisedUserService* supervised_user_service =
       SupervisedUserServiceFactory::GetForProfile(profile);
   SupervisedUserURLFilter* url_filter =
@@ -181,8 +182,8 @@ bool ShouldShowLocalNewTab(const GURL& url, Profile* profile) {
   // On Chrome OS, if the session hasn't merged yet, we need to avoid loading
   // the remote NTP because that will trigger showing the merge session throttle
   // interstitial page, which can show for 5+ seconds. crbug.com/591530.
-  if (merge_session_throttling_utils::ShouldDelayRequestForProfile(profile) &&
-      merge_session_throttling_utils::ShouldDelayUrl(url)) {
+  if (merge_session_throttling_utils::ShouldDelayUrl(url) &&
+      merge_session_throttling_utils::IsSessionRestorePending(profile)) {
     return true;
   }
 #endif  // defined(OS_CHROMEOS)
@@ -290,8 +291,8 @@ bool IsRenderedInInstantProcess(const content::WebContents* contents,
 
 bool ShouldUseProcessPerSiteForInstantURL(const GURL& url, Profile* profile) {
   return ShouldAssignURLToInstantRenderer(url, profile) &&
-      (url.host() == chrome::kChromeSearchLocalNtpHost ||
-       url.host() == chrome::kChromeSearchRemoteNtpHost);
+         (url.host_piece() == chrome::kChromeSearchLocalNtpHost ||
+          url.host_piece() == chrome::kChromeSearchRemoteNtpHost);
 }
 
 bool IsNTPURL(const GURL& url, Profile* profile) {
@@ -299,12 +300,11 @@ bool IsNTPURL(const GURL& url, Profile* profile) {
     return false;
 
   if (!IsInstantExtendedAPIEnabled())
-    return url == GURL(chrome::kChromeUINewTabURL);
+    return url == chrome::kChromeUINewTabURL;
 
   const base::string16 search_terms = ExtractSearchTermsFromURL(profile, url);
-  return profile &&
-      ((IsInstantURL(url, profile) && search_terms.empty()) ||
-       url == GURL(chrome::kChromeSearchLocalNtpUrl));
+  return profile && ((IsInstantURL(url, profile) && search_terms.empty()) ||
+                     url == chrome::kChromeSearchLocalNtpUrl);
 }
 
 bool IsInstantNTP(const content::WebContents* contents) {
@@ -331,7 +331,7 @@ bool IsInstantNTPURL(const GURL& url, Profile* profile) {
   if (!IsInstantExtendedAPIEnabled())
     return false;
 
-  if (url == GURL(chrome::kChromeSearchLocalNtpUrl))
+  if (url == chrome::kChromeSearchLocalNtpUrl)
     return true;
 
   GURL new_tab_url(GetNewTabPageURL(profile));

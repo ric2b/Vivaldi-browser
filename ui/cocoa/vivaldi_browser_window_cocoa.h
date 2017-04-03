@@ -26,7 +26,7 @@ class VivaldiBrowserWindowCocoa : public VivaldiBrowserWindow {
       Profile* profile,
       content::WebContents* web_contents,
       const GURL& url,
-      const security_state::SecurityStateModel::SecurityInfo& security_info,
+      const security_state::SecurityInfo& security_info,
       gfx::Point anchor) override;
   void HandleKeyboardEvent(
       const content::NativeWebKeyboardEvent& event) override;

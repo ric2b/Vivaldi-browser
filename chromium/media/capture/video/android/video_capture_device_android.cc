@@ -508,18 +508,22 @@ void VideoCaptureDeviceAndroid::DoGetPhotoCapabilities(
   photo_capabilities->iso->current = caps.getCurrentIso();
   photo_capabilities->iso->max = caps.getMaxIso();
   photo_capabilities->iso->min = caps.getMinIso();
+  photo_capabilities->iso->step = caps.getStepIso();
   photo_capabilities->height = mojom::Range::New();
   photo_capabilities->height->current = caps.getCurrentHeight();
   photo_capabilities->height->max = caps.getMaxHeight();
   photo_capabilities->height->min = caps.getMinHeight();
+  photo_capabilities->height->step = caps.getStepHeight();
   photo_capabilities->width = mojom::Range::New();
   photo_capabilities->width->current = caps.getCurrentWidth();
   photo_capabilities->width->max = caps.getMaxWidth();
   photo_capabilities->width->min = caps.getMinWidth();
+  photo_capabilities->width->step = caps.getStepWidth();
   photo_capabilities->zoom = mojom::Range::New();
   photo_capabilities->zoom->current = caps.getCurrentZoom();
   photo_capabilities->zoom->max = caps.getMaxZoom();
   photo_capabilities->zoom->min = caps.getMinZoom();
+  photo_capabilities->zoom->step = caps.getStepZoom();
   photo_capabilities->focus_mode = ToMojomMeteringMode(caps.getFocusMode());
   photo_capabilities->exposure_mode =
       ToMojomMeteringMode(caps.getExposureMode());
@@ -530,6 +534,8 @@ void VideoCaptureDeviceAndroid::DoGetPhotoCapabilities(
       caps.getMaxExposureCompensation();
   photo_capabilities->exposure_compensation->min =
       caps.getMinExposureCompensation();
+  photo_capabilities->exposure_compensation->step =
+      caps.getStepExposureCompensation();
   photo_capabilities->white_balance_mode =
       ToMojomMeteringMode(caps.getWhiteBalanceMode());
   photo_capabilities->fill_light_mode =
@@ -540,6 +546,7 @@ void VideoCaptureDeviceAndroid::DoGetPhotoCapabilities(
       caps.getCurrentColorTemperature();
   photo_capabilities->color_temperature->max = caps.getMaxColorTemperature();
   photo_capabilities->color_temperature->min = caps.getMinColorTemperature();
+  photo_capabilities->color_temperature->step = caps.getStepColorTemperature();
   photo_capabilities->brightness = media::mojom::Range::New();
   photo_capabilities->contrast = media::mojom::Range::New();
   photo_capabilities->saturation = media::mojom::Range::New();
@@ -561,9 +568,7 @@ void VideoCaptureDeviceAndroid::DoSetPhotoOptions(
 #endif
   JNIEnv* env = AttachCurrentThread();
 
-  const int width = settings->has_width ? settings->width : 0;
-  const int height = settings->has_height ? settings->height : 0;
-  const int zoom = settings->has_zoom ? settings->zoom : 0;
+  const double zoom = settings->has_zoom ? settings->zoom : 0.0;
 
   const PhotoCapabilities::AndroidMeteringMode focus_mode =
       settings->has_focus_mode
@@ -575,6 +580,9 @@ void VideoCaptureDeviceAndroid::DoSetPhotoOptions(
           ? ToAndroidMeteringMode(settings->exposure_mode)
           : PhotoCapabilities::AndroidMeteringMode::NOT_SET;
 
+  const double width = settings->has_width ? settings->width : 0.0;
+  const double height = settings->has_height ? settings->height : 0.0;
+
   std::vector<float> points_of_interest_marshalled;
   for (const auto& point : settings->points_of_interest) {
     points_of_interest_marshalled.push_back(point->x);
@@ -583,20 +591,24 @@ void VideoCaptureDeviceAndroid::DoSetPhotoOptions(
   ScopedJavaLocalRef<jfloatArray> points_of_interest =
       base::android::ToJavaFloatArray(env, points_of_interest_marshalled);
 
-  const int exposure_compensation =
-      settings->has_exposure_compensation ? settings->exposure_compensation : 0;
+  const double exposure_compensation = settings->has_exposure_compensation
+                                           ? settings->exposure_compensation
+                                           : 0.0;
 
   const PhotoCapabilities::AndroidMeteringMode white_balance_mode =
       settings->has_white_balance_mode
           ? ToAndroidMeteringMode(settings->white_balance_mode)
           : PhotoCapabilities::AndroidMeteringMode::NOT_SET;
 
-  const int iso = settings->has_iso ? settings->iso : 0;
+  const double iso = settings->has_iso ? settings->iso : 0.0;
 
   const PhotoCapabilities::AndroidFillLightMode fill_light_mode =
       settings->has_fill_light_mode
           ? ToAndroidFillLightMode(settings->fill_light_mode)
           : PhotoCapabilities::AndroidFillLightMode::NOT_SET;
+
+  const double color_temperature =
+      settings->has_color_temperature ? settings->color_temperature : 0.0;
 
   Java_VideoCapture_setPhotoOptions(
       env, j_capture_, zoom, static_cast<int>(focus_mode),
@@ -604,8 +616,7 @@ void VideoCaptureDeviceAndroid::DoSetPhotoOptions(
       settings->has_exposure_compensation, exposure_compensation,
       static_cast<int>(white_balance_mode), iso,
       settings->has_red_eye_reduction, settings->red_eye_reduction,
-      static_cast<int>(fill_light_mode),
-      settings->has_color_temperature ? settings->color_temperature : 0);
+      static_cast<int>(fill_light_mode), color_temperature);
 
   callback.Run(true);
 }

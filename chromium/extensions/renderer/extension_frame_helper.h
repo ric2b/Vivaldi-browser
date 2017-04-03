@@ -108,6 +108,7 @@ class ExtensionFrameHelper
       const blink::WebVector<blink::WebString>& newly_matching_selectors,
       const blink::WebVector<blink::WebString>& stopped_matching_selectors)
           override;
+  void DidStartProvisionalLoad() override;
   void DidCreateScriptContext(v8::Local<v8::Context>,
                               int extension_group,
                               int world_id) override;
@@ -138,8 +139,7 @@ class ExtensionFrameHelper
   void OnExtensionMessageInvoke(const std::string& extension_id,
                                 const std::string& module_name,
                                 const std::string& function_name,
-                                const base::ListValue& args,
-                                bool user_gesture);
+                                const base::ListValue& args);
   void OnAssignPortId(int port_id, int request_id);
 
   // Type of view associated with the RenderFrame.
@@ -167,6 +167,8 @@ class ExtensionFrameHelper
 
   // Map of port requests to callbacks.
   std::map<int, std::unique_ptr<PendingPortRequest>> pending_port_requests_;
+
+  bool delayed_main_world_script_initialization_ = false;
 
   base::WeakPtrFactory<ExtensionFrameHelper> weak_ptr_factory_;
 

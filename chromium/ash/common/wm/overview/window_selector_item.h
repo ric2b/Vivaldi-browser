@@ -94,12 +94,11 @@ class ASH_EXPORT WindowSelectorItem : public views::ButtonListener,
   // Restores and animates the managed window to its non overview mode state.
   void RestoreWindow();
 
+  // Ensures that a possibly minimized window becomes visible after restore.
+  void EnsureVisible();
+
   // Restores stacking of window captions above the windows, then fades out.
   void Shutdown();
-
-  // Forces the managed window to be shown (ie not hidden or minimized) when
-  // calling RestoreWindow().
-  void ShowWindowOnExit();
 
   // Dispatched before beginning window overview. This will do any necessary
   // one time actions such as restoring minimized windows.
@@ -135,10 +134,11 @@ class ASH_EXPORT WindowSelectorItem : public views::ButtonListener,
   // Closes |transform_window_|.
   void CloseWindow();
 
-  // Hides the original window header and sets shape or mask on a window.
-  // When masks are used, rounded corner |radius| can be specified.
-  // TODO(varkha): remove |radius|.
-  void HideHeaderAndSetShape(int radius);
+  // Hides the original window header.
+  void HideHeader();
+
+  // Called when the window is minimized or unminimized.
+  void OnMinimizedStateChanged();
 
   // Sets if the item is dimmed in the overview. Changing the value will also
   // change the visibility of the transform windows.
@@ -201,6 +201,8 @@ class ASH_EXPORT WindowSelectorItem : public views::ButtonListener,
 
   // Allows a test to directly set animation state.
   gfx::SlideAnimation* GetBackgroundViewAnimation();
+
+  WmWindow* GetOverviewWindowForMinimizedStateForTest();
 
   // True if the item is being shown in the overview, false if it's being
   // filtered.

@@ -28,7 +28,7 @@
 #include "chrome/browser/printing/pwg_raster_converter.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/version_info/version_info.h"
-#include "device/core/mock_device_client.h"
+#include "device/base/mock_device_client.h"
 #include "device/usb/mock_usb_device.h"
 #include "device/usb/mock_usb_service.h"
 #include "extensions/browser/api/device_permissions_manager.h"
@@ -798,10 +798,10 @@ TEST_F(ExtensionPrinterHandlerTest, Print_Pwg) {
   EXPECT_FALSE(pwg_raster_converter_->bitmap_settings().reverse_page_order);
 
   EXPECT_EQ(printing::kDefaultPdfDpi,
-            pwg_raster_converter_->conversion_settings().dpi());
-  EXPECT_TRUE(pwg_raster_converter_->conversion_settings().autorotate());
+            pwg_raster_converter_->conversion_settings().dpi);
+  EXPECT_TRUE(pwg_raster_converter_->conversion_settings().autorotate);
   EXPECT_EQ("0,0 208x416",  // vertically_oriented_size  * dpi / points_per_inch
-            pwg_raster_converter_->conversion_settings().area().ToString());
+            pwg_raster_converter_->conversion_settings().area.ToString());
 
   const PrinterProviderPrintJob* print_job = fake_api->GetNextPendingPrintJob();
   ASSERT_TRUE(print_job);
@@ -852,10 +852,10 @@ TEST_F(ExtensionPrinterHandlerTest, Print_Pwg_NonDefaultSettings) {
   EXPECT_TRUE(pwg_raster_converter_->bitmap_settings().reverse_page_order);
 
   EXPECT_EQ(200,  // max(vertical_dpi, horizontal_dpi)
-            pwg_raster_converter_->conversion_settings().dpi());
-  EXPECT_TRUE(pwg_raster_converter_->conversion_settings().autorotate());
+            pwg_raster_converter_->conversion_settings().dpi);
+  EXPECT_TRUE(pwg_raster_converter_->conversion_settings().autorotate);
   EXPECT_EQ("0,0 138x277",  // vertically_oriented_size  * dpi / points_per_inch
-            pwg_raster_converter_->conversion_settings().area().ToString());
+            pwg_raster_converter_->conversion_settings().area.ToString());
 
   const PrinterProviderPrintJob* print_job = fake_api->GetNextPendingPrintJob();
   ASSERT_TRUE(print_job);

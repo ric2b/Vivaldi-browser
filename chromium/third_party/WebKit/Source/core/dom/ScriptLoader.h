@@ -26,7 +26,7 @@
 #include "core/dom/ScriptRunner.h"
 #include "core/fetch/FetchRequest.h"
 #include "core/fetch/ResourceClient.h"
-#include "core/fetch/ScriptResource.h"
+#include "core/loader/resource/ScriptResource.h"
 #include "wtf/text/TextPosition.h"
 #include "wtf/text/WTFString.h"
 
@@ -127,7 +127,7 @@ class CORE_EXPORT ScriptLoader : public GarbageCollectedFinalized<ScriptLoader>,
  private:
   bool ignoresLoadRequest() const;
   bool isScriptForEventSupported() const;
-  void logScriptMimetype(ScriptResource*, LocalFrame*, String);
+  void logScriptMIMEType(LocalFrame*, ScriptResource*, const String&);
 
   bool fetchScript(const String& sourceUrl, FetchRequest::DeferOption);
   bool doExecuteScript(const ScriptSourceCode&);

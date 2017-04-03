@@ -10,6 +10,7 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/stl_util.h"
 #include "base/timer/timer.h"
 #include "content/public/browser/browser_thread.h"
 #include "net/base/load_flags.h"
@@ -27,7 +28,7 @@ namespace {
 // Record a GetHash result.
 void RecordGetHashResult(safe_browsing::V4OperationResult result) {
   UMA_HISTOGRAM_ENUMERATION(
-      "SafeBrowsing.GetV4HashResult", result,
+      "SafeBrowsing.V4GetHash.Result", result,
       safe_browsing::V4OperationResult::OPERATION_RESULT_MAX);
 }
 
@@ -67,7 +68,7 @@ enum ParseResultType {
 
 // Record parsing errors of a GetHash result.
 void RecordParseGetHashResult(ParseResultType result_type) {
-  UMA_HISTOGRAM_ENUMERATION("SafeBrowsing.ParseV4HashResult", result_type,
+  UMA_HISTOGRAM_ENUMERATION("SafeBrowsing.V4GetHash.Parse.Result", result_type,
                             PARSE_RESULT_TYPE_MAX);
 }
 
@@ -90,8 +91,8 @@ enum V4FullHashCacheResultType {
 
 // Record a full hash cache hit result.
 void RecordV4FullHashCacheResult(V4FullHashCacheResultType result_type) {
-  UMA_HISTOGRAM_ENUMERATION("SafeBrowsing.V4FullHashCacheResult", result_type,
-                            FULL_HASH_CACHE_RESULT_MAX);
+  UMA_HISTOGRAM_ENUMERATION("SafeBrowsing.V4GetHash.CacheHit.Result",
+                            result_type, FULL_HASH_CACHE_RESULT_MAX);
 }
 
 // Enumerate GetHash hits/misses for histogramming purposes. DO NOT CHANGE THE
@@ -113,7 +114,7 @@ enum V4GetHashCheckResultType {
 
 // Record a GetHash hit result.
 void RecordV4GetHashCheckResult(V4GetHashCheckResultType result_type) {
-  UMA_HISTOGRAM_ENUMERATION("SafeBrowsing.V4GetHashCheckResult", result_type,
+  UMA_HISTOGRAM_ENUMERATION("SafeBrowsing.V4GetHash.Check.Result", result_type,
                             GET_HASH_CHECK_RESULT_MAX);
 }
 
@@ -130,9 +131,6 @@ const char kPhishing[] = "PHISHING";
 }  // namespace
 
 namespace safe_browsing {
-
-const char kUmaV4HashResponseMetricName[] =
-    "SafeBrowsing.GetV4HashHttpResponseOrErrorCode";
 
 // The default V4GetHashProtocolManagerFactory.
 class V4GetHashProtocolManagerFactoryImpl
@@ -171,12 +169,14 @@ FullHashCallbackInfo::FullHashCallbackInfo(
     std::unique_ptr<net::URLFetcher> fetcher,
     const FullHashToStoreAndHashPrefixesMap&
         full_hash_to_store_and_hash_prefixes,
-    const FullHashCallback& callback)
+    const FullHashCallback& callback,
+    const base::Time& network_start_time)
     : cached_full_hash_infos(cached_full_hash_infos),
       callback(callback),
       fetcher(std::move(fetcher)),
       full_hash_to_store_and_hash_prefixes(
           full_hash_to_store_and_hash_prefixes),
+      network_start_time(network_start_time),
       prefixes_requested(prefixes_requested) {}
 
 FullHashCallbackInfo::~FullHashCallbackInfo() {}
@@ -239,11 +239,18 @@ V4GetHashProtocolManager::V4GetHashProtocolManager(
       url_fetcher_id_(0),
       clock_(new base::DefaultClock()) {
   DCHECK(!stores_to_check.empty());
+  std::set<PlatformType> platform_types;
+  std::set<ThreatEntryType> threat_entry_types;
+  std::set<ThreatType> threat_types;
   for (const ListIdentifier& store : stores_to_check) {
-    platform_types_.insert(store.platform_type());
-    threat_entry_types_.insert(store.threat_entry_type());
-    threat_types_.insert(store.threat_type());
+    platform_types.insert(store.platform_type());
+    threat_entry_types.insert(store.threat_entry_type());
+    threat_types.insert(store.threat_type());
   }
+  platform_types_.assign(platform_types.begin(), platform_types.end());
+  threat_entry_types_.assign(threat_entry_types.begin(),
+                             threat_entry_types.end());
+  threat_types_.assign(threat_types.begin(), threat_types.end());
 }
 
 V4GetHashProtocolManager::~V4GetHashProtocolManager() {}
@@ -298,7 +305,7 @@ void V4GetHashProtocolManager::GetFullHashes(
   net::URLFetcher* fetcher = owned_fetcher.get();
   pending_hash_requests_[fetcher].reset(new FullHashCallbackInfo(
       cached_full_hash_infos, prefixes_to_request, std::move(owned_fetcher),
-      full_hash_to_store_and_hash_prefixes, callback));
+      full_hash_to_store_and_hash_prefixes, callback, clock_->Now()));
 
   fetcher->SetExtraRequestHeaders(headers.ToString());
   fetcher->SetLoadFlags(net::LOAD_DISABLE_CACHE);
@@ -312,7 +319,7 @@ void V4GetHashProtocolManager::GetFullHashesWithApis(
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   DCHECK(url.SchemeIs(url::kHttpScheme) || url.SchemeIs(url::kHttpsScheme));
 
-  std::unordered_set<FullHash> full_hashes;
+  std::vector<FullHash> full_hashes;
   V4ProtocolManagerUtil::UrlToFullHashes(url.GetOrigin(), &full_hashes);
 
   FullHashToStoreAndHashPrefixesMap full_hash_to_store_and_hash_prefixes;
@@ -470,12 +477,13 @@ void V4GetHashProtocolManager::HandleGetHashError(const Time& now) {
 
 void V4GetHashProtocolManager::OnFullHashForApi(
     const ThreatMetadataForApiCallback& api_callback,
-    const std::unordered_set<FullHash>& full_hashes,
+    const std::vector<FullHash>& full_hashes,
     const std::vector<FullHashInfo>& full_hash_infos) {
   ThreatMetadata md;
   for (const FullHashInfo& full_hash_info : full_hash_infos) {
     DCHECK_EQ(GetChromeUrlApiId(), full_hash_info.list_id);
-    DCHECK(full_hashes.find(full_hash_info.full_hash) != full_hashes.end());
+    DCHECK(std::find(full_hashes.begin(), full_hashes.end(),
+                     full_hash_info.full_hash) != full_hashes.end());
     md.api_permissions.insert(full_hash_info.metadata.api_permissions.begin(),
                               full_hash_info.metadata.api_permissions.end());
   }
@@ -529,6 +537,15 @@ bool V4GetHashProtocolManager::ParseHashResponse(
 
     ListIdentifier list_id(match.platform_type(), match.threat_entry_type(),
                            match.threat_type());
+    if (!base::ContainsValue(platform_types_, list_id.platform_type()) ||
+        !base::ContainsValue(threat_entry_types_,
+                             list_id.threat_entry_type()) ||
+        !base::ContainsValue(threat_types_, list_id.threat_type())) {
+      // The server may send a ThreatMatch response for lists that we didn't ask
+      // for so ignore those ThreatMatch responses.
+      continue;
+    }
+
     base::Time positive_expiry;
     if (match.has_cache_duration()) {
       // Seconds resolution is good enough so we ignore the nanos field.
@@ -539,35 +556,33 @@ bool V4GetHashProtocolManager::ParseHashResponse(
     }
     FullHashInfo full_hash_info(match.threat().hash(), list_id,
                                 positive_expiry);
-    if (!ParseMetadata(match, &full_hash_info.metadata)) {
-      return false;
-    }
-
+    ParseMetadata(match, &full_hash_info.metadata);
     full_hash_infos->push_back(full_hash_info);
   }
   return true;
 }
 
-bool V4GetHashProtocolManager::ParseMetadata(const ThreatMatch& match,
+// static
+void V4GetHashProtocolManager::ParseMetadata(const ThreatMatch& match,
                                              ThreatMetadata* metadata) {
   // Different threat types will handle the metadata differently.
   if (match.threat_type() == API_ABUSE) {
     if (!match.has_platform_type() ||
         match.platform_type() != CHROME_PLATFORM) {
       RecordParseGetHashResult(UNEXPECTED_PLATFORM_TYPE_ERROR);
-      return false;
+      return;
     }
 
     if (!match.has_threat_entry_metadata()) {
       RecordParseGetHashResult(NO_METADATA_ERROR);
-      return false;
+      return;
     }
     // For API Abuse, store a list of the returned permissions.
     for (const ThreatEntryMetadata::MetadataEntry& m :
          match.threat_entry_metadata().entries()) {
       if (m.key() != kPermission) {
         RecordParseGetHashResult(UNEXPECTED_METADATA_VALUE_ERROR);
-        return false;
+        return;
       }
       metadata->api_permissions.insert(m.value());
     }
@@ -575,7 +590,6 @@ bool V4GetHashProtocolManager::ParseMetadata(const ThreatMatch& match,
              match.threat_type() == POTENTIALLY_HARMFUL_APPLICATION) {
     for (const ThreatEntryMetadata::MetadataEntry& m :
          match.threat_entry_metadata().entries()) {
-      // TODO: Need to confirm the below key/value pairs with CSD backend.
       if (m.key() == kPhaPatternType || m.key() == kMalwarePatternType) {
         if (m.value() == kLanding) {
           metadata->threat_pattern_type = ThreatPatternType::MALWARE_LANDING;
@@ -586,7 +600,7 @@ bool V4GetHashProtocolManager::ParseMetadata(const ThreatMatch& match,
           break;
         } else {
           RecordParseGetHashResult(UNEXPECTED_METADATA_VALUE_ERROR);
-          return false;
+          return;
         }
       }
     }
@@ -607,16 +621,14 @@ bool V4GetHashProtocolManager::ParseMetadata(const ThreatMatch& match,
           break;
         } else {
           RecordParseGetHashResult(UNEXPECTED_METADATA_VALUE_ERROR);
-          return false;
+          return;
         }
       }
     }
-  } else {
+  } else if (match.has_threat_entry_metadata() &&
+             match.threat_entry_metadata().entries_size() > 1) {
     RecordParseGetHashResult(UNEXPECTED_THREAT_TYPE_ERROR);
-    return false;
   }
-
-  return true;
 }
 
 void V4GetHashProtocolManager::ResetGetHashErrors() {
@@ -698,7 +710,7 @@ void V4GetHashProtocolManager::OnURLFetchComplete(
   int response_code = source->GetResponseCode();
   net::URLRequestStatus status = source->GetStatus();
   V4ProtocolManagerUtil::RecordHttpResponseOrErrorCode(
-      kUmaV4HashResponseMetricName, status, response_code);
+      "SafeBrowsing.V4GetHash.Network.Result", status, response_code);
 
   std::vector<FullHashInfo> full_hash_infos;
   Time negative_cache_expire;
@@ -726,6 +738,8 @@ void V4GetHashProtocolManager::OnURLFetchComplete(
   }
 
   const std::unique_ptr<FullHashCallbackInfo>& fhci = it->second;
+  UMA_HISTOGRAM_LONG_TIMES("SafeBrowsing.V4GetHash.Network.Time",
+                           clock_->Now() - fhci->network_start_time);
   UpdateCache(fhci->prefixes_requested, full_hash_infos, negative_cache_expire);
   MergeResults(fhci->full_hash_to_store_and_hash_prefixes, full_hash_infos,
                &fhci->cached_full_hash_infos);

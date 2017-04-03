@@ -4,6 +4,8 @@
 
 """Start and stop the WPTserve servers as they're used by the layout tests."""
 
+import datetime
+import logging
 from webkitpy.layout_tests.servers import server_base
 
 
@@ -45,19 +47,31 @@ class WPTServe(server_base.ServerBase):
         self._stdout = self._stderr = self._executive.DEVNULL
         # TODO(burnik): We should stop setting the CWD once WPT can be run without it.
         self._cwd = path_to_wpt_root
-        self._env = {'PYTHONPATH': path_to_thirdparty}
+        self._env = port_obj.host.environ.copy()
+        self._env.update({'PYTHONPATH': path_to_thirdparty})
         self._keep_process_reference = True
         self._start_cmd = start_cmd
 
+        expiration_date = datetime.date(2025, 1, 4)
+        if datetime.date.today() > expiration_date - datetime.timedelta(30):
+            logging.getLogger(__name__).error(
+                'Pre-generated keys and certificates are going to be expired at %s.'
+                ' Please re-generate them by following steps in %s/README.chromium.'
+                % (expiration_date.strftime('%b %d %Y'), path_to_wpt_support))
+
     def _stop_running_server(self):
+        while self._pid and self._executive.check_running_pid(self._pid):
+            # TODO(burnik): Figure out a cleaner way of stopping wptserve.
+            if self._platform.is_win():
+                self._executive.kill_process(self._pid)
+            else:
+                self._executive.interrupt(self._pid)
+
+            # According to Popen.wait(), this can deadlock when using stdout=PIPE and/or stderr=PIPE.
+            # We're using DEVNULL for both so that should not occur.
+            if self._process is not None:
+                self._process.wait()
+
         # Clean up the pid file.
-        if self._pid and not self._executive.check_running_pid(self._pid):
+        if self._filesystem.exists(self._pid_file):
             self._filesystem.remove(self._pid_file)
-            return
-
-        # TODO(burnik): Figure out a cleaner way of stopping wptserve.
-        self._executive.interrupt(self._pid)
-
-        # According to Popen.wait(), this can deadlock when using stdout=PIPE and/or stderr=PIPE.
-        # We're using DEVNULL for both so that should not occur.
-        self._process.wait()

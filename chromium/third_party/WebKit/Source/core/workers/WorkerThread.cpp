@@ -35,6 +35,7 @@
 #include "core/inspector/WorkerInspectorController.h"
 #include "core/inspector/WorkerThreadDebugger.h"
 #include "core/origin_trials/OriginTrialContext.h"
+#include "core/workers/ThreadedWorkletGlobalScope.h"
 #include "core/workers/WorkerBackingThread.h"
 #include "core/workers/WorkerClients.h"
 #include "core/workers/WorkerGlobalScope.h"
@@ -46,9 +47,7 @@
 #include "platform/WebThreadSupportingGC.h"
 #include "platform/heap/SafePoint.h"
 #include "platform/heap/ThreadState.h"
-#include "platform/scheduler/CancellableTaskFactory.h"
 #include "platform/weborigin/KURL.h"
-#include "public/platform/WebThread.h"
 #include "wtf/Functional.h"
 #include "wtf/Noncopyable.h"
 #include "wtf/PtrUtil.h"
@@ -62,100 +61,18 @@ namespace blink {
 using ExitCode = WorkerThread::ExitCode;
 
 // TODO(nhiroki): Adjust the delay based on UMA.
-const long long kForceTerminationDelayInMs = 2000;  // 2 secs
-
-// ForceTerminationTask is used for posting a delayed task to terminate the
-// worker execution from the main thread. This task is expected to run when the
-// shutdown sequence does not start in a certain time period because of an
-// inifite loop in the JS execution context etc. When the shutdown sequence is
-// started before this task runs, the task is simply cancelled.
-class WorkerThread::ForceTerminationTask final {
- public:
-  static std::unique_ptr<ForceTerminationTask> create(
-      WorkerThread* workerThread) {
-    return wrapUnique(new ForceTerminationTask(workerThread));
-  }
-
-  void schedule() {
-    DCHECK(isMainThread());
-    Platform::current()->mainThread()->getWebTaskRunner()->postDelayedTask(
-        BLINK_FROM_HERE, m_cancellableTaskFactory->cancelAndCreate(),
-        m_workerThread->m_forceTerminationDelayInMs);
-  }
-
- private:
-  explicit ForceTerminationTask(WorkerThread* workerThread)
-      : m_workerThread(workerThread) {
-    DCHECK(isMainThread());
-    m_cancellableTaskFactory =
-        CancellableTaskFactory::create(this, &ForceTerminationTask::run);
-  }
-
-  void run() {
-    DCHECK(isMainThread());
-    MutexLocker lock(m_workerThread->m_threadStateMutex);
-    if (m_workerThread->m_threadState == ThreadState::ReadyToShutdown) {
-      // Shutdown sequence is now running. Just return.
-      return;
-    }
-    if (m_workerThread->m_runningDebuggerTask) {
-      // Any debugger task is guaranteed to finish, so we can wait for the
-      // completion. Shutdown sequence will start after that.
-      return;
-    }
-
-    m_workerThread->forciblyTerminateExecution(
-        lock, ExitCode::AsyncForciblyTerminated);
-  }
-
-  WorkerThread* m_workerThread;
-  std::unique_ptr<CancellableTaskFactory> m_cancellableTaskFactory;
-};
-
-class WorkerThread::WorkerMicrotaskRunner final
-    : public WebThread::TaskObserver {
- public:
-  explicit WorkerMicrotaskRunner(WorkerThread* workerThread)
-      : m_workerThread(workerThread) {}
-
-  void willProcessTask() override {
-    // No tasks should get executed after we have closed.
-    DCHECK(!m_workerThread->globalScope()->isClosing());
-
-    if (m_workerThread->isForciblyTerminated()) {
-      // The script has been terminated forcibly, which means we need to
-      // ask objects in the thread to stop working as soon as possible.
-      m_workerThread->prepareForShutdownOnWorkerThread();
-    }
-  }
-
-  void didProcessTask() override {
-    Microtask::performCheckpoint(m_workerThread->isolate());
-    WorkerOrWorkletGlobalScope* globalScope = m_workerThread->globalScope();
-    globalScope->scriptController()->getRejectedPromises()->processQueue();
-    if (globalScope->isClosing()) {
-      // |m_workerThread| will eventually be requested to terminate.
-      m_workerThread->workerReportingProxy().didCloseWorkerGlobalScope();
-
-      // Stop further worker tasks to run after this point.
-      m_workerThread->prepareForShutdownOnWorkerThread();
-    }
-  }
-
- private:
-  // Thread owns the microtask runner; reference remains
-  // valid for the lifetime of this object.
-  WorkerThread* m_workerThread;
-};
+const long long kForcibleTerminationDelayInMs = 2000;  // 2 secs
 
 static Mutex& threadSetMutex() {
   DEFINE_THREAD_SAFE_STATIC_LOCAL(Mutex, mutex, new Mutex);
   return mutex;
 }
 
-static HashSet<WorkerThread*>& workerThreads() {
-  DEFINE_STATIC_LOCAL(HashSet<WorkerThread*>, threads, ());
-  return threads;
+static int getNextWorkerThreadId() {
+  DCHECK(isMainThread());
+  static int nextWorkerThreadId = 1;
+  CHECK_LT(nextWorkerThreadId, std::numeric_limits<int>::max());
+  return nextWorkerThreadId++;
 }
 
 WorkerThreadLifecycleContext::WorkerThreadLifecycleContext() {
@@ -235,6 +152,32 @@ void WorkerThread::terminateAndWaitForAllWorkers() {
   // Destruct base::Thread and join the underlying system threads.
   for (WorkerThread* thread : threads)
     thread->clearWorkerBackingThread();
+}
+
+void WorkerThread::willProcessTask() {
+  DCHECK(isCurrentThread());
+
+  // No tasks should get executed after we have closed.
+  DCHECK(!globalScope()->isClosing());
+
+  if (isForciblyTerminated()) {
+    // The script has been terminated forcibly, which means we need to
+    // ask objects in the thread to stop working as soon as possible.
+    prepareForShutdownOnWorkerThread();
+  }
+}
+
+void WorkerThread::didProcessTask() {
+  DCHECK(isCurrentThread());
+  Microtask::performCheckpoint(isolate());
+  globalScope()->scriptController()->getRejectedPromises()->processQueue();
+  if (globalScope()->isClosing()) {
+    // This WorkerThread will eventually be requested to terminate.
+    workerReportingProxy().didCloseWorkerGlobalScope();
+
+    // Stop further worker tasks to run after this point.
+    prepareForShutdownOnWorkerThread();
+  }
 }
 
 v8::Isolate* WorkerThread::isolate() {
@@ -320,6 +263,12 @@ unsigned WorkerThread::workerThreadCount() {
   return workerThreads().size();
 }
 
+HashSet<WorkerThread*>& WorkerThread::workerThreads() {
+  DCHECK(isMainThread());
+  DEFINE_STATIC_LOCAL(HashSet<WorkerThread*>, threads, ());
+  return threads;
+}
+
 PlatformThreadId WorkerThread::platformThreadId() {
   if (!m_requestedToStart)
     return 0;
@@ -345,8 +294,9 @@ bool WorkerThread::isForciblyTerminated() {
 
 WorkerThread::WorkerThread(PassRefPtr<WorkerLoaderProxy> workerLoaderProxy,
                            WorkerReportingProxy& workerReportingProxy)
-    : m_forceTerminationDelayInMs(kForceTerminationDelayInMs),
-      m_inspectorTaskRunner(wrapUnique(new InspectorTaskRunner())),
+    : m_workerThreadId(getNextWorkerThreadId()),
+      m_forcibleTerminationDelayInMs(kForcibleTerminationDelayInMs),
+      m_inspectorTaskRunner(makeUnique<InspectorTaskRunner>()),
       m_workerLoaderProxy(workerLoaderProxy),
       m_workerReportingProxy(workerReportingProxy),
       m_shutdownEvent(wrapUnique(
@@ -377,7 +327,7 @@ void WorkerThread::terminateInternal(TerminationMode mode) {
         // for the completion even if the synchronous forcible
         // termination is requested. Shutdown sequence will start
         // after the task.
-        DCHECK(!m_scheduledForceTerminationTask);
+        DCHECK(!m_forcibleTerminationTaskHandle.isActive());
         return;
       }
 
@@ -386,7 +336,7 @@ void WorkerThread::terminateInternal(TerminationMode mode) {
       // main thread and the scheduled termination task never runs.
       if (mode == TerminationMode::Forcible &&
           m_exitCode == ExitCode::NotTerminated) {
-        DCHECK(m_scheduledForceTerminationTask);
+        DCHECK(m_forcibleTerminationTaskHandle.isActive());
         forciblyTerminateExecution(lock, ExitCode::SyncForciblyTerminated);
       }
       return;
@@ -399,9 +349,16 @@ void WorkerThread::terminateInternal(TerminationMode mode) {
           forciblyTerminateExecution(lock, ExitCode::SyncForciblyTerminated);
           break;
         case TerminationMode::Graceful:
-          DCHECK(!m_scheduledForceTerminationTask);
-          m_scheduledForceTerminationTask = ForceTerminationTask::create(this);
-          m_scheduledForceTerminationTask->schedule();
+          DCHECK(!m_forcibleTerminationTaskHandle.isActive());
+          m_forcibleTerminationTaskHandle =
+              Platform::current()
+                  ->mainThread()
+                  ->getWebTaskRunner()
+                  ->postDelayedCancellableTask(
+                      BLINK_FROM_HERE,
+                      WTF::bind(&WorkerThread::mayForciblyTerminateExecution,
+                                WTF::unretained(this)),
+                      m_forcibleTerminationDelayInMs);
           break;
       }
     }
@@ -443,6 +400,22 @@ bool WorkerThread::shouldScheduleToTerminateExecution(const MutexLocker& lock) {
   return false;
 }
 
+void WorkerThread::mayForciblyTerminateExecution() {
+  DCHECK(isMainThread());
+  MutexLocker lock(m_threadStateMutex);
+  if (m_threadState == ThreadState::ReadyToShutdown) {
+    // Shutdown sequence is now running. Just return.
+    return;
+  }
+  if (m_runningDebuggerTask) {
+    // Any debugger task is guaranteed to finish, so we can wait for the
+    // completion. Shutdown sequence will start after that.
+    return;
+  }
+
+  forciblyTerminateExecution(lock, ExitCode::AsyncForciblyTerminated);
+}
+
 void WorkerThread::forciblyTerminateExecution(const MutexLocker& lock,
                                               ExitCode exitCode) {
   DCHECK(isMainThread());
@@ -453,7 +426,7 @@ void WorkerThread::forciblyTerminateExecution(const MutexLocker& lock,
   setExitCode(lock, exitCode);
 
   isolate()->TerminateExecution();
-  m_scheduledForceTerminationTask.reset();
+  m_forcibleTerminationTaskHandle.cancel();
 }
 
 bool WorkerThread::isInShutdown() {
@@ -485,13 +458,7 @@ void WorkerThread::initializeOnWorkerThread(
 
     if (isOwningBackingThread())
       workerBackingThread().initialize();
-
-    if (shouldAttachThreadDebugger())
-      V8PerIsolateData::from(isolate())->setThreadDebugger(
-          wrapUnique(new WorkerThreadDebugger(this, isolate())));
-    m_microtaskRunner = wrapUnique(new WorkerMicrotaskRunner(this));
-    workerBackingThread().backingThread().addTaskObserver(
-        m_microtaskRunner.get());
+    workerBackingThread().backingThread().addTaskObserver(this);
 
     // Optimize for memory usage instead of latency for the worker isolate.
     isolate()->IsolateInBackgroundNotification();
@@ -554,14 +521,13 @@ void WorkerThread::prepareForShutdownOnWorkerThread() {
   InspectorInstrumentation::allAsyncTasksCanceled(globalScope());
 
   globalScope()->notifyContextDestroyed();
-  globalScope()->dispose();
   if (m_workerInspectorController) {
     m_workerInspectorController->dispose();
     m_workerInspectorController.clear();
   }
+  globalScope()->dispose();
   m_consoleMessageStorage.clear();
-  workerBackingThread().backingThread().removeTaskObserver(
-      m_microtaskRunner.get());
+  workerBackingThread().backingThread().removeTaskObserver(this);
 }
 
 void WorkerThread::performShutdownOnWorkerThread() {
@@ -579,8 +545,6 @@ void WorkerThread::performShutdownOnWorkerThread() {
   if (isOwningBackingThread())
     workerBackingThread().shutdown();
   // We must not touch workerBackingThread() from now on.
-
-  m_microtaskRunner = nullptr;
 
   // Notify the proxy that the WorkerOrWorkletGlobalScope has been disposed
   // of. This can free this thread object, hence it must not be touched

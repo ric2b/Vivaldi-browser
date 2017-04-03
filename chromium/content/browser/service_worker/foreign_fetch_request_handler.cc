@@ -8,10 +8,12 @@
 
 #include "base/command_line.h"
 #include "base/macros.h"
+#include "base/stl_util.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
 #include "content/browser/service_worker/service_worker_response_info.h"
 #include "content/browser/service_worker/service_worker_url_request_job.h"
 #include "content/common/resource_request_body_impl.h"
+#include "content/common/service_worker/service_worker_types.h"
 #include "content/common/service_worker/service_worker_utils.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/resource_request_info.h"
@@ -92,8 +94,10 @@ void ForeignFetchRequestHandler::InitializeHandler(
   if (ServiceWorkerUtils::IsMainResourceType(resource_type))
     return;
 
-  if (request->initiator().IsSameOriginWith(url::Origin(request->url())))
+  if (request->initiator().has_value() &&
+      request->initiator()->IsSameOriginWith(url::Origin(request->url()))) {
     return;
+  }
 
   if (!context_wrapper->OriginHasForeignFetchRegistrations(
           request->url().GetOrigin())) {
@@ -218,7 +222,7 @@ void ForeignFetchRequestHandler::DidFindRegistration(
     }
   }
 
-  const url::Origin& request_origin = job->request()->initiator();
+  const url::Origin& request_origin = job->request()->initiator().value();
   bool origin_matches = active_version->foreign_fetch_origins().empty();
   for (const url::Origin& origin : active_version->foreign_fetch_origins()) {
     if (request_origin.IsSameOriginWith(origin))
@@ -226,6 +230,11 @@ void ForeignFetchRequestHandler::DidFindRegistration(
   }
 
   if (!scope_matches || !origin_matches) {
+    job->FallbackToNetwork();
+    return;
+  }
+
+  if (!IsForeignFetchEnabled() && !CheckOriginTrialToken(active_version)) {
     job->FallbackToNetwork();
     return;
   }
@@ -268,6 +277,18 @@ void ForeignFetchRequestHandler::ClearJob() {
   job_.reset();
   target_worker_ = nullptr;
   resource_context_ = nullptr;
+}
+
+// static
+bool ForeignFetchRequestHandler::CheckOriginTrialToken(
+    const ServiceWorkerVersion* const active_version) {
+  // The worker entry in the database was written by old version Chrome (< M56)
+  // and the main script was not loaded yet. In this case, we can't check the
+  // origin trial token.
+  if (!active_version->origin_trial_tokens())
+    return true;
+  const auto& token_map = *active_version->origin_trial_tokens();
+  return base::ContainsKey(token_map, "ForeignFetch");
 }
 
 }  // namespace content

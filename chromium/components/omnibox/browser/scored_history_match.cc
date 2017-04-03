@@ -20,7 +20,6 @@
 #include "components/omnibox/browser/history_url_provider.h"
 #include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/omnibox/browser/url_prefix.h"
-#include "components/search_engines/template_url_service.h"
 
 namespace {
 
@@ -105,17 +104,22 @@ void InitDaysAgoToRecencyScoreArray() {
 }  // namespace
 
 // static
-const size_t ScoredHistoryMatch::kMaxVisitsToScore = 10;
-bool ScoredHistoryMatch::also_do_hup_like_scoring_ = false;
-int ScoredHistoryMatch::bookmark_value_ = 1;
-bool ScoredHistoryMatch::fix_few_visits_bug_ = false;
-bool ScoredHistoryMatch::allow_tld_matches_ = false;
-bool ScoredHistoryMatch::allow_scheme_matches_ = false;
-size_t ScoredHistoryMatch::num_title_words_to_allow_ = 10u;
-bool ScoredHistoryMatch::hqp_experimental_scoring_enabled_ = false;
+bool ScoredHistoryMatch::also_do_hup_like_scoring_;
+float ScoredHistoryMatch::bookmark_value_;
+float ScoredHistoryMatch::typed_value_;
+bool ScoredHistoryMatch::fix_few_visits_bug_;
+bool ScoredHistoryMatch::frequency_uses_sum_;
+size_t ScoredHistoryMatch::max_visits_to_score_;
+bool ScoredHistoryMatch::allow_tld_matches_;
+bool ScoredHistoryMatch::allow_scheme_matches_;
+size_t ScoredHistoryMatch::num_title_words_to_allow_;
+bool ScoredHistoryMatch::hqp_experimental_scoring_enabled_;
+
+// Default topicality threshold.  See GetTopicalityScore() for details.
 float ScoredHistoryMatch::topicality_threshold_ = 0.8f;
-// Default HQP relevance buckets. See GetFinalRelevancyScore()
-// for more details on these numbers.
+
+// Default HQP relevance buckets. See GetFinalRelevancyScore() for more details
+// on these numbers.
 char ScoredHistoryMatch::hqp_relevance_buckets_str_[] =
     "0.0:400,1.5:600,5.0:900,10.5:1203,15.0:1300,20.0:1399";
 std::vector<ScoredHistoryMatch::ScoreMaxRelevance>*
@@ -129,7 +133,6 @@ ScoredHistoryMatch::ScoredHistoryMatch()
                          WordStarts(),
                          RowWordStarts(),
                          false,
-                         nullptr,
                          base::Time::Max()) {
 }
 
@@ -141,7 +144,6 @@ ScoredHistoryMatch::ScoredHistoryMatch(
     const WordStarts& terms_to_word_starts_offsets,
     const RowWordStarts& word_starts,
     bool is_url_bookmarked,
-    TemplateURLService* template_url_service,
     base::Time now)
     : HistoryMatch(row, 0, false, false), raw_score(0) {
   // NOTE: Call Init() before doing any validity checking to ensure that the
@@ -150,23 +152,10 @@ ScoredHistoryMatch::ScoredHistoryMatch(
   // has been constructed via the no-args constructor.
   ScoredHistoryMatch::Init();
 
-  GURL gurl = row.url();
-  if (!gurl.is_valid())
-    return;
-
-  // Skip results corresponding to queries from the default search engine.
-  // These are low-quality, difficult-to-understand matches for users.
-  // SearchProvider should surface past queries in a better way.
-  TemplateURL* template_url = template_url_service ?
-      template_url_service->GetDefaultSearchProvider() : nullptr;
-  if (template_url &&
-      template_url->IsSearchURL(gurl,
-                                template_url_service->search_terms_data()))
-    return;
-
   // Figure out where each search term appears in the URL and/or page title
   // so that we can score as well as provide autocomplete highlighting.
   base::OffsetAdjuster::Adjustments adjustments;
+  GURL gurl = row.url();
   base::string16 url =
       bookmarks::CleanUpUrlForMatching(gurl, &adjustments);
   base::string16 title = bookmarks::CleanUpTitleForMatching(row.title());
@@ -419,6 +408,9 @@ void ScoredHistoryMatch::Init() {
   initialized = true;
   also_do_hup_like_scoring_ = OmniboxFieldTrial::HQPAlsoDoHUPLikeScoring();
   bookmark_value_ = OmniboxFieldTrial::HQPBookmarkValue();
+  typed_value_ = OmniboxFieldTrial::HQPTypedValue();
+  max_visits_to_score_ = OmniboxFieldTrial::HQPMaxVisitsToScore();
+  frequency_uses_sum_ = OmniboxFieldTrial::HQPFreqencyUsesSum();
   fix_few_visits_bug_ = OmniboxFieldTrial::HQPFixFewVisitsBug();
   allow_tld_matches_ = OmniboxFieldTrial::HQPAllowMatchInTLDValue();
   allow_scheme_matches_ = OmniboxFieldTrial::HQPAllowMatchInSchemeValue();
@@ -473,31 +465,34 @@ float ScoredHistoryMatch::GetTopicalityScore(
         0, colon_pos);
   }
   for (const auto& url_match : url_matches) {
-    const size_t term_offset = terms_to_word_starts_offsets[url_match.term_num];
+    // Calculate the offset in the URL string where the meaningful (word) part
+    // of the term starts.  This takes into account times when a term starts
+    // with punctuation such as "/foo".
+    const size_t term_word_offset =
+        url_match.offset + terms_to_word_starts_offsets[url_match.term_num];
     // Advance next_word_starts until it's >= the position of the term we're
     // considering (adjusted for where the word begins within the term).
     while ((next_word_starts != end_word_starts) &&
-           (*next_word_starts < (url_match.offset + term_offset))) {
+           (*next_word_starts < term_word_offset)) {
       ++next_word_starts;
     }
-    const bool at_word_boundary =
-        (next_word_starts != end_word_starts) &&
-        (*next_word_starts == url_match.offset + term_offset);
+    const bool at_word_boundary = (next_word_starts != end_word_starts) &&
+                                  (*next_word_starts == term_word_offset);
     if ((question_mark_pos != std::string::npos) &&
-        (url_match.offset > question_mark_pos)) {
+        (term_word_offset >= question_mark_pos)) {
       // The match is in a CGI ?... fragment.
       DCHECK(at_word_boundary);
       term_scores[url_match.term_num] += 5;
     } else if ((end_of_hostname_pos != std::string::npos) &&
-               (url_match.offset > end_of_hostname_pos)) {
+               (term_word_offset >= end_of_hostname_pos)) {
       // The match is in the path.
       DCHECK(at_word_boundary);
       term_scores[url_match.term_num] += 8;
     } else if ((colon_pos == std::string::npos) ||
-               (url_match.offset > colon_pos)) {
+               (term_word_offset >= colon_pos)) {
       // The match is in the hostname.
       if ((last_part_of_hostname_pos == std::string::npos) ||
-          (url_match.offset < last_part_of_hostname_pos)) {
+          (term_word_offset < last_part_of_hostname_pos)) {
         // Either there are no dots in the hostname or this match isn't
         // the last dotted component.
         term_scores[url_match.term_num] += at_word_boundary ? 10 : 2;
@@ -524,20 +519,22 @@ float ScoredHistoryMatch::GetTopicalityScore(
       title_matches, terms_to_word_starts_offsets,
       word_starts.title_word_starts_, 0, std::string::npos);
   for (const auto& title_match : title_matches) {
-    const size_t term_offset =
-        terms_to_word_starts_offsets[title_match.term_num];
+    // Calculate the offset in the title string where the meaningful (word) part
+    // of the term starts.  This takes into account times when a term starts
+    // with punctuation such as "/foo".
+    const size_t term_word_offset =
+        title_match.offset + terms_to_word_starts_offsets[title_match.term_num];
     // Advance next_word_starts until it's >= the position of the term we're
     // considering (adjusted for where the word begins within the term).
     while ((next_word_starts != end_word_starts) &&
-           (*next_word_starts < (title_match.offset + term_offset))) {
+           (*next_word_starts < term_word_offset)) {
       ++next_word_starts;
       ++word_num;
     }
     if (word_num >= num_title_words_to_allow_)
       break;  // only count the first ten words
     DCHECK(next_word_starts != end_word_starts);
-    DCHECK_EQ(*next_word_starts, title_match.offset + term_offset)
-        << "not at word boundary";
+    DCHECK_EQ(*next_word_starts, term_word_offset) << "not at word boundary";
     term_scores[title_match.term_num] += 8;
   }
   // TODO(mpearson): Restore logic for penalizing out-of-order matches.
@@ -585,29 +582,38 @@ float ScoredHistoryMatch::GetRecencyScore(int last_visit_days_ago) const {
 float ScoredHistoryMatch::GetFrequency(const base::Time& now,
                                        const bool bookmarked,
                                        const VisitInfoVector& visits) const {
-  // Compute the weighted average |value_of_transition| over the last at
-  // most kMaxVisitsToScore visits, where each visit is weighted using
-  // GetRecencyScore() based on how many days ago it happened.  Use
-  // kMaxVisitsToScore as the denominator for the average regardless of
-  // how many visits there were in order to penalize a match that has
-  // fewer visits than kMaxVisitsToScore.
+  // Compute the weighted sum of |value_of_transition| over the last at most
+  // |max_visits_to_score_| visits, where each visit is weighted using
+  // GetRecencyScore() based on how many days ago it happened.
   float summed_visit_points = 0;
-  const size_t max_visit_to_score =
-      std::min(visits.size(), ScoredHistoryMatch::kMaxVisitsToScore);
-  for (size_t i = 0; i < max_visit_to_score; ++i) {
-    const bool is_page_transition_typed = ui::PageTransitionCoreTypeIs(
-        visits[i].second, ui::PAGE_TRANSITION_TYPED);
-    int value_of_transition = is_page_transition_typed ? 20 : 1;
+  auto visits_end =
+      visits.begin() + std::min(visits.size(), max_visits_to_score_);
+  // Visits should be in newest to oldest order.
+  DCHECK(std::adjacent_find(
+             visits.begin(), visits_end,
+             [](const history::VisitInfo& a, const history::VisitInfo& b) {
+               return a.first < b.first;
+             }) == visits_end);
+  for (auto i = visits.begin(); i != visits_end; ++i) {
+    const bool is_page_transition_typed =
+        ui::PageTransitionCoreTypeIs(i->second, ui::PAGE_TRANSITION_TYPED);
+    float value_of_transition = is_page_transition_typed ? typed_value_ : 1;
     if (bookmarked)
       value_of_transition = std::max(value_of_transition, bookmark_value_);
-    const float bucket_weight =
-        GetRecencyScore((now - visits[i].first).InDays());
+    const float bucket_weight = GetRecencyScore((now - i->first).InDays());
     summed_visit_points += (value_of_transition * bucket_weight);
   }
+  if (frequency_uses_sum_)
+    return summed_visit_points;
+
+  // Compute the average weighted value_of_transition and return it.
+  // Use |max_visits_to_score_| as the denominator for the average regardless of
+  // how many visits there were in order to penalize a match that has
+  // fewer visits than kMaxVisitsToScore.
   if (fix_few_visits_bug_)
-    return summed_visit_points / ScoredHistoryMatch::kMaxVisitsToScore;
+    return summed_visit_points / ScoredHistoryMatch::max_visits_to_score_;
   return visits.size() * summed_visit_points /
-      ScoredHistoryMatch::kMaxVisitsToScore;
+         ScoredHistoryMatch::max_visits_to_score_;
 }
 
 // static

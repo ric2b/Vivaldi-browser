@@ -57,25 +57,24 @@ void FlatTreeTraversalTest::setupSampleHTML(const char* mainHTML,
                                             const char* shadowHTML,
                                             unsigned index) {
   Element* body = document().body();
-  body->setInnerHTML(String::fromUTF8(mainHTML), ASSERT_NO_EXCEPTION);
+  body->setInnerHTML(String::fromUTF8(mainHTML));
   Element* shadowHost = toElement(NodeTraversal::childAt(*body, index));
   ShadowRoot* shadowRoot = shadowHost->createShadowRootInternal(
       ShadowRootType::V0, ASSERT_NO_EXCEPTION);
-  shadowRoot->setInnerHTML(String::fromUTF8(shadowHTML), ASSERT_NO_EXCEPTION);
+  shadowRoot->setInnerHTML(String::fromUTF8(shadowHTML));
   body->updateDistribution();
 }
 
 void FlatTreeTraversalTest::setupDocumentTree(const char* mainHTML) {
   Element* body = document().body();
-  body->setInnerHTML(String::fromUTF8(mainHTML), ASSERT_NO_EXCEPTION);
+  body->setInnerHTML(String::fromUTF8(mainHTML));
 }
 
 void FlatTreeTraversalTest::attachV0ShadowRoot(Element& shadowHost,
                                                const char* shadowInnerHTML) {
   ShadowRoot* shadowRoot = shadowHost.createShadowRootInternal(
       ShadowRootType::V0, ASSERT_NO_EXCEPTION);
-  shadowRoot->setInnerHTML(String::fromUTF8(shadowInnerHTML),
-                           ASSERT_NO_EXCEPTION);
+  shadowRoot->setInnerHTML(String::fromUTF8(shadowInnerHTML));
   document().body()->updateDistribution();
 }
 
@@ -83,8 +82,7 @@ void FlatTreeTraversalTest::attachOpenShadowRoot(Element& shadowHost,
                                                  const char* shadowInnerHTML) {
   ShadowRoot* shadowRoot = shadowHost.createShadowRootInternal(
       ShadowRootType::Open, ASSERT_NO_EXCEPTION);
-  shadowRoot->setInnerHTML(String::fromUTF8(shadowInnerHTML),
-                           ASSERT_NO_EXCEPTION);
+  shadowRoot->setInnerHTML(String::fromUTF8(shadowInnerHTML));
   document().body()->updateDistribution();
 }
 
@@ -569,6 +567,31 @@ TEST_F(FlatTreeTraversalTest, v1Redistribution) {
   EXPECT_EQ(d11, FlatTreeTraversal::parent(*d14));
   EXPECT_EQ(nullptr, FlatTreeTraversal::parent(*d3));
   EXPECT_EQ(nullptr, FlatTreeTraversal::parent(*d4));
+}
+
+TEST_F(FlatTreeTraversalTest, v1SlotInDocumentTree) {
+  const char* mainHTML =
+      "<div id='parent'>"
+      "<slot>"
+      "<div id='child1'></div>"
+      "<div id='child2'></div>"
+      "</slot>"
+      "</div>";
+
+  setupDocumentTree(mainHTML);
+  Element* body = document().body();
+  Element* parent = body->querySelector("#parent");
+  Element* slot = body->querySelector("slot");
+  Element* child1 = body->querySelector("#child1");
+  Element* child2 = body->querySelector("#child2");
+
+  EXPECT_EQ(slot, FlatTreeTraversal::firstChild(*parent));
+  EXPECT_EQ(child1, FlatTreeTraversal::firstChild(*slot));
+  EXPECT_EQ(child2, FlatTreeTraversal::nextSibling(*child1));
+  EXPECT_EQ(nullptr, FlatTreeTraversal::nextSibling(*child2));
+  EXPECT_EQ(slot, FlatTreeTraversal::parent(*child1));
+  EXPECT_EQ(slot, FlatTreeTraversal::parent(*child2));
+  EXPECT_EQ(parent, FlatTreeTraversal::parent(*slot));
 }
 
 }  // namespace blink

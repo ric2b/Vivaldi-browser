@@ -20,6 +20,7 @@
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/common/child_process_host_impl.h"
 #include "content/common/frame_messages.h"
+#include "content/common/renderer.mojom.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/global_request_id.h"
 #include "content/public/browser/notification_details.h"
@@ -28,6 +29,7 @@
 #include "content/public/browser/notification_types.h"
 #include "content/public/browser/render_widget_host_iterator.h"
 #include "content/public/browser/storage_partition.h"
+#include "mojo/public/cpp/bindings/associated_interface_ptr.h"
 
 namespace content {
 
@@ -57,9 +59,8 @@ MockRenderProcessHost::~MockRenderProcessHost() {
 
   // In unit tests, Cleanup() might not have been called.
   if (!deletion_callback_called_) {
-    FOR_EACH_OBSERVER(RenderProcessHostObserver,
-                      observers_,
-                      RenderProcessHostDestroyed(this));
+    for (auto& observer : observers_)
+      observer.RenderProcessHostDestroyed(this);
     RenderProcessHostImpl::UnregisterHost(GetID());
   }
 }
@@ -72,9 +73,8 @@ void MockRenderProcessHost::SimulateCrash() {
       NOTIFICATION_RENDERER_PROCESS_CLOSED, Source<RenderProcessHost>(this),
       Details<RenderProcessHost::RendererClosedDetails>(&details));
 
-  FOR_EACH_OBSERVER(
-      RenderProcessHostObserver, observers_,
-      RenderProcessExited(this, details.status, details.exit_code));
+  for (auto& observer : observers_)
+    observer.RenderProcessExited(this, details.status, details.exit_code);
 
   // Send every routing ID a FrameHostMsg_RenderProcessGone message. To ensure a
   // predictable order for unittests which may assert against the order, we sort
@@ -95,14 +95,13 @@ void MockRenderProcessHost::SimulateCrash() {
   }
 }
 
-void MockRenderProcessHost::EnableSendQueue() {
-}
-
 bool MockRenderProcessHost::Init() {
   has_connection_ = true;
-  remote_interfaces_.reset(new shell::InterfaceProvider);
+  remote_interfaces_.reset(new service_manager::InterfaceProvider);
   return true;
 }
+
+void MockRenderProcessHost::EnableSendQueue() {}
 
 int MockRenderProcessHost::GetNextRoutingID() {
   return ++prev_routing_id_;
@@ -207,9 +206,8 @@ bool MockRenderProcessHost::IgnoreInputEvents() const {
 
 void MockRenderProcessHost::Cleanup() {
   if (listeners_.IsEmpty()) {
-    FOR_EACH_OBSERVER(RenderProcessHostObserver,
-                      observers_,
-                      RenderProcessHostDestroyed(this));
+    for (auto& observer : observers_)
+      observer.RenderProcessHostDestroyed(this);
     base::ThreadTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE, this);
     RenderProcessHostImpl::UnregisterHost(GetID());
     deletion_callback_called_ = true;
@@ -256,7 +254,8 @@ base::TimeDelta MockRenderProcessHost::GetChildProcessIdleTime() const {
   return base::TimeDelta::FromMilliseconds(0);
 }
 
-shell::InterfaceProvider* MockRenderProcessHost::GetRemoteInterfaces() {
+service_manager::InterfaceProvider*
+MockRenderProcessHost::GetRemoteInterfaces() {
   return remote_interfaces_.get();
 }
 
@@ -300,6 +299,16 @@ bool MockRenderProcessHost::IsWorkerRefCountDisabled() {
 }
 
 void MockRenderProcessHost::PurgeAndSuspend() {}
+
+void MockRenderProcessHost::Resume() {}
+
+mojom::Renderer* MockRenderProcessHost::GetRendererInterface() {
+  if (!renderer_interface_) {
+    renderer_interface_.reset(new mojom::RendererAssociatedPtr);
+    mojo::GetDummyProxyForTesting(renderer_interface_.get());
+  }
+  return renderer_interface_->get();
+}
 
 void MockRenderProcessHost::FilterURL(bool empty_allowed, GURL* url) {
   RenderProcessHostImpl::FilterURL(this, empty_allowed, url);

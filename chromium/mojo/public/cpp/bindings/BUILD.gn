@@ -39,7 +39,6 @@ component("bindings") {
     "bindings_export.h",
     "connection_error_callback.h",
     "connector.h",
-    "enum_traits.h",
     "filter_chain.h",
     "interface_data_view.h",
     "interface_endpoint_client.h",
@@ -139,11 +138,13 @@ component("bindings") {
     "string_traits_stl.h",
     "string_traits_string16.h",
     "string_traits_string_piece.h",
+    "strong_associated_binding.h",
     "strong_binding.h",
     "struct_ptr.h",
     "sync_call_restrictions.h",
     "sync_handle_registry.h",
     "sync_handle_watcher.h",
+    "thread_safe_interface_ptr.h",
     "type_converter.h",
     "union_traits.h",
   ]
@@ -166,6 +167,7 @@ component("bindings") {
 
 source_set("struct_traits") {
   sources = [
+    "enum_traits.h",
     "struct_traits.h",
   ]
 }

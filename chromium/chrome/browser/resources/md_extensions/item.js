@@ -100,6 +100,15 @@ cr.define('extensions', function() {
       this.fire('extension-item-size-changed', {item: this.data});
     },
 
+    /**
+     * @return {boolean}
+     * @private
+     */
+    computeErrorsHidden_: function() {
+      return !this.data.manifestErrors.length &&
+             !this.data.runtimeErrors.length;
+    },
+
     /** @private */
     onRemoveTap_: function() {
       this.delegate.deleteItem(this.data.id);
@@ -112,8 +121,13 @@ cr.define('extensions', function() {
     },
 
     /** @private */
+    onErrorsTap_: function() {
+      this.fire('extension-item-show-errors', {data: this.data});
+    },
+
+    /** @private */
     onDetailsTap_: function() {
-      this.fire('extension-item-show-details', {element: this});
+      this.fire('extension-item-show-details', {data: this.data});
     },
 
     /**

@@ -2,24 +2,25 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import argparse
+import os
 import subprocess
 import sys
 import re
 
 def ListIdentities():
   return subprocess.check_output([
-    '/usr/bin/env',
     'xcrun',
     'security',
     'find-identity',
     '-v',
     '-p',
     'codesigning',
-  ]).strip()
+  ])
 
 
 def FindValidIdentity():
-  lines = ListIdentities().splitlines()
+  lines = list(map(str.strip, ListIdentities().splitlines()))
   # Look for something like "2) XYZ "iPhone Developer: Name (ABC)""
   exp = re.compile('[0-9]+\) ([A-F0-9]+) "([^"]*)"')
   for line in lines:
@@ -32,4 +33,11 @@ def FindValidIdentity():
 
 
 if __name__ == '__main__':
+  parser = argparse.ArgumentParser('codesign iOS bundles')
+  parser.add_argument('--developer_dir', required=False,
+                      help='Path to Xcode.')
+  args = parser.parse_args()
+  if args.developer_dir:
+    os.environ['DEVELOPER_DIR'] = args.developer_dir
+
   print FindValidIdentity()

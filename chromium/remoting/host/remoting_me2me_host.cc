@@ -28,15 +28,16 @@
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "components/policy/policy_constants.h"
-#include "ipc/attachment_broker_unprivileged.h"
 #include "ipc/ipc_channel.h"
 #include "ipc/ipc_channel_proxy.h"
 #include "ipc/ipc_listener.h"
 #include "jingle/glue/thread_wrapper.h"
+#include "mojo/edk/embedder/embedder.h"
+#include "mojo/edk/embedder/platform_channel_pair.h"
+#include "mojo/edk/embedder/scoped_ipc_support.h"
 #include "net/base/network_change_notifier.h"
 #include "net/base/url_util.h"
 #include "net/socket/client_socket_factory.h"
-#include "net/socket/ssl_server_socket.h"
 #include "net/url_request/url_fetcher.h"
 #include "remoting/base/auto_thread_task_runner.h"
 #include "remoting/base/breakpad.h"
@@ -150,11 +151,13 @@ const char kStdinConfigPath[] = "-";
 // The command line switch used to pass name of the pipe to capture audio on
 // linux.
 const char kAudioPipeSwitchName[] = "audio-pipe-name";
+#endif  // defined(OS_LINUX)
 
+#if defined(OS_POSIX)
 // The command line switch used to pass name of the unix domain socket used to
 // listen for security key requests.
 const char kAuthSocknameSwitchName[] = "ssh-auth-sockname";
-#endif  // defined(OS_LINUX)
+#endif  // defined(OS_POSIX)
 
 // The command line switch used by the parent to request the host to signal it
 // when it is successfully started.
@@ -376,7 +379,7 @@ class HostProcess : public ConfigWatcher::Delegate,
   bool curtain_required_ = false;
   ThirdPartyAuthConfig third_party_auth_config_;
   bool security_key_auth_policy_enabled_ = false;
-  bool security_key_extension_supported_ = false;
+  bool security_key_extension_supported_ = true;
 
   // Boolean to change flow, where necessary, if we're
   // capturing a window instead of the entire desktop.
@@ -411,6 +414,8 @@ class HostProcess : public ConfigWatcher::Delegate,
   scoped_refptr<HostProcess> self_;
 
 #if defined(REMOTING_MULTI_PROCESS)
+  std::unique_ptr<mojo::edk::ScopedIPCSupport> ipc_support_;
+
   // Accessed on the UI thread.
   std::unique_ptr<IPC::ChannelProxy> daemon_channel_;
 
@@ -455,35 +460,21 @@ HostProcess::~HostProcess() {
 
 bool HostProcess::InitWithCommandLine(const base::CommandLine* cmd_line) {
 #if defined(REMOTING_MULTI_PROCESS)
-  // Parse the handle value and convert it to a handle/file descriptor.
-  std::string channel_name =
-      cmd_line->GetSwitchValueASCII(kDaemonPipeSwitchName);
-
-  int pipe_handle = 0;
-  if (channel_name.empty() ||
-      !base::StringToInt(channel_name, &pipe_handle)) {
-    LOG(ERROR) << "Invalid '" << kDaemonPipeSwitchName
-               << "' value: " << channel_name;
-    return false;
-  }
-
-#if defined(OS_WIN)
-  base::win::ScopedHandle pipe(reinterpret_cast<HANDLE>(pipe_handle));
-  IPC::ChannelHandle channel_handle(pipe.Get());
-#elif defined(OS_POSIX)
-  base::FileDescriptor pipe(pipe_handle, true);
-  IPC::ChannelHandle channel_handle(channel_name, pipe);
-#endif  // defined(OS_POSIX)
+  // Mojo keeps the task runner passed to it alive forever, so an
+  // AutoThreadTaskRunner should not be passed to it. Otherwise, the process may
+  // never shut down cleanly.
+  ipc_support_ = base::MakeUnique<mojo::edk::ScopedIPCSupport>(
+      context_->network_task_runner()->task_runner());
+  mojo::edk::SetParentPipeHandle(
+      mojo::edk::PlatformChannelPair::PassClientHandleFromParentProcess(
+          *cmd_line));
 
   // Connect to the daemon process.
-  daemon_channel_.reset(
-      new IPC::ChannelProxy(this, context_->network_task_runner()));
-  IPC::AttachmentBrokerUnprivileged::CreateBrokerIfNeeded();
-  IPC::AttachmentBroker* broker = IPC::AttachmentBroker::GetGlobal();
-  if (broker && !broker->IsPrivilegedBroker())
-    broker->RegisterBrokerCommunicationChannel(daemon_channel_.get());
-  daemon_channel_->Init(channel_handle, IPC::Channel::MODE_CLIENT,
-                        /*create_pipe_now=*/true);
+  daemon_channel_ = IPC::ChannelProxy::Create(
+      mojo::edk::CreateChildMessagePipe(
+          cmd_line->GetSwitchValueASCII(kMojoPipeToken))
+          .release(),
+      IPC::Channel::MODE_CLIENT, this, context_->network_task_runner());
 
 #else  // !defined(REMOTING_MULTI_PROCESS)
   if (cmd_line->HasSwitch(kHostConfigSwitchName)) {
@@ -816,19 +807,19 @@ void HostProcess::StartOnUiThread() {
     remoting::AudioCapturerLinux::InitializePipeReader(
         context_->audio_task_runner(), audio_pipe_name);
   }
+#endif  // defined(OS_LINUX)
 
+#if defined(OS_POSIX)
   base::FilePath security_key_socket_name =
       base::CommandLine::ForCurrentProcess()->GetSwitchValuePath(
           kAuthSocknameSwitchName);
   if (!security_key_socket_name.empty()) {
     remoting::SecurityKeyAuthHandler::SetSecurityKeySocketName(
         security_key_socket_name);
-    security_key_extension_supported_ = true;
+  } else {
+    security_key_extension_supported_ = false;
   }
-#elif defined(OS_WIN)
-  // TODO(joedow): Remove the conditional once this is supported on OSX.
-  security_key_extension_supported_ = true;
-#endif  // defined(OS_WIN)
+#endif  // defined(OS_POSIX)
 
   // Create a desktop environment factory appropriate to the build type &
   // platform.
@@ -850,8 +841,6 @@ void HostProcess::StartOnUiThread() {
         context_->input_task_runner(), context_->ui_task_runner());
   }
 #endif  // !defined(REMOTING_MULTI_PROCESS)
-  desktop_environment_factory->set_supports_touch_events(
-      InputInjector::SupportsTouchEvents());
 
   desktop_environment_factory_.reset(desktop_environment_factory);
 
@@ -868,10 +857,6 @@ void HostProcess::ShutdownOnUiThread() {
   policy_watcher_.reset();
 
 #if defined(REMOTING_MULTI_PROCESS)
-  IPC::AttachmentBroker* broker = IPC::AttachmentBroker::GetGlobal();
-  if (broker && !broker->IsPrivilegedBroker()) {
-    broker->DeregisterBrokerCommunicationChannel(daemon_channel_.get());
-  }
   daemon_channel_.reset();
 #endif  // defined(REMOTING_MULTI_PROCESS)
 
@@ -1249,7 +1234,7 @@ bool HostProcess::OnCurtainPolicyUpdate(base::DictionaryValue* policies) {
     // TODO(jamiewalch): Fix this once we have implemented the multi-process
     // daemon architecture (crbug.com/134894)
     if (getuid() == 0) {
-      LOG(ERROR) << "Running the host in the console login session is yet not "
+      LOG(ERROR) << "Running the host in the console login session is not yet "
                     "supported.";
       ShutdownHost(kLoginScreenNotSupportedExitCode);
       return false;
@@ -1641,10 +1626,6 @@ int HostProcessMain() {
   // network thread. base::GetLinuxDistro() caches the result.
   base::GetLinuxDistro();
 #endif
-
-  // Enable support for SSL server sockets, which must be done while still
-  // single-threaded.
-  net::EnableSSLServerSockets();
 
   // Create the main message loop and start helper threads.
   base::MessageLoopForUI message_loop;

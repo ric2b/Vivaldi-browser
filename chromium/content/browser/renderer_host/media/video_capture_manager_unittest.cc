@@ -18,10 +18,11 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
-#include "content/browser/browser_thread_impl.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "content/browser/renderer_host/media/media_stream_provider.h"
 #include "content/browser/renderer_host/media/video_capture_controller_event_handler.h"
 #include "content/common/media/media_stream_options.h"
+#include "content/public/test/test_browser_thread_bundle.h"
 #include "media/capture/video/fake_video_capture_device_factory.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -138,12 +139,8 @@ class MockFrameObserver : public VideoCaptureControllerEventHandler {
   MOCK_METHOD1(OnError, void(VideoCaptureControllerID id));
 
   void OnBufferCreated(VideoCaptureControllerID id,
-                       base::SharedMemoryHandle handle,
+                       mojo::ScopedSharedBufferHandle handle,
                        int length, int buffer_id) override {}
-  void OnBufferCreated2(VideoCaptureControllerID id,
-                        const std::vector<gfx::GpuMemoryBufferHandle>& handles,
-                        const gfx::Size& size,
-                        int buffer_id) override {}
   void OnBufferDestroyed(VideoCaptureControllerID id, int buffer_id) override {}
   void OnBufferReady(VideoCaptureControllerID id,
                      int buffer_id,
@@ -176,11 +173,6 @@ class VideoCaptureManagerTest : public testing::Test {
  protected:
   void SetUp() override {
     listener_.reset(new MockMediaStreamProviderListener());
-    message_loop_.reset(new base::MessageLoopForIO);
-    ui_thread_.reset(new BrowserThreadImpl(BrowserThread::UI,
-                                           message_loop_.get()));
-    io_thread_.reset(new BrowserThreadImpl(BrowserThread::IO,
-                                           message_loop_.get()));
     vcm_ = new VideoCaptureManager(
         std::unique_ptr<media::VideoCaptureDeviceFactory>(
             new WrappedDeviceFactory()));
@@ -188,7 +180,7 @@ class VideoCaptureManagerTest : public testing::Test {
         vcm_->video_capture_device_factory());
     const int32_t kNumberOfFakeDevices = 2;
     video_capture_device_factory_->set_number_of_devices(kNumberOfFakeDevices);
-    vcm_->Register(listener_.get(), message_loop_->task_runner().get());
+    vcm_->Register(listener_.get(), base::ThreadTaskRunnerHandle::Get());
     frame_observer_.reset(new MockFrameObserver());
 
     base::RunLoop run_loop;
@@ -223,7 +215,6 @@ class VideoCaptureManagerTest : public testing::Test {
     vcm_->StartCaptureForClient(
         session_id,
         params,
-        base::kNullProcessHandle,
         client_id,
         frame_observer_.get(),
         base::Bind(&VideoCaptureManagerTest::OnGotControllerCallback,
@@ -274,9 +265,7 @@ class VideoCaptureManagerTest : public testing::Test {
   std::map<VideoCaptureControllerID, VideoCaptureController*> controllers_;
   scoped_refptr<VideoCaptureManager> vcm_;
   std::unique_ptr<MockMediaStreamProviderListener> listener_;
-  std::unique_ptr<base::MessageLoop> message_loop_;
-  std::unique_ptr<BrowserThreadImpl> ui_thread_;
-  std::unique_ptr<BrowserThreadImpl> io_thread_;
+  TestBrowserThreadBundle thread_bundle_;
   std::unique_ptr<MockFrameObserver> frame_observer_;
   WrappedDeviceFactory* video_capture_device_factory_;
   StreamDeviceInfoArray devices_;

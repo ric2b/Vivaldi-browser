@@ -20,10 +20,10 @@ enum SensorState {
     readonly attribute SensorState state;
     readonly attribute SensorReading? reading;
 
-    [CallWith=ScriptState, RaisesException] void start();
-    [CallWith=ScriptState, RaisesException] void stop();
+    [CallWith=ScriptState, RaisesException, MeasureAs=GenericSensorStart] void start();
+    [CallWith=ScriptState, RaisesException, MeasureAs=GenericSensorStop] void stop();
 
     attribute EventHandler onerror;
     attribute EventHandler onchange;
-    attribute EventHandler onstatechange;
+    attribute EventHandler onactivate;
 };

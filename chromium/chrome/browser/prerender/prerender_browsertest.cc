@@ -25,7 +25,6 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/test_timeouts.h"
 #include "base/values.h"
@@ -41,6 +40,7 @@
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/external_protocol/external_protocol_handler.h"
 #include "chrome/browser/net/prediction_options.h"
+#include "chrome/browser/password_manager/password_store_factory.h"
 #include "chrome/browser/predictors/autocomplete_action_predictor.h"
 #include "chrome/browser/predictors/autocomplete_action_predictor_factory.h"
 #include "chrome/browser/prerender/prerender_contents.h"
@@ -66,7 +66,6 @@
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
-#include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/favicon/content/content_favicon_driver.h"
@@ -74,6 +73,9 @@
 #include "components/omnibox/browser/omnibox_edit_model.h"
 #include "components/omnibox/browser/omnibox_popup_model.h"
 #include "components/omnibox/browser/omnibox_view.h"
+#include "components/password_manager/core/browser/password_bubble_experiment.h"
+#include "components/password_manager/core/browser/password_manager_test_utils.h"
+#include "components/password_manager/core/browser/test_password_store.h"
 #include "components/safe_browsing_db/database_manager.h"
 #include "components/safe_browsing_db/util.h"
 #include "components/variations/entropy_provider.h"
@@ -117,7 +119,6 @@
 #include "net/url_request/url_request_job.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "ui/base/l10n/l10n_util.h"
 #include "url/gurl.h"
 
 using chrome_browser_net::NetworkPredictionOptions;
@@ -576,7 +577,7 @@ class SwapProcessesContentBrowserClient : public ChromeContentBrowserClient {
 
   // ChromeContentBrowserClient:
   bool ShouldSwapProcessesForRedirect(
-      content::ResourceContext* resource_context,
+      content::BrowserContext* browser_context,
       const GURL& current_url,
       const GURL& new_url) override {
     return true;
@@ -602,6 +603,36 @@ class PrerenderBrowserTest : public test_utils::PrerenderInProcessBrowserTest {
         loader_path_("/prerender/prerender_loader.html") {}
 
   ~PrerenderBrowserTest() override {}
+
+  std::unique_ptr<TestPrerender> PrerenderTestURL(
+      const std::string& html_file,
+      FinalStatus expected_final_status,
+      int expected_number_of_loads) {
+    GURL url = src_server()->GetURL(MakeAbsolute(html_file));
+    return PrerenderTestURL(url, expected_final_status,
+                            expected_number_of_loads);
+  }
+
+  std::unique_ptr<TestPrerender> PrerenderTestURL(
+      const GURL& url,
+      FinalStatus expected_final_status,
+      int expected_number_of_loads) {
+    std::vector<FinalStatus> expected_final_status_queue(1,
+                                                         expected_final_status);
+    auto prerenders = PrerenderTestURLImpl(url, expected_final_status_queue,
+                                           expected_number_of_loads);
+    CHECK_EQ(1u, prerenders.size());
+    return std::move(prerenders[0]);
+  }
+
+  std::vector<std::unique_ptr<TestPrerender>> PrerenderTestURL(
+      const std::string& html_file,
+      const std::vector<FinalStatus>& expected_final_status_queue,
+      int expected_number_of_loads) {
+    GURL url = src_server()->GetURL(MakeAbsolute(html_file));
+    return PrerenderTestURLImpl(url, expected_final_status_queue,
+                                expected_number_of_loads);
+  }
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
     PrerenderInProcessBrowserTest::SetUpCommandLine(command_line);
@@ -745,15 +776,6 @@ class PrerenderBrowserTest : public test_utils::PrerenderInProcessBrowserTest {
     EXPECT_TRUE(js_result);
   }
 
-  void UseHttpsSrcServer() {
-    if (https_src_server_)
-      return;
-    https_src_server_.reset(
-        new net::EmbeddedTestServer(net::EmbeddedTestServer::TYPE_HTTPS));
-    https_src_server_->ServeFilesFromSourceDirectory("chrome/test/data");
-    CHECK(https_src_server_->Start());
-  }
-
   void DisableJavascriptCalls() {
     call_javascript_ = false;
   }
@@ -852,15 +874,6 @@ class PrerenderBrowserTest : public test_utils::PrerenderInProcessBrowserTest {
     return history_list->GetSize();
   }
 
-  test_utils::FakeSafeBrowsingDatabaseManager*
-  GetFakeSafeBrowsingDatabaseManager() {
-    return static_cast<test_utils::FakeSafeBrowsingDatabaseManager*>(
-        safe_browsing_factory()
-            ->test_safe_browsing_service()
-            ->database_manager()
-            .get());
-  }
-
   void SetLoaderHostOverride(const std::string& host) {
     loader_host_override_ = host;
     host_resolver()->AddRule(host, "127.0.0.1");
@@ -921,20 +934,6 @@ class PrerenderBrowserTest : public test_utils::PrerenderInProcessBrowserTest {
         base::ASCIIToUTF16(javascript));
   }
 
-  // Returns a string for pattern-matching TaskManager tab entries.
-  base::string16 MatchTaskManagerTab(const char* page_title) {
-    return l10n_util::GetStringFUTF16(IDS_TASK_MANAGER_TAB_PREFIX,
-                                      base::ASCIIToUTF16(page_title));
-  }
-
-  // Returns a string for pattern-matching TaskManager prerender entries.
-  base::string16 MatchTaskManagerPrerender(const char* page_title) {
-    return l10n_util::GetStringFUTF16(IDS_TASK_MANAGER_PRERENDER_PREFIX,
-                                      base::ASCIIToUTF16(page_title));
-  }
-
-  const base::HistogramTester& histogram_tester() { return histogram_tester_; }
-
  private:
   // TODO(davidben): Remove this altogether so the tests don't globally assume
   // only one prerender.
@@ -942,47 +941,24 @@ class PrerenderBrowserTest : public test_utils::PrerenderInProcessBrowserTest {
     return GetPrerenderContentsFor(dest_url_);
   }
 
-  ScopedVector<TestPrerender> PrerenderTestURLImpl(
+  std::vector<std::unique_ptr<TestPrerender>> PrerenderTestURLImpl(
       const GURL& prerender_url,
       const std::vector<FinalStatus>& expected_final_status_queue,
-      int expected_number_of_loads) override {
+      int expected_number_of_loads) {
     dest_url_ = prerender_url;
 
-    base::StringPairs replacement_text;
-    replacement_text.push_back(
-        make_pair("REPLACE_WITH_PRERENDER_URL", prerender_url.spec()));
-    std::string replacement_path;
-    net::test_server::GetFilePathWithReplacements(
-        loader_path_, replacement_text, &replacement_path);
-
-    const net::EmbeddedTestServer* src_server = embedded_test_server();
-    if (https_src_server_)
-      src_server = https_src_server_.get();
-    GURL loader_url = src_server->GetURL(
-        replacement_path + "&" + loader_query_);
-
+    GURL loader_url = ServeLoaderURL(loader_path_, "REPLACE_WITH_PRERENDER_URL",
+                                     prerender_url, "&" + loader_query_);
     GURL::Replacements loader_replacements;
     if (!loader_host_override_.empty())
       loader_replacements.SetHostStr(loader_host_override_);
     loader_url = loader_url.ReplaceComponents(loader_replacements);
 
-    CHECK(!expected_final_status_queue.empty());
-    ScopedVector<TestPrerender> prerenders;
-    for (size_t i = 0; i < expected_final_status_queue.size(); i++) {
-      prerenders.push_back(
-          prerender_contents_factory()
-              ->ExpectPrerenderContents(expected_final_status_queue[i])
-              .release());
-    }
-
-    FinalStatus expected_final_status = expected_final_status_queue.front();
-
-    // Navigate to the loader URL and then wait for the first prerender to be
-    // created.
-    ui_test_utils::NavigateToURL(current_browser(), loader_url);
-    prerenders[0]->WaitForCreate();
+    std::vector<std::unique_ptr<TestPrerender>> prerenders =
+        NavigateWithPrerenders(loader_url, expected_final_status_queue);
     prerenders[0]->WaitForLoads(expected_number_of_loads);
 
+    FinalStatus expected_final_status = expected_final_status_queue.front();
     if (ShouldAbortPrerenderBeforeSwap(expected_final_status)) {
       // The prerender will abort on its own. Assert it does so correctly.
       prerenders[0]->WaitForStop();
@@ -1068,13 +1044,11 @@ class PrerenderBrowserTest : public test_utils::PrerenderInProcessBrowserTest {
   }
 
   GURL dest_url_;
-  std::unique_ptr<net::EmbeddedTestServer> https_src_server_;
   bool call_javascript_;
   bool check_load_events_;
   std::string loader_host_override_;
   std::string loader_path_;
   std::string loader_query_;
-  base::HistogramTester histogram_tester_;
   base::test::ScopedFeatureList feature_list_;
 };
 
@@ -1685,11 +1659,15 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, PrerenderReferrer) {
 
 // Checks that the referrer is not set when prerendering and the source page is
 // HTTPS.
-IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest,
-                       PrerenderNoSSLReferrer) {
+IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, PrerenderNoSSLReferrer) {
+  // Use http:// url for the prerendered page main resource.
+  GURL url(
+      embedded_test_server()->GetURL("/prerender/prerender_no_referrer.html"));
+
+  // Use https:// for all other resources.
   UseHttpsSrcServer();
-  PrerenderTestURL("/prerender/prerender_no_referrer.html", FINAL_STATUS_USED,
-                   1);
+
+  PrerenderTestURL(url, FINAL_STATUS_USED, 1);
   NavigateToDestURL();
 }
 
@@ -1752,7 +1730,7 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, PrerenderInfiniteLoop) {
   expected_final_status_queue.push_back(FINAL_STATUS_USED);
   expected_final_status_queue.push_back(FINAL_STATUS_APP_TERMINATING);
 
-  ScopedVector<TestPrerender> prerenders =
+  std::vector<std::unique_ptr<TestPrerender>> prerenders =
       PrerenderTestURL(kHtmlFileA, expected_final_status_queue, 1);
   ASSERT_TRUE(prerenders[0]->contents());
   // Assert that the pending prerender is in there already. This relies on the
@@ -1795,7 +1773,7 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest,
   expected_final_status_queue.push_back(FINAL_STATUS_APP_TERMINATING);
   expected_final_status_queue.push_back(FINAL_STATUS_APP_TERMINATING);
 
-  ScopedVector<TestPrerender> prerenders =
+  std::vector<std::unique_ptr<TestPrerender>> prerenders =
       PrerenderTestURL(kHtmlFileA, expected_final_status_queue, 1);
   ASSERT_TRUE(prerenders[0]->contents());
 
@@ -2172,16 +2150,15 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, PrerenderXhrDelete) {
                    FINAL_STATUS_INVALID_HTTP_METHOD, 1);
 }
 
-// Checks that a top-level page which would trigger an SSL error is canceled.
+// Sets up HTTPS server for prerendered page, and checks that an SSL error will
+// cancel the prerender. The prerenderer loader will be served through HTTP.
 IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, PrerenderSSLErrorTopLevel) {
   net::EmbeddedTestServer https_server(net::EmbeddedTestServer::TYPE_HTTPS);
   https_server.SetSSLConfig(net::EmbeddedTestServer::CERT_MISMATCHED_NAME);
   https_server.ServeFilesFromSourceDirectory("chrome/test/data");
   ASSERT_TRUE(https_server.Start());
   GURL https_url = https_server.GetURL("/prerender/prerender_page.html");
-  PrerenderTestURL(https_url,
-                   FINAL_STATUS_SSL_ERROR,
-                   0);
+  PrerenderTestURL(https_url, FINAL_STATUS_SSL_ERROR, 0);
 }
 
 // Checks that an SSL error that comes from a subresource does not cancel
@@ -3236,6 +3213,49 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, HttpPost) {
       "document.getElementsByTagName('pre')[0].innerText);",
       &body));
   EXPECT_EQ("text=value\n", body);
+}
+
+// Prerenders a page that tries to automatically sign user in via the Credential
+// Manager API. The page should be killed.
+IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, AutosigninInPrerenderer) {
+  // Set up a credential in the password store.
+  PasswordStoreFactory::GetInstance()->SetTestingFactory(
+      current_browser()->profile(),
+      password_manager::BuildPasswordStore<
+          content::BrowserContext, password_manager::TestPasswordStore>);
+  scoped_refptr<password_manager::TestPasswordStore> password_store =
+      static_cast<password_manager::TestPasswordStore*>(
+          PasswordStoreFactory::GetForProfile(
+              current_browser()->profile(),
+              ServiceAccessType::IMPLICIT_ACCESS).get());
+  autofill::PasswordForm signin_form;
+  signin_form.signon_realm = embedded_test_server()->base_url().spec();
+  signin_form.password_value = base::ASCIIToUTF16("password");
+  signin_form.username_value = base::ASCIIToUTF16("user");
+  signin_form.origin = embedded_test_server()->base_url();
+  signin_form.skip_zero_click = false;
+  password_store->AddLogin(signin_form);
+  // Enable 'auto signin' for the profile.
+  password_bubble_experiment::RecordAutoSignInPromptFirstRunExperienceWasShown(
+      browser()->profile()->GetPrefs());
+
+  // Intercept the successful landing page where a signed in user ends up.
+  // It should never load as the API is suppressed.
+  GURL done_url = embedded_test_server()->GetURL("/password/done.html");
+  base::FilePath empty_file = ui_test_utils::GetTestFilePath(
+      base::FilePath(), base::FilePath(FILE_PATH_LITERAL("empty.html")));
+  RequestCounter done_counter;
+  BrowserThread::PostTask(
+      BrowserThread::IO, FROM_HERE,
+      base::Bind(&CreateCountingInterceptorOnIO,
+                 done_url, empty_file, done_counter.AsWeakPtr()));
+  // Loading may finish or be interrupted. The final result is important only.
+  DisableLoadEventCheck();
+  // TestPrenderContents is always created before the Autosignin JS can run, so
+  // waiting for PrerenderContents to stop should be reliable.
+  PrerenderTestURL("/password/autosignin.html",
+                   FINAL_STATUS_CREDENTIAL_MANAGER_API, 0);
+  EXPECT_EQ(0, done_counter.count());
 }
 
 class PrerenderIncognitoBrowserTest : public PrerenderBrowserTest {

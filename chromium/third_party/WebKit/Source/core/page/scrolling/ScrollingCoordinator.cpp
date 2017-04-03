@@ -64,9 +64,9 @@
 #include "public/platform/WebScrollbarLayer.h"
 #include "public/platform/WebScrollbarThemeGeometry.h"
 #include "public/platform/WebScrollbarThemePainter.h"
-#include "wtf/PtrUtil.h"
 #include "wtf/text/StringBuilder.h"
 #include <memory>
+#include <utility>
 
 using blink::WebLayer;
 using blink::WebLayerPositionConstraint;
@@ -128,6 +128,10 @@ void ScrollingCoordinator::notifyGeometryChanged() {
 }
 
 void ScrollingCoordinator::notifyOverflowUpdated() {
+  m_scrollGestureRegionIsDirty = true;
+}
+
+void ScrollingCoordinator::frameViewVisibilityDidChange() {
   m_scrollGestureRegionIsDirty = true;
 }
 
@@ -309,8 +313,8 @@ static std::unique_ptr<WebScrollbarLayer> createScrollbarLayer(
       WebScrollbarThemeGeometryNative::create(theme));
 
   std::unique_ptr<WebScrollbarLayer> scrollbarLayer =
-      wrapUnique(Platform::current()->compositorSupport()->createScrollbarLayer(
-          WebScrollbarImpl::create(&scrollbar), painter, geometry.release()));
+      Platform::current()->compositorSupport()->createScrollbarLayer(
+          WebScrollbarImpl::create(&scrollbar), painter, std::move(geometry));
   GraphicsLayer::registerContentsLayer(scrollbarLayer->layer());
   return scrollbarLayer;
 }
@@ -324,10 +328,10 @@ ScrollingCoordinator::createSolidColorScrollbarLayer(
   WebScrollbar::Orientation webOrientation =
       (orientation == HorizontalScrollbar) ? WebScrollbar::Horizontal
                                            : WebScrollbar::Vertical;
-  std::unique_ptr<WebScrollbarLayer> scrollbarLayer = wrapUnique(
+  std::unique_ptr<WebScrollbarLayer> scrollbarLayer =
       Platform::current()->compositorSupport()->createSolidColorScrollbarLayer(
           webOrientation, thumbThickness, trackStart,
-          isLeftSideVerticalScrollbar));
+          isLeftSideVerticalScrollbar);
   GraphicsLayer::registerContentsLayer(scrollbarLayer->layer());
   return scrollbarLayer;
 }
@@ -450,8 +454,8 @@ bool ScrollingCoordinator::scrollableAreaScrollLayerDidChange(
   WebLayer* containerLayer = toWebLayer(scrollableArea->layerForContainer());
   if (webLayer) {
     webLayer->setScrollClipLayer(containerLayer);
-    DoublePoint scrollPosition(scrollableArea->scrollPositionDouble() +
-                               toDoubleSize(scrollableArea->scrollOrigin()));
+    DoublePoint scrollPosition(FloatPoint(scrollableArea->scrollOrigin()) +
+                               scrollableArea->scrollOffset());
     webLayer->setScrollPositionDouble(scrollPosition);
 
     webLayer->setBounds(scrollableArea->contentsSize());
@@ -873,7 +877,8 @@ Region ScrollingCoordinator::computeShouldHandleScrollGestureOnMainThreadRegion(
     const IntPoint& frameLocation) const {
   Region shouldHandleScrollGestureOnMainThreadRegion;
   FrameView* frameView = frame->view();
-  if (!frameView || frameView->shouldThrottleRendering())
+  if (!frameView || frameView->shouldThrottleRendering() ||
+      !frameView->isVisible())
     return shouldHandleScrollGestureOnMainThreadRegion;
 
   IntPoint offset = frameLocation;

@@ -42,6 +42,17 @@ class FieldTrialToStruct(unittest.TestCase):
           'platforms': ['win'],
           'experiments': [{'name': 'OtherGroup'}]
         }
+      ],
+      'TrialWithForcingFlag':  [
+        {
+          'platforms': ['win'],
+          'experiments': [
+            {
+              'name': 'ForcedGroup',
+              'forcing_flag': "my-forcing-flag"
+            }
+          ]
+        }
       ]
     }
     result = fieldtrial_to_struct._FieldTrialConfigToDescription(config, 'win')
@@ -75,6 +86,15 @@ class FieldTrialToStruct(unittest.TestCase):
             {
               'name': 'Trial2',
               'experiments': [{'name': 'OtherGroup'}]
+            },
+            {
+              'name': 'TrialWithForcingFlag',
+              'experiments': [
+                  {
+                    'name': 'ForcedGroup',
+                    'forcing_flag': "my-forcing-flag"
+                  }
+              ]
             },
           ]
         }
@@ -188,8 +208,8 @@ class FieldTrialToStruct(unittest.TestCase):
     self.assertEqual(expected, result)
 
   def test_FieldTrialToStructMain(self):
-    schema = (
-        '../../chrome/common/variations/fieldtrial_testing_config_schema.json')
+    schema = ('../../components/variations/field_trial_config/'
+                  'field_trial_testing_config_schema.json')
     test_output_filename = 'test_output'
     fieldtrial_to_struct.main([
       '--schema=' + schema,

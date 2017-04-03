@@ -197,16 +197,8 @@ SK_API void SkDebugf_FileLine(const char* file, int line, bool fatal,
 #   define SK_SUPPORT_LEGACY_GETTOPDEVICE
 #endif
 
-#ifndef    SK_SUPPORT_LEGACY_XFERMODE_OBJECT
-#   define SK_SUPPORT_LEGACY_XFERMODE_OBJECT
-#endif
-
 #ifndef    SK_SUPPORT_LEGACY_GETDEVICE
 #   define SK_SUPPORT_LEGACY_GETDEVICE
-#endif
-
-#ifndef    SK_SUPPORT_LEGACY_PICTUREINSTALLPIXELREF
-#   define SK_SUPPORT_LEGACY_PICTUREINSTALLPIXELREF
 #endif
 
 #ifndef SK_SUPPORT_LEGACY_CLIP_REGIONOPS
@@ -220,8 +212,16 @@ SK_API void SkDebugf_FileLine(const char* file, int line, bool fatal,
 #   define SK_SUPPORT_LEGACY_ANISOTROPIC_MIPMAP_SCALE
 #endif
 
+#ifndef    SK_SUPPORT_LEGACY_CANVAS_IS_REFCNT
+#   define SK_SUPPORT_LEGACY_CANVAS_IS_REFCNT
+#endif
+
 #ifndef    SK_IGNORE_ETC1_SUPPORT
 #   define SK_IGNORE_ETC1_SUPPORT
+#endif
+
+#ifndef    SK_SUPPORT_LEGACY_XFERMODE_IS_PUBLIC
+#   define SK_SUPPORT_LEGACY_XFERMODE_IS_PUBLIC
 #endif
 
 #ifndef    SK_IGNORE_GPU_DITHER
@@ -230,6 +230,10 @@ SK_API void SkDebugf_FileLine(const char* file, int line, bool fatal,
 
 #ifndef    SK_SUPPORT_LEGACY_EVAL_CUBIC
 #   define SK_SUPPORT_LEGACY_EVAL_CUBIC
+#endif
+
+#ifndef    SK_SUPPORT_LEGACY_IMAGE_ENCODER_CLASS
+#   define SK_SUPPORT_LEGACY_IMAGE_ENCODER_CLASS
 #endif
 
 ///////////////////////// Imported from BUILD.gn and skia_common.gypi
@@ -264,6 +268,10 @@ SK_API void SkDebugf_FileLine(const char* file, int line, bool fatal,
 
 // Enabling the screenspace AA tessellating path renderer needs rebaselines.
 #define SK_DISABLE_SCREENSPACE_TESS_AA_PATH_RENDERER
+
+// Disable analytic AA until we fix all the Chrome tests.
+// (we now set analytic AA as default in Skia.)
+#define SK_NO_ANALYTIC_AA
 
 // ===== End Chrome-specific definitions =====
 

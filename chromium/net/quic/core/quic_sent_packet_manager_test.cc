@@ -5,8 +5,8 @@
 #include "net/quic/core/quic_sent_packet_manager.h"
 
 #include <memory>
+
 #include "base/memory/ptr_util.h"
-#include "base/stl_util.h"
 #include "net/quic/core/quic_flags.h"
 #include "net/quic/test_tools/quic_config_peer.h"
 #include "net/quic/test_tools/quic_sent_packet_manager_peer.h"
@@ -83,7 +83,7 @@ class QuicSentPacketManagerTest : public ::testing::TestWithParam<TestParams> {
                  kDefaultPathId,
                  &clock_,
                  &stats_,
-                 kCubic,
+                 FLAGS_quic_default_enable_cubic_bytes ? kCubicBytes : kCubic,
                  kNack,
                  /*delegate=*/nullptr),
         send_algorithm_(new StrictMock<MockSendAlgorithm>),
@@ -106,7 +106,7 @@ class QuicSentPacketManagerTest : public ::testing::TestWithParam<TestParams> {
         .Times(AnyNumber());
   }
 
-  ~QuicSentPacketManagerTest() override { base::STLDeleteElements(&packets_); }
+  ~QuicSentPacketManagerTest() override {}
 
   QuicByteCount BytesInFlight() {
     return QuicSentPacketManagerPeer::GetBytesInFlight(&manager_);
@@ -142,14 +142,14 @@ class QuicSentPacketManagerTest : public ::testing::TestWithParam<TestParams> {
   void ExpectAck(QuicPacketNumber largest_observed) {
     EXPECT_CALL(
         *send_algorithm_,
-        OnCongestionEvent(true, _, ElementsAre(Pair(largest_observed, _)),
+        OnCongestionEvent(true, _, _, ElementsAre(Pair(largest_observed, _)),
                           IsEmpty()));
     EXPECT_CALL(*network_change_visitor_, OnCongestionChange());
   }
 
   void ExpectUpdatedRtt(QuicPacketNumber largest_observed) {
     EXPECT_CALL(*send_algorithm_,
-                OnCongestionEvent(true, _, IsEmpty(), IsEmpty()));
+                OnCongestionEvent(true, _, _, IsEmpty(), IsEmpty()));
     EXPECT_CALL(*network_change_visitor_, OnCongestionChange());
   }
 
@@ -157,7 +157,7 @@ class QuicSentPacketManagerTest : public ::testing::TestWithParam<TestParams> {
                         QuicPacketNumber largest_observed,
                         QuicPacketNumber lost_packet) {
     EXPECT_CALL(*send_algorithm_,
-                OnCongestionEvent(rtt_updated, _,
+                OnCongestionEvent(rtt_updated, _, _,
                                   ElementsAre(Pair(largest_observed, _)),
                                   ElementsAre(Pair(lost_packet, _))));
     EXPECT_CALL(*network_change_visitor_, OnCongestionChange());
@@ -179,7 +179,7 @@ class QuicSentPacketManagerTest : public ::testing::TestWithParam<TestParams> {
     }
     EXPECT_CALL(
         *send_algorithm_,
-        OnCongestionEvent(rtt_updated, _, Pointwise(KeyEq(), ack_vector),
+        OnCongestionEvent(rtt_updated, _, _, Pointwise(KeyEq(), ack_vector),
                           Pointwise(KeyEq(), lost_vector)));
     EXPECT_CALL(*network_change_visitor_, OnCongestionChange())
         .Times(AnyNumber());
@@ -305,7 +305,6 @@ class QuicSentPacketManagerTest : public ::testing::TestWithParam<TestParams> {
 
   QuicFlagSaver flags_;  // Save/restore all QUIC flag values.
   QuicSentPacketManager manager_;
-  vector<QuicEncryptedPacket*> packets_;
   MockClock clock_;
   QuicConnectionStats stats_;
   MockSendAlgorithm* send_algorithm_;
@@ -774,7 +773,7 @@ TEST_P(QuicSentPacketManagerTest, TailLossProbeThenRTO) {
   NackPackets(0, 103, &ack_frame);
   EXPECT_CALL(*send_algorithm_, OnRetransmissionTimeout(true));
   EXPECT_CALL(*send_algorithm_,
-              OnCongestionEvent(true, _, ElementsAre(Pair(103, _)), _));
+              OnCongestionEvent(true, _, _, ElementsAre(Pair(103, _)), _));
   EXPECT_CALL(*network_change_visitor_, OnCongestionChange());
   manager_.OnIncomingAck(ack_frame, clock_.ApproximateNow());
   // All packets before 103 should be lost.
@@ -997,7 +996,7 @@ TEST_P(QuicSentPacketManagerTest, RetransmissionTimeout) {
   ack_frame.ack_delay_time = QuicTime::Delta::Zero();
   // Ensure no packets are lost.
   EXPECT_CALL(*send_algorithm_,
-              OnCongestionEvent(true, _, ElementsAre(Pair(102, _)),
+              OnCongestionEvent(true, _, _, ElementsAre(Pair(102, _)),
                                 /*lost_packets=*/IsEmpty()));
   EXPECT_CALL(*network_change_visitor_, OnCongestionChange());
   EXPECT_CALL(*send_algorithm_, OnRetransmissionTimeout(true));
@@ -1045,7 +1044,7 @@ TEST_P(QuicSentPacketManagerTest, NewRetransmissionTimeout) {
   ack_frame.ack_delay_time = QuicTime::Delta::Zero();
   // This will include packets in the lost packet map.
   EXPECT_CALL(*send_algorithm_,
-              OnCongestionEvent(true, _, ElementsAre(Pair(102, _)),
+              OnCongestionEvent(true, _, _, ElementsAre(Pair(102, _)),
                                 /*lost_packets=*/Not(IsEmpty())));
   EXPECT_CALL(*network_change_visitor_, OnCongestionChange());
   manager_.OnIncomingAck(ack_frame, clock_.Now());
@@ -1420,7 +1419,7 @@ TEST_P(QuicSentPacketManagerTest, NegotiateTimeLossDetectionFromOptions) {
 }
 
 TEST_P(QuicSentPacketManagerTest, NegotiateCongestionControlFromOptions) {
-  FLAGS_quic_allow_bbr = true;
+  FLAGS_quic_allow_new_bbr = true;
   QuicConfig config;
   QuicTagVector options;
 
@@ -1436,17 +1435,21 @@ TEST_P(QuicSentPacketManagerTest, NegotiateCongestionControlFromOptions) {
   QuicConfigPeer::SetReceivedConnectionOptions(&config, options);
   EXPECT_CALL(*network_change_visitor_, OnCongestionChange());
   manager_.SetFromConfig(config);
-  // TODO(vasilvv): change this back to kBBR when the new version is in.
-  EXPECT_EQ(kCubic, QuicSentPacketManagerPeer::GetSendAlgorithm(manager_)
-                        ->GetCongestionControlType());
+  EXPECT_EQ(kBBR, QuicSentPacketManagerPeer::GetSendAlgorithm(manager_)
+                      ->GetCongestionControlType());
 
   options.clear();
   options.push_back(kBYTE);
   QuicConfigPeer::SetReceivedConnectionOptions(&config, options);
   EXPECT_CALL(*network_change_visitor_, OnCongestionChange());
   manager_.SetFromConfig(config);
-  EXPECT_EQ(kCubicBytes, QuicSentPacketManagerPeer::GetSendAlgorithm(manager_)
-                             ->GetCongestionControlType());
+  if (FLAGS_quic_default_enable_cubic_bytes) {
+    EXPECT_EQ(kCubic, QuicSentPacketManagerPeer::GetSendAlgorithm(manager_)
+                          ->GetCongestionControlType());
+  } else {
+    EXPECT_EQ(kCubicBytes, QuicSentPacketManagerPeer::GetSendAlgorithm(manager_)
+                               ->GetCongestionControlType());
+  }
 
   options.clear();
   options.push_back(kRENO);
@@ -1599,7 +1602,7 @@ TEST_P(QuicSentPacketManagerTest, NegotiateUndoFromOptionsAtServer) {
   }
   auto loss_algorithm = base::MakeUnique<MockLossAlgorithm>();
   QuicSentPacketManagerPeer::SetLossAlgorithm(&manager_, loss_algorithm.get());
-  EXPECT_CALL(*send_algorithm_, OnCongestionEvent(true, _, _, _));
+  EXPECT_CALL(*send_algorithm_, OnCongestionEvent(true, _, _, _, _));
   EXPECT_CALL(*network_change_visitor_, OnCongestionChange());
   SendAlgorithmInterface::CongestionVector lost_packets;
   for (size_t i = 1; i < kNumSentPackets; ++i) {

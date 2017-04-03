@@ -18,7 +18,7 @@ class VivaldiFrameObserver :
   ~VivaldiFrameObserver() override;
 
   void GetFocusedElementInfo(std::string *tagname, std::string *type,
-      bool *editable);
+      bool *editable, std::string *role);
 
  private:
   explicit VivaldiFrameObserver(content::WebContents *contents);
@@ -26,13 +26,14 @@ class VivaldiFrameObserver :
 
   bool OnMessageReceived(const IPC::Message& message) override;
   void OnDidUpdateFocusedElementInfo(std::string tagname, std::string type,
-      bool editable);
+      bool editable, std::string role);
   void OnFocusedNodeChanged(bool editable, gfx::Rect node_bounds);
 
   // This gets returned by GetFocusedElementInfo()
   std::string focused_element_tagname_;
   std::string focused_element_type_;
   bool focused_element_editable_ = false;
+  std::string focused_element_role_;
 
   // Keep track of the HostZoomMap we're currently subscribed to.
   content::HostZoomMap* host_zoom_map_;

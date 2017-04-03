@@ -18,6 +18,8 @@
 #include "ash/common/system/tray/tray_item_more.h"
 #include "ash/common/system/tray/tray_popup_item_style.h"
 #include "ash/common/system/tray/tray_popup_label_button.h"
+#include "ash/common/system/tray/tray_popup_utils.h"
+#include "ash/common/system/tray/tri_view.h"
 #include "ash/common/wm_shell.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "base/strings/utf_string_conversions.h"
@@ -29,6 +31,7 @@
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/vector_icons_public.h"
+#include "ui/views/controls/button/custom_button.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/layout/box_layout.h"
@@ -36,6 +39,10 @@
 
 namespace ash {
 namespace {
+
+bool UseMdMenu() {
+  return MaterialDesignController::IsSystemTrayMenuMaterial();
+}
 
 enum AccessibilityState {
   A11Y_NONE = 0,
@@ -100,12 +107,12 @@ class DefaultAccessibilityView : public TrayItemMore {
   void UpdateStyle() override {
     TrayItemMore::UpdateStyle();
 
-    if (!MaterialDesignController::IsSystemTrayMenuMaterial())
+    if (!UseMdMenu())
       return;
 
     std::unique_ptr<TrayPopupItemStyle> style = CreateStyle();
     SetImage(gfx::CreateVectorIcon(kSystemMenuAccessibilityIcon,
-                                   style->GetForegroundColor()));
+                                   style->GetIconColor()));
   }
 
  private:
@@ -167,7 +174,7 @@ AccessibilityDetailedView::AccessibilityDetailedView(SystemTrayItem* owner,
 
   AppendAccessibilityList();
 
-  if (!MaterialDesignController::IsSystemTrayMenuMaterial())
+  if (!UseMdMenu())
     AppendHelpEntries();
 
   CreateTitleRow(IDS_ASH_STATUS_TRAY_ACCESSIBILITY_TITLE);
@@ -228,10 +235,10 @@ void AccessibilityDetailedView::AppendAccessibilityList() {
 }
 
 void AccessibilityDetailedView::AppendHelpEntries() {
+  DCHECK(!UseMdMenu());
   // Currently the help page requires a browser window.
   // TODO(yoshiki): show this even on login/lock screen. crbug.com/158286
-  if (login_ == LoginStatus::NOT_LOGGED_IN || login_ == LoginStatus::LOCKED ||
-      WmShell::Get()->GetSessionStateDelegate()->IsInSecondaryLoginScreen())
+  if (!TrayPopupUtils::CanOpenWebUISettings(login_))
     return;
 
   views::View* bottom_row = new View();
@@ -264,16 +271,23 @@ HoverHighlightView* AccessibilityDetailedView::AddScrollListItem(
     bool checked,
     const gfx::VectorIcon& icon) {
   HoverHighlightView* container = new HoverHighlightView(this);
-  if (MaterialDesignController::IsSystemTrayMenuMaterial()) {
+  if (UseMdMenu()) {
     gfx::ImageSkia image = CreateVectorIcon(icon, kMenuIconColor);
     const int padding = (kMenuButtonSize - image.width()) / 2;
     container->AddIconAndLabelCustomSize(
         image, text, highlight,
         image.width() + kMenuSeparatorVerticalPadding * 2, padding, padding);
-    gfx::ImageSkia check_mark =
-        CreateVectorIcon(gfx::VectorIconId::CHECK_CIRCLE, gfx::kGoogleGreen700);
-    container->AddRightIcon(check_mark, check_mark.width());
-    container->SetRightIconVisible(checked);
+    if (checked) {
+      gfx::ImageSkia check_mark = CreateVectorIcon(
+          gfx::VectorIconId::CHECK_CIRCLE, gfx::kGoogleGreen700);
+      container->AddRightIcon(check_mark, check_mark.width());
+      container->SetRightViewVisible(true);
+      container->SetAccessiblityState(
+          HoverHighlightView::AccessibilityState::CHECKED_CHECKBOX);
+    } else {
+      container->SetAccessiblityState(
+          HoverHighlightView::AccessibilityState::UNCHECKED_CHECKBOX);
+    }
   } else {
     container->AddCheckableLabel(text, highlight, checked);
   }
@@ -322,17 +336,38 @@ void AccessibilityDetailedView::HandleViewClicked(views::View* view) {
 
 void AccessibilityDetailedView::HandleButtonPressed(views::Button* sender,
                                                     const ui::Event& event) {
-  if (MaterialDesignController::UseMaterialDesignSystemIcons())
-    return;
-
-  SystemTrayController* controller = WmShell::Get()->system_tray_controller();
   if (sender == help_view_)
-    controller->ShowAccessibilityHelp();
+    ShowHelp();
   else if (sender == settings_view_)
-    controller->ShowAccessibilitySettings();
-  else
-    return;
-  owner()->system_tray()->CloseSystemBubble();
+    ShowSettings();
+}
+
+void AccessibilityDetailedView::CreateExtraTitleRowButtons() {
+  if (UseMdMenu()) {
+    DCHECK(!help_view_);
+    DCHECK(!settings_view_);
+
+    tri_view()->SetContainerVisible(TriView::Container::END, true);
+
+    help_view_ = CreateHelpButton(login_);
+    settings_view_ = CreateSettingsButton(login_);
+    tri_view()->AddView(TriView::Container::END, help_view_);
+    tri_view()->AddView(TriView::Container::END, settings_view_);
+  }
+}
+
+void AccessibilityDetailedView::ShowSettings() {
+  if (TrayPopupUtils::CanOpenWebUISettings(login_)) {
+    WmShell::Get()->system_tray_controller()->ShowAccessibilitySettings();
+    owner()->system_tray()->CloseSystemBubble();
+  }
+}
+
+void AccessibilityDetailedView::ShowHelp() {
+  if (TrayPopupUtils::CanOpenWebUISettings(login_)) {
+    WmShell::Get()->system_tray_controller()->ShowAccessibilityHelp();
+    owner()->system_tray()->CloseSystemBubble();
+  }
 }
 
 }  // namespace tray

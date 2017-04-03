@@ -16,7 +16,6 @@
 #include "content/browser/indexed_db/indexed_db_observer.h"
 
 namespace content {
-class IndexedDBDatabaseError;
 
 class CONTENT_EXPORT IndexedDBConnection {
  public:
@@ -38,7 +37,6 @@ class CONTENT_EXPORT IndexedDBConnection {
   // connection.
   virtual void RemoveObservers(const std::vector<int32_t>& remove_observer_ids);
 
-  void set_id(int32_t id);
   int32_t id() const { return id_; }
 
   IndexedDBDatabase* database() const { return database_.get(); }
@@ -52,9 +50,7 @@ class CONTENT_EXPORT IndexedDBConnection {
   }
 
  private:
-  enum { kInvalidId = -1 };
-  // id_ is ipc_database_id
-  int32_t id_ = kInvalidId;
+  const int32_t id_;
 
   // NULL in some unit tests, and after the connection is closed.
   scoped_refptr<IndexedDBDatabase> database_;

@@ -21,7 +21,6 @@
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/controls/label.h"
-#include "ui/views/controls/menu/menu_model_adapter.h"
 #include "ui/views/controls/menu/menu_runner.h"
 #include "ui/views/controls/scroll_view.h"
 #include "ui/views/controls/separator.h"
@@ -128,10 +127,8 @@ void MediaGalleriesDialogViews::InitChildViews() {
       views::BoxLayout::kVertical, 0, 0,
       views::kRelatedControlSmallVerticalSpacing));
   scroll_container->SetBorder(
-      views::Border::CreateEmptyBorder(views::kRelatedControlVerticalSpacing,
-                                       0,
-                                       views::kRelatedControlVerticalSpacing,
-                                       0));
+      views::CreateEmptyBorder(views::kRelatedControlVerticalSpacing, 0,
+                               views::kRelatedControlVerticalSpacing, 0));
 
   std::vector<base::string16> section_headers =
       controller_->GetSectionHeaders();
@@ -148,11 +145,9 @@ void MediaGalleriesDialogViews::InitChildViews() {
       views::Label* header = new views::Label(section_headers[i]);
       header->SetMultiLine(true);
       header->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-      header->SetBorder(views::Border::CreateEmptyBorder(
-          views::kRelatedControlVerticalSpacing,
-          views::kPanelHorizMargin,
-          views::kRelatedControlVerticalSpacing,
-          0));
+      header->SetBorder(views::CreateEmptyBorder(
+          views::kRelatedControlVerticalSpacing, views::kPanelHorizMargin,
+          views::kRelatedControlVerticalSpacing, 0));
       scroll_container->AddChildView(header);
     }
 
@@ -306,15 +301,12 @@ void MediaGalleriesDialogViews::ShowContextMenuForView(
 void MediaGalleriesDialogViews::ShowContextMenu(const gfx::Point& point,
                                                 ui::MenuSourceType source_type,
                                                 MediaGalleryPrefId id) {
-  menu_model_adapter_.reset(new views::MenuModelAdapter(
+  context_menu_runner_.reset(new views::MenuRunner(
       controller_->GetContextMenu(id),
+      views::MenuRunner::HAS_MNEMONICS | views::MenuRunner::CONTEXT_MENU |
+          views::MenuRunner::ASYNC,
       base::Bind(&MediaGalleriesDialogViews::OnMenuClosed,
                  base::Unretained(this))));
-
-  context_menu_runner_.reset(new views::MenuRunner(
-      menu_model_adapter_->CreateMenu(), views::MenuRunner::HAS_MNEMONICS |
-                                             views::MenuRunner::CONTEXT_MENU |
-                                             views::MenuRunner::ASYNC));
 
   context_menu_runner_->RunMenuAt(GetWidget(), NULL,
                                   gfx::Rect(point.x(), point.y(), 0, 0),
@@ -326,7 +318,6 @@ bool MediaGalleriesDialogViews::ControllerHasWebContents() const {
 }
 
 void MediaGalleriesDialogViews::OnMenuClosed() {
-  menu_model_adapter_.reset();
   context_menu_runner_.reset();
 }
 

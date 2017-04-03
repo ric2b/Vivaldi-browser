@@ -9,13 +9,7 @@
       Get suggested content
     </message>
     <message name="IDS_NTP_STATUS_CARD_TITLE_NO_SUGGESTIONS" desc="On the New Tab Page, title of the status card explaining that there is no new content available in the section." formatter_data="android_java">
-      Done for now
-    </message>
-    <message name="IDS_NTP_STATUS_CARD_NO_BOOKMARKS" desc="On the New Tab Page, text of the card explaining to the user that they can expect to see bookmarks in this area in the future." formatter_data="android_java">
-      Your recently visited bookmarks will appear here.
-    </message>
-    <message name="IDS_NTP_STATUS_CARD_NO_ARTICLES" desc="On the New Tab Page, text of the card explaining to the user that they can expect to see suggested articles in this area in the future." formatter_data="android_java">
-      More articles will appear when the time is right.
+      That’s all for now
     </message>
   </if>
 
@@ -23,20 +17,32 @@
     Articles for you
   </message>
 
+  <message name="IDS_NTP_ARTICLE_SUGGESTIONS_SECTION_EMPTY" desc="On the New Tab Page, text of the card explaining to the user that they can expect to see suggested articles in this area in the future.">
+    Your suggested articles appear here
+  </message>
+
   <message name="IDS_NTP_RECENT_TAB_SUGGESTIONS_SECTION_HEADER" desc="Header of the recent tabs section, which is a list of pages that the user recently viewed, displayed as cards on the New Tab Page.">
     Recent tabs
   </message>
 
-  <message name="IDS_NTP_DOWNLOAD_SUGGESTIONS_SECTION_HEADER" desc="Header of the downloads section, which is a list of pages (or files) that the user downloaded, displayed as cards on the New Tab Page.">
-    Downloads
-  </message>
-
-  <message name="IDS_NTP_BOOKMARK_SUGGESTIONS_SECTION_HEADER" desc="Header of the bookmarks section, which is a list of the user's most recently used bookmarks displayed as cards on the New Tab Page.">
+  <message name="IDS_NTP_BOOKMARK_SUGGESTIONS_SECTION_HEADER" desc="Header of the bookmarks section. The bookmarks section shows a list of recently *visited* bookmarks, irrespective of their creation date. It is *not* a list of recently *created* bookmarks">
     Recent bookmarks
   </message>
 
+  <message name="IDS_NTP_BOOKMARK_SUGGESTIONS_SECTION_EMPTY" desc="On the New Tab Page, text of the card explaining to the user that they can expect to see bookmarks in this area in the future.">
+    Your recently visited bookmarks appear here
+  </message>
+
   <message name="IDS_NTP_FOREIGN_SESSIONS_SUGGESTIONS_SECTION_HEADER" desc="Header of the foreign sessions, which is a list of the user's most recently visited tabs on other devices displayed as cards on the New Tab Page.">
-    Continue from another device
+    Recent tabs
+  </message>
+
+  <message name="IDS_NTP_FOREIGN_SESSIONS_SUGGESTIONS_SECTION_EMPTY" desc="On the New Tab Page, text of the card explaining to the user that they can expect to see tabs from other devices in this area in the future.">
+    Your recent tabs from other devices appear here
+  </message>
+
+  <message name="IDS_NTP_SUGGESTIONS_SECTION_EMPTY" desc="On the New Tab Page, text of card explaining to the user that they can expect to see some sort of content suggestions in this area in the future.">
+    Your suggestions appear here
   </message>
 
 </grit-part>

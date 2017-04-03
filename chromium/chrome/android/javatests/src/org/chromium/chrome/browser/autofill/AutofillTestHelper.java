@@ -5,10 +5,10 @@
 package org.chromium.chrome.browser.autofill;
 
 import org.chromium.base.ThreadUtils;
+import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.AutofillProfile;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.CreditCard;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.PersonalDataManagerObserver;
-import org.chromium.content.browser.test.util.CallbackHelper;
 
 import java.util.List;
 import java.util.concurrent.Callable;
@@ -45,12 +45,12 @@ public class AutofillTestHelper {
         });
     }
 
-    List<AutofillProfile> getProfilesToSuggest(final boolean includeName) throws
+    List<AutofillProfile> getProfilesToSuggest(final boolean includeNameInLabel) throws
             ExecutionException {
         return ThreadUtils.runOnUiThreadBlocking(new Callable<List<AutofillProfile>>() {
             @Override
             public List<AutofillProfile> call() {
-                return PersonalDataManager.getInstance().getProfilesToSuggest(includeName);
+                return PersonalDataManager.getInstance().getProfilesToSuggest(includeNameInLabel);
             }
         });
     }
@@ -96,7 +96,7 @@ public class AutofillTestHelper {
         mOnPersonalDataChangedHelper.waitForCallback(callCount);
     }
 
-    CreditCard getCreditCard(final String guid) throws ExecutionException {
+    public CreditCard getCreditCard(final String guid) throws ExecutionException {
         return ThreadUtils.runOnUiThreadBlocking(new Callable<CreditCard>() {
             @Override
             public CreditCard call() {

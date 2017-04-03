@@ -27,11 +27,11 @@
 
 #include "platform/CrossThreadFunctional.h"
 #include "platform/SharedBuffer.h"
+#include "platform/WebTaskRunner.h"
 #include "platform/graphics/ImageDecodingStore.h"
 #include "platform/graphics/test/MockImageDecoder.h"
 #include "platform/image-decoders/SegmentReader.h"
 #include "public/platform/Platform.h"
-#include "public/platform/WebTaskRunner.h"
 #include "public/platform/WebThread.h"
 #include "public/platform/WebTraceLocation.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -59,7 +59,7 @@ class ImageFrameGeneratorTest : public ::testing::Test,
  public:
   void SetUp() override {
     ImageDecodingStore::instance().setCacheLimitInBytes(1024 * 1024);
-    m_generator = ImageFrameGenerator::create(fullSize(), false);
+    m_generator = ImageFrameGenerator::create(fullSize(), nullptr, false);
     m_data = SharedBuffer::create();
     m_segmentReader = SegmentReader::createFromSharedBuffer(m_data);
     useMockImageDecoderFactory();
@@ -110,7 +110,7 @@ class ImageFrameGeneratorTest : public ::testing::Test,
     m_frameCount = count;
     if (count > 1) {
       m_generator.clear();
-      m_generator = ImageFrameGenerator::create(fullSize(), true);
+      m_generator = ImageFrameGenerator::create(fullSize(), nullptr, true);
       useMockImageDecoderFactory();
     }
   }

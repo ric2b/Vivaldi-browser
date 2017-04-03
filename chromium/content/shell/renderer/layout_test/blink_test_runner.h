@@ -22,7 +22,6 @@
 #include "v8/include/v8.h"
 
 class SkBitmap;
-class SkCanvas;
 
 namespace base {
 class DictionaryValue;
@@ -31,12 +30,12 @@ class DictionaryValue;
 namespace blink {
 class WebDeviceMotionData;
 class WebDeviceOrientationData;
+class WebFrame;
 class WebView;
-struct WebRect;
 }
 
 namespace test_runner {
-class WebViewTestProxyBase;
+class AppBannerService;
 }
 
 namespace content {
@@ -98,8 +97,10 @@ class BlinkTestRunner : public RenderViewObserver,
   std::string EvaluateInWebInspectorOverlay(const std::string& script) override;
   void ClearAllDatabases() override;
   void SetDatabaseQuota(int quota) override;
-  void SimulateWebNotificationClick(const std::string& title,
-                                    int action_index) override;
+  void SimulateWebNotificationClick(
+      const std::string& title,
+      int action_index,
+      const base::NullableString16& reply) override;
   void SimulateWebNotificationClose(const std::string& title,
                                     bool by_user) override;
   void SetDeviceScaleFactor(float factor) override;
@@ -151,14 +152,16 @@ class BlinkTestRunner : public RenderViewObserver,
       blink::WebMediaStream* stream) override;
   cc::SharedBitmapManager* GetSharedBitmapManager() override;
   void DispatchBeforeInstallPromptEvent(
-      int request_id,
       const std::vector<std::string>& event_platforms,
       const base::Callback<void(bool)>& callback) override;
+  void ResolveBeforeInstallPromptPromise(
+      const std::string& platform) override;
   blink::WebPlugin* CreatePluginPlaceholder(
     blink::WebLocalFrame* frame,
     const blink::WebPluginParams& params) override;
   float GetDeviceScaleFactor() const override;
   void RunIdleTasks(const base::Closure& callback) override;
+  void ForceTextInputStateUpdate(blink::WebFrame* frame) override;
 
   // Resets a RenderView to a known state for layout tests. It is used both when
   // a RenderView is created and when reusing an existing RenderView for the
@@ -216,6 +219,8 @@ class BlinkTestRunner : public RenderViewObserver,
   bool is_main_window_;
 
   bool focus_on_next_commit_;
+
+  std::unique_ptr<test_runner::AppBannerService> app_banner_service_;
 
   std::unique_ptr<LeakDetector> leak_detector_;
 

@@ -5,15 +5,15 @@
 #include "components/arc/intent_helper/arc_intent_helper_bridge.h"
 
 #include <utility>
-#include <vector>
 
-#include "ash/common/new_window_delegate.h"
 #include "ash/common/shell_delegate.h"
-#include "ash/common/wallpaper/wallpaper_delegate.h"
+#include "ash/common/wallpaper/wallpaper_controller.h"
 #include "ash/common/wm_shell.h"
+#include "ash/public/interfaces/new_window.mojom.h"
 #include "ash/shell.h"
 #include "base/command_line.h"
 #include "base/memory/weak_ptr.h"
+#include "components/arc/arc_bridge_service.h"
 #include "components/arc/intent_helper/activity_icon_loader.h"
 #include "components/arc/intent_helper/link_handler_model_impl.h"
 #include "components/arc/intent_helper/local_activity_resolver.h"
@@ -22,11 +22,9 @@
 
 namespace arc {
 
-namespace {
-
-constexpr char kArcIntentHelperPackageName[] = "org.chromium.arc.intent_helper";
-
-}  // namespace
+// static
+const char ArcIntentHelperBridge::kArcIntentHelperPackageName[] =
+    "org.chromium.arc.intent_helper";
 
 ArcIntentHelperBridge::ArcIntentHelperBridge(
     ArcBridgeService* bridge_service,
@@ -59,8 +57,7 @@ void ArcIntentHelperBridge::OnInstanceClosed() {
   ash::Shell::GetInstance()->set_link_handler_model_factory(nullptr);
 }
 
-void ArcIntentHelperBridge::OnIconInvalidated(
-    const mojo::String& package_name) {
+void ArcIntentHelperBridge::OnIconInvalidated(const std::string& package_name) {
   DCHECK(thread_checker_.CalledOnValidThread());
   icon_loader_->InvalidateIcons(package_name);
 }
@@ -71,22 +68,21 @@ void ArcIntentHelperBridge::OnOpenDownloads() {
   // downloads by default, which is what we want.  However if it is open it will
   // simply be brought to the forgeground without forcibly being navigated to
   // downloads, which is probably not ideal.
-  ash::WmShell::Get()->new_window_delegate()->OpenFileManager();
+  ash::WmShell::Get()->new_window_client()->OpenFileManager();
 }
 
-void ArcIntentHelperBridge::OnOpenUrl(const mojo::String& url) {
+void ArcIntentHelperBridge::OnOpenUrl(const std::string& url) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  GURL gurl(url.get());
-  ash::WmShell::Get()->delegate()->OpenUrlFromArc(gurl);
+  ash::WmShell::Get()->delegate()->OpenUrlFromArc(GURL(url));
 }
 
 void ArcIntentHelperBridge::OpenWallpaperPicker() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  ash::WmShell::Get()->wallpaper_delegate()->OpenSetWallpaperPage();
+  ash::WmShell::Get()->wallpaper_controller()->OpenSetWallpaperPage();
 }
 
 void ArcIntentHelperBridge::SetWallpaperDeprecated(
-    mojo::Array<uint8_t> jpeg_data) {
+    const std::vector<uint8_t>& jpeg_data) {
   DCHECK(thread_checker_.CalledOnValidThread());
   LOG(ERROR) << "IntentHelper.SetWallpaper is deprecated";
 }
@@ -108,12 +104,12 @@ bool ArcIntentHelperBridge::IsIntentHelperPackage(
 }
 
 // static
-mojo::Array<mojom::IntentHandlerInfoPtr>
+std::vector<mojom::IntentHandlerInfoPtr>
 ArcIntentHelperBridge::FilterOutIntentHelper(
-    mojo::Array<mojom::IntentHandlerInfoPtr> handlers) {
-  mojo::Array<mojom::IntentHandlerInfoPtr> handlers_filtered;
+    std::vector<mojom::IntentHandlerInfoPtr> handlers) {
+  std::vector<mojom::IntentHandlerInfoPtr> handlers_filtered;
   for (auto& handler : handlers) {
-    if (IsIntentHelperPackage(handler->package_name.get()))
+    if (IsIntentHelperPackage(handler->package_name))
       continue;
     handlers_filtered.push_back(std::move(handler));
   }
@@ -166,7 +162,7 @@ mojom::IntentHelperInstance* ArcIntentHelperBridge::GetIntentHelperInstance(
 }
 
 void ArcIntentHelperBridge::OnIntentFiltersUpdated(
-    mojo::Array<mojom::IntentFilterPtr> filters) {
+    std::vector<mojom::IntentFilterPtr> filters) {
   DCHECK(thread_checker_.CalledOnValidThread());
   activity_resolver_->UpdateIntentFilters(std::move(filters));
 }

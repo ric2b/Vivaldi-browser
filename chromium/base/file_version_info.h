@@ -58,7 +58,6 @@ class BASE_EXPORT FileVersionInfo {
   virtual base::string16 product_short_name() = 0;
   virtual base::string16 internal_name() = 0;
   virtual base::string16 product_version() = 0;
-  virtual base::string16 source_version() = 0;
   virtual base::string16 private_build() = 0;
   virtual base::string16 special_build() = 0;
   virtual base::string16 comments() = 0;

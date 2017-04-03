@@ -35,17 +35,6 @@
 
 namespace blink {
 
-#if USE(QCMSLIB)
-struct QCMSProfileDeleter {
-  void operator()(qcms_profile* profile) {
-    if (profile)
-      qcms_profile_release(profile);
-  }
-};
-
-using QCMSProfileUniquePtr = std::unique_ptr<qcms_profile, QCMSProfileDeleter>;
-#endif  // USE(QCMSLIB)
-
 inline bool matchesJPEGSignature(const char* contents) {
   return !memcmp(contents, "\xFF\xD8\xFF", 3);
 }
@@ -82,7 +71,7 @@ std::unique_ptr<ImageDecoder> ImageDecoder::create(
     PassRefPtr<SegmentReader> passData,
     bool dataComplete,
     AlphaOption alphaOption,
-    GammaAndColorProfileOption colorOptions) {
+    ColorSpaceOption colorOptions) {
   RefPtr<SegmentReader> data = passData;
 
   // We need at least kLongestSignatureLength bytes to run the signature
@@ -185,6 +174,11 @@ ImageFrame* ImageDecoder::frameBufferAtIndex(size_t index) {
     PlatformInstrumentation::didDecodeImage();
   }
 
+  if (!m_hasHistogrammedColorSpace) {
+    BitmapImageMetrics::countImageGamma(m_embeddedColorSpace.get());
+    m_hasHistogrammedColorSpace = true;
+  }
+
   frame->notifyBitmapIfPixelsChanged();
   return frame;
 }
@@ -220,9 +214,15 @@ size_t ImageDecoder::clearCacheExceptFrame(size_t clearExceptFrame) {
   if (m_frameBufferCache.size() <= 1)
     return 0;
 
+  return clearCacheExceptTwoFrames(clearExceptFrame, kNotFound);
+}
+
+size_t ImageDecoder::clearCacheExceptTwoFrames(size_t clearExceptFrame1,
+                                               size_t clearExceptFrame2) {
   size_t frameBytesCleared = 0;
   for (size_t i = 0; i < m_frameBufferCache.size(); ++i) {
-    if (i != clearExceptFrame) {
+    if (m_frameBufferCache[i].getStatus() != ImageFrame::FrameEmpty &&
+        i != clearExceptFrame1 && i != clearExceptFrame2) {
       frameBytesCleared += frameBytesAtIndex(i);
       clearFrameBuffer(i);
     }
@@ -232,6 +232,30 @@ size_t ImageDecoder::clearCacheExceptFrame(size_t clearExceptFrame) {
 
 void ImageDecoder::clearFrameBuffer(size_t frameIndex) {
   m_frameBufferCache[frameIndex].clearPixelData();
+}
+
+Vector<size_t> ImageDecoder::findFramesToDecode(size_t index) const {
+  DCHECK(index < m_frameBufferCache.size());
+
+  Vector<size_t> framesToDecode;
+  do {
+    framesToDecode.append(index);
+    index = m_frameBufferCache[index].requiredPreviousFrameIndex();
+  } while (index != kNotFound &&
+           m_frameBufferCache[index].getStatus() != ImageFrame::FrameComplete);
+  return framesToDecode;
+}
+
+bool ImageDecoder::postDecodeProcessing(size_t index) {
+  DCHECK(index < m_frameBufferCache.size());
+
+  if (m_frameBufferCache[index].getStatus() != ImageFrame::FrameComplete)
+    return false;
+
+  if (m_purgeAggressively)
+    clearCacheExceptFrame(index);
+
+  return true;
 }
 
 void ImageDecoder::updateAggressivePurging(size_t index) {
@@ -343,128 +367,88 @@ size_t ImagePlanes::rowBytes(int i) const {
 
 namespace {
 
-#if USE(QCMSLIB)
-
-const unsigned kIccColorProfileHeaderLength = 128;
-
-bool rgbColorProfile(const char* profileData, unsigned profileLength) {
-  DCHECK_GE(profileLength, kIccColorProfileHeaderLength);
-
-  return !memcmp(&profileData[16], "RGB ", 4);
-}
-
-bool inputDeviceColorProfile(const char* profileData, unsigned profileLength) {
-  DCHECK_GE(profileLength, kIccColorProfileHeaderLength);
-
-  return !memcmp(&profileData[12], "mntr", 4) ||
-         !memcmp(&profileData[12], "scnr", 4);
-}
-
-// The output device color profile is global and shared across multiple threads.
-SpinLock gTargetColorProfileLock;
-qcms_profile* gTargetColorProfile = nullptr;
-
-#endif  // USE(QCMSLIB)
+// The output device color space is global and shared across multiple threads.
+SpinLock gTargetColorSpaceLock;
+SkColorSpace* gTargetColorSpace = nullptr;
 
 }  // namespace
 
 // static
 void ImageDecoder::setTargetColorProfile(const WebVector<char>& profile) {
-#if USE(QCMSLIB)
   if (profile.isEmpty())
     return;
 
   // Take a lock around initializing and accessing the global device color
   // profile.
-  SpinLock::Guard guard(gTargetColorProfileLock);
+  SpinLock::Guard guard(gTargetColorSpaceLock);
 
   // Layout tests expect that only the first call will take effect.
-  if (gTargetColorProfile)
+  if (gTargetColorSpace)
     return;
 
-  {
-    sk_sp<SkColorSpace> colorSpace =
-        SkColorSpace::NewICC(profile.data(), profile.size());
-    BitmapImageMetrics::countGamma(colorSpace.get());
-  }
+  gTargetColorSpace =
+      SkColorSpace::MakeICC(profile.data(), profile.size()).release();
 
-  // FIXME: Add optional ICCv4 support and support for multiple monitors.
-  gTargetColorProfile =
-      qcms_profile_from_memory(profile.data(), profile.size());
-  if (!gTargetColorProfile)
-    return;
+  // UMA statistics.
+  BitmapImageMetrics::countOutputGamma(gTargetColorSpace);
+}
 
-  if (qcms_profile_is_bogus(gTargetColorProfile)) {
-    qcms_profile_release(gTargetColorProfile);
-    gTargetColorProfile = nullptr;
-    return;
-  }
+sk_sp<SkColorSpace> ImageDecoder::colorSpace() const {
+  // TODO(ccameron): This should always return a non-null SkColorSpace. This is
+  // disabled for now because specifying a non-renderable color space results in
+  // errors.
+  // https://bugs.chromium.org/p/skia/issues/detail?id=5907
+  if (!RuntimeEnabledFeatures::colorCorrectRenderingEnabled())
+    return nullptr;
 
-  qcms_profile_precache_output_transform(gTargetColorProfile);
-#endif  // USE(QCMSLIB)
+  if (m_embeddedColorSpace)
+    return m_embeddedColorSpace;
+  return SkColorSpace::MakeNamed(SkColorSpace::kSRGB_Named);
 }
 
 void ImageDecoder::setColorProfileAndComputeTransform(const char* iccData,
-                                                      unsigned iccLength,
-                                                      bool hasAlpha,
-                                                      bool useSRGB) {
-  // Sub-classes should not call this if they were instructed to ignore embedded
-  // color profiles.
-  DCHECK(!m_ignoreGammaAndColorProfile);
+                                                      unsigned iccLength) {
+  sk_sp<SkColorSpace> colorSpace = SkColorSpace::MakeICC(iccData, iccLength);
+  if (!colorSpace)
+    DLOG(ERROR) << "Failed to parse image ICC profile";
+  setColorSpaceAndComputeTransform(std::move(colorSpace));
+}
 
-  m_colorProfile.assign(iccData, iccLength);
-  m_hasColorProfile = true;
+void ImageDecoder::setColorSpaceAndComputeTransform(
+    sk_sp<SkColorSpace> colorSpace) {
+  DCHECK(!m_ignoreColorSpace);
+  DCHECK(!m_hasHistogrammedColorSpace);
 
-  // With color correct rendering, we use Skia instead of QCMS to color correct
-  // images.
+  m_embeddedColorSpace = colorSpace;
+
+  m_sourceToOutputDeviceColorTransform = nullptr;
+
+  // With color correct rendering, we do not transform to the output color space
+  // at decode time.  Instead, we tag the raw image pixels and pass the tagged
+  // SkImage to Skia.
   if (RuntimeEnabledFeatures::colorCorrectRenderingEnabled())
     return;
 
-#if USE(QCMSLIB)
-  m_sourceToOutputDeviceColorTransform.reset();
-
-  // Create the input profile
-  QCMSProfileUniquePtr inputProfile;
-  if (useSRGB) {
-    inputProfile.reset(qcms_profile_sRGB());
-  } else {
-    // Only accept RGB color profiles from input class devices.
-    if (iccLength < kIccColorProfileHeaderLength)
-      return;
-    if (!rgbColorProfile(iccData, iccLength))
-      return;
-    if (!inputDeviceColorProfile(iccData, iccLength))
-      return;
-    inputProfile.reset(qcms_profile_from_memory(iccData, iccLength));
-  }
-  if (!inputProfile)
+  if (!m_embeddedColorSpace)
     return;
-
-  // We currently only support color profiles for RGB profiled images.
-  ASSERT(rgbData == qcms_profile_get_color_space(inputProfile.get()));
 
   // Take a lock around initializing and accessing the global device color
   // profile.
-  SpinLock::Guard guard(gTargetColorProfileLock);
+  SpinLock::Guard guard(gTargetColorSpaceLock);
 
   // Initialize the output device profile to sRGB if it has not yet been
   // initialized.
-  if (!gTargetColorProfile) {
-    gTargetColorProfile = qcms_profile_sRGB();
-    qcms_profile_precache_output_transform(gTargetColorProfile);
+  if (!gTargetColorSpace) {
+    gTargetColorSpace =
+        SkColorSpace::MakeNamed(SkColorSpace::kSRGB_Named).release();
   }
 
-  if (qcms_profile_match(inputProfile.get(), gTargetColorProfile))
+  if (SkColorSpace::Equals(m_embeddedColorSpace.get(), gTargetColorSpace)) {
     return;
+  }
 
-  qcms_data_type dataFormat = hasAlpha ? QCMS_DATA_RGBA_8 : QCMS_DATA_RGB_8;
-
-  // FIXME: Don't force perceptual intent if the image profile contains an
-  // intent.
-  m_sourceToOutputDeviceColorTransform.reset(
-      qcms_transform_create(inputProfile.get(), dataFormat, gTargetColorProfile,
-                            QCMS_DATA_RGBA_8, QCMS_INTENT_PERCEPTUAL));
-#endif  // USE(QCMSLIB)
+  m_sourceToOutputDeviceColorTransform =
+      SkColorSpaceXform::New(m_embeddedColorSpace.get(), gTargetColorSpace);
 }
 
 }  // namespace blink

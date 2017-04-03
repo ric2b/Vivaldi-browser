@@ -56,10 +56,9 @@ class CORE_EXPORT DragController final
  public:
   static DragController* create(Page*);
 
-  DragSession dragEntered(DragData*);
-  void dragExited(DragData*);
-  DragSession dragUpdated(DragData*);
-  bool performDrag(DragData*);
+  DragSession dragEnteredOrUpdated(DragData*, LocalFrame& localRoot);
+  void dragExited(DragData*, LocalFrame& localRoot);
+  bool performDrag(DragData*, LocalFrame& localRoot);
 
   enum SelectionDragPolicy {
     ImmediateSelectionDragResolution,
@@ -82,19 +81,18 @@ class CORE_EXPORT DragController final
 
   DECLARE_TRACE();
 
-  static const int DragIconRightInset;
-  static const int DragIconBottomInset;
-
  private:
   DragController(Page*);
 
   DispatchEventResult dispatchTextInputEventFor(LocalFrame*, DragData*);
-  bool canProcessDrag(DragData*);
+  bool canProcessDrag(DragData*, LocalFrame& localRoot);
   bool concludeEditDrag(DragData*);
-  DragSession dragEnteredOrUpdated(DragData*);
-  DragOperation operationForLoad(DragData*);
-  bool tryDocumentDrag(DragData*, DragDestinationAction, DragSession&);
-  bool tryDHTMLDrag(DragData*, DragOperation&);
+  DragOperation operationForLoad(DragData*, LocalFrame& localRoot);
+  bool tryDocumentDrag(DragData*,
+                       DragDestinationAction,
+                       DragSession&,
+                       LocalFrame& localRoot);
+  bool tryDHTMLDrag(DragData*, DragOperation&, LocalFrame& localRoot);
   DragOperation dragOperation(DragData*);
   void cancelDrag();
   bool dragIsMove(FrameSelection&, DragData*);
@@ -111,10 +109,11 @@ class CORE_EXPORT DragController final
 
   Member<Page> m_page;
 
-  Member<Document>
-      m_documentUnderMouse;  // The document the mouse was last dragged over.
-  Member<Document>
-      m_dragInitiator;  // The Document (if any) that initiated the drag.
+  // The document the mouse was last dragged over.
+  Member<Document> m_documentUnderMouse;
+  // The Document (if any) that initiated the drag.
+  Member<Document> m_dragInitiator;
+
   Member<HTMLInputElement> m_fileInputElementUnderMouse;
   bool m_documentIsHandlingDrag;
 

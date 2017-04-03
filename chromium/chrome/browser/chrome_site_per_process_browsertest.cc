@@ -8,10 +8,13 @@
 #include "base/path_service.h"
 #include "base/strings/stringprintf.h"
 #include "chrome/browser/chrome_notification_types.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/guest_view/browser/guest_view_manager_delegate.h"
+#include "components/guest_view/browser/test_guest_view_manager.h"
 #include "content/public/browser/interstitial_page.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_service.h"
@@ -22,6 +25,7 @@
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/public/test/test_utils.h"
+#include "extensions/browser/api/extensions_api_client.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "ui/display/display_switches.h"
@@ -38,8 +42,16 @@ class ChromeSitePerProcessTest : public InProcessBrowserTest {
 
   void SetUpOnMainThread() override {
     host_resolver()->AddRule("*", "127.0.0.1");
-    ASSERT_TRUE(embedded_test_server()->Start());
+    ASSERT_TRUE(embedded_test_server()->InitializeAndListen());
     content::SetupCrossSiteRedirector(embedded_test_server());
+
+    // Serve from the root so that flash_object.html can load the swf file.
+    // Needed for the PluginWithRemoteTopFrame test.
+    base::FilePath test_data_dir;
+    CHECK(base::PathService::Get(base::DIR_SOURCE_ROOT, &test_data_dir));
+    embedded_test_server()->ServeFilesFromDirectory(test_data_dir);
+
+    embedded_test_server()->StartAcceptingConnections();
   }
 
  private:
@@ -177,11 +189,6 @@ IN_PROC_BROWSER_TEST_F(ChromeSitePerProcessTest,
 // involves querying content settings from the renderer process and using the
 // top frame's origin as one of the parameters.  See https://crbug.com/426658.
 IN_PROC_BROWSER_TEST_F(ChromeSitePerProcessTest, PluginWithRemoteTopFrame) {
-  // Serve from the root so that flash_object.html can load the swf file.
-  base::FilePath test_data_dir;
-  CHECK(base::PathService::Get(base::DIR_SOURCE_ROOT, &test_data_dir));
-  embedded_test_server()->ServeFilesFromDirectory(test_data_dir);
-
   GURL main_url(
       embedded_test_server()->GetURL("a.com", "/chrome/test/data/iframe.html"));
   ui_test_utils::NavigateToURL(browser(), main_url);
@@ -248,4 +255,100 @@ IN_PROC_BROWSER_TEST_F(ChromeSitePerProcessTest, PopupWindowFocus) {
 
   // The popup should be focused now.
   EXPECT_EQ(popup, browser()->tab_strip_model()->GetActiveWebContents());
+}
+
+// Verify that ctrl-click of an anchor targeting a remote frame works (i.e. that
+// it opens the link in a new tab).  See also https://crbug.com/647772.
+IN_PROC_BROWSER_TEST_F(ChromeSitePerProcessTest,
+                       AnchorCtrlClickWhenTargetIsCrossSite) {
+  // Navigate to anchor_targeting_remote_frame.html.
+  GURL main_url(embedded_test_server()->GetURL(
+      "a.com", "/frame_tree/anchor_targeting_remote_frame.html"));
+  ui_test_utils::NavigateToURL(browser(), main_url);
+
+  // Verify that there is only 1 active tab (with the right contents committed).
+  EXPECT_EQ(0, browser()->tab_strip_model()->active_index());
+  content::WebContents* main_contents =
+      browser()->tab_strip_model()->GetWebContentsAt(0);
+  EXPECT_EQ(main_url, main_contents->GetLastCommittedURL());
+
+  // Ctrl-click the anchor/link in the page.
+  content::WebContentsAddedObserver new_tab_observer;
+#if defined(OS_MACOSX)
+  std::string new_tab_click_script = "simulateClick({ metaKey: true });";
+#else
+  std::string new_tab_click_script = "simulateClick({ ctrlKey: true });";
+#endif
+  EXPECT_TRUE(ExecuteScript(main_contents, new_tab_click_script));
+
+  // Wait for a new tab to appear (the whole point of this test).
+  content::WebContents* new_contents = new_tab_observer.GetWebContents();
+
+  // Verify that the new tab has the right contents and is in the right, new
+  // place in the tab strip.
+  EXPECT_TRUE(WaitForLoadStop(new_contents));
+  EXPECT_EQ(2, browser()->tab_strip_model()->count());
+  EXPECT_EQ(new_contents, browser()->tab_strip_model()->GetWebContentsAt(1));
+  GURL expected_url(embedded_test_server()->GetURL("c.com", "/title1.html"));
+  EXPECT_EQ(expected_url, new_contents->GetLastCommittedURL());
+}
+
+class ChromeSitePerProcessPDFTest : public ChromeSitePerProcessTest {
+ public:
+  ChromeSitePerProcessPDFTest() : test_guest_view_manager_(nullptr) {}
+  ~ChromeSitePerProcessPDFTest() override {}
+
+  void SetUpOnMainThread() override {
+    ChromeSitePerProcessTest::SetUpOnMainThread();
+    guest_view::GuestViewManager::set_factory_for_testing(&factory_);
+    test_guest_view_manager_ = static_cast<guest_view::TestGuestViewManager*>(
+        guest_view::GuestViewManager::CreateWithDelegate(
+            browser()->profile(),
+            extensions::ExtensionsAPIClient::Get()
+                ->CreateGuestViewManagerDelegate(browser()->profile())));
+  }
+
+ protected:
+  guest_view::TestGuestViewManager* test_guest_view_manager() const {
+    return test_guest_view_manager_;
+  }
+
+ private:
+  guest_view::TestGuestViewManagerFactory factory_;
+  guest_view::TestGuestViewManager* test_guest_view_manager_;
+
+  DISALLOW_COPY_AND_ASSIGN(ChromeSitePerProcessPDFTest);
+};
+
+// TODO(ekaramad): This test is flaky on Windows 7. Enable it when the issue is
+// fixed ((https://crbug.com/666379).
+#if defined(OS_WIN)
+#define MAYBE_EmbeddedPDFInsideCrossOriginFrame \
+  DISABLED_EmbeddedPDFInsideCrossOriginFrame
+#else
+#define MAYBE_EmbeddedPDFInsideCrossOriginFrame \
+  EmbeddedPDFInsideCrossOriginFrame
+#endif
+// This test verifies that when navigating an OOPIF to a page with <embed>-ed
+// PDF, the guest is properly created (https://crbug.com/649856).
+IN_PROC_BROWSER_TEST_F(ChromeSitePerProcessPDFTest,
+                       MAYBE_EmbeddedPDFInsideCrossOriginFrame) {
+  // Navigate to a page with an <iframe>.
+  GURL main_url(embedded_test_server()->GetURL("a.com", "/iframe.html"));
+  ui_test_utils::NavigateToURL(browser(), main_url);
+
+  // Initially, no guests are created.
+  EXPECT_EQ(0U, test_guest_view_manager()->num_guests_created());
+
+  // Navigate subframe to a cross-site page with an embedded PDF.
+  content::WebContents* active_web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  GURL frame_url =
+      embedded_test_server()->GetURL("b.com", "/page_with_embedded_pdf.html");
+
+  // Ensure the page finishes loading without crashing.
+  EXPECT_TRUE(NavigateIframeToURL(active_web_contents, "test", frame_url));
+
+  // Wait until the guest for PDF is created.
+  test_guest_view_manager()->WaitForSingleGuestCreated();
 }

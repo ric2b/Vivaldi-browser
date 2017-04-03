@@ -61,9 +61,6 @@ class SecurityStateBubbleDecoration : public BubbleDecoration,
   // LocationBarDecoration:
   CGFloat GetWidthForSpace(CGFloat width) override;
   void DrawInFrame(NSRect frame, NSView* control_view) override;
-  void DrawWithBackgroundInFrame(NSRect background_frame,
-                                 NSRect frame,
-                                 NSView* control_view) override;
   bool IsDraggable() override;
   NSPasteboard* GetDragPasteboard() override;
   NSImage* GetDragImage() override;
@@ -71,6 +68,7 @@ class SecurityStateBubbleDecoration : public BubbleDecoration,
   bool OnMousePressed(NSRect frame, NSPoint location) override;
   bool AcceptsMousePress() override;
   NSPoint GetBubblePointInFrame(NSRect frame) override;
+  NSString* GetToolTip() override;
 
   // BubbleDecoration:
   NSColor* GetBackgroundBorderColor() override;

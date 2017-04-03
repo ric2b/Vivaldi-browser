@@ -54,6 +54,13 @@ bool SectionPredicate(
   }
 }
 
+bool AllInterestingNodesPredicate(
+    BrowserAccessibility* start, BrowserAccessibility* node) {
+  BrowserAccessibilityAndroid* android_node =
+      static_cast<BrowserAccessibilityAndroid*>(node);
+  return android_node->IsInterestingOnAndroid();
+}
+
 void AddToPredicateMap(const char* search_key_ascii,
                        AccessibilityMatchPredicate predicate) {
   base::string16 search_key_utf16 = base::ASCIIToUTF16(search_key_ascii);
@@ -105,14 +112,9 @@ AccessibilityMatchPredicate PredicateForSearchKey(
   if (iter != g_search_key_to_predicate_map.Get().end())
     return iter->second;
 
-  // If we don't recognize the selector, return any element that's clickable.
-  // We mark all focusable nodes and leaf nodes as clickable because it's
-  // impossible to know whether a web node has a click handler or not, so
-  // to be safe we have to allow accessibility services to click on nearly
-  // anything that could possibly respond to a click.
-  return [](BrowserAccessibility* start, BrowserAccessibility* node) {
-    return static_cast<BrowserAccessibilityAndroid*>(node)->IsClickable();
-  };
+  // If we don't recognize the selector, return any element that a
+  // screen reader should navigate to.
+  return AllInterestingNodesPredicate;
 }
 
 }  // anonymous namespace
@@ -346,8 +348,7 @@ void BrowserAccessibilityManagerAndroid::HitTest(
     const JavaParamRef<jobject>& obj,
     jint x,
     jint y) {
-  if (delegate())
-    delegate()->AccessibilityHitTest(gfx::Point(x, y));
+  BrowserAccessibilityManager::HitTest(gfx::Point(x, y));
 }
 
 jboolean BrowserAccessibilityManagerAndroid::IsEditableText(
@@ -359,6 +360,17 @@ jboolean BrowserAccessibilityManagerAndroid::IsEditableText(
     return false;
 
   return node->IsEditableText();
+}
+
+jboolean BrowserAccessibilityManagerAndroid::IsFocused(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    jint id) {
+  BrowserAccessibilityAndroid* node = GetFromUniqueID(id);
+  if (!node)
+    return false;
+
+  return node->IsFocused();
 }
 
 jint BrowserAccessibilityManagerAndroid::GetEditableTextSelectionStart(
@@ -428,7 +440,8 @@ jboolean BrowserAccessibilityManagerAndroid::PopulateAccessibilityNodeInfo(
       node->IsFocusable(),
       node->IsFocused(),
       node->IsCollapsed(),
-      node->IsExpanded());
+      node->IsExpanded(),
+      node->HasNonEmptyValue());
   Java_BrowserAccessibilityManager_setAccessibilityNodeInfoClassName(
       env, obj, info,
       base::android::ConvertUTF8ToJavaString(env, node->GetClassName()));
@@ -680,6 +693,15 @@ jboolean BrowserAccessibilityManagerAndroid::AdjustSlider(
   return false;
 }
 
+void BrowserAccessibilityManagerAndroid::ShowContextMenu(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    jint id) {
+  BrowserAccessibilityAndroid* node = GetFromUniqueID(id);
+  if (node)
+    node->manager()->ShowContextMenu(*node);
+}
+
 void BrowserAccessibilityManagerAndroid::HandleHoverEvent(
     BrowserAccessibility* node) {
   JNIEnv* env = AttachCurrentThread();
@@ -687,19 +709,30 @@ void BrowserAccessibilityManagerAndroid::HandleHoverEvent(
   if (obj.is_null())
     return;
 
-  BrowserAccessibilityAndroid* ancestor =
-      static_cast<BrowserAccessibilityAndroid*>(node->GetParent());
-  while (ancestor && ancestor != GetRoot()) {
-    if (ancestor->PlatformIsLeaf() ||
-        (ancestor->IsFocusable() && !ancestor->HasFocusableChild())) {
-      node = ancestor;
-      // Don't break - we want the highest ancestor that's focusable or a
-      // leaf node.
-    }
-    ancestor = static_cast<BrowserAccessibilityAndroid*>(ancestor->GetParent());
+  // First walk up to the nearest platform node, in case this node isn't
+  // even exposed on the platform.
+  node = node->GetClosestPlatformObject();
+
+  // If this node is uninteresting and just a wrapper around a sole
+  // interesting descendant, prefer that descendant instead.
+  const BrowserAccessibilityAndroid* android_node =
+      static_cast<BrowserAccessibilityAndroid*>(node);
+  const BrowserAccessibilityAndroid* sole_interesting_node =
+      android_node->GetSoleInterestingNodeFromSubtree();
+  if (sole_interesting_node)
+    android_node = sole_interesting_node;
+
+  // Finally, if this node is still uninteresting, try to walk up to
+  // find an interesting parent.
+  while (android_node && !android_node->IsInterestingOnAndroid()) {
+    android_node = static_cast<BrowserAccessibilityAndroid*>(
+        android_node->GetParent());
   }
 
-  Java_BrowserAccessibilityManager_handleHover(env, obj, node->unique_id());
+  if (android_node) {
+    Java_BrowserAccessibilityManager_handleHover(
+        env, obj, android_node->unique_id());
+  }
 }
 
 jint BrowserAccessibilityManagerAndroid::FindElementType(
@@ -886,10 +919,7 @@ void BrowserAccessibilityManagerAndroid::SetAccessibilityFocus(
   if (!node)
     return;
 
-  if (node->manager()->delegate()) {
-    node->manager()->delegate()->AccessibilitySetAccessibilityFocus(
-        node->GetId());
-  }
+  node->manager()->SetAccessibilityFocus(*node);
 }
 
 bool BrowserAccessibilityManagerAndroid::IsSlider(

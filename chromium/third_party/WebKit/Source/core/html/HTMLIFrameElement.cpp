@@ -48,6 +48,7 @@ DEFINE_TRACE(HTMLIFrameElement) {
   visitor->trace(m_sandbox);
   visitor->trace(m_permissions);
   HTMLFrameElementBase::trace(visitor);
+  Supplementable<HTMLIFrameElement>::trace(visitor);
 }
 
 HTMLIFrameElement::~HTMLIFrameElement() {}
@@ -119,11 +120,24 @@ void HTMLIFrameElement::parseAttribute(const QualifiedName& name,
     m_allowFullscreen = !value.isNull();
     if (m_allowFullscreen != oldAllowFullscreen)
       frameOwnerPropertiesChanged();
+  } else if (name == allowpaymentrequestAttr) {
+    bool oldAllowPaymentRequest = m_allowPaymentRequest;
+    m_allowPaymentRequest = !value.isNull();
+    if (m_allowPaymentRequest != oldAllowPaymentRequest)
+      frameOwnerPropertiesChanged();
   } else if (name == permissionsAttr) {
     if (initializePermissionsAttribute())
       m_permissions->setValue(value);
   } else if (RuntimeEnabledFeatures::embedderCSPEnforcementEnabled() &&
              name == cspAttr) {
+    // TODO(amalika): add more robust validation of the value
+    if (!value.getString().containsOnlyASCII()) {
+      m_csp = nullAtom;
+      document().addConsoleMessage(ConsoleMessage::create(
+          OtherMessageSource, ErrorMessageLevel,
+          "'csp' attribute contains non-ASCII characters: " + value));
+      return;
+    }
     AtomicString oldCSP = m_csp;
     m_csp = value;
     if (m_csp != oldCSP)
@@ -137,7 +151,7 @@ void HTMLIFrameElement::parseAttribute(const QualifiedName& name,
 }
 
 bool HTMLIFrameElement::layoutObjectIsNeeded(const ComputedStyle& style) {
-  return isURLAllowed() && HTMLElement::layoutObjectIsNeeded(style);
+  return contentFrame() && HTMLElement::layoutObjectIsNeeded(style);
 }
 
 LayoutObject* HTMLIFrameElement::createLayoutObject(const ComputedStyle&) {

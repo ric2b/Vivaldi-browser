@@ -19,8 +19,8 @@
 #include "media/mojo/clients/mojo_decryptor.h"
 #include "media/mojo/common/media_type_converters.h"
 #include "media/mojo/interfaces/decryptor.mojom.h"
-#include "services/shell/public/cpp/connect.h"
-#include "services/shell/public/interfaces/interface_provider.mojom.h"
+#include "services/service_manager/public/cpp/connect.h"
+#include "services/service_manager/public/interfaces/interface_provider.mojom.h"
 #include "url/gurl.h"
 
 namespace media {
@@ -28,21 +28,21 @@ namespace media {
 template <typename PromiseType>
 static void RejectPromise(std::unique_ptr<PromiseType> promise,
                           mojom::CdmPromiseResultPtr result) {
-  promise->reject(static_cast<MediaKeys::Exception>(result->exception),
-                  result->system_code, result->error_message);
+  promise->reject(result->exception, result->system_code,
+                  result->error_message);
 }
 
 // static
 void MojoCdm::Create(
     const std::string& key_system,
     const GURL& security_origin,
-    const media::CdmConfig& cdm_config,
+    const CdmConfig& cdm_config,
     mojom::ContentDecryptionModulePtr remote_cdm,
-    const media::SessionMessageCB& session_message_cb,
-    const media::SessionClosedCB& session_closed_cb,
-    const media::SessionKeysChangeCB& session_keys_change_cb,
-    const media::SessionExpirationUpdateCB& session_expiration_update_cb,
-    const media::CdmCreatedCB& cdm_created_cb) {
+    const SessionMessageCB& session_message_cb,
+    const SessionClosedCB& session_closed_cb,
+    const SessionKeysChangeCB& session_keys_change_cb,
+    const SessionExpirationUpdateCB& session_expiration_update_cb,
+    const CdmCreatedCB& cdm_created_cb) {
   scoped_refptr<MojoCdm> mojo_cdm(
       new MojoCdm(std::move(remote_cdm), session_message_cb, session_closed_cb,
                   session_keys_change_cb, session_expiration_update_cb));
@@ -98,7 +98,7 @@ MojoCdm::~MojoCdm() {
 
 void MojoCdm::InitializeCdm(const std::string& key_system,
                             const GURL& security_origin,
-                            const media::CdmConfig& cdm_config,
+                            const CdmConfig& cdm_config,
                             std::unique_ptr<CdmInitializedPromise> promise) {
   DVLOG(1) << __FUNCTION__ << ": " << key_system;
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -106,7 +106,8 @@ void MojoCdm::InitializeCdm(const std::string& key_system,
   // If connection error has happened, fail immediately.
   if (remote_cdm_.encountered_error()) {
     LOG(ERROR) << "Remote CDM encountered error.";
-    promise->reject(NOT_SUPPORTED_ERROR, 0, "Mojo CDM creation failed.");
+    promise->reject(CdmPromise::NOT_SUPPORTED_ERROR, 0,
+                    "Mojo CDM creation failed.");
     return;
   }
 
@@ -125,13 +126,14 @@ void MojoCdm::OnConnectionError() {
   LOG(ERROR) << "Remote CDM connection error.";
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  // We only handle initial connection error.
-  if (!pending_init_promise_)
-    return;
+  // Handle initial connection error.
+  if (pending_init_promise_) {
+    pending_init_promise_->reject(CdmPromise::NOT_SUPPORTED_ERROR, 0,
+                                  "Mojo CDM creation failed.");
+    pending_init_promise_.reset();
+  }
 
-  pending_init_promise_->reject(NOT_SUPPORTED_ERROR, 0,
-                                "Mojo CDM creation failed.");
-  pending_init_promise_.reset();
+  cdm_session_tracker_.CloseRemainingSessions(session_closed_cb_);
 }
 
 void MojoCdm::SetServerCertificate(const std::vector<uint8_t>& certificate,
@@ -140,9 +142,8 @@ void MojoCdm::SetServerCertificate(const std::vector<uint8_t>& certificate,
   DCHECK(thread_checker_.CalledOnValidThread());
 
   remote_cdm_->SetServerCertificate(
-      mojo::Array<uint8_t>::From(certificate),
-      base::Bind(&MojoCdm::OnPromiseResult<>, base::Unretained(this),
-                 base::Passed(&promise)));
+      certificate, base::Bind(&MojoCdm::OnSimpleCdmPromiseResult,
+                              base::Unretained(this), base::Passed(&promise)));
 }
 
 void MojoCdm::CreateSessionAndGenerateRequest(
@@ -154,10 +155,8 @@ void MojoCdm::CreateSessionAndGenerateRequest(
   DCHECK(thread_checker_.CalledOnValidThread());
 
   remote_cdm_->CreateSessionAndGenerateRequest(
-      static_cast<mojom::ContentDecryptionModule::SessionType>(session_type),
-      static_cast<mojom::ContentDecryptionModule::InitDataType>(init_data_type),
-      mojo::Array<uint8_t>::From(init_data),
-      base::Bind(&MojoCdm::OnPromiseResult<std::string>, base::Unretained(this),
+      session_type, init_data_type, init_data,
+      base::Bind(&MojoCdm::OnNewSessionCdmPromiseResult, base::Unretained(this),
                  base::Passed(&promise)));
 }
 
@@ -168,9 +167,9 @@ void MojoCdm::LoadSession(SessionType session_type,
   DCHECK(thread_checker_.CalledOnValidThread());
 
   remote_cdm_->LoadSession(
-      static_cast<mojom::ContentDecryptionModule::SessionType>(session_type),
-      session_id, base::Bind(&MojoCdm::OnPromiseResult<std::string>,
-                             base::Unretained(this), base::Passed(&promise)));
+      session_type, session_id,
+      base::Bind(&MojoCdm::OnNewSessionCdmPromiseResult, base::Unretained(this),
+                 base::Passed(&promise)));
 }
 
 void MojoCdm::UpdateSession(const std::string& session_id,
@@ -180,8 +179,8 @@ void MojoCdm::UpdateSession(const std::string& session_id,
   DCHECK(thread_checker_.CalledOnValidThread());
 
   remote_cdm_->UpdateSession(
-      session_id, mojo::Array<uint8_t>::From(response),
-      base::Bind(&MojoCdm::OnPromiseResult<>, base::Unretained(this),
+      session_id, response,
+      base::Bind(&MojoCdm::OnSimpleCdmPromiseResult, base::Unretained(this),
                  base::Passed(&promise)));
 }
 
@@ -191,7 +190,7 @@ void MojoCdm::CloseSession(const std::string& session_id,
   DCHECK(thread_checker_.CalledOnValidThread());
 
   remote_cdm_->CloseSession(
-      session_id, base::Bind(&MojoCdm::OnPromiseResult<>,
+      session_id, base::Bind(&MojoCdm::OnSimpleCdmPromiseResult,
                              base::Unretained(this), base::Passed(&promise)));
 }
 
@@ -201,7 +200,7 @@ void MojoCdm::RemoveSession(const std::string& session_id,
   DCHECK(thread_checker_.CalledOnValidThread());
 
   remote_cdm_->RemoveSession(
-      session_id, base::Bind(&MojoCdm::OnPromiseResult<>,
+      session_id, base::Bind(&MojoCdm::OnSimpleCdmPromiseResult,
                              base::Unretained(this), base::Passed(&promise)));
 }
 
@@ -210,7 +209,7 @@ CdmContext* MojoCdm::GetCdmContext() {
   return this;
 }
 
-media::Decryptor* MojoCdm::GetDecryptor() {
+Decryptor* MojoCdm::GetDecryptor() {
   base::AutoLock auto_lock(lock_);
 
   if (!decryptor_task_runner_)
@@ -236,28 +235,27 @@ int MojoCdm::GetCdmId() const {
   return cdm_id_;
 }
 
-void MojoCdm::OnSessionMessage(const mojo::String& session_id,
-                               mojom::CdmMessageType message_type,
-                               mojo::Array<uint8_t> message) {
+void MojoCdm::OnSessionMessage(const std::string& session_id,
+                               MessageType message_type,
+                               const std::vector<uint8_t>& message) {
   DVLOG(2) << __FUNCTION__;
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  session_message_cb_.Run(session_id,
-                          static_cast<MediaKeys::MessageType>(message_type),
-                          message.storage());
+  session_message_cb_.Run(session_id, message_type, message);
 }
 
-void MojoCdm::OnSessionClosed(const mojo::String& session_id) {
+void MojoCdm::OnSessionClosed(const std::string& session_id) {
   DVLOG(2) << __FUNCTION__;
   DCHECK(thread_checker_.CalledOnValidThread());
 
+  cdm_session_tracker_.RemoveSession(session_id);
   session_closed_cb_.Run(session_id);
 }
 
 void MojoCdm::OnSessionKeysChange(
-    const mojo::String& session_id,
+    const std::string& session_id,
     bool has_additional_usable_key,
-    mojo::Array<mojom::CdmKeyInformationPtr> keys_info) {
+    std::vector<mojom::CdmKeyInformationPtr> keys_info) {
   DVLOG(2) << __FUNCTION__;
   DCHECK(thread_checker_.CalledOnValidThread());
 
@@ -273,17 +271,17 @@ void MojoCdm::OnSessionKeysChange(
     }
   }
 
-  media::CdmKeysInfo key_data;
+  CdmKeysInfo key_data;
   key_data.reserve(keys_info.size());
   for (size_t i = 0; i < keys_info.size(); ++i) {
     key_data.push_back(
-        keys_info[i].To<std::unique_ptr<media::CdmKeyInformation>>().release());
+        keys_info[i].To<std::unique_ptr<CdmKeyInformation>>().release());
   }
   session_keys_change_cb_.Run(session_id, has_additional_usable_key,
                               std::move(key_data));
 }
 
-void MojoCdm::OnSessionExpirationUpdate(const mojo::String& session_id,
+void MojoCdm::OnSessionExpirationUpdate(const std::string& session_id,
                                         double new_expiry_time_sec) {
   DVLOG(2) << __FUNCTION__;
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -323,6 +321,26 @@ void MojoCdm::OnKeyAdded() {
   DCHECK(decryptor_);
 
   decryptor_->OnKeyAdded();
+}
+
+void MojoCdm::OnSimpleCdmPromiseResult(
+    std::unique_ptr<SimpleCdmPromise> promise,
+    mojom::CdmPromiseResultPtr result) {
+  if (result->success)
+    promise->resolve();
+  else
+    RejectPromise(std::move(promise), std::move(result));
+}
+
+void MojoCdm::OnNewSessionCdmPromiseResult(
+    std::unique_ptr<NewSessionCdmPromise> promise,
+    mojom::CdmPromiseResultPtr result,
+    const std::string& session_id) {
+  if (result->success) {
+    cdm_session_tracker_.AddSession(session_id);
+    promise->resolve(session_id);
+  } else
+    RejectPromise(std::move(promise), std::move(result));
 }
 
 }  // namespace media

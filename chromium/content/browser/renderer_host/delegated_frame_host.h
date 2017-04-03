@@ -46,7 +46,6 @@ namespace content {
 
 class DelegatedFrameHost;
 class RenderWidgetHostViewFrameSubscriber;
-class RenderWidgetHostImpl;
 class ResizeLock;
 
 // The DelegatedFrameHostClient is the interface from the DelegatedFrameHost,
@@ -71,7 +70,6 @@ class CONTENT_EXPORT DelegatedFrameHostClient {
       int compositor_frame_sink_id,
       bool is_swap_ack,
       const cc::ReturnedResourceArray& resources) = 0;
-  virtual void DelegatedFrameHostOnLostCompositorResources() = 0;
 
   virtual void SetBeginFrameSource(cc::BeginFrameSource* source) = 0;
   virtual bool IsAutoResizeEnabled() const = 0;
@@ -98,7 +96,6 @@ class CONTENT_EXPORT DelegatedFrameHost
   void OnCompositingStarted(ui::Compositor* compositor,
                             base::TimeTicks start_time) override;
   void OnCompositingEnded(ui::Compositor* compositor) override;
-  void OnCompositingAborted(ui::Compositor* compositor) override;
   void OnCompositingLockStateChanged(ui::Compositor* compositor) override;
   void OnCompositingShuttingDown(ui::Compositor* compositor) override;
 
@@ -156,19 +153,20 @@ class CONTENT_EXPORT DelegatedFrameHost
 
   // Given the SurfaceID of a Surface that is contained within this class'
   // Surface, find the relative transform between the Surfaces and apply it
-  // to a point. If a Surface has not yet been created this returns the
-  // same point with no transform applied.
-  gfx::Point TransformPointToLocalCoordSpace(
-      const gfx::Point& point,
-      const cc::SurfaceId& original_surface);
+  // to a point. Returns false if a Surface has not yet been created or if
+  // |original_surface| is not embedded within our current Surface.
+  bool TransformPointToLocalCoordSpace(const gfx::Point& point,
+                                       const cc::SurfaceId& original_surface,
+                                       gfx::Point* transformed_point);
 
   // Given a RenderWidgetHostViewBase that renders to a Surface that is
   // contained within this class' Surface, find the relative transform between
-  // the Surfaces and apply it to a point. If a Surface has not yet been
-  // created this returns the same point with no transform applied.
-  gfx::Point TransformPointToCoordSpaceForView(
-      const gfx::Point& point,
-      RenderWidgetHostViewBase* target_view);
+  // the Surfaces and apply it to a point. Returns false if a Surface has not
+  // yet been created or if |target_view| is not a descendant RWHV from our
+  // client.
+  bool TransformPointToCoordSpaceForView(const gfx::Point& point,
+                                         RenderWidgetHostViewBase* target_view,
+                                         gfx::Point* transformed_point);
 
   // Exposed for tests.
   cc::SurfaceId SurfaceIdForTesting() const {

@@ -11,15 +11,18 @@
 #include "base/threading/thread.h"
 #include "blimp/client/core/contents/blimp_contents_impl.h"
 #include "blimp/client/core/contents/tab_control_feature.h"
+#include "blimp/client/core/settings/settings.h"
 #include "blimp/client/public/blimp_client_context_delegate.h"
 #include "blimp/client/public/contents/blimp_contents.h"
 #include "blimp/client/test/compositor/mock_compositor_dependencies.h"
 #include "blimp/client/test/test_blimp_client_context_delegate.h"
+#include "components/prefs/testing_pref_service.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/native_widget_types.h"
 
 #if defined(OS_ANDROID)
+#include "blimp/client/core/settings/android/settings_android.h"
 #include "ui/android/window_android.h"
 #endif  // defined(OS_ANDROID)
 
@@ -61,9 +64,13 @@ class BlimpClientContextImplTest : public testing::Test {
 
 TEST_F(BlimpClientContextImplTest,
        CreatedBlimpContentsGetsHelpersAttachedAndHasTabControlFeature) {
+  TestingPrefServiceSimple prefs;
+  Settings::RegisterPrefs(prefs.registry());
+
+  auto settings = base::MakeUnique<Settings>(&prefs);
   BlimpClientContextImpl blimp_client_context(
       io_thread_.task_runner(), io_thread_.task_runner(),
-      base::MakeUnique<MockCompositorDependencies>());
+      base::MakeUnique<MockCompositorDependencies>(), std::move(settings));
   TestBlimpClientContextDelegate delegate;
   blimp_client_context.SetDelegate(&delegate);
 
@@ -77,6 +84,7 @@ TEST_F(BlimpClientContextImplTest,
       blimp_client_context.CreateBlimpContents(window_);
   DCHECK(blimp_contents);
   DCHECK_EQ(blimp_contents.get(), attached_blimp_contents);
+  blimp_client_context.SetDelegate(nullptr);
 }
 
 }  // namespace

@@ -45,7 +45,7 @@ class CAPTURE_EXPORT VideoCaptureDeviceClient
  public:
   VideoCaptureDeviceClient(
       std::unique_ptr<VideoFrameReceiver> receiver,
-      const scoped_refptr<VideoCaptureBufferPool>& buffer_pool,
+      scoped_refptr<VideoCaptureBufferPool> buffer_pool,
       const VideoCaptureJpegDecoderFactoryCB& jpeg_decoder_factory);
   ~VideoCaptureDeviceClient() override;
 
@@ -66,7 +66,7 @@ class CAPTURE_EXPORT VideoCaptureDeviceClient
                                 base::TimeDelta timestamp) override;
   void OnIncomingCapturedVideoFrame(
       std::unique_ptr<Buffer> buffer,
-      const scoped_refptr<media::VideoFrame>& frame) override;
+      scoped_refptr<media::VideoFrame> frame) override;
   std::unique_ptr<Buffer> ResurrectLastOutputBuffer(
       const gfx::Size& dimensions,
       media::VideoPixelFormat format,
@@ -85,16 +85,21 @@ class CAPTURE_EXPORT VideoCaptureDeviceClient
   // Returns an nullptr if allocation fails.
   //
   // When requested |storage| is PIXEL_STORAGE_CPU, a single shared memory
-  // chunk is reserved; whereas for PIXEL_STORAGE_GPUMEMORYBUFFER, three
-  // GpuMemoryBuffers in R_8 format representing I420 planes are reserved. The
-  // output buffers stay reserved and mapped for use until the Buffer objects
-  // are destroyed or returned.
+  // chunk is reserved. The output buffers stay reserved and mapped for use
+  // until the Buffer objects are destroyed or returned.
   std::unique_ptr<Buffer> ReserveI420OutputBuffer(
       const gfx::Size& dimensions,
       media::VideoPixelStorage storage,
       uint8_t** y_plane_data,
       uint8_t** u_plane_data,
       uint8_t** v_plane_data);
+
+  // A branch of OnIncomingCapturedData for Y16 frame_format.pixel_format.
+  void OnIncomingCapturedY16Data(const uint8_t* data,
+                                 int length,
+                                 const VideoCaptureFormat& frame_format,
+                                 base::TimeTicks reference_time,
+                                 base::TimeDelta timestamp);
 
   // The receiver to which we post events.
   const std::unique_ptr<VideoFrameReceiver> receiver_;
@@ -115,10 +120,6 @@ class CAPTURE_EXPORT VideoCaptureDeviceClient
 
   static const int kMaxDroppedFrames = 150;
 #endif  // DCHECK_IS_ON()
-
-  // Indication to the Client to copy-transform the incoming data into
-  // GpuMemoryBuffers.
-  const bool use_gpu_memory_buffers_;
 
   media::VideoPixelFormat last_captured_pixel_format_;
 

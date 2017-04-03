@@ -4,6 +4,7 @@
 
 #include "chrome/browser/chromeos/set_time_dialog.h"
 
+#include "ash/public/cpp/shell_window_ids.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/common/url_constants.h"
@@ -23,11 +24,20 @@ const int kDefaultHeight = 235;
 }  // namespace
 
 // static
-void SetTimeDialog::ShowDialog(gfx::NativeWindow owning_window) {
+void SetTimeDialog::ShowDialogInParent(gfx::NativeWindow parent) {
+  DCHECK(parent);
   content::RecordAction(base::UserMetricsAction("Options_SetTimeDialog_Show"));
-  chrome::ShowWebDialog(owning_window,
-                        ProfileManager::GetActiveUserProfile(),
+  chrome::ShowWebDialog(parent, ProfileManager::GetActiveUserProfile(),
                         new SetTimeDialog());
+}
+
+// static
+void SetTimeDialog::ShowDialogInContainer(int container_id) {
+  DCHECK_NE(container_id, ash::kShellWindowId_Invalid);
+  content::RecordAction(base::UserMetricsAction("Options_SetTimeDialog_Show"));
+  chrome::ShowWebDialogInContainer(container_id,
+                                   ProfileManager::GetActiveUserProfile(),
+                                   new SetTimeDialog());
 }
 
 SetTimeDialog::SetTimeDialog() {

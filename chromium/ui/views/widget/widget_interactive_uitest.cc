@@ -30,6 +30,7 @@
 #include "ui/views/focus/focus_manager.h"
 #include "ui/views/test/focus_manager_test.h"
 #include "ui/views/test/native_widget_factory.h"
+#include "ui/views/test/views_interactive_ui_test_base.h"
 #include "ui/views/test/widget_test.h"
 #include "ui/views/touchui/touch_selection_controller_impl.h"
 #include "ui/views/widget/widget.h"
@@ -156,49 +157,6 @@ class NestedLoopCaptureView : public View {
   DISALLOW_COPY_AND_ASSIGN(NestedLoopCaptureView);
 };
 
-// Spins a run loop until a Widget's active state matches a desired state.
-class WidgetActivationWaiter : public WidgetObserver {
- public:
-  WidgetActivationWaiter(Widget* widget, bool active) : observed_(false) {
-#if defined(OS_WIN)
-    // On Windows, a HWND can receive a WM_ACTIVATE message without the value
-    // of ::GetActiveWindow() updating to reflect that change. This can cause
-    // the active window reported by IsActive() to get out of sync. Usually this
-    // happens after a call to HWNDMessageHandler::Deactivate() which works by
-    // activating some other window, which might be in another application.
-    // Doing this can trigger the native OS activation-blocker, causing the
-    // taskbar icon to flash instead. But since activation of native widgets on
-    // Windows is synchronous, we never have to wait anyway, so it's safe to
-    // return here.
-    if (active == widget->IsActive()) {
-      observed_ = true;
-      return;
-    }
-#endif
-    // Always expect a change for tests using this.
-    EXPECT_NE(active, widget->IsActive());
-    widget->AddObserver(this);
-  }
-
-  void Wait() {
-    if (!observed_)
-      run_loop_.Run();
-  }
-
-  void OnWidgetActivationChanged(Widget* widget, bool active) override {
-    observed_ = true;
-    widget->RemoveObserver(this);
-    if (run_loop_.running())
-      run_loop_.Quit();
-  }
-
- private:
-  base::RunLoop run_loop_;
-  bool observed_;
-
-  DISALLOW_COPY_AND_ASSIGN(WidgetActivationWaiter);
-};
-
 ui::WindowShowState GetWidgetShowState(const Widget* widget) {
   // Use IsMaximized/IsMinimized/IsFullScreen instead of GetWindowPlacement
   // because the former is implemented on all platforms but the latter is not.
@@ -225,7 +183,7 @@ void RunPendingMessagesForActiveStatusChange() {
 // this is just an activation. For other widgets, it means activating and then
 // spinning the run loop until the OS has activated the window.
 void ActivateSync(Widget* widget) {
-  WidgetActivationWaiter waiter(widget, true);
+  views::test::WidgetActivationWaiter waiter(widget, true);
   widget->Activate();
   waiter.Wait();
 }
@@ -233,7 +191,7 @@ void ActivateSync(Widget* widget) {
 // Like for ActivateSync(), wait for a widget to become active, but Show() the
 // widget rather than calling Activate().
 void ShowSync(Widget* widget) {
-  WidgetActivationWaiter waiter(widget, true);
+  views::test::WidgetActivationWaiter waiter(widget, true);
   widget->Show();
   waiter.Wait();
 }
@@ -252,7 +210,7 @@ void DeactivateSync(Widget* widget) {
   stealer->CloseNow();
   widget->widget_delegate()->set_can_activate(true);
 #else
-  WidgetActivationWaiter waiter(widget, false);
+  views::test::WidgetActivationWaiter waiter(widget, false);
   widget->Deactivate();
   waiter.Wait();
 #endif
@@ -926,7 +884,7 @@ TEST_F(WidgetTestInteractive, WindowModalWindowDestroyedActivationTest) {
 #if defined(OS_MACOSX)
   // Window modal dialogs on Mac are "sheets", which animate to close before
   // activating their parent widget.
-  WidgetActivationWaiter waiter(&top_level_widget, true);
+  views::test::WidgetActivationWaiter waiter(&top_level_widget, true);
   modal_dialog_widget->Close();
   waiter.Wait();
 #else
@@ -1239,6 +1197,11 @@ TEST_F(WidgetTestInteractive, MAYBE_ExitFullscreenRestoreState) {
 // Testing initial focus is assigned properly for normal top-level widgets,
 // and subclasses that specify a initially focused child view.
 TEST_F(WidgetTestInteractive, InitialFocus) {
+  // TODO: test uses GetContext(), which is not applicable to aura-mus.
+  // http://crbug.com/663809.
+  if (IsAuraMusClient())
+    return;
+
   // By default, there is no initially focused view (even if there is a
   // focusable subview).
   Widget* toplevel(CreateTopLevelPlatformWidget());
@@ -1305,7 +1268,7 @@ class CaptureLostTrackingWidget : public Widget {
 
 }  // namespace
 
-class WidgetCaptureTest : public ViewsTestBase {
+class WidgetCaptureTest : public ViewsInteractiveUITestBase {
  public:
   WidgetCaptureTest() {
   }
@@ -1315,14 +1278,10 @@ class WidgetCaptureTest : public ViewsTestBase {
   void SetUp() override {
     // On mus these tests run as part of views::ViewsTestSuite which already
     // does this initialization.
-    if (!IsMus()) {
-      gl::GLSurfaceTestSupport::InitializeOneOff();
-      ui::RegisterPathProvider();
-      base::FilePath ui_test_pak_path;
-      ASSERT_TRUE(PathService::Get(ui::UI_TEST_PAK, &ui_test_pak_path));
-      ui::ResourceBundle::InitSharedInstanceWithPakPath(ui_test_pak_path);
-    }
-    ViewsTestBase::SetUp();
+    if (!IsMus())
+      ViewsInteractiveUITestBase::SetUp();
+    else
+      ViewsTestBase::SetUp();
   }
 
   // Verifies Widget::SetCapture() results in updating native capture along with
@@ -1453,6 +1412,10 @@ TEST_F(WidgetCaptureTest, CaptureDesktopNativeWidget) {
 TEST_F(WidgetCaptureTest, FailedCaptureRequestIsNoop) {
   // Fails on mus. http://crbug.com/611764
   if (IsMus())
+    return;
+  // TODO: test uses GetContext(), which is not applicable to aura-mus.
+  // http://crbug.com/663809.
+  if (IsAuraMusClient())
     return;
 
   Widget widget;

@@ -173,34 +173,30 @@ void GraphicsContext::setShadow(
   if (contextDisabled())
     return;
 
-  std::unique_ptr<DrawLooperBuilder> drawLooperBuilder =
-      DrawLooperBuilder::create();
+  DrawLooperBuilder drawLooperBuilder;
   if (!color.alpha()) {
     // When shadow-only but there is no shadow, we use an empty draw looper
     // to disable rendering of the source primitive.  When not shadow-only, we
     // clear the looper.
-    if (shadowMode != DrawShadowOnly)
-      drawLooperBuilder.reset();
-
-    setDrawLooper(std::move(drawLooperBuilder));
+    setDrawLooper(shadowMode != DrawShadowOnly
+                      ? nullptr
+                      : drawLooperBuilder.detachDrawLooper());
     return;
   }
 
-  drawLooperBuilder->addShadow(offset, blur, color, shadowTransformMode,
-                               shadowAlphaMode);
+  drawLooperBuilder.addShadow(offset, blur, color, shadowTransformMode,
+                              shadowAlphaMode);
   if (shadowMode == DrawShadowAndForeground) {
-    drawLooperBuilder->addUnmodifiedContent();
+    drawLooperBuilder.addUnmodifiedContent();
   }
-  setDrawLooper(std::move(drawLooperBuilder));
+  setDrawLooper(drawLooperBuilder.detachDrawLooper());
 }
 
-void GraphicsContext::setDrawLooper(
-    std::unique_ptr<DrawLooperBuilder> drawLooperBuilder) {
+void GraphicsContext::setDrawLooper(sk_sp<SkDrawLooper> drawLooper) {
   if (contextDisabled())
     return;
 
-  mutableState()->setDrawLooper(
-      drawLooperBuilder ? drawLooperBuilder->detachDrawLooper() : nullptr);
+  mutableState()->setDrawLooper(std::move(drawLooper));
 }
 
 SkColorFilter* GraphicsContext::getColorFilter() const {
@@ -227,7 +223,7 @@ void GraphicsContext::concat(const SkMatrix& matrix) {
 }
 
 void GraphicsContext::beginLayer(float opacity,
-                                 SkXfermode::Mode xfermode,
+                                 SkBlendMode xfermode,
                                  const FloatRect* bounds,
                                  ColorFilter colorFilter,
                                  sk_sp<SkImageFilter> imageFilter) {
@@ -236,7 +232,7 @@ void GraphicsContext::beginLayer(float opacity,
 
   SkPaint layerPaint;
   layerPaint.setAlpha(static_cast<unsigned char>(opacity * 255));
-  layerPaint.setXfermodeMode(xfermode);
+  layerPaint.setBlendMode(static_cast<SkBlendMode>(xfermode));
   layerPaint.setColorFilter(WebCoreColorFilterToSkiaColorFilter(colorFilter));
   layerPaint.setImageFilter(std::move(imageFilter));
 
@@ -305,13 +301,13 @@ void GraphicsContext::drawPicture(const SkPicture* picture) {
 void GraphicsContext::compositePicture(sk_sp<SkPicture> picture,
                                        const FloatRect& dest,
                                        const FloatRect& src,
-                                       SkXfermode::Mode op) {
+                                       SkBlendMode op) {
   if (contextDisabled() || !picture)
     return;
   ASSERT(m_canvas);
 
   SkPaint picturePaint;
-  picturePaint.setXfermodeMode(op);
+  picturePaint.setBlendMode(static_cast<SkBlendMode>(op));
   m_canvas->save();
   SkRect sourceBounds = src;
   SkRect skBounds = dest;
@@ -329,18 +325,18 @@ void GraphicsContext::compositePicture(sk_sp<SkPicture> picture,
 
 void GraphicsContext::drawFocusRingPath(const SkPath& path,
                                         const Color& color,
-                                        int width) {
+                                        float width) {
   drawPlatformFocusRing(path, m_canvas, color.rgb(), width);
 }
 
 void GraphicsContext::drawFocusRingRect(const SkRect& rect,
                                         const Color& color,
-                                        int width) {
+                                        float width) {
   drawPlatformFocusRing(rect, m_canvas, color.rgb(), width);
 }
 
 void GraphicsContext::drawFocusRing(const Path& focusRingPath,
-                                    int width,
+                                    float width,
                                     int offset,
                                     const Color& color) {
   // FIXME: Implement support for offset.
@@ -351,7 +347,7 @@ void GraphicsContext::drawFocusRing(const Path& focusRingPath,
 }
 
 void GraphicsContext::drawFocusRing(const Vector<IntRect>& rects,
-                                    int width,
+                                    float width,
                                     int offset,
                                     const Color& color) {
   if (contextDisabled())
@@ -451,12 +447,11 @@ void GraphicsContext::drawInnerShadow(const FloatRoundedRect& rect,
     clip(rect.rect());
   }
 
-  std::unique_ptr<DrawLooperBuilder> drawLooperBuilder =
-      DrawLooperBuilder::create();
-  drawLooperBuilder->addShadow(FloatSize(shadowOffset), shadowBlur, shadowColor,
-                               DrawLooperBuilder::ShadowRespectsTransforms,
-                               DrawLooperBuilder::ShadowIgnoresAlpha);
-  setDrawLooper(std::move(drawLooperBuilder));
+  DrawLooperBuilder drawLooperBuilder;
+  drawLooperBuilder.addShadow(FloatSize(shadowOffset), shadowBlur, shadowColor,
+                              DrawLooperBuilder::ShadowRespectsTransforms,
+                              DrawLooperBuilder::ShadowIgnoresAlpha);
+  setDrawLooper(drawLooperBuilder.detachDrawLooper());
   fillRectWithRoundedHole(outerRect, roundedHole, fillColor);
 }
 
@@ -798,7 +793,7 @@ void GraphicsContext::drawImage(
     Image* image,
     const FloatRect& dest,
     const FloatRect* srcPtr,
-    SkXfermode::Mode op,
+    SkBlendMode op,
     RespectImageOrientationEnum shouldRespectImageOrientation) {
   if (contextDisabled() || !image)
     return;
@@ -806,7 +801,7 @@ void GraphicsContext::drawImage(
   const FloatRect src = srcPtr ? *srcPtr : image->rect();
 
   SkPaint imagePaint = immutableState()->fillPaint();
-  imagePaint.setXfermodeMode(op);
+  imagePaint.setBlendMode(static_cast<SkBlendMode>(op));
   imagePaint.setColor(SK_ColorBLACK);
   imagePaint.setFilterQuality(computeFilterQuality(image, dest, src));
   imagePaint.setAntiAlias(shouldAntialias());
@@ -819,7 +814,7 @@ void GraphicsContext::drawImageRRect(
     Image* image,
     const FloatRoundedRect& dest,
     const FloatRect& srcRect,
-    SkXfermode::Mode op,
+    SkBlendMode op,
     RespectImageOrientationEnum respectOrientation) {
   if (contextDisabled() || !image)
     return;
@@ -836,7 +831,7 @@ void GraphicsContext::drawImageRRect(
     return;
 
   SkPaint imagePaint = immutableState()->fillPaint();
-  imagePaint.setXfermodeMode(op);
+  imagePaint.setBlendMode(static_cast<SkBlendMode>(op));
   imagePaint.setColor(SK_ColorBLACK);
   imagePaint.setFilterQuality(
       computeFilterQuality(image, dest.rect(), srcRect));
@@ -895,11 +890,12 @@ void GraphicsContext::drawTiledImage(Image* image,
                                      const FloatRect& destRect,
                                      const FloatPoint& srcPoint,
                                      const FloatSize& tileSize,
-                                     SkXfermode::Mode op,
+                                     SkBlendMode op,
                                      const FloatSize& repeatSpacing) {
   if (contextDisabled() || !image)
     return;
   image->drawTiled(*this, destRect, srcPoint, tileSize, op, repeatSpacing);
+  m_paintController.setImagePainted();
 }
 
 void GraphicsContext::drawTiledImage(Image* image,
@@ -908,7 +904,7 @@ void GraphicsContext::drawTiledImage(Image* image,
                                      const FloatSize& tileScaleFactor,
                                      Image::TileRule hRule,
                                      Image::TileRule vRule,
-                                     SkXfermode::Mode op) {
+                                     SkBlendMode op) {
   if (contextDisabled() || !image)
     return;
 
@@ -919,6 +915,7 @@ void GraphicsContext::drawTiledImage(Image* image,
   }
 
   image->drawTiled(*this, dest, srcRect, tileScaleFactor, hRule, vRule, op);
+  m_paintController.setImagePainted();
 }
 
 void GraphicsContext::drawOval(const SkRect& oval, const SkPaint& paint) {
@@ -969,13 +966,13 @@ void GraphicsContext::fillRect(const FloatRect& rect) {
 
 void GraphicsContext::fillRect(const FloatRect& rect,
                                const Color& color,
-                               SkXfermode::Mode xferMode) {
+                               SkBlendMode xferMode) {
   if (contextDisabled())
     return;
 
   SkPaint paint = immutableState()->fillPaint();
   paint.setColor(color.rgb());
-  paint.setXfermodeMode(xferMode);
+  paint.setBlendMode(xferMode);
 
   drawRect(rect, paint);
 }

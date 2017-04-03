@@ -35,12 +35,14 @@ class CORE_EXPORT FrameOwner : public GarbageCollectedMixin {
 
   // On load failure, a frame can ask its owner to render fallback content
   // which replaces the frame contents.
+  virtual bool canRenderFallbackContent() const = 0;
   virtual void renderFallbackContent() = 0;
 
   virtual ScrollbarMode scrollingMode() const = 0;
   virtual int marginWidth() const = 0;
   virtual int marginHeight() const = 0;
   virtual bool allowFullscreen() const = 0;
+  virtual bool allowPaymentRequest() const = 0;
   virtual AtomicString csp() const = 0;
   virtual const WebVector<WebPermissionType>& delegatedPermissions() const = 0;
 };
@@ -60,11 +62,13 @@ class CORE_EXPORT DummyFrameOwner
   void clearContentFrame() override {}
   SandboxFlags getSandboxFlags() const override { return SandboxNone; }
   void dispatchLoad() override {}
+  bool canRenderFallbackContent() const override { return false; }
   void renderFallbackContent() override {}
   ScrollbarMode scrollingMode() const override { return ScrollbarAuto; }
   int marginWidth() const override { return -1; }
   int marginHeight() const override { return -1; }
   bool allowFullscreen() const override { return false; }
+  bool allowPaymentRequest() const override { return false; }
   AtomicString csp() const override { return nullAtom; }
   const WebVector<WebPermissionType>& delegatedPermissions() const override {
     DEFINE_STATIC_LOCAL(WebVector<WebPermissionType>, permissions, ());

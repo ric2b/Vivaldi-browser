@@ -172,6 +172,8 @@
         'win/get_module_information.h',
         'win/handle.cc',
         'win/handle.h',
+        'win/initial_client_data.cc',
+        'win/initial_client_data.h',
         'win/module_version.cc',
         'win/module_version.h',
         'win/nt_internals.cc',
@@ -189,6 +191,7 @@
         'win/scoped_local_alloc.h',
         'win/scoped_process_suspend.cc',
         'win/scoped_process_suspend.h',
+        'win/termination_codes.h',
         'win/time.cc',
         'win/time.h',
         'win/xp_compat.h',
@@ -280,6 +283,10 @@
                 },
               },
             }],
+          ],
+        }, {  # else: OS!="win"
+          'sources!': [
+            'win/capture_context.asm',
           ],
         }],
       ],

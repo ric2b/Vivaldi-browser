@@ -4,10 +4,15 @@
 
 #include "modules/vr/VRDisplay.h"
 
+#include "core/css/StylePropertySet.h"
 #include "core/dom/DOMException.h"
+#include "core/dom/DocumentUserGestureToken.h"
+#include "core/dom/FrameRequestCallback.h"
 #include "core/dom/Fullscreen.h"
+#include "core/dom/ScriptedAnimationController.h"
 #include "core/frame/UseCounter.h"
 #include "core/inspector/ConsoleMessage.h"
+#include "core/loader/DocumentLoader.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "modules/vr/NavigatorVR.h"
 #include "modules/vr/VRController.h"
@@ -18,12 +23,20 @@
 #include "modules/vr/VRPose.h"
 #include "modules/vr/VRStageParameters.h"
 #include "modules/webgl/WebGLRenderingContextBase.h"
+#include "platform/Histogram.h"
 #include "platform/UserGestureIndicator.h"
 #include "public/platform/Platform.h"
+#include "wtf/AutoReset.h"
+
+#include <array>
 
 namespace blink {
 
 namespace {
+
+// Magic numbers used to mark valid pose index values encoded in frame
+// data. Must match the magic numbers used in vr_shell.cc.
+static constexpr std::array<uint8_t, 2> kWebVrPosePixelMagicNumbers{{42, 142}};
 
 VREye stringToVREye(const String& whichEye) {
   if (whichEye == "left")
@@ -33,20 +46,56 @@ VREye stringToVREye(const String& whichEye) {
   return VREyeNone;
 }
 
+class VRDisplayFrameRequestCallback : public FrameRequestCallback {
+ public:
+  VRDisplayFrameRequestCallback(VRDisplay* vrDisplay) : m_vrDisplay(vrDisplay) {
+    m_useLegacyTimeBase = true;
+  }
+  ~VRDisplayFrameRequestCallback() override {}
+  void handleEvent(double highResTimeMs) override {
+    Document* doc = m_vrDisplay->document();
+    if (!doc)
+      return;
+
+    // Need to divide by 1000 here because serviceScriptedAnimations expects
+    // time to be given in seconds.
+    m_vrDisplay->serviceScriptedAnimations(
+        doc->loader()->timing().pseudoWallTimeToMonotonicTime(highResTimeMs /
+                                                              1000.0));
+  }
+
+  DEFINE_INLINE_VIRTUAL_TRACE() {
+    visitor->trace(m_vrDisplay);
+
+    FrameRequestCallback::trace(visitor);
+  }
+
+  Member<VRDisplay> m_vrDisplay;
+};
+
 }  // namespace
 
-VRDisplay::VRDisplay(NavigatorVR* navigatorVR)
+VRDisplay::VRDisplay(NavigatorVR* navigatorVR,
+                     device::mojom::blink::VRDisplayPtr display,
+                     device::mojom::blink::VRDisplayClientRequest request)
     : m_navigatorVR(navigatorVR),
-      m_displayId(0),
       m_isConnected(false),
       m_isPresenting(false),
+      m_isValidDeviceForPresenting(true),
       m_canUpdateFramePose(true),
       m_capabilities(new VRDisplayCapabilities()),
       m_eyeParametersLeft(new VREyeParameters()),
       m_eyeParametersRight(new VREyeParameters()),
       m_depthNear(0.01),
       m_depthFar(10000.0),
-      m_fullscreenCheckTimer(this, &VRDisplay::onFullscreenCheck) {}
+      m_fullscreenCheckTimer(this, &VRDisplay::onFullscreenCheck),
+      m_contextGL(nullptr),
+      m_animationCallbackRequested(false),
+      m_inAnimationFrame(false),
+      m_display(std::move(display)),
+      m_binding(this, std::move(request)) {
+  ThreadState::current()->registerPreFinalizer(this);
+}
 
 VRDisplay::~VRDisplay() {}
 
@@ -54,7 +103,7 @@ VRController* VRDisplay::controller() {
   return m_navigatorVR->controller();
 }
 
-void VRDisplay::update(const device::blink::VRDisplayPtr& display) {
+void VRDisplay::update(const device::mojom::blink::VRDisplayInfoPtr& display) {
   m_displayId = display->index;
   m_displayName = display->displayName;
   m_isConnected = true;
@@ -66,6 +115,13 @@ void VRDisplay::update(const device::blink::VRDisplayPtr& display) {
   m_capabilities->setCanPresent(display->capabilities->canPresent);
   m_capabilities->setMaxLayers(display->capabilities->canPresent ? 1 : 0);
 
+  // Ignore non presenting delegate
+  bool isValid = display->leftEye->renderWidth > 0;
+  bool needOnPresentChange = false;
+  if (m_isPresenting && isValid && !m_isValidDeviceForPresenting) {
+    needOnPresentChange = true;
+  }
+  m_isValidDeviceForPresenting = isValid;
   m_eyeParametersLeft->update(display->leftEye);
   m_eyeParametersRight->update(display->rightEye);
 
@@ -76,6 +132,10 @@ void VRDisplay::update(const device::blink::VRDisplayPtr& display) {
   } else {
     m_stageParameters = nullptr;
   }
+
+  if (needOnPresentChange) {
+    OnPresentChange();
+  }
 }
 
 void VRDisplay::disconnected() {
@@ -85,6 +145,9 @@ void VRDisplay::disconnected() {
 
 bool VRDisplay::getFrameData(VRFrameData* frameData) {
   updatePose();
+
+  if (!m_framePose)
+    return false;
 
   if (!frameData)
     return false;
@@ -97,10 +160,6 @@ bool VRDisplay::getFrameData(VRFrameData* frameData) {
 }
 
 VRPose* VRDisplay::getPose() {
-  Document* document = m_navigatorVR->document();
-  if (document)
-    UseCounter::count(*document, UseCounter::VRDeprecatedGetPose);
-
   updatePose();
 
   if (!m_framePose)
@@ -112,15 +171,27 @@ VRPose* VRDisplay::getPose() {
 }
 
 void VRDisplay::updatePose() {
+  if (m_displayBlurred) {
+    // WebVR spec says to return a null pose when the display is blurred.
+    m_framePose = nullptr;
+    return;
+  }
   if (m_canUpdateFramePose) {
-    m_framePose = controller()->getPose(m_displayId);
+    if (!m_display)
+      return;
+    device::mojom::blink::VRPosePtr pose;
+    m_display->GetPose(&pose);
+    m_framePose = std::move(pose);
     if (m_isPresenting)
       m_canUpdateFramePose = false;
   }
 }
 
 void VRDisplay::resetPose() {
-  controller()->resetPose(m_displayId);
+  if (!m_display)
+    return;
+
+  m_display->ResetPose();
 }
 
 VREyeParameters* VRDisplay::getEyeParameters(const String& whichEye) {
@@ -135,20 +206,88 @@ VREyeParameters* VRDisplay::getEyeParameters(const String& whichEye) {
 }
 
 int VRDisplay::requestAnimationFrame(FrameRequestCallback* callback) {
-  // TODO: Use HMD-specific rAF when an external display is present.
+  Document* doc = m_navigatorVR->document();
+  if (!doc)
+    return 0;
+
+  if (!m_animationCallbackRequested) {
+    doc->requestAnimationFrame(new VRDisplayFrameRequestCallback(this));
+    m_animationCallbackRequested = true;
+  }
+
   callback->m_useLegacyTimeBase = false;
-  if (Document* doc = m_navigatorVR->document())
-    return doc->requestAnimationFrame(callback);
-  return 0;
+  return ensureScriptedAnimationController(doc).registerCallback(callback);
 }
 
 void VRDisplay::cancelAnimationFrame(int id) {
-  if (Document* document = m_navigatorVR->document())
-    document->cancelAnimationFrame(id);
+  if (!m_scriptedAnimationController)
+    return;
+  m_scriptedAnimationController->cancelCallback(id);
+}
+
+void VRDisplay::OnBlur() {
+  m_displayBlurred = true;
+
+  m_navigatorVR->enqueueVREvent(VRDisplayEvent::create(
+      EventTypeNames::vrdisplayblur, true, false, this, ""));
+}
+
+void VRDisplay::OnFocus() {
+  m_displayBlurred = false;
+  // Restart our internal doc requestAnimationFrame callback, if it fired while
+  // the display was blurred.
+  // TODO(bajones): Don't use doc->requestAnimationFrame() at all. Animation
+  // frames should be tied to the presenting VR display (e.g. should be serviced
+  // by GVR library callbacks on Android), and not the doc frame rate.
+  if (!m_animationCallbackRequested) {
+    Document* doc = m_navigatorVR->document();
+    if (!doc)
+      return;
+    doc->requestAnimationFrame(new VRDisplayFrameRequestCallback(this));
+  }
+  m_navigatorVR->enqueueVREvent(VRDisplayEvent::create(
+      EventTypeNames::vrdisplayfocus, true, false, this, ""));
+}
+
+void VRDisplay::serviceScriptedAnimations(double monotonicAnimationStartTime) {
+  if (!m_scriptedAnimationController)
+    return;
+  AutoReset<bool> animating(&m_inAnimationFrame, true);
+  m_animationCallbackRequested = false;
+
+  // We use an internal rAF callback to run the animation loop at the display
+  // speed, and run the user's callback after our internal callback fires.
+  // However, when the display is blurred, we want to pause the animation loop,
+  // so we don't fire the user's callback until the display is focused.
+  if (m_displayBlurred)
+    return;
+  m_scriptedAnimationController->serviceScriptedAnimations(
+      monotonicAnimationStartTime);
+}
+
+void ReportPresentationResult(PresentationResult result) {
+  // Note that this is called twice for each call to requestPresent -
+  // one to declare that requestPresent was called, and one for the
+  // result.
+  DEFINE_STATIC_LOCAL(
+      EnumerationHistogram, vrPresentationResultHistogram,
+      ("VRDisplayPresentResult",
+       static_cast<int>(PresentationResult::PresentationResultMax)));
+  vrPresentationResultHistogram.count(static_cast<int>(result));
 }
 
 ScriptPromise VRDisplay::requestPresent(ScriptState* scriptState,
                                         const HeapVector<VRLayer>& layers) {
+  ExecutionContext* executionContext = scriptState->getExecutionContext();
+  UseCounter::count(executionContext, UseCounter::VRRequestPresent);
+  String errorMessage;
+  if (!executionContext->isSecureContext(errorMessage)) {
+    UseCounter::count(executionContext,
+                      UseCounter::VRRequestPresentInsecureOrigin);
+  }
+
+  ReportPresentationResult(PresentationResult::Requested);
+
   ScriptPromiseResolver* resolver = ScriptPromiseResolver::create(scriptState);
   ScriptPromise promise = resolver->promise();
 
@@ -158,6 +297,7 @@ ScriptPromise VRDisplay::requestPresent(ScriptState* scriptState,
     DOMException* exception =
         DOMException::create(InvalidStateError, "VRDisplay cannot present.");
     resolver->reject(exception);
+    ReportPresentationResult(PresentationResult::VRDisplayCannotPresent);
     return promise;
   }
 
@@ -171,10 +311,9 @@ ScriptPromise VRDisplay::requestPresent(ScriptState* scriptState,
     DOMException* exception = DOMException::create(
         InvalidStateError, "API can only be initiated by a user gesture.");
     resolver->reject(exception);
+    ReportPresentationResult(PresentationResult::NotInitiatedByUserGesture);
     return promise;
   }
-
-  m_isPresenting = false;
 
   // A valid number of layers must be provided in order to present.
   if (layers.size() == 0 || layers.size() > m_capabilities->maxLayers()) {
@@ -182,6 +321,7 @@ ScriptPromise VRDisplay::requestPresent(ScriptState* scriptState,
     DOMException* exception =
         DOMException::create(InvalidStateError, "Invalid number of layers.");
     resolver->reject(exception);
+    ReportPresentationResult(PresentationResult::InvalidNumberOfLayers);
     return promise;
   }
 
@@ -192,6 +332,7 @@ ScriptPromise VRDisplay::requestPresent(ScriptState* scriptState,
     DOMException* exception =
         DOMException::create(InvalidStateError, "Invalid layer source.");
     resolver->reject(exception);
+    ReportPresentationResult(PresentationResult::InvalidLayerSource);
     return promise;
   }
 
@@ -203,6 +344,8 @@ ScriptPromise VRDisplay::requestPresent(ScriptState* scriptState,
     DOMException* exception = DOMException::create(
         InvalidStateError, "Layer source must have a WebGLRenderingContext");
     resolver->reject(exception);
+    ReportPresentationResult(
+        PresentationResult::LayerSourceMissingWebGLContext);
     return promise;
   }
 
@@ -218,30 +361,51 @@ ScriptPromise VRDisplay::requestPresent(ScriptState* scriptState,
         InvalidStateError,
         "Layer bounds must either be an empty array or have 4 values");
     resolver->reject(exception);
+    ReportPresentationResult(PresentationResult::InvalidLayerBounds);
     return promise;
   }
 
-  if (!m_capabilities->hasExternalDisplay()) {
-    // TODO: Need a proper VR compositor, but for the moment on mobile
-    // we'll just make the canvas fullscreen so that VrShell can pick it
-    // up through the standard (high latency) compositing path.
-    Fullscreen::requestFullscreen(*m_layer.source(),
-                                  Fullscreen::UnprefixedRequest);
-
-    // Check to see if the canvas is still the current fullscreen
-    // element once per second.
-    m_fullscreenCheckTimer.startRepeating(1.0, BLINK_FROM_HERE);
-  }
-
-  if (firstPresent) {
+  if (!m_pendingPresentResolvers.isEmpty()) {
+    // If we are waiting on the results of a previous requestPresent call don't
+    // fire a new request, just cache the resolver and resolve it when the
+    // original request returns.
+    m_pendingPresentResolvers.append(resolver);
+  } else if (firstPresent) {
     bool secureContext = scriptState->getExecutionContext()->isSecureContext();
-    controller()->requestPresent(resolver, m_displayId, secureContext);
+    if (!m_display) {
+      forceExitPresent();
+      DOMException* exception = DOMException::create(
+          InvalidStateError, "The service is no longer active.");
+      resolver->reject(exception);
+      return promise;
+    }
+
+    m_pendingPresentResolvers.append(resolver);
+    m_display->RequestPresent(secureContext, convertToBaseCallback(WTF::bind(
+                                                 &VRDisplay::onPresentComplete,
+                                                 wrapPersistent(this))));
   } else {
     updateLayerBounds();
     resolver->resolve();
+    ReportPresentationResult(PresentationResult::SuccessAlreadyPresenting);
   }
 
   return promise;
+}
+
+void VRDisplay::onPresentComplete(bool success) {
+  if (success) {
+    this->beginPresent();
+  } else {
+    this->forceExitPresent();
+    DOMException* exception = DOMException::create(
+        NotAllowedError, "Presentation request was denied.");
+
+    while (!m_pendingPresentResolvers.isEmpty()) {
+      ScriptPromiseResolver* resolver = m_pendingPresentResolvers.takeFirst();
+      resolver->reject(exception);
+    }
+  }
 }
 
 ScriptPromise VRDisplay::exitPresent(ScriptState* scriptState) {
@@ -256,7 +420,13 @@ ScriptPromise VRDisplay::exitPresent(ScriptState* scriptState) {
     return promise;
   }
 
-  controller()->exitPresent(m_displayId);
+  if (!m_display) {
+    DOMException* exception =
+        DOMException::create(InvalidStateError, "VRService is not available.");
+    resolver->reject(exception);
+    return promise;
+  }
+  m_display->ExitPresent();
 
   resolver->resolve();
 
@@ -265,50 +435,117 @@ ScriptPromise VRDisplay::exitPresent(ScriptState* scriptState) {
   return promise;
 }
 
-void VRDisplay::beginPresent(ScriptPromiseResolver* resolver) {
+void VRDisplay::beginPresent() {
+  Document* doc = m_navigatorVR->document();
+  std::unique_ptr<UserGestureIndicator> gestureIndicator;
   if (m_capabilities->hasExternalDisplay()) {
     forceExitPresent();
     DOMException* exception = DOMException::create(
         InvalidStateError,
         "VR Presentation not implemented for this VRDisplay.");
-    resolver->reject(exception);
+    while (!m_pendingPresentResolvers.isEmpty()) {
+      ScriptPromiseResolver* resolver = m_pendingPresentResolvers.takeFirst();
+      resolver->reject(exception);
+    }
+    ReportPresentationResult(
+        PresentationResult::PresentationNotSupportedByDisplay);
     return;
+  } else {
+    // TODO(klausw,crbug.com/655722): Need a proper VR compositor, but
+    // for the moment on mobile we'll just make the canvas fullscreen
+    // so that VrShell can pick it up through the standard (high
+    // latency) compositing path.
+    auto canvas = m_layer.source();
+    auto inlineStyle = canvas->inlineStyle();
+    if (inlineStyle) {
+      // THREE.js's VREffect sets explicit style.width/height on its rendering
+      // canvas based on the non-fullscreen window dimensions, and it keeps
+      // those unchanged when presenting. Unfortunately it appears that a
+      // fullscreened canvas just gets centered if it has explicitly set a
+      // size smaller than the fullscreen dimensions. Manually set size to
+      // 100% in this case and restore it when exiting fullscreen. This is a
+      // stopgap measure since THREE.js's usage appears legal according to the
+      // WebVR API spec. This will no longer be necessary once we can get rid
+      // of this fullscreen hack.
+      m_fullscreenOrigWidth = inlineStyle->getPropertyValue(CSSPropertyWidth);
+      if (!m_fullscreenOrigWidth.isNull()) {
+        canvas->setInlineStyleProperty(CSSPropertyWidth, "100%");
+      }
+      m_fullscreenOrigHeight = inlineStyle->getPropertyValue(CSSPropertyHeight);
+      if (!m_fullscreenOrigHeight.isNull()) {
+        canvas->setInlineStyleProperty(CSSPropertyHeight, "100%");
+      }
+    } else {
+      m_fullscreenOrigWidth = String();
+      m_fullscreenOrigHeight = String();
+    }
+
+    if (doc) {
+      // Since the callback for requestPresent is asynchronous, we've lost our
+      // UserGestureToken, and need to create a new one to enter fullscreen.
+      gestureIndicator =
+          wrapUnique(new UserGestureIndicator(DocumentUserGestureToken::create(
+              doc, UserGestureToken::Status::PossiblyExistingGesture)));
+    }
+    Fullscreen::requestFullscreen(*canvas, Fullscreen::UnprefixedRequest);
+
+    // Check to see if the canvas is still the current fullscreen
+    // element once every 5 seconds.
+    m_fullscreenCheckTimer.startRepeating(5.0, BLINK_FROM_HERE);
+  }
+
+  if (doc) {
+    Platform::current()->recordRapporURL("VR.WebVR.PresentSuccess",
+                                         WebURL(doc->url()));
   }
 
   m_isPresenting = true;
+  ReportPresentationResult(PresentationResult::Success);
 
   updateLayerBounds();
 
-  Document* document = m_navigatorVR->document();
-  if (document)
-    UseCounter::count(*document, UseCounter::VRPresent);
-
-  resolver->resolve();
-  m_navigatorVR->fireVRDisplayPresentChange(this);
+  while (!m_pendingPresentResolvers.isEmpty()) {
+    ScriptPromiseResolver* resolver = m_pendingPresentResolvers.takeFirst();
+    resolver->resolve();
+  }
+  OnPresentChange();
 }
 
 void VRDisplay::forceExitPresent() {
   if (m_isPresenting) {
     if (!m_capabilities->hasExternalDisplay()) {
-      Fullscreen::fullyExitFullscreen(m_layer.source()->document());
+      auto canvas = m_layer.source();
+      Fullscreen::fullyExitFullscreen(canvas->document());
       m_fullscreenCheckTimer.stop();
+      if (!m_fullscreenOrigWidth.isNull()) {
+        canvas->setInlineStyleProperty(CSSPropertyWidth, m_fullscreenOrigWidth);
+        m_fullscreenOrigWidth = String();
+      }
+      if (!m_fullscreenOrigHeight.isNull()) {
+        canvas->setInlineStyleProperty(CSSPropertyWidth,
+                                       m_fullscreenOrigHeight);
+        m_fullscreenOrigHeight = String();
+      }
     } else {
       // Can't get into this presentation mode, so nothing to do here.
     }
-    m_navigatorVR->fireVRDisplayPresentChange(this);
+    m_isPresenting = false;
+    OnPresentChange();
   }
 
-  m_isPresenting = false;
   m_renderingContext = nullptr;
   m_contextGL = nullptr;
 }
 
 void VRDisplay::updateLayerBounds() {
+  if (!m_display)
+    return;
+
   // Set up the texture bounds for the provided layer
-  device::blink::VRLayerBoundsPtr leftBounds =
-      device::blink::VRLayerBounds::New();
-  device::blink::VRLayerBoundsPtr rightBounds =
-      device::blink::VRLayerBounds::New();
+  device::mojom::blink::VRLayerBoundsPtr leftBounds =
+      device::mojom::blink::VRLayerBounds::New();
+  device::mojom::blink::VRLayerBoundsPtr rightBounds =
+      device::mojom::blink::VRLayerBounds::New();
 
   if (m_layer.leftBounds().size() == 4) {
     leftBounds->left = m_layer.leftBounds()[0];
@@ -336,8 +573,7 @@ void VRDisplay::updateLayerBounds() {
     rightBounds->height = 1.0f;
   }
 
-  controller()->updateLayerBounds(m_displayId, std::move(leftBounds),
-                                  std::move(rightBounds));
+  m_display->UpdateLayerBounds(std::move(leftBounds), std::move(rightBounds));
 }
 
 HeapVector<VRLayer> VRDisplay::getLayers() {
@@ -351,8 +587,31 @@ HeapVector<VRLayer> VRDisplay::getLayers() {
 }
 
 void VRDisplay::submitFrame() {
-  if (!m_isPresenting || !m_contextGL) {
-    // Something got confused, we can't submit frames if we're not presenting.
+  if (!m_display)
+    return;
+
+  Document* doc = m_navigatorVR->document();
+  if (!m_isPresenting) {
+    if (doc) {
+      doc->addConsoleMessage(ConsoleMessage::create(
+          RenderingMessageSource, WarningMessageLevel,
+          "submitFrame has no effect when the VRDisplay is not presenting."));
+    }
+    return;
+  }
+
+  if (!m_inAnimationFrame) {
+    if (doc) {
+      doc->addConsoleMessage(
+          ConsoleMessage::create(RenderingMessageSource, WarningMessageLevel,
+                                 "submitFrame must be called within a "
+                                 "VRDisplay.requestAnimationFrame callback."));
+    }
+    return;
+  }
+
+  if (!m_contextGL) {
+    // Something got confused, we can't submit frames without a GL context.
     return;
   }
 
@@ -374,8 +633,11 @@ void VRDisplay::submitFrame() {
   gl->ColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
   int idx = m_framePose->poseIndex;
   // Careful with the arithmetic here. Float color 1.f is equivalent to int 255.
-  gl->ClearColor((idx & 255) / 255.0f, ((idx >> 8) & 255) / 255.0f,
-                 ((idx >> 16) & 255) / 255.0f, 1.0f);
+  // Use the low byte of the index as the red component, and store an arbitrary
+  // magic number in green/blue. This number must match the reading code in
+  // vr_shell.cc. Avoid all-black/all-white.
+  gl->ClearColor((idx & 255) / 255.0f, kWebVrPosePixelMagicNumbers[0] / 255.0f,
+                 kWebVrPosePixelMagicNumbers[1] / 255.0f, 1.0f);
   gl->Clear(GL_COLOR_BUFFER_BIT);
 
   // Set the GL state back to what was set by the WebVR application.
@@ -384,8 +646,50 @@ void VRDisplay::submitFrame() {
   m_renderingContext->restoreColorMask();
   m_renderingContext->restoreClearColor();
 
-  controller()->submitFrame(m_displayId, m_framePose.Clone());
+  m_display->SubmitFrame(m_framePose.Clone());
   m_canUpdateFramePose = true;
+}
+
+Document* VRDisplay::document() {
+  return m_navigatorVR->document();
+}
+
+void VRDisplay::OnPresentChange() {
+  if (m_isPresenting && !m_isValidDeviceForPresenting) {
+    VLOG(1) << __FUNCTION__ << ": device not valid, not sending event";
+    return;
+  }
+  m_navigatorVR->enqueueVREvent(VRDisplayEvent::create(
+      EventTypeNames::vrdisplaypresentchange, true, false, this, ""));
+}
+
+void VRDisplay::OnChanged(device::mojom::blink::VRDisplayInfoPtr display) {
+  update(display);
+}
+
+void VRDisplay::OnExitPresent() {
+  forceExitPresent();
+}
+
+void VRDisplay::onConnected() {
+  m_navigatorVR->enqueueVREvent(VRDisplayEvent::create(
+      EventTypeNames::vrdisplayconnect, true, false, this, "connect"));
+}
+
+void VRDisplay::onDisconnected() {
+  m_navigatorVR->enqueueVREvent(VRDisplayEvent::create(
+      EventTypeNames::vrdisplaydisconnect, true, false, this, "disconnect"));
+}
+
+void VRDisplay::OnActivate(device::mojom::blink::VRDisplayEventReason reason) {
+  m_navigatorVR->dispatchVRGestureEvent(VRDisplayEvent::create(
+      EventTypeNames::vrdisplayactivate, true, false, this, reason));
+}
+
+void VRDisplay::OnDeactivate(
+    device::mojom::blink::VRDisplayEventReason reason) {
+  m_navigatorVR->enqueueVREvent(VRDisplayEvent::create(
+      EventTypeNames::vrdisplaydeactivate, true, false, this, reason));
 }
 
 void VRDisplay::onFullscreenCheck(TimerBase*) {
@@ -396,10 +700,24 @@ void VRDisplay::onFullscreenCheck(TimerBase*) {
   // adding a bunch of notification plumbing to Fullscreen.
   if (!Fullscreen::isCurrentFullScreenElement(*m_layer.source())) {
     m_isPresenting = false;
-    m_navigatorVR->fireVRDisplayPresentChange(this);
+    OnPresentChange();
     m_fullscreenCheckTimer.stop();
-    controller()->exitPresent(m_displayId);
+    if (!m_display)
+      return;
+    m_display->ExitPresent();
   }
+}
+
+ScriptedAnimationController& VRDisplay::ensureScriptedAnimationController(
+    Document* doc) {
+  if (!m_scriptedAnimationController)
+    m_scriptedAnimationController = ScriptedAnimationController::create(doc);
+
+  return *m_scriptedAnimationController;
+}
+
+void VRDisplay::dispose() {
+  m_binding.Close();
 }
 
 DEFINE_TRACE(VRDisplay) {
@@ -410,6 +728,8 @@ DEFINE_TRACE(VRDisplay) {
   visitor->trace(m_eyeParametersRight);
   visitor->trace(m_layer);
   visitor->trace(m_renderingContext);
+  visitor->trace(m_scriptedAnimationController);
+  visitor->trace(m_pendingPresentResolvers);
 }
 
 }  // namespace blink

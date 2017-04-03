@@ -7,7 +7,7 @@
 #include "content/common/input/input_event_ack_state.h"
 #include "content/common/input/synthetic_web_input_event_builders.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/web/WebInputEvent.h"
+#include "third_party/WebKit/public/platform/WebInputEvent.h"
 
 using blink::WebGestureEvent;
 using blink::WebInputEvent;
@@ -420,9 +420,6 @@ TEST(TouchActionFilterTest, Pinch) {
   filter.ResetTouchAction();
   filter.OnSetTouchAction(TOUCH_ACTION_NONE);
   EXPECT_TRUE(filter.FilterGestureEvent(&scroll_begin));
-  EXPECT_TRUE(filter.FilterGestureEvent(&pinch_begin));
-  EXPECT_TRUE(filter.FilterGestureEvent(&pinch_update));
-  EXPECT_TRUE(filter.FilterGestureEvent(&pinch_end));
   EXPECT_TRUE(filter.FilterGestureEvent(&pinch_begin));
   EXPECT_TRUE(filter.FilterGestureEvent(&pinch_update));
   EXPECT_TRUE(filter.FilterGestureEvent(&pinch_end));

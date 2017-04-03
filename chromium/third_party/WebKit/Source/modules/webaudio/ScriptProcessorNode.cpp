@@ -50,12 +50,12 @@ ScriptProcessorHandler::ScriptProcessorHandler(AudioNode& node,
       m_numberOfInputChannels(numberOfInputChannels),
       m_numberOfOutputChannels(numberOfOutputChannels),
       m_internalInputBus(AudioBus::create(numberOfInputChannels,
-                                          ProcessingSizeInFrames,
+                                          AudioUtilities::kRenderQuantumFrames,
                                           false)) {
   // Regardless of the allowed buffer sizes, we still need to process at the
   // granularity of the AudioNode.
-  if (m_bufferSize < ProcessingSizeInFrames)
-    m_bufferSize = ProcessingSizeInFrames;
+  if (m_bufferSize < AudioUtilities::kRenderQuantumFrames)
+    m_bufferSize = AudioUtilities::kRenderQuantumFrames;
 
   DCHECK_LE(numberOfInputChannels, BaseAudioContext::maxNumberOfChannels());
 
@@ -214,7 +214,7 @@ void ScriptProcessorHandler::process(size_t framesToProcess) {
         // If this node is in the offline audio context, use the
         // waitable event to synchronize to the offline rendering thread.
         std::unique_ptr<WaitableEvent> waitableEvent =
-            wrapUnique(new WaitableEvent());
+            makeUnique<WaitableEvent>();
 
         context()->getExecutionContext()->postTask(
             BLINK_FROM_HERE,

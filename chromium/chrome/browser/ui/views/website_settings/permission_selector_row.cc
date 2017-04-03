@@ -7,11 +7,12 @@
 #include "base/i18n/rtl.h"
 #include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
+#include "chrome/browser/ui/views/website_settings/non_accessible_image_view.h"
 #include "chrome/browser/ui/views/website_settings/website_settings_popup_view.h"
 #include "chrome/browser/ui/website_settings/permission_menu_model.h"
 #include "chrome/browser/ui/website_settings/website_settings_ui.h"
 #include "chrome/grit/generated_resources.h"
-#include "ui/accessibility/ax_view_state.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/models/combobox_model.h"
 #include "ui/gfx/image/image.h"
@@ -28,7 +29,7 @@
 namespace {
 // Minimum distance between the label and its corresponding menu.
 const int kMinSeparationBetweenLabelAndMenu = 16;
-}
+}  // namespace
 
 namespace internal {
 
@@ -48,7 +49,7 @@ class PermissionMenuButton : public views::MenuButton,
   ~PermissionMenuButton() override;
 
   // Overridden from views::View.
-  void GetAccessibleState(ui::AXViewState* state) override;
+  void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
   void OnNativeThemeChanged(const ui::NativeTheme* theme) override;
 
  private:
@@ -88,9 +89,9 @@ PermissionMenuButton::PermissionMenuButton(const base::string16& text,
 PermissionMenuButton::~PermissionMenuButton() {
 }
 
-void PermissionMenuButton::GetAccessibleState(ui::AXViewState* state) {
-  MenuButton::GetAccessibleState(state);
-  state->value = GetText();
+void PermissionMenuButton::GetAccessibleNodeData(ui::AXNodeData* node_data) {
+  MenuButton::GetAccessibleNodeData(node_data);
+  node_data->SetValue(GetText());
 }
 
 void PermissionMenuButton::OnNativeThemeChanged(const ui::NativeTheme* theme) {
@@ -251,7 +252,7 @@ PermissionSelectorRow::PermissionSelectorRow(
 
   layout->StartRow(1, column_set_id);
   // Create the permission icon.
-  icon_ = new views::ImageView();
+  icon_ = new NonAccessibleImageView();
   const gfx::Image& image = WebsiteSettingsUI::GetPermissionIcon(permission);
   icon_->SetImage(image.ToImageSkia());
   layout->AddView(icon_,
@@ -366,7 +367,6 @@ void PermissionSelectorRow::PermissionChanged(
     combobox_->UpdateSelectedIndex(use_default);
   }
 
-  FOR_EACH_OBSERVER(PermissionSelectorRowObserver,
-                    observer_list_,
-                    OnPermissionChanged(permission));
+  for (PermissionSelectorRowObserver& observer : observer_list_)
+    observer.OnPermissionChanged(permission);
 }

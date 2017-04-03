@@ -15,10 +15,8 @@
 #include "android_webview/common/aw_switches.h"
 #include "android_webview/crash_reporter/aw_microdump_crash_reporter.h"
 #include "android_webview/gpu/aw_content_gpu_client.h"
-#include "android_webview/lib/aw_browser_dependency_factory_impl.h"
 #include "android_webview/native/aw_locale_manager_impl.h"
 #include "android_webview/native/aw_media_url_interceptor.h"
-#include "android_webview/native/aw_message_port_service_impl.h"
 #include "android_webview/native/aw_quota_manager_bridge_impl.h"
 #include "android_webview/native/aw_web_contents_view_delegate.h"
 #include "android_webview/native/aw_web_preferences_populater_impl.h"
@@ -41,8 +39,8 @@
 #include "content/public/common/content_switches.h"
 #include "gin/public/isolate_holder.h"
 #include "gin/v8_initializer.h"
-#include "gpu/command_buffer/client/gl_in_process_context.h"
 #include "gpu/command_buffer/service/gpu_switches.h"
+#include "gpu/ipc/gl_in_process_context.h"
 #include "media/base/media_switches.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/events/gesture_detection/gesture_configuration.h"
@@ -67,6 +65,9 @@ bool AwMainDelegate::BasicStartupComplete(int* exit_code) {
   content::SetContentClient(&content_client_);
 
   base::CommandLine* cl = base::CommandLine::ForCurrentProcess();
+
+  // Temporarily disable async ondraw for M56.
+  cl->AppendSwitch(switches::kSyncOnDrawHardware);
 
   // WebView uses the Android system's scrollbars and overscroll glow.
   cl->AppendSwitch(switches::kDisableOverscrollEdgeEffect);
@@ -108,6 +109,10 @@ bool AwMainDelegate::BasicStartupComplete(int* exit_code) {
   // Webview does not currently support the Presentation API, see
   // https://crbug.com/521319
   cl->AppendSwitch(switches::kDisablePresentationAPI);
+
+  // WebView doesn't support Remote Playback API for the same reason as the
+  // Presentation API, see https://crbug.com/521319.
+  cl->AppendSwitch(switches::kDisableRemotePlaybackAPI);
 
 #if defined(V8_USE_EXTERNAL_STARTUP_DATA)
   if (cl->GetSwitchValueASCII(switches::kProcessType).empty()) {
@@ -197,8 +202,6 @@ int AwMainDelegate::RunProcess(
     const std::string& process_type,
     const content::MainFunctionParams& main_function_params) {
   if (process_type.empty()) {
-    AwBrowserDependencyFactoryImpl::InstallInstance();
-
     browser_runner_.reset(content::BrowserMainRunner::Create());
     int exit_code = browser_runner_->Initialize(main_function_params);
     DCHECK_LT(exit_code, 0);
@@ -263,10 +266,6 @@ content::WebContentsViewDelegate* AwMainDelegate::CreateViewDelegate(
 
 AwWebPreferencesPopulater* AwMainDelegate::CreateWebPreferencesPopulater() {
   return new AwWebPreferencesPopulaterImpl();
-}
-
-AwMessagePortService* AwMainDelegate::CreateAwMessagePortService() {
-  return new AwMessagePortServiceImpl();
 }
 
 AwLocaleManager* AwMainDelegate::CreateAwLocaleManager() {

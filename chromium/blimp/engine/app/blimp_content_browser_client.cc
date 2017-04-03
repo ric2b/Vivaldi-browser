@@ -9,8 +9,8 @@
 #include "blimp/engine/grit/blimp_browser_resources.h"
 #include "blimp/engine/mojo/blob_channel_service.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/common/service_names.h"
-#include "services/shell/public/cpp/interface_registry.h"
+#include "content/public/common/service_names.mojom.h"
+#include "services/service_manager/public/cpp/interface_registry.h"
 #include "ui/base/resource/resource_bundle.h"
 
 namespace blimp {
@@ -45,7 +45,7 @@ BlimpBrowserContext* BlimpContentBrowserClient::GetBrowserContext() {
 }
 
 void BlimpContentBrowserClient::ExposeInterfacesToRenderer(
-    shell::InterfaceRegistry* registry,
+    service_manager::InterfaceRegistry* registry,
     content::RenderProcessHost* render_process_host) {
   registry->AddInterface<mojom::BlobChannel>(base::Bind(
       &BlobChannelService::BindRequest,
@@ -57,7 +57,7 @@ BlimpContentBrowserClient::GetServiceManifestOverlay(
     const std::string& name) {
   ResourceBundle& rb = ResourceBundle::GetSharedInstance();
   int id = -1;
-  if (name == content::kBrowserServiceName) {
+  if (name == content::mojom::kBrowserServiceName) {
     id = IDR_BLIMP_CONTENT_BROWSER_MANIFEST_OVERLAY;
   }
   if (id == -1) {

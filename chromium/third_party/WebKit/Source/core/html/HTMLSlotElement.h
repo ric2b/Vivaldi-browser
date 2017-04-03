@@ -46,14 +46,17 @@ class CORE_EXPORT HTMLSlotElement final : public HTMLElement {
 
   const HeapVector<Member<Node>>& assignedNodes();
   const HeapVector<Member<Node>>& getDistributedNodes();
+  const HeapVector<Member<Node>> getDistributedNodesForBinding();
   const HeapVector<Member<Node>> assignedNodesForBinding(
       const AssignedNodesOptions&);
 
   Node* firstDistributedNode() const {
+    DCHECK(supportsDistribution());
     return m_distributedNodes.isEmpty() ? nullptr
                                         : m_distributedNodes.first().get();
   }
   Node* lastDistributedNode() const {
+    DCHECK(supportsDistribution());
     return m_distributedNodes.isEmpty() ? nullptr
                                         : m_distributedNodes.last().get();
   }
@@ -79,7 +82,7 @@ class CORE_EXPORT HTMLSlotElement final : public HTMLElement {
                         const AtomicString& newValue,
                         AttributeModificationReason = ModifiedDirectly) final;
 
-  short tabIndex() const override;
+  int tabIndex() const override;
   AtomicString name() const;
 
   // This method can be slow because this has to traverse the children of a
@@ -88,10 +91,11 @@ class CORE_EXPORT HTMLSlotElement final : public HTMLElement {
   bool hasAssignedNodesSlow() const;
   bool findHostChildWithSameSlotName() const;
 
-  void enqueueSlotChangeEvent();
-
   void clearDistribution();
   void saveAndClearDistribution();
+
+  bool supportsDistribution() const { return isInV1ShadowTree(); }
+  void didSlotChange(SlotChangeType);
 
   static AtomicString normalizeSlotName(const AtomicString&);
 
@@ -104,6 +108,7 @@ class CORE_EXPORT HTMLSlotElement final : public HTMLElement {
   void removedFrom(ContainerNode*) final;
   void willRecalcStyle(StyleRecalcChange) final;
 
+  void enqueueSlotChangeEvent();
   void dispatchSlotChangeEvent();
 
   HeapVector<Member<Node>> m_assignedNodes;

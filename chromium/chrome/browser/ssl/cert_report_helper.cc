@@ -13,17 +13,28 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ssl/ssl_cert_reporter.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/prefs/pref_service.h"
+#include "components/safe_browsing_db/safe_browsing_prefs.h"
 #include "components/security_interstitials/core/controller_client.h"
 #include "components/security_interstitials/core/metrics_helper.h"
 #include "components/variations/variations_associated_data.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/base/l10n/l10n_util.h"
+
+namespace {
+
+// Returns a pointer to the Profile associated with |web_contents|.
+Profile* GetProfile(content::WebContents* web_contents) {
+  return Profile::FromBrowserContext(web_contents->GetBrowserContext());
+}
+
+}  // namespace
 
 // Constants for the HTTPSErrorReporter Finch experiment
 const char CertReportHelper::kFinchExperimentName[] = "ReportCertificateErrors";
@@ -40,6 +51,7 @@ CertReportHelper::CertReportHelper(
     const net::SSLInfo& ssl_info,
     certificate_reporting::ErrorReport::InterstitialReason interstitial_reason,
     bool overridable,
+    const base::Time& interstitial_time,
     security_interstitials::MetricsHelper* metrics_helper)
     : ssl_cert_reporter_(std::move(ssl_cert_reporter)),
       web_contents_(web_contents),
@@ -47,6 +59,7 @@ CertReportHelper::CertReportHelper(
       ssl_info_(ssl_info),
       interstitial_reason_(interstitial_reason),
       overridable_(overridable),
+      interstitial_time_(interstitial_time),
       metrics_helper_(metrics_helper) {}
 
 CertReportHelper::~CertReportHelper() {
@@ -63,9 +76,9 @@ void CertReportHelper::PopulateExtendedReportingOption(
   if (!show)
     return;
 
-  load_time_data->SetBoolean(
-      security_interstitials::kBoxChecked,
-      IsPrefEnabled(prefs::kSafeBrowsingExtendedReportingEnabled));
+  load_time_data->SetBoolean(security_interstitials::kBoxChecked,
+                             safe_browsing::IsExtendedReportingEnabled(
+                                 *GetProfile(web_contents_)->GetPrefs()));
 
   const std::string privacy_link = base::StringPrintf(
       security_interstitials::kPrivacyLinkHtml,
@@ -74,7 +87,10 @@ void CertReportHelper::PopulateExtendedReportingOption(
 
   load_time_data->SetString(
       security_interstitials::kOptInLink,
-      l10n_util::GetStringFUTF16(IDS_SAFE_BROWSING_MALWARE_REPORTING_AGREE,
+      l10n_util::GetStringFUTF16(safe_browsing::ChooseOptInTextResource(
+                                     *GetProfile(web_contents_)->GetPrefs(),
+                                     IDS_SAFE_BROWSING_MALWARE_REPORTING_AGREE,
+                                     IDS_SAFE_BROWSING_SCOUT_REPORTING_AGREE),
                                  base::UTF8ToUTF16(privacy_link)));
 }
 
@@ -83,7 +99,8 @@ void CertReportHelper::FinishCertCollection(
   if (!ShouldShowCertificateReporterCheckbox())
     return;
 
-  if (!IsPrefEnabled(prefs::kSafeBrowsingExtendedReportingEnabled))
+  if (!safe_browsing::IsExtendedReportingEnabled(
+          *GetProfile(web_contents_)->GetPrefs()))
     return;
 
   if (metrics_helper_) {
@@ -97,11 +114,14 @@ void CertReportHelper::FinishCertCollection(
   std::string serialized_report;
   certificate_reporting::ErrorReport report(request_url_.host(), ssl_info_);
 
+  report.AddNetworkTimeInfo(g_browser_process->network_time_tracker());
+
   report.SetInterstitialInfo(
       interstitial_reason_, user_proceeded,
       overridable_
           ? certificate_reporting::ErrorReport::INTERSTITIAL_OVERRIDABLE
-          : certificate_reporting::ErrorReport::INTERSTITIAL_NOT_OVERRIDABLE);
+          : certificate_reporting::ErrorReport::INTERSTITIAL_NOT_OVERRIDABLE,
+      interstitial_time_);
 
   if (!report.Serialize(&serialized_report)) {
     LOG(ERROR) << "Failed to serialize certificate report.";
@@ -145,7 +165,5 @@ bool CertReportHelper::ShouldReportCertificateError() {
 }
 
 bool CertReportHelper::IsPrefEnabled(const char* pref) {
-  Profile* profile =
-      Profile::FromBrowserContext(web_contents_->GetBrowserContext());
-  return profile->GetPrefs()->GetBoolean(pref);
+  return GetProfile(web_contents_)->GetPrefs()->GetBoolean(pref);
 }

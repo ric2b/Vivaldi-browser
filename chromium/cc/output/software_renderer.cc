@@ -82,7 +82,7 @@ void SoftwareRenderer::FinishDrawingFrame(DrawingFrame* frame) {
 
 void SoftwareRenderer::SwapBuffers(std::vector<ui::LatencyInfo> latency_info) {
   DCHECK(visible_);
-  TRACE_EVENT0("cc,benchmark", "SoftwareRenderer::SwapBuffers");
+  TRACE_EVENT0("cc", "SoftwareRenderer::SwapBuffers");
   OutputSurfaceFrame output_frame;
   output_frame.latency_info = std::move(latency_info);
   output_surface_->SwapBuffers(std::move(output_frame));
@@ -152,12 +152,7 @@ void SoftwareRenderer::SetClipRect(const gfx::Rect& rect) {
 void SoftwareRenderer::ClearCanvas(SkColor color) {
   if (!current_canvas_)
     return;
-  // SkCanvas::clear doesn't respect the current clipping region
-  // so we SkCanvas::drawColor instead if scissoring is active.
-  if (is_scissor_enabled_)
-    current_canvas_->drawColor(color, SkXfermode::kSrc_Mode);
-  else
-    current_canvas_->clear(color);
+  current_canvas_->clear(color);
 }
 
 void SoftwareRenderer::ClearFramebuffer(DrawingFrame* frame) {
@@ -244,9 +239,10 @@ void SoftwareRenderer::DoDrawQuad(DrawingFrame* frame,
   if (quad->ShouldDrawWithBlending() ||
       quad->shared_quad_state->blend_mode != SkXfermode::kSrcOver_Mode) {
     current_paint_.setAlpha(quad->shared_quad_state->opacity * 255);
-    current_paint_.setXfermodeMode(quad->shared_quad_state->blend_mode);
+    current_paint_.setBlendMode(
+        static_cast<SkBlendMode>(quad->shared_quad_state->blend_mode));
   } else {
-    current_paint_.setXfermodeMode(SkXfermode::kSrc_Mode);
+    current_paint_.setBlendMode(SkBlendMode::kSrc);
   }
 
   if (draw_region) {
@@ -361,11 +357,13 @@ void SoftwareRenderer::DrawPictureQuad(const DrawingFrame* frame,
                                               disable_image_filtering);
     quad->raster_source->PlaybackToCanvas(
         &filtered_canvas, quad->content_rect, quad->content_rect,
-        quad->contents_scale, playback_settings);
+        gfx::SizeF(quad->contents_scale, quad->contents_scale),
+        playback_settings);
   } else {
     quad->raster_source->PlaybackToCanvas(
         current_canvas_, quad->content_rect, quad->content_rect,
-        quad->contents_scale, playback_settings);
+        gfx::SizeF(quad->contents_scale, quad->contents_scale),
+        playback_settings);
   }
 }
 

@@ -10,17 +10,18 @@
 
 #include "ash/common/login_status.h"
 #include "ash/common/system/chromeos/network/network_detailed_view.h"
+#include "ash/common/system/chromeos/network/network_list_delegate.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "ui/chromeos/network/network_list_delegate.h"
 #include "ui/gfx/image/image.h"
 #include "ui/views/controls/button/button.h"
+#include "ui/views/controls/button/custom_button.h"
 
 namespace chromeos {
 class NetworkTypePattern;
 }
 
-namespace ui {
+namespace ash {
 class NetworkListViewBase;
 }
 
@@ -39,7 +40,7 @@ namespace tray {
 
 class NetworkStateListDetailedView
     : public NetworkDetailedView,
-      public ui::NetworkListDelegate,
+      public NetworkListDelegate,
       public base::SupportsWeakPtr<NetworkStateListDetailedView> {
  public:
   enum ListType { LIST_TYPE_NETWORK, LIST_TYPE_VPN };
@@ -62,7 +63,9 @@ class NetworkStateListDetailedView
   void HandleButtonPressed(views::Button* sender,
                            const ui::Event& event) override;
   void CreateExtraTitleRowButtons() override;
-  void ShowSettings() override;
+
+  // Launches the WebUI settings in a browser and closes the system menu.
+  void ShowSettings();
 
   // Create UI components.
   void CreateHeaderEntry();
@@ -98,7 +101,7 @@ class NetworkStateListDetailedView
   // Creates the view of an extra icon appearing next to the network name
   // indicating that the network is controlled by an extension. If no extension
   // is registered for this network, returns |nullptr|.
-  views::View* CreateControlledByExtensionView(const ui::NetworkInfo& info);
+  views::View* CreateControlledByExtensionView(const NetworkInfo& info);
 
   // Periodically request a network scan.
   void CallRequestScan();
@@ -106,12 +109,12 @@ class NetworkStateListDetailedView
   // Handle toggile mobile action
   void ToggleMobile();
 
-  // ui::NetworkListDelegate:
-  views::View* CreateViewForNetwork(const ui::NetworkInfo& info) override;
+  // NetworkListDelegate:
+  views::View* CreateViewForNetwork(const NetworkInfo& info) override;
   bool IsViewHovered(views::View* view) override;
   chromeos::NetworkTypePattern GetNetworkTypePattern() const override;
   void UpdateViewForNetwork(views::View* view,
-                            const ui::NetworkInfo& info) override;
+                            const NetworkInfo& info) override;
   views::Label* CreateInfoLabel() override;
   void OnNetworkEntryClicked(views::View* sender) override;
   void OnOtherWifiClicked() override;
@@ -128,6 +131,7 @@ class NetworkStateListDetailedView
   // scanning state.
   bool prev_wifi_scanning_state_;
 
+  // Not used for material design.
   views::ImageButton* info_icon_;
 
   // Not used for material design.
@@ -142,6 +146,11 @@ class NetworkStateListDetailedView
   TrayPopupLabelButton* settings_;
   TrayPopupLabelButton* proxy_settings_;
 
+  // Only used in material design.
+  views::CustomButton* info_button_md_;
+  views::CustomButton* settings_button_md_;
+  views::CustomButton* proxy_settings_button_md_;
+
   // A small bubble for displaying network info.
   views::BubbleDialogDelegateView* info_bubble_;
 
@@ -150,7 +159,7 @@ class NetworkStateListDetailedView
 
   gfx::Image controlled_by_extension_icon_;
 
-  std::unique_ptr<ui::NetworkListViewBase> network_list_view_;
+  std::unique_ptr<NetworkListViewBase> network_list_view_;
 
   DISALLOW_COPY_AND_ASSIGN(NetworkStateListDetailedView);
 };

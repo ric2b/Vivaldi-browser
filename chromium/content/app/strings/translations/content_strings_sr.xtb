@@ -34,6 +34,7 @@
 <translation id="2148716181193084225">Данас</translation>
 <translation id="2226276347425096477">Скратите овај текст на <ph name="MAX_CHARACTERS" /> знак(ов)а или мање (тренутно користите <ph name="CURRENT_LENGTH" /> знак(ов)а).</translation>
 <translation id="2247351761944213033"><ph name="WEEKNUMBER" />. недеља, <ph name="YEAR" />.</translation>
+<translation id="2277199496770840904"><ph name="NUMBER" />. песма</translation>
 <translation id="2291999235780842123">поље за потврду</translation>
 <translation id="2335594187091864976">бирач датума и времена</translation>
 <translation id="248395913932153421">Дан</translation>
@@ -116,7 +117,6 @@
 <translation id="5643186887447432888">дугме</translation>
 <translation id="5677946354068040947">још опција</translation>
 <translation id="57838592816432529">Искључи звук</translation>
-<translation id="583281660410589416">Непознато</translation>
 <translation id="5843503607508392247">Друго...</translation>
 <translation id="5860033963881614850">Искључено</translation>
 <translation id="588258955323874662">Цеo екран</translation>

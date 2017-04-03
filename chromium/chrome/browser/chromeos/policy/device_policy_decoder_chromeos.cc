@@ -206,6 +206,21 @@ void DecodeLoginPolicies(const em::ChromeDeviceSettingsProto& policy,
               chromeos::kAccountsPrefDeviceLocalAccountsKeyKioskAppUpdateURL,
               entry.kiosk_app().update_url());
         }
+        if (entry.android_kiosk_app().has_package_name()) {
+          entry_dict->SetStringWithoutPathExpansion(
+              chromeos::kAccountsPrefDeviceLocalAccountsKeyArcKioskPackage,
+              entry.android_kiosk_app().package_name());
+        }
+        if (entry.android_kiosk_app().has_class_name()) {
+          entry_dict->SetStringWithoutPathExpansion(
+              chromeos::kAccountsPrefDeviceLocalAccountsKeyArcKioskClass,
+              entry.android_kiosk_app().class_name());
+        }
+        if (entry.android_kiosk_app().has_action()) {
+          entry_dict->SetStringWithoutPathExpansion(
+              chromeos::kAccountsPrefDeviceLocalAccountsKeyArcKioskAction,
+              entry.android_kiosk_app().action());
+        }
       } else if (entry.has_deprecated_public_session_id()) {
         // Deprecated public session specification.
         entry_dict->SetStringWithoutPathExpansion(
@@ -330,6 +345,26 @@ void DecodeNetworkPolicies(const em::ChromeDeviceSettingsProto& policy,
                         container.data_roaming_enabled()),
                     nullptr);
     }
+  }
+
+  if (policy.has_network_throttling()) {
+    const em::NetworkThrottlingEnabledProto& container(
+        policy.network_throttling());
+    std::unique_ptr<base::DictionaryValue> throttling_status(
+        new base::DictionaryValue());
+    bool enabled = (container.has_enabled()) ? container.enabled() : false;
+    uint32_t upload_rate_kbits =
+        (container.has_upload_rate_kbits()) ? container.upload_rate_kbits() : 0;
+    uint32_t download_rate_kbits = (container.has_download_rate_kbits())
+                                       ? container.download_rate_kbits()
+                                       : 0;
+
+    throttling_status->SetBoolean("enabled", enabled);
+    throttling_status->SetInteger("upload_rate_kbits", upload_rate_kbits);
+    throttling_status->SetInteger("download_rate_kbits", download_rate_kbits);
+    policies->Set(key::kNetworkThrottlingEnabled, POLICY_LEVEL_MANDATORY,
+                  POLICY_SCOPE_MACHINE, POLICY_SOURCE_CLOUD,
+                  std::move(throttling_status), nullptr);
   }
 
   if (policy.has_open_network_configuration() &&

@@ -30,6 +30,8 @@
 
 #include "core/dom/Document.h"
 
+#include "core/dom/SynchronousMutationObserver.h"
+#include "core/dom/Text.h"
 #include "core/frame/FrameView.h"
 #include "core/html/HTMLHeadElement.h"
 #include "core/html/HTMLLinkElement.h"
@@ -64,10 +66,73 @@ void DocumentTest::SetUp() {
 }
 
 void DocumentTest::setHtmlInnerHTML(const char* htmlContent) {
-  document().documentElement()->setInnerHTML(String::fromUTF8(htmlContent),
-                                             ASSERT_NO_EXCEPTION);
+  document().documentElement()->setInnerHTML(String::fromUTF8(htmlContent));
   document().view()->updateAllLifecyclePhases();
 }
+
+namespace {
+
+class TestSynchronousMutationObserver
+    : public GarbageCollectedFinalized<TestSynchronousMutationObserver>,
+      public SynchronousMutationObserver {
+  USING_GARBAGE_COLLECTED_MIXIN(TestSynchronousMutationObserver);
+
+ public:
+  TestSynchronousMutationObserver(Document&);
+  virtual ~TestSynchronousMutationObserver() = default;
+
+  int countContextDestroyedCalled() const {
+    return m_contextDestroyedCalledCounter;
+  }
+
+  const HeapVector<Member<ContainerNode>>& removedChildrenNodes() const {
+    return m_removedChildrenNodes;
+  }
+
+  const HeapVector<Member<Node>>& removedNodes() const {
+    return m_removedNodes;
+  }
+
+  DECLARE_TRACE();
+
+ private:
+  // Implement |SynchronousMutationObserver| member functions.
+  void contextDestroyed() final;
+  void nodeChildrenWillBeRemoved(ContainerNode&) final;
+  void nodeWillBeRemoved(Node&) final;
+
+  int m_contextDestroyedCalledCounter = 0;
+  HeapVector<Member<ContainerNode>> m_removedChildrenNodes;
+  HeapVector<Member<Node>> m_removedNodes;
+
+  DISALLOW_COPY_AND_ASSIGN(TestSynchronousMutationObserver);
+};
+
+TestSynchronousMutationObserver::TestSynchronousMutationObserver(
+    Document& document) {
+  setContext(&document);
+}
+
+void TestSynchronousMutationObserver::contextDestroyed() {
+  ++m_contextDestroyedCalledCounter;
+}
+
+void TestSynchronousMutationObserver::nodeChildrenWillBeRemoved(
+    ContainerNode& container) {
+  m_removedChildrenNodes.append(&container);
+}
+
+void TestSynchronousMutationObserver::nodeWillBeRemoved(Node& node) {
+  m_removedNodes.append(&node);
+}
+
+DEFINE_TRACE(TestSynchronousMutationObserver) {
+  visitor->trace(m_removedChildrenNodes);
+  visitor->trace(m_removedNodes);
+  SynchronousMutationObserver::trace(visitor);
+}
+
+}  // anonymous namespace
 
 // This tests that we properly resize and re-layout pages for printing in the
 // presence of media queries effecting elements in a subtree layout boundary
@@ -153,8 +218,8 @@ TEST_F(DocumentTest, LinkManifest) {
   link->setAttribute(blink::HTMLNames::relAttr, "manifest");
 
   // Check that link outside of the <head> are ignored.
-  document().head()->removeChild(link, ASSERT_NO_EXCEPTION);
-  document().head()->removeChild(link2, ASSERT_NO_EXCEPTION);
+  document().head()->removeChild(link);
+  document().head()->removeChild(link2);
   EXPECT_EQ(0, document().linkManifest());
   document().body()->appendChild(link);
   EXPECT_EQ(0, document().linkManifest());
@@ -295,6 +360,40 @@ TEST_F(DocumentTest, EnforceSandboxFlags) {
   document().enforceSandboxFlags(mask);
   EXPECT_TRUE(document().getSecurityOrigin()->isUnique());
   EXPECT_TRUE(document().getSecurityOrigin()->isPotentiallyTrustworthy());
+}
+
+TEST_F(DocumentTest, SynchronousMutationNotifier) {
+  auto& observer = *new TestSynchronousMutationObserver(document());
+
+  EXPECT_EQ(observer.lifecycleContext(), document());
+  EXPECT_EQ(observer.countContextDestroyedCalled(), 0);
+
+  Element* divNode = document().createElement("div");
+  document().body()->appendChild(divNode);
+
+  Element* boldNode = document().createElement("b");
+  divNode->appendChild(boldNode);
+
+  Element* italicNode = document().createElement("i");
+  divNode->appendChild(italicNode);
+
+  Node* textNode = document().createTextNode("0123456789");
+  boldNode->appendChild(textNode);
+  EXPECT_TRUE(observer.removedNodes().isEmpty());
+
+  textNode->remove();
+  ASSERT_EQ(observer.removedNodes().size(), 1u);
+  EXPECT_EQ(textNode, observer.removedNodes()[0]);
+
+  divNode->removeChildren();
+  EXPECT_EQ(observer.removedNodes().size(), 1u)
+      << "ContainerNode::removeChildren() doesn't call nodeWillBeRemoved()";
+  ASSERT_EQ(observer.removedChildrenNodes().size(), 1u);
+  EXPECT_EQ(divNode, observer.removedChildrenNodes()[0]);
+
+  document().shutdown();
+  EXPECT_EQ(observer.lifecycleContext(), nullptr);
+  EXPECT_EQ(observer.countContextDestroyedCalled(), 1);
 }
 
 }  // namespace blink

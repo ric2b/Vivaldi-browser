@@ -88,6 +88,10 @@ bool WindowState::IsPinned() const {
          GetStateType() == WINDOW_STATE_TYPE_TRUSTED_PINNED;
 }
 
+bool WindowState::IsTrustedPinned() const {
+  return GetStateType() == WINDOW_STATE_TYPE_TRUSTED_PINNED;
+}
+
 bool WindowState::IsNormalStateType() const {
   return GetStateType() == WINDOW_STATE_TYPE_NORMAL ||
          GetStateType() == WINDOW_STATE_TYPE_DEFAULT;
@@ -112,7 +116,7 @@ bool WindowState::IsUserPositionable() const {
 }
 
 bool WindowState::ShouldBeExcludedFromMru() const {
-  return (window_->GetBoolProperty(ash::WmWindowProperty::EXCLUDE_FROM_MRU));
+  return window_->GetBoolProperty(ash::WmWindowProperty::EXCLUDE_FROM_MRU);
 }
 
 bool WindowState::CanMaximize() const {
@@ -351,14 +355,14 @@ void WindowState::UpdateWindowShowStateFromStateType() {
 
 void WindowState::NotifyPreStateTypeChange(
     WindowStateType old_window_state_type) {
-  FOR_EACH_OBSERVER(WindowStateObserver, observer_list_,
-                    OnPreWindowStateTypeChange(this, old_window_state_type));
+  for (auto& observer : observer_list_)
+    observer.OnPreWindowStateTypeChange(this, old_window_state_type);
 }
 
 void WindowState::NotifyPostStateTypeChange(
     WindowStateType old_window_state_type) {
-  FOR_EACH_OBSERVER(WindowStateObserver, observer_list_,
-                    OnPostWindowStateTypeChange(this, old_window_state_type));
+  for (auto& observer : observer_list_)
+    observer.OnPostWindowStateTypeChange(this, old_window_state_type);
 }
 
 void WindowState::SetBoundsDirect(const gfx::Rect& bounds) {

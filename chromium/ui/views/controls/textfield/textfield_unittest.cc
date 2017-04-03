@@ -20,7 +20,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
-#include "ui/accessibility/ax_view_state.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/base/dragdrop/drag_drop_types.h"
@@ -1499,9 +1499,9 @@ TEST_F(TextfieldTest, DragUpOrDownSelectsToEnd) {
   InitTextfield();
   textfield_->SetText(ASCIIToUTF16("hello world"));
   const base::string16 expected_up = base::ASCIIToUTF16(
-      PlatformStyle::kTextfieldDragVerticallyDragsToEnd ? "hello" : "lo");
+      PlatformStyle::kTextDragVerticallyDragsToEnd ? "hello" : "lo");
   const base::string16 expected_down = base::ASCIIToUTF16(
-      PlatformStyle::kTextfieldDragVerticallyDragsToEnd ? " world" : " w");
+      PlatformStyle::kTextDragVerticallyDragsToEnd ? " world" : " w");
   const int kStartX = GetCursorPositionX(5);
   const int kDownX = GetCursorPositionX(7);
   const int kUpX = GetCursorPositionX(3);
@@ -2605,8 +2605,7 @@ TEST_F(TextfieldTest, KeepInitiallySelectedWord) {
 }
 
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
-// flaky: http://crbug.com/396477
-TEST_F(TextfieldTest, DISABLED_SelectionClipboard) {
+TEST_F(TextfieldTest, SelectionClipboard) {
   InitTextfield();
   textfield_->SetText(ASCIIToUTF16("0123"));
   gfx::Point point_1(GetCursorPositionX(1), 0);
@@ -2691,7 +2690,7 @@ TEST_F(TextfieldTest, DISABLED_SelectionClipboard) {
   EXPECT_STR_EQ("0123", GetClipboardText(ui::CLIPBOARD_TYPE_SELECTION));
 
   // Middle clicking with an empty selection clipboard should still focus.
-  SetClipboardText(ui::CLIPBOARD_TYPE_COPY_PASTE, std::string());
+  SetClipboardText(ui::CLIPBOARD_TYPE_SELECTION, std::string());
   textfield_->GetFocusManager()->ClearFocus();
   EXPECT_FALSE(textfield_->HasFocus());
   textfield_->OnMousePressed(middle);
@@ -2748,8 +2747,8 @@ TEST_F(TextfieldTest, DISABLED_SelectionClipboard) {
 }
 
 // Verify that the selection clipboard is not updated for selections on a
-// password textfield. Disabled due to http://crbug.com/396477.
-TEST_F(TextfieldTest, DISABLED_SelectionClipboard_Password) {
+// password textfield.
+TEST_F(TextfieldTest, SelectionClipboard_Password) {
   InitTextfields(2);
   textfield_->SetText(ASCIIToUTF16("abcd"));
 
@@ -2997,18 +2996,22 @@ TEST_F(TextfieldTest, AccessiblePasswordTest) {
   InitTextfield();
   textfield_->SetText(ASCIIToUTF16("password"));
 
-  ui::AXViewState state_regular;
-  textfield_->GetAccessibleState(&state_regular);
-  EXPECT_EQ(ui::AX_ROLE_TEXT_FIELD, state_regular.role);
-  EXPECT_EQ(ASCIIToUTF16("password"), state_regular.value);
-  EXPECT_FALSE(state_regular.HasStateFlag(ui::AX_STATE_PROTECTED));
+  ui::AXNodeData node_data_regular;
+  node_data_regular.state = 0;
+  textfield_->GetAccessibleNodeData(&node_data_regular);
+  EXPECT_EQ(ui::AX_ROLE_TEXT_FIELD, node_data_regular.role);
+  EXPECT_EQ(ASCIIToUTF16("password"),
+            node_data_regular.GetString16Attribute(ui::AX_ATTR_VALUE));
+  EXPECT_FALSE(node_data_regular.HasStateFlag(ui::AX_STATE_PROTECTED));
 
   textfield_->SetTextInputType(ui::TEXT_INPUT_TYPE_PASSWORD);
-  ui::AXViewState state_protected;
-  textfield_->GetAccessibleState(&state_protected);
-  EXPECT_EQ(ui::AX_ROLE_TEXT_FIELD, state_protected.role);
-  EXPECT_EQ(ASCIIToUTF16("********"), state_protected.value);
-  EXPECT_TRUE(state_protected.HasStateFlag(ui::AX_STATE_PROTECTED));
+  ui::AXNodeData node_data_protected;
+  node_data_protected.state = 0;
+  textfield_->GetAccessibleNodeData(&node_data_protected);
+  EXPECT_EQ(ui::AX_ROLE_TEXT_FIELD, node_data_protected.role);
+  EXPECT_EQ(ASCIIToUTF16("********"),
+            node_data_protected.GetString16Attribute(ui::AX_ATTR_VALUE));
+  EXPECT_TRUE(node_data_protected.HasStateFlag(ui::AX_STATE_PROTECTED));
 }
 
 }  // namespace views

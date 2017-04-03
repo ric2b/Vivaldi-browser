@@ -6,11 +6,13 @@
 #include <string>
 
 #include "ash/common/login_status.h"
+#include "ash/common/material_design/material_design_controller.h"
 #include "ash/common/strings/grit/ash_strings.h"
 #include "ash/common/system/date/date_default_view.h"
 #include "ash/common/system/date/tray_date.h"
+#include "ash/common/system/tiles/tiles_default_view.h"
+#include "ash/common/system/tiles/tray_tiles.h"
 #include "ash/common/system/tray/system_tray.h"
-#include "ash/common/system/tray/tray_popup_header_button.h"
 #include "ash/shell.h"
 #include "base/command_line.h"
 #include "base/location.h"
@@ -42,6 +44,7 @@
 #include "content/public/test/test_utils.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
+#include "ui/views/controls/button/custom_button.h"
 #include "ui/views/view.h"
 
 namespace em = enterprise_management;
@@ -76,12 +79,10 @@ class ShutdownPolicyBaseTest
   ~ShutdownPolicyBaseTest() override {}
 
   // DeviceSettingsService::Observer:
-  void OwnershipStatusChanged() override {}
   void DeviceSettingsUpdated() override {
     if (run_loop_)
       run_loop_->Quit();
   }
-  void OnDeviceSettingsServiceShutdown() override {}
 
   // policy::DevicePolicyCrosBrowserTest:
   void SetUpInProcessBrowserTestFixture() override {
@@ -145,59 +146,74 @@ class ShutdownPolicyInSessionTest
   ShutdownPolicyInSessionTest() {}
   ~ShutdownPolicyInSessionTest() override {}
 
-  void SetUpOnMainThread() override {
-    ShutdownPolicyBaseTest::SetUpOnMainThread();
-    ash::TrayDate* tray_date = ash::Shell::GetInstance()
-                                 ->GetPrimarySystemTray()
-                                 ->GetTrayDateForTesting();
-    ASSERT_TRUE(tray_date);
-    date_default_view_.reset(static_cast<ash::DateDefaultView*>(
-        tray_date->CreateDefaultViewForTesting(ash::LoginStatus::USER)));
-    ASSERT_TRUE(date_default_view_);
+  // Opens the system tray menu. This creates the tray views.
+  void OpenSystemTrayMenu() {
+    ash::Shell::GetInstance()->GetPrimarySystemTray()->ShowDefaultView(
+        ash::BUBBLE_CREATE_NEW);
   }
 
-  void TearDownOnMainThread() override {
-    date_default_view_.reset();
-    ShutdownPolicyBaseTest::TearDownOnMainThread();
+  // Closes the system tray menu. This deletes the tray views.
+  void CloseSystemTrayMenu() {
+    ash::Shell::GetInstance()->GetPrimarySystemTray()->CloseSystemBubble();
   }
 
-  // Get the shutdown and reboot button view from the date default view.
-  const ash::TrayPopupHeaderButton* GetShutdownButton() {
-    return static_cast<const ash::TrayPopupHeaderButton*>(
-        date_default_view_->GetShutdownButtonViewForTest());
+  // Gets the shutdown button view.
+  const views::View* GetShutdownButton() {
+    ash::SystemTray* tray = ash::Shell::GetInstance()->GetPrimarySystemTray();
+    if (ash::MaterialDesignController::IsSystemTrayMenuMaterial()) {
+      return tray->GetTrayTilesForTesting()
+          ->GetDefaultViewForTesting()
+          ->GetShutdownButtonViewForTest();
+    }
+    return tray->GetTrayDateForTesting()
+        ->GetDefaultViewForTesting()
+        ->GetShutdownButtonViewForTest();
   }
 
-  bool HasButtonTooltipText(const ash::TrayPopupHeaderButton* button,
-                            int message_id) const {
+  // Returns true if the shutdown button's tooltip matches the text of the
+  // resource |message_id|.
+  bool HasShutdownButtonTooltip(int message_id) {
+    const views::View* button = GetShutdownButton();
     base::string16 actual_tooltip;
     button->GetTooltipText(gfx::Point(), &actual_tooltip);
     return l10n_util::GetStringUTF16(message_id) == actual_tooltip;
   }
 
  private:
-  std::unique_ptr<ash::DateDefaultView> date_default_view_;
-
   DISALLOW_COPY_AND_ASSIGN(ShutdownPolicyInSessionTest);
 };
 
+// Tests that by default the shutdown button tooltip is "shutdown".
 IN_PROC_BROWSER_TEST_F(ShutdownPolicyInSessionTest, TestBasic) {
-  const ash::TrayPopupHeaderButton *shutdown_button = GetShutdownButton();
-  EXPECT_TRUE(
-      HasButtonTooltipText(shutdown_button, IDS_ASH_STATUS_TRAY_SHUTDOWN));
+  OpenSystemTrayMenu();
+  EXPECT_TRUE(HasShutdownButtonTooltip(IDS_ASH_STATUS_TRAY_SHUTDOWN));
+  CloseSystemTrayMenu();
 }
 
+// Tests that enabling the reboot-on-shutdown policy changes the shutdown button
+// tooltip to "restart". Note that the tooltip doesn't change dynamically if the
+// menu is open during the policy change -- that's a rare condition and
+// supporting it would add complexity.
 IN_PROC_BROWSER_TEST_F(ShutdownPolicyInSessionTest, PolicyChange) {
-  const ash::TrayPopupHeaderButton *shutdown_button = GetShutdownButton();
-
+  // Change the policy to reboot and let it propagate over mojo to ash.
   UpdateRebootOnShutdownPolicy(true);
   SyncRefreshDevicePolicy();
-  EXPECT_TRUE(
-      HasButtonTooltipText(shutdown_button, IDS_ASH_STATUS_TRAY_REBOOT));
+  content::RunAllPendingInMessageLoop();
 
+  // When the menu is opened the tooltip reads "reboot".
+  OpenSystemTrayMenu();
+  EXPECT_TRUE(HasShutdownButtonTooltip(IDS_ASH_STATUS_TRAY_REBOOT));
+  CloseSystemTrayMenu();
+
+  // Change the policy to shutdown and let it propagate over mojo to ash.
   UpdateRebootOnShutdownPolicy(false);
   SyncRefreshDevicePolicy();
-  EXPECT_TRUE(
-      HasButtonTooltipText(shutdown_button, IDS_ASH_STATUS_TRAY_SHUTDOWN));
+  content::RunAllPendingInMessageLoop();
+
+  // When the menu is opened the tooltip reads "shutdown".
+  OpenSystemTrayMenu();
+  EXPECT_TRUE(HasShutdownButtonTooltip(IDS_ASH_STATUS_TRAY_SHUTDOWN));
+  CloseSystemTrayMenu();
 }
 
 class ShutdownPolicyLockerTest : public ShutdownPolicyBaseTest {
@@ -230,8 +246,7 @@ class ShutdownPolicyLockerTest : public ShutdownPolicyBaseTest {
     if (!tester->IsLocked())
       lock_state_observer.Wait();
     ScreenLocker* screen_locker = ScreenLocker::default_screen_locker();
-    WebUIScreenLocker* web_ui_screen_locker =
-        static_cast<WebUIScreenLocker*>(screen_locker->delegate());
+    WebUIScreenLocker* web_ui_screen_locker = screen_locker->web_ui();
     ASSERT_TRUE(web_ui_screen_locker);
     content::WebUI* web_ui = web_ui_screen_locker->GetWebUI();
     ASSERT_TRUE(web_ui);
@@ -239,8 +254,7 @@ class ShutdownPolicyLockerTest : public ShutdownPolicyBaseTest {
     ASSERT_TRUE(contents_);
 
     // Wait for the login UI to be ready.
-    WaitUntilOobeUIIsReady(
-        static_cast<OobeUI*>(web_ui->GetController()));
+    WaitUntilOobeUIIsReady(web_ui_screen_locker->GetOobeUI());
   }
 
  private:

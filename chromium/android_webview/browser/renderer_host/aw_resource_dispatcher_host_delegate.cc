@@ -8,6 +8,7 @@
 #include <string>
 
 #include "android_webview/browser/aw_browser_context.h"
+#include "android_webview/browser/aw_contents_client_bridge_base.h"
 #include "android_webview/browser/aw_contents_io_thread_client.h"
 #include "android_webview/browser/aw_login_delegate.h"
 #include "android_webview/browser/aw_resource_context.h"
@@ -22,6 +23,7 @@
 #include "content/public/browser/resource_dispatcher_host_login_delegate.h"
 #include "content/public/browser/resource_request_info.h"
 #include "content/public/browser/resource_throttle.h"
+#include "content/public/browser/web_contents.h"
 #include "net/base/load_flags.h"
 #include "net/base/net_errors.h"
 #include "net/http/http_response_headers.h"
@@ -30,8 +32,10 @@
 #include "url/url_constants.h"
 
 using android_webview::AwContentsIoThreadClient;
+using android_webview::AwContentsClientBridgeBase;
 using content::BrowserThread;
 using content::ResourceType;
+using content::WebContents;
 using navigation_interception::InterceptNavigationDelegate;
 
 namespace {
@@ -41,15 +45,44 @@ base::LazyInstance<android_webview::AwResourceDispatcherHostDelegate>
 
 void SetCacheControlFlag(
     net::URLRequest* request, int flag) {
-  const int all_cache_control_flags = net::LOAD_BYPASS_CACHE |
-      net::LOAD_VALIDATE_CACHE |
-      net::LOAD_PREFERRING_CACHE |
-      net::LOAD_ONLY_FROM_CACHE;
+  const int all_cache_control_flags =
+      net::LOAD_BYPASS_CACHE | net::LOAD_VALIDATE_CACHE |
+      net::LOAD_SKIP_CACHE_VALIDATION | net::LOAD_ONLY_FROM_CACHE;
   DCHECK_EQ((flag & all_cache_control_flags), flag);
   int load_flags = request->load_flags();
   load_flags &= ~all_cache_control_flags;
   load_flags |= flag;
   request->SetLoadFlags(load_flags);
+}
+
+// Called when ResourceDispathcerHost detects a download request.
+// The download is already cancelled when this is called, since
+// relevant for DownloadListener is already extracted.
+void DownloadStartingOnUIThread(
+    const content::ResourceRequestInfo::WebContentsGetter& web_contents_getter,
+    const GURL& url,
+    const std::string& user_agent,
+    const std::string& content_disposition,
+    const std::string& mime_type,
+    int64_t content_length) {
+  AwContentsClientBridgeBase* client =
+      AwContentsClientBridgeBase::FromWebContentsGetter(web_contents_getter);
+  if (!client)
+    return;
+  client->NewDownload(url, user_agent, content_disposition, mime_type,
+                      content_length);
+}
+
+void NewLoginRequestOnUIThread(
+    const content::ResourceRequestInfo::WebContentsGetter& web_contents_getter,
+    const std::string& realm,
+    const std::string& account,
+    const std::string& args) {
+  AwContentsClientBridgeBase* client =
+      AwContentsClientBridgeBase::FromWebContentsGetter(web_contents_getter);
+  if (!client)
+    return;
+  client->NewLoginRequest(realm, account, args);
 }
 
 }  // namespace
@@ -177,18 +210,20 @@ bool IoThreadClientThrottle::ShouldBlockRequest() {
     if (request_->url().SchemeIs(url::kFtpScheme)) {
       return true;
     }
-    SetCacheControlFlag(request_, net::LOAD_ONLY_FROM_CACHE);
+    SetCacheControlFlag(
+        request_, net::LOAD_ONLY_FROM_CACHE | net::LOAD_SKIP_CACHE_VALIDATION);
   } else {
     AwContentsIoThreadClient::CacheMode cache_mode = io_client->GetCacheMode();
     switch(cache_mode) {
       case AwContentsIoThreadClient::LOAD_CACHE_ELSE_NETWORK:
-        SetCacheControlFlag(request_, net::LOAD_PREFERRING_CACHE);
+        SetCacheControlFlag(request_, net::LOAD_SKIP_CACHE_VALIDATION);
         break;
       case AwContentsIoThreadClient::LOAD_NO_CACHE:
         SetCacheControlFlag(request_, net::LOAD_BYPASS_CACHE);
         break;
       case AwContentsIoThreadClient::LOAD_CACHE_ONLY:
-        SetCacheControlFlag(request_, net::LOAD_ONLY_FROM_CACHE);
+        SetCacheControlFlag(request_, net::LOAD_ONLY_FROM_CACHE |
+                                          net::LOAD_SKIP_CACHE_VALIDATION);
         break;
       default:
         break;
@@ -280,7 +315,6 @@ void AwResourceDispatcherHostDelegate::DownloadStarting(
   request->extra_request_headers().GetHeader(
       net::HttpRequestHeaders::kUserAgent, &user_agent);
 
-
   net::HttpResponseHeaders* response_headers = request->response_headers();
   if (response_headers) {
     response_headers->GetNormalizedHeader("content-disposition",
@@ -290,24 +324,19 @@ void AwResourceDispatcherHostDelegate::DownloadStarting(
 
   request->Cancel();
 
+  // POST request cannot be repeated in general, so prevent client from
+  // retrying the same request, unless it is with a GET.
+  if ("GET" != request->method())
+    return;
+
   const content::ResourceRequestInfo* request_info =
       content::ResourceRequestInfo::ForRequest(request);
 
-  // TODO(jam): http://crbug.com/645983 we will need to make this map work with
-  // both RFH IDs and FTN IDs.
-  std::unique_ptr<AwContentsIoThreadClient> io_client =
-      AwContentsIoThreadClient::FromID(request_info->GetChildID(),
-                                       request_info->GetRenderFrameID());
-
-  // POST request cannot be repeated in general, so prevent client from
-  // retrying the same request, even if it is with a GET.
-  if ("GET" == request->method() && io_client) {
-    io_client->NewDownload(url,
-                           user_agent,
-                           content_disposition,
-                           mime_type,
-                           content_length);
-  }
+  BrowserThread::PostTask(
+      BrowserThread::UI, FROM_HERE,
+      base::Bind(&DownloadStartingOnUIThread,
+                 request_info->GetWebContentsGetterForRequest(), url,
+                 user_agent, content_disposition, mime_type, content_length));
 }
 
 content::ResourceDispatcherHostLoginDelegate*
@@ -319,12 +348,7 @@ content::ResourceDispatcherHostLoginDelegate*
 
 bool AwResourceDispatcherHostDelegate::HandleExternalProtocol(
     const GURL& url,
-    int child_id,
-    const content::ResourceRequestInfo::WebContentsGetter& web_contents_getter,
-    bool is_main_frame,
-    ui::PageTransition page_transition,
-    bool has_user_gesture,
-    content::ResourceContext* resource_context) {
+    content::ResourceRequestInfo* info) {
   // The AwURLRequestJobFactory implementation should ensure this method never
   // gets called.
   NOTREACHED();
@@ -347,13 +371,11 @@ void AwResourceDispatcherHostDelegate::OnResponseStarted(
     // Check for x-auto-login header.
     HeaderData header_data;
     if (ParserHeaderInResponse(request, ALLOW_ANY_REALM, &header_data)) {
-      std::unique_ptr<AwContentsIoThreadClient> io_client =
-          AwContentsIoThreadClient::FromID(request_info->GetChildID(),
-                                           request_info->GetRenderFrameID());
-      if (io_client) {
-        io_client->NewLoginRequest(header_data.realm, header_data.account,
-                                   header_data.args);
-      }
+      BrowserThread::PostTask(
+          BrowserThread::UI, FROM_HERE,
+          base::Bind(&NewLoginRequestOnUIThread,
+                     request_info->GetWebContentsGetterForRequest(),
+                     header_data.realm, header_data.account, header_data.args));
     }
   }
 }

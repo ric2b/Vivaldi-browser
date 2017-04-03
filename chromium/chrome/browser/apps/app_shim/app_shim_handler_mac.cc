@@ -96,7 +96,6 @@ class AppShimHandlerRegistry : public content::NotificationObserver {
   ~AppShimHandlerRegistry() override {}
 
   // content::NotificationObserver override:
-  // todo: tomas@vivaldi.com - add handling for main menu pref update
   void Observe(int type,
                const content::NotificationSource& source,
                const content::NotificationDetails& details) override {

@@ -1,14 +1,11 @@
 {
-  "manifest_version":  1,
-  "name": "exe:mash_unittests",
+  "name": "mash_unittests",
   "display_name": "Mash Unittests",
-  "capabilities": {
-    "required": {
-      "*": { "classes": [ "app", "test" ] },
-      "service:ash": {
-        "interfaces": [
-          "ui::mojom::AcceleratorRegistrar"
-        ]
+  "interface_provider_specs": {
+    "service_manager:connector": {
+      "requires": {
+        "*": [ "app", "test" ],
+        "ash": [ "mus:window_manager" ]
       }
     }
   }

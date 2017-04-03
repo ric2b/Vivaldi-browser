@@ -9,6 +9,7 @@
 goog.provide('Tutorial');
 
 goog.require('Msgs');
+goog.require('cvox.AbstractEarcons');
 
 /**
  * @constructor
@@ -19,7 +20,34 @@ Tutorial = function() {
    * @type {number}
    * @private
    */
-  this.page_ = 0;
+  this.page_;
+
+  this.page = sessionStorage['tutorial_page_pos'] !== undefined ?
+      sessionStorage['tutorial_page_pos'] : 0;
+};
+/**
+ * @param {Node} container
+ * @private
+ */
+Tutorial.buildEarconPage_ = function(container) {
+  for (var earconId in cvox.EarconDescription) {
+    var msgid = cvox.EarconDescription[earconId];
+    var earconElement = document.createElement('p');
+    earconElement.innerText = Msgs.getMsg(msgid);
+    earconElement.setAttribute('tabindex', 0);
+    var prevEarcon;
+    var playEarcon = function(earcon) {
+      if (prevEarcon) {
+        chrome.extension.getBackgroundPage()['cvox']['ChromeVox'][
+            'earcons']['cancelEarcon'](prevEarcon);
+      }
+      chrome.extension.getBackgroundPage()['cvox']['ChromeVox'][
+          'earcons']['playEarcon'](earcon);
+      prevEarcon = earcon;
+    }.bind(this, earconId);
+    earconElement.addEventListener('focus', playEarcon, false);
+    container.appendChild(earconElement);
+  }
 };
 
 /**
@@ -28,7 +56,7 @@ Tutorial = function() {
  * a message ID for some text, and optional attributes indicating if it's
  * a heading, link, text for only one platform, etc.
  *
- * @type Array<Object>
+ * @type Array<Array<Object>>
  */
 Tutorial.PAGES = [
   [
@@ -57,6 +85,8 @@ Tutorial.PAGES = [
   [
     { msgid: 'tutorial_jump_heading', heading: true },
     { msgid: 'tutorial_jump' },
+    { msgid: 'tutorial_jump_second_heading', heading: true },
+    { msgid: 'tutorial_jump_wrap_heading', heading: true },
     { msgid: 'tutorial_click_next' },
   ],
   [
@@ -67,8 +97,12 @@ Tutorial.PAGES = [
   [
     { msgid: 'tutorial_chrome_shortcuts_heading', heading: true },
     { msgid: 'tutorial_chrome_shortcuts' },
-    { msgid: 'tutorial_chromebook_ctrl_forward', chromebookOnly: true },
-    { msgid: 'tutorial_chromeos_ctrl_f2', chromebookOnly: false },
+    { msgid: 'tutorial_chromebook_ctrl_forward', chromebookOnly: true }
+  ],
+  [
+    { msgid: 'tutorial_earcon_page_title', heading: true },
+    { msgid: 'tutorial_earcon_page_body' },
+    { custom: Tutorial.buildEarconPage_ }
   ],
   [
     { msgid: 'tutorial_learn_more_heading', heading: true },
@@ -83,53 +117,132 @@ Tutorial.PAGES = [
 ];
 
 Tutorial.prototype = {
-  /** Open the first page in the tutorial. */
-  firstPage: function() {
-    this.page_ = 0;
-    this.showPage_();
+  /** Open the last viewed page in the tutorial. */
+  lastViewedPage: function() {
+    this.page = sessionStorage['tutorial_page_pos'] !== undefined ?
+        sessionStorage['tutorial_page_pos'] : 0;
+    if (this.page == -1)
+      this.page = 0;
+    this.showCurrentPage_();
+  },
+
+  /** Open the update notes page. */
+  updateNotes: function() {
+    delete sessionStorage['tutorial_page_pos'];
+    this.page = -1;
+    this.showPage_([
+      { msgid: 'update_56_title', heading: true },
+      { msgid: 'update_56_intro' },
+      {
+        list: true,
+        items: [
+          {msgid: 'update_56_item_1', listItem: true},
+          {msgid: 'update_56_item_2', listItem: true},
+          {msgid: 'update_56_item_3', listItem: true},
+        ],
+      },
+      { msgid: 'update_56_OUTTRO' },
+    ]);
   },
 
   /** Move to the next page in the tutorial. */
   nextPage: function() {
-    if (this.page_ < Tutorial.PAGES.length - 1) {
-      this.page_++;
-      this.showPage_();
+    if (this.page < Tutorial.PAGES.length - 1) {
+      this.page++;
+      this.showCurrentPage_();
     }
   },
 
   /** Move to the previous page in the tutorial. */
   previousPage: function() {
-    if (this.page_ > 0) {
-      this.page_--;
-      this.showPage_();
+    if (this.page > 0) {
+      this.page--;
+      this.showCurrentPage_();
     }
   },
 
   /**
-   * Recreate the tutorial DOM for page |this.page_|.
+   * Shows the page for page |this.page_|.
+   */
+  showCurrentPage_: function() {
+    var pageElements = Tutorial.PAGES[this.page] || [];
+    this.showPage_(pageElements);
+  },
+
+  /**
+   * Recreate the tutorial DOM using |pageElements|.
+   * @param {!Array<Object>} pageElements
    * @private
    */
-  showPage_: function() {
+  showPage_: function(pageElements) {
     var tutorialContainer = $('tutorial_main');
     tutorialContainer.innerHTML = '';
+    this.buildDom_(pageElements, tutorialContainer);
+    this.finalizeDom_();
+  },
 
-    var pageElements = Tutorial.PAGES[this.page_];
+  /**
+   * Builds a dom under the container
+   * @param {!Array<Object>} pageElements
+   * @param {!Node} container
+   * @private
+   */
+  buildDom_: function(pageElements, container) {
+    var focus;
     for (var i = 0; i < pageElements.length; ++i) {
       var pageElement = pageElements[i];
       var msgid = pageElement.msgid;
-      var text = Msgs.getMsg(msgid);
+      var text = '';
+      if (msgid)
+        text = Msgs.getMsg(msgid);
       var element;
       if (pageElement.heading) {
         element = document.createElement('h2');
+        element.setAttribute('tabindex', -1);
+        if (!focus)
+          focus = element;
+      } else if (pageElement.list) {
+        element = document.createElement('ul');
+        this.buildDom_(pageElement.items, element);
+      } else if (pageElement.listItem) {
+        element = document.createElement('li');
       } else if (pageElement.link) {
         element = document.createElement('a');
         element.href = pageElement.link;
-        element.target = '_blank';
+        element.setAttribute('tabindex', 0);
+        element.addEventListener('click', function(evt) {
+          Panel.closeMenusAndRestoreFocus();
+          chrome.windows.create({url: evt.target.href});
+          return false;
+        }, false);
+      } else if (pageElement.custom) {
+        element = document.createElement('div');
+        pageElement.custom(element);
       } else {
         element = document.createElement('p');
       }
-      element.innerText = text;
-      tutorialContainer.appendChild(element);
+      if (text)
+        element.innerText = text;
+      container.appendChild(element);
     }
+    if (focus)
+      focus.focus();
+  },
+
+  /** @private */
+  finalizeDom_: function() {
+    var disableNext = this.page == (Tutorial.PAGES.length - 1);
+    var disablePrevious = this.page == 0;
+    $('tutorial_next').setAttribute('aria-disabled', disableNext);
+    $('tutorial_previous').setAttribute('aria-disabled', disablePrevious);
+  },
+
+  get page() {
+    return this.page_;
+  },
+
+  set page(val) {
+    this.page_ = val;
+    sessionStorage['tutorial_page_pos'] = this.page_;
   }
 };

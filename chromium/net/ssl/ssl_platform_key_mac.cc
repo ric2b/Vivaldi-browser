@@ -4,14 +4,11 @@
 
 #include "net/ssl/ssl_platform_key.h"
 
+#include <Security/cssm.h>
 #include <Security/SecBase.h>
 #include <Security/SecCertificate.h>
 #include <Security/SecIdentity.h>
 #include <Security/SecKey.h>
-#include <Security/cssm.h>
-#include <openssl/ecdsa.h>
-#include <openssl/obj.h>
-#include <openssl/rsa.h>
 
 #include <memory>
 
@@ -22,16 +19,18 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/scoped_policy.h"
-#include "base/sequenced_task_runner.h"
 #include "base/synchronization/lock.h"
 #include "crypto/mac_security_services_lock.h"
 #include "crypto/openssl_util.h"
-#include "crypto/scoped_openssl_types.h"
 #include "net/base/net_errors.h"
 #include "net/cert/x509_certificate.h"
-#include "net/ssl/ssl_platform_key_task_runner.h"
+#include "net/ssl/ssl_platform_key_util.h"
 #include "net/ssl/ssl_private_key.h"
 #include "net/ssl/threaded_ssl_private_key.h"
+#include "third_party/boringssl/src/include/openssl/ecdsa.h"
+#include "third_party/boringssl/src/include/openssl/mem.h"
+#include "third_party/boringssl/src/include/openssl/nid.h"
+#include "third_party/boringssl/src/include/openssl/rsa.h"
 
 namespace net {
 
@@ -91,22 +90,18 @@ SecKeyRef FetchSecKeyRefForCertificate(const X509Certificate* certificate) {
 
 class SSLPlatformKeyMac : public ThreadedSSLPrivateKey::Delegate {
  public:
-  SSLPlatformKeyMac(SecKeyRef key, const CSSM_KEY* cssm_key)
-      : key_(key, base::scoped_policy::RETAIN), cssm_key_(cssm_key) {
-    DCHECK(cssm_key_->KeyHeader.AlgorithmId == CSSM_ALGID_RSA ||
-           cssm_key_->KeyHeader.AlgorithmId == CSSM_ALGID_ECDSA);
-  }
+  SSLPlatformKeyMac(SSLPrivateKey::Type type,
+                    size_t max_length,
+                    SecKeyRef key,
+                    const CSSM_KEY* cssm_key)
+      : type_(type),
+        max_length_(max_length),
+        key_(key, base::scoped_policy::RETAIN),
+        cssm_key_(cssm_key) {}
 
   ~SSLPlatformKeyMac() override {}
 
-  SSLPrivateKey::Type GetType() override {
-    if (cssm_key_->KeyHeader.AlgorithmId == CSSM_ALGID_RSA) {
-      return SSLPrivateKey::Type::RSA;
-    } else {
-      DCHECK_EQ(CSSM_ALGID_ECDSA, cssm_key_->KeyHeader.AlgorithmId);
-      return SSLPrivateKey::Type::ECDSA;
-    }
-  }
+  SSLPrivateKey::Type GetType() override { return type_; }
 
   std::vector<SSLPrivateKey::Hash> GetDigestPreferences() override {
     static const SSLPrivateKey::Hash kHashes[] = {
@@ -116,17 +111,7 @@ class SSLPlatformKeyMac : public ThreadedSSLPrivateKey::Delegate {
                                             kHashes + arraysize(kHashes));
   }
 
-  size_t GetMaxSignatureLengthInBytes() override {
-    if (cssm_key_->KeyHeader.AlgorithmId == CSSM_ALGID_RSA) {
-      return (cssm_key_->KeyHeader.LogicalKeySizeInBits + 7) / 8;
-    } else {
-      // LogicalKeySizeInBits is the size of an EC public key. But an
-      // ECDSA signature length depends on the size of the base point's
-      // order. For P-256, P-384, and P-521, these two sizes are the same.
-      return ECDSA_SIG_max_len((cssm_key_->KeyHeader.LogicalKeySizeInBits + 7) /
-                               8);
-    }
-  }
+  size_t GetMaxSignatureLengthInBytes() override { return max_length_; }
 
   Error SignDigest(SSLPrivateKey::Hash hash,
                    const base::StringPiece& input,
@@ -161,7 +146,7 @@ class SSLPlatformKeyMac : public ThreadedSSLPrivateKey::Delegate {
     hash_data.Data =
         const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(input.data()));
 
-    crypto::ScopedOpenSSLBytes free_digest_info;
+    bssl::UniquePtr<uint8_t> free_digest_info;
     if (cssm_key_->KeyHeader.AlgorithmId == CSSM_ALGID_RSA) {
       // CSSM expects the caller to prepend the DigestInfo.
       int hash_nid = NID_undef;
@@ -202,7 +187,7 @@ class SSLPlatformKeyMac : public ThreadedSSLPrivateKey::Delegate {
       }
     }
 
-    signature->resize(GetMaxSignatureLengthInBytes());
+    signature->resize(max_length_);
     CSSM_DATA signature_data;
     signature_data.Length = signature->size();
     signature_data.Data = signature->data();
@@ -216,6 +201,8 @@ class SSLPlatformKeyMac : public ThreadedSSLPrivateKey::Delegate {
   }
 
  private:
+  SSLPrivateKey::Type type_;
+  size_t max_length_;
   base::ScopedCFTypeRef<SecKeyRef> key_;
   const CSSM_KEY* cssm_key_;
 
@@ -237,13 +224,14 @@ scoped_refptr<SSLPrivateKey> FetchClientCertPrivateKey(
   if (status != noErr)
     return nullptr;
 
-  if (cssm_key->KeyHeader.AlgorithmId != CSSM_ALGID_RSA &&
-      cssm_key->KeyHeader.AlgorithmId != CSSM_ALGID_ECDSA) {
-    LOG(ERROR) << "Unknown key type: " << cssm_key->KeyHeader.AlgorithmId;
+  SSLPrivateKey::Type key_type;
+  size_t max_length;
+  if (!GetClientCertInfo(certificate, &key_type, &max_length))
     return nullptr;
-  }
+
   return make_scoped_refptr(new ThreadedSSLPrivateKey(
-      base::MakeUnique<SSLPlatformKeyMac>(private_key.get(), cssm_key),
+      base::MakeUnique<SSLPlatformKeyMac>(key_type, max_length,
+                                          private_key.get(), cssm_key),
       GetSSLPlatformKeyTaskRunner()));
 }
 

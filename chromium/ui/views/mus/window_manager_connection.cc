@@ -4,14 +4,15 @@
 
 #include "ui/views/mus/window_manager_connection.h"
 
+#include <algorithm>
 #include <set>
 #include <utility>
 
 #include "base/lazy_instance.h"
 #include "base/memory/ptr_util.h"
 #include "base/threading/thread_local.h"
-#include "services/shell/public/cpp/connection.h"
-#include "services/shell/public/cpp/connector.h"
+#include "services/service_manager/public/cpp/connection.h"
+#include "services/service_manager/public/cpp/connector.h"
 #include "services/ui/public/cpp/gpu_service.h"
 #include "services/ui/public/cpp/property_type_converters.h"
 #include "services/ui/public/cpp/window.h"
@@ -20,9 +21,9 @@
 #include "services/ui/public/interfaces/event_matcher.mojom.h"
 #include "services/ui/public/interfaces/window_tree.mojom.h"
 #include "ui/aura/env.h"
+#include "ui/aura/mus/os_exchange_data_provider_mus.h"
 #include "ui/views/mus/clipboard_mus.h"
 #include "ui/views/mus/native_widget_mus.h"
-#include "ui/views/mus/os_exchange_data_provider_mus.h"
 #include "ui/views/mus/pointer_watcher_event_router.h"
 #include "ui/views/mus/screen_mus.h"
 #include "ui/views/mus/surface_context_factory.h"
@@ -38,6 +39,47 @@ using WindowManagerConnectionPtr =
 // Env is thread local so that aura may be used on multiple threads.
 base::LazyInstance<WindowManagerConnectionPtr>::Leaky lazy_tls_ptr =
     LAZY_INSTANCE_INITIALIZER;
+
+// Recursively finds the deepest visible window from |windows| that contains
+// |screen_point|, when offsetting by the display origins from
+// |display_origins|.
+ui::Window* GetWindowFrom(const std::map<int64_t, gfx::Point>& display_origins,
+                          const std::vector<ui::Window*>& windows,
+                          const gfx::Point& screen_point) {
+  for (ui::Window* window : windows) {
+    if (!window->visible())
+      continue;
+
+    auto it = display_origins.find(window->display_id());
+    if (it == display_origins.end())
+      continue;
+
+    gfx::Rect bounds_in_screen = window->GetBoundsInRoot();
+    bounds_in_screen.Offset(it->second.x(), it->second.y());
+
+    if (bounds_in_screen.Contains(screen_point)) {
+      if (!window->children().empty()) {
+        ui::Window* child =
+            GetWindowFrom(display_origins, window->children(), screen_point);
+        if (child)
+          return child;
+      }
+
+      return window;
+    }
+  }
+  return nullptr;
+}
+
+aura::Window* GetAuraWindowFromUiWindow(ui::Window* window) {
+  if (!window)
+    return nullptr;
+  NativeWidgetMus* nw_mus = NativeWidgetMus::GetForWindow(window);
+  return nw_mus
+             ? static_cast<internal::NativeWidgetPrivate*>(nw_mus)
+                   ->GetNativeView()
+             : nullptr;
+}
 
 }  // namespace
 
@@ -58,8 +100,8 @@ WindowManagerConnection::~WindowManagerConnection() {
 
 // static
 std::unique_ptr<WindowManagerConnection> WindowManagerConnection::Create(
-    shell::Connector* connector,
-    const shell::Identity& identity,
+    service_manager::Connector* connector,
+    const service_manager::Identity& identity,
     scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
   DCHECK(!lazy_tls_ptr.Pointer()->Get());
   WindowManagerConnection* connection =
@@ -80,7 +122,7 @@ bool WindowManagerConnection::Exists() {
   return !!lazy_tls_ptr.Pointer()->Get();
 }
 
-ui::Window* WindowManagerConnection::NewWindow(
+ui::Window* WindowManagerConnection::NewTopLevelWindow(
     const std::map<std::string, std::vector<uint8_t>>& properties) {
   return client_->NewTopLevelWindow(&properties);
 }
@@ -98,8 +140,8 @@ NativeWidget* WindowManagerConnection::CreateNativeWidgetMus(
   NativeWidgetMus::ConfigurePropertiesForNewWindow(init_params, &properties);
   properties[ui::mojom::WindowManager::kAppID_Property] =
       mojo::ConvertTo<std::vector<uint8_t>>(identity_.name());
-  return new NativeWidgetMus(delegate, NewWindow(properties),
-                             ui::mojom::SurfaceType::DEFAULT);
+  return new NativeWidgetMus(delegate, NewTopLevelWindow(properties),
+                             ui::mojom::CompositorFrameSinkType::DEFAULT);
 }
 
 const std::set<ui::Window*>& WindowManagerConnection::GetRoots() const {
@@ -107,8 +149,8 @@ const std::set<ui::Window*>& WindowManagerConnection::GetRoots() const {
 }
 
 WindowManagerConnection::WindowManagerConnection(
-    shell::Connector* connector,
-    const shell::Identity& identity,
+    service_manager::Connector* connector,
+    const service_manager::Identity& identity,
     scoped_refptr<base::SingleThreadTaskRunner> task_runner)
     : connector_(connector), identity_(identity) {
   lazy_tls_ptr.Pointer()->Set(this);
@@ -139,6 +181,18 @@ WindowManagerConnection::WindowManagerConnection(
       std::map<std::string, std::vector<uint8_t>>()));
 }
 
+ui::Window* WindowManagerConnection::GetUiWindowAtScreenPoint(
+    const gfx::Point& point) {
+  std::map<int64_t, gfx::Point> display_origins;
+  for (display::Display& d : display::Screen::GetScreen()->GetAllDisplays())
+    display_origins[d.id()] = d.bounds().origin();
+
+  const std::set<ui::Window*>& roots = GetRoots();
+  std::vector<ui::Window*> windows;
+  std::copy(roots.begin(), roots.end(), std::back_inserter(windows));
+  return GetWindowFrom(display_origins, windows, point);
+}
+
 void WindowManagerConnection::OnEmbed(ui::Window* root) {}
 
 void WindowManagerConnection::OnLostConnection(ui::WindowTreeClient* client) {
@@ -167,9 +221,14 @@ gfx::Point WindowManagerConnection::GetCursorScreenPoint() {
   return client_->GetCursorScreenPoint();
 }
 
+aura::Window* WindowManagerConnection::GetWindowAtScreenPoint(
+    const gfx::Point& point) {
+  return GetAuraWindowFromUiWindow(GetUiWindowAtScreenPoint(point));
+}
+
 std::unique_ptr<OSExchangeData::Provider>
 WindowManagerConnection::BuildProvider() {
-  return base::MakeUnique<OSExchangeDataProviderMus>();
+  return base::MakeUnique<aura::OSExchangeDataProviderMus>();
 }
 
 }  // namespace views

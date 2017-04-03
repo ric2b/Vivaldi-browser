@@ -12,7 +12,6 @@
 #include <vector>
 
 #include "ash/common/wm_shell.h"
-#include "ash/display/display_manager.h"
 #include "ash/display/display_util.h"
 #include "ash/shell.h"
 #include "ash/touch/touchscreen_util.h"
@@ -25,6 +24,7 @@
 #include "ui/display/display.h"
 #include "ui/display/manager/display_layout.h"
 #include "ui/display/manager/display_layout_store.h"
+#include "ui/display/manager/display_manager.h"
 #include "ui/display/manager/display_manager_utilities.h"
 #include "ui/display/types/display_mode.h"
 #include "ui/display/types/display_snapshot.h"
@@ -317,8 +317,17 @@ float DisplayChangeObserver::FindDeviceScaleFactor(float dpi) {
 }
 
 void DisplayChangeObserver::OnTouchscreenDeviceConfigurationChanged() {
-  OnDisplayModeChanged(
-      Shell::GetInstance()->display_configurator()->cached_displays());
+  // If there are no cached display snapshots, either there are no attached
+  // displays or the cached snapshots have been invalidated. For the first case
+  // there aren't any touchscreens to associate. For the second case, the
+  // displays and touch input-devices will get associated when display
+  // configuration finishes.
+  const auto& cached_displays =
+      Shell::GetInstance()->display_configurator()->cached_displays();
+  if (!cached_displays.empty())
+    OnDisplayModeChanged(cached_displays);
+  else
+    VLOG(1) << "Not updating touchscreen associations";
 }
 
 }  // namespace ash

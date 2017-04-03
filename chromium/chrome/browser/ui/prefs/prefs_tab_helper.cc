@@ -44,6 +44,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/renderer_preferences.h"
 #include "content/public/common/web_preferences.h"
+#include "extensions/features/features.h"
 #include "third_party/icu/source/common/unicode/uchar.h"
 #include "third_party/icu/source/common/unicode/uscript.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -66,7 +67,7 @@ namespace {
 
 // The list of prefs we want to observe.
 const char* const kPrefsToObserve[] = {
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   prefs::kAnimationPolicy,
 #endif
   prefs::kDataSaverEnabled,
@@ -176,67 +177,73 @@ struct FontDefault {
 // TODO(falken): add proper defaults when possible for all
 // platforms/scripts/generic families.
 const FontDefault kFontDefaults[] = {
-  { prefs::kWebKitStandardFontFamily, IDS_STANDARD_FONT_FAMILY },
-  { prefs::kWebKitFixedFontFamily, IDS_FIXED_FONT_FAMILY },
-  { prefs::kWebKitSerifFontFamily, IDS_SERIF_FONT_FAMILY },
-  { prefs::kWebKitSansSerifFontFamily, IDS_SANS_SERIF_FONT_FAMILY },
-  { prefs::kWebKitCursiveFontFamily, IDS_CURSIVE_FONT_FAMILY },
-  { prefs::kWebKitFantasyFontFamily, IDS_FANTASY_FONT_FAMILY },
-  { prefs::kWebKitPictographFontFamily, IDS_PICTOGRAPH_FONT_FAMILY },
+    {prefs::kWebKitStandardFontFamily, IDS_STANDARD_FONT_FAMILY},
+    {prefs::kWebKitFixedFontFamily, IDS_FIXED_FONT_FAMILY},
+    {prefs::kWebKitSerifFontFamily, IDS_SERIF_FONT_FAMILY},
+    {prefs::kWebKitSansSerifFontFamily, IDS_SANS_SERIF_FONT_FAMILY},
+    {prefs::kWebKitCursiveFontFamily, IDS_CURSIVE_FONT_FAMILY},
+    {prefs::kWebKitFantasyFontFamily, IDS_FANTASY_FONT_FAMILY},
+    {prefs::kWebKitPictographFontFamily, IDS_PICTOGRAPH_FONT_FAMILY},
 #if defined(OS_CHROMEOS) || defined(OS_MACOSX) || defined(OS_WIN)
-  { prefs::kWebKitStandardFontFamilyJapanese,
-    IDS_STANDARD_FONT_FAMILY_JAPANESE },
-  { prefs::kWebKitFixedFontFamilyJapanese, IDS_FIXED_FONT_FAMILY_JAPANESE },
-  { prefs::kWebKitSerifFontFamilyJapanese, IDS_SERIF_FONT_FAMILY_JAPANESE },
-  { prefs::kWebKitSansSerifFontFamilyJapanese,
-    IDS_SANS_SERIF_FONT_FAMILY_JAPANESE },
-  { prefs::kWebKitStandardFontFamilyKorean, IDS_STANDARD_FONT_FAMILY_KOREAN },
-  { prefs::kWebKitSerifFontFamilyKorean, IDS_SERIF_FONT_FAMILY_KOREAN },
-  { prefs::kWebKitSansSerifFontFamilyKorean,
-    IDS_SANS_SERIF_FONT_FAMILY_KOREAN },
-  { prefs::kWebKitStandardFontFamilySimplifiedHan,
-    IDS_STANDARD_FONT_FAMILY_SIMPLIFIED_HAN },
-  { prefs::kWebKitSerifFontFamilySimplifiedHan,
-    IDS_SERIF_FONT_FAMILY_SIMPLIFIED_HAN },
-  { prefs::kWebKitSansSerifFontFamilySimplifiedHan,
-    IDS_SANS_SERIF_FONT_FAMILY_SIMPLIFIED_HAN },
-  { prefs::kWebKitStandardFontFamilyTraditionalHan,
-    IDS_STANDARD_FONT_FAMILY_TRADITIONAL_HAN },
-  { prefs::kWebKitSerifFontFamilyTraditionalHan,
-    IDS_SERIF_FONT_FAMILY_TRADITIONAL_HAN },
-  { prefs::kWebKitSansSerifFontFamilyTraditionalHan,
-    IDS_SANS_SERIF_FONT_FAMILY_TRADITIONAL_HAN },
+    {prefs::kWebKitStandardFontFamilyJapanese,
+     IDS_STANDARD_FONT_FAMILY_JAPANESE},
+    {prefs::kWebKitFixedFontFamilyJapanese, IDS_FIXED_FONT_FAMILY_JAPANESE},
+    {prefs::kWebKitSerifFontFamilyJapanese, IDS_SERIF_FONT_FAMILY_JAPANESE},
+    {prefs::kWebKitSansSerifFontFamilyJapanese,
+     IDS_SANS_SERIF_FONT_FAMILY_JAPANESE},
+    {prefs::kWebKitStandardFontFamilyKorean, IDS_STANDARD_FONT_FAMILY_KOREAN},
+    {prefs::kWebKitSerifFontFamilyKorean, IDS_SERIF_FONT_FAMILY_KOREAN},
+    {prefs::kWebKitSansSerifFontFamilyKorean,
+     IDS_SANS_SERIF_FONT_FAMILY_KOREAN},
+    {prefs::kWebKitStandardFontFamilySimplifiedHan,
+     IDS_STANDARD_FONT_FAMILY_SIMPLIFIED_HAN},
+    {prefs::kWebKitSerifFontFamilySimplifiedHan,
+     IDS_SERIF_FONT_FAMILY_SIMPLIFIED_HAN},
+    {prefs::kWebKitSansSerifFontFamilySimplifiedHan,
+     IDS_SANS_SERIF_FONT_FAMILY_SIMPLIFIED_HAN},
+    {prefs::kWebKitStandardFontFamilyTraditionalHan,
+     IDS_STANDARD_FONT_FAMILY_TRADITIONAL_HAN},
+    {prefs::kWebKitSerifFontFamilyTraditionalHan,
+     IDS_SERIF_FONT_FAMILY_TRADITIONAL_HAN},
+    {prefs::kWebKitSansSerifFontFamilyTraditionalHan,
+     IDS_SANS_SERIF_FONT_FAMILY_TRADITIONAL_HAN},
+#endif
+#if defined(OS_MACOSX) || defined(OS_WIN)
+    {prefs::kWebKitCursiveFontFamilySimplifiedHan,
+     IDS_CURSIVE_FONT_FAMILY_SIMPLIFIED_HAN},
+    {prefs::kWebKitCursiveFontFamilyTraditionalHan,
+     IDS_CURSIVE_FONT_FAMILY_TRADITIONAL_HAN},
 #endif
 #if defined(OS_CHROMEOS)
-  { prefs::kWebKitStandardFontFamilyArabic, IDS_STANDARD_FONT_FAMILY_ARABIC },
-  { prefs::kWebKitSerifFontFamilyArabic, IDS_SERIF_FONT_FAMILY_ARABIC },
-  { prefs::kWebKitSansSerifFontFamilyArabic,
-    IDS_SANS_SERIF_FONT_FAMILY_ARABIC },
-  { prefs::kWebKitFixedFontFamilyKorean, IDS_FIXED_FONT_FAMILY_KOREAN },
-  { prefs::kWebKitFixedFontFamilySimplifiedHan,
-    IDS_FIXED_FONT_FAMILY_SIMPLIFIED_HAN },
-  { prefs::kWebKitFixedFontFamilyTraditionalHan,
-    IDS_FIXED_FONT_FAMILY_TRADITIONAL_HAN },
+    {prefs::kWebKitStandardFontFamilyArabic, IDS_STANDARD_FONT_FAMILY_ARABIC},
+    {prefs::kWebKitSerifFontFamilyArabic, IDS_SERIF_FONT_FAMILY_ARABIC},
+    {prefs::kWebKitSansSerifFontFamilyArabic,
+     IDS_SANS_SERIF_FONT_FAMILY_ARABIC},
+    {prefs::kWebKitFixedFontFamilyKorean, IDS_FIXED_FONT_FAMILY_KOREAN},
+    {prefs::kWebKitFixedFontFamilySimplifiedHan,
+     IDS_FIXED_FONT_FAMILY_SIMPLIFIED_HAN},
+    {prefs::kWebKitFixedFontFamilyTraditionalHan,
+     IDS_FIXED_FONT_FAMILY_TRADITIONAL_HAN},
 #elif defined(OS_WIN)
-  { prefs::kWebKitFixedFontFamilyArabic, IDS_FIXED_FONT_FAMILY_ARABIC },
-  { prefs::kWebKitSansSerifFontFamilyArabic,
-    IDS_SANS_SERIF_FONT_FAMILY_ARABIC },
-  { prefs::kWebKitStandardFontFamilyCyrillic,
-    IDS_STANDARD_FONT_FAMILY_CYRILLIC },
-  { prefs::kWebKitFixedFontFamilyCyrillic, IDS_FIXED_FONT_FAMILY_CYRILLIC },
-  { prefs::kWebKitSerifFontFamilyCyrillic, IDS_SERIF_FONT_FAMILY_CYRILLIC },
-  { prefs::kWebKitSansSerifFontFamilyCyrillic,
-    IDS_SANS_SERIF_FONT_FAMILY_CYRILLIC },
-  { prefs::kWebKitStandardFontFamilyGreek, IDS_STANDARD_FONT_FAMILY_GREEK },
-  { prefs::kWebKitFixedFontFamilyGreek, IDS_FIXED_FONT_FAMILY_GREEK },
-  { prefs::kWebKitSerifFontFamilyGreek, IDS_SERIF_FONT_FAMILY_GREEK },
-  { prefs::kWebKitSansSerifFontFamilyGreek, IDS_SANS_SERIF_FONT_FAMILY_GREEK },
-  { prefs::kWebKitFixedFontFamilyKorean, IDS_FIXED_FONT_FAMILY_KOREAN },
-  { prefs::kWebKitCursiveFontFamilyKorean, IDS_CURSIVE_FONT_FAMILY_KOREAN },
-  { prefs::kWebKitFixedFontFamilySimplifiedHan,
-    IDS_FIXED_FONT_FAMILY_SIMPLIFIED_HAN },
-  { prefs::kWebKitFixedFontFamilyTraditionalHan,
-    IDS_FIXED_FONT_FAMILY_TRADITIONAL_HAN },
+    {prefs::kWebKitFixedFontFamilyArabic, IDS_FIXED_FONT_FAMILY_ARABIC},
+    {prefs::kWebKitSansSerifFontFamilyArabic,
+     IDS_SANS_SERIF_FONT_FAMILY_ARABIC},
+    {prefs::kWebKitStandardFontFamilyCyrillic,
+     IDS_STANDARD_FONT_FAMILY_CYRILLIC},
+    {prefs::kWebKitFixedFontFamilyCyrillic, IDS_FIXED_FONT_FAMILY_CYRILLIC},
+    {prefs::kWebKitSerifFontFamilyCyrillic, IDS_SERIF_FONT_FAMILY_CYRILLIC},
+    {prefs::kWebKitSansSerifFontFamilyCyrillic,
+     IDS_SANS_SERIF_FONT_FAMILY_CYRILLIC},
+    {prefs::kWebKitStandardFontFamilyGreek, IDS_STANDARD_FONT_FAMILY_GREEK},
+    {prefs::kWebKitFixedFontFamilyGreek, IDS_FIXED_FONT_FAMILY_GREEK},
+    {prefs::kWebKitSerifFontFamilyGreek, IDS_SERIF_FONT_FAMILY_GREEK},
+    {prefs::kWebKitSansSerifFontFamilyGreek, IDS_SANS_SERIF_FONT_FAMILY_GREEK},
+    {prefs::kWebKitFixedFontFamilyKorean, IDS_FIXED_FONT_FAMILY_KOREAN},
+    {prefs::kWebKitCursiveFontFamilyKorean, IDS_CURSIVE_FONT_FAMILY_KOREAN},
+    {prefs::kWebKitFixedFontFamilySimplifiedHan,
+     IDS_FIXED_FONT_FAMILY_SIMPLIFIED_HAN},
+    {prefs::kWebKitFixedFontFamilyTraditionalHan,
+     IDS_FIXED_FONT_FAMILY_TRADITIONAL_HAN},
 #endif
 };
 
@@ -550,15 +557,6 @@ void PrefsTabHelper::RegisterProfilePrefs(
               l10n_util::GetStringUTF8(pref.resource_id)))
         pref.resource_id = IDS_FIXED_FONT_FAMILY_ALT_WIN;
     }
-
-    // The standard font (Meiryo) isn't installed by default as of Win 10.
-    if (base::win::GetVersion() >= base::win::VERSION_WIN10) {
-      if (pref.pref_name == prefs::kWebKitStandardFontFamilyJapanese) {
-        pref.resource_id = IDS_STANDARD_FONT_FAMILY_JAPANESE_ALT_WIN;
-      } else if (pref.pref_name == prefs::kWebKitSansSerifFontFamilyJapanese) {
-        pref.resource_id = IDS_SANS_SERIF_FONT_FAMILY_JAPANESE_ALT_WIN;
-      }
-    }
 #endif
 
     UScriptCode pref_script = GetScriptOfFontPref(pref.pref_name);
@@ -665,6 +663,16 @@ void PrefsTabHelper::OnFontFamilyPrefChanged(const std::string& pref_name) {
 }
 
 void PrefsTabHelper::OnWebPrefChanged(const std::string& pref_name) {
+  // Use PostTask to dispatch the OnWebkitPreferencesChanged notification to
+  // give other observers (particularly the FontFamilyCache) a chance to react
+  // to the pref change.
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::Bind(&PrefsTabHelper::NotifyWebkitPreferencesChanged,
+                            weak_ptr_factory_.GetWeakPtr(), pref_name));
+}
+
+void PrefsTabHelper::NotifyWebkitPreferencesChanged(
+    const std::string& pref_name) {
 #if !defined(OS_ANDROID)
   OnFontFamilyPrefChanged(pref_name);
 #endif

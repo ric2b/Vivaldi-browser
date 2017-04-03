@@ -177,7 +177,7 @@ class PipelineIntegrationTestBase::DecodingMockVDA
 
     client_->PictureReady(
         Picture(available_picture_buffer_ids_.front(), bitstream_buffer_id,
-                gfx::Rect(kMaxPictureWidth, kMaxPictureHeight), false));
+                gfx::Rect(kMaxPictureWidth, kMaxPictureHeight), gfx::ColorSpace(), false));
     available_picture_buffer_ids_.pop();
 
     base::MessageLoop::current()->task_runner()->PostTask(
@@ -220,7 +220,8 @@ PipelineIntegrationTestBase::PipelineIntegrationTestBase()
       ended_(false),
       pipeline_status_(PIPELINE_OK),
       last_video_frame_format_(PIXEL_FORMAT_UNKNOWN),
-      last_video_frame_color_space_(COLOR_SPACE_UNSPECIFIED)
+      last_video_frame_color_space_(COLOR_SPACE_UNSPECIFIED),
+      current_duration_(kInfiniteDuration)
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
       , mock_video_accelerator_factories_(
           new MockGpuVideoAcceleratorFactories(nullptr)),
@@ -307,7 +308,9 @@ void PipelineIntegrationTestBase::OnError(PipelineStatus status) {
 PipelineStatus PipelineIntegrationTestBase::StartInternal(
     std::unique_ptr<DataSource> data_source,
     CdmContext* cdm_context,
-    uint8_t test_type) {
+    uint8_t test_type,
+    ScopedVector<VideoDecoder> prepend_video_decoders,
+    ScopedVector<AudioDecoder> prepend_audio_decoders) {
   hashing_enabled_ = test_type & kHashed;
   clockless_playback_ = test_type & kClockless;
 
@@ -318,7 +321,13 @@ PipelineStatus PipelineIntegrationTestBase::StartInternal(
       .Times(AnyNumber());
   EXPECT_CALL(*this, OnBufferingStateChange(BUFFERING_HAVE_NOTHING))
       .Times(AnyNumber());
-  EXPECT_CALL(*this, OnDurationChange()).Times(AtMost(1));
+  // Permit at most two calls to OnDurationChange.  CheckDuration will make sure
+  // that no more than one of them is a finite duration.  This allows the
+  // pipeline to call back at the end of the media with the known duration.
+  EXPECT_CALL(*this, OnDurationChange())
+      .Times(AtMost(2))
+      .WillRepeatedly(
+          Invoke(this, &PipelineIntegrationTestBase::CheckDuration));
   EXPECT_CALL(*this, OnVideoNaturalSizeChange(_)).Times(AtMost(1));
   EXPECT_CALL(*this, OnVideoOpacityChange(_)).Times(AtMost(1));
   CreateDemuxer(std::move(data_source));
@@ -334,9 +343,11 @@ PipelineStatus PipelineIntegrationTestBase::StartInternal(
   // media files are provided in advance.
   EXPECT_CALL(*this, OnWaitingForDecryptionKey()).Times(0);
 
-  pipeline_->Start(demuxer_.get(), CreateRenderer(GetTestDataFilePath(filename_)), this,
-                   base::Bind(&PipelineIntegrationTestBase::OnStatusCallback,
-                              base::Unretained(this)));
+  pipeline_->Start(
+      demuxer_.get(), CreateRenderer(GetTestDataFilePath(filename_), std::move(prepend_video_decoders),
+                                     std::move(prepend_audio_decoders)),
+      this, base::Bind(&PipelineIntegrationTestBase::OnStatusCallback,
+                       base::Unretained(this)));
   base::RunLoop().Run();
   return pipeline_status_;
 }
@@ -344,12 +355,16 @@ PipelineStatus PipelineIntegrationTestBase::StartInternal(
 PipelineStatus PipelineIntegrationTestBase::StartWithFile(
     const std::string& filename,
     CdmContext* cdm_context,
-    uint8_t test_type) {
+    uint8_t test_type,
+    ScopedVector<VideoDecoder> prepend_video_decoders,
+    ScopedVector<AudioDecoder> prepend_audio_decoders) {
   std::unique_ptr<FileDataSource> file_data_source(new FileDataSource());
   base::FilePath file_path(GetTestDataFilePath(filename));
   CHECK(file_data_source->Initialize(file_path)) << "Is " << file_path.value()
                                                  << " missing?";
-  return StartInternal(std::move(file_data_source), cdm_context, test_type);
+  return StartInternal(std::move(file_data_source), cdm_context, test_type,
+                       std::move(prepend_video_decoders),
+                       std::move(prepend_audio_decoders));
 }
 
 PipelineStatus PipelineIntegrationTestBase::Start(const std::string& filename) {
@@ -361,9 +376,14 @@ PipelineStatus PipelineIntegrationTestBase::Start(const std::string& filename,
   return StartWithFile(filename, cdm_context, kNormal);
 }
 
-PipelineStatus PipelineIntegrationTestBase::Start(const std::string& filename,
-                                                  uint8_t test_type) {
-  return StartWithFile(filename, nullptr, test_type);
+PipelineStatus PipelineIntegrationTestBase::Start(
+    const std::string& filename,
+    uint8_t test_type,
+    ScopedVector<VideoDecoder> prepend_video_decoders,
+    ScopedVector<AudioDecoder> prepend_audio_decoders) {
+  return StartWithFile(filename, nullptr, test_type,
+                       std::move(prepend_video_decoders),
+                       std::move(prepend_audio_decoders));
 }
 
 PipelineStatus PipelineIntegrationTestBase::Start(const uint8_t* data,
@@ -474,9 +494,11 @@ void PipelineIntegrationTestBase::CreateDemuxer(
 }
 
 std::unique_ptr<Renderer> PipelineIntegrationTestBase::CreateRenderer(
-    const base::FilePath& file_path) {
-  ScopedVector<VideoDecoder> video_decoders;
-  ScopedVector<AudioDecoder> audio_decoders;
+    const base::FilePath& file_path,
+    ScopedVector<VideoDecoder> prepend_video_decoders,
+    ScopedVector<AudioDecoder> prepend_audio_decoders) {
+  ScopedVector<VideoDecoder> video_decoders = std::move(prepend_video_decoders);
+  ScopedVector<AudioDecoder> audio_decoders = std::move(prepend_audio_decoders);
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
   const std::string content_type;
   const GURL url("file://" + file_path.AsUTF8Unsafe());
@@ -610,6 +632,18 @@ void PipelineIntegrationTestBase::OnVideoFramePaint(
   last_frame_ = frame;
   DVLOG(3) << __FUNCTION__ << " pts=" << frame->timestamp().InSecondsF();
   VideoFrame::HashFrameForTesting(&md5_context_, frame);
+}
+
+void PipelineIntegrationTestBase::CheckDuration() {
+  // Allow the pipeline to specify indefinite duration, then reduce it once
+  // it becomes known.
+  ASSERT_EQ(kInfiniteDuration, current_duration_);
+  base::TimeDelta new_duration = pipeline_->GetMediaDuration();
+  current_duration_ = new_duration;
+}
+
+base::TimeDelta PipelineIntegrationTestBase::GetStartTime() {
+  return demuxer_->GetStartTime();
 }
 
 void PipelineIntegrationTestBase::ResetVideoHash() {

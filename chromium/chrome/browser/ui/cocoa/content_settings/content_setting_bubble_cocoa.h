@@ -8,11 +8,12 @@
 #include <memory>
 
 #include "base/macros.h"
-#import "chrome/browser/ui/cocoa/base_bubble_controller.h"
+#import "chrome/browser/ui/cocoa/omnibox_decoration_bubble_controller.h"
 #include "content/public/common/media_stream_request.h"
 
 class ContentSettingBubbleModel;
 class ContentSettingBubbleWebContentsObserverBridge;
+class ContentSettingDecoration;
 class ContentSettingMediaMenuModel;
 @class InfoBubbleView;
 
@@ -23,9 +24,9 @@ class WebContents;
 namespace content_setting_bubble {
 // For every "show popup" button, remember the index of the popup tab contents
 // it should open when clicked.
-typedef std::map<NSButton*, int> PopupLinks;
+using PopupLinks = std::map<NSButton*, int>;
 
-// For every media menu button, remember the components assosiated with the
+// For every media menu button, remember the components associated with the
 // menu button.
 struct MediaMenuParts {
   MediaMenuParts(content::MediaStreamType type, NSTextField* label);
@@ -45,12 +46,12 @@ struct compare_button {
     return [a tag] < [b tag];
   }
 };
-typedef std::map<NSPopUpButton*, MediaMenuParts*, compare_button>
-  MediaMenuPartsMap;
+using MediaMenuPartsMap =
+    std::map<NSPopUpButton*, std::unique_ptr<MediaMenuParts>, compare_button>;
 }  // namespace content_setting_bubble
 
 // Manages a "content blocked" bubble.
-@interface ContentSettingBubbleController : BaseBubbleController {
+@interface ContentSettingBubbleController : OmniboxDecorationBubbleController {
  @private
   IBOutlet NSTextField* titleLabel_;
   IBOutlet NSTextField* messageLabel_;
@@ -70,15 +71,19 @@ typedef std::map<NSPopUpButton*, MediaMenuParts*, compare_button>
       observerBridge_;
   content_setting_bubble::PopupLinks popupLinks_;
   content_setting_bubble::MediaMenuPartsMap mediaMenus_;
+
+  // The omnibox icon the bubble is anchored to.
+  ContentSettingDecoration* decoration_;  // weak
 }
 
 // Creates and shows a content blocked bubble. Takes ownership of
 // |contentSettingBubbleModel| but not of the other objects.
 + (ContentSettingBubbleController*)
-    showForModel:(ContentSettingBubbleModel*)contentSettingBubbleModel
-     webContents:(content::WebContents*)webContents
-    parentWindow:(NSWindow*)parentWindow
-      anchoredAt:(NSPoint)anchoredAt;
+showForModel:(ContentSettingBubbleModel*)contentSettingBubbleModel
+ webContents:(content::WebContents*)webContents
+parentWindow:(NSWindow*)parentWindow
+  decoration:(ContentSettingDecoration*)decoration
+  anchoredAt:(NSPoint)anchoredAt;
 
 // Callback for the "don't block / continue blocking" radio group.
 - (IBAction)allowBlockToggled:(id)sender;

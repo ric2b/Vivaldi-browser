@@ -18,7 +18,7 @@ source_set("key_systems") {
     "//base",
     "//chromecast/public/media",
     "//media",
-    "//third_party/widevine/cdm:version_h",
+    "//third_party/widevine/cdm:headers",
   ]
 }
 
@@ -37,6 +37,13 @@ source_set("base") {
     "video_plane_controller.cc",
     "video_plane_controller.h",
   ]
+
+  if (!is_android) {
+    sources += [
+      "video_resolution_policy.cc",
+      "video_resolution_policy.h",
+    ]
+  }
 
   public_deps = [
     ":key_systems",

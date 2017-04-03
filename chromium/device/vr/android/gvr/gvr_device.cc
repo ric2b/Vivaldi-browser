@@ -10,6 +10,7 @@
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "device/vr/android/gvr/gvr_delegate.h"
+#include "device/vr/android/gvr/gvr_device_provider.h"
 #include "device/vr/vr_device_manager.h"
 #include "third_party/gvr-android-sdk/src/ndk/include/vr/gvr/capi/include/gvr.h"
 #include "third_party/gvr-android-sdk/src/ndk/include/vr/gvr/capi/include/gvr_types.h"
@@ -24,41 +25,42 @@ static const uint64_t kPredictionTimeWithoutVsyncNanos = 50000000;
 
 }  // namespace
 
-GvrDevice::GvrDevice(GvrDeviceProvider* provider, GvrDelegate* delegate)
-    : VRDevice(provider), delegate_(delegate), gvr_provider_(provider) {}
+GvrDevice::GvrDevice(GvrDeviceProvider* provider,
+                     const base::WeakPtr<GvrDelegate>& delegate)
+    : VRDevice(), delegate_(delegate), gvr_provider_(provider) {}
 
 GvrDevice::~GvrDevice() {}
 
-VRDisplayPtr GvrDevice::GetVRDevice() {
+mojom::VRDisplayInfoPtr GvrDevice::GetVRDevice() {
   TRACE_EVENT0("input", "GvrDevice::GetVRDevice");
 
-  VRDisplayPtr device = VRDisplay::New();
+  mojom::VRDisplayInfoPtr device = mojom::VRDisplayInfo::New();
 
   device->index = id();
 
-  device->capabilities = VRDisplayCapabilities::New();
+  device->capabilities = mojom::VRDisplayCapabilities::New();
   device->capabilities->hasOrientation = true;
   device->capabilities->hasPosition = false;
   device->capabilities->hasExternalDisplay = false;
   device->capabilities->canPresent = true;
 
-  device->leftEye = VREyeParameters::New();
-  device->rightEye = VREyeParameters::New();
-  VREyeParametersPtr& left_eye = device->leftEye;
-  VREyeParametersPtr& right_eye = device->rightEye;
+  device->leftEye = mojom::VREyeParameters::New();
+  device->rightEye = mojom::VREyeParameters::New();
+  mojom::VREyeParametersPtr& left_eye = device->leftEye;
+  mojom::VREyeParametersPtr& right_eye = device->rightEye;
 
-  left_eye->fieldOfView = VRFieldOfView::New();
-  right_eye->fieldOfView = VRFieldOfView::New();
+  left_eye->fieldOfView = mojom::VRFieldOfView::New();
+  right_eye->fieldOfView = mojom::VRFieldOfView::New();
 
-  left_eye->offset = mojo::Array<float>::New(3);
-  right_eye->offset = mojo::Array<float>::New(3);
+  left_eye->offset.resize(3);
+  right_eye->offset.resize(3);
 
-  // TODO(bajones): GVR has a bug that causes it to return bad render target
-  // sizes when the phone is in portait mode. Send arbitrary,
-  // not-horrifically-wrong values instead.
-  //  gvr::Sizei render_target_size = gvr_api->GetRecommendedRenderTargetSize();
-  left_eye->renderWidth = 1024;   // render_target_size.width / 2;
-  left_eye->renderHeight = 1024;  // render_target_size.height;
+  // Set the render target size to "invalid" to indicate that
+  // we can't render into it yet. Other code uses this to check
+  // for valid state.
+  gvr::Sizei render_target_size = kInvalidRenderTargetSize;
+  left_eye->renderWidth = render_target_size.width / 2;
+  left_eye->renderHeight = render_target_size.height;
 
   right_eye->renderWidth = left_eye->renderWidth;
   right_eye->renderHeight = left_eye->renderHeight;
@@ -87,8 +89,23 @@ VRDisplayPtr GvrDevice::GetVRDevice() {
     right_eye->offset[1] = 0.0;
     right_eye->offset[2] = 0.03;
 
+    // Tell the delegate not to draw yet, to avoid a race condition
+    // (and visible wobble) on entering VR.
+    delegate_->SetWebVRRenderSurfaceSize(kInvalidRenderTargetSize.width,
+                                         kInvalidRenderTargetSize.height);
+
     return device;
   }
+
+  // In compositor mode, we have to use the current compositor window's
+  // surface size. Would be nice to change it, but that needs more browser
+  // internals to be modified. TODO(klausw,crbug.com/655722): remove this once
+  // we can pick our own surface size.
+  gvr::Sizei compositor_size = delegate_->GetWebVRCompositorSurfaceSize();
+  left_eye->renderWidth = compositor_size.width / 2;
+  left_eye->renderHeight = compositor_size.height;
+  right_eye->renderWidth = left_eye->renderWidth;
+  right_eye->renderHeight = left_eye->renderHeight;
 
   std::string vendor = gvr_api->GetViewerVendor();
   std::string model = gvr_api->GetViewerModel();
@@ -124,31 +141,37 @@ VRDisplayPtr GvrDevice::GetVRDevice() {
   right_eye->offset[1] = -right_eye_mat.m[1][3];
   right_eye->offset[2] = -right_eye_mat.m[2][3];
 
+  delegate_->SetWebVRRenderSurfaceSize(2 * left_eye->renderWidth,
+                                       left_eye->renderHeight);
+
   return device;
 }
 
-VRPosePtr GvrDevice::GetPose() {
+mojom::VRPosePtr GvrDevice::GetPose() {
   TRACE_EVENT0("input", "GvrDevice::GetSensorState");
 
-  VRPosePtr pose = VRPose::New();
+  mojom::VRPosePtr pose = mojom::VRPose::New();
 
   pose->timestamp = base::Time::Now().ToJsTime();
 
   // Increment pose frame counter always, even if it's a faked pose.
   pose->poseIndex = ++pose_index_;
 
-  pose->orientation = mojo::Array<float>::New(4);
+  pose->orientation.emplace(4);
 
   gvr::GvrApi* gvr_api = GetGvrApi();
   if (!gvr_api) {
     // If we don't have a GvrApi instance return a static forward orientation.
-    pose->orientation[0] = 0.0;
-    pose->orientation[1] = 0.0;
-    pose->orientation[2] = 0.0;
-    pose->orientation[3] = 1.0;
+    pose->orientation.value()[0] = 0.0;
+    pose->orientation.value()[1] = 0.0;
+    pose->orientation.value()[2] = 0.0;
+    pose->orientation.value()[3] = 1.0;
 
     return pose;
   }
+
+  if (!delegate_)
+    return nullptr;
 
   gvr::ClockTimePoint target_time = gvr::GvrApi::GetTimePointNow();
   target_time.monotonic_system_time_nanos += kPredictionTimeWithoutVsyncNanos;
@@ -168,15 +191,15 @@ VRPosePtr GvrDevice::GetPose() {
     gfx::DecomposedTransform decomposed_transform;
     gfx::DecomposeTransform(&decomposed_transform, transform);
 
-    pose->orientation[0] = decomposed_transform.quaternion[0];
-    pose->orientation[1] = decomposed_transform.quaternion[1];
-    pose->orientation[2] = decomposed_transform.quaternion[2];
-    pose->orientation[3] = decomposed_transform.quaternion[3];
+    pose->orientation.value()[0] = decomposed_transform.quaternion[0];
+    pose->orientation.value()[1] = decomposed_transform.quaternion[1];
+    pose->orientation.value()[2] = decomposed_transform.quaternion[2];
+    pose->orientation.value()[3] = decomposed_transform.quaternion[3];
 
-    pose->position = mojo::Array<float>::New(3);
-    pose->position[0] = decomposed_transform.translate[0];
-    pose->position[1] = decomposed_transform.translate[1];
-    pose->position[2] = decomposed_transform.translate[2];
+    pose->position.emplace(3);
+    pose->position.value()[0] = decomposed_transform.translate[0];
+    pose->position.value()[1] = decomposed_transform.translate[1];
+    pose->position.value()[2] = decomposed_transform.translate[2];
   }
 
   // Save the underlying GVR pose for use by rendering. It can't use a
@@ -188,46 +211,60 @@ VRPosePtr GvrDevice::GetPose() {
 
 void GvrDevice::ResetPose() {
   gvr::GvrApi* gvr_api = GetGvrApi();
-  if (gvr_api)
-    gvr_api->ResetTracking();
+
+  // Should never call RecenterTracking when using with Daydream viewers. On
+  // those devices recentering should only be done via the controller.
+  if (gvr_api && gvr_api->GetViewerType() == GVR_VIEWER_TYPE_CARDBOARD)
+    gvr_api->RecenterTracking();
 }
 
-bool GvrDevice::RequestPresent(bool secure_origin) {
+void GvrDevice::RequestPresent(const base::Callback<void(bool)>& callback) {
+  gvr_provider_->RequestPresent(callback);
+}
+
+void GvrDevice::SetSecureOrigin(bool secure_origin) {
   secure_origin_ = secure_origin;
   if (delegate_)
     delegate_->SetWebVRSecureOrigin(secure_origin_);
-  return gvr_provider_->RequestPresent();
 }
 
 void GvrDevice::ExitPresent() {
   gvr_provider_->ExitPresent();
+  OnExitPresent();
 }
 
-void GvrDevice::SubmitFrame(VRPosePtr pose) {
+void GvrDevice::SubmitFrame(mojom::VRPosePtr pose) {
   if (delegate_)
     delegate_->SubmitWebVRFrame();
 }
 
-void GvrDevice::UpdateLayerBounds(VRLayerBoundsPtr leftBounds,
-                                  VRLayerBoundsPtr rightBounds) {
+void GvrDevice::UpdateLayerBounds(mojom::VRLayerBoundsPtr left_bounds,
+                                  mojom::VRLayerBoundsPtr right_bounds) {
   if (!delegate_)
     return;
 
-  delegate_->UpdateWebVRTextureBounds(0,  // Left eye
-                                      leftBounds->left, leftBounds->top,
-                                      leftBounds->width, leftBounds->height);
-  delegate_->UpdateWebVRTextureBounds(1,  // Right eye
-                                      rightBounds->left, rightBounds->top,
-                                      rightBounds->width, rightBounds->height);
+  gvr::Rectf left_gvr_bounds;
+  left_gvr_bounds.left = left_bounds->left;
+  left_gvr_bounds.top = 1.0f - left_bounds->top;
+  left_gvr_bounds.right = left_bounds->left + left_bounds->width;
+  left_gvr_bounds.bottom = 1.0f - (left_bounds->top + left_bounds->height);
+
+  gvr::Rectf right_gvr_bounds;
+  right_gvr_bounds.left = right_bounds->left;
+  right_gvr_bounds.top = 1.0f - right_bounds->top;
+  right_gvr_bounds.right = right_bounds->left + right_bounds->width;
+  right_gvr_bounds.bottom = 1.0f - (right_bounds->top + right_bounds->height);
+
+  delegate_->UpdateWebVRTextureBounds(left_gvr_bounds, right_gvr_bounds);
 }
 
-void GvrDevice::SetDelegate(GvrDelegate* delegate) {
+void GvrDevice::SetDelegate(const base::WeakPtr<GvrDelegate>& delegate) {
   delegate_ = delegate;
 
   // Notify the clients that this device has changed
   if (delegate_) {
     delegate_->SetWebVRSecureOrigin(secure_origin_);
-    VRDeviceManager::GetInstance()->OnDeviceChanged(GetVRDevice());
+    OnChanged();
   }
 }
 

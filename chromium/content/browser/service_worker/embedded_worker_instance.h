@@ -37,7 +37,7 @@ namespace IPC {
 class Message;
 }
 
-namespace shell {
+namespace service_manager {
 class InterfaceProvider;
 class InterfaceRegistry;
 }
@@ -134,11 +134,12 @@ class CONTENT_EXPORT EmbeddedWorkerInstance {
   // Resumes the worker if it paused after download.
   void ResumeAfterDownload();
 
-  // Returns the shell::InterfaceRegistry and shell::InterfaceProvider for this
+  // Returns the service_manager::InterfaceRegistry and
+  // service_manager::InterfaceProvider for this
   // worker. It is invalid to call this when the worker is not in STARTING or
   // RUNNING status.
-  shell::InterfaceRegistry* GetInterfaceRegistry();
-  shell::InterfaceProvider* GetRemoteInterfaces();
+  service_manager::InterfaceRegistry* GetInterfaceRegistry();
+  service_manager::InterfaceProvider* GetRemoteInterfaces();
 
   int embedded_worker_id() const { return embedded_worker_id_; }
   EmbeddedWorkerStatus status() const { return status_; }
@@ -225,7 +226,8 @@ class CONTENT_EXPORT EmbeddedWorkerInstance {
                                      bool wait_for_debugger);
 
   // Sends StartWorker message via Mojo.
-  void SendMojoStartWorker(std::unique_ptr<EmbeddedWorkerStartParams> params);
+  ServiceWorkerStatusCode SendMojoStartWorker(
+      std::unique_ptr<EmbeddedWorkerStartParams> params);
 
   // Called back from StartTask after a start worker message is sent.
   void OnStartWorkerMessageSent();
@@ -311,8 +313,8 @@ class CONTENT_EXPORT EmbeddedWorkerInstance {
   int thread_id_;
 
   // These are connected to the renderer process after OnThreadStarted.
-  std::unique_ptr<shell::InterfaceRegistry> interface_registry_;
-  std::unique_ptr<shell::InterfaceProvider> remote_interfaces_;
+  std::unique_ptr<service_manager::InterfaceRegistry> interface_registry_;
+  std::unique_ptr<service_manager::InterfaceProvider> remote_interfaces_;
   // |client_| is used to send messages to the renderer process.
   mojom::EmbeddedWorkerInstanceClientPtr client_;
 

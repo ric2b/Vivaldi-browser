@@ -41,7 +41,6 @@
 #include "wtf/Vector.h"
 #include <memory>
 
-class SkData;
 struct SkYUVSizeInfo;
 
 namespace blink {
@@ -64,8 +63,10 @@ class PLATFORM_EXPORT ImageFrameGenerator final
 
  public:
   static PassRefPtr<ImageFrameGenerator> create(const SkISize& fullSize,
+                                                sk_sp<SkColorSpace> colorSpace,
                                                 bool isMultiFrame = false) {
-    return adoptRef(new ImageFrameGenerator(fullSize, isMultiFrame));
+    return adoptRef(
+        new ImageFrameGenerator(fullSize, std::move(colorSpace), isMultiFrame));
   }
 
   ~ImageFrameGenerator();
@@ -93,6 +94,7 @@ class PLATFORM_EXPORT ImageFrameGenerator final
                    const size_t rowBytes[3]);
 
   const SkISize& getFullSize() const { return m_fullSize; }
+  sk_sp<SkColorSpace> getColorSpace() const { return m_colorSpace; }
 
   bool isMultiFrame() const { return m_isMultiFrame; }
   bool decodeFailed() const { return m_decodeFailed; }
@@ -105,7 +107,9 @@ class PLATFORM_EXPORT ImageFrameGenerator final
   bool getYUVComponentSizes(SegmentReader*, SkYUVSizeInfo*);
 
  private:
-  ImageFrameGenerator(const SkISize& fullSize, bool isMultiFrame);
+  ImageFrameGenerator(const SkISize& fullSize,
+                      sk_sp<SkColorSpace>,
+                      bool isMultiFrame);
 
   friend class ImageFrameGeneratorTest;
   friend class DeferredImageDecoderTest;
@@ -131,6 +135,7 @@ class PLATFORM_EXPORT ImageFrameGenerator final
               SkBitmap::Allocator*);
 
   const SkISize m_fullSize;
+  sk_sp<SkColorSpace> m_colorSpace;
 
   const bool m_isMultiFrame;
   bool m_decodeFailed;

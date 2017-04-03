@@ -126,15 +126,16 @@ void SetPDFUseGDIPrinting(bool enable) {
 #endif  // defined(OS_WIN)
 
 bool GetPDFDocInfo(const void* pdf_buffer,
-                   int buffer_size, int* page_count,
+                   int buffer_size,
+                   int* page_count,
                    double* max_page_width) {
   if (!g_sdk_initialized_via_pepper) {
     if (!InitializeSDK())
       return false;
   }
   PDFEngineExports* engine_exports = PDFEngineExports::Get();
-  bool ret = engine_exports->GetPDFDocInfo(
-      pdf_buffer, buffer_size, page_count, max_page_width);
+  bool ret = engine_exports->GetPDFDocInfo(pdf_buffer, buffer_size, page_count,
+                                           max_page_width);
   if (!g_sdk_initialized_via_pepper)
     ShutdownSDK();
 
@@ -142,16 +143,18 @@ bool GetPDFDocInfo(const void* pdf_buffer,
 }
 
 bool GetPDFPageSizeByIndex(const void* pdf_buffer,
-                           int pdf_buffer_size, int page_number,
-                           double* width, double* height) {
+                           int pdf_buffer_size,
+                           int page_number,
+                           double* width,
+                           double* height) {
   if (!g_sdk_initialized_via_pepper) {
     if (!chrome_pdf::InitializeSDK())
       return false;
   }
   chrome_pdf::PDFEngineExports* engine_exports =
       chrome_pdf::PDFEngineExports::Get();
-  bool ret = engine_exports->GetPDFPageSizeByIndex(
-      pdf_buffer, pdf_buffer_size, page_number, width, height);
+  bool ret = engine_exports->GetPDFPageSizeByIndex(pdf_buffer, pdf_buffer_size,
+                                                   page_number, width, height);
   if (!g_sdk_initialized_via_pepper)
     chrome_pdf::ShutdownSDK();
   return ret;

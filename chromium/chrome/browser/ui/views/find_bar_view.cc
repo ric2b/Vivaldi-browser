@@ -27,7 +27,6 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/theme_provider.h"
 #include "ui/events/event.h"
-#include "ui/gfx/canvas.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/vector_icons_public.h"
@@ -112,7 +111,7 @@ class FocusForwarderView : public views::View {
 // FindBarView, public:
 
 FindBarView::FindBarView(FindBarHost* host)
-    : DropdownBarView(host),
+    : find_bar_host_(host),
       find_text_(new views::Textfield),
       match_count_text_(new MatchCountLabel()),
       focus_forwarder_view_(new FocusForwarderView(find_text_)),
@@ -160,20 +159,15 @@ FindBarView::FindBarView(FindBarHost* host)
 
   EnableCanvasFlippingForRTLUI(true);
 
-  // The background color is not used since there's no arrow.
-  SetBorder(base::MakeUnique<views::BubbleBorder>(
-      views::BubbleBorder::NONE, views::BubbleBorder::SMALL_SHADOW,
-      gfx::kPlaceholderColor));
-
   match_count_text_->SetEventTargeter(
       base::MakeUnique<views::ViewTargeter>(this));
   AddChildViewAt(match_count_text_, 1);
 
-  separator_->SetBorder(views::Border::CreateEmptyBorder(
-      0, kSeparatorLeftSpacing, 0, kSeparatorRightSpacing));
+  separator_->SetBorder(views::CreateEmptyBorder(0, kSeparatorLeftSpacing, 0,
+                                                 kSeparatorRightSpacing));
   AddChildViewAt(separator_, 2);
 
-  find_text_->SetBorder(views::Border::NullBorder());
+  find_text_->SetBorder(views::NullBorder());
 
   views::BoxLayout* manager =
       new views::BoxLayout(views::BoxLayout::kHorizontal, kInteriorPadding,
@@ -249,25 +243,8 @@ void FindBarView::ClearMatchCount() {
   SchedulePaint();
 }
 
-void FindBarView::SetFocusAndSelection(bool select_all) {
-  find_text_->RequestFocus();
-  GetWidget()->GetInputMethod()->ShowImeIfNeeded();
-  if (select_all && !find_text_->text().empty())
-    find_text_->SelectAll(true);
-}
-
 ///////////////////////////////////////////////////////////////////////////////
 // FindBarView, views::View overrides:
-
-void FindBarView::OnPaintBackground(gfx::Canvas* canvas) {
-  // Draw within the lines.
-  canvas->Save();
-  gfx::Rect bounds = GetLocalBounds();
-  bounds.Inset(border()->GetInsets());
-  canvas->ClipRect(bounds);
-  views::View::OnPaintBackground(canvas);
-  canvas->Restore();
-}
 
 void FindBarView::Layout() {
   views::View::Layout();
@@ -292,6 +269,16 @@ gfx::Size FindBarView::GetPreferredSize() const {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+// FindBarView, DropdownBarHostDelegate implementation:
+
+void FindBarView::SetFocusAndSelection(bool select_all) {
+  find_text_->RequestFocus();
+  GetWidget()->GetInputMethod()->ShowImeIfNeeded();
+  if (select_all && !find_text_->text().empty())
+    find_text_->SelectAll(true);
+}
+
+////////////////////////////////////////////////////////////////////////////////
 // FindBarView, views::VectorIconButtonDelegate implementation:
 
 void FindBarView::ButtonPressed(
@@ -301,7 +288,7 @@ void FindBarView::ButtonPressed(
     case VIEW_ID_FIND_IN_PAGE_NEXT_BUTTON:
       if (!find_text_->text().empty()) {
         FindTabHelper* find_tab_helper = FindTabHelper::FromWebContents(
-            find_bar_host()->GetFindBarController()->web_contents());
+            find_bar_host_->GetFindBarController()->web_contents());
         find_tab_helper->StartFinding(
             find_text_->text(),
             sender->id() == VIEW_ID_FIND_IN_PAGE_NEXT_BUTTON,
@@ -309,7 +296,7 @@ void FindBarView::ButtonPressed(
       }
       break;
     case VIEW_ID_FIND_IN_PAGE_CLOSE_BUTTON:
-      find_bar_host()->GetFindBarController()->EndFindSession(
+      find_bar_host_->GetFindBarController()->EndFindSession(
           FindBarController::kKeepSelectionOnPage,
           FindBarController::kKeepResultsInFindBox);
       break;
@@ -330,10 +317,10 @@ SkColor FindBarView::GetVectorIconBaseColor() const {
 bool FindBarView::HandleKeyEvent(views::Textfield* sender,
                                  const ui::KeyEvent& key_event) {
   // If the dialog is not visible, there is no reason to process keyboard input.
-  if (!host()->IsVisible())
+  if (!find_bar_host_->IsVisible())
     return false;
 
-  if (find_bar_host()->MaybeForwardKeyEventToWebpage(key_event))
+  if (find_bar_host_->MaybeForwardKeyEventToWebpage(key_event))
     return true;  // Handled, we are done!
 
   if (key_event.key_code() == ui::VKEY_RETURN &&
@@ -341,7 +328,7 @@ bool FindBarView::HandleKeyEvent(views::Textfield* sender,
     // Pressing Return/Enter starts the search (unless text box is empty).
     base::string16 find_string = find_text_->text();
     if (!find_string.empty()) {
-      FindBarController* controller = find_bar_host()->GetFindBarController();
+      FindBarController* controller = find_bar_host_->GetFindBarController();
       FindTabHelper* find_tab_helper =
           FindTabHelper::FromWebContents(controller->web_contents());
       // Search forwards for enter, backwards for shift-enter.
@@ -375,7 +362,7 @@ views::View* FindBarView::TargetForRect(View* root, const gfx::Rect& rect) {
 }
 
 void FindBarView::Find(const base::string16& search_text) {
-  FindBarController* controller = find_bar_host()->GetFindBarController();
+  FindBarController* controller = find_bar_host_->GetFindBarController();
   DCHECK(controller);
   content::WebContents* web_contents = controller->web_contents();
   // We must guard against a NULL web_contents, which can happen if the text
@@ -396,7 +383,7 @@ void FindBarView::Find(const base::string16& search_text) {
   } else {
     find_tab_helper->StopFinding(FindBarController::kClearSelectionOnPage);
     UpdateForResult(find_tab_helper->find_result(), base::string16());
-    find_bar_host()->MoveWindowIfNecessary(gfx::Rect());
+    find_bar_host_->MoveWindowIfNecessary(gfx::Rect());
 
     // Clearing the text box should clear the prepopulate state so that when
     // we close and reopen the Find box it doesn't show the search we just
@@ -416,10 +403,6 @@ void FindBarView::UpdateMatchCountAppearance(bool no_match) {
   find_next_button_->SetEnabled(enable_buttons);
 }
 
-FindBarHost* FindBarView::find_bar_host() const {
-  return static_cast<FindBarHost*>(host());
-}
-
 const char* FindBarView::GetClassName() const {
   return "FindBarView";
 }
@@ -427,9 +410,13 @@ const char* FindBarView::GetClassName() const {
 void FindBarView::OnNativeThemeChanged(const ui::NativeTheme* theme) {
   SkColor bg_color = theme->GetSystemColor(
       ui::NativeTheme::kColorId_TextfieldDefaultBackground);
-  set_background(views::Background::CreateSolidBackground(bg_color));
-  match_count_text_->SetBackgroundColor(bg_color);
+  auto border = base::MakeUnique<views::BubbleBorder>(
+      views::BubbleBorder::NONE, views::BubbleBorder::SMALL_SHADOW,
+      bg_color);
+  set_background(new views::BubbleBackground(border.get()));
+  SetBorder(std::move(border));
 
+  match_count_text_->SetBackgroundColor(bg_color);
   SkColor text_color =
       theme->GetSystemColor(ui::NativeTheme::kColorId_TextfieldDefaultColor);
   match_count_text_->SetEnabledColor(SkColorSetA(text_color, 0x69));

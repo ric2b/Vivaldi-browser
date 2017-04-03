@@ -1,8 +1,7 @@
 // Copyright (c) 2012 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
-//
-// Utils to simulate various outcomes of a sync cycle.
+
 #ifndef COMPONENTS_SYNC_ENGINE_IMPL_CYCLE_TEST_UTIL_H_
 #define COMPONENTS_SYNC_ENGINE_IMPL_CYCLE_TEST_UTIL_H_
 
@@ -13,6 +12,8 @@
 
 namespace syncer {
 namespace test_util {
+
+// Utils to simulate various outcomes of a sync cycle.
 
 // Configure sync cycle successes and failures.
 void SimulateGetEncryptionKeyFailed(
@@ -58,6 +59,8 @@ void SimulateTypesThrottledImpl(SyncCycle* cycle,
                                 ModelTypeSet types,
                                 const base::TimeDelta& delta);
 
+void SimulatePartialFailureImpl(SyncCycle* cycle, ModelTypeSet types);
+
 // Works with poll cycles.
 void SimulatePollIntervalUpdateImpl(ModelTypeSet requested_types,
                                     SyncCycle* cycle,
@@ -75,6 +78,10 @@ ACTION_P(SimulateThrottled, throttle) {
 
 ACTION_P2(SimulateTypesThrottled, types, throttle) {
   SimulateTypesThrottledImpl(arg0, types, throttle);
+}
+
+ACTION_P(SimulatePartialFailure, types) {
+  SimulatePartialFailureImpl(arg0, types);
 }
 
 ACTION_P(SimulatePollIntervalUpdate, poll) {

@@ -12,16 +12,16 @@
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/trace_event_argument.h"
 #include "base/trace_event/trace_event_synthetic_delay.h"
-#include "cc/animation/animation_events.h"
 #include "cc/debug/benchmark_instrumentation.h"
 #include "cc/debug/devtools_instrumentation.h"
-#include "cc/input/top_controls_manager.h"
+#include "cc/input/browser_controls_offset_manager.h"
 #include "cc/output/compositor_frame_sink.h"
 #include "cc/output/context_provider.h"
 #include "cc/scheduler/compositor_timing_history.h"
 #include "cc/scheduler/delay_based_time_source.h"
 #include "cc/trees/layer_tree_host_in_process.h"
 #include "cc/trees/layer_tree_impl.h"
+#include "cc/trees/mutator_host.h"
 #include "cc/trees/task_runner_provider.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 
@@ -90,11 +90,12 @@ ProxyImpl::~ProxyImpl() {
   DCHECK(IsImplThread());
   DCHECK(IsMainThreadBlocked());
 
+  // Prevent the scheduler from performing actions while we're in an
+  // inconsistent state.
+  scheduler_->Stop();
   // Take away the CompositorFrameSink before destroying things so it doesn't
   // try to call into its client mid-shutdown.
-  scheduler_->DidLoseCompositorFrameSink();
   layer_tree_host_impl_->ReleaseCompositorFrameSink();
-
   scheduler_ = nullptr;
   layer_tree_host_impl_ = nullptr;
   // We need to explicitly shutdown the notifier to destroy any weakptrs it is
@@ -110,11 +111,12 @@ void ProxyImpl::InitializeMutatorOnImpl(
   layer_tree_host_impl_->SetLayerTreeMutator(std::move(mutator));
 }
 
-void ProxyImpl::UpdateTopControlsStateOnImpl(TopControlsState constraints,
-                                             TopControlsState current,
-                                             bool animate) {
+void ProxyImpl::UpdateBrowserControlsStateOnImpl(
+    BrowserControlsState constraints,
+    BrowserControlsState current,
+    bool animate) {
   DCHECK(IsImplThread());
-  layer_tree_host_impl_->top_controls_manager()->UpdateTopControlsState(
+  layer_tree_host_impl_->browser_controls_manager()->UpdateBrowserControlsState(
       constraints, current, animate);
 }
 
@@ -267,11 +269,12 @@ void ProxyImpl::SetBeginFrameSource(BeginFrameSource* source) {
   }
 }
 
-void ProxyImpl::DidSwapBuffersCompleteOnImplThread() {
-  TRACE_EVENT0("cc,benchmark", "ProxyImpl::DidSwapBuffersCompleteOnImplThread");
+void ProxyImpl::DidReceiveCompositorFrameAckOnImplThread() {
+  TRACE_EVENT0("cc,benchmark",
+               "ProxyImpl::DidReceiveCompositorFrameAckOnImplThread");
   DCHECK(IsImplThread());
-  scheduler_->DidSwapBuffersComplete();
-  channel_impl_->DidCompleteSwapBuffers();
+  scheduler_->DidReceiveCompositorFrameAck();
+  channel_impl_->DidReceiveCompositorFrameAck();
 }
 
 void ProxyImpl::OnCanDrawStateChanged(bool can_draw) {
@@ -325,7 +328,7 @@ void ProxyImpl::SetVideoNeedsBeginFrames(bool needs_begin_frames) {
 }
 
 void ProxyImpl::PostAnimationEventsToMainThreadOnImplThread(
-    std::unique_ptr<AnimationEvents> events) {
+    std::unique_ptr<MutatorEvents> events) {
   TRACE_EVENT0("cc", "ProxyImpl::PostAnimationEventsToMainThreadOnImplThread");
   DCHECK(IsImplThread());
   channel_impl_->SetAnimationEvents(std::move(events));
@@ -447,24 +450,22 @@ void ProxyImpl::ScheduledActionSendBeginMainFrame(const BeginFrameArgs& args) {
   devtools_instrumentation::DidRequestMainThreadFrame(layer_tree_host_id_);
 }
 
-DrawResult ProxyImpl::ScheduledActionDrawAndSwapIfPossible() {
-  TRACE_EVENT0("cc", "ProxyImpl::ScheduledActionDrawAndSwap");
+DrawResult ProxyImpl::ScheduledActionDrawIfPossible() {
+  TRACE_EVENT0("cc", "ProxyImpl::ScheduledActionDraw");
   DCHECK(IsImplThread());
 
-  // SchedulerStateMachine::DidDrawIfPossibleCompleted isn't set up to
-  // handle DRAW_ABORTED_CANT_DRAW.  Moreover, the scheduler should
-  // never generate this call when it can't draw.
+  // The scheduler should never generate this call when it can't draw.
   DCHECK(layer_tree_host_impl_->CanDraw());
 
   bool forced_draw = false;
-  return DrawAndSwapInternal(forced_draw);
+  return DrawInternal(forced_draw);
 }
 
-DrawResult ProxyImpl::ScheduledActionDrawAndSwapForced() {
-  TRACE_EVENT0("cc", "ProxyImpl::ScheduledActionDrawAndSwapForced");
+DrawResult ProxyImpl::ScheduledActionDrawForced() {
+  TRACE_EVENT0("cc", "ProxyImpl::ScheduledActionDrawForced");
   DCHECK(IsImplThread());
   bool forced_draw = true;
-  return DrawAndSwapInternal(forced_draw);
+  return DrawInternal(forced_draw);
 }
 
 void ProxyImpl::ScheduledActionCommit() {
@@ -537,8 +538,8 @@ void ProxyImpl::SendBeginMainFrameNotExpectedSoon() {
   channel_impl_->BeginMainFrameNotExpectedSoon();
 }
 
-DrawResult ProxyImpl::DrawAndSwapInternal(bool forced_draw) {
-  TRACE_EVENT_SYNTHETIC_DELAY("cc.DrawAndSwap");
+DrawResult ProxyImpl::DrawInternal(bool forced_draw) {
+  TRACE_EVENT_SYNTHETIC_DELAY("cc.Draw");
 
   DCHECK(IsImplThread());
   DCHECK(layer_tree_host_impl_.get());
@@ -575,7 +576,8 @@ DrawResult ProxyImpl::DrawAndSwapInternal(bool forced_draw) {
 
   if (draw_frame) {
     if (layer_tree_host_impl_->DrawLayers(&frame))
-      scheduler_->DidSwapBuffers();
+      // Drawing implies we submitted a frame to the CompositorFrameSink.
+      scheduler_->DidSubmitCompositorFrame();
     result = DRAW_SUCCESS;
   } else {
     DCHECK_NE(DRAW_SUCCESS, result);

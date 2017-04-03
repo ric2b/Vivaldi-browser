@@ -4,8 +4,6 @@
 
 source_set("app") {
   sources = [
-    "application_delegate/memory_warning_helper.h",
-    "application_delegate/memory_warning_helper.mm",
     "deferred_initialization_runner.h",
     "deferred_initialization_runner.mm",
     "safe_mode_crashing_modules_config.h",
@@ -16,11 +14,21 @@ source_set("app") {
 
   deps = [
     "//base",
-    "//ios/chrome/browser",
   ]
 
-  libs = [
-    "Foundation.framework",
-    "UIKit.framework",
+  libs = [ "Foundation.framework" ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [
+    "deferred_initialization_runner_unittest.mm",
+    "safe_mode_util_unittest.cc",
+  ]
+  deps = [
+    ":app",
+    "//base",
+    "//base/test:test_support",
+    "//testing/gtest",
   ]
 }

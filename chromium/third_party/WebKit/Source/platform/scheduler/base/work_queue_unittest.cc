@@ -24,8 +24,9 @@ class WorkQueueTest : public testing::Test {
  public:
   void SetUp() override {
     time_domain_.reset(new RealTimeDomain(""));
-    task_queue_ = make_scoped_refptr(new TaskQueueImpl(
-        nullptr, time_domain_.get(), TaskQueue::Spec("fake"), "", ""));
+    task_queue_ = make_scoped_refptr(
+        new TaskQueueImpl(nullptr, time_domain_.get(),
+                          TaskQueue::Spec(TaskQueue::QueueType::TEST), "", ""));
 
     work_queue_.reset(new WorkQueue(task_queue_.get(), "test"));
     work_queue_sets_.reset(new WorkQueueSets(1, "test"));
@@ -356,6 +357,19 @@ TEST_F(WorkQueueTest, BlockedByFenceNewFenceUnblocks) {
 
   EXPECT_TRUE(work_queue_->InsertFence(4));
   EXPECT_FALSE(work_queue_->BlockedByFence());
+}
+
+TEST_F(WorkQueueTest, InsertFenceAfterEnqueuing) {
+  work_queue_->Push(FakeTaskWithEnqueueOrder(2));
+  work_queue_->Push(FakeTaskWithEnqueueOrder(3));
+  work_queue_->Push(FakeTaskWithEnqueueOrder(4));
+  EXPECT_FALSE(work_queue_->BlockedByFence());
+
+  EXPECT_FALSE(work_queue_->InsertFence(1));
+  EXPECT_TRUE(work_queue_->BlockedByFence());
+
+  EnqueueOrder enqueue_order;
+  EXPECT_FALSE(work_queue_->GetFrontTaskEnqueueOrder(&enqueue_order));
 }
 
 }  // namespace internal

@@ -24,14 +24,8 @@ class ASH_EXPORT TrayUserSeparator : public SystemTrayItem {
 
  private:
   // Overridden from SystemTrayItem.
-  views::View* CreateTrayView(LoginStatus status) override;
   views::View* CreateDefaultView(LoginStatus status) override;
-  views::View* CreateDetailedView(LoginStatus status) override;
-  void DestroyTrayView() override {}
   void DestroyDefaultView() override;
-  void DestroyDetailedView() override {}
-  void UpdateAfterLoginStatusChange(LoginStatus status) override {}
-  void UpdateAfterShelfAlignmentChange(ShelfAlignment alignment) override {}
 
   // True if the separator gets shown.
   bool separator_shown_;

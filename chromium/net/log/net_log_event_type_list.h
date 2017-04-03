@@ -1166,6 +1166,12 @@ EVENT_TYPE(HTTP_TRANSACTION_DRAIN_BODY_FOR_AUTH_RESTART)
 // Measures the time taken to look up the key used for Token Binding.
 EVENT_TYPE(HTTP_TRANSACTION_GET_TOKEN_BINDING_KEY)
 
+// Measures the time taken due to throttling by the NetworkThrottleManager.
+EVENT_TYPE(HTTP_TRANSACTION_THROTTLED)
+
+// Record priority changes on the network transaction.
+EVENT_TYPE(HTTP_TRANSACTION_SET_PRIORITY)
+
 // This event is sent when we try to restart a transaction after an error.
 // The following parameters are attached:
 //   {
@@ -2066,12 +2072,13 @@ EVENT_TYPE(SERVICE_WORKER_ERROR_KILLED_WITH_BLOB)
 EVENT_TYPE(SERVICE_WORKER_ERROR_KILLED_WITH_STREAM)
 
 // This event is emitted when a request to be forwarded to a Service Worker has
-// request body blobs, and it may be necessary to wait for them to finish
-// construction. The END phase event parameter is:
+// request body, and it may be necessary to wait for sizes of files in the body
+// to be resolved. The END phase event parameter is:
 //   {
-//     "success": Whether the request blobs finished construction successfully.
+//     "success": Whether file sizes in the request body have been resolved
+//     successfully
 //   }
-EVENT_TYPE(SERVICE_WORKER_WAITING_FOR_REQUEST_BODY_BLOB)
+EVENT_TYPE(SERVICE_WORKER_WAITING_FOR_REQUEST_BODY_FILES)
 
 // This event is emitted when a request failed to be forwarded to a Service
 // Worker, because it had a request body with a blob that failed to be

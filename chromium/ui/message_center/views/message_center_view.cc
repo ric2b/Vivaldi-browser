@@ -238,11 +238,11 @@ void MessageCenterView::Layout() {
     if (is_scrollable) {
       // Draw separator line on the top of the button bar if it is on the bottom
       // or draw it at the bottom if the bar is on the top.
-      button_bar_->SetBorder(views::Border::CreateSolidSidedBorder(
+      button_bar_->SetBorder(views::CreateSolidSidedBorder(
           top_down_ ? 0 : 1, 0, top_down_ ? 1 : 0, 0, kFooterDelimiterColor));
     } else {
-      button_bar_->SetBorder(views::Border::CreateEmptyBorder(
-          top_down_ ? 0 : 1, 0, top_down_ ? 1 : 0, 0));
+      button_bar_->SetBorder(
+          views::CreateEmptyBorder(top_down_ ? 0 : 1, 0, top_down_ ? 1 : 0, 0));
     }
     button_bar_->SchedulePaint();
   }
@@ -398,9 +398,15 @@ void MessageCenterView::OnNotificationUpdated(const std::string& id) {
     if ((*iter)->id() == id) {
       int old_width = view->width();
       int old_height = view->height();
+      bool old_pinned = view->IsPinned();
       message_list_view_->UpdateNotification(view, **iter);
-      if (view->GetHeightForWidth(old_width) != old_height)
+      if (view->GetHeightForWidth(old_width) != old_height) {
         Update(true /* animate */);
+      } else if (view->IsPinned() != old_pinned) {
+        // Animate flag is false, since the pinned flag transition doesn't need
+        // animation.
+        Update(false /* animate */);
+      }
       break;
     }
   }

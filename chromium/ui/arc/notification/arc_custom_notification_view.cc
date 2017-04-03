@@ -187,9 +187,9 @@ void ArcCustomNotificationView::CreateFloatingCloseButton() {
   constexpr int kImageSize = 16;
   constexpr int kTouchExtendedPadding =
       message_center::kControlButtonSize - kImageSize - kPaddingFromBorder;
-  floating_close_button_->SetBorder(views::Border::CreateEmptyBorder(
-      kPaddingFromBorder, kTouchExtendedPadding, kTouchExtendedPadding,
-      kPaddingFromBorder));
+  floating_close_button_->SetBorder(
+      views::CreateEmptyBorder(kPaddingFromBorder, kTouchExtendedPadding,
+                               kTouchExtendedPadding, kPaddingFromBorder));
 
   ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
   floating_close_button_->SetImage(
@@ -198,6 +198,8 @@ void ArcCustomNotificationView::CreateFloatingCloseButton() {
   floating_close_button_->set_animate_on_state_change(false);
   floating_close_button_->SetAccessibleName(l10n_util::GetStringUTF16(
         IDS_MESSAGE_CENTER_CLOSE_NOTIFICATION_BUTTON_ACCESSIBLE_NAME));
+  floating_close_button_->SetTooltipText(l10n_util::GetStringUTF16(
+        IDS_MESSAGE_CENTER_CLOSE_NOTIFICATION_BUTTON_TOOLTIP));
 
   views::Widget::InitParams params(views::Widget::InitParams::TYPE_CONTROL);
   params.opacity = views::Widget::InitParams::TRANSLUCENT_WINDOW;
@@ -310,12 +312,14 @@ void ArcCustomNotificationView::ViewHierarchyChanged(
   if (!details.is_add) {
     // Resets slide helper when this view is removed from its parent.
     slide_helper_.reset();
-  }
 
-  // Bail if native_view() has attached to a different widget.
-  if (widget && native_view() &&
-      views::Widget::GetTopLevelWidgetForNativeView(native_view()) != widget) {
-    return;
+    // Bail if this view is no longer attached to a widget or native_view() has
+    // attached to a different widget.
+    if (!widget || (native_view() &&
+                    views::Widget::GetTopLevelWidgetForNativeView(
+                        native_view()) != widget)) {
+      return;
+    }
   }
 
   views::NativeViewHost::ViewHierarchyChanged(details);

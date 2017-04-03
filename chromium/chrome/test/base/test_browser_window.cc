@@ -149,8 +149,12 @@ bool TestBrowserWindow::IsToolbarVisible() const {
   return false;
 }
 
-gfx::Rect TestBrowserWindow::GetRootWindowResizerRect() const {
-  return gfx::Rect();
+ShowTranslateBubbleResult TestBrowserWindow::ShowTranslateBubble(
+    content::WebContents* contents,
+    translate::TranslateStep step,
+    translate::TranslateErrors::Type error_type,
+    bool is_user_gesture) {
+  return ShowTranslateBubbleResult::SUCCESS;
 }
 
 autofill::SaveCardBubbleView* TestBrowserWindow::ShowSaveCreditCardBubble(

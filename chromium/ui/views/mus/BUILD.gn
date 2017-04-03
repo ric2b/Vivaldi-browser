@@ -4,8 +4,8 @@
 
 import("//build/config/features.gni")
 import("//build/config/ui.gni")
-import("//services/shell/public/cpp/service.gni")
-import("//services/shell/public/service_manifest.gni")
+import("//services/service_manager/public/cpp/service.gni")
+import("//services/service_manager/public/service_manifest.gni")
 import("//testing/test.gni")
 import("//tools/grit/repack.gni")
 
@@ -17,17 +17,19 @@ component("mus") {
     "aura_init.h",
     "clipboard_mus.cc",
     "clipboard_mus.h",
+    "desktop_window_tree_host_mus.cc",
+    "desktop_window_tree_host_mus.h",
     "drag_drop_client_mus.cc",
     "drag_drop_client_mus.h",
     "drop_target_mus.cc",
     "drop_target_mus.h",
     "input_method_mus.cc",
     "input_method_mus.h",
+    "mus_client.cc",
+    "mus_client.h",
     "mus_export.h",
     "native_widget_mus.cc",
     "native_widget_mus.h",
-    "os_exchange_data_provider_mus.cc",
-    "os_exchange_data_provider_mus.h",
     "pointer_watcher_event_router.cc",
     "pointer_watcher_event_router.h",
     "screen_mus.cc",
@@ -64,8 +66,9 @@ component("mus") {
     "//mojo/public/cpp/bindings",
     "//net",
     "//services/catalog/public/cpp",
-    "//services/shell/public/cpp",
-    "//services/shell/public/interfaces",
+    "//services/catalog/public/interfaces:constants",
+    "//services/service_manager/public/cpp",
+    "//services/service_manager/public/interfaces",
     "//services/ui/public/cpp",
     "//services/ui/public/interfaces",
     "//skia",
@@ -122,6 +125,7 @@ static_library("test_support") {
 
   sources = [
     "../test/native_widget_factory_mus.cc",
+    "test_utils.h",
     "views_mus_test_suite.cc",
     "views_mus_test_suite.h",
   ]
@@ -130,9 +134,8 @@ static_library("test_support") {
     ":mus",
     "//base",
     "//base/test:test_support",
-    "//services/shell/background:lib",
-    "//services/shell/background/tests:test_support",
-    "//services/shell/public/cpp:sources",
+    "//services/service_manager/background:lib",
+    "//services/service_manager/public/cpp:sources",
     "//services/ui/common:mus_common",
     "//testing/gtest",
     "//ui/aura",
@@ -154,10 +157,10 @@ test("views_mus_unittests") {
   sources = [
     "input_method_mus_unittest.cc",
     "native_widget_mus_unittest.cc",
-    "os_exchange_data_provider_mus_unittest.cc",
     "pointer_watcher_event_router_unittest.cc",
     "run_all_unittests_mus.cc",
     "screen_mus_unittest.cc",
+    "window_manager_connection_unittest.cc",
   ]
 
   configs += [ "//build/config:precompiled_headers" ]
@@ -170,8 +173,9 @@ test("views_mus_unittests") {
     "//base/test:test_support",
     "//cc",
     "//net",
-    "//services/shell/background:main",  # Provides main().
+    "//services/service_manager/background:main",  # Provides main().
     "//services/ui/public/cpp",
+    "//services/ui/public/cpp:internal_or_test",
     "//services/ui/public/cpp/tests:unittest_support",
     "//services/ui/public/interfaces",
     "//skia",
@@ -232,6 +236,116 @@ test("views_mus_unittests") {
   }
 }
 
+static_library("test_support_aura_mus") {
+  testonly = true
+
+  sources = [
+    "../test/native_widget_factory_aura_mus.cc",
+    "test_utils.h",
+    "views_aura_mus_test_suite.cc",
+    "views_aura_mus_test_suite.h",
+  ]
+
+  deps = [
+    ":mus",
+    "//base",
+    "//base/test:test_support",
+    "//services/service_manager/background:lib",
+    "//services/service_manager/public/cpp:sources",
+    "//services/ui/common:mus_common",
+    "//testing/gtest",
+    "//ui/aura",
+    "//ui/aura:test_support",
+    "//ui/gl:test_support",
+    "//ui/resources",
+    "//ui/resources:ui_test_pak",
+    "//ui/views",
+    "//ui/views:test_support_internal",
+  ]
+
+  data_deps = [
+    "//ui/resources:ui_test_pak_data",
+  ]
+}
+
+test("views_aura_mus_unittests") {
+  testonly = true
+
+  sources = [
+    "run_all_unittests_aura_mus.cc",
+    "screen_mus_unittest.cc",
+  ]
+
+  configs += [ "//build/config:precompiled_headers" ]
+
+  deps = [
+    ":mus",
+    ":test_support_aura_mus",
+    "//base",
+    "//base:i18n",
+    "//base/test:test_support",
+    "//cc",
+    "//net",
+    "//services/service_manager/background:main",  # Provides main().
+    "//services/ui/public/interfaces",
+    "//skia",
+    "//testing/gtest",
+    "//third_party/icu",
+    "//ui/accessibility",
+    "//ui/aura",
+    "//ui/aura:test_support",
+    "//ui/base",
+    "//ui/base:test_support",
+    "//ui/base/ime",
+    "//ui/compositor:test_support",
+    "//ui/events:dom_keycode_converter",
+    "//ui/events:events_base",
+    "//ui/events:test_support",
+    "//ui/events/platform",
+    "//ui/gfx:test_support",
+    "//ui/gfx/geometry",
+    "//ui/native_theme",
+    "//ui/strings",
+    "//ui/touch_selection",
+    "//ui/views",
+    "//ui/views:test_support_internal",
+    "//ui/views:views_unittests_sources",
+    "//ui/wm",
+    "//url",
+  ]
+
+  data_deps = [
+    ":unittests_aura_manifest",
+    "//services/ui/ime/test_ime_driver",
+    "//services/ui/test_wm",
+  ]
+
+  if (is_win) {
+    deps += [
+      "//build/win:default_exe_manifest",
+      "//third_party/iaccessible2",
+      "//third_party/wtl",
+    ]
+    libs = [
+      "imm32.lib",
+      "oleacc.lib",
+      "comctl32.lib",
+    ]
+  }
+
+  if (use_x11) {
+    configs += [
+      "//build/config/linux:x11",
+      "//build/config/linux:xext",
+    ]
+    deps += [
+      "//ui/events/devices",
+      "//ui/events/platform/x11",
+      "//ui/gfx/x",
+    ]
+  }
+}
+
 # Tests that must run sequentially because they access system-wide features
 # like capture.
 test("views_mus_interactive_ui_tests") {
@@ -247,7 +361,7 @@ test("views_mus_interactive_ui_tests") {
     ":mus",
     ":test_support",
     "//base",
-    "//services/shell/background:main",  # Provides main().
+    "//services/service_manager/background:main",  # Provides main().
     "//testing/gmock",
     "//testing/gtest",
     "//ui/aura",
@@ -282,13 +396,16 @@ test("views_mus_interactive_ui_tests") {
 }
 
 service_manifest("unittests_manifest") {
-  type = "exe"
   name = "views_mus_unittests"
   source = "unittests_manifest.json"
 }
 
+service_manifest("unittests_aura_manifest") {
+  name = "views_aura_mus_unittests"
+  source = "unittests_aura_manifest.json"
+}
+
 service_manifest("interactive_ui_tests_manifest") {
-  type = "exe"
   name = "views_mus_interactive_ui_tests"
   source = "interactive_ui_tests_manifest.json"
 }

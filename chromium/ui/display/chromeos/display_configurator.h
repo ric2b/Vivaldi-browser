@@ -29,12 +29,10 @@
 #include "ui/gfx/geometry/size.h"
 
 namespace gfx {
-class Point;
 class Size;
 }
 
 namespace ui {
-struct DisplayConfigureRequest;
 struct GammaRampRGBEntry;
 class DisplayLayoutManager;
 class DisplayMode;
@@ -135,6 +133,10 @@ class DISPLAY_EXPORT DisplayConfigurator : public NativeDisplayObserver {
     // ConfigureDisplays(), and returns true; returns false otherwise.
     bool TriggerConfigureTimeout() WARN_UNUSED_RESULT;
 
+    // Gets the current delay of the |configure_timer_| if it's running, or zero
+    // time delta otherwise.
+    base::TimeDelta GetConfigureDelay() const;
+
    private:
     DisplayConfigurator* configurator_;  // not owned
 
@@ -158,6 +160,16 @@ class DISPLAY_EXPORT DisplayConfigurator : public NativeDisplayObserver {
   // See crbug.com/130188 for initial discussion.
   static const int kVerticalGap = 60;
 
+  // The delay to perform configuration after RRNotify. See the comment for
+  // |configure_timer_|.
+  static const int kConfigureDelayMs = 500;
+
+  // The delay to perform configuration after waking up from suspend when in
+  // multi display mode. Should be bigger than |kConfigureDelayMs|. Generally
+  // big enough for external displays to be detected and added.
+  // crbug.com/614624.
+  static const int kResumeConfigureMultiDisplayDelayMs = 2000;
+
   // Returns the mode within |display| that matches the given size with highest
   // refresh rate. Returns None if no matching display was found.
   static const DisplayMode* FindDisplayModeMatchingSize(
@@ -175,6 +187,18 @@ class DISPLAY_EXPORT DisplayConfigurator : public NativeDisplayObserver {
   const std::vector<DisplaySnapshot*>& cached_displays() const {
     return cached_displays_;
   }
+  void set_state_controller(StateController* controller) {
+    state_controller_ = controller;
+  }
+  void set_mirroring_controller(SoftwareMirroringController* controller) {
+    mirroring_controller_ = controller;
+  }
+  void set_configure_display(bool configure_display) {
+    configure_display_ = configure_display;
+  }
+  chromeos::DisplayPowerState current_power_state() const {
+    return current_power_state_;
+  }
 
   // Called when an external process no longer needs to control the display
   // and Chrome can take control.
@@ -183,13 +207,6 @@ class DISPLAY_EXPORT DisplayConfigurator : public NativeDisplayObserver {
   // Called when an external process needs to control the display and thus
   // Chrome should relinquish it.
   void RelinquishControl(const DisplayControlCallback& callback);
-
-  void set_state_controller(StateController* controller) {
-    state_controller_ = controller;
-  }
-  void set_mirroring_controller(SoftwareMirroringController* controller) {
-    mirroring_controller_ = controller;
-  }
 
   // Replaces |native_display_delegate_| with the delegate passed in and sets
   // |configure_display_| to true. Should be called before Init().
@@ -230,6 +247,7 @@ class DISPLAY_EXPORT DisplayConfigurator : public NativeDisplayObserver {
 
   // NativeDisplayDelegate::Observer overrides:
   void OnConfigurationChanged() override;
+  void OnDisplaySnapshotsInvalidated() override;
 
   void AddObserver(Observer* observer);
   void RemoveObserver(Observer* observer);
@@ -237,7 +255,7 @@ class DISPLAY_EXPORT DisplayConfigurator : public NativeDisplayObserver {
   // Sets all the displays into pre-suspend mode; usually this means
   // configure them for their resume state. This allows faster resume on
   // machines where display configuration is slow. On completion of the display
-  // configuration |callback| is executed.
+  // configuration |callback| is executed synchronously or asynchronously.
   void SuspendDisplays(const ConfigurationCallback& callback);
 
   // Reprobes displays to handle changes made while the system was
@@ -281,10 +299,6 @@ class DISPLAY_EXPORT DisplayConfigurator : public NativeDisplayObserver {
 
   // Returns true if there is at least one display on.
   bool IsDisplayOn() const;
-
-  void set_configure_display(bool configure_display) {
-    configure_display_ = configure_display;
-  }
 
   // Sets the gamma, degamma and correction matrix for |display_id| to the
   // values in |degamma_lut|, |gamma_lut| and |correction_matrix|.
@@ -366,6 +380,13 @@ class DISPLAY_EXPORT DisplayConfigurator : public NativeDisplayObserver {
   void OnDisplayControlTaken(const DisplayControlCallback& callback,
                              bool success);
   void OnDisplayControlRelinquished(const DisplayControlCallback& callback,
+                                    bool success);
+
+  // Helper function that sends the actual command.
+  // |callback| is called upon completion of the relinquish command.
+  // |success| is the result from calling SetDisplayPowerInternal() in
+  // RelinquishDisplay().
+  void SendRelinquishDisplayControl(const DisplayControlCallback& callback,
                                     bool success);
 
   StateController* state_controller_;

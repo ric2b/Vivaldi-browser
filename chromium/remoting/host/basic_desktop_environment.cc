@@ -17,8 +17,8 @@
 #include "remoting/host/screen_controls.h"
 #include "remoting/protocol/capability_names.h"
 #include "third_party/webrtc/modules/desktop_capture/desktop_capture_options.h"
+#include "third_party/webrtc/modules/desktop_capture/desktop_capturer.h"
 #include "third_party/webrtc/modules/desktop_capture/mouse_cursor_monitor.h"
-#include "third_party/webrtc/modules/desktop_capture/screen_capturer.h"
 
 #if defined(USE_X11)
 #include "remoting/host/linux/x11_util.h"
@@ -52,13 +52,10 @@ BasicDesktopEnvironment::CreateScreenControls() {
 std::unique_ptr<webrtc::MouseCursorMonitor>
 BasicDesktopEnvironment::CreateMouseCursorMonitor() {
   return base::MakeUnique<MouseCursorMonitorProxy>(video_capture_task_runner_,
-                                                   *desktop_capture_options_);
+                                                   desktop_capture_options());
 }
 
 std::string BasicDesktopEnvironment::GetCapabilities() const {
-  if (supports_touch_events_)
-    return protocol::kTouchEventsCapability;
-
   return std::string();
 }
 
@@ -75,7 +72,7 @@ BasicDesktopEnvironment::CreateVideoCapturer() {
 
   std::unique_ptr<DesktopCapturerProxy> result(
       new DesktopCapturerProxy(video_capture_task_runner_));
-  result->CreateCapturer(*desktop_capture_options_);
+  result->CreateCapturer(desktop_capture_options());
   return std::move(result);
 }
 
@@ -84,18 +81,15 @@ BasicDesktopEnvironment::BasicDesktopEnvironment(
     scoped_refptr<base::SingleThreadTaskRunner> video_capture_task_runner,
     scoped_refptr<base::SingleThreadTaskRunner> input_task_runner,
     scoped_refptr<base::SingleThreadTaskRunner> ui_task_runner,
-    bool supports_touch_events)
+    const DesktopEnvironmentOptions& options)
     : caller_task_runner_(caller_task_runner),
       video_capture_task_runner_(video_capture_task_runner),
       input_task_runner_(input_task_runner),
       ui_task_runner_(ui_task_runner),
-      desktop_capture_options_(new webrtc::DesktopCaptureOptions(
-          webrtc::DesktopCaptureOptions::CreateDefault())),
-      supports_touch_events_(supports_touch_events) {
+      options_(options) {
   DCHECK(caller_task_runner_->BelongsToCurrentThread());
-  desktop_capture_options_->set_detect_updated_region(true);
 #if defined(USE_X11)
-  IgnoreXServerGrabs(desktop_capture_options_->x_display()->display(), true);
+  IgnoreXServerGrabs(desktop_capture_options().x_display()->display(), true);
 #endif
 }
 
@@ -107,8 +101,7 @@ BasicDesktopEnvironmentFactory::BasicDesktopEnvironmentFactory(
     : caller_task_runner_(caller_task_runner),
       video_capture_task_runner_(video_capture_task_runner),
       input_task_runner_(input_task_runner),
-      ui_task_runner_(ui_task_runner),
-      supports_touch_events_(false) {}
+      ui_task_runner_(ui_task_runner) {}
 
 BasicDesktopEnvironmentFactory::~BasicDesktopEnvironmentFactory() {}
 

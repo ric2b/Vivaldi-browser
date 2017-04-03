@@ -84,6 +84,8 @@ class WTF_EXPORT String {
 
   // Construct a string with UTF-16 data, from a null-terminated source.
   String(const UChar*);
+  String(const char16_t* chars)
+      : String(reinterpret_cast<const UChar*>(chars)) {}
 
   // Construct a string with latin1 data.
   String(const LChar* characters, unsigned length);
@@ -185,7 +187,9 @@ class WTF_EXPORT String {
                : kNotFound;
   }
 
-  // Unicode aware case insensitive string matching.
+  // Unicode aware case insensitive string matching. Non-ASCII characters might
+  // match to ASCII characters. This function is rarely used to implement web
+  // platform features.
   size_t findIgnoringCase(const StringView& value, unsigned start = 0) const {
     return m_impl ? m_impl->findIgnoringCase(value, start) : kNotFound;
   }
@@ -278,7 +282,10 @@ class WTF_EXPORT String {
   String left(unsigned len) const { return substring(0, len); }
   String right(unsigned len) const { return substring(length() - len, len); }
 
-  // Returns a lowercase/uppercase version of the string
+  // Returns a lowercase/uppercase version of the string. These functions might
+  // convert non-ASCII characters to ASCII characters. For example, lower() for
+  // U+212A is 'k', upper() for U+017F is 'S'.
+  // These functions are rarely used to implement web platform features.
   String lower() const;
   String upper() const;
 

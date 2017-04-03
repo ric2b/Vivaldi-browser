@@ -8,7 +8,6 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
-import android.os.Environment;
 import android.test.suitebuilder.annotation.SmallTest;
 
 import org.chromium.base.ThreadUtils;
@@ -71,12 +70,6 @@ public class AddToHomescreenManagerTest extends ChromeActivityTestCaseBase<Chrom
     private static final String MANIFEST_PATH = "/chrome/test/data/banners/manifest_test_page.html";
     private static final String MANIFEST_TITLE = "Web app banner test page";
 
-    private static final String MANIFEST_TIMES_OUT_NO_SERVICE_WORKER_HTML =
-            UrlUtils.encodeHtmlDataUri("<html><head>"
-                    + "<title>" + MANIFEST_TITLE + "</title>"
-                    + "<link rel=\"manifest\" href=\"../../../../slow?10000\" />"
-                    + "</head></html>");
-
     private static class TestShortcutHelperDelegate extends ShortcutHelper.Delegate {
         public Intent mBroadcastedIntent;
 
@@ -96,7 +89,7 @@ public class AddToHomescreenManagerTest extends ChromeActivityTestCaseBase<Chrom
     }
 
     private static class TestDataStorageFactory extends WebappDataStorage.Factory {
-        public Bitmap mSplashImage;
+        public String mSplashImage;
 
         @Override
         public WebappDataStorage create(final String webappId) {
@@ -110,7 +103,7 @@ public class AddToHomescreenManagerTest extends ChromeActivityTestCaseBase<Chrom
             }
 
             @Override
-            public void updateSplashScreenImage(Bitmap splashScreenImage) {
+            public void updateSplashScreenImage(String splashScreenImage) {
                 assertNull(mSplashImage);
                 mSplashImage = splashScreenImage;
             }
@@ -166,8 +159,7 @@ public class AddToHomescreenManagerTest extends ChromeActivityTestCaseBase<Chrom
     public void setUp() throws Exception {
         super.setUp();
         ChromeWebApkHost.initForTesting(false);
-        mTestServer = EmbeddedTestServer.createAndStartFileServer(
-                getInstrumentation().getContext(), Environment.getExternalStorageDirectory());
+        mTestServer = EmbeddedTestServer.createAndStartServer(getInstrumentation().getContext());
         // Register handler for "slow?10000" URL.
         mTestServer.addDefaultHandlers(mTestServer.getURL("/chrome/test/data"));
         mShortcutHelperDelegate = new TestShortcutHelperDelegate();
@@ -280,8 +272,10 @@ public class AddToHomescreenManagerTest extends ChromeActivityTestCaseBase<Chrom
             // Test that bitmap sizes match expectations.
             int idealSize = mActivity.getResources().getDimensionPixelSize(
                     R.dimen.webapp_splash_image_size_ideal);
-            assertEquals(idealSize, dataStorageFactory.mSplashImage.getWidth());
-            assertEquals(idealSize, dataStorageFactory.mSplashImage.getHeight());
+            Bitmap splashImage =
+                    ShortcutHelper.decodeBitmapFromString(dataStorageFactory.mSplashImage);
+            assertEquals(idealSize, splashImage.getWidth());
+            assertEquals(idealSize, splashImage.getHeight());
         } finally {
             mTestServer.stopAndDestroyServer();
         }

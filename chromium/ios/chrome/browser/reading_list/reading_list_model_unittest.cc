@@ -142,9 +142,9 @@ TEST_F(ReadingListModelTest, EmptyLoaded) {
 TEST_F(ReadingListModelTest, AddEntry) {
   ClearCounts();
   const ReadingListEntry& entry =
-      model_->AddEntry(GURL("http://example.com"), "sample");
+      model_->AddEntry(GURL("http://example.com"), "\n  \tsample Test ");
   EXPECT_EQ(GURL("http://example.com"), entry.URL());
-  EXPECT_EQ("sample", entry.Title());
+  EXPECT_EQ("sample Test", entry.Title());
 
   AssertObserverCount(0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1);
   EXPECT_EQ(1ul, model_->unread_size());
@@ -153,7 +153,7 @@ TEST_F(ReadingListModelTest, AddEntry) {
 
   const ReadingListEntry& other_entry = model_->GetUnreadEntryAtIndex(0);
   EXPECT_EQ(GURL("http://example.com"), other_entry.URL());
-  EXPECT_EQ("sample", other_entry.Title());
+  EXPECT_EQ("sample Test", other_entry.Title());
 }
 
 TEST_F(ReadingListModelTest, ReadEntry) {
@@ -167,6 +167,46 @@ TEST_F(ReadingListModelTest, ReadEntry) {
   EXPECT_FALSE(model_->HasUnseenEntries());
 
   const ReadingListEntry& other_entry = model_->GetReadEntryAtIndex(0);
+  EXPECT_EQ(GURL("http://example.com"), other_entry.URL());
+  EXPECT_EQ("sample", other_entry.Title());
+}
+
+TEST_F(ReadingListModelTest, EntryFromURL) {
+  GURL url1("http://example.com");
+  GURL url2("http://example2.com");
+  std::string entry1_title = "foo bar qux";
+  model_->AddEntry(url1, entry1_title);
+
+  const ReadingListEntry* entry1 = model_->GetEntryFromURL(url1);
+  EXPECT_NE(nullptr, entry1);
+  EXPECT_EQ(entry1_title, entry1->Title());
+  model_->MarkReadByURL(url1);
+  entry1 = model_->GetEntryFromURL(url1);
+  EXPECT_NE(nullptr, entry1);
+  EXPECT_EQ(entry1_title, entry1->Title());
+
+  const ReadingListEntry* entry2 = model_->GetEntryFromURL(url2);
+  EXPECT_EQ(nullptr, entry2);
+}
+
+TEST_F(ReadingListModelTest, UnreadEntry) {
+  // Setup.
+  model_->AddEntry(GURL("http://example.com"), "sample");
+  model_->MarkReadByURL(GURL("http://example.com"));
+  ClearCounts();
+  ASSERT_EQ(0ul, model_->unread_size());
+  ASSERT_EQ(1ul, model_->read_size());
+
+  // Action.
+  model_->MarkUnreadByURL(GURL("http://example.com"));
+
+  // Tests.
+  AssertObserverCount(0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1);
+  EXPECT_EQ(1ul, model_->unread_size());
+  EXPECT_EQ(0ul, model_->read_size());
+  EXPECT_TRUE(model_->HasUnseenEntries());
+
+  const ReadingListEntry& other_entry = model_->GetUnreadEntryAtIndex(0);
   EXPECT_EQ(GURL("http://example.com"), other_entry.URL());
   EXPECT_EQ("sample", other_entry.Title());
 }
@@ -232,15 +272,15 @@ TEST_F(ReadingListModelTest, UpdateEntryState) {
   EXPECT_EQ(ReadingListEntry::PROCESSING, entry.DistilledState());
 }
 
-TEST_F(ReadingListModelTest, UpdateDistilledURL) {
+TEST_F(ReadingListModelTest, UpdateDistilledPath) {
   const GURL gurl("http://example.com");
   const ReadingListEntry& entry = model_->AddEntry(gurl, "sample");
   ClearCounts();
 
-  model_->SetEntryDistilledURL(gurl, gurl);
+  model_->SetEntryDistilledPath(gurl, base::FilePath("distilled/page.html"));
   AssertObserverCount(0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1);
   EXPECT_EQ(ReadingListEntry::PROCESSED, entry.DistilledState());
-  EXPECT_EQ(gurl, entry.DistilledURL());
+  EXPECT_EQ(base::FilePath("distilled/page.html"), entry.DistilledPath());
 }
 
 TEST_F(ReadingListModelTest, UpdateReadEntryTitle) {
@@ -267,17 +307,17 @@ TEST_F(ReadingListModelTest, UpdateReadEntryState) {
   EXPECT_EQ(ReadingListEntry::PROCESSING, entry.DistilledState());
 }
 
-TEST_F(ReadingListModelTest, UpdateReadDistilledURL) {
+TEST_F(ReadingListModelTest, UpdateReadDistilledPath) {
   const GURL gurl("http://example.com");
   model_->AddEntry(gurl, "sample");
   model_->MarkReadByURL(gurl);
   const ReadingListEntry& entry = model_->GetReadEntryAtIndex(0);
   ClearCounts();
 
-  model_->SetEntryDistilledURL(gurl, gurl);
+  model_->SetEntryDistilledPath(gurl, base::FilePath("distilled/page.html"));
   AssertObserverCount(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1);
   EXPECT_EQ(ReadingListEntry::PROCESSED, entry.DistilledState());
-  EXPECT_EQ(gurl, entry.DistilledURL());
+  EXPECT_EQ(GURL("chrome://offline/distilled/page.html"), entry.DistilledURL());
 }
 
 // Tests that the callback is called when the entry is unread.
@@ -332,6 +372,13 @@ TEST_F(ReadingListModelTest, CallbackEntryURLNotPresent) {
   // Test.
   EXPECT_FALSE(result);
   EXPECT_FALSE(CallbackCalled());
+}
+
+// Tests that ReadingListModel calls CallbackModelBeingDeleted when destroyed.
+TEST_F(ReadingListModelTest, CallbackModelBeingDeleted) {
+  AssertObserverCount(1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+  model_.reset();
+  AssertObserverCount(1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0);
 }
 
 }  // namespace

@@ -9,6 +9,7 @@
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
 #include "build/build_config.h"
 #include "gpu/gpu_export.h"
 #include "gpu/ipc/common/surface_handle.h"
@@ -16,7 +17,7 @@
 
 namespace gpu {
 class GpuChannelManager;
-class GpuCommandBufferStub;
+class ImageTransportSurfaceDelegate;
 
 // The GPU process is agnostic as to how it displays results. On some platforms
 // it renders directly to window. On others it renders offscreen and transports
@@ -33,8 +34,7 @@ class ImageTransportSurface {
   // This will be implemented separately by each platform. On failure, a null
   // scoped_refptr should be returned.
   static scoped_refptr<gl::GLSurface> CreateNativeSurface(
-      GpuChannelManager* manager,
-      GpuCommandBufferStub* stub,
+      base::WeakPtr<ImageTransportSurfaceDelegate> stub,
       SurfaceHandle surface_handle,
       gl::GLSurface::Format format);
 

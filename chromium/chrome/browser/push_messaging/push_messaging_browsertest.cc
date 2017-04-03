@@ -385,8 +385,8 @@ void PushMessagingBrowserTest::EndpointToToken(const std::string& endpoint,
                                                std::string* out_token) {
   size_t last_slash = endpoint.rfind('/');
 
-  ASSERT_EQ(endpoint.substr(0, last_slash + 1),
-            push_service()->GetEndpoint(standard_protocol).spec());
+  ASSERT_EQ(push_service()->GetEndpoint(standard_protocol).spec(),
+            endpoint.substr(0, last_slash + 1));
 
   ASSERT_LT(last_slash + 1, endpoint.length());  // Token must not be empty.
 
@@ -444,21 +444,6 @@ IN_PROC_BROWSER_TEST_F(PushMessagingBrowserTest,
   // Both of these methods EXPECT that they succeed.
   ASSERT_NO_FATAL_FAILURE(EndpointToToken(script_result));
   GetAppIdentifierForServiceWorkerRegistration(0LL);
-}
-
-IN_PROC_BROWSER_TEST_F(PushMessagingBrowserTest, SubscribeFailureBadKey) {
-  std::string script_result;
-
-  ASSERT_TRUE(RunScript("registerServiceWorker()", &script_result));
-  ASSERT_EQ("ok - service worker registered", script_result);
-
-  ASSERT_NO_FATAL_FAILURE(RequestAndAcceptPermission());
-
-  ASSERT_TRUE(RunScript("documentSubscribePushBadKey()", &script_result));
-  EXPECT_EQ(
-      "InvalidAccessError - Failed to execute 'subscribe' on 'PushManager': "
-      "The provided applicationServerKey is not valid.",
-      script_result);
 }
 
 IN_PROC_BROWSER_TEST_F(PushMessagingBrowserTest,
@@ -710,13 +695,182 @@ IN_PROC_BROWSER_TEST_F(
       script_result);
 }
 
-// Disabled on Windows and Linux due to flakiness (http://crbug.com/554003).
-#if defined(OS_WIN) || defined(OS_LINUX)
-#define MAYBE_SubscribePersisted DISABLED_SubscribePersisted
-#else
-#define MAYBE_SubscribePersisted SubscribePersisted
-#endif
-IN_PROC_BROWSER_TEST_F(PushMessagingBrowserTest, MAYBE_SubscribePersisted) {
+IN_PROC_BROWSER_TEST_F(
+    PushMessagingBrowserTest,
+    ResubscribeWithoutKeyAfterSubscribingFromDocumentWithNumber) {
+  std::string script_result;
+
+  ASSERT_TRUE(RunScript("registerServiceWorker()", &script_result));
+  ASSERT_EQ("ok - service worker registered", script_result);
+
+  ASSERT_NO_FATAL_FAILURE(RequestAndAcceptPermission());
+
+  LoadTestPageWithoutManifest();  // Reload to become controlled.
+
+  ASSERT_TRUE(RunScript("isControlled()", &script_result));
+  ASSERT_EQ("true - is controlled", script_result);
+
+  // Run the subscribe from the document with a numeric key.
+  // This should succeed.
+  ASSERT_TRUE(
+      RunScript("documentSubscribePushWithNumericKey()", &script_result));
+  std::string token1;
+  ASSERT_NO_FATAL_FAILURE(
+      EndpointToToken(script_result, false /* standard_protocol */, &token1));
+
+  // Try to resubscribe from the document without a key - should fail.
+  ASSERT_TRUE(RunScript("documentSubscribePushWithoutKey()", &script_result));
+  EXPECT_EQ(
+      "AbortError - Registration failed - missing applicationServerKey, "
+      "and manifest empty or missing",
+      script_result);
+
+  // Now run the subscribe from the service worker without a key.
+  // In this case, the sender id should be read from the datastore.
+  // Note, we would rather this failed as we only really want to support
+  // no-key subscribes after subscribing with a numeric gcm sender id in the
+  // manifest, not a numeric applicationServerKey, but for code simplicity
+  // this case is allowed.
+  ASSERT_TRUE(RunScript("workerSubscribePushNoKey()", &script_result));
+  std::string token2;
+  ASSERT_NO_FATAL_FAILURE(
+      EndpointToToken(script_result, false /* standard_protocol */, &token2));
+  EXPECT_EQ(token1, token2);
+
+  ASSERT_TRUE(RunScript("unsubscribePush()", &script_result));
+  EXPECT_EQ("unsubscribe result: true", script_result);
+  EXPECT_NE(push_service(), GetAppHandler());
+
+  // After unsubscribing, subscribe again from the worker with no key.
+  // The sender id should again be read from the datastore, so the
+  // subcribe should succeed, and we should get a new subscription token.
+  ASSERT_TRUE(RunScript("workerSubscribePushNoKey()", &script_result));
+  std::string token3;
+  ASSERT_NO_FATAL_FAILURE(
+      EndpointToToken(script_result, false /* standard_protocol */, &token3));
+  EXPECT_NE(token1, token3);
+
+  ASSERT_TRUE(RunScript("unsubscribePush()", &script_result));
+  EXPECT_EQ("unsubscribe result: true", script_result);
+  EXPECT_NE(push_service(), GetAppHandler());
+}
+
+IN_PROC_BROWSER_TEST_F(
+    PushMessagingBrowserTest,
+    ResubscribeWithoutKeyAfterSubscribingFromWorkerWithNumber) {
+  std::string script_result;
+
+  ASSERT_TRUE(RunScript("registerServiceWorker()", &script_result));
+  ASSERT_EQ("ok - service worker registered", script_result);
+
+  ASSERT_NO_FATAL_FAILURE(RequestAndAcceptPermission());
+
+  LoadTestPageWithoutManifest();  // Reload to become controlled.
+
+  ASSERT_TRUE(RunScript("isControlled()", &script_result));
+  ASSERT_EQ("true - is controlled", script_result);
+
+  // Run the subscribe from the service worker with a numeric key.
+  // This should succeed.
+  ASSERT_TRUE(RunScript("workerSubscribePushWithNumericKey()", &script_result));
+  std::string token1;
+  ASSERT_NO_FATAL_FAILURE(
+      EndpointToToken(script_result, false /* standard_protocol */, &token1));
+
+  // Try to resubscribe from the document without a key - should fail.
+  ASSERT_TRUE(RunScript("documentSubscribePushWithoutKey()", &script_result));
+  EXPECT_EQ(
+      "AbortError - Registration failed - missing applicationServerKey, "
+      "and manifest empty or missing",
+      script_result);
+
+  // Now run the subscribe from the service worker without a key.
+  // In this case, the sender id should be read from the datastore.
+  // Note, we would rather this failed as we only really want to support
+  // no-key subscribes after subscribing with a numeric gcm sender id in the
+  // manifest, not a numeric applicationServerKey, but for code simplicity
+  // this case is allowed.
+  ASSERT_TRUE(RunScript("workerSubscribePushNoKey()", &script_result));
+  std::string token2;
+  ASSERT_NO_FATAL_FAILURE(
+      EndpointToToken(script_result, false /* standard_protocol */, &token2));
+  EXPECT_EQ(token1, token2);
+
+  ASSERT_TRUE(RunScript("unsubscribePush()", &script_result));
+  EXPECT_EQ("unsubscribe result: true", script_result);
+  EXPECT_NE(push_service(), GetAppHandler());
+
+  // After unsubscribing, subscribe again from the worker with no key.
+  // The sender id should again be read from the datastore, so the
+  // subcribe should succeed, and we should get a new subscription token.
+  ASSERT_TRUE(RunScript("workerSubscribePushNoKey()", &script_result));
+  std::string token3;
+  ASSERT_NO_FATAL_FAILURE(
+      EndpointToToken(script_result, false /* standard_protocol */, &token3));
+  EXPECT_NE(token1, token3);
+
+  ASSERT_TRUE(RunScript("unsubscribePush()", &script_result));
+  EXPECT_EQ("unsubscribe result: true", script_result);
+  EXPECT_NE(push_service(), GetAppHandler());
+}
+
+IN_PROC_BROWSER_TEST_F(PushMessagingBrowserTest, ResubscribeWithMismatchedKey) {
+  std::string script_result;
+
+  ASSERT_TRUE(RunScript("registerServiceWorker()", &script_result));
+  ASSERT_EQ("ok - service worker registered", script_result);
+
+  ASSERT_NO_FATAL_FAILURE(RequestAndAcceptPermission());
+
+  LoadTestPage();  // Reload to become controlled.
+
+  ASSERT_TRUE(RunScript("isControlled()", &script_result));
+  ASSERT_EQ("true - is controlled", script_result);
+
+  // Run the subscribe from the service worker with a key.
+  // This should succeed.
+  ASSERT_TRUE(
+      RunScript("workerSubscribePushWithNumericKey('11111')", &script_result));
+  std::string token1;
+  ASSERT_NO_FATAL_FAILURE(
+      EndpointToToken(script_result, false /* standard_protocol */, &token1));
+
+  // Try to resubscribe with a different key - should fail.
+  ASSERT_TRUE(
+      RunScript("workerSubscribePushWithNumericKey('22222')", &script_result));
+  EXPECT_EQ(
+      "InvalidStateError - Registration failed - A subscription with a "
+      "different applicationServerKey (or gcm_sender_id) already exists; to "
+      "change the applicationServerKey, unsubscribe then resubscribe.",
+      script_result);
+
+  // Try to resubscribe with the original key - should succeed.
+  ASSERT_TRUE(
+      RunScript("workerSubscribePushWithNumericKey('11111')", &script_result));
+  std::string token2;
+  ASSERT_NO_FATAL_FAILURE(
+      EndpointToToken(script_result, false /* standard_protocol */, &token2));
+  EXPECT_EQ(token1, token2);
+
+  ASSERT_TRUE(RunScript("unsubscribePush()", &script_result));
+  EXPECT_EQ("unsubscribe result: true", script_result);
+  EXPECT_NE(push_service(), GetAppHandler());
+
+  // Resubscribe with a different key after unsubscribing.
+  // Should succeed, and we should get a new subscription token.
+  ASSERT_TRUE(
+      RunScript("workerSubscribePushWithNumericKey('22222')", &script_result));
+  std::string token3;
+  ASSERT_NO_FATAL_FAILURE(
+      EndpointToToken(script_result, false /* standard_protocol */, &token3));
+  EXPECT_NE(token1, token3);
+
+  ASSERT_TRUE(RunScript("unsubscribePush()", &script_result));
+  EXPECT_EQ("unsubscribe result: true", script_result);
+  EXPECT_NE(push_service(), GetAppHandler());
+}
+
+IN_PROC_BROWSER_TEST_F(PushMessagingBrowserTest, SubscribePersisted) {
   std::string script_result;
 
   // First, test that Service Worker registration IDs are assigned in order of

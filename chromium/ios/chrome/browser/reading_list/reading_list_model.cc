@@ -5,7 +5,11 @@
 #include "ios/chrome/browser/reading_list/reading_list_model.h"
 
 ReadingListModel::ReadingListModel() : current_batch_updates_count_(0) {}
-ReadingListModel::~ReadingListModel() {}
+ReadingListModel::~ReadingListModel() {
+  for (auto& observer : observers_) {
+    observer.ReadingListModelBeingDeleted(this);
+  }
+}
 
 // Observer methods.
 void ReadingListModel::AddObserver(ReadingListModelObserver* observer) {
@@ -32,8 +36,8 @@ ReadingListModel::BeginBatchUpdates() {
 
   ++current_batch_updates_count_;
   if (current_batch_updates_count_ == 1) {
-    FOR_EACH_OBSERVER(ReadingListModelObserver, observers_,
-                      ReadingListModelBeganBatchUpdates(this));
+    for (auto& observer : observers_)
+      observer.ReadingListModelBeganBatchUpdates(this);
   }
   return token;
 }
@@ -42,7 +46,7 @@ void ReadingListModel::EndBatchUpdates() {
   DCHECK(IsPerformingBatchUpdates());
   --current_batch_updates_count_;
   if (current_batch_updates_count_ == 0) {
-    FOR_EACH_OBSERVER(ReadingListModelObserver, observers_,
-                      ReadingListModelCompletedBatchUpdates(this));
+    for (auto& observer : observers_)
+      observer.ReadingListModelCompletedBatchUpdates(this);
   }
 }

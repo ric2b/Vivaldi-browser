@@ -5,6 +5,7 @@
 // https://webbluetoothchrome.github.io/web-bluetooth/#idl-def-requestdeviceoptions
 
 dictionary RequestDeviceOptions {
-    required sequence<BluetoothScanFilter>  filters;
+    sequence<BluetoothScanFilter>  filters;
     sequence<BluetoothServiceUUID> optionalServices = [];
+    boolean acceptAllDevices = false;
 };

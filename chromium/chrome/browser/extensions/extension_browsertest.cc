@@ -39,7 +39,7 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
-#include "components/sync/api/string_ordinal.h"
+#include "components/sync/model/string_ordinal.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
@@ -127,7 +127,7 @@ void ExtensionBrowserTest::SetUp() {
 void ExtensionBrowserTest::SetUpCommandLine(base::CommandLine* command_line) {
   PathService::Get(chrome::DIR_TEST_DATA, &test_data_dir_);
   test_data_dir_ = test_data_dir_.AppendASCII("extensions");
-  observer_.reset(new ExtensionTestNotificationObserver(browser()));
+  observer_.reset(new ChromeExtensionTestNotificationObserver(browser()));
 
   // We don't want any warning bubbles for, e.g., unpacked extensions.
   ExtensionMessageBubbleFactory::set_override_for_tests(
@@ -147,7 +147,7 @@ void ExtensionBrowserTest::SetUpCommandLine(base::CommandLine* command_line) {
 
 void ExtensionBrowserTest::SetUpOnMainThread() {
   InProcessBrowserTest::SetUpOnMainThread();
-  observer_.reset(new ExtensionTestNotificationObserver(browser()));
+  observer_.reset(new ChromeExtensionTestNotificationObserver(browser()));
   if (extension_service()->updater()) {
     extension_service()->updater()->SetExtensionCacheForTesting(
         test_extension_cache_.get());
@@ -226,14 +226,19 @@ ExtensionBrowserTest::LoadExtensionWithInstallParam(
 
   const std::string extension_id = extension->id();
 
+  // If this is an incognito test (e.g. where the test fixture appended the
+  // --incognito flag), we need to use the original profile when we wait for
+  // notifications.
+  Profile* original_profile = profile()->GetOriginalProfile();
+
   if (!install_param.empty()) {
-    extensions::ExtensionPrefs::Get(profile())
+    extensions::ExtensionPrefs::Get(original_profile)
         ->SetInstallParam(extension_id, install_param);
     // Re-enable the extension if needed.
     if (registry->enabled_extensions().Contains(extension_id)) {
       content::WindowedNotificationObserver load_signal(
           extensions::NOTIFICATION_EXTENSION_LOADED_DEPRECATED,
-          content::Source<Profile>(profile()));
+          content::Source<Profile>(original_profile));
       // Reload the extension so that the
       // NOTIFICATION_EXTENSION_LOADED_DEPRECATED
       // observers may access |install_param|.
@@ -251,12 +256,13 @@ ExtensionBrowserTest::LoadExtensionWithInstallParam(
   {
     content::WindowedNotificationObserver load_signal(
         extensions::NOTIFICATION_EXTENSION_LOADED_DEPRECATED,
-        content::Source<Profile>(profile()));
-    CHECK(!extensions::util::IsIncognitoEnabled(extension_id, profile()))
+        content::Source<Profile>(original_profile));
+    CHECK(!extensions::util::IsIncognitoEnabled(extension_id, original_profile))
         << extension_id << " is enabled in incognito, but shouldn't be";
 
     if (flags & kFlagEnableIncognito) {
-      extensions::util::SetIsIncognitoEnabled(extension_id, profile(), true);
+      extensions::util::SetIsIncognitoEnabled(extension_id, original_profile,
+                                              true);
       load_signal.Wait();
       extension = service->GetExtensionById(extension_id, false);
       CHECK(extension) << extension_id << " not found after reloading.";
@@ -266,10 +272,11 @@ ExtensionBrowserTest::LoadExtensionWithInstallParam(
   {
     content::WindowedNotificationObserver load_signal(
         extensions::NOTIFICATION_EXTENSION_LOADED_DEPRECATED,
-        content::Source<Profile>(profile()));
-    CHECK(extensions::util::AllowFileAccess(extension_id, profile()));
+        content::Source<Profile>(original_profile));
+    CHECK(extensions::util::AllowFileAccess(extension_id, original_profile));
     if (!(flags & kFlagEnableFileAccess)) {
-      extensions::util::SetAllowFileAccess(extension_id, profile(), false);
+      extensions::util::SetAllowFileAccess(extension_id, original_profile,
+                                           false);
       load_signal.Wait();
       extension = service->GetExtensionById(extension_id, false);
       CHECK(extension) << extension_id << " not found after reloading.";

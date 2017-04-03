@@ -41,15 +41,6 @@ bool PathProvider(int key, FilePath* result) {
       *result = test_data_path;
       return true;
     }
-    case DIR_VIVALDI_TEST_DATA:
-      if (!PathService::Get(DIR_SOURCE_ROOT, result))
-        return false;
-      *result = result->DirName(); // Src dir is in the vivaldi chromium folder
-      *result = result->Append(FILE_PATH_LITERAL("testdata"));
-      *result = result->Append(FILE_PATH_LITERAL("data"));
-      if (!PathExists(*result))  // We don't want to create this.
-        return false;
-      return true;
     default:
       return false;
   }

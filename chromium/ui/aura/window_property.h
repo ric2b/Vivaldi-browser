@@ -19,7 +19,7 @@
 //
 //  DECLARE_EXPORTED_WINDOW_PROPERTY_TYPE(FOO_EXPORT, MyType);
 //  namespace foo {
-//    // Use this to define an exported property that is premitive,
+//    // Use this to define an exported property that is primitive,
 //    // or a pointer you don't want automatically deleted.
 //    DEFINE_WINDOW_PROPERTY_KEY(MyType, kMyKey, MyDefault);
 //
@@ -110,21 +110,22 @@ class AURA_EXPORT PropertyHelper {
 }  // namespace aura
 
 // Macros to instantiate the property getter/setter template functions.
-#define DECLARE_EXPORTED_WINDOW_PROPERTY_TYPE(EXPORT, T)  \
-    namespace aura {                                            \
-      template<> EXPORT void aura::Window::SetProperty(         \
-          const WindowProperty<T >* property, T value) {        \
-        subtle::PropertyHelper::Set<T>(this, property, value);  \
-      }                                                         \
-      template<> EXPORT T Window::GetProperty(                  \
-          const WindowProperty<T >* property) const {           \
-        return subtle::PropertyHelper::Get<T>(this, property);  \
-      }                                                         \
-      template<> EXPORT void Window::ClearProperty(             \
-          const WindowProperty<T >* property) {                 \
-        subtle::PropertyHelper::Clear<T>(this, property);       \
-      }                                                         \
-    }
+#define DECLARE_EXPORTED_WINDOW_PROPERTY_TYPE(EXPORT, T)                  \
+  namespace aura {                                                        \
+  template <>                                                             \
+  EXPORT void Window::SetProperty(const WindowProperty<T>* property,      \
+                                  T value) {                              \
+    subtle::PropertyHelper::Set<T>(this, property, value);                \
+  }                                                                       \
+  template <>                                                             \
+  EXPORT T Window::GetProperty(const WindowProperty<T>* property) const { \
+    return subtle::PropertyHelper::Get<T>(this, property);                \
+  }                                                                       \
+  template <>                                                             \
+  EXPORT void Window::ClearProperty(const WindowProperty<T>* property) {  \
+    subtle::PropertyHelper::Clear<T>(this, property);                     \
+  }                                                                       \
+  }
 #define DECLARE_WINDOW_PROPERTY_TYPE(T)  \
     DECLARE_EXPORTED_WINDOW_PROPERTY_TYPE(, T)
 

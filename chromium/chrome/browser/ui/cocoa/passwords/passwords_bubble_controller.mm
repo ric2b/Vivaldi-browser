@@ -10,6 +10,7 @@
 #import "chrome/browser/ui/cocoa/info_bubble_view.h"
 #import "chrome/browser/ui/cocoa/info_bubble_window.h"
 #include "chrome/browser/ui/cocoa/location_bar/location_bar_view_mac.h"
+#import "chrome/browser/ui/cocoa/location_bar/manage_passwords_decoration.h"
 #import "chrome/browser/ui/cocoa/passwords/auto_signin_view_controller.h"
 #import "chrome/browser/ui/cocoa/passwords/confirmation_password_saved_view_controller.h"
 #import "chrome/browser/ui/cocoa/passwords/manage_passwords_view_controller.h"
@@ -56,6 +57,13 @@
   // The bubble is about to be closed. It destroys the model.
   model_ = nil;
   [super close];
+}
+
+- (LocationBarDecoration*)decorationForBubble {
+  BrowserWindowController* controller = [BrowserWindowController
+      browserWindowControllerForWindow:[self parentWindow]];
+  LocationBarViewMac* locationBar = [controller locationBarBridge];
+  return locationBar ? locationBar->manage_passwords_decoration() : nullptr;
 }
 
 - (void)updateState {
@@ -109,8 +117,8 @@
     BrowserWindowController* controller = [BrowserWindowController
         browserWindowControllerForWindow:[self parentWindow]];
     if (controller) {
-    anchorPoint =
-        [controller locationBarBridge]->GetManagePasswordsBubblePoint();
+    anchorPoint = [controller locationBarBridge]->GetBubblePointForDecoration(
+        [self decorationForBubble]);
     } else {
       // gisli@vivaldi.com:  if no controller use semi-hardcoded point,
       anchorPoint = NSMakePoint(NSWidth([[[self parentWindow] contentView] frame]) - 50,

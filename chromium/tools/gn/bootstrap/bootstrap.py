@@ -308,7 +308,7 @@ def write_gn_ninja(path, root_gen_dir, options):
   else:
     cc = os.environ.get('CC', 'cc')
     cxx = os.environ.get('CXX', 'c++')
-    ld = os.environ.get('LD', cxx)
+    ld = cxx
     ar = os.environ.get('AR', 'ar')
 
   cflags = os.environ.get('CFLAGS', '').split()
@@ -319,7 +319,7 @@ def write_gn_ninja(path, root_gen_dir, options):
 
   # //base/allocator/allocator_extension.cc needs this macro defined,
   # otherwise there would be link errors.
-  cflags.extend(['-DNO_TCMALLOC'])
+  cflags.extend(['-DNO_TCMALLOC', '-D__STDC_FORMAT_MACROS'])
 
   if is_posix:
     if options.debug:
@@ -469,7 +469,6 @@ def write_gn_ninja(path, root_gen_dir, options):
       'base/task_scheduler/post_task.cc',
       'base/task_scheduler/priority_queue.cc',
       'base/task_scheduler/scheduler_lock_impl.cc',
-      'base/task_scheduler/scheduler_service_thread.cc',
       'base/task_scheduler/scheduler_worker.cc',
       'base/task_scheduler/scheduler_worker_pool_impl.cc',
       'base/task_scheduler/scheduler_worker_stack.cc',
@@ -500,6 +499,7 @@ def write_gn_ninja(path, root_gen_dir, options):
       'base/time/time.cc',
       'base/timer/elapsed_timer.cc',
       'base/timer/timer.cc',
+      'base/trace_event/category_registry.cc',
       'base/trace_event/heap_profiler_allocation_context.cc',
       'base/trace_event/heap_profiler_allocation_context_tracker.cc',
       'base/trace_event/heap_profiler_allocation_register.cc',
@@ -524,7 +524,6 @@ def write_gn_ninja(path, root_gen_dir, options):
       'base/trace_event/trace_event_synthetic_delay.cc',
       'base/trace_event/trace_log.cc',
       'base/trace_event/trace_log_constants.cc',
-      'base/trace_event/trace_sampling_thread.cc',
       'base/trace_event/tracing_agent.cc',
       'base/tracked_objects.cc',
       'base/tracking_info.cc',
@@ -555,9 +554,9 @@ def write_gn_ninja(path, root_gen_dir, options):
         'base/synchronization/read_write_lock_posix.cc',
         'base/synchronization/waitable_event_posix.cc',
         'base/sys_info_posix.cc',
+        'base/task_scheduler/task_tracker_posix.cc',
         'base/threading/platform_thread_internal_posix.cc',
         'base/threading/platform_thread_posix.cc',
-        'base/threading/thread_local_posix.cc',
         'base/threading/thread_local_storage_posix.cc',
         'base/threading/worker_pool_posix.cc',
         'base/time/time_posix.cc',
@@ -700,7 +699,6 @@ def write_gn_ninja(path, root_gen_dir, options):
         'base/sys_info_win.cc',
         'base/threading/platform_thread_win.cc',
         'base/threading/thread_local_storage_win.cc',
-        'base/threading/thread_local_win.cc',
         'base/threading/worker_pool_win.cc',
         'base/time/time_win.cc',
         'base/timer/hi_res_timer_manager_win.cc',

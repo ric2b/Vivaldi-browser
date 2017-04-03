@@ -57,7 +57,7 @@ class SoftwareDevice : public cc::SoftwareOutputDevice {
  public:
   SoftwareDevice(SkCanvas** canvas) : canvas_(canvas) {}
 
-  void Resize(const gfx::Size& pixel_size, float scale_factor) override {
+  void Resize(const gfx::Size& pixel_size, float device_scale_factor) override {
     // Intentional no-op: canvas size is controlled by the embedder.
   }
   SkCanvas* BeginPaint(const gfx::Rect& damage_rect) override {
@@ -81,6 +81,7 @@ class SynchronousCompositorFrameSink::SoftwareOutputSurface
       : cc::OutputSurface(std::move(software_device)) {}
 
   // cc::OutputSurface implementation.
+  void BindToClient(cc::OutputSurfaceClient* client) override {}
   void EnsureBackbuffer() override {}
   void DiscardBackbuffer() override {}
   void BindFramebuffer() override {}
@@ -88,9 +89,7 @@ class SynchronousCompositorFrameSink::SoftwareOutputSurface
   void Reshape(const gfx::Size& size,
                float scale_factor,
                const gfx::ColorSpace& color_space,
-               bool has_alpha) override {
-    surface_size_ = size;
-  }
+               bool has_alpha) override {}
   uint32_t GetFramebufferCopyTextureFormat() override { return 0; }
   cc::OverlayCandidateValidator* GetOverlayCandidateValidator() const override {
     return nullptr;
@@ -105,13 +104,16 @@ class SynchronousCompositorFrameSink::SoftwareOutputSurface
 SynchronousCompositorFrameSink::SynchronousCompositorFrameSink(
     scoped_refptr<cc::ContextProvider> context_provider,
     scoped_refptr<cc::ContextProvider> worker_context_provider,
+    gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
     int routing_id,
     uint32_t compositor_frame_sink_id,
     std::unique_ptr<cc::BeginFrameSource> begin_frame_source,
     SynchronousCompositorRegistry* registry,
     scoped_refptr<FrameSwapMessageQueue> frame_swap_message_queue)
     : cc::CompositorFrameSink(std::move(context_provider),
-                              std::move(worker_context_provider)),
+                              std::move(worker_context_provider),
+                              gpu_memory_buffer_manager,
+                              nullptr),
       routing_id_(routing_id),
       compositor_frame_sink_id_(compositor_frame_sink_id),
       registry_(registry),
@@ -165,7 +167,6 @@ bool SynchronousCompositorFrameSink::BindToClient(
       base::Bind(&SynchronousCompositorFrameSink::DidActivatePendingTree,
                  base::Unretained(this)));
   registry_->RegisterCompositorFrameSink(routing_id_, this);
-  registered_ = true;
 
   surface_manager_->RegisterFrameSinkId(kFrameSinkId);
   surface_manager_->RegisterSurfaceFactoryClient(kFrameSinkId, this);
@@ -183,9 +184,9 @@ bool SynchronousCompositorFrameSink::BindToClient(
   display_.reset(new cc::Display(
       nullptr /* shared_bitmap_manager */,
       nullptr /* gpu_memory_buffer_manager */, software_renderer_settings,
-      nullptr /* begin_frame_source */, std::move(output_surface),
+      kFrameSinkId, nullptr /* begin_frame_source */, std::move(output_surface),
       nullptr /* scheduler */, nullptr /* texture_mailbox_deleter */));
-  display_->Initialize(&display_client_, surface_manager_.get(), kFrameSinkId);
+  display_->Initialize(&display_client_, surface_manager_.get());
   display_->SetVisible(true);
   return true;
 }
@@ -195,10 +196,9 @@ void SynchronousCompositorFrameSink::DetachFromClient() {
   client_->SetBeginFrameSource(nullptr);
   // Destroy the begin frame source on the same thread it was bound on.
   begin_frame_source_ = nullptr;
-  if (registered_)
-    registry_->UnregisterCompositorFrameSink(routing_id_, this);
+  registry_->UnregisterCompositorFrameSink(routing_id_, this);
   client_->SetTreeActivationCallback(base::Closure());
-  if (!root_local_frame_id_.is_null()) {
+  if (root_local_frame_id_.is_valid()) {
     surface_factory_->Destroy(root_local_frame_id_);
     surface_factory_->Destroy(child_local_frame_id_);
   }
@@ -215,7 +215,8 @@ void SynchronousCompositorFrameSink::DetachFromClient() {
 
 static void NoOpDrawCallback() {}
 
-void SynchronousCompositorFrameSink::SwapBuffers(cc::CompositorFrame frame) {
+void SynchronousCompositorFrameSink::SubmitCompositorFrame(
+    cc::CompositorFrame frame) {
   DCHECK(CalledOnValidThread());
   DCHECK(sync_client_);
 
@@ -223,26 +224,26 @@ void SynchronousCompositorFrameSink::SwapBuffers(cc::CompositorFrame frame) {
     DCHECK(frame.delegated_frame_data->resource_list.empty());
     cc::ReturnedResourceArray return_resources;
     ReturnResources(return_resources);
-    did_swap_ = true;
+    did_submit_frame_ = true;
     return;
   }
 
-  cc::CompositorFrame swap_frame;
+  cc::CompositorFrame submit_frame;
 
   if (in_software_draw_) {
     // The frame we send to the client is actually just the metadata. Preserve
     // the |frame| for the software path below.
-    swap_frame.metadata = frame.metadata.Clone();
+    submit_frame.metadata = frame.metadata.Clone();
 
-    if (root_local_frame_id_.is_null()) {
+    if (!root_local_frame_id_.is_valid()) {
       root_local_frame_id_ = surface_id_allocator_->GenerateId();
       surface_factory_->Create(root_local_frame_id_);
       child_local_frame_id_ = surface_id_allocator_->GenerateId();
       surface_factory_->Create(child_local_frame_id_);
     }
 
-    display_->SetSurfaceId(cc::SurfaceId(kFrameSinkId, root_local_frame_id_),
-                           frame.metadata.device_scale_factor);
+    display_->SetLocalFrameId(root_local_frame_id_,
+                              frame.metadata.device_scale_factor);
 
     // The layer compositor should be giving a frame that covers the
     // |sw_viewport_for_current_draw_| but at 0,0.
@@ -301,12 +302,13 @@ void SynchronousCompositorFrameSink::SwapBuffers(cc::CompositorFrame frame) {
   } else {
     // For hardware draws we send the whole frame to the client so it can draw
     // the content in it.
-    swap_frame = std::move(frame);
+    submit_frame = std::move(frame);
   }
 
-  sync_client_->SwapBuffers(compositor_frame_sink_id_, std::move(swap_frame));
+  sync_client_->SubmitCompositorFrame(compositor_frame_sink_id_,
+                                      std::move(submit_frame));
   DeliverMessages();
-  did_swap_ = true;
+  did_submit_frame_ = true;
 }
 
 void SynchronousCompositorFrameSink::CancelFallbackTick() {
@@ -382,7 +384,7 @@ void SynchronousCompositorFrameSink::DemandDrawSw(SkCanvas* canvas) {
 void SynchronousCompositorFrameSink::InvokeComposite(
     const gfx::Transform& transform,
     const gfx::Rect& viewport) {
-  did_swap_ = false;
+  did_submit_frame_ = false;
   // Adjust transform so that the layer compositor draws the |viewport| rect
   // at its origin. The offset of the |viewport| we pass to the layer compositor
   // is ignored for drawing, so its okay to not match the transform.
@@ -393,11 +395,11 @@ void SynchronousCompositorFrameSink::InvokeComposite(
   adjusted_transform.matrix().postTranslate(-viewport.x(), -viewport.y(), 0);
   client_->OnDraw(adjusted_transform, viewport, in_software_draw_);
 
-  if (did_swap_) {
+  if (did_submit_frame_) {
     // This must happen after unwinding the stack and leaving the compositor.
     // Usually it is a separate task but we just defer it until OnDraw completes
     // instead.
-    client_->DidSwapBuffersComplete();
+    client_->DidReceiveCompositorFrameAck();
   }
 }
 

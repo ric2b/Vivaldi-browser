@@ -23,11 +23,6 @@
 namespace chrome {
 
 const char kChromeVersion[] = CHROME_VERSION_STRING;
-const char kVivaldiVersion[] = VIVALDI_VERSION_STRING;
-
-#if defined(OS_WIN)
-const char kChromeVersionEnvVar[] = "VIVALDI_VERSION";
-#endif
 
 // The following should not be used for UI strings; they are meant
 // for system strings only. UI changes should be made in the GRD.
@@ -161,6 +156,8 @@ const base::FilePath::CharType kOfflinePageMetadataDirname[] =
 const base::FilePath::CharType kOfflinePageRequestQueueDirname[] =
     FPL("Offline Pages/request_queue");
 const base::FilePath::CharType kPreferencesFilename[] = FPL("Preferences");
+const base::FilePath::CharType kPreviewsOptOutDBFilename[] =
+    FPL("previews_opt_out.db");
 const base::FilePath::CharType kProtectedPreferencesFilenameDeprecated[] =
     FPL("Protected Preferences");
 const base::FilePath::CharType kReadmeFilename[] = FPL("README");
@@ -177,8 +174,6 @@ const base::FilePath::CharType kSingletonSocketFilename[] =
 const base::FilePath::CharType kSupervisedUserSettingsFilename[] =
     FPL("Managed Mode Settings");
 const base::FilePath::CharType kThemePackFilename[] = FPL("Cached Theme.pak");
-const base::FilePath::CharType kThemePackMaterialDesignFilename[] =
-    FPL("Cached Theme Material Design.pak");
 const base::FilePath::CharType kWebAppDirname[] = FPL("Web Applications");
 
 #if defined(OS_WIN)

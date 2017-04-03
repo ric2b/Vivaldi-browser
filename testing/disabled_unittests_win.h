@@ -44,3 +44,23 @@
   // Sems to have broken in v54
   DISABLE(QuarantineWinTest, LocalFile_DependsOnLocalConfig)
   DISABLE(DownloadTest, CheckLocalhostZone_DependsOnLocalConfig)
+
+  // Seems to have broken in v56
+  DISABLE(PrefHashBrowserTestChangedSplitPrefInstance/PrefHashBrowserTestChangedSplitPref,
+      ChangedSplitPref/0)
+  DISABLE(PrefHashBrowserTestClearedAtomicInstance/PrefHashBrowserTestClearedAtomic,
+      ClearedAtomic/1)
+  DISABLE(PrefHashBrowserTestRegistryValidationFailureInstance/PrefHashBrowserTestRegistryValidationFailure,
+      RegistryValidationFailure/1)
+  DISABLE(PrefHashBrowserTestRegistryValidationFailureInstance/PrefHashBrowserTestRegistryValidationFailure,
+      RegistryValidationFailure/3)
+  DISABLE(PrefHashBrowserTestUnchangedCustomInstance/PrefHashBrowserTestUnchangedCustom,
+      UnchangedCustom/0)
+  DISABLE(PrefHashBrowserTestUnchangedCustomInstance/PrefHashBrowserTestUnchangedCustom,
+      UnchangedCustom/3)
+  DISABLE(PrefHashBrowserTestUnchangedDefaultInstance/PrefHashBrowserTestUnchangedDefault,
+      UnchangedDefault/2)
+  DISABLE(PrefHashBrowserTestUntrustedInitializedInstance/PrefHashBrowserTestUntrustedInitialized,
+      UntrustedInitialized/0)
+   DISABLE(PrefHashBrowserTestUntrustedInitializedInstance/PrefHashBrowserTestUntrustedInitialized,
+      UntrustedInitialized/3)

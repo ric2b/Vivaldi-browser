@@ -93,6 +93,7 @@ static void PositionPadding(scoped_refptr<cc::SolidColorLayer> padding_layer,
 
 void TabLayer::SetProperties(int id,
                              bool can_use_live_layer,
+                             bool browser_controls_at_bottom,
                              int toolbar_resource_id,
                              int close_button_resource_id,
                              int shadow_resource_id,
@@ -141,7 +142,6 @@ void TabLayer::SetProperties(int id,
                              float toolbar_alpha,
                              float toolbar_y_offset,
                              float side_border_scale,
-                             bool attach_content,
                              bool inset_border) {
   if (alpha <= 0) {
     layer_->SetHideLayerAndSubtree(true);
@@ -234,8 +234,10 @@ void TabLayer::SetProperties(int id,
                                toolbar_textbox_background_color,
                                toolbar_textbox_resource_id,
                                toolbar_textbox_alpha,
+                               view_height,
                                false,
-                               false);
+                               false,
+                               browser_controls_at_bottom);
   toolbar_layer_->UpdateProgressBar(0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 
   float toolbar_impact_height = 0;
@@ -521,7 +523,7 @@ void TabLayer::SetProperties(int id,
     close_button_->SetOpacity(close_alpha * close_alpha * border_alpha);
   }
 
-  if (content_visible && attach_content) {
+  if (content_visible) {
     {
       // content_ and back_logo_ Transforms
       gfx::Transform transform;

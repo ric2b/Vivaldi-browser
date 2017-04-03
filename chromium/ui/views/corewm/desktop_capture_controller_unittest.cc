@@ -6,17 +6,13 @@
 
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/path_service.h"
 #include "ui/aura/env.h"
 #include "ui/aura/test/test_window_delegate.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/aura/window_tree_host.h"
-#include "ui/base/resource/resource_bundle.h"
-#include "ui/base/ui_base_paths.h"
 #include "ui/events/event.h"
 #include "ui/events/test/event_generator.h"
-#include "ui/gl/test/gl_surface_test_support.h"
-#include "ui/views/test/views_test_base.h"
+#include "ui/views/test/views_interactive_ui_test_base.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/desktop_aura/desktop_native_widget_aura.h"
 #include "ui/views/widget/desktop_aura/desktop_screen_position_client.h"
@@ -28,21 +24,7 @@
 
 namespace views {
 
-class DesktopCaptureControllerTest : public ViewsTestBase {
- public:
-  DesktopCaptureControllerTest() {}
-  ~DesktopCaptureControllerTest() override {}
-
-  void SetUp() override {
-    gl::GLSurfaceTestSupport::InitializeOneOff();
-    ui::RegisterPathProvider();
-    base::FilePath ui_test_pak_path;
-    ASSERT_TRUE(PathService::Get(ui::UI_TEST_PAK, &ui_test_pak_path));
-    ui::ResourceBundle::InitSharedInstanceWithPakPath(ui_test_pak_path);
-
-    ViewsTestBase::SetUp();
-  }
-};
+using DesktopCaptureControllerTest = ViewsInteractiveUITestBase;
 
 // This class provides functionality to verify whether the View instance
 // received the gesture event.
@@ -118,8 +100,7 @@ TEST_F(DesktopCaptureControllerTest, CaptureWindowInputEventTest) {
   Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_POPUP);
   std::unique_ptr<wm::ScopedCaptureClient> scoped_capture_client(
       new wm::ScopedCaptureClient(params.context->GetRootWindow()));
-  aura::client::CaptureClient* capture_client =
-      scoped_capture_client->capture_client();
+  aura::client::CaptureClient* capture_client = wm::CaptureController::Get();
   params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
   params.bounds = gfx::Rect(50, 50, 650, 650);
   widget1->Init(params);
@@ -160,8 +141,7 @@ TEST_F(DesktopCaptureControllerTest, CaptureWindowInputEventTest) {
 
   EXPECT_FALSE(widget1->GetNativeView()->HasCapture());
   EXPECT_FALSE(widget2->GetNativeView()->HasCapture());
-  EXPECT_EQ(reinterpret_cast<aura::Window*>(0),
-            capture_client->GetCaptureWindow());
+  EXPECT_EQ(nullptr, capture_client->GetCaptureWindow());
 
   widget1->GetNativeView()->SetCapture();
   EXPECT_TRUE(widget1->GetNativeView()->HasCapture());

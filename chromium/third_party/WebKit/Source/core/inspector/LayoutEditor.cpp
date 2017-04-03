@@ -146,8 +146,7 @@ void LayoutEditor::dispose() {
   if (!m_isDirty)
     return;
 
-  ErrorString errorString;
-  m_domAgent->undo(&errorString);
+  m_domAgent->undo();
 }
 
 DEFINE_TRACE(LayoutEditor) {
@@ -346,8 +345,7 @@ void LayoutEditor::commitChanges() {
     return;
 
   m_isDirty = false;
-  ErrorString errorString;
-  m_domAgent->markUndoableState(&errorString);
+  m_domAgent->markUndoableState();
 }
 
 void LayoutEditor::nextSelector() {
@@ -419,11 +417,10 @@ std::unique_ptr<protocol::DictionaryValue> LayoutEditor::currentSelectorInfo(
 }
 
 bool LayoutEditor::setCSSPropertyValueInCurrentRule(const String& value) {
-  ErrorString errorString;
-  m_cssAgent->setLayoutEditorValue(&errorString, m_element.get(),
-                                   m_matchedStyles.at(m_currentRuleIndex),
-                                   m_changingProperty, value, false);
-  return errorString.isEmpty();
+  Response response = m_cssAgent->setLayoutEditorValue(
+      m_element.get(), m_matchedStyles.at(m_currentRuleIndex),
+      m_changingProperty, value, false);
+  return response.isSuccess();
 }
 
 void LayoutEditor::evaluateInOverlay(

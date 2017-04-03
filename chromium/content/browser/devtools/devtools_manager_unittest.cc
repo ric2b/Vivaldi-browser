@@ -89,7 +89,9 @@ class TestWebContentsDelegate : public WebContentsDelegate {
   TestWebContentsDelegate() : renderer_unresponsive_received_(false) {}
 
   // Notification that the contents is hung.
-  void RendererUnresponsive(WebContents* source) override {
+  void RendererUnresponsive(
+      WebContents* source,
+      const WebContentsUnresponsiveState& unresponsive_state) override {
     renderer_unresponsive_received_ = true;
   }
 
@@ -146,8 +148,8 @@ TEST_F(DevToolsManagerTest, NoUnresponsiveDialogInInspectedContents) {
 
   // Start with a short timeout.
   inspected_rvh->GetWidget()->StartHangMonitorTimeout(
-      TimeDelta::FromMilliseconds(10),
-      RenderWidgetHostDelegate::RENDERER_UNRESPONSIVE_UNKNOWN);
+      TimeDelta::FromMilliseconds(10), blink::WebInputEvent::Undefined,
+      RendererUnresponsiveType::RENDERER_UNRESPONSIVE_UNKNOWN);
   // Wait long enough for first timeout and see if it fired.
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE, base::MessageLoop::QuitWhenIdleClosure(),
@@ -159,8 +161,8 @@ TEST_F(DevToolsManagerTest, NoUnresponsiveDialogInInspectedContents) {
   client_host.Close();
   // Start with a short timeout.
   inspected_rvh->GetWidget()->StartHangMonitorTimeout(
-      TimeDelta::FromMilliseconds(10),
-      RenderWidgetHostDelegate::RENDERER_UNRESPONSIVE_UNKNOWN);
+      TimeDelta::FromMilliseconds(10), blink::WebInputEvent::Undefined,
+      RendererUnresponsiveType::RENDERER_UNRESPONSIVE_UNKNOWN);
   // Wait long enough for first timeout and see if it fired.
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE, base::MessageLoop::QuitWhenIdleClosure(),
@@ -178,7 +180,7 @@ TEST_F(DevToolsManagerTest, ReattachOnCancelPendingNavigation) {
       url, Referrer(), ui::PAGE_TRANSITION_TYPED, std::string());
   int pending_id = controller().GetPendingEntry()->GetUniqueID();
   contents()->GetMainFrame()->PrepareForCommit();
-  contents()->TestDidNavigate(contents()->GetMainFrame(), 1, pending_id, true,
+  contents()->TestDidNavigate(contents()->GetMainFrame(), pending_id, true,
                               url, ui::PAGE_TRANSITION_TYPED);
   contents()->GetMainFrame()->SimulateNavigationStop();
   EXPECT_FALSE(contents()->CrossProcessNavigationPending());
@@ -201,7 +203,7 @@ TEST_F(DevToolsManagerTest, ReattachOnCancelPendingNavigation) {
       url, Referrer(), ui::PAGE_TRANSITION_TYPED, std::string());
   pending_id = controller().GetPendingEntry()->GetUniqueID();
   contents()->GetMainFrame()->PrepareForCommit();
-  contents()->TestDidNavigate(contents()->GetMainFrame(), 1, pending_id, false,
+  contents()->TestDidNavigate(contents()->GetMainFrame(), pending_id, false,
                               url, ui::PAGE_TRANSITION_TYPED);
   EXPECT_FALSE(contents()->CrossProcessNavigationPending());
   EXPECT_EQ(client_host.agent_host(),

@@ -89,16 +89,16 @@ class MockCertificateReportSender
   MockCertificateReportSender() {}
   ~MockCertificateReportSender() override {}
 
-  void Send(const GURL& report_uri,
-            base::StringPiece content_type,
-            base::StringPiece report) override {
+  void Send(
+      const GURL& report_uri,
+      base::StringPiece content_type,
+      base::StringPiece report,
+      const base::Callback<void()>& success_callback,
+      const base::Callback<void(const GURL&, int)>& error_callback) override {
     latest_report_uri_ = report_uri;
     report.CopyToString(&latest_report_);
     content_type.CopyToString(&latest_content_type_);
   }
-
-  void SetErrorCallback(
-      const base::Callback<void(const GURL&, int)>& error_callback) override {}
 
   void Clear() {
     latest_report_uri_ = GURL();
@@ -126,21 +126,18 @@ class MockFailingCertificateReportSender
   int net_error() { return net_error_; }
 
   // TransportSecurityState::ReportSenderInterface:
-  void Send(const GURL& report_uri,
-            base::StringPiece content_type,
-            base::StringPiece report) override {
-    ASSERT_FALSE(error_callback_.is_null());
-    error_callback_.Run(report_uri, net_error_);
-  }
-
-  void SetErrorCallback(
+  void Send(
+      const GURL& report_uri,
+      base::StringPiece content_type,
+      base::StringPiece report,
+      const base::Callback<void()>& success_callback,
       const base::Callback<void(const GURL&, int)>& error_callback) override {
-    error_callback_ = error_callback;
+    ASSERT_FALSE(error_callback.is_null());
+    error_callback.Run(report_uri, net_error_);
   }
 
  private:
   const int net_error_;
-  base::Callback<void(const GURL&, int)> error_callback_;
 };
 
 // A mock ExpectCTReporter that remembers the latest violation that was
@@ -258,8 +255,7 @@ void CheckHPKPReport(
 // 5. The "cert-status" field matches |cert_status|, and is not present when
 //    |cert_status| is empty.
 // 6. The "validated-chain" and "serverd-chain" fields match those in
-//    |ssl_info|, and are only present when |ssl_info.is_issued_by_known_root|
-//    is true.
+//    |ssl_info|.
 void CheckSerializedExpectStapleReport(const std::string& report,
                                        const HostPortPair& host_port_pair,
                                        const SSLInfo& ssl_info,
@@ -318,18 +314,13 @@ void CheckSerializedExpectStapleReport(const std::string& report,
   bool has_validated_chain = report_dict->GetList(
       "validated-certificate-chain", &report_validated_certificate_chain);
 
-  if (ssl_info.is_issued_by_known_root) {
-    EXPECT_TRUE(has_served_chain);
-    EXPECT_NO_FATAL_FAILURE(CompareCertificateChainWithList(
-        ssl_info.unverified_cert, report_served_certificate_chain));
+  EXPECT_TRUE(has_served_chain);
+  EXPECT_NO_FATAL_FAILURE(CompareCertificateChainWithList(
+      ssl_info.unverified_cert, report_served_certificate_chain));
 
-    EXPECT_TRUE(has_validated_chain);
-    EXPECT_NO_FATAL_FAILURE(CompareCertificateChainWithList(
-        ssl_info.cert, report_validated_certificate_chain));
-  } else {
-    EXPECT_FALSE(has_served_chain);
-    EXPECT_FALSE(has_validated_chain);
-  }
+  EXPECT_TRUE(has_validated_chain);
+  EXPECT_NO_FATAL_FAILURE(CompareCertificateChainWithList(
+      ssl_info.cert, report_validated_certificate_chain));
 }
 
 // Set up |state| for ExpectStaple, call CheckExpectStaple(), and verify the
@@ -345,6 +336,11 @@ void CheckExpectStapleReport(TransportSecurityState* state,
   HostPortPair host_port(kExpectStapleStaticHostname, 443);
   state->SetReportSender(reporter);
   state->CheckExpectStaple(host_port, ssl_info, ocsp_response);
+  if (!ssl_info.is_issued_by_known_root) {
+    EXPECT_EQ(GURL(), reporter->latest_report_uri());
+    EXPECT_EQ(std::string(), reporter->latest_report());
+    return;
+  }
   EXPECT_EQ(GURL(kExpectStapleStaticReportURI), reporter->latest_report_uri());
   EXPECT_EQ("application/json; charset=utf-8", reporter->latest_content_type());
   std::string serialized_report = reporter->latest_report();
@@ -2067,14 +2063,14 @@ TEST_P(ExpectStapleErrorResponseTest, CheckResponseStatusSerialization) {
   ssl_info.unverified_cert = cert2;
   ssl_info.ocsp_result.response_status = test.response_status;
 
-  // Certificate chains should only be included when |is_issued_by_known_root|
-  // is true.
+  // Reports should only be sent when |is_issued_by_known_root| is true.
   ssl_info.is_issued_by_known_root = true;
   ASSERT_NO_FATAL_FAILURE(
       CheckExpectStapleReport(&state, &reporter, ssl_info, ocsp_response,
                               test.response_status_string, std::string()));
+  reporter.Clear();
 
-  // No certificate chains should be included in the report.
+  // No report should be sent.
   ssl_info.is_issued_by_known_root = false;
   ASSERT_NO_FATAL_FAILURE(
       CheckExpectStapleReport(&state, &reporter, ssl_info, ocsp_response,
@@ -2122,14 +2118,13 @@ TEST_P(ExpectStapleErrorCertStatusTest, CheckCertStatusSerialization) {
   ssl_info.ocsp_result.response_status = OCSPVerifyResult::PROVIDED;
   ssl_info.ocsp_result.revocation_status = test.revocation_status;
 
-  // Certificate chains should only be included when |is_issued_by_known_root|
-  // is true.
+  // Reports should only be sent when |is_issued_by_known_root| is true.
   ssl_info.is_issued_by_known_root = true;
   ASSERT_NO_FATAL_FAILURE(CheckExpectStapleReport(&state, &reporter, ssl_info,
                                                   ocsp_response, "PROVIDED",
                                                   test.cert_status_string));
+  reporter.Clear();
 
-  // No certificate chains should be included in the report.
   ssl_info.is_issued_by_known_root = false;
   ASSERT_NO_FATAL_FAILURE(CheckExpectStapleReport(&state, &reporter, ssl_info,
                                                   ocsp_response, "PROVIDED",

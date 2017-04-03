@@ -28,6 +28,7 @@
 #include "chrome/browser/safe_browsing/protocol_manager.h"
 #include "chrome/browser/safe_browsing/safe_browsing_util.h"
 #include "components/safe_browsing_db/database_manager.h"
+#include "components/safe_browsing_db/safe_browsing_prefs.h"
 #include "components/safe_browsing_db/safebrowsing.pb.h"
 #include "components/safe_browsing_db/util.h"
 #include "url/gurl.h"
@@ -45,7 +46,7 @@ class ClientSideDetectionService;
 class DownloadProtectionService;
 struct V4ProtocolConfig;
 
-// Implemetation that manages a local database on disk.
+// Implementation that manages a local database on disk.
 //
 // Construction needs to happen on the main thread.
 class LocalSafeBrowsingDatabaseManager
@@ -80,7 +81,7 @@ class LocalSafeBrowsingDatabaseManager
     std::vector<SBThreatType> full_hash_results;
 
     SafeBrowsingDatabaseManager::Client* client;
-    bool is_extended_reporting;
+    ExtendedReportingLevel extended_reporting_level;
     bool need_get_hash;
     base::TimeTicks start;  // When check was sent to SB service.
     ListType check_type;    // See comment in constructor.
@@ -158,7 +159,6 @@ class LocalSafeBrowsingDatabaseManager
   FRIEND_TEST_ALL_PREFIXES(LocalDatabaseManagerTest,
                            ServiceStopWithPendingChecks);
 
-  typedef std::set<SafeBrowsingCheck*> CurrentChecks;
   typedef std::vector<SafeBrowsingCheck*> GetHashRequestors;
   typedef base::hash_map<SBPrefix, GetHashRequestors> GetHashRequests;
 
@@ -217,9 +217,9 @@ class LocalSafeBrowsingDatabaseManager
   // Called on the UI thread to prepare hash request.
   void OnRequestFullHash(SafeBrowsingCheck* check);
 
-  // Called on the UI thread to determine if current profile is opted into
-  // extended reporting.
-  bool GetExtendedReporting();
+  // Called on the UI thread to determine what level of extended reporting the
+  // current profile is opted into.
+  ExtendedReportingLevel GetExtendedReporting();
 
   // Called on the IO thread to request full hash.
   void RequestFullHash(SafeBrowsingCheck* check);
@@ -236,7 +236,7 @@ class LocalSafeBrowsingDatabaseManager
   // Called on the IO thread with the results of all chunks.
   void OnGetAllChunksFromDatabase(const std::vector<SBListChunkRanges>& lists,
                                   bool database_error,
-                                  bool is_extended_reporting,
+                                  ExtendedReportingLevel reporting_level,
                                   GetChunksCallback callback);
 
   // Called on the IO thread after the database reports that it added a chunk.
@@ -304,7 +304,7 @@ class LocalSafeBrowsingDatabaseManager
   // browsing check with timeout of |timeout|. |task| will be called on
   // success, otherwise TimeoutCallback will be called.
   void StartSafeBrowsingCheck(
-      SafeBrowsingCheck* check,
+      std::unique_ptr<SafeBrowsingCheck> check,
       const base::Callback<std::vector<SBPrefix>(void)>& task);
 
   // SafeBrowsingProtocolManageDelegate override
@@ -321,7 +321,7 @@ class LocalSafeBrowsingDatabaseManager
 
   scoped_refptr<SafeBrowsingService> sb_service_;
 
-  CurrentChecks checks_;
+  std::map<SafeBrowsingCheck*, std::unique_ptr<SafeBrowsingCheck>> checks_;
 
   // Used for issuing only one GetHash request for a given prefix.
   GetHashRequests gethash_requests_;
@@ -338,7 +338,7 @@ class LocalSafeBrowsingDatabaseManager
   bool enabled_;
 
   // Indicate if download_protection is enabled by command switch
-  // so we allow this feature to be exersized.
+  // so we allow this feature to be exercised.
   bool enable_download_protection_;
 
   // Indicate if client-side phishing detection whitelist should be enabled

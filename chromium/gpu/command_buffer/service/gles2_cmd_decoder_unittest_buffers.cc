@@ -44,20 +44,54 @@ TEST_P(GLES3DecoderTest, BindBufferBaseValidArgsNewId) {
   EXPECT_TRUE(GetBuffer(kNewClientId) != NULL);
 }
 
-
 TEST_P(GLES3DecoderTest, BindBufferRangeValidArgs) {
-  EXPECT_CALL(*gl_, BindBufferRange(GL_TRANSFORM_FEEDBACK_BUFFER, 2,
-                                    kServiceBufferId, 4, 4));
+  const GLenum kTarget = GL_TRANSFORM_FEEDBACK_BUFFER;
+  const GLintptr kRangeOffset = 4;
+  const GLsizeiptr kRangeSize = 8;
+  const GLsizeiptr kBufferSize = kRangeOffset + kRangeSize;
+  DoBindBuffer(kTarget, client_buffer_id_, kServiceBufferId);
+  DoBufferData(kTarget, kBufferSize);
+  EXPECT_CALL(*gl_, BindBufferRange(kTarget, 2, kServiceBufferId,
+                                    kRangeOffset, kRangeSize));
   SpecializedSetup<BindBufferRange, 0>(true);
   BindBufferRange cmd;
-  cmd.Init(GL_TRANSFORM_FEEDBACK_BUFFER, 2, client_buffer_id_, 4, 4);
+  cmd.Init(kTarget, 2, client_buffer_id_, kRangeOffset, kRangeSize);
+  EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
+  EXPECT_EQ(GL_NO_ERROR, GetGLError());
+}
+
+TEST_P(GLES3DecoderTest, BindBufferRangeValidArgsWithNoData) {
+  const GLenum kTarget = GL_TRANSFORM_FEEDBACK_BUFFER;
+  const GLintptr kRangeOffset = 4;
+  const GLsizeiptr kRangeSize = 8;
+  DoBindBuffer(kTarget, client_buffer_id_, kServiceBufferId);
+  EXPECT_CALL(*gl_, BindBufferBase(kTarget, 2, kServiceBufferId));
+  SpecializedSetup<BindBufferRange, 0>(true);
+  BindBufferRange cmd;
+  cmd.Init(kTarget, 2, client_buffer_id_, kRangeOffset, kRangeSize);
+  EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
+  EXPECT_EQ(GL_NO_ERROR, GetGLError());
+}
+
+TEST_P(GLES3DecoderTest, BindBufferRangeValidArgsWithLessData) {
+  const GLenum kTarget = GL_TRANSFORM_FEEDBACK_BUFFER;
+  const GLintptr kRangeOffset = 4;
+  const GLsizeiptr kRangeSize = 8;
+  const GLsizeiptr kBufferSize = kRangeOffset + kRangeSize - 4;
+  DoBindBuffer(kTarget, client_buffer_id_, kServiceBufferId);
+  DoBufferData(kTarget, kBufferSize);
+  EXPECT_CALL(*gl_, BindBufferRange(kTarget, 2, kServiceBufferId,
+                                    kRangeOffset, kRangeSize - 4));
+  SpecializedSetup<BindBufferRange, 0>(true);
+  BindBufferRange cmd;
+  cmd.Init(kTarget, 2, client_buffer_id_, kRangeOffset, kRangeSize);
   EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
   EXPECT_EQ(GL_NO_ERROR, GetGLError());
 }
 
 TEST_P(GLES3DecoderTest, BindBufferRangeValidArgsNewId) {
-  EXPECT_CALL(*gl_, BindBufferRange(GL_TRANSFORM_FEEDBACK_BUFFER, 2,
-                                    kNewServiceId, 4, 4));
+  EXPECT_CALL(*gl_, BindBufferBase(GL_TRANSFORM_FEEDBACK_BUFFER, 2,
+                                    kNewServiceId));
   EXPECT_CALL(*gl_, GenBuffersARB(1, _))
       .WillOnce(SetArgPointee<1>(kNewServiceId));
   SpecializedSetup<BindBufferRange, 0>(true);
@@ -68,7 +102,7 @@ TEST_P(GLES3DecoderTest, BindBufferRangeValidArgsNewId) {
   EXPECT_TRUE(GetBuffer(kNewClientId) != NULL);
 }
 
-TEST_P(GLES2DecoderTest, MapBufferRangeUnmapBufferReadSucceeds) {
+TEST_P(GLES3DecoderTest, MapBufferRangeUnmapBufferReadSucceeds) {
   const GLenum kTarget = GL_ARRAY_BUFFER;
   const GLintptr kOffset = 10;
   const GLsizeiptr kSize = 64;
@@ -100,11 +134,6 @@ TEST_P(GLES2DecoderTest, MapBufferRangeUnmapBufferReadSucceeds) {
     MapBufferRange cmd;
     cmd.Init(kTarget, kOffset, kSize, kAccess, data_shm_id, data_shm_offset,
              result_shm_id, result_shm_offset);
-    decoder_->set_unsafe_es3_apis_enabled(false);
-    *result = 0;
-    EXPECT_EQ(error::kUnknownCommand, ExecuteCmd(cmd));
-    EXPECT_EQ(0u, *result);
-    decoder_->set_unsafe_es3_apis_enabled(true);
     *result = 0;
     EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
     int8_t* mem = reinterpret_cast<int8_t*>(&result[1]);
@@ -119,16 +148,13 @@ TEST_P(GLES2DecoderTest, MapBufferRangeUnmapBufferReadSucceeds) {
 
     UnmapBuffer cmd;
     cmd.Init(kTarget);
-    decoder_->set_unsafe_es3_apis_enabled(false);
-    EXPECT_EQ(error::kUnknownCommand, ExecuteCmd(cmd));
-    decoder_->set_unsafe_es3_apis_enabled(true);
     EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
   }
 
   EXPECT_EQ(GL_NO_ERROR, GetGLError());
 }
 
-TEST_P(GLES2DecoderTest, MapBufferRangeUnmapBufferWriteSucceeds) {
+TEST_P(GLES3DecoderTest, MapBufferRangeUnmapBufferWriteSucceeds) {
   const GLenum kTarget = GL_ELEMENT_ARRAY_BUFFER;
   const GLintptr kOffset = 10;
   const GLsizeiptr kSize = 64;
@@ -175,11 +201,6 @@ TEST_P(GLES2DecoderTest, MapBufferRangeUnmapBufferWriteSucceeds) {
     MapBufferRange cmd;
     cmd.Init(kTarget, kOffset, kSize, kAccess, data_shm_id, data_shm_offset,
              result_shm_id, result_shm_offset);
-    decoder_->set_unsafe_es3_apis_enabled(false);
-    *result = 0;
-    EXPECT_EQ(error::kUnknownCommand, ExecuteCmd(cmd));
-    EXPECT_EQ(0u, *result);
-    decoder_->set_unsafe_es3_apis_enabled(true);
     *result = 0;
     EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
     EXPECT_EQ(1u, *result);
@@ -198,9 +219,6 @@ TEST_P(GLES2DecoderTest, MapBufferRangeUnmapBufferWriteSucceeds) {
 
     UnmapBuffer cmd;
     cmd.Init(kTarget);
-    decoder_->set_unsafe_es3_apis_enabled(false);
-    EXPECT_EQ(error::kUnknownCommand, ExecuteCmd(cmd));
-    decoder_->set_unsafe_es3_apis_enabled(true);
     EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
 
     // Verify the GPU mem and shadow data are both updated
@@ -329,7 +347,7 @@ TEST_P(GLES3DecoderTest, FlushMappedBufferRangeSucceeds) {
   EXPECT_EQ(GL_NO_ERROR, GetGLError());
 }
 
-TEST_P(GLES2DecoderTest, MapBufferRangeNotInitFails) {
+TEST_P(GLES3DecoderTest, MapBufferRangeNotInitFails) {
   const GLenum kTarget = GL_ARRAY_BUFFER;
   const GLintptr kOffset = 10;
   const GLsizeiptr kSize = 64;
@@ -347,11 +365,10 @@ TEST_P(GLES2DecoderTest, MapBufferRangeNotInitFails) {
   MapBufferRange cmd;
   cmd.Init(kTarget, kOffset, kSize, kAccess, data_shm_id, data_shm_offset,
            result_shm_id, result_shm_offset);
-  decoder_->set_unsafe_es3_apis_enabled(true);
   EXPECT_NE(error::kNoError, ExecuteCmd(cmd));
 }
 
-TEST_P(GLES2DecoderTest, MapBufferRangeWriteInvalidateRangeSucceeds) {
+TEST_P(GLES3DecoderTest, MapBufferRangeWriteInvalidateRangeSucceeds) {
   const GLenum kTarget = GL_ARRAY_BUFFER;
   const GLintptr kOffset = 10;
   const GLsizeiptr kSize = 64;
@@ -384,11 +401,10 @@ TEST_P(GLES2DecoderTest, MapBufferRangeWriteInvalidateRangeSucceeds) {
   MapBufferRange cmd;
   cmd.Init(kTarget, kOffset, kSize, kAccess, data_shm_id, data_shm_offset,
            result_shm_id, result_shm_offset);
-  decoder_->set_unsafe_es3_apis_enabled(true);
   EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
 }
 
-TEST_P(GLES2DecoderTest, MapBufferRangeWriteInvalidateBufferSucceeds) {
+TEST_P(GLES3DecoderTest, MapBufferRangeWriteInvalidateBufferSucceeds) {
   // Test INVALIDATE_BUFFER_BIT is mapped to INVALIDATE_RANGE_BIT.
   const GLenum kTarget = GL_ARRAY_BUFFER;
   const GLintptr kOffset = 10;
@@ -424,11 +440,10 @@ TEST_P(GLES2DecoderTest, MapBufferRangeWriteInvalidateBufferSucceeds) {
   MapBufferRange cmd;
   cmd.Init(kTarget, kOffset, kSize, kAccess, data_shm_id, data_shm_offset,
            result_shm_id, result_shm_offset);
-  decoder_->set_unsafe_es3_apis_enabled(true);
   EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
 }
 
-TEST_P(GLES2DecoderTest, MapBufferRangeWriteUnsynchronizedBit) {
+TEST_P(GLES3DecoderTest, MapBufferRangeWriteUnsynchronizedBit) {
   // Test UNSYNCHRONIZED_BIT is filtered out.
   const GLenum kTarget = GL_ARRAY_BUFFER;
   const GLintptr kOffset = 10;
@@ -462,12 +477,11 @@ TEST_P(GLES2DecoderTest, MapBufferRangeWriteUnsynchronizedBit) {
   MapBufferRange cmd;
   cmd.Init(kTarget, kOffset, kSize, kAccess, data_shm_id, data_shm_offset,
            result_shm_id, result_shm_offset);
-  decoder_->set_unsafe_es3_apis_enabled(true);
   EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
   EXPECT_EQ(0, memcmp(&data[0], mem, kSize));
 }
 
-TEST_P(GLES2DecoderTest, MapBufferRangeWithError) {
+TEST_P(GLES3DecoderTest, MapBufferRangeWithError) {
   const GLenum kTarget = GL_ARRAY_BUFFER;
   const GLintptr kOffset = 10;
   const GLsizeiptr kSize = 64;
@@ -491,7 +505,6 @@ TEST_P(GLES2DecoderTest, MapBufferRangeWithError) {
   MapBufferRange cmd;
   cmd.Init(kTarget, kOffset, kSize, kAccess, data_shm_id, data_shm_offset,
            result_shm_id, result_shm_offset);
-  decoder_->set_unsafe_es3_apis_enabled(true);
   EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
   memset(&data[0], 72, kSize);
   // Mem is untouched.
@@ -500,7 +513,7 @@ TEST_P(GLES2DecoderTest, MapBufferRangeWithError) {
   EXPECT_EQ(GL_INVALID_OPERATION, GetGLError());
 }
 
-TEST_P(GLES2DecoderTest, MapBufferRangeBadSharedMemoryFails) {
+TEST_P(GLES3DecoderTest, MapBufferRangeBadSharedMemoryFails) {
   const GLenum kTarget = GL_ARRAY_BUFFER;
   const GLintptr kOffset = 10;
   const GLsizeiptr kSize = 64;
@@ -521,7 +534,6 @@ TEST_P(GLES2DecoderTest, MapBufferRangeBadSharedMemoryFails) {
   uint32_t data_shm_id = kSharedMemoryId;
   uint32_t data_shm_offset = kSharedMemoryOffset + sizeof(*result);
 
-  decoder_->set_unsafe_es3_apis_enabled(true);
   MapBufferRange cmd;
   cmd.Init(kTarget, kOffset, kSize, kAccess,
            kInvalidSharedMemoryId, data_shm_offset,
@@ -541,29 +553,27 @@ TEST_P(GLES2DecoderTest, MapBufferRangeBadSharedMemoryFails) {
   EXPECT_NE(error::kNoError, ExecuteCmd(cmd));
 }
 
-TEST_P(GLES2DecoderTest, UnmapBufferWriteNotMappedFails) {
+TEST_P(GLES3DecoderTest, UnmapBufferWriteNotMappedFails) {
   const GLenum kTarget = GL_ARRAY_BUFFER;
 
   DoBindBuffer(kTarget, client_buffer_id_, kServiceBufferId);
 
   UnmapBuffer cmd;
   cmd.Init(kTarget);
-  decoder_->set_unsafe_es3_apis_enabled(true);
   EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
   EXPECT_EQ(GL_INVALID_OPERATION, GetGLError());
 }
 
-TEST_P(GLES2DecoderTest, UnmapBufferWriteNoBoundBufferFails) {
+TEST_P(GLES3DecoderTest, UnmapBufferWriteNoBoundBufferFails) {
   const GLenum kTarget = GL_ARRAY_BUFFER;
 
   UnmapBuffer cmd;
   cmd.Init(kTarget);
-  decoder_->set_unsafe_es3_apis_enabled(true);
   EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
   EXPECT_EQ(GL_INVALID_OPERATION, GetGLError());
 }
 
-TEST_P(GLES2DecoderTest, BufferDataDestroysDataStore) {
+TEST_P(GLES3DecoderTest, BufferDataDestroysDataStore) {
   const GLenum kTarget = GL_ARRAY_BUFFER;
   const GLintptr kOffset = 10;
   const GLsizeiptr kSize = 64;
@@ -580,8 +590,6 @@ TEST_P(GLES2DecoderTest, BufferDataDestroysDataStore) {
   DoBufferData(kTarget, kSize + kOffset);
 
   std::vector<int8_t> data(kSize);
-
-  decoder_->set_unsafe_es3_apis_enabled(true);
 
   {  // MapBufferRange succeeds
     EXPECT_CALL(*gl_,
@@ -613,7 +621,7 @@ TEST_P(GLES2DecoderTest, BufferDataDestroysDataStore) {
   }
 }
 
-TEST_P(GLES2DecoderTest, DeleteBuffersDestroysDataStore) {
+TEST_P(GLES3DecoderTest, DeleteBuffersDestroysDataStore) {
   const GLenum kTarget = GL_ARRAY_BUFFER;
   const GLintptr kOffset = 10;
   const GLsizeiptr kSize = 64;
@@ -630,8 +638,6 @@ TEST_P(GLES2DecoderTest, DeleteBuffersDestroysDataStore) {
   DoBufferData(kTarget, kSize + kOffset);
 
   std::vector<int8_t> data(kSize);
-
-  decoder_->set_unsafe_es3_apis_enabled(true);
 
   {  // MapBufferRange succeeds
     EXPECT_CALL(*gl_,
@@ -663,7 +669,7 @@ TEST_P(GLES2DecoderTest, DeleteBuffersDestroysDataStore) {
   }
 }
 
-TEST_P(GLES2DecoderTest, MapUnmapBufferInvalidTarget) {
+TEST_P(GLES3DecoderTest, MapUnmapBufferInvalidTarget) {
   const GLenum kTarget = GL_TEXTURE_2D;
   const GLintptr kOffset = 10;
   const GLsizeiptr kSize = 64;
@@ -674,8 +680,6 @@ TEST_P(GLES2DecoderTest, MapUnmapBufferInvalidTarget) {
   uint32_t data_shm_id = kSharedMemoryId;
   // uint32_t is Result for both MapBufferRange and UnmapBuffer commands.
   uint32_t data_shm_offset = kSharedMemoryOffset + sizeof(uint32_t);
-
-  decoder_->set_unsafe_es3_apis_enabled(true);
 
   typedef MapBufferRange::Result Result;
   Result* result = GetSharedMemoryAs<Result*>();

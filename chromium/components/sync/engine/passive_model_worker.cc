@@ -4,18 +4,13 @@
 
 #include "components/sync/engine/passive_model_worker.h"
 
-#include "base/message_loop/message_loop.h"
+#include "base/callback.h"
 
 namespace syncer {
 
-PassiveModelWorker::PassiveModelWorker(WorkerLoopDestructionObserver* observer)
-    : ModelSafeWorker(observer) {}
+PassiveModelWorker::PassiveModelWorker() = default;
 
 PassiveModelWorker::~PassiveModelWorker() {}
-
-void PassiveModelWorker::RegisterForLoopDestruction() {
-  SetWorkingLoopToCurrent();
-}
 
 SyncerError PassiveModelWorker::DoWorkAndWaitUntilDoneImpl(
     const WorkCallback& work) {
@@ -25,6 +20,12 @@ SyncerError PassiveModelWorker::DoWorkAndWaitUntilDoneImpl(
 
 ModelSafeGroup PassiveModelWorker::GetModelSafeGroup() {
   return GROUP_PASSIVE;
+}
+
+bool PassiveModelWorker::IsOnModelThread() {
+  // Passive types are checked by SyncBackendRegistrar.
+  NOTREACHED();
+  return false;
 }
 
 }  // namespace syncer

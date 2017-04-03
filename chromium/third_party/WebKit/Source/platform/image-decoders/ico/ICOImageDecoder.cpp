@@ -45,13 +45,13 @@ static const size_t sizeOfDirectory = 6;
 static const size_t sizeOfDirEntry = 16;
 
 ICOImageDecoder::ICOImageDecoder(AlphaOption alphaOption,
-                                 GammaAndColorProfileOption colorOptions,
+                                 ColorSpaceOption colorOptions,
                                  size_t maxDecodedBytes)
     : ImageDecoder(alphaOption, colorOptions, maxDecodedBytes),
       m_fastReader(nullptr),
       m_decodedOffset(0),
       m_dirEntriesCount(0),
-      m_gammaAndColorProfileOption(colorOptions) {}
+      m_colorSpaceOption(colorOptions) {}
 
 ICOImageDecoder::~ICOImageDecoder() {}
 
@@ -189,7 +189,7 @@ bool ICOImageDecoder::decodeDirectory() {
 }
 
 bool ICOImageDecoder::decodeAtIndex(size_t index) {
-  ASSERT_WITH_SECURITY_IMPLICATION(index < m_dirEntries.size());
+  SECURITY_DCHECK(index < m_dirEntries.size());
   const IconDirectoryEntry& dirEntry = m_dirEntries[index];
   const ImageType imageType = imageTypeAtIndex(index);
   if (imageType == Unknown)
@@ -214,8 +214,8 @@ bool ICOImageDecoder::decodeAtIndex(size_t index) {
     AlphaOption alphaOption =
         m_premultiplyAlpha ? AlphaPremultiplied : AlphaNotPremultiplied;
     m_pngDecoders[index] = wrapUnique(
-        new PNGImageDecoder(alphaOption, m_gammaAndColorProfileOption,
-                            m_maxDecodedBytes, dirEntry.m_imageOffset));
+        new PNGImageDecoder(alphaOption, m_colorSpaceOption, m_maxDecodedBytes,
+                            dirEntry.m_imageOffset));
     setDataForPNGDecoderAtIndex(index);
   }
   // Fail if the size the PNGImageDecoder calculated does not match the size
@@ -330,7 +330,7 @@ ICOImageDecoder::IconDirectoryEntry ICOImageDecoder::readDirectoryEntry() {
 ICOImageDecoder::ImageType ICOImageDecoder::imageTypeAtIndex(size_t index) {
   // Check if this entry is a BMP or a PNG; we need 4 bytes to check the magic
   // number.
-  ASSERT_WITH_SECURITY_IMPLICATION(index < m_dirEntries.size());
+  SECURITY_DCHECK(index < m_dirEntries.size());
   const uint32_t imageOffset = m_dirEntries[index].m_imageOffset;
   if ((imageOffset > m_data->size()) || ((m_data->size() - imageOffset) < 4))
     return Unknown;

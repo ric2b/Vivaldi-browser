@@ -45,13 +45,15 @@ CompositorMusConnection::CompositorMusConnection(
                             this, base::Passed(std::move(request))));
 }
 
-void CompositorMusConnection::AttachSurfaceOnMainThread(
-    std::unique_ptr<ui::WindowSurfaceBinding> surface_binding) {
+void CompositorMusConnection::AttachCompositorFrameSinkOnMainThread(
+    std::unique_ptr<ui::WindowCompositorFrameSinkBinding>
+        compositor_frame_sink_binding) {
   DCHECK(main_task_runner_->BelongsToCurrentThread());
   compositor_task_runner_->PostTask(
       FROM_HERE,
-      base::Bind(&CompositorMusConnection::AttachSurfaceOnCompositorThread,
-                 this, base::Passed(std::move(surface_binding))));
+      base::Bind(
+          &CompositorMusConnection::AttachCompositorFrameSinkOnCompositorThread,
+          this, base::Passed(std::move(compositor_frame_sink_binding))));
 }
 
 CompositorMusConnection::~CompositorMusConnection() {
@@ -60,13 +62,16 @@ CompositorMusConnection::~CompositorMusConnection() {
   DCHECK(!window_tree_client_);
 }
 
-void CompositorMusConnection::AttachSurfaceOnCompositorThread(
-    std::unique_ptr<ui::WindowSurfaceBinding> surface_binding) {
+void CompositorMusConnection::AttachCompositorFrameSinkOnCompositorThread(
+    std::unique_ptr<ui::WindowCompositorFrameSinkBinding>
+        compositor_frame_sink_binding) {
   DCHECK(compositor_task_runner_->BelongsToCurrentThread());
-  window_surface_binding_ = std::move(surface_binding);
+  window_compositor_frame_sink_binding_ =
+      std::move(compositor_frame_sink_binding);
   if (root_) {
-    root_->AttachSurface(ui::mojom::SurfaceType::DEFAULT,
-                         std::move(window_surface_binding_));
+    root_->AttachCompositorFrameSink(
+        ui::mojom::CompositorFrameSinkType::DEFAULT,
+        std::move(window_compositor_frame_sink_binding_));
   }
 }
 
@@ -151,9 +156,10 @@ void CompositorMusConnection::OnEmbed(ui::Window* root) {
   DCHECK(compositor_task_runner_->BelongsToCurrentThread());
   root_ = root;
   root_->set_input_event_handler(this);
-  if (window_surface_binding_) {
-    root->AttachSurface(ui::mojom::SurfaceType::DEFAULT,
-                        std::move(window_surface_binding_));
+  if (window_compositor_frame_sink_binding_) {
+    root->AttachCompositorFrameSink(
+        ui::mojom::CompositorFrameSinkType::DEFAULT,
+        std::move(window_compositor_frame_sink_binding_));
   }
 }
 

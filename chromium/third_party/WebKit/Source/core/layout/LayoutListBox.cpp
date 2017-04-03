@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 2006, 2007, 2008, 2011 Apple Inc. All rights reserved.
- *               2009 Torch Mobile Inc. All rights reserved. (http://www.torchmobile.com/)
+ *               2009 Torch Mobile Inc. All rights reserved.
+ *                    (http://www.torchmobile.com/)
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -38,7 +39,8 @@
 
 namespace blink {
 
-// Default size when the multiple attribute is present but size attribute is absent.
+// Default size when the multiple attribute is present but size attribute is
+// absent.
 const int defaultSize = 4;
 
 const int defaultPaddingBottom = 1;
@@ -64,7 +66,10 @@ unsigned LayoutListBox::size() const {
 }
 
 LayoutUnit LayoutListBox::defaultItemHeight() const {
-  return LayoutUnit(style()->getFontMetrics().height() + defaultPaddingBottom);
+  const SimpleFontData* fontData = style()->font().primaryFont();
+  if (!fontData)
+    return LayoutUnit();
+  return LayoutUnit(fontData->getFontMetrics().height() + defaultPaddingBottom);
 }
 
 LayoutUnit LayoutListBox::itemHeight() const {
@@ -96,7 +101,8 @@ void LayoutListBox::computeLogicalHeight(
     LayoutUnit logicalTop,
     LogicalExtentComputedValues& computedValues) const {
   LayoutUnit height = itemHeight() * size();
-  // FIXME: The item height should have been added before updateLogicalHeight was called to avoid this hack.
+  // FIXME: The item height should have been added before updateLogicalHeight
+  // was called to avoid this hack.
   setIntrinsicContentLogicalHeight(height);
 
   height += borderAndPaddingHeight();

@@ -29,7 +29,6 @@
 #include "ui/gl/gl_surface_stub.h"
 #include "ui/gl/gl_switches.h"
 #include "ui/gl/scoped_make_current.h"
-#include "ui/gl/sync_control_vsync_provider.h"
 
 #if defined(USE_X11) && !defined(OS_CHROMEOS)
 extern "C" {
@@ -78,6 +77,11 @@ extern "C" {
 #define EGL_PLATFORM_ANGLE_TYPE_OPENGLES_ANGLE 0x320E
 #endif /* EGL_ANGLE_platform_angle_opengl */
 
+#ifndef EGL_ANGLE_platform_angle_null
+#define EGL_ANGLE_platform_angle_null 1
+#define EGL_PLATFORM_ANGLE_TYPE_NULL_ANGLE 0x33AE
+#endif /* EGL_ANGLE_platform_angle_null */
+
 #ifndef EGL_ANGLE_x11_visual
 #define EGL_ANGLE_x11_visual 1
 #define EGL_X11_VISUAL_ID_ANGLE 0x33A3
@@ -122,46 +126,13 @@ EGLNativeDisplayType g_native_display = EGL_DEFAULT_DISPLAY;
 
 const char* g_egl_extensions = nullptr;
 bool g_egl_create_context_robustness_supported = false;
+bool g_egl_create_context_bind_generates_resource_supported = false;
+bool g_egl_create_context_webgl_compatability_supported = false;
 bool g_egl_sync_control_supported = false;
 bool g_egl_window_fixed_size_supported = false;
 bool g_egl_surfaceless_context_supported = false;
 bool g_egl_surface_orientation_supported = false;
 bool g_use_direct_composition = false;
-
-class EGLSyncControlVSyncProvider : public SyncControlVSyncProvider {
- public:
-  explicit EGLSyncControlVSyncProvider(EGLSurface surface)
-      : SyncControlVSyncProvider(),
-        surface_(surface) {
-  }
-
-  ~EGLSyncControlVSyncProvider() override {}
-
- protected:
-  bool GetSyncValues(int64_t* system_time,
-                     int64_t* media_stream_counter,
-                     int64_t* swap_buffer_counter) override {
-    uint64_t u_system_time, u_media_stream_counter, u_swap_buffer_counter;
-    bool result = eglGetSyncValuesCHROMIUM(
-        g_display, surface_, &u_system_time,
-        &u_media_stream_counter, &u_swap_buffer_counter) == EGL_TRUE;
-    if (result) {
-      *system_time = static_cast<int64_t>(u_system_time);
-      *media_stream_counter = static_cast<int64_t>(u_media_stream_counter);
-      *swap_buffer_counter = static_cast<int64_t>(u_swap_buffer_counter);
-    }
-    return result;
-  }
-
-  bool GetMscRate(int32_t* numerator, int32_t* denominator) override {
-    return false;
-  }
-
- private:
-  EGLSurface surface_;
-
-  DISALLOW_COPY_AND_ASSIGN(EGLSyncControlVSyncProvider);
-};
 
 EGLDisplay GetPlatformANGLEDisplay(EGLNativeDisplayType native_display,
                                    EGLenum platform_type,
@@ -209,6 +180,9 @@ EGLDisplay GetDisplayFromType(DisplayType display_type,
     case ANGLE_OPENGLES:
       return GetPlatformANGLEDisplay(
           native_display, EGL_PLATFORM_ANGLE_TYPE_OPENGLES_ANGLE, false);
+    case ANGLE_NULL:
+      return GetPlatformANGLEDisplay(native_display,
+                                     EGL_PLATFORM_ANGLE_TYPE_NULL_ANGLE, false);
     default:
       NOTREACHED();
       return EGL_NO_DISPLAY;
@@ -229,6 +203,8 @@ const char* DisplayTypeString(DisplayType display_type) {
       return "OpenGL";
     case ANGLE_OPENGLES:
       return "OpenGLES";
+    case ANGLE_NULL:
+      return "Null";
     default:
       NOTREACHED();
       return "Err";
@@ -257,8 +233,8 @@ EGLConfig ChooseConfig(GLSurface::Format format) {
   // Choose an EGL configuration.
   // On X this is only used for PBuffer surfaces.
   std::vector<EGLint> renderable_types;
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnableUnsafeES3APIs)) {
+  if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kDisableES3GLContext)) {
     renderable_types.push_back(EGL_OPENGL_ES3_BIT);
   }
   renderable_types.push_back(EGL_OPENGL_ES2_BIT);
@@ -383,6 +359,7 @@ EGLConfig ChooseConfig(GLSurface::Format format) {
 
 void GetEGLInitDisplays(bool supports_angle_d3d,
                         bool supports_angle_opengl,
+                        bool supports_angle_null,
                         const base::CommandLine* command_line,
                         std::vector<DisplayType>* init_displays) {
   // SwiftShader does not use the platform extensions
@@ -398,6 +375,12 @@ void GetEGLInitDisplays(bool supports_angle_d3d,
   bool use_angle_default =
       !command_line->HasSwitch(switches::kUseANGLE) ||
       requested_renderer == kANGLEImplementationDefaultName;
+
+  if (supports_angle_null &&
+      requested_renderer == kANGLEImplementationNullName) {
+    init_displays->push_back(ANGLE_NULL);
+    return;
+  }
 
   if (supports_angle_d3d) {
     if (use_angle_default) {
@@ -437,6 +420,31 @@ void GetEGLInitDisplays(bool supports_angle_d3d,
   }
 }
 
+EGLSyncControlVSyncProvider::EGLSyncControlVSyncProvider(EGLSurface surface)
+    : SyncControlVSyncProvider(), surface_(surface) {}
+
+EGLSyncControlVSyncProvider::~EGLSyncControlVSyncProvider() {}
+
+bool EGLSyncControlVSyncProvider::GetSyncValues(int64_t* system_time,
+                                                int64_t* media_stream_counter,
+                                                int64_t* swap_buffer_counter) {
+  uint64_t u_system_time, u_media_stream_counter, u_swap_buffer_counter;
+  bool result = eglGetSyncValuesCHROMIUM(g_display, surface_, &u_system_time,
+                                         &u_media_stream_counter,
+                                         &u_swap_buffer_counter) == EGL_TRUE;
+  if (result) {
+    *system_time = static_cast<int64_t>(u_system_time);
+    *media_stream_counter = static_cast<int64_t>(u_media_stream_counter);
+    *swap_buffer_counter = static_cast<int64_t>(u_swap_buffer_counter);
+  }
+  return result;
+}
+
+bool EGLSyncControlVSyncProvider::GetMscRate(int32_t* numerator,
+                                             int32_t* denominator) {
+  return false;
+}
+
 GLSurfaceEGL::GLSurfaceEGL() {}
 
 GLSurface::Format GLSurfaceEGL::GetFormat() {
@@ -472,6 +480,10 @@ bool GLSurfaceEGL::InitializeOneOff(EGLNativeDisplayType native_display) {
   g_egl_extensions = eglQueryString(g_display, EGL_EXTENSIONS);
   g_egl_create_context_robustness_supported =
       HasEGLExtension("EGL_EXT_create_context_robustness");
+  g_egl_create_context_bind_generates_resource_supported =
+      HasEGLExtension("EGL_CHROMIUM_create_context_bind_generates_resource");
+  g_egl_create_context_webgl_compatability_supported =
+      HasEGLExtension("EGL_ANGLE_create_context_webgl_compatibility");
   g_egl_sync_control_supported =
       HasEGLExtension("EGL_CHROMIUM_sync_control");
   g_egl_window_fixed_size_supported =
@@ -503,7 +515,7 @@ bool GLSurfaceEGL::InitializeOneOff(EGLNativeDisplayType native_display) {
     // to query for supported GL extensions.
     scoped_refptr<GLSurface> surface = new SurfacelessEGL(gfx::Size(1, 1));
     scoped_refptr<GLContext> context = InitializeGLContext(
-        new GLContextEGL(nullptr), surface.get(), PreferIntegratedGpu);
+        new GLContextEGL(nullptr), surface.get(), GLContextAttribs());
     if (!context->MakeCurrent(surface.get()))
       g_egl_surfaceless_context_supported = false;
 
@@ -528,6 +540,8 @@ void GLSurfaceEGL::ResetForTesting() {
 
   g_egl_extensions = nullptr;
   g_egl_create_context_robustness_supported = false;
+  g_egl_create_context_bind_generates_resource_supported = false;
+  g_egl_create_context_webgl_compatability_supported = false;
   g_egl_sync_control_supported = false;
   g_egl_window_fixed_size_supported = false;
   g_egl_surface_orientation_supported = false;
@@ -562,6 +576,14 @@ bool GLSurfaceEGL::IsCreateContextRobustnessSupported() {
   return g_egl_create_context_robustness_supported;
 }
 
+bool GLSurfaceEGL::IsCreateContextBindGeneratesResourceSupported() {
+  return g_egl_create_context_bind_generates_resource_supported;
+}
+
+bool GLSurfaceEGL::IsCreateContextWebGLCompatabilitySupported() {
+  return g_egl_create_context_webgl_compatability_supported;
+}
+
 // static
 bool GLSurfaceEGL::IsEGLSurfacelessContextSupported() {
   return g_egl_surfaceless_context_supported;
@@ -592,6 +614,7 @@ EGLDisplay GLSurfaceEGL::InitializeDisplay(
 
   bool supports_angle_d3d = false;
   bool supports_angle_opengl = false;
+  bool supports_angle_null = false;
   // Check for availability of ANGLE extensions.
   if (client_extensions &&
       ExtensionsContain(client_extensions, "EGL_ANGLE_platform_angle")) {
@@ -599,10 +622,13 @@ EGLDisplay GLSurfaceEGL::InitializeDisplay(
         ExtensionsContain(client_extensions, "EGL_ANGLE_platform_angle_d3d");
     supports_angle_opengl =
         ExtensionsContain(client_extensions, "EGL_ANGLE_platform_angle_opengl");
+    supports_angle_null =
+        ExtensionsContain(client_extensions, "EGL_ANGLE_platform_angle_null");
   }
 
   std::vector<DisplayType> init_displays;
   GetEGLInitDisplays(supports_angle_d3d, supports_angle_opengl,
+                     supports_angle_null,
                      base::CommandLine::ForCurrentProcess(), &init_displays);
 
   for (size_t disp_index = 0; disp_index < init_displays.size(); ++disp_index) {

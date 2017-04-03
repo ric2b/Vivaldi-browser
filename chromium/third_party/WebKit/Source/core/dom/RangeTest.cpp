@@ -41,21 +41,8 @@ HTMLDocument& RangeTest::document() const {
   return *m_document;
 }
 
-TEST_F(RangeTest, createAdjustedToTreeScopeWithPositionInShadowTree) {
-  document().body()->setInnerHTML("<div><select><option>012</option></div>",
-                                  ASSERT_NO_EXCEPTION);
-  Element* const selectElement = document().querySelector("select");
-  const Position& position =
-      Position::afterNode(selectElement->userAgentShadowRoot());
-  Range* const range = Range::createAdjustedToTreeScope(document(), position);
-  EXPECT_EQ(range->startContainer(), selectElement->parentNode());
-  EXPECT_EQ(static_cast<unsigned>(range->startOffset()),
-            selectElement->nodeIndex());
-  EXPECT_TRUE(range->collapsed());
-}
-
 TEST_F(RangeTest, SplitTextNodeRangeWithinText) {
-  document().body()->setInnerHTML("1234", ASSERT_NO_EXCEPTION);
+  document().body()->setInnerHTML("1234");
   Text* oldText = toText(document().body()->firstChild());
 
   Range* range04 = Range::create(document(), oldText, 0, oldText, 4);
@@ -96,8 +83,7 @@ TEST_F(RangeTest, SplitTextNodeRangeWithinText) {
 TEST_F(RangeTest, SplitTextNodeRangeOutsideText) {
   document().body()->setInnerHTML(
       "<span id=\"outer\">0<span id=\"inner-left\">1</span>SPLITME<span "
-      "id=\"inner-right\">2</span>3</span>",
-      ASSERT_NO_EXCEPTION);
+      "id=\"inner-right\">2</span>3</span>");
 
   Element* outer = document().getElementById(AtomicString::fromUTF8("outer"));
   Element* innerLeft =
@@ -159,8 +145,8 @@ TEST_F(RangeTest, SplitTextNodeRangeOutsideText) {
 }
 
 TEST_F(RangeTest, updateOwnerDocumentIfNeeded) {
-  Element* foo = document().createElement("foo", ASSERT_NO_EXCEPTION);
-  Element* bar = document().createElement("bar", ASSERT_NO_EXCEPTION);
+  Element* foo = document().createElement("foo");
+  Element* bar = document().createElement("bar");
   foo->appendChild(bar);
 
   Range* range = Range::create(document(), Position(bar, 0), Position(foo, 1));
@@ -177,8 +163,7 @@ TEST_F(RangeTest, updateOwnerDocumentIfNeeded) {
 // Regression test for crbug.com/639184
 TEST_F(RangeTest, NotMarkedValidByIrrelevantTextInsert) {
   document().body()->setInnerHTML(
-      "<div><span id=span1>foo</span>bar<span id=span2>baz</span></div>",
-      ASSERT_NO_EXCEPTION);
+      "<div><span id=span1>foo</span>bar<span id=span2>baz</span></div>");
 
   Element* div = document().querySelector("div");
   Element* span1 = document().getElementById("span1");
@@ -187,7 +172,7 @@ TEST_F(RangeTest, NotMarkedValidByIrrelevantTextInsert) {
 
   Range* range = Range::create(document(), span2, 0, div, 3);
 
-  div->removeChild(span1, ASSERT_NO_EXCEPTION);
+  div->removeChild(span1);
   text->insertData(0, "bar", ASSERT_NO_EXCEPTION);
 
   EXPECT_TRUE(range->boundaryPointsValid());
@@ -200,8 +185,7 @@ TEST_F(RangeTest, NotMarkedValidByIrrelevantTextInsert) {
 // Regression test for crbug.com/639184
 TEST_F(RangeTest, NotMarkedValidByIrrelevantTextRemove) {
   document().body()->setInnerHTML(
-      "<div><span id=span1>foofoo</span>bar<span id=span2>baz</span></div>",
-      ASSERT_NO_EXCEPTION);
+      "<div><span id=span1>foofoo</span>bar<span id=span2>baz</span></div>");
 
   Element* div = document().querySelector("div");
   Element* span1 = document().getElementById("span1");
@@ -210,7 +194,7 @@ TEST_F(RangeTest, NotMarkedValidByIrrelevantTextRemove) {
 
   Range* range = Range::create(document(), span2, 0, div, 3);
 
-  div->removeChild(span1, ASSERT_NO_EXCEPTION);
+  div->removeChild(span1);
   text->deleteData(0, 3, ASSERT_NO_EXCEPTION);
 
   EXPECT_TRUE(range->boundaryPointsValid());

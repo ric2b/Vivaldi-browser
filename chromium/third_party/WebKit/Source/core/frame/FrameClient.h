@@ -12,9 +12,6 @@
 namespace blink {
 
 class Frame;
-class LocalFrame;
-class MessageEvent;
-class SecurityOrigin;
 enum class FrameDetachType;
 
 class CORE_EXPORT FrameClient : public GarbageCollectedFinalized<FrameClient> {
@@ -31,10 +28,8 @@ class CORE_EXPORT FrameClient : public GarbageCollectedFinalized<FrameClient> {
 
   virtual Frame* parent() const = 0;
   virtual Frame* top() const = 0;
-  virtual Frame* previousSibling() const = 0;
   virtual Frame* nextSibling() const = 0;
   virtual Frame* firstChild() const = 0;
-  virtual Frame* lastChild() const = 0;
 
   virtual unsigned backForwardLength() = 0;
 

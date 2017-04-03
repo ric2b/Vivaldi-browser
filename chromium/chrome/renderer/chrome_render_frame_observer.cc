@@ -12,7 +12,7 @@
 #include <vector>
 
 #include "base/command_line.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
@@ -27,10 +27,10 @@
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_view.h"
 #include "extensions/common/constants.h"
+#include "printing/features/features.h"
 #include "skia/ext/image_operations.h"
 #include "third_party/WebKit/public/platform/WebImage.h"
 #include "third_party/WebKit/public/platform/WebURLRequest.h"
-#include "third_party/WebKit/public/platform/modules/app_banner/WebAppBannerPromptReply.h"
 #include "third_party/WebKit/public/web/WebDataSource.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebElement.h"
@@ -43,7 +43,7 @@
 #include "ui/gfx/geometry/size_f.h"
 #include "url/gurl.h"
 
-#if defined(ENABLE_PRINTING)
+#if BUILDFLAG(ENABLE_PRINTING)
 #include "components/printing/common/print_messages.h"
 #include "components/printing/renderer/print_web_view_helper.h"
 #endif
@@ -145,12 +145,10 @@ bool ChromeRenderFrameObserver::OnMessageReceived(const IPC::Message& message) {
                         OnRequestThumbnailForContextNode)
     IPC_MESSAGE_HANDLER(ChromeViewMsg_SetClientSidePhishingDetection,
                         OnSetClientSidePhishingDetection)
-#if defined(ENABLE_PRINTING)
+#if BUILDFLAG(ENABLE_PRINTING)
     IPC_MESSAGE_HANDLER(PrintMsg_PrintNodeUnderContextMenu,
                         OnPrintNodeUnderContextMenu)
 #endif
-    IPC_MESSAGE_HANDLER(ChromeViewMsg_AppBannerPromptRequest,
-                        OnAppBannerPromptRequest)
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
 
@@ -221,9 +219,9 @@ void ChromeRenderFrameObserver::OnRequestThumbnailForContextNode(
 }
 
 void ChromeRenderFrameObserver::OnPrintNodeUnderContextMenu() {
-#if defined(ENABLE_PRINTING)
+#if BUILDFLAG(ENABLE_PRINTING)
   printing::PrintWebViewHelper* helper =
-      printing::PrintWebViewHelper::Get(render_frame()->GetRenderView());
+      printing::PrintWebViewHelper::Get(render_frame());
   if (helper)
     helper->PrintNode(render_frame()->GetWebFrame()->contextMenuNode());
 #endif
@@ -238,30 +236,6 @@ void ChromeRenderFrameObserver::OnSetClientSidePhishingDetection(
                                                               nullptr)
           : nullptr;
 #endif
-}
-
-void ChromeRenderFrameObserver::OnAppBannerPromptRequest(
-    int request_id,
-    const std::string& platform) {
-  // App banner prompt requests are handled in the general chrome render frame
-  // observer, not the AppBannerClient, as the AppBannerClient is created lazily
-  // by blink and may not exist when the request is sent.
-  blink::WebAppBannerPromptReply reply = blink::WebAppBannerPromptReply::None;
-  blink::WebString web_platform(base::UTF8ToUTF16(platform));
-  blink::WebVector<blink::WebString> web_platforms(&web_platform, 1);
-
-  blink::WebLocalFrame* frame = render_frame()->GetWebFrame();
-  frame->willShowInstallBannerPrompt(request_id, web_platforms, &reply);
-
-  // Extract the referrer header for this site according to its referrer policy.
-  // Pass in an empty URL as the destination so that it is always treated
-  // as a cross-origin request.
-  std::string referrer = blink::WebSecurityPolicy::generateReferrerHeader(
-      frame->document().referrerPolicy(), GURL(),
-      frame->document().outgoingReferrer()).utf8();
-
-  Send(new ChromeViewHostMsg_AppBannerPromptReply(
-      routing_id(), request_id, reply, referrer));
 }
 
 void ChromeRenderFrameObserver::DidFinishLoad() {

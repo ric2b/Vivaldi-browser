@@ -3,7 +3,8 @@
  *           (C) 1999 Antti Koivisto (koivisto@kde.org)
  *           (C) 2006 Allan Sandfeld Jensen (kde@carewolf.com)
  *           (C) 2006 Samuel Weinig (sam.weinig@gmail.com)
- * Copyright (C) 2004, 2005, 2006, 2007, 2009, 2010, 2011 Apple Inc. All rights reserved.
+ * Copyright (C) 2004, 2005, 2006, 2007, 2009, 2010, 2011 Apple Inc.
+ *               All rights reserved.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -121,9 +122,6 @@ class CORE_EXPORT LayoutImage : public LayoutReplaced {
                    const HitTestLocation& locationInContainer,
                    const LayoutPoint& accumulatedOffset,
                    HitTestAction) final;
-
-  bool boxShadowShouldBeAppliedToBackground(BackgroundBleedAvoidance,
-                                            const InlineFlowBox*) const final;
 
   void invalidatePaintAndMarkForLayoutIfNeeded();
   void updateIntrinsicSizeIfNeeded(const LayoutSize&);

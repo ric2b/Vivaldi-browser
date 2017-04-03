@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/webui/uber/uber_ui.h"
 
+#include "base/memory/ptr_util.h"
 #include "base/stl_util.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
@@ -27,12 +28,13 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
+#include "content/public/common/browser_side_navigation_policy.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/extension_set.h"
 
 using content::NavigationController;
 using content::NavigationEntry;
-using content::RenderViewHost;
+using content::RenderFrameHost;
 using content::WebContents;
 
 namespace {
@@ -146,18 +148,23 @@ void SubframeLogger::DidCommitProvisionalLoadForFrame(
     content::RenderFrameHost* render_frame_host,
     const GURL& url,
     ui::PageTransition transition_type) {
-  if (url == GURL(chrome::kChromeUIExtensionsFrameURL) ||
-      url == GURL(chrome::kChromeUIHelpFrameURL) ||
-      url == GURL(chrome::kChromeUIHistoryFrameURL) ||
-      url == GURL(chrome::kChromeUISettingsFrameURL) ||
-      url == GURL(chrome::kChromeUIUberFrameURL)) {
+  if (url == chrome::kChromeUIExtensionsFrameURL ||
+      url == chrome::kChromeUIHelpFrameURL ||
+      url == chrome::kChromeUIHistoryFrameURL ||
+      url == chrome::kChromeUISettingsFrameURL ||
+      url == chrome::kChromeUIUberFrameURL) {
     webui::LogWebUIUrl(url);
   }
 }
 
-UberUI::UberUI(content::WebUI* web_ui)
-    : WebUIController(web_ui),
-      subframe_logger_(web_ui->GetWebContents()) {
+UberUI::UberUI(content::WebUI* web_ui) : WebUIController(web_ui) {
+  if (!content::IsBrowserSideNavigationEnabled()) {
+    // This isn't needed with PlzNavigate because when
+    // CreateWebUIControllerForURL is called there's always a RenderFrame
+    // and the logging happens there.
+    subframe_logger_ =
+        base::MakeUnique<SubframeLogger>(web_ui->GetWebContents());
+  }
   content::WebUIDataSource::Add(web_ui->GetWebContents()->GetBrowserContext(),
                                 CreateUberHTMLSource());
 
@@ -174,7 +181,6 @@ UberUI::UberUI(content::WebUI* web_ui)
 }
 
 UberUI::~UberUI() {
-  base::STLDeleteValues(&sub_uis_);
 }
 
 void UberUI::RegisterSubpage(const std::string& page_url,
@@ -185,14 +191,13 @@ void UberUI::RegisterSubpage(const std::string& page_url,
 
 content::WebUI* UberUI::GetSubpage(const std::string& page_url) {
   if (!base::ContainsKey(sub_uis_, page_url))
-    return NULL;
-  return sub_uis_[page_url];
+    return nullptr;
+  return sub_uis_[page_url].get();
 }
 
-void UberUI::RenderViewCreated(RenderViewHost* render_view_host) {
-  for (SubpageMap::iterator iter = sub_uis_.begin(); iter != sub_uis_.end();
-       ++iter) {
-    iter->second->GetController()->RenderViewCreated(render_view_host);
+void UberUI::RenderFrameCreated(RenderFrameHost* render_frame_host) {
+  for (auto iter = sub_uis_.begin(); iter != sub_uis_.end(); ++iter) {
+    iter->second->GetController()->RenderFrameCreated(render_frame_host);
   }
 }
 
@@ -200,7 +205,7 @@ bool UberUI::OverrideHandleWebUIMessage(const GURL& source_url,
                                         const std::string& message,
                                         const base::ListValue& args) {
   // Find the appropriate subpage and forward the message.
-  SubpageMap::iterator subpage = sub_uis_.find(source_url.GetOrigin().spec());
+  auto subpage = sub_uis_.find(source_url.GetOrigin().spec());
   if (subpage == sub_uis_.end()) {
     // The message was sent from the uber page itself.
     DCHECK_EQ(std::string(chrome::kChromeUIUberHost), source_url.host());

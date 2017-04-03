@@ -16,7 +16,6 @@
 #include "url/origin.h"
 
 namespace content {
-class ResourceRequestBody;
 
 // A struct to hold the parameters needed to start a navigation request in
 // ResourceDispatcherHost. It is initialized on the UI thread, and then passed
@@ -29,7 +28,9 @@ struct CONTENT_EXPORT NavigationRequestInfo {
                         bool is_main_frame,
                         bool parent_is_main_frame,
                         bool are_ancestors_secure,
-                        int frame_tree_node_id);
+                        int frame_tree_node_id,
+                        bool is_for_guests_only,
+                        bool report_raw_headers);
   ~NavigationRequestInfo();
 
   const CommonNavigationParams common_params;
@@ -50,6 +51,10 @@ struct CONTENT_EXPORT NavigationRequestInfo {
   const bool are_ancestors_secure;
 
   const int frame_tree_node_id;
+
+  const bool is_for_guests_only;
+
+  const bool report_raw_headers;
 };
 
 }  // namespace content

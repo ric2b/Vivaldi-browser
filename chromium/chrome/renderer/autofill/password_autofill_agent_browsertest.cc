@@ -2,29 +2,31 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/feature_list.h"
+#include "components/autofill/content/renderer/password_autofill_agent.h"
+
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/scoped_feature_list.h"
 #include "chrome/renderer/autofill/fake_content_password_manager_driver.h"
+#include "chrome/renderer/autofill/fake_password_manager_client.h"
 #include "chrome/renderer/autofill/password_generation_test_utils.h"
 #include "chrome/test/base/chrome_render_view_test.h"
-#include "components/autofill/content/common/autofill_messages.h"
 #include "components/autofill/content/renderer/autofill_agent.h"
 #include "components/autofill/content/renderer/form_autofill_util.h"
-#include "components/autofill/content/renderer/password_autofill_agent.h"
 #include "components/autofill/content/renderer/test_password_autofill_agent.h"
 #include "components/autofill/content/renderer/test_password_generation_agent.h"
 #include "components/autofill/core/common/autofill_constants.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/form_field_data.h"
-#include <components/autofill/core/common/password_form.h>
+#include "components/autofill/core/common/password_form.h"
 #include "components/autofill/core/common/password_form_field_prediction_map.h"
 #include "components/password_manager/core/common/password_manager_features.h"
+#include "content/public/common/associated_interface_provider.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_view.h"
-#include "services/shell/public/cpp/interface_provider.h"
+#include "services/service_manager/public/cpp/interface_provider.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/platform/WebVector.h"
@@ -326,21 +328,27 @@ class PasswordAutofillAgentTest : public ChromeRenderViewTest {
   void RegisterMainFrameRemoteInterfaces() override {
     // We only use the fake driver for main frame
     // because our test cases only involve the main frame.
-    shell::InterfaceProvider* remote_interfaces =
+    service_manager::InterfaceProvider* remote_interfaces =
         view_->GetMainRenderFrame()->GetRemoteInterfaces();
-    shell::InterfaceProvider::TestApi test_api(remote_interfaces);
+    service_manager::InterfaceProvider::TestApi test_api(remote_interfaces);
     test_api.SetBinderForName(
         mojom::PasswordManagerDriver::Name_,
         base::Bind(&PasswordAutofillAgentTest::BindPasswordManagerDriver,
                    base::Unretained(this)));
+
+    // Because the test cases only involve the main frame in this test,
+    // the fake password client is only used for the main frame.
+    content::AssociatedInterfaceProvider* remote_associated_interfaces =
+        view_->GetMainRenderFrame()->GetRemoteAssociatedInterfaces();
+    remote_associated_interfaces->OverrideBinderForTesting(
+        mojom::PasswordManagerClient::Name_,
+        base::Bind(&PasswordAutofillAgentTest::BindPasswordManagerClient,
+                   base::Unretained(this)));
   }
 
   void SetFillOnAccountSelect() {
-    base::FeatureList::ClearInstanceForTesting();
-    std::unique_ptr<base::FeatureList> feature_list(new base::FeatureList);
-    feature_list->InitializeFromCommandLine(
-        password_manager::features::kFillOnAccountSelect.name, "");
-    base::FeatureList::SetInstance(std::move(feature_list));
+    scoped_feature_list_.InitAndEnableFeature(
+        password_manager::features::kFillOnAccountSelect);
   }
 
   void UpdateOriginForHTML(const std::string& html) {
@@ -535,12 +543,24 @@ class PasswordAutofillAgentTest : public ChromeRenderViewTest {
     EXPECT_EQ(ASCIIToUTF16(new_password_value), form.new_password_value);
   }
 
+  bool GetCalledShowPasswordGenerationPopup() {
+    fake_pw_client_.Flush();
+    return fake_pw_client_.called_show_pw_generation_popup();
+  }
+
   void BindPasswordManagerDriver(mojo::ScopedMessagePipeHandle handle) {
     fake_driver_.BindRequest(
         mojo::MakeRequest<mojom::PasswordManagerDriver>(std::move(handle)));
   }
 
+  void BindPasswordManagerClient(mojo::ScopedInterfaceEndpointHandle handle) {
+    fake_pw_client_.BindRequest(
+        mojo::MakeAssociatedRequest<mojom::PasswordManagerClient>(
+            std::move(handle)));
+  }
+
   FakeContentPasswordManagerDriver fake_driver_;
+  FakePasswordManagerClient fake_pw_client_;
 
   base::string16 username1_;
   base::string16 username2_;
@@ -553,6 +573,7 @@ class PasswordAutofillAgentTest : public ChromeRenderViewTest {
 
   WebInputElement username_element_;
   WebInputElement password_element_;
+  base::test::ScopedFeatureList scoped_feature_list_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(PasswordAutofillAgentTest);
@@ -1983,8 +2004,7 @@ TEST_F(PasswordAutofillAgentTest, PasswordGenerationSupersedesAutofill) {
   SetFocused(password_element_);
   SimulateElementClick("new_password");
   EXPECT_FALSE(GetCalledShowPasswordSuggestions());
-  EXPECT_TRUE(render_thread_->sink().GetFirstMessageMatching(
-      AutofillHostMsg_ShowPasswordGenerationPopup::ID));
+  EXPECT_TRUE(GetCalledShowPasswordGenerationPopup());
 }
 
 // Tests that a password change form is properly filled with the username and

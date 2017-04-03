@@ -40,7 +40,6 @@ class MediaDevices;
 class MediaDevicesRequest;
 class UserMediaRequest;
 class WebUserMediaClient;
-class WebLocalFrameImpl;
 
 class UserMediaClientImpl final : public UserMediaClient {
  public:
@@ -53,7 +52,6 @@ class UserMediaClientImpl final : public UserMediaClient {
   void requestUserMedia(UserMediaRequest*) override;
   void cancelUserMediaRequest(UserMediaRequest*) override;
   void requestMediaDevices(MediaDevicesRequest*) override;
-  void requestSources(MediaStreamTrackSourcesRequest*) override;
   void setMediaDeviceChangeObserver(MediaDevices*) override;
 
  private:

@@ -14,6 +14,7 @@
 #include "base/memory/ref_counted.h"
 #include "chrome/browser/external_protocol/external_protocol_handler.h"
 #include "content/public/browser/resource_dispatcher_host_delegate.h"
+#include "extensions/features/features.h"
 
 class DelayedResourceQueue;
 class DownloadRequestLimiter;
@@ -63,15 +64,8 @@ class ChromeResourceDispatcherHostDelegate
   content::ResourceDispatcherHostLoginDelegate* CreateLoginDelegate(
       net::AuthChallengeInfo* auth_info,
       net::URLRequest* request) override;
-  bool HandleExternalProtocol(
-      const GURL& url,
-      int child_id,
-      const content::ResourceRequestInfo::WebContentsGetter&
-          web_contents_getter,
-      bool is_main_frame,
-      ui::PageTransition page_transition,
-      bool has_user_gesture,
-      content::ResourceContext* resource_context) override;
+  bool HandleExternalProtocol(const GURL& url,
+                              content::ResourceRequestInfo* info) override;
   bool ShouldForceDownloadResource(const GURL& url,
                                    const std::string& mime_type) override;
   bool ShouldInterceptResourceAsStream(net::URLRequest* request,
@@ -113,7 +107,7 @@ class ChromeResourceDispatcherHostDelegate
       ScopedVector<content::ResourceThrottle>* throttles);
 
  private:
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   struct StreamTargetInfo {
     std::string extension_id;
     std::string view_id;
@@ -122,7 +116,7 @@ class ChromeResourceDispatcherHostDelegate
 
   scoped_refptr<DownloadRequestLimiter> download_request_limiter_;
   scoped_refptr<safe_browsing::SafeBrowsingService> safe_browsing_;
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   scoped_refptr<extensions::UserScriptListener> user_script_listener_;
   std::map<net::URLRequest*, StreamTargetInfo> stream_target_info_;
 #endif

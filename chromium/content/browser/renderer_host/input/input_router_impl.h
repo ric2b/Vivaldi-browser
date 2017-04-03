@@ -35,7 +35,6 @@ namespace content {
 
 class InputAckHandler;
 class InputRouterClient;
-class OverscrollController;
 struct InputEventAck;
 
 // A default implementation for browser input event routing.
@@ -209,9 +208,9 @@ class CONTENT_EXPORT InputRouterImpl
   // or MoveRangeSelectionExtent_ACK.
   bool select_message_pending_;
 
-  // Queue of pending select messages to send after receving the next select
+  // Queue of pending select messages to send after receiving the next select
   // message ack.
-  std::deque<IPC::Message*> pending_select_messages_;
+  std::deque<std::unique_ptr<IPC::Message>> pending_select_messages_;
 
   // True while waiting for MoveCaret_ACK.
   bool move_caret_pending_;

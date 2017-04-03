@@ -546,9 +546,9 @@ void RootInlineBox::setLineBreakInfo(LineLayoutItem obj,
   // This has security implications because if the LayoutObject does not point
   // to at least one line box, then that LayoutInline can be deleted later
   // without resetting the lineBreakObj, leading to use-after-free.
-  ASSERT_WITH_SECURITY_IMPLICATION(!obj || obj.isText() ||
-                                   !(obj.isLayoutInline() && obj.isBox() &&
-                                     !LineLayoutBox(obj).inlineBoxWrapper()));
+  SECURITY_DCHECK(!obj || obj.isText() ||
+                  !(obj.isLayoutInline() && obj.isBox() &&
+                    !LineLayoutBox(obj).inlineBoxWrapper()));
 
   m_lineBreakObj = obj;
   m_lineBreakPos = breakPos;
@@ -730,7 +730,12 @@ LayoutUnit RootInlineBox::verticalPositionForBox(
 
   if (verticalAlign != VerticalAlignBaseline) {
     const Font& font = parent.style(firstLine)->font();
-    const FontMetrics& fontMetrics = font.getFontMetrics();
+    const SimpleFontData* fontData = font.primaryFont();
+    DCHECK(fontData);
+    if (!fontData)
+      return LayoutUnit();
+
+    const FontMetrics& fontMetrics = fontData->getFontMetrics();
     int fontSize = font.getFontDescription().computedPixelSize();
 
     LineDirectionMode lineDirection =

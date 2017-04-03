@@ -13,6 +13,7 @@
 #include "base/base64.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/rand_util.h"
 #include "base/single_thread_task_runner.h"
@@ -21,13 +22,13 @@
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
+#include "components/sync/base/hash_util.h"
 #include "components/sync/base/node_ordinal.h"
 #include "components/sync/base/time.h"
 #include "components/sync/protocol/bookmark_specifics.pb.h"
 #include "components/sync/protocol/sync.pb.h"
 #include "components/sync/syncable/syncable_columns.h"
 #include "components/sync/syncable/syncable_id.h"
-#include "components/sync/syncable/syncable_util.h"
 #include "sql/error_delegate_util.h"
 #include "sql/transaction.h"
 
@@ -123,7 +124,7 @@ void UnpackProtoFields(sql::Statement* statement,
 }
 
 // The caller owns the returned EntryKernel*.  Assumes the statement currently
-// points to a valid row in the metas table. Returns NULL to indicate that
+// points to a valid row in the metas table. Returns null to indicate that
 // it detected a corruption in the data on unpacking.
 std::unique_ptr<EntryKernel> UnpackEntry(sql::Statement* statement,
                                          int* total_specifics_copies) {
@@ -1212,7 +1213,7 @@ bool DirectoryBackingStore::MigrateVersion79To80() {
   sql::Statement update(db_->GetUniqueStatement(
           "UPDATE share_info SET bag_of_chips = ?"));
   // An empty message is serialized to an empty string.
-  update.BindBlob(0, NULL, 0);
+  update.BindBlob(0, nullptr, 0);
   if (!update.Run())
     return false;
   SetVersion(80);
@@ -1383,9 +1384,8 @@ bool DirectoryBackingStore::MigrateVersion85To86() {
         // means we can set the bookmark tag according to the originator client
         // item ID and originator cache guid, because (unlike the other case) we
         // know that this client is the originator.
-        unique_bookmark_tag = syncable::GenerateSyncableBookmarkHash(
-            cache_guid,
-            id_string.substr(1));
+        unique_bookmark_tag =
+            GenerateSyncableBookmarkHash(cache_guid, id_string.substr(1));
       } else {
         // If we've already committed the item, then we don't know who the
         // originator was.  We do not have access to the originator client item
@@ -1399,7 +1399,7 @@ bool DirectoryBackingStore::MigrateVersion85To86() {
         // tag according to the originator_cache_guid and originator_item_id
         // when we see updates for this item.  That should ensure that commonly
         // modified items will end up with the proper tag values eventually.
-        unique_bookmark_tag = syncable::GenerateSyncableBookmarkHash(
+        unique_bookmark_tag = GenerateSyncableBookmarkHash(
             std::string(),  // cache_guid left intentionally blank.
             id_string.substr(1));
       }
@@ -1509,7 +1509,7 @@ bool DirectoryBackingStore::CreateTables() {
     s.BindString(1, dir_name_);                   // name
     s.BindString(2, std::string());               // store_birthday
     s.BindString(3, GenerateCacheGUID());         // cache_guid
-    s.BindBlob(4, NULL, 0);                       // bag_of_chips
+    s.BindBlob(4, nullptr, 0);                    // bag_of_chips
     if (!s.Run())
       return false;
   }
@@ -1743,15 +1743,13 @@ bool DirectoryBackingStore::needs_column_refresh() const {
 }
 
 void DirectoryBackingStore::ResetAndCreateConnection() {
-  db_.reset(new sql::Connection());
+  db_ = base::MakeUnique<sql::Connection>();
   db_->set_histogram_tag("SyncDirectory");
-  db_->set_exclusive_locking();
   db_->set_cache_size(32);
   db_->set_page_size(database_page_size_);
 
-  // TODO(shess): The current mitigation for http://crbug.com/537742 stores
-  // state in the meta table, which this database does not use.
-  db_->set_mmap_disabled();
+  // This db does not use [meta] table, store mmap status data elsewhere.
+  db_->set_mmap_alt_status();
 
   if (!catastrophic_error_handler_.is_null())
     SetCatastrophicErrorHandler(catastrophic_error_handler_);

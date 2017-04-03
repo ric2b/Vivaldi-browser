@@ -29,6 +29,12 @@ public class AwWebContentsObserver extends WebContentsObserver {
     // Temporarily stores the URL passed the last time to didFinishLoad callback.
     private String mLastDidFinishLoadUrl;
 
+    // Temporarily stores the last committed url.
+    private String mLastCommittedUrl;
+    // Temporarily stores the last url that was committed when we started a navigation to an error
+    // page.
+    private String mLastCommittedUrlWhenNavigatingToErrorPage;
+
     public AwWebContentsObserver(
             WebContents webContents, AwContents awContents, AwContentsClient awContentsClient) {
         super(webContents);
@@ -48,6 +54,24 @@ public class AwWebContentsObserver extends WebContentsObserver {
     }
 
     @Override
+    public void didStartProvisionalLoadForFrame(long frameId, long parentFrameId,
+            boolean isMainFrame, String validatedUrl, boolean isErrorPage, boolean isIframeSrcdoc) {
+        if (isMainFrame && isErrorPage) {
+            // We are navigating to an error page - we should call onPageFinished for the last
+            // committed Url.
+            mLastCommittedUrlWhenNavigatingToErrorPage = mLastCommittedUrl;
+        }
+    }
+
+    @Override
+    public void didCommitProvisionalLoadForFrame(
+            long frameId, boolean isMainFrame, String url, int transitionType) {
+        if (isMainFrame) {
+            mLastCommittedUrl = url;
+        }
+    }
+
+    @Override
     public void didFinishLoad(long frameId, String validatedUrl, boolean isMainFrame) {
         if (isMainFrame && getClientIfNeedToFireCallback(validatedUrl) != null) {
             mLastDidFinishLoadUrl = validatedUrl;
@@ -58,9 +82,13 @@ public class AwWebContentsObserver extends WebContentsObserver {
     public void didStopLoading(String validatedUrl) {
         if (validatedUrl.length() == 0) validatedUrl = "about:blank";
         AwContentsClient client = getClientIfNeedToFireCallback(validatedUrl);
-        if (client != null && validatedUrl.equals(mLastDidFinishLoadUrl)) {
+        if (client != null
+                && (validatedUrl.equals(mLastDidFinishLoadUrl)
+                  || validatedUrl.equals(mLastCommittedUrlWhenNavigatingToErrorPage))) {
             client.getCallbackHelper().postOnPageFinished(validatedUrl);
             mLastDidFinishLoadUrl = null;
+            mLastCommittedUrlWhenNavigatingToErrorPage = null;
+            mLastCommittedUrl = null;
         }
     }
 

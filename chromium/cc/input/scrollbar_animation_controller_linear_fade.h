@@ -12,7 +12,6 @@
 #include "cc/input/scrollbar_animation_controller.h"
 
 namespace cc {
-class LayerImpl;
 
 class CC_EXPORT ScrollbarAnimationControllerLinearFade
     : public ScrollbarAnimationController {
@@ -37,10 +36,13 @@ class CC_EXPORT ScrollbarAnimationControllerLinearFade
       base::TimeDelta duration);
 
   void RunAnimationFrame(float progress) override;
+  const base::TimeDelta& Duration() override;
 
  private:
   float OpacityAtTime(base::TimeTicks now) const;
   void ApplyOpacityToScrollbars(float opacity);
+
+  base::TimeDelta duration_;
 
   DISALLOW_COPY_AND_ASSIGN(ScrollbarAnimationControllerLinearFade);
 };

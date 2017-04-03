@@ -15,6 +15,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/values.h"
+#include "components/physical_web/data_source/physical_web_data_source.h"
 #include "device/bluetooth/uribeacon/uri_encoder.h"
 #import "ios/chrome/common/physical_web/physical_web_device.h"
 #import "ios/chrome/common/physical_web/physical_web_request.h"
@@ -24,6 +25,12 @@ namespace {
 
 NSString* const kUriBeaconServiceUUID = @"FED8";
 NSString* const kEddystoneBeaconServiceUUID = @"FEAA";
+
+// The length of time in seconds since a URL was last seen before it should be
+// considered lost (ie, no longer nearby).
+const NSTimeInterval kLostThresholdSeconds = 15.0;
+// The time interval in seconds between checks for lost URLs.
+const NSTimeInterval kUpdateIntervalSeconds = 6.0;
 
 enum BeaconType {
   BEACON_TYPE_NONE,
@@ -41,8 +48,14 @@ enum BeaconType {
 + (PhysicalWebDevice*)newDeviceFromData:(NSData*)data
                                    rssi:(int)rssi
                                    type:(BeaconType)type;
-// Starts the CoreBluetooth scanner when the bluetooth is powered on.
+// Starts the CoreBluetooth scanner when the bluetooth is powered on and starts
+// the update timer.
 - (void)reallyStart;
+// Stops the CoreBluetooth scanner and update timer.
+- (void)reallyStop;
+// Timer callback to check for lost URLs based on the elapsed time since they
+// were last seen.
+- (void)onUpdateTimeElapsed:(NSTimer*)timer;
 // Requests metadata of a device if the same URL has not been requested before.
 - (void)requestMetadataForDevice:(PhysicalWebDevice*)device;
 // Returns the beacon type given the advertisement data.
@@ -72,12 +85,19 @@ enum BeaconType {
   base::scoped_nsobject<NSMutableSet> finalUrls_;
   // CoreBluetooth scanner.
   base::scoped_nsobject<CBCentralManager> centralManager_;
+  // When YES, we will notify the delegate if a previously nearby URL is lost
+  // and remove it from the list of nearby devices.
+  BOOL onLostDetectionEnabled_;
   // The value is YES if network requests can be sent.
   BOOL networkRequestEnabled_;
   // List of unresolved PhysicalWebDevice when network requests are not enabled.
   base::scoped_nsobject<NSMutableArray> unresolvedDevices_;
+  // A repeating timer to check for lost URLs. If the elapsed time since an URL
+  // was last seen exceeds a threshold, the URL is considered lost.
+  base::scoped_nsobject<NSTimer> updateTimer_;
 }
 
+@synthesize onLostDetectionEnabled = onLostDetectionEnabled_;
 @synthesize networkRequestEnabled = networkRequestEnabled_;
 
 - (instancetype)initWithDelegate:(id<PhysicalWebScannerDelegate>)delegate {
@@ -90,10 +110,11 @@ enum BeaconType {
     pendingRequests_.reset([[NSMutableArray alloc] init]);
     centralManager_.reset([[CBCentralManager alloc]
         initWithDelegate:self
-                   queue:dispatch_get_main_queue()]);
+                   queue:dispatch_get_main_queue()
+                 options:@{
+                   CBCentralManagerOptionShowPowerAlertKey : @NO
+                 }]);
     unresolvedDevices_.reset([[NSMutableArray alloc] init]);
-    [[NSHTTPCookieStorage sharedHTTPCookieStorage]
-        setCookieAcceptPolicy:NSHTTPCookieAcceptPolicyNever];
   }
   return self;
 }
@@ -106,6 +127,10 @@ enum BeaconType {
 - (void)dealloc {
   [centralManager_ setDelegate:nil];
   centralManager_.reset();
+  if (updateTimer_.get()) {
+    [updateTimer_ invalidate];
+    updateTimer_.reset();
+  }
   [super dealloc];
 }
 
@@ -129,7 +154,7 @@ enum BeaconType {
   }
   [pendingRequests_ removeAllObjects];
   if (!pendingStart_ && [self bluetoothEnabled]) {
-    [centralManager_ stopScan];
+    [self reallyStop];
   }
   pendingStart_ = NO;
   started_ = NO;
@@ -163,11 +188,11 @@ enum BeaconType {
     std::string description = base::SysNSStringToUTF8([device description]);
 
     auto metadataItem = base::MakeUnique<base::DictionaryValue>();
-    metadataItem->SetString("scannedUrl", scannedUrl);
-    metadataItem->SetString("resolvedUrl", resolvedUrl);
-    metadataItem->SetString("icon", icon);
-    metadataItem->SetString("title", title);
-    metadataItem->SetString("description", description);
+    metadataItem->SetString(kPhysicalWebScannedUrlKey, scannedUrl);
+    metadataItem->SetString(kPhysicalWebResolvedUrlKey, resolvedUrl);
+    metadataItem->SetString(kPhysicalWebIconUrlKey, icon);
+    metadataItem->SetString(kPhysicalWebTitleKey, title);
+    metadataItem->SetString(kPhysicalWebDescriptionKey, description);
     metadataList->Append(std::move(metadataItem));
   }
 
@@ -189,6 +214,16 @@ enum BeaconType {
   [unresolvedDevices_ removeAllObjects];
 }
 
+- (void)setOnLostDetectionEnabled:(BOOL)enabled {
+  if (enabled == onLostDetectionEnabled_) {
+    return;
+  }
+  onLostDetectionEnabled_ = enabled;
+  if (started_) {
+    [self start];
+  }
+}
+
 - (int)unresolvedBeaconsCount {
   return [unresolvedDevices_ count];
 }
@@ -205,10 +240,89 @@ enum BeaconType {
 
 - (void)reallyStart {
   pendingStart_ = NO;
+
+  if (updateTimer_.get()) {
+    [updateTimer_ invalidate];
+    updateTimer_.reset();
+  }
+
   NSArray* serviceUUIDs = @[
     [CBUUID UUIDWithString:kUriBeaconServiceUUID],
     [CBUUID UUIDWithString:kEddystoneBeaconServiceUUID]
   ];
+  if (onLostDetectionEnabled_) {
+    // Register a repeating timer to periodically check for lost URLs.
+    updateTimer_.reset(
+        [[NSTimer scheduledTimerWithTimeInterval:kUpdateIntervalSeconds
+                                          target:self
+                                        selector:@selector(onUpdateTimeElapsed:)
+                                        userInfo:nil
+                                         repeats:YES] retain]);
+  }
+  [centralManager_ scanForPeripheralsWithServices:serviceUUIDs options:nil];
+}
+
+- (void)reallyStop {
+  if (updateTimer_.get()) {
+    [updateTimer_ invalidate];
+    updateTimer_.reset();
+  }
+
+  [centralManager_ stopScan];
+}
+
+- (void)onUpdateTimeElapsed:(NSTimer*)timer {
+  NSDate* now = [NSDate date];
+  NSMutableArray* lostDevices = [NSMutableArray array];
+  NSMutableArray* lostUnresolvedDevices = [NSMutableArray array];
+  NSMutableArray* lostScannedUrls = [NSMutableArray array];
+
+  for (PhysicalWebDevice* device in devices_.get()) {
+    NSDate* scanTimestamp = [device scanTimestamp];
+    NSTimeInterval elapsedSeconds = [now timeIntervalSinceDate:scanTimestamp];
+    if (elapsedSeconds > kLostThresholdSeconds) {
+      [lostDevices addObject:device];
+      [lostScannedUrls addObject:[device requestURL]];
+      [devicesUrls_ removeObject:[device requestURL]];
+      [finalUrls_ removeObject:[device url]];
+    }
+  }
+
+  for (PhysicalWebDevice* device in unresolvedDevices_.get()) {
+    NSDate* scanTimestamp = [device scanTimestamp];
+    NSTimeInterval elapsedSeconds = [now timeIntervalSinceDate:scanTimestamp];
+    if (elapsedSeconds > kLostThresholdSeconds) {
+      [lostUnresolvedDevices addObject:device];
+      [lostScannedUrls addObject:[device requestURL]];
+      [devicesUrls_ removeObject:[device requestURL]];
+    }
+  }
+
+  NSMutableArray* requestsToRemove = [NSMutableArray array];
+  for (PhysicalWebRequest* request in pendingRequests_.get()) {
+    if ([lostScannedUrls containsObject:[request requestURL]]) {
+      [request cancel];
+      [requestsToRemove addObject:request];
+    }
+  }
+
+  [devices_ removeObjectsInArray:lostDevices];
+  [unresolvedDevices_ removeObjectsInArray:lostUnresolvedDevices];
+  [pendingRequests_ removeObjectsInArray:requestsToRemove];
+
+  if ([lostDevices count]) {
+    [delegate_ scannerUpdatedDevices:self];
+  }
+
+  // TODO(crbug.com/657056): Remove this workaround when radar is fixed.
+  // For unknown reasons, when scanning for longer periods (on the order of
+  // minutes), the scanner is less reliable at detecting all nearby URLs. As a
+  // workaround, we restart the scanner each time we check for lost URLs.
+  NSArray* serviceUUIDs = @[
+    [CBUUID UUIDWithString:kUriBeaconServiceUUID],
+    [CBUUID UUIDWithString:kEddystoneBeaconServiceUUID]
+  ];
+  [centralManager_ stopScan];
   [centralManager_ scanForPeripheralsWithServices:serviceUUIDs options:nil];
 }
 
@@ -222,7 +336,7 @@ enum BeaconType {
   } else {
     if (started_ && !pendingStart_) {
       pendingStart_ = YES;
-      [centralManager_ stopScan];
+      [self reallyStop];
     }
   }
   [delegate_ scannerBluetoothStatusUpdated:self];
@@ -274,10 +388,25 @@ enum BeaconType {
   if (!device.get())
     return;
 
-  // Skip if the URL has already been seen.
-  if ([devicesUrls_ containsObject:[device url]])
+  // If the URL has already been seen, update its timestamp.
+  if ([devicesUrls_ containsObject:[device requestURL]]) {
+    for (PhysicalWebDevice* unresolvedDevice in unresolvedDevices_.get()) {
+      if ([[unresolvedDevice requestURL] isEqual:[device requestURL]]) {
+        [unresolvedDevice setScanTimestamp:[NSDate date]];
+        return;
+      }
+    }
+    for (PhysicalWebDevice* resolvedDevice in devices_.get()) {
+      if ([[resolvedDevice requestURL] isEqual:[device requestURL]]) {
+        [resolvedDevice setScanTimestamp:[NSDate date]];
+        break;
+      }
+    }
     return;
-  [devicesUrls_ addObject:[device url]];
+  }
+
+  [device setScanTimestamp:[NSDate date]];
+  [devicesUrls_ addObject:[device requestURL]];
 
   if (networkRequestEnabled_) {
     [self requestMetadataForDevice:device];
@@ -326,13 +455,14 @@ enum BeaconType {
     return nil;
 
   return [[PhysicalWebDevice alloc] initWithURL:url
-                                     requestURL:nil
+                                     requestURL:url
                                            icon:nil
                                           title:nil
                                     description:nil
                                   transmitPower:transmitPower
                                            rssi:rssi
-                                           rank:physical_web::kMaxRank];
+                                           rank:physical_web::kMaxRank
+                                  scanTimestamp:[NSDate date]];
 }
 
 - (void)requestMetadataForDevice:(PhysicalWebDevice*)device {

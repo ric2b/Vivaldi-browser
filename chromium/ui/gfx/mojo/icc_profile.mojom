@@ -4,8 +4,13 @@
 
 module gfx.mojom;
 
+import "ui/gfx/mojo/color_space.mojom";
+
 struct ICCProfile {
-  bool valid = false;
+  [Native]
+  enum Type;
+  gfx.mojom.ColorSpace color_space;
+  Type type;
   string data;
   uint64 id;
 };

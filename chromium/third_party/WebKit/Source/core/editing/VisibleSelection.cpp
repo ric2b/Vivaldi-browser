@@ -32,7 +32,6 @@
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/SelectionAdjuster.h"
 #include "core/editing/iterators/CharacterIterator.h"
-#include "core/layout/LayoutObject.h"
 #include "platform/geometry/LayoutPoint.h"
 #include "wtf/Assertions.h"
 #include "wtf/text/CString.h"
@@ -52,276 +51,30 @@ VisibleSelectionTemplate<Strategy>::VisibleSelectionTemplate()
 
 template <typename Strategy>
 VisibleSelectionTemplate<Strategy>::VisibleSelectionTemplate(
-    const PositionTemplate<Strategy>& base,
-    const PositionTemplate<Strategy>& extent,
-    TextAffinity affinity,
-    bool isDirectional)
-    : m_base(base),
-      m_extent(extent),
-      m_affinity(affinity),
-      m_isDirectional(isDirectional),
-      m_granularity(CharacterGranularity),
-      m_hasTrailingWhitespace(false) {
-  validate();
+    const SelectionTemplate<Strategy>& selection)
+    : m_base(selection.base()),
+      m_extent(selection.extent()),
+      m_affinity(selection.affinity()),
+      m_selectionType(NoSelection),
+      m_isDirectional(selection.isDirectional()),
+      m_granularity(selection.granularity()),
+      m_hasTrailingWhitespace(selection.hasTrailingWhitespace()) {
+  validate(m_granularity);
 }
 
 template <typename Strategy>
 VisibleSelectionTemplate<Strategy> VisibleSelectionTemplate<Strategy>::create(
-    const PositionTemplate<Strategy>& base,
-    const PositionTemplate<Strategy>& extent,
-    TextAffinity affinity,
-    bool isDirectional) {
-  return VisibleSelectionTemplate(base, extent, affinity, isDirectional);
+    const SelectionTemplate<Strategy>& selection) {
+  return VisibleSelectionTemplate(selection);
 }
 
-VisibleSelection createVisibleSelectionDeprecated(const Position& pos,
-                                                  TextAffinity affinity,
-                                                  bool isDirectional) {
-  if (pos.isNotNull())
-    pos.document()->updateStyleAndLayoutIgnorePendingStylesheets();
-  return VisibleSelection::create(pos, pos, affinity, isDirectional);
-}
-
-VisibleSelection createVisibleSelectionDeprecated(const Position& base,
-                                                  const Position& extent,
-                                                  TextAffinity affinity,
-                                                  bool isDirectional) {
-  if (base.isNotNull())
-    base.document()->updateStyleAndLayoutIgnorePendingStylesheets();
-  if (extent.isNotNull())
-    extent.document()->updateStyleAndLayoutIgnorePendingStylesheets();
-  return VisibleSelection::create(base, extent, affinity, isDirectional);
-}
-
-VisibleSelection createVisibleSelectionDeprecated(
-    const PositionWithAffinity& pos,
-    bool isDirectional) {
-  if (pos.isNotNull())
-    pos.position().document()->updateStyleAndLayoutIgnorePendingStylesheets();
-  return VisibleSelection::create(pos.position(), pos.position(),
-                                  pos.affinity(), isDirectional);
-}
-
-VisibleSelection createVisibleSelectionDeprecated(const VisiblePosition& pos,
-                                                  bool isDirectional) {
-  if (pos.isNotNull())
-    pos.deepEquivalent()
-        .document()
-        ->updateStyleAndLayoutIgnorePendingStylesheets();
-  return VisibleSelection::create(pos.deepEquivalent(), pos.deepEquivalent(),
-                                  pos.affinity(), isDirectional);
-}
-
-VisibleSelection createVisibleSelectionDeprecated(const VisiblePosition& base,
-                                                  const VisiblePosition& extent,
-                                                  bool isDirectional) {
-  if (base.isNotNull())
-    base.deepEquivalent()
-        .document()
-        ->updateStyleAndLayoutIgnorePendingStylesheets();
-  if (extent.isNotNull())
-    extent.deepEquivalent()
-        .document()
-        ->updateStyleAndLayoutIgnorePendingStylesheets();
-  return VisibleSelection::create(base.deepEquivalent(),
-                                  extent.deepEquivalent(), base.affinity(),
-                                  isDirectional);
-}
-
-VisibleSelection createVisibleSelectionDeprecated(const EphemeralRange& range,
-                                                  TextAffinity affinity,
-                                                  bool isDirectional) {
-  if (range.isNotNull())
-    range.startPosition()
-        .document()
-        ->updateStyleAndLayoutIgnorePendingStylesheets();
-  return VisibleSelection::create(range.startPosition(), range.endPosition(),
-                                  affinity, isDirectional);
-}
-
-VisibleSelectionInFlatTree createVisibleSelectionDeprecated(
-    const PositionInFlatTree& pos,
-    TextAffinity affinity,
-    bool isDirectional) {
-  if (pos.isNotNull())
-    pos.document()->updateStyleAndLayoutIgnorePendingStylesheets();
-  return VisibleSelectionInFlatTree::create(pos, pos, affinity, isDirectional);
-}
-
-VisibleSelectionInFlatTree createVisibleSelectionDeprecated(
-    const PositionInFlatTree& base,
-    const PositionInFlatTree& extent,
-    TextAffinity affinity,
-    bool isDirectional) {
-  if (base.isNotNull())
-    base.document()->updateStyleAndLayoutIgnorePendingStylesheets();
-  if (extent.isNotNull())
-    extent.document()->updateStyleAndLayoutIgnorePendingStylesheets();
-  return VisibleSelectionInFlatTree::create(base, extent, affinity,
-                                            isDirectional);
-}
-
-VisibleSelectionInFlatTree createVisibleSelectionDeprecated(
-    const PositionInFlatTreeWithAffinity& pos,
-    bool isDirectional) {
-  if (pos.isNotNull())
-    pos.position().document()->updateStyleAndLayoutIgnorePendingStylesheets();
-  return VisibleSelectionInFlatTree::create(pos.position(), pos.position(),
-                                            pos.affinity(), isDirectional);
-}
-
-VisibleSelectionInFlatTree createVisibleSelectionDeprecated(
-    const VisiblePositionInFlatTree& pos,
-    bool isDirectional) {
-  if (pos.isNotNull())
-    pos.deepEquivalent()
-        .document()
-        ->updateStyleAndLayoutIgnorePendingStylesheets();
-  return VisibleSelectionInFlatTree::create(pos.deepEquivalent(),
-                                            pos.deepEquivalent(),
-                                            pos.affinity(), isDirectional);
-}
-
-VisibleSelectionInFlatTree createVisibleSelectionDeprecated(
-    const VisiblePositionInFlatTree& base,
-    const VisiblePositionInFlatTree& extent,
-    bool isDirectional) {
-  if (base.isNotNull())
-    base.deepEquivalent()
-        .document()
-        ->updateStyleAndLayoutIgnorePendingStylesheets();
-  if (extent.isNotNull())
-    extent.deepEquivalent()
-        .document()
-        ->updateStyleAndLayoutIgnorePendingStylesheets();
-  return VisibleSelectionInFlatTree::create(base.deepEquivalent(),
-                                            extent.deepEquivalent(),
-                                            base.affinity(), isDirectional);
-}
-
-VisibleSelectionInFlatTree createVisibleSelectionDeprecated(
-    const EphemeralRangeInFlatTree& range,
-    TextAffinity affinity,
-    bool isDirectional) {
-  if (range.isNotNull())
-    range.startPosition()
-        .document()
-        ->updateStyleAndLayoutIgnorePendingStylesheets();
-  return VisibleSelectionInFlatTree::create(
-      range.startPosition(), range.endPosition(), affinity, isDirectional);
-}
-
-VisibleSelection createVisibleSelection(const Position& pos,
-                                        TextAffinity affinity,
-                                        bool isDirectional) {
-  DCHECK(!needsLayoutTreeUpdate(pos));
-  return VisibleSelection::create(pos, pos, affinity, isDirectional);
-}
-
-VisibleSelection createVisibleSelection(const Position& base,
-                                        const Position& extent,
-                                        TextAffinity affinity,
-                                        bool isDirectional) {
-  DCHECK(!needsLayoutTreeUpdate(base));
-  DCHECK(!needsLayoutTreeUpdate(extent));
-  // TODO(xiaochengh): We should check |base.isNotNull() || extent.isNull()|
-  // after all call sites have ensured that.
-  return VisibleSelection::create(base, extent, affinity, isDirectional);
-}
-
-VisibleSelection createVisibleSelection(const PositionWithAffinity& pos,
-                                        bool isDirectional) {
-  DCHECK(!needsLayoutTreeUpdate(pos.position()));
-  return VisibleSelection::create(pos.position(), pos.position(),
-                                  pos.affinity(), isDirectional);
-}
-
-VisibleSelection createVisibleSelection(const VisiblePosition& pos,
-                                        bool isDirectional) {
-  DCHECK(pos.isValid());
-  return VisibleSelection::create(pos.deepEquivalent(), pos.deepEquivalent(),
-                                  pos.affinity(), isDirectional);
-}
-
-VisibleSelection createVisibleSelection(const VisiblePosition& base,
-                                        const VisiblePosition& extent,
-                                        bool isDirectional) {
-  DCHECK(base.isValid());
-  DCHECK(extent.isValid());
-  // TODO(xiaochengh): We should check |base.isNotNull() || extent.isNull()|
-  // after all call sites have ensured that.
-  return VisibleSelection::create(base.deepEquivalent(),
-                                  extent.deepEquivalent(), base.affinity(),
-                                  isDirectional);
-}
-
-VisibleSelection createVisibleSelection(const EphemeralRange& range,
-                                        TextAffinity affinity,
-                                        bool isDirectional) {
-  DCHECK(!needsLayoutTreeUpdate(range.startPosition()));
-  DCHECK(!needsLayoutTreeUpdate(range.endPosition()));
-  return VisibleSelection::create(range.startPosition(), range.endPosition(),
-                                  affinity, isDirectional);
-}
-
-VisibleSelectionInFlatTree createVisibleSelection(const PositionInFlatTree& pos,
-                                                  TextAffinity affinity,
-                                                  bool isDirectional) {
-  DCHECK(!needsLayoutTreeUpdate(pos));
-  return VisibleSelectionInFlatTree::create(pos, pos, affinity, isDirectional);
+VisibleSelection createVisibleSelection(const SelectionInDOMTree& selection) {
+  return VisibleSelection::create(selection);
 }
 
 VisibleSelectionInFlatTree createVisibleSelection(
-    const PositionInFlatTree& base,
-    const PositionInFlatTree& extent,
-    TextAffinity affinity,
-    bool isDirectional) {
-  DCHECK(!needsLayoutTreeUpdate(base));
-  DCHECK(!needsLayoutTreeUpdate(extent));
-  // TODO(xiaochengh): We should check |base.isNotNull() || extent.isNull()|
-  // after all call sites have ensured that.
-  return VisibleSelectionInFlatTree::create(base, extent, affinity,
-                                            isDirectional);
-}
-
-VisibleSelectionInFlatTree createVisibleSelection(
-    const PositionInFlatTreeWithAffinity& pos,
-    bool isDirectional) {
-  DCHECK(!needsLayoutTreeUpdate(pos.position()));
-  return VisibleSelectionInFlatTree::create(pos.position(), pos.position(),
-                                            pos.affinity(), isDirectional);
-}
-
-VisibleSelectionInFlatTree createVisibleSelection(
-    const VisiblePositionInFlatTree& pos,
-    bool isDirectional) {
-  DCHECK(pos.isValid());
-  return VisibleSelectionInFlatTree::create(pos.deepEquivalent(),
-                                            pos.deepEquivalent(),
-                                            pos.affinity(), isDirectional);
-}
-
-VisibleSelectionInFlatTree createVisibleSelection(
-    const VisiblePositionInFlatTree& base,
-    const VisiblePositionInFlatTree& extent,
-    bool isDirectional) {
-  DCHECK(base.isValid());
-  DCHECK(extent.isValid());
-  // TODO(xiaochengh): We should check |base.isNotNull() || extent.isNull()|
-  // after all call sites have ensured that.
-  return VisibleSelectionInFlatTree::create(base.deepEquivalent(),
-                                            extent.deepEquivalent(),
-                                            base.affinity(), isDirectional);
-}
-
-VisibleSelectionInFlatTree createVisibleSelection(
-    const EphemeralRangeInFlatTree& range,
-    TextAffinity affinity,
-    bool isDirectional) {
-  DCHECK(!needsLayoutTreeUpdate(range.startPosition()));
-  DCHECK(!needsLayoutTreeUpdate(range.endPosition()));
-  return VisibleSelectionInFlatTree::create(
-      range.startPosition(), range.endPosition(), affinity, isDirectional);
+    const SelectionInFlatTree& selection) {
+  return VisibleSelectionInFlatTree::create(selection);
 }
 
 template <typename Strategy>
@@ -375,18 +128,16 @@ operator=(const VisibleSelectionTemplate<Strategy>& other) {
 }
 
 template <typename Strategy>
-VisibleSelectionTemplate<Strategy>
-VisibleSelectionTemplate<Strategy>::selectionFromContentsOfNode(Node* node) {
-  DCHECK(!Strategy::editingIgnoresContent(node));
-
-  // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
-  // needs to be audited. see http://crbug.com/590369 for more details.
-  node->document().updateStyleAndLayoutIgnorePendingStylesheets();
-
-  return VisibleSelectionTemplate::create(
-      PositionTemplate<Strategy>::firstPositionInNode(node),
-      PositionTemplate<Strategy>::lastPositionInNode(node), SelDefaultAffinity,
-      false);
+SelectionTemplate<Strategy> VisibleSelectionTemplate<Strategy>::asSelection()
+    const {
+  typename SelectionTemplate<Strategy>::Builder builder;
+  if (m_base.isNotNull())
+    builder.setBaseAndExtent(m_base, m_extent);
+  return builder.setAffinity(m_affinity)
+      .setGranularity(m_granularity)
+      .setIsDirectional(m_isDirectional)
+      .setHasTrailingWhitespace(m_hasTrailingWhitespace)
+      .build();
 }
 
 template <typename Strategy>
@@ -441,13 +192,9 @@ VisibleSelectionTemplate<Strategy>::toNormalizedEphemeralRange() const {
 
   // Make sure we have an updated layout since this function is called
   // in the course of running edit commands which modify the DOM.
-  // Failing to call this can result in equivalentXXXPosition calls returning
+  // Failing to ensure this can result in equivalentXXXPosition calls returning
   // incorrect results.
-  m_start.document()->updateStyleAndLayout();
-
-  // Check again, because updating layout can clear the selection.
-  if (isNone())
-    return EphemeralRangeTemplate<Strategy>();
+  DCHECK(!m_start.document()->needsLayoutTreeUpdate());
 
   if (isCaret()) {
     // If the selection is a caret, move the range start upstream. This
@@ -473,14 +220,6 @@ VisibleSelectionTemplate<Strategy>::toNormalizedEphemeralRange() const {
 }
 
 template <typename Strategy>
-void VisibleSelectionTemplate<Strategy>::expandUsingGranularity(
-    TextGranularity granularity) {
-  if (isNone())
-    return;
-  validate(granularity);
-}
-
-template <typename Strategy>
 static EphemeralRangeTemplate<Strategy> makeSearchRange(
     const PositionTemplate<Strategy>& pos) {
   Node* node = pos.anchorNode();
@@ -499,7 +238,11 @@ static EphemeralRangeTemplate<Strategy> makeSearchRange(
 
 template <typename Strategy>
 void VisibleSelectionTemplate<Strategy>::appendTrailingWhitespace() {
+  if (isNone())
+    return;
   DCHECK_EQ(m_granularity, WordGranularity);
+  if (!isRange())
+    return;
   const EphemeralRangeTemplate<Strategy> searchRange = makeSearchRange(end());
   if (searchRange.isNull())
     return;
@@ -548,17 +291,15 @@ void VisibleSelectionTemplate<Strategy>::setBaseAndExtentToDeepEquivalents() {
 }
 
 template <typename Strategy>
-void VisibleSelectionTemplate<Strategy>::setStartRespectingGranularity(
+static PositionTemplate<Strategy> computeStartRespectingGranularity(
+    const PositionWithAffinityTemplate<Strategy>& passedStart,
     TextGranularity granularity) {
-  DCHECK(m_base.isNotNull());
-  DCHECK(m_extent.isNotNull());
-
-  m_start = m_baseIsFirst ? m_base : m_extent;
+  DCHECK(passedStart.isNotNull());
 
   switch (granularity) {
     case CharacterGranularity:
       // Don't do any expansion.
-      break;
+      return passedStart.position();
     case WordGranularity: {
       // General case: Select the word the caret is positioned inside of.
       // If the caret is on the word boundary, select the word according to
@@ -570,68 +311,54 @@ void VisibleSelectionTemplate<Strategy>::setStartRespectingGranularity(
       // from the the end of the last word to the line break (also
       // RightWordIfOnBoundary);
       const VisiblePositionTemplate<Strategy> visibleStart =
-          createVisiblePosition(m_start, m_affinity);
-      EWordSide side = RightWordIfOnBoundary;
+          createVisiblePosition(passedStart);
       if (isEndOfEditableOrNonEditableContent(visibleStart) ||
           (isEndOfLine(visibleStart) && !isStartOfLine(visibleStart) &&
-           !isEndOfParagraph(visibleStart)))
-        side = LeftWordIfOnBoundary;
-      m_start = startOfWord(visibleStart, side).deepEquivalent();
-      break;
+           !isEndOfParagraph(visibleStart))) {
+        return startOfWord(visibleStart, LeftWordIfOnBoundary).deepEquivalent();
+      }
+      return startOfWord(visibleStart, RightWordIfOnBoundary).deepEquivalent();
     }
-    case SentenceGranularity: {
-      m_start = startOfSentence(createVisiblePosition(m_start, m_affinity))
-                    .deepEquivalent();
-      break;
-    }
-    case LineGranularity: {
-      m_start = startOfLine(createVisiblePosition(m_start, m_affinity))
-                    .deepEquivalent();
-      break;
-    }
+    case SentenceGranularity:
+      return startOfSentence(createVisiblePosition(passedStart))
+          .deepEquivalent();
+    case LineGranularity:
+      return startOfLine(createVisiblePosition(passedStart)).deepEquivalent();
     case LineBoundary:
-      m_start = startOfLine(createVisiblePosition(m_start, m_affinity))
-                    .deepEquivalent();
-      break;
+      return startOfLine(createVisiblePosition(passedStart)).deepEquivalent();
     case ParagraphGranularity: {
-      VisiblePositionTemplate<Strategy> pos =
-          createVisiblePosition(m_start, m_affinity);
+      const VisiblePositionTemplate<Strategy> pos =
+          createVisiblePosition(passedStart);
       if (isStartOfLine(pos) && isEndOfEditableOrNonEditableContent(pos))
-        pos = previousPositionOf(pos);
-      m_start = startOfParagraph(pos).deepEquivalent();
-      break;
+        return startOfParagraph(previousPositionOf(pos)).deepEquivalent();
+      return startOfParagraph(pos).deepEquivalent();
     }
     case DocumentBoundary:
-      m_start = startOfDocument(createVisiblePosition(m_start, m_affinity))
-                    .deepEquivalent();
-      break;
+      return startOfDocument(createVisiblePosition(passedStart))
+          .deepEquivalent();
     case ParagraphBoundary:
-      m_start = startOfParagraph(createVisiblePosition(m_start, m_affinity))
-                    .deepEquivalent();
-      break;
+      return startOfParagraph(createVisiblePosition(passedStart))
+          .deepEquivalent();
     case SentenceBoundary:
-      m_start = startOfSentence(createVisiblePosition(m_start, m_affinity))
-                    .deepEquivalent();
-      break;
+      return startOfSentence(createVisiblePosition(passedStart))
+          .deepEquivalent();
   }
 
-  // Make sure we do not have a Null position.
-  if (m_start.isNull())
-    m_start = m_baseIsFirst ? m_base : m_extent;
+  NOTREACHED();
+  return passedStart.position();
 }
 
 template <typename Strategy>
-void VisibleSelectionTemplate<Strategy>::setEndRespectingGranularity(
+static PositionTemplate<Strategy> computeEndRespectingGranularity(
+    const PositionTemplate<Strategy>& start,
+    const PositionWithAffinityTemplate<Strategy>& passedEnd,
     TextGranularity granularity) {
-  DCHECK(m_base.isNotNull());
-  DCHECK(m_extent.isNotNull());
-
-  m_end = m_baseIsFirst ? m_extent : m_base;
+  DCHECK(passedEnd.isNotNull());
 
   switch (granularity) {
     case CharacterGranularity:
       // Don't do any expansion.
-      break;
+      return passedEnd.position();
     case WordGranularity: {
       // General case: Select the word the caret is positioned inside of.
       // If the caret is on the word boundary, select the word according to
@@ -643,7 +370,7 @@ void VisibleSelectionTemplate<Strategy>::setEndRespectingGranularity(
       // from the the end of the last word to the line break (also
       // |RightWordIfOnBoundary|);
       const VisiblePositionTemplate<Strategy> originalEnd =
-          createVisiblePosition(m_end, m_affinity);
+          createVisiblePosition(passedEnd);
       EWordSide side = RightWordIfOnBoundary;
       if (isEndOfEditableOrNonEditableContent(originalEnd) ||
           (isEndOfLine(originalEnd) && !isStartOfLine(originalEnd) &&
@@ -652,98 +379,89 @@ void VisibleSelectionTemplate<Strategy>::setEndRespectingGranularity(
 
       const VisiblePositionTemplate<Strategy> wordEnd =
           endOfWord(originalEnd, side);
-      VisiblePositionTemplate<Strategy> end = wordEnd;
+      if (!isEndOfParagraph(originalEnd))
+        return wordEnd.deepEquivalent();
+      if (isEmptyTableCell(start.anchorNode()))
+        return wordEnd.deepEquivalent();
 
-      if (isEndOfParagraph(originalEnd) &&
-          !isEmptyTableCell(m_start.anchorNode())) {
-        // Select the paragraph break (the space from the end of a paragraph
-        // to the start of the next one) to match TextEdit.
-        end = nextPositionOf(wordEnd);
-
-        if (Element* table = tableElementJustBefore(end)) {
-          // The paragraph break after the last paragraph in the last cell
-          // of a block table ends at the start of the paragraph after the
-          // table.
-          if (isEnclosingBlock(table))
-            end = nextPositionOf(end, CannotCrossEditingBoundary);
-          else
-            end = wordEnd;
-        }
-
+      // Select the paragraph break (the space from the end of a paragraph
+      // to the start of the next one) to match TextEdit.
+      const VisiblePositionTemplate<Strategy> end = nextPositionOf(wordEnd);
+      Element* const table = tableElementJustBefore(end);
+      if (!table) {
         if (end.isNull())
-          end = wordEnd;
+          return wordEnd.deepEquivalent();
+        return end.deepEquivalent();
       }
 
-      m_end = end.deepEquivalent();
-      break;
+      if (!isEnclosingBlock(table))
+        return wordEnd.deepEquivalent();
+
+      // The paragraph break after the last paragraph in the last cell
+      // of a block table ends at the start of the paragraph after the
+      // table.
+      const VisiblePositionTemplate<Strategy> next =
+          nextPositionOf(end, CannotCrossEditingBoundary);
+      if (next.isNull())
+        return wordEnd.deepEquivalent();
+      return next.deepEquivalent();
     }
-    case SentenceGranularity: {
-      m_end = endOfSentence(createVisiblePosition(m_end, m_affinity))
-                  .deepEquivalent();
-      break;
-    }
+    case SentenceGranularity:
+      return endOfSentence(createVisiblePosition(passedEnd)).deepEquivalent();
     case LineGranularity: {
-      VisiblePositionTemplate<Strategy> end =
-          endOfLine(createVisiblePosition(m_end, m_affinity));
+      const VisiblePositionTemplate<Strategy> end =
+          endOfLine(createVisiblePosition(passedEnd));
+      if (!isEndOfParagraph(end))
+        return end.deepEquivalent();
       // If the end of this line is at the end of a paragraph, include the
       // space after the end of the line in the selection.
-      if (isEndOfParagraph(end)) {
-        VisiblePositionTemplate<Strategy> next = nextPositionOf(end);
-        if (next.isNotNull())
-          end = next;
-      }
-      m_end = end.deepEquivalent();
-      break;
+      const VisiblePositionTemplate<Strategy> next = nextPositionOf(end);
+      if (next.isNull())
+        return end.deepEquivalent();
+      return next.deepEquivalent();
     }
     case LineBoundary:
-      m_end =
-          endOfLine(createVisiblePosition(m_end, m_affinity)).deepEquivalent();
-      break;
+      return endOfLine(createVisiblePosition(passedEnd)).deepEquivalent();
     case ParagraphGranularity: {
       const VisiblePositionTemplate<Strategy> visibleParagraphEnd =
-          endOfParagraph(createVisiblePosition(m_end, m_affinity));
+          endOfParagraph(createVisiblePosition(passedEnd));
 
       // Include the "paragraph break" (the space from the end of this
       // paragraph to the start of the next one) in the selection.
-      VisiblePositionTemplate<Strategy> end =
+      const VisiblePositionTemplate<Strategy> end =
           nextPositionOf(visibleParagraphEnd);
 
-      if (Element* table = tableElementJustBefore(end)) {
-        // The paragraph break after the last paragraph in the last cell of
-        // a block table ends at the start of the paragraph after the table,
-        // not at the position just after the table.
-        if (isEnclosingBlock(table)) {
-          end = nextPositionOf(end, CannotCrossEditingBoundary);
-        } else {
-          // There is no parargraph break after the last paragraph in the
-          // last cell of an inline table.
-          end = visibleParagraphEnd;
-        }
+      Element* const table = tableElementJustBefore(end);
+      if (!table) {
+        if (end.isNull())
+          return visibleParagraphEnd.deepEquivalent();
+        return end.deepEquivalent();
       }
 
-      if (end.isNull())
-        end = visibleParagraphEnd;
+      if (!isEnclosingBlock(table)) {
+        // There is no paragraph break after the last paragraph in the
+        // last cell of an inline table.
+        return visibleParagraphEnd.deepEquivalent();
+      }
 
-      m_end = end.deepEquivalent();
-      break;
+      // The paragraph break after the last paragraph in the last cell of
+      // a block table ends at the start of the paragraph after the table,
+      // not at the position just after the table.
+      const VisiblePositionTemplate<Strategy> next =
+          nextPositionOf(end, CannotCrossEditingBoundary);
+      if (next.isNull())
+        return visibleParagraphEnd.deepEquivalent();
+      return next.deepEquivalent();
     }
     case DocumentBoundary:
-      m_end = endOfDocument(createVisiblePosition(m_end, m_affinity))
-                  .deepEquivalent();
-      break;
+      return endOfDocument(createVisiblePosition(passedEnd)).deepEquivalent();
     case ParagraphBoundary:
-      m_end = endOfParagraph(createVisiblePosition(m_end, m_affinity))
-                  .deepEquivalent();
-      break;
+      return endOfParagraph(createVisiblePosition(passedEnd)).deepEquivalent();
     case SentenceBoundary:
-      m_end = endOfSentence(createVisiblePosition(m_end, m_affinity))
-                  .deepEquivalent();
-      break;
+      return endOfSentence(createVisiblePosition(passedEnd)).deepEquivalent();
   }
-
-  // Make sure we do not have a Null position.
-  if (m_end.isNull())
-    m_end = m_baseIsFirst ? m_extent : m_base;
+  NOTREACHED();
+  return passedEnd.position();
 }
 
 template <typename Strategy>
@@ -770,12 +488,17 @@ void VisibleSelectionTemplate<Strategy>::validate(TextGranularity granularity) {
     return;
   }
 
-  m_start = m_baseIsFirst ? m_base : m_extent;
-  m_end = m_baseIsFirst ? m_extent : m_base;
-  setStartRespectingGranularity(granularity);
-  DCHECK(m_start.isNotNull());
-  setEndRespectingGranularity(granularity);
-  DCHECK(m_end.isNotNull());
+  const PositionTemplate<Strategy> start = m_baseIsFirst ? m_base : m_extent;
+  const PositionTemplate<Strategy> newStart = computeStartRespectingGranularity(
+      PositionWithAffinityTemplate<Strategy>(start, m_affinity), granularity);
+  m_start = newStart.isNotNull() ? newStart : start;
+
+  const PositionTemplate<Strategy> end = m_baseIsFirst ? m_extent : m_base;
+  const PositionTemplate<Strategy> newEnd = computeEndRespectingGranularity(
+      m_start, PositionWithAffinityTemplate<Strategy>(end, m_affinity),
+      granularity);
+  m_end = newEnd.isNotNull() ? newEnd : end;
+
   adjustSelectionToAvoidCrossingShadowBoundaries();
   adjustSelectionToAvoidCrossingEditingBoundaries();
   updateSelectionType();
@@ -1019,23 +742,12 @@ void VisibleSelectionTemplate<Strategy>::updateIfNeeded() {
   Document* document = m_base.document();
   if (!document)
     return;
-  document->updateStyleAndLayoutIgnorePendingStylesheets();
+  DCHECK(!document->needsLayoutTreeUpdate());
   const bool hasTrailingWhitespace = m_hasTrailingWhitespace;
   validate(m_granularity);
   if (!hasTrailingWhitespace)
     return;
   appendTrailingWhitespace();
-}
-
-// TODO(yosin): Since |validatePositionsIfNeeded()| is called just one place,
-// we should move it to the call site.
-template <typename Strategy>
-void VisibleSelectionTemplate<Strategy>::validatePositionsIfNeeded() {
-  if (!m_base.isConnected() || !m_extent.isConnected()) {
-    *this = VisibleSelectionTemplate();
-    return;
-  }
-  updateIfNeeded();
 }
 
 template <typename Strategy>

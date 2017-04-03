@@ -4,8 +4,8 @@
 
 #include "content/browser/device_sensors/device_sensor_host.h"
 
+#include "base/message_loop/message_loop.h"
 #include "content/browser/device_sensors/device_sensor_service.h"
-#include "content/public/browser/browser_thread.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 
 namespace content {
@@ -21,7 +21,11 @@ void DeviceSensorHost<MojoInterface, consumer_type>::Create(
 template <typename MojoInterface, ConsumerType consumer_type>
 DeviceSensorHost<MojoInterface, consumer_type>::DeviceSensorHost()
     : is_started_(false) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+#if defined(OS_ANDROID)
+  DCHECK(base::MessageLoopForUI::IsCurrent());
+#else
+  DCHECK(base::MessageLoopForIO::IsCurrent());
+#endif
 }
 
 template <typename MojoInterface, ConsumerType consumer_type>

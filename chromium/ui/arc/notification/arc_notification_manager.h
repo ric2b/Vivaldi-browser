@@ -5,10 +5,10 @@
 #ifndef UI_ARC_NOTIFICATION_ARC_NOTIFICATION_MANAGER_H_
 #define UI_ARC_NOTIFICATION_ARC_NOTIFICATION_MANAGER_H_
 
+#include <memory>
 #include <string>
 #include <unordered_map>
 
-#include "components/arc/arc_bridge_service.h"
 #include "components/arc/arc_service.h"
 #include "components/arc/common/notifications.mojom.h"
 #include "components/arc/instance_holder.h"
@@ -18,6 +18,7 @@
 
 namespace arc {
 
+class ArcBridgeService;
 class ArcNotificationItem;
 
 class ArcNotificationManager
@@ -40,7 +41,7 @@ class ArcNotificationManager
 
   // mojom::NotificationsHost implementation:
   void OnNotificationPosted(mojom::ArcNotificationDataPtr data) override;
-  void OnNotificationRemoved(const mojo::String& key) override;
+  void OnNotificationRemoved(const std::string& key) override;
   void OnToastPosted(mojom::ArcToastDataPtr data) override;
   void OnToastCancelled(mojom::ArcToastDataPtr data) override;
 
@@ -62,7 +63,7 @@ class ArcNotificationManager
 
   bool ready_ = false;
 
-  mojo::Binding<arc::mojom::NotificationsHost> binding_;
+  mojo::Binding<mojom::NotificationsHost> binding_;
 
   DISALLOW_COPY_AND_ASSIGN(ArcNotificationManager);
 };

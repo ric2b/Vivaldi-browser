@@ -13,8 +13,7 @@ namespace blink {
 
 class PaintLayerClipperTest : public RenderingTest {
  public:
-  PaintLayerClipperTest()
-      : RenderingTest(SingleChildFrameLoaderClient::create()) {}
+  PaintLayerClipperTest() : RenderingTest(EmptyFrameLoaderClient::create()) {}
 };
 
 TEST_F(PaintLayerClipperTest, LayoutSVGRoot) {
@@ -59,6 +58,62 @@ TEST_F(PaintLayerClipperTest, LayoutSVGRootChild) {
   EXPECT_EQ(LayoutRect(8, 8, 200, 300), backgroundRect.rect());
   EXPECT_EQ(LayoutRect(8, 8, 200, 300), foregroundRect.rect());
   EXPECT_EQ(LayoutRect(8, 8, 400, 0), layerBounds);
+}
+
+TEST_F(PaintLayerClipperTest, ContainPaintClip) {
+  setBodyInnerHTML(
+      "<div id='target'"
+      "    style='contain: paint; width: 200px; height: 200px; overflow: auto'>"
+      "  <div style='height: 400px'></div>"
+      "</div>");
+
+  LayoutRect infiniteRect(LayoutRect::infiniteIntRect());
+  PaintLayer* layer =
+      toLayoutBoxModelObject(getLayoutObjectByElementId("target"))->layer();
+  ClipRectsContext context(layer, PaintingClipRectsIgnoringOverflowClip);
+  LayoutRect layerBounds;
+  ClipRect backgroundRect, foregroundRect;
+  layer->clipper().calculateRects(context, infiniteRect, layerBounds,
+                                  backgroundRect, foregroundRect);
+  EXPECT_EQ(infiniteRect, backgroundRect.rect());
+  EXPECT_EQ(infiniteRect, foregroundRect.rect());
+  EXPECT_EQ(LayoutRect(0, 0, 200, 200), layerBounds);
+
+  ClipRectsContext contextClip(layer, PaintingClipRects);
+  layer->clipper().calculateRects(contextClip, infiniteRect, layerBounds,
+                                  backgroundRect, foregroundRect);
+  EXPECT_EQ(LayoutRect(0, 0, 200, 200), backgroundRect.rect());
+  EXPECT_EQ(LayoutRect(0, 0, 200, 200), foregroundRect.rect());
+  EXPECT_EQ(LayoutRect(0, 0, 200, 200), layerBounds);
+}
+
+TEST_F(PaintLayerClipperTest, NestedContainPaintClip) {
+  setBodyInnerHTML(
+      "<div style='contain: paint; width: 200px; height: 200px; overflow: "
+      "auto'>"
+      "  <div id='target' style='contain: paint; height: 400px'>"
+      "  </div>"
+      "</div>");
+
+  LayoutRect infiniteRect(LayoutRect::infiniteIntRect());
+  PaintLayer* layer =
+      toLayoutBoxModelObject(getLayoutObjectByElementId("target"))->layer();
+  ClipRectsContext context(layer->parent(),
+                           PaintingClipRectsIgnoringOverflowClip);
+  LayoutRect layerBounds;
+  ClipRect backgroundRect, foregroundRect;
+  layer->clipper().calculateRects(context, infiniteRect, layerBounds,
+                                  backgroundRect, foregroundRect);
+  EXPECT_EQ(LayoutRect(0, 0, 200, 400), backgroundRect.rect());
+  EXPECT_EQ(LayoutRect(0, 0, 200, 400), foregroundRect.rect());
+  EXPECT_EQ(LayoutRect(0, 0, 200, 400), layerBounds);
+
+  ClipRectsContext contextClip(layer->parent(), PaintingClipRects);
+  layer->clipper().calculateRects(contextClip, infiniteRect, layerBounds,
+                                  backgroundRect, foregroundRect);
+  EXPECT_EQ(LayoutRect(0, 0, 200, 200), backgroundRect.rect());
+  EXPECT_EQ(LayoutRect(0, 0, 200, 200), foregroundRect.rect());
+  EXPECT_EQ(LayoutRect(0, 0, 200, 400), layerBounds);
 }
 
 }  // namespace blink

@@ -286,7 +286,8 @@ TEST_F(StructTraitsTest, CompositorFrameMetadata) {
   std::vector<ui::LatencyInfo> latency_infos = {latency_info};
   std::vector<uint32_t> satisfies_sequences = {1234, 1337};
   std::vector<SurfaceId> referenced_surfaces;
-  SurfaceId id(FrameSinkId(1234, 4321), LocalFrameId(5678, 9101112));
+  SurfaceId id(FrameSinkId(1234, 4321),
+               LocalFrameId(5678, base::UnguessableToken::Create()));
   referenced_surfaces.push_back(id);
 
   CompositorFrameMetadata input;
@@ -438,7 +439,9 @@ TEST_F(StructTraitsTest, QuadListBasic) {
   solid_quad->SetNew(sqs, rect2, rect2, color2, force_anti_aliasing_off);
 
   const gfx::Rect rect3(1029, 3847, 5610, 2938);
-  const SurfaceId surface_id(FrameSinkId(1234, 4321), LocalFrameId(5678, 2468));
+  const SurfaceId surface_id(
+      FrameSinkId(1234, 4321),
+      LocalFrameId(5678, base::UnguessableToken::Create()));
   SurfaceDrawQuad* surface_quad =
       render_pass->CreateAndAppendDrawQuad<SurfaceDrawQuad>();
   surface_quad->SetNew(sqs, rect3, rect3, surface_id);
@@ -611,7 +614,8 @@ TEST_F(StructTraitsTest, RenderPass) {
   const gfx::Rect surface_quad_rect(1337, 2448, 1234, 5678);
   surface_quad->SetNew(
       shared_state_2, surface_quad_rect, surface_quad_rect,
-      SurfaceId(FrameSinkId(1337, 1234), LocalFrameId(1234, 2468)));
+      SurfaceId(FrameSinkId(1337, 1234),
+                LocalFrameId(1234, base::UnguessableToken::Create())));
 
   std::unique_ptr<RenderPass> output;
   mojom::TraitsTestServicePtr proxy = GetTraitsTestProxy();
@@ -766,7 +770,8 @@ TEST_F(StructTraitsTest, Selection) {
 
 TEST_F(StructTraitsTest, SurfaceId) {
   static constexpr FrameSinkId frame_sink_id(1337, 1234);
-  static constexpr LocalFrameId local_frame_id(0xfbadbeef, 0xdeadbeef);
+  static LocalFrameId local_frame_id(0xfbadbeef,
+                                     base::UnguessableToken::Create());
   SurfaceId input(frame_sink_id, local_frame_id);
   mojom::TraitsTestServicePtr proxy = GetTraitsTestProxy();
   SurfaceId output;
@@ -820,9 +825,7 @@ TEST_F(StructTraitsTest, TransferableResource) {
   const uint32_t filter = 1234;
   const gfx::Size size(1234, 5678);
   const int8_t mailbox_name[GL_MAILBOX_SIZE_CHROMIUM] = {
-      0, 9, 8, 7, 6, 5, 4, 3, 2, 1, 9, 7, 5, 3, 1, 2, 4, 6, 8, 0, 0, 9,
-      8, 7, 6, 5, 4, 3, 2, 1, 9, 7, 5, 3, 1, 2, 4, 6, 8, 0, 0, 9, 8, 7,
-      6, 5, 4, 3, 2, 1, 9, 7, 5, 3, 1, 2, 4, 6, 8, 0, 0, 9, 8, 7};
+      0, 9, 8, 7, 6, 5, 4, 3, 2, 1, 9, 7, 5, 3, 1, 2};
   const gpu::CommandBufferNamespace command_buffer_namespace = gpu::IN_PROCESS;
   const int32_t extra_data_field = 0xbeefbeef;
   const gpu::CommandBufferId command_buffer_id(

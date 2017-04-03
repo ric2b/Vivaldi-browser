@@ -12,16 +12,17 @@
 #include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "components/sync/api/data_type_error_handler_impl.h"
-#include "components/sync/api/model_type_change_processor.h"
-#include "components/sync/api/model_type_service.h"
-#include "components/sync/api/sync_error.h"
-#include "components/sync/api/sync_merge_result.h"
 #include "components/sync/base/bind_to_task_runner.h"
 #include "components/sync/base/data_type_histogram.h"
-#include "components/sync/core/activation_context.h"
 #include "components/sync/driver/backend_data_type_configurer.h"
 #include "components/sync/driver/sync_client.h"
+#include "components/sync/engine/activation_context.h"
+#include "components/sync/model/data_type_error_handler_impl.h"
+#include "components/sync/model/model_type_change_processor.h"
+#include "components/sync/model/model_type_debug_info.h"
+#include "components/sync/model/model_type_sync_bridge.h"
+#include "components/sync/model/sync_error.h"
+#include "components/sync/model/sync_merge_result.h"
 
 namespace syncer {
 
@@ -68,22 +69,26 @@ void ModelTypeController::LoadModels(
 
   // Start the type processor on the model thread.
   model_thread_->PostTask(
-      FROM_HERE, base::Bind(&ModelTypeService::OnSyncStarting,
-                            sync_client_->GetModelTypeServiceForType(type()),
+      FROM_HERE, base::Bind(&ModelTypeSyncBridge::OnSyncStarting,
+                            sync_client_->GetSyncBridgeForModelType(type()),
                             base::Passed(CreateErrorHandler()), callback));
 }
 
 void ModelTypeController::GetAllNodes(const AllNodesCallback& callback) {
-  base::WeakPtr<ModelTypeService> service =
-      sync_client_->GetModelTypeServiceForType(type());
-  // TODO(gangwu): Casting should happen "near" where the processor factory has
-  // code that instantiates a new processor.
-  SharedModelTypeProcessor* processor =
-      static_cast<SharedModelTypeProcessor*>(service->change_processor());
+  base::WeakPtr<ModelTypeSyncBridge> bridge =
+      sync_client_->GetSyncBridgeForModelType(type());
+  model_thread_->PostTask(FROM_HERE,
+                          base::Bind(&ModelTypeDebugInfo::GetAllNodes, bridge,
+                                     BindToCurrentThread(callback)));
+}
+
+void ModelTypeController::GetStatusCounters(
+    const StatusCountersCallback& callback) {
+  base::WeakPtr<ModelTypeSyncBridge> bridge =
+      sync_client_->GetSyncBridgeForModelType(type());
   model_thread_->PostTask(
-      FROM_HERE, base::Bind(&SharedModelTypeProcessor::GetAllNodes,
-                            base::Unretained(processor),
-                            base::ThreadTaskRunnerHandle::Get(), callback));
+      FROM_HERE,
+      base::Bind(&ModelTypeDebugInfo::GetStatusCounters, bridge, callback));
 }
 
 void ModelTypeController::LoadModelsDone(ConfigureResult result,
@@ -163,9 +168,10 @@ void ModelTypeController::DeactivateDataType(
     BackendDataTypeConfigurer* configurer) {
   DCHECK(CalledOnValidThread());
   DCHECK(configurer);
-  DCHECK(activated_);
-  configurer->DeactivateNonBlockingDataType(type());
-  activated_ = false;
+  if (activated_) {
+    configurer->DeactivateNonBlockingDataType(type());
+    activated_ = false;
+  }
 }
 
 void ModelTypeController::Stop() {
@@ -175,16 +181,15 @@ void ModelTypeController::Stop() {
     return;
 
   // Check preferences if datatype is not in preferred datatypes. Only call
-  // DisableSync if service is ready to handle it (controller is in loaded
+  // DisableSync if the bridge is ready to handle it (controller is in loaded
   // state).
   ModelTypeSet preferred_types =
       sync_prefs_.GetPreferredDataTypes(ModelTypeSet(type()));
   if ((state() == MODEL_LOADED || state() == RUNNING) &&
       (!sync_prefs_.IsFirstSetupComplete() || !preferred_types.Has(type()))) {
     model_thread_->PostTask(
-        FROM_HERE,
-        base::Bind(&ModelTypeService::DisableSync,
-                   sync_client_->GetModelTypeServiceForType(type())));
+        FROM_HERE, base::Bind(&ModelTypeSyncBridge::DisableSync,
+                              sync_client_->GetSyncBridgeForModelType(type())));
   }
 
   state_ = NOT_RUNNING;

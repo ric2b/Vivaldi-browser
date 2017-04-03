@@ -10,20 +10,25 @@
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/content_settings/tab_specific_content_settings.h"
+#include "chrome/browser/history/history_test_utils.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/ui/blocked_content/popup_blocker_tab_helper.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_finder.h"
-#include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/ui/javascript_dialogs/javascript_dialog_tab_helper.h"
 #include "chrome/browser/ui/location_bar/location_bar.h"
+#include "chrome/browser/ui/login/login_handler.h"
+#include "chrome/browser/ui/login/login_handler_test_utils.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/url_constants.h"
@@ -49,6 +54,8 @@
 #include "content/public/common/url_constants.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_navigation_observer.h"
+#include "content/public/test/test_utils.h"
+#include "extensions/features/features.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -102,38 +109,6 @@ class CloseObserver : public content::WebContentsObserver {
   base::RunLoop close_loop_;
 
   DISALLOW_COPY_AND_ASSIGN(CloseObserver);
-};
-
-class BrowserActivationObserver : public chrome::BrowserListObserver {
- public:
-  BrowserActivationObserver()
-      : browser_(chrome::FindLastActive()), observed_(false) {
-    BrowserList::AddObserver(this);
-  }
-  ~BrowserActivationObserver() override { BrowserList::RemoveObserver(this); }
-
-  void WaitForActivation() {
-    if (observed_)
-      return;
-    message_loop_runner_ = new content::MessageLoopRunner;
-    message_loop_runner_->Run();
-  }
-
- private:
-  // chrome::BrowserListObserver:
-  void OnBrowserSetLastActive(Browser* browser) override {
-    if (browser == browser_)
-      return;
-    observed_ = true;
-    if (message_loop_runner_.get() && message_loop_runner_->loop_running())
-      message_loop_runner_->Quit();
-  }
-
-  Browser* browser_;
-  bool observed_;
-  scoped_refptr<content::MessageLoopRunner> message_loop_runner_;
-
-  DISALLOW_COPY_AND_ASSIGN(BrowserActivationObserver);
 };
 
 class PopupBlockerBrowserTest : public InProcessBrowserTest {
@@ -363,8 +338,16 @@ IN_PROC_BROWSER_TEST_F(PopupBlockerBrowserTest,
 }
 
 // Verify that when you unblock popup, the popup shows in history and omnibox.
+// TODO(crbug.com/663333) Flaky on Linux.
+#if defined(OS_LINUX)
+#define MAYBE_UnblockedPopupShowsInHistoryAndOmnibox \
+  DISABLED_UnblockedPopupShowsInHistoryAndOmnibox
+#else
+#define MAYBE_UnblockedPopupShowsInHistoryAndOmnibox \
+  UnblockedPopupShowsInHistoryAndOmnibox
+#endif
 IN_PROC_BROWSER_TEST_F(PopupBlockerBrowserTest,
-                       UnblockedPopupShowsInHistoryAndOmnibox) {
+                       MAYBE_UnblockedPopupShowsInHistoryAndOmnibox) {
   base::CommandLine::ForCurrentProcess()->AppendSwitch(
       switches::kDisablePopupBlocking);
   GURL url(embedded_test_server()->GetURL(
@@ -375,6 +358,7 @@ IN_PROC_BROWSER_TEST_F(PopupBlockerBrowserTest,
       "data:text/html,<title>Popup Success!</title>you should not see this "
       "message if popup blocker is enabled";
 
+  WaitForHistoryBackendToRun(browser()->profile());
   ui_test_utils::HistoryEnumerator history(browser()->profile());
   std::vector<GURL>& history_urls = history.urls();
   ASSERT_EQ(2u, history_urls.size());
@@ -545,17 +529,134 @@ IN_PROC_BROWSER_TEST_F(PopupBlockerBrowserTest, ModalPopUnder) {
   tab->GetMainFrame()->ExecuteJavaScriptForTests(base::UTF8ToUTF16("alert()"));
   app_modal::AppModalDialog* dialog = ui_test_utils::WaitForAppModalDialog();
 
+  // Verify that after the dialog is closed, the popup is in front again.
+  ASSERT_TRUE(dialog->IsJavaScriptModalDialog());
+  app_modal::JavaScriptAppModalDialog* js_dialog =
+      static_cast<app_modal::JavaScriptAppModalDialog*>(dialog);
+
+  ui_test_utils::BrowserActivationWaiter waiter(popup_browser);
+  js_dialog->native_dialog()->AcceptAppModalDialog();
+  waiter.WaitForActivation();
+  ASSERT_EQ(popup_browser, chrome::FindLastActive());
+}
+
+// Verify that app modal prompts can't be used to create pop unders, while the
+// new auto-dismissing JavaScript dialogs are enabled.
+IN_PROC_BROWSER_TEST_F(PopupBlockerBrowserTest,
+                       ModalPopUnderAutoDismissingDialogs) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(features::kAutoDismissingDialogs);
+
+  // One tab to test in.
+  TabStripModel* tab_strip = browser()->tab_strip_model();
+  WebContents* tab = tab_strip->GetActiveWebContents();
+  EXPECT_EQ(1, tab_strip->count());
+
+  // One blank tab for later.
+  ui_test_utils::NavigateToURLWithDisposition(
+      browser(), GURL(url::kAboutBlankURL),
+      WindowOpenDisposition::NEW_BACKGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
+  EXPECT_EQ(2, tab_strip->count());
+  ASSERT_EQ(0, tab_strip->GetIndexOfWebContents(tab));
+
+  // Show a popup.
+  JavaScriptDialogTabHelper* js_helper =
+      JavaScriptDialogTabHelper::FromWebContents(tab);
+  GURL url(
+      embedded_test_server()->GetURL("/popup_blocker/popup-window-open.html"));
+  HostContentSettingsMapFactory::GetForProfile(browser()->profile())
+      ->SetContentSettingDefaultScope(url, GURL(), CONTENT_SETTINGS_TYPE_POPUPS,
+                                      std::string(), CONTENT_SETTING_ALLOW);
+
+  NavigateAndCheckPopupShown(url, ExpectPopup);
+
+  Browser* popup_browser = chrome::FindLastActive();
+  ASSERT_NE(popup_browser, browser());
+
+  // Showing an alert will raise the tab over the popup.
+  scoped_refptr<content::MessageLoopRunner> runner =
+      new content::MessageLoopRunner;
+  js_helper->SetDialogShownCallbackForTesting(runner->QuitClosure());
+  tab->GetMainFrame()->ExecuteJavaScriptForTests(base::UTF8ToUTF16("alert()"));
+  runner->Run();
+
+  // Verify that after the dialog is closed, the popup is in front again.
+  ui_test_utils::BrowserActivationWaiter waiter(popup_browser);
+  tab_strip->ActivateTabAt(1, true);
+  waiter.WaitForActivation();
+  ASSERT_EQ(popup_browser, chrome::FindLastActive());
+}
+
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+#define MAYBE_ModalPopUnderViaGuestView DISABLED_ModalPopUnderViaGuestView
+#else
+#define MAYBE_ModalPopUnderViaGuestView ModalPopUnderViaGuestView
+#endif
+IN_PROC_BROWSER_TEST_F(PopupBlockerBrowserTest,
+                       MAYBE_ModalPopUnderViaGuestView) {
+  WebContents* tab = browser()->tab_strip_model()->GetActiveWebContents();
+  GURL url(
+      embedded_test_server()->GetURL("/popup_blocker/popup-window-open.html"));
+  HostContentSettingsMapFactory::GetForProfile(browser()->profile())
+      ->SetContentSettingDefaultScope(url, GURL(), CONTENT_SETTINGS_TYPE_POPUPS,
+                                      std::string(), CONTENT_SETTING_ALLOW);
+
+  NavigateAndCheckPopupShown(url, ExpectPopup);
+
+  Browser* popup_browser = chrome::FindLastActive();
+  ASSERT_NE(popup_browser, browser());
+
+  // Showing an alert will raise the tab over the popup.
+  tab->GetMainFrame()->ExecuteJavaScriptForTests(
+      base::UTF8ToUTF16("var o = document.createElement('object'); o.data = "
+                        "'/alert_dialog.pdf'; document.body.appendChild(o);"));
+  app_modal::AppModalDialog* dialog = ui_test_utils::WaitForAppModalDialog();
+
   // Verify that after the dialog was closed, the popup is in front again.
   ASSERT_TRUE(dialog->IsJavaScriptModalDialog());
   app_modal::JavaScriptAppModalDialog* js_dialog =
       static_cast<app_modal::JavaScriptAppModalDialog*>(dialog);
 
-  BrowserActivationObserver activation_observer;
+  ui_test_utils::BrowserActivationWaiter waiter(popup_browser);
   js_dialog->native_dialog()->AcceptAppModalDialog();
-
-  if (popup_browser != chrome::FindLastActive())
-    activation_observer.WaitForActivation();
+  waiter.WaitForActivation();
   ASSERT_EQ(popup_browser, chrome::FindLastActive());
+}
+
+IN_PROC_BROWSER_TEST_F(PopupBlockerBrowserTest, ModalPopUnderViaHTTPAuth) {
+  WebContents* tab = browser()->tab_strip_model()->GetActiveWebContents();
+  GURL url(
+      embedded_test_server()->GetURL("/popup_blocker/popup-window-open.html"));
+  HostContentSettingsMapFactory::GetForProfile(browser()->profile())
+      ->SetContentSettingDefaultScope(url, GURL(), CONTENT_SETTINGS_TYPE_POPUPS,
+                                      std::string(), CONTENT_SETTING_ALLOW);
+
+  NavigateAndCheckPopupShown(url, ExpectPopup);
+
+  Browser* popup_browser = chrome::FindLastActive();
+  ASSERT_NE(popup_browser, browser());
+
+  // Showing an http auth dialog will raise the tab over the popup.
+  LoginPromptBrowserTestObserver observer;
+  content::NavigationController* controller = &tab->GetController();
+  observer.Register(content::Source<content::NavigationController>(controller));
+  {
+    WindowedAuthNeededObserver auth_needed_observer(controller);
+    tab->GetMainFrame()->ExecuteJavaScriptForTests(
+        base::UTF8ToUTF16("var f = document.createElement('iframe'); f.src = "
+                          "'/auth-basic'; document.body.appendChild(f);"));
+    auth_needed_observer.Wait();
+    ASSERT_FALSE(observer.handlers().empty());
+  }
+
+  {
+    ui_test_utils::BrowserActivationWaiter waiter(popup_browser);
+    LoginHandler* handler = *observer.handlers().begin();
+    handler->CancelAuth();
+    waiter.WaitForActivation();
+    ASSERT_EQ(popup_browser, chrome::FindLastActive());
+  }
 }
 
 // Tests that Ctrl+Enter/Cmd+Enter keys on a link open the backgournd tab.

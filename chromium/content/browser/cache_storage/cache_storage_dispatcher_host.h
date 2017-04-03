@@ -8,6 +8,10 @@
 #include <stdint.h>
 
 #include <list>
+#include <map>
+#include <memory>
+#include <string>
+#include <vector>
 
 #include "base/macros.h"
 #include "content/browser/cache_storage/cache_storage.h"
@@ -107,8 +111,7 @@ class CONTENT_EXPORT CacheStorageDispatcherHost : public BrowserMessageFilter {
                                     CacheStorageError error);
   void OnCacheStorageKeysCallback(int thread_id,
                                   int request_id,
-                                  const std::vector<std::string>& strings,
-                                  CacheStorageError error);
+                                  const std::vector<std::string>& strings);
   void OnCacheStorageMatchCallback(
       int thread_id,
       int request_id,

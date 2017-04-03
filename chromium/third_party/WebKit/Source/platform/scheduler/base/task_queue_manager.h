@@ -20,11 +20,8 @@
 #include "platform/scheduler/base/task_queue_selector.h"
 
 namespace base {
-class TickClock;
-
 namespace trace_event {
 class ConvertableToTraceFormat;
-class TracedValue;
 }  // namespace trace_event
 }  // namespace base
 
@@ -136,6 +133,12 @@ class BLINK_PLATFORM_EXPORT TaskQueueManager
     DCHECK(main_thread_checker_.CalledOnValidThread());
     return currently_executing_task_queue_;
   }
+
+  // Return number of pending tasks in task queues.
+  size_t GetNumberOfPendingTasks() const;
+
+  // Returns true if there is a task that could be executed immediately.
+  bool HasImmediateWorkForTesting() const;
 
  private:
   friend class LazyNow;

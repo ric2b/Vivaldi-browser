@@ -231,12 +231,13 @@ public class DOMUtils {
      * @param viewCore The ContentViewCore in which the node lives.
      * @param nodeId The id of the node.
      */
-    public static void clickNode(ActivityInstrumentationTestCase2 activityTestCase,
+    public static boolean clickNode(ActivityInstrumentationTestCase2 activityTestCase,
             final ContentViewCore viewCore, String nodeId)
             throws InterruptedException, TimeoutException {
         scrollNodeIntoView(viewCore.getWebContents(), nodeId);
         int[] clickTarget = getClickTargetForNode(viewCore, nodeId);
-        TouchCommon.singleClickView(viewCore.getContainerView(), clickTarget[0], clickTarget[1]);
+        return TouchCommon.singleClickView(
+                viewCore.getContainerView(), clickTarget[0], clickTarget[1]);
     }
 
     /**
@@ -462,11 +463,12 @@ public class DOMUtils {
      * @return the click target of the node in the form of a [ x, y ] array.
      */
     private static int[] getClickTargetForBounds(ContentViewCore viewCore, Rect bounds) {
-        int topControlsLayoutHeight = viewCore.doTopControlsShrinkBlinkSize()
-                ? viewCore.getTopControlsHeightPix() : 0;
+        int browserControlsLayoutHeight = viewCore.doBrowserControlsShrinkBlinkSize()
+                ? viewCore.getTopControlsHeightPix()
+                : 0;
         int clickX = (int) viewCore.getRenderCoordinates().fromLocalCssToPix(bounds.exactCenterX());
         int clickY = (int) viewCore.getRenderCoordinates().fromLocalCssToPix(bounds.exactCenterY())
-                + topControlsLayoutHeight;
+                + browserControlsLayoutHeight;
         return new int[] { clickX, clickY };
     }
 

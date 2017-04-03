@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include <openssl/aes.h>
-#include <openssl/evp.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -16,8 +14,9 @@
 #include "components/webcrypto/crypto_data.h"
 #include "components/webcrypto/status.h"
 #include "crypto/openssl_util.h"
-#include "crypto/scoped_openssl_types.h"
 #include "third_party/WebKit/public/platform/WebCryptoAlgorithmParams.h"
+#include "third_party/boringssl/src/include/openssl/aes.h"
+#include "third_party/boringssl/src/include/openssl/cipher.h"
 
 namespace webcrypto {
 
@@ -63,15 +62,10 @@ Status AesCbcEncryptDecrypt(EncryptOrDecrypt cipher_operation,
     return Status::ErrorDataTooLarge();
 
   // Note: PKCS padding is enabled by default
-  crypto::ScopedOpenSSL<EVP_CIPHER_CTX, EVP_CIPHER_CTX_free> context(
-      EVP_CIPHER_CTX_new());
-
-  if (!context.get())
-    return Status::OperationError();
-
   const EVP_CIPHER* const cipher = GetAESCipherByKeyLength(raw_key.size());
   DCHECK(cipher);
 
+  bssl::ScopedEVP_CIPHER_CTX context;
   if (!EVP_CipherInit_ex(context.get(), cipher, NULL, &raw_key[0],
                          params->iv().data(), cipher_operation)) {
     return Status::OperationError();

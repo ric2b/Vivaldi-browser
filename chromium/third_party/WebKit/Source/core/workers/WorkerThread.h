@@ -34,6 +34,8 @@
 #include "core/workers/WorkerThreadLifecycleObserver.h"
 #include "platform/LifecycleNotifier.h"
 #include "platform/WaitableEvent.h"
+#include "platform/WebTaskRunner.h"
+#include "public/platform/WebThread.h"
 #include "wtf/Forward.h"
 #include "wtf/Functional.h"
 #include "wtf/PassRefPtr.h"
@@ -90,7 +92,7 @@ class CORE_EXPORT WorkerThreadLifecycleContext final
 //    any interruptions.
 //  - Queued tasks never run.
 //  - postTask() and appendDebuggerTask() reject posting new tasks.
-class CORE_EXPORT WorkerThread {
+class CORE_EXPORT WorkerThread : public WebThread::TaskObserver {
  public:
   // Represents how this thread is terminated. Used for UMA. Append only.
   enum class ExitCode {
@@ -112,12 +114,15 @@ class CORE_EXPORT WorkerThread {
   void terminateAndWait();
   static void terminateAndWaitForAllWorkers();
 
+  // WebThread::TaskObserver.
+  void willProcessTask() override;
+  void didProcessTask() override;
+
   virtual WorkerBackingThread& workerBackingThread() = 0;
   virtual void clearWorkerBackingThread() = 0;
   ConsoleMessageStorage* consoleMessageStorage() const {
     return m_consoleMessageStorage.get();
   }
-  virtual bool shouldAttachThreadDebugger() const { return true; }
   v8::Isolate* isolate();
 
   bool isCurrentThread();
@@ -154,6 +159,12 @@ class CORE_EXPORT WorkerThread {
   // Number of active worker threads.
   static unsigned workerThreadCount();
 
+  // Returns a set of all worker threads. This must be called only on the main
+  // thread and the returned set must not be stored for future use.
+  static HashSet<WorkerThread*>& workerThreads();
+
+  int getWorkerThreadId() const { return m_workerThreadId; }
+
   PlatformThreadId platformThreadId();
 
   bool isForciblyTerminated();
@@ -184,9 +195,6 @@ class CORE_EXPORT WorkerThread {
       Terminate_WhileDebuggerTaskIsRunningOnInitialization);
   FRIEND_TEST_ALL_PREFIXES(WorkerThreadTest,
                            Terminate_WhileDebuggerTaskIsRunning);
-
-  class ForceTerminationTask;
-  class WorkerMicrotaskRunner;
 
   enum class TerminationMode {
     // Synchronously terminate the worker execution. Please be careful to
@@ -219,6 +227,13 @@ class CORE_EXPORT WorkerThread {
   // acquired.
   bool shouldScheduleToTerminateExecution(const MutexLocker&);
 
+  // Called as a delayed task to terminate the worker execution from the main
+  // thread. This task is expected to run when the shutdown sequence does not
+  // start in a certain time period because of an inifite loop in the JS
+  // execution context etc. When the shutdown sequence is started before this
+  // task runs, the task is simply cancelled.
+  void mayForciblyTerminateExecution();
+
   // Forcibly terminates the worker execution. This must be called with
   // |m_threadStateMutex| acquired.
   void forciblyTerminateExecution(const MutexLocker&, ExitCode);
@@ -249,6 +264,9 @@ class CORE_EXPORT WorkerThread {
 
   ExitCode getExitCodeForTesting();
 
+  // A unique identifier among all WorkerThreads.
+  const int m_workerThreadId;
+
   // Accessed only on the main thread.
   bool m_requestedToStart = false;
 
@@ -264,10 +282,9 @@ class CORE_EXPORT WorkerThread {
   ThreadState m_threadState = ThreadState::NotStarted;
   ExitCode m_exitCode = ExitCode::NotTerminated;
 
-  long long m_forceTerminationDelayInMs;
+  long long m_forcibleTerminationDelayInMs;
 
   std::unique_ptr<InspectorTaskRunner> m_inspectorTaskRunner;
-  std::unique_ptr<WorkerMicrotaskRunner> m_microtaskRunner;
 
   RefPtr<WorkerLoaderProxy> m_workerLoaderProxy;
   WorkerReportingProxy& m_workerReportingProxy;
@@ -283,9 +300,9 @@ class CORE_EXPORT WorkerThread {
   // Signaled when the thread completes termination on the worker thread.
   std::unique_ptr<WaitableEvent> m_shutdownEvent;
 
-  // Scheduled when termination starts with TerminationMode::Force, and
-  // cancelled when the worker thread is gracefully shut down.
-  std::unique_ptr<ForceTerminationTask> m_scheduledForceTerminationTask;
+  // Used to cancel a scheduled forcible termination task. See
+  // mayForciblyTerminateExecution() for details.
+  TaskHandle m_forcibleTerminationTaskHandle;
 
   Persistent<WorkerThreadLifecycleContext> m_workerThreadLifecycleContext;
 };

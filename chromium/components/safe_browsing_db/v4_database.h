@@ -17,8 +17,16 @@ namespace safe_browsing {
 
 class V4Database;
 
+// Scheduled when the database has been read from disk and is ready to process
+// resource reputation requests.
 typedef base::Callback<void(std::unique_ptr<V4Database>)>
     NewDatabaseReadyCallback;
+
+// Scheduled when the checksum for all the stores in the database has been
+// verified to match the expected value. Stores for which the checksum did not
+// match are passed as the argument and need to be reset.
+typedef base::Callback<void(const std::vector<ListIdentifier>&)>
+    DatabaseReadyForUpdatesCallback;
 
 // This callback is scheduled once the database has finished processing the
 // update requests for all stores and is ready to process the next set of update
@@ -108,6 +116,13 @@ class V4Database {
   // Returns the current state of each of the stores being managed.
   std::unique_ptr<StoreStateMap> GetStoreStateMap();
 
+  // Check if all the selected stores are available and populated.
+  // Returns false if any of |stores_to_check| don't have valid data.
+  // A store may be unavailble if either it hasn't yet gotten a proper
+  // full-update (just after install, or corrupted/missing file), or if it's
+  // not supported in this build (i.e. Chromium).
+  virtual bool AreStoresAvailable(const StoresToCheck& stores_to_check) const;
+
   // Searches for a hash prefix matching the |full_hash| in stores in the
   // database, filtered by |stores_to_check|, and returns the identifier of the
   // store along with the matching hash prefix in |matched_hash_prefix_map|.
@@ -116,8 +131,21 @@ class V4Database {
       const StoresToCheck& stores_to_check,
       StoreAndHashPrefixes* matched_store_and_full_hashes);
 
-  // Deletes the current database and creates a new one.
-  virtual bool ResetDatabase();
+  // Resets the stores in |stores_to_reset| to an empty state. This is done if
+  // the checksum doesn't match the expected value.
+  void ResetStores(const std::vector<ListIdentifier>& stores_to_reset);
+
+  // Schedules verification of the checksum of each store read from disk on task
+  // runner. If the checksum doesn't match, that store is passed to the
+  // |db_ready_for_updates_callback|. At the end,
+  // |db_ready_for_updates_callback| is scheduled (on the same thread as it was
+  // called) to indicate that the database updates can now be scheduled.
+  void VerifyChecksum(
+      DatabaseReadyForUpdatesCallback db_ready_for_updates_callback);
+
+  // Records the size of each of the stores managed by this database, along
+  // with the combined size of all the stores.
+  void RecordFileSizeHistograms();
 
  protected:
   V4Database(const scoped_refptr<base::SequencedTaskRunner>& db_task_runner,
@@ -147,13 +175,19 @@ class V4Database {
       const base::FilePath& base_path,
       const ListInfos& list_infos,
       const scoped_refptr<base::SingleThreadTaskRunner>& callback_task_runner,
-      NewDatabaseReadyCallback callback);
+      NewDatabaseReadyCallback callback,
+      const base::TimeTicks create_start_time);
 
   // Callback called when a new store has been created and is ready to be used.
   // This method updates the store_map_ to point to the new store, which causes
   // the old store to get deleted.
   void UpdatedStoreReady(ListIdentifier identifier,
                          std::unique_ptr<V4Store> store);
+
+  // See |VerifyChecksum|.
+  void VerifyChecksumOnTaskRunner(
+      const scoped_refptr<base::SingleThreadTaskRunner>& callback_task_runner,
+      DatabaseReadyForUpdatesCallback db_ready_for_updates_callback);
 
   const scoped_refptr<base::SequencedTaskRunner> db_task_runner_;
 

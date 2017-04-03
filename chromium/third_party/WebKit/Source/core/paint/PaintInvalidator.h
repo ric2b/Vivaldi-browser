@@ -45,9 +45,10 @@ struct PaintInvalidatorContext {
     ForcedSubtreeInvalidationRectUpdate = 1 << 1,
     ForcedSubtreeFullInvalidation = 1 << 2,
     ForcedSubtreeFullInvalidationForStackedContents = 1 << 3,
+    ForcedSubtreeSVGResourceChange = 1 << 4,
     // TODO(crbug.com/637313): This is temporary before we support filters in
     // paint property tree.
-    ForcedSubtreeSlowPathRect = 1 << 4,
+    ForcedSubtreeSlowPathRect = 1 << 5,
   };
   unsigned forcedSubtreeInvalidationFlags = 0;
 
@@ -68,10 +69,24 @@ struct PaintInvalidatorContext {
 
   PaintLayer* paintingLayer = nullptr;
 
-  LayoutRect oldBounds;
-  LayoutRect newBounds;
+  // Store the old and new visual rects in the paint invalidation backing's
+  // coordinates. The rects do *not* account for composited scrolling.
+  // See LayoutObject::adjustVisualRectForCompositedScrolling().
+  LayoutRect oldVisualRect;
+  LayoutRect newVisualRect;
+
+  // Store the origin of the object's local coordinates in the paint
+  // invalidation backing's coordinates. They are used to detect layoutObject
+  // shifts that force a full invalidation and invalidation check in subtree.
+  // The points do *not* account for composited scrolling. See
+  // LayoutObject::adjustVisualRectForCompositedScrolling().
   LayoutPoint oldLocation;
   LayoutPoint newLocation;
+
+  // Stores the old and new offsets to paint this object, relative to the
+  // containing transform node. They are for SPv2 only.
+  LayoutPoint oldPaintOffset;
+  LayoutPoint newPaintOffset;
 };
 
 class PaintInvalidator {
@@ -88,12 +103,10 @@ class PaintInvalidator {
       const LayoutObject&,
       const FloatRect&,
       const PaintInvalidatorContext&);
-  LayoutRect computePaintInvalidationRectInBacking(
-      const LayoutObject&,
-      const PaintInvalidatorContext&);
-  LayoutPoint computeLocationFromPaintInvalidationBacking(
-      const LayoutObject&,
-      const PaintInvalidatorContext&);
+  LayoutRect computeVisualRectInBacking(const LayoutObject&,
+                                        const PaintInvalidatorContext&);
+  LayoutPoint computeLocationInBacking(const LayoutObject&,
+                                       const PaintInvalidatorContext&);
   void updatePaintingLayer(const LayoutObject&, PaintInvalidatorContext&);
   void updateContext(const LayoutObject&, PaintInvalidatorContext&);
 

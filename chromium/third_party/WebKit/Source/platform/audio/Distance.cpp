@@ -28,6 +28,7 @@
 
 #include "platform/audio/Distance.h"
 #include "wtf/Assertions.h"
+#include "wtf/MathExtras.h"
 #include <math.h>
 #include <algorithm>
 
@@ -35,18 +36,14 @@ namespace blink {
 
 DistanceEffect::DistanceEffect()
     : m_model(ModelInverse),
-      m_isClamped(true),
       m_refDistance(1.0),
       m_maxDistance(10000.0),
       m_rolloffFactor(1.0) {}
 
 double DistanceEffect::gain(double distance) {
-  // don't go beyond maximum distance
-  distance = std::min(distance, m_maxDistance);
-
-  // if clamped, don't get closer than reference distance
-  if (m_isClamped)
-    distance = std::max(distance, m_refDistance);
+  // Don't get closer than the reference distance or go beyond the maximum
+  // distance.
+  distance = clampTo(distance, m_refDistance, m_maxDistance);
 
   switch (m_model) {
     case ModelLinear:
@@ -64,17 +61,18 @@ double DistanceEffect::linearGain(double distance) {
   // We want a gain that decreases linearly from m_refDistance to
   // m_maxDistance. The gain is 1 at m_refDistance.
   return (1.0 -
-          m_rolloffFactor * (distance - m_refDistance) /
+          clampTo(m_rolloffFactor, 0.0, 1.0) * (distance - m_refDistance) /
               (m_maxDistance - m_refDistance));
 }
 
 double DistanceEffect::inverseGain(double distance) {
   return m_refDistance /
-         (m_refDistance + m_rolloffFactor * (distance - m_refDistance));
+         (m_refDistance +
+          clampTo(m_rolloffFactor, 0.0) * (distance - m_refDistance));
 }
 
 double DistanceEffect::exponentialGain(double distance) {
-  return pow(distance / m_refDistance, -m_rolloffFactor);
+  return pow(distance / m_refDistance, -clampTo(m_rolloffFactor, 0.0));
 }
 
 }  // namespace blink

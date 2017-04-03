@@ -6,6 +6,7 @@
 #define CONTENT_PUBLIC_BROWSER_BROWSER_CHILD_PROCESS_HOST_H_
 
 #include "base/environment.h"
+#include "base/memory/shared_memory.h"
 #include "base/process/kill.h"
 #include "base/process/process_handle.h"
 #include "base/strings/string16.h"
@@ -20,12 +21,7 @@
 
 namespace base {
 class CommandLine;
-class FilePath;
 class SharedPersistentMemoryAllocator;
-}
-
-namespace shell {
-class InterfaceProvider;
 }
 
 namespace content {
@@ -46,9 +42,9 @@ class CONTENT_EXPORT BrowserChildProcessHost : public IPC::Sender {
       content::ProcessType process_type,
       BrowserChildProcessHostDelegate* delegate);
 
-  // Used to create a child process host, connecting the process to the shell
-  // as a new service instance identified by |service_name| and (optional)
-  // |instance_id|.
+  // Used to create a child process host, connecting the process to the
+  // Service Manager as a new service instance identified by |service_name| and
+  // (optional) |instance_id|.
   static BrowserChildProcessHost* Create(
       content::ProcessType process_type,
       BrowserChildProcessHostDelegate* delegate,
@@ -63,10 +59,9 @@ class CONTENT_EXPORT BrowserChildProcessHost : public IPC::Sender {
 
   // Derived classes call this to launch the child process asynchronously.
   // Takes ownership of |cmd_line| and |delegate|.
-  virtual void Launch(
-      SandboxedProcessLauncherDelegate* delegate,
-      base::CommandLine* cmd_line,
-      bool terminate_on_shutdown) = 0;
+  virtual void Launch(SandboxedProcessLauncherDelegate* delegate,
+                      base::CommandLine* cmd_line,
+                      bool terminate_on_shutdown) = 0;
 
   virtual const ChildProcessData& GetData() const = 0;
 

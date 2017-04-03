@@ -49,7 +49,7 @@
 #include "core/page/DragController.h"
 #include "core/page/FocusController.h"
 #include "core/page/PointerLockController.h"
-#include "core/page/ScopedPageLoadDeferrer.h"
+#include "core/page/ScopedPageSuspender.h"
 #include "core/page/ValidationMessageClient.h"
 #include "core/page/scrolling/ScrollingCoordinator.h"
 #include "core/paint/PaintLayer.h"
@@ -62,13 +62,13 @@ namespace blink {
 // Set of all live pages; includes internal Page objects that are
 // not observable from scripts.
 static Page::PageSet& allPages() {
-  DEFINE_STATIC_LOCAL(Page::PageSet, allPages, ());
-  return allPages;
+  DEFINE_STATIC_LOCAL(Page::PageSet, pages, ());
+  return pages;
 }
 
 Page::PageSet& Page::ordinaryPages() {
-  DEFINE_STATIC_LOCAL(Page::PageSet, ordinaryPages, ());
-  return ordinaryPages;
+  DEFINE_STATIC_LOCAL(Page::PageSet, pages, ());
+  return pages;
 }
 
 void Page::networkStateChanged(bool online) {
@@ -105,8 +105,8 @@ float deviceScaleFactor(LocalFrame* frame) {
 Page* Page::createOrdinary(PageClients& pageClients) {
   Page* page = create(pageClients);
   ordinaryPages().add(page);
-  if (ScopedPageLoadDeferrer::isActive())
-    page->setDefersLoading(true);
+  if (ScopedPageSuspender::isActive())
+    page->setSuspended(true);
   return page;
 }
 
@@ -130,7 +130,7 @@ Page::Page(PageClients& pageClients)
                        : UseCounter::DefaultContext),
       m_openedByDOM(false),
       m_tabKeyCyclesThroughElements(true),
-      m_defersLoading(false),
+      m_suspended(false),
       m_deviceScaleFactor(1),
       m_visibilityState(PageVisibilityStateVisible),
       m_isCursorVisible(true),
@@ -147,6 +147,17 @@ Page::Page(PageClients& pageClients)
 Page::~Page() {
   // willBeDestroyed() must be called before Page destruction.
   ASSERT(!m_mainFrame);
+}
+
+void Page::closeSoon() {
+  // Make sure this Page can no longer be found by JS.
+  m_isClosing = true;
+
+  // TODO(dcheng): Try to remove this in a followup, it's not obviously needed.
+  if (m_mainFrame->isLocalFrame())
+    toLocalFrame(m_mainFrame)->loader().stopAllLoaders();
+
+  chromeClient().closeWindowSoon();
 }
 
 ViewportDescription Page::viewportDescription() const {
@@ -253,15 +264,15 @@ void Page::setValidationMessageClient(ValidationMessageClient* client) {
   m_validationMessageClient = client;
 }
 
-void Page::setDefersLoading(bool defers) {
-  if (defers == m_defersLoading)
+void Page::setSuspended(bool suspend) {
+  if (suspend == m_suspended)
     return;
 
-  m_defersLoading = defers;
+  m_suspended = suspend;
   for (Frame* frame = mainFrame(); frame;
        frame = frame->tree().traverseNext()) {
     if (frame->isLocalFrame())
-      toLocalFrame(frame)->loader().setDefersLoading(defers);
+      toLocalFrame(frame)->loader().setDefersLoading(suspend);
   }
 }
 
@@ -407,10 +418,8 @@ void Page::settingsChanged(SettingsDelegate::ChangeType changeType) {
     case SettingsDelegate::ViewportRuleChange: {
       if (!mainFrame() || !mainFrame()->isLocalFrame())
         break;
-      Document* doc = toLocalFrame(mainFrame())->document();
-      if (!doc || !doc->styleResolver())
-        break;
-      doc->styleResolver()->viewportStyleResolver()->collectViewportRules();
+      if (Document* doc = toLocalFrame(mainFrame())->document())
+        doc->styleEngine().viewportRulesChanged();
     } break;
     case SettingsDelegate::TextTrackKindUserPreferenceChange:
       for (Frame* frame = mainFrame(); frame;
@@ -426,17 +435,16 @@ void Page::settingsChanged(SettingsDelegate::ChangeType changeType) {
     case SettingsDelegate::DOMWorldsChange: {
       if (!settings().forceMainWorldInitialization())
         break;
-      if (!mainFrame() || !mainFrame()->isLocalFrame())
-        break;
-      if (!toLocalFrame(mainFrame())
-               ->loader()
-               .stateMachine()
-               ->committedFirstRealDocumentLoad())
-        break;
       for (Frame* frame = mainFrame(); frame;
            frame = frame->tree().traverseNext()) {
-        if (frame->isLocalFrame())
-          toLocalFrame(frame)->script().initializeMainWorld();
+        if (!frame->isLocalFrame())
+          continue;
+        LocalFrame* localFrame = toLocalFrame(frame);
+        if (localFrame->loader()
+                .stateMachine()
+                ->committedFirstRealDocumentLoad()) {
+          localFrame->script().initializeMainWorld();
+        }
       }
     } break;
   }
@@ -463,11 +471,11 @@ void Page::didCommitLoad(LocalFrame* frame) {
 
     // Need to reset visual viewport position here since before commit load we
     // would update the previous history item, Page::didCommitLoad is called
-    // after a new history item is created in FrameLoader. See crbug.com/642279
-    frameHost().visualViewport().setScrollPosition(DoublePoint(),
-                                                   ProgrammaticScroll);
+    // after a new history item is created in FrameLoader.
+    // See crbug.com/642279
+    frameHost().visualViewport().setScrollOffset(ScrollOffset(),
+                                                 ProgrammaticScroll);
     m_hostsUsingFeatures.updateMeasurementsAndClear();
-    UserGestureIndicator::clearProcessedUserGestureSinceLoad();
   }
 }
 
@@ -511,10 +519,6 @@ void Page::layerTreeViewInitialized(WebLayerTreeView& layerTreeView) {
 void Page::willCloseLayerTreeView(WebLayerTreeView& layerTreeView) {
   if (m_scrollingCoordinator)
     m_scrollingCoordinator->willCloseLayerTreeView(layerTreeView);
-}
-
-void Page::willBeClosed() {
-  ordinaryPages().remove(this);
 }
 
 void Page::willBeDestroyed() {

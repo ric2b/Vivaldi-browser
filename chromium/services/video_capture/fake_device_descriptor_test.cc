@@ -12,23 +12,22 @@ using testing::Invoke;
 namespace video_capture {
 
 FakeDeviceDescriptorTest::FakeDeviceDescriptorTest()
-    : VideoCaptureServiceTest() {}
+    : video_capture::ServiceTest() {}
 
 FakeDeviceDescriptorTest::~FakeDeviceDescriptorTest() = default;
 
 void FakeDeviceDescriptorTest::SetUp() {
-  VideoCaptureServiceTest::SetUp();
+  video_capture::ServiceTest::SetUp();
 
   base::RunLoop wait_loop;
   EXPECT_CALL(descriptor_receiver_, OnEnumerateDeviceDescriptorsCallback(_))
       .WillOnce(Invoke([this, &wait_loop](
-          const std::vector<mojom::VideoCaptureDeviceDescriptorPtr>&
-              descriptors) {
-        fake_device_descriptor_ = descriptors[0].Clone();
+          const std::vector<media::VideoCaptureDeviceDescriptor>& descriptors) {
+        fake_device_descriptor_ = descriptors[0];
         wait_loop.Quit();
       }));
   factory_->EnumerateDeviceDescriptors(base::Bind(
-      &MockDeviceDescriptorReceiver::HandleEnumerateDeviceDescriptorsCallback,
+      &MockDeviceDescriptorReceiver::OnEnumerateDeviceDescriptorsCallback,
       base::Unretained(&descriptor_receiver_)));
   wait_loop.Run();
 }

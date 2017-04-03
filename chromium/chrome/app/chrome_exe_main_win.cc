@@ -14,7 +14,6 @@
 #include "base/at_exit.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
-#include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/path_service.h"
 #include "base/strings/string16.h"
@@ -28,7 +27,8 @@
 #include "chrome/browser/win/chrome_process_finder.h"
 #include "chrome/common/chrome_paths_internal.h"
 #include "chrome/common/chrome_switches.h"
-#include "chrome/installer/util/browser_distribution.h"
+#include "chrome/install_static/initialize_from_primary_module.h"
+#include "chrome/install_static/install_util.h"
 #include "chrome_elf/chrome_elf_main.h"
 #include "components/crash/content/app/crash_switches.h"
 #include "components/crash/content/app/crashpad.h"
@@ -204,6 +204,7 @@ int APIENTRY wWinMain(HINSTANCE instance, HINSTANCE prev, wchar_t*, int) {
 int main() {
   HINSTANCE instance = GetModuleHandle(nullptr);
 #endif
+  install_static::InitializeFromPrimaryModule();
   SignalInitializeCrashReporting();
 
   // Initialize the CommandLine singleton from the environment.

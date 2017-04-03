@@ -1,4 +1,4 @@
-import("//build/json_schema_api.gni")
+import("//tools/json_schema_compiler/json_schema_api.gni")
 import("schemas.gni")
 
 json_schema_api("api") {

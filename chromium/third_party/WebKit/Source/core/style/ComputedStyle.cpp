@@ -598,9 +598,7 @@ StyleDifference ComputedStyle::visualInvalidationDiff(
 
   updatePropertySpecificDifferences(other, diff);
 
-  // TODO(skobes): Refine the criteria for ScrollAnchor-disabling properties.
-  // Some things set needsLayout but shouldn't disable scroll anchoring.
-  if (diff.needsLayout() || diff.transformChanged())
+  if (scrollAnchorDisablingPropertyChanged(other, diff))
     diff.setScrollAnchorDisablingPropertyChanged();
 
   // Cursors are not checked, since they will be set appropriately in response
@@ -612,6 +610,35 @@ StyleDifference ComputedStyle::visualInvalidationDiff(
   // transition properly.
 
   return diff;
+}
+
+bool ComputedStyle::scrollAnchorDisablingPropertyChanged(
+    const ComputedStyle& other,
+    StyleDifference& diff) const {
+  if (m_nonInheritedData.m_position != other.m_nonInheritedData.m_position)
+    return true;
+
+  if (m_box.get() != other.m_box.get()) {
+    if (m_box->width() != other.m_box->width() ||
+        m_box->minWidth() != other.m_box->minWidth() ||
+        m_box->maxWidth() != other.m_box->maxWidth() ||
+        m_box->height() != other.m_box->height() ||
+        m_box->minHeight() != other.m_box->minHeight() ||
+        m_box->maxHeight() != other.m_box->maxHeight())
+      return true;
+  }
+
+  if (m_surround.get() != other.m_surround.get()) {
+    if (m_surround->margin != other.m_surround->margin ||
+        m_surround->offset != other.m_surround->offset ||
+        m_surround->padding != other.m_surround->padding)
+      return true;
+  }
+
+  if (diff.transformChanged())
+    return true;
+
+  return false;
 }
 
 bool ComputedStyle::diffNeedsFullLayoutAndPaintInvalidation(
@@ -814,7 +841,7 @@ bool ComputedStyle::diffNeedsFullLayoutAndPaintInvalidation(
   if (isDisplayTableType(display())) {
     if (m_inheritedData.m_borderCollapse !=
             other.m_inheritedData.m_borderCollapse ||
-        m_inheritedData.m_emptyCells != other.m_inheritedData.m_emptyCells ||
+        emptyCells() != other.emptyCells() ||
         m_inheritedData.m_captionSide != other.m_inheritedData.m_captionSide ||
         m_nonInheritedData.m_tableLayout !=
             other.m_nonInheritedData.m_tableLayout)
@@ -936,15 +963,12 @@ bool ComputedStyle::diffNeedsPaintInvalidationSubtree(
 
 bool ComputedStyle::diffNeedsPaintInvalidationObject(
     const ComputedStyle& other) const {
-  if (!m_background->outline().visuallyEqual(other.m_background->outline()))
-    return true;
-
   if (visibility() != other.visibility() ||
       m_inheritedData.m_printColorAdjust !=
           other.m_inheritedData.m_printColorAdjust ||
       m_inheritedData.m_insideLink != other.m_inheritedData.m_insideLink ||
       !m_surround->border.visuallyEqual(other.m_surround->border) ||
-      !m_background->visuallyEqual(*other.m_background))
+      *m_background != *other.m_background)
     return true;
 
   if (m_rareInheritedData.get() != other.m_rareInheritedData.get()) {
@@ -970,6 +994,8 @@ bool ComputedStyle::diffNeedsPaintInvalidationObject(
             *other.m_rareNonInheritedData.get()) ||
         !m_rareNonInheritedData->clipPathDataEquivalent(
             *other.m_rareNonInheritedData.get()) ||
+        !m_rareNonInheritedData->m_outline.visuallyEqual(
+            other.m_rareNonInheritedData->m_outline) ||
         (visitedLinkBorderLeftColor() != other.visitedLinkBorderLeftColor() &&
          borderLeftWidth()) ||
         (visitedLinkBorderRightColor() != other.visitedLinkBorderRightColor() &&
@@ -1018,18 +1044,11 @@ bool ComputedStyle::diffNeedsPaintInvalidationObjectForPaintImage(
       return true;
   }
 
-  if (inheritedVariables() || other.inheritedVariables()) {
+  if (inheritedVariables() || nonInheritedVariables() ||
+      other.inheritedVariables() || other.nonInheritedVariables()) {
     for (const AtomicString& property :
          *value->customInvalidationProperties()) {
-      CSSVariableData* thisVar =
-          inheritedVariables() ? inheritedVariables()->getVariable(property)
-                               : nullptr;
-      CSSVariableData* otherVar =
-          other.inheritedVariables()
-              ? other.inheritedVariables()->getVariable(property)
-              : nullptr;
-
-      if (!dataEquivalent(thisVar, otherVar))
+      if (!dataEquivalent(getVariable(property), other.getVariable(property)))
         return true;
     }
   }
@@ -1067,10 +1086,13 @@ void ComputedStyle::updatePropertySpecificDifferences(
     if (!m_rareNonInheritedData->reflectionDataEquivalent(
             *other.m_rareNonInheritedData.get()))
       diff.setFilterChanged();
+
+    if (!m_rareNonInheritedData->m_outline.visuallyEqual(
+            other.m_rareNonInheritedData->m_outline))
+      diff.setNeedsRecomputeOverflow();
   }
 
-  if (!m_background->outline().visuallyEqual(other.m_background->outline()) ||
-      !m_surround->border.visualOverflowEqual(other.m_surround->border))
+  if (!m_surround->border.visualOverflowEqual(other.m_surround->border))
     diff.setNeedsRecomputeOverflow();
 
   if (!diff.needsPaintInvalidation()) {
@@ -1106,6 +1128,8 @@ void ComputedStyle::updatePropertySpecificDifferences(
                     other.m_rareInheritedData->visitedLinkTextEmphasisColor() ||
                 m_rareInheritedData->textEmphasisFill !=
                     other.m_rareInheritedData->textEmphasisFill ||
+                m_rareInheritedData->m_textDecorationSkip !=
+                    other.m_rareInheritedData->m_textDecorationSkip ||
                 m_rareInheritedData->appliedTextDecorations !=
                     other.m_rareInheritedData->appliedTextDecorations)) {
       diff.setTextDecorationOrColorChanged();
@@ -1114,9 +1138,10 @@ void ComputedStyle::updatePropertySpecificDifferences(
 }
 
 void ComputedStyle::addPaintImage(StyleImage* image) {
-  if (!m_rareNonInheritedData.access()->m_paintImages)
+  if (!m_rareNonInheritedData.access()->m_paintImages) {
     m_rareNonInheritedData.access()->m_paintImages =
-        WTF::wrapUnique(new Vector<Persistent<StyleImage>>());
+        makeUnique<Vector<Persistent<StyleImage>>>();
+  }
   m_rareNonInheritedData.access()->m_paintImages->append(image);
 }
 
@@ -1153,6 +1178,9 @@ static bool hasPropertyThatCreatesStackingContext(
       case CSSPropertyAliasWebkitTransformStyle:
       case CSSPropertyPerspective:
       case CSSPropertyAliasWebkitPerspective:
+      case CSSPropertyTranslate:
+      case CSSPropertyRotate:
+      case CSSPropertyScale:
       case CSSPropertyOffsetPath:
       case CSSPropertyOffsetPosition:
       case CSSPropertyWebkitMask:
@@ -1225,6 +1253,10 @@ bool ComputedStyle::hasWillChangeTransformHint() const {
     switch (property) {
       case CSSPropertyTransform:
       case CSSPropertyAliasWebkitTransform:
+      case CSSPropertyPerspective:
+      case CSSPropertyTranslate:
+      case CSSPropertyScale:
+      case CSSPropertyRotate:
         return true;
       default:
         break;
@@ -1236,9 +1268,6 @@ bool ComputedStyle::hasWillChangeTransformHint() const {
 bool ComputedStyle::requireTransformOrigin(
     ApplyTransformOrigin applyOrigin,
     ApplyMotionPath applyMotionPath) const {
-  const Vector<RefPtr<TransformOperation>>& transformOperations =
-      transform().operations();
-
   // transform-origin brackets the transform with translate operations.
   // Optimize for the case where the only transform is a translation, since the
   // transform-origin is irrelevant in that case.
@@ -1248,9 +1277,8 @@ bool ComputedStyle::requireTransformOrigin(
   if (applyMotionPath == IncludeMotionPath)
     return true;
 
-  unsigned size = transformOperations.size();
-  for (unsigned i = 0; i < size; ++i) {
-    TransformOperation::OperationType type = transformOperations[i]->type();
+  for (const auto& operation : transform().operations()) {
+    TransformOperation::OperationType type = operation->type();
     if (type != TransformOperation::TranslateX &&
         type != TransformOperation::TranslateY &&
         type != TransformOperation::Translate &&
@@ -1286,20 +1314,20 @@ void ComputedStyle::applyTransform(
   bool applyTransformOrigin =
       requireTransformOrigin(applyOrigin, applyMotionPath);
 
-  float offsetX = transformOriginX().type() == Percent ? boundingBox.x() : 0;
-  float offsetY = transformOriginY().type() == Percent ? boundingBox.y() : 0;
-
   float originX = 0;
   float originY = 0;
   float originZ = 0;
 
+  const FloatSize& boxSize = boundingBox.size();
   if (applyTransformOrigin ||
       // We need to calculate originX and originY for applying motion path.
-      applyMotionPath == ComputedStyle::IncludeMotionPath) {
+      applyMotionPath == IncludeMotionPath) {
+    float offsetX = transformOriginX().type() == Percent ? boundingBox.x() : 0;
     originX =
-        floatValueForLength(transformOriginX(), boundingBox.width()) + offsetX;
+        floatValueForLength(transformOriginX(), boxSize.width()) + offsetX;
+    float offsetY = transformOriginY().type() == Percent ? boundingBox.y() : 0;
     originY =
-        floatValueForLength(transformOriginY(), boundingBox.height()) + offsetY;
+        floatValueForLength(transformOriginY(), boxSize.height()) + offsetY;
     if (applyTransformOrigin) {
       originZ = transformOriginZ();
       result.translate3d(originX, originY, originZ);
@@ -1309,23 +1337,20 @@ void ComputedStyle::applyTransform(
   if (applyIndependentTransformProperties ==
       IncludeIndependentTransformProperties) {
     if (translate())
-      translate()->apply(result, boundingBox.size());
+      translate()->apply(result, boxSize);
 
     if (rotate())
-      rotate()->apply(result, boundingBox.size());
+      rotate()->apply(result, boxSize);
 
     if (scale())
-      scale()->apply(result, boundingBox.size());
+      scale()->apply(result, boxSize);
   }
 
-  if (applyMotionPath == ComputedStyle::IncludeMotionPath)
-    applyMotionPathTransform(originX, originY, result);
+  if (applyMotionPath == IncludeMotionPath)
+    applyMotionPathTransform(originX, originY, boundingBox, result);
 
-  const Vector<RefPtr<TransformOperation>>& transformOperations =
-      transform().operations();
-  unsigned size = transformOperations.size();
-  for (unsigned i = 0; i < size; ++i)
-    transformOperations[i]->apply(result, boundingBox.size());
+  for (const auto& operation : transform().operations())
+    operation->apply(result, boxSize);
 
   if (applyTransformOrigin) {
     result.translate3d(-originX, -originY, -originZ);
@@ -1335,11 +1360,11 @@ void ComputedStyle::applyTransform(
 void ComputedStyle::applyMotionPathTransform(
     float originX,
     float originY,
+    const FloatRect& boundingBox,
     TransformationMatrix& transform) const {
   const StyleMotionData& motionData =
       m_rareNonInheritedData->m_transform->m_motion;
-  // TODO(ericwilligers): crbug.com/638055 Apply offset-position and
-  // offset-anchor.
+  // TODO(ericwilligers): crbug.com/638055 Apply offset-position.
   if (!motionData.m_path) {
     return;
   }
@@ -1362,8 +1387,25 @@ void ComputedStyle::applyMotionPathTransform(
   if (motionData.m_rotation.type == OffsetRotationFixed)
     angle = 0;
 
-  transform.translate(point.x() - originX, point.y() - originY);
+  float originShiftX = 0;
+  float originShiftY = 0;
+  if (RuntimeEnabledFeatures::cssOffsetPositionAnchorEnabled()) {
+    // TODO(ericwilligers): crbug.com/638055 Support offset-anchor: auto.
+    const LengthPoint& anchor = offsetAnchor();
+    originShiftX = floatValueForLength(anchor.x(), boundingBox.width()) -
+                   floatValueForLength(transformOriginX(), boundingBox.width());
+    originShiftY =
+        floatValueForLength(anchor.y(), boundingBox.height()) -
+        floatValueForLength(transformOriginY(), boundingBox.height());
+  }
+
+  transform.translate(point.x() - originX + originShiftX,
+                      point.y() - originY + originShiftY);
   transform.rotate(angle + motionData.m_rotation.angle);
+
+  if (RuntimeEnabledFeatures::cssOffsetPositionAnchorEnabled()) {
+    transform.translate(-originShiftX, -originShiftY);
+  }
 }
 
 void ComputedStyle::setTextShadow(PassRefPtr<ShadowList> s) {
@@ -1564,9 +1606,10 @@ const AtomicString& ComputedStyle::hyphenString() const {
                       (&hyphenMinusCharacter, 1));
   DEFINE_STATIC_LOCAL(AtomicString, hyphenString, (&hyphenCharacter, 1));
   const SimpleFontData* primaryFont = font().primaryFont();
-  ASSERT(primaryFont);
-  return primaryFont->glyphForCharacter(hyphenCharacter) ? hyphenString
-                                                         : hyphenMinusString;
+  DCHECK(primaryFont);
+  return primaryFont && primaryFont->glyphForCharacter(hyphenCharacter)
+             ? hyphenString
+             : hyphenMinusString;
 }
 
 const AtomicString& ComputedStyle::textEmphasisMarkString() const {
@@ -1642,9 +1685,6 @@ CSSTransitionData& ComputedStyle::accessTransitions() {
 
 const Font& ComputedStyle::font() const {
   return m_styleInheritedData->font;
-}
-const FontMetrics& ComputedStyle::getFontMetrics() const {
-  return m_styleInheritedData->font.getFontMetrics();
 }
 const FontDescription& ComputedStyle::getFontDescription() const {
   return m_styleInheritedData->font.getFontDescription();
@@ -1777,6 +1817,18 @@ void ComputedStyle::removeNonInheritedVariable(const AtomicString& name) {
   mutableNonInheritedVariables().removeVariable(name);
 }
 
+CSSVariableData* ComputedStyle::getVariable(const AtomicString& name) const {
+  if (inheritedVariables()) {
+    if (CSSVariableData* variable = inheritedVariables()->getVariable(name))
+      return variable;
+  }
+  if (nonInheritedVariables()) {
+    if (CSSVariableData* variable = nonInheritedVariables()->getVariable(name))
+      return variable;
+  }
+  return nullptr;
+}
+
 float ComputedStyle::wordSpacing() const {
   return getFontDescription().wordSpacing();
 }
@@ -1794,6 +1846,15 @@ bool ComputedStyle::setFontDescription(const FontDescription& v) {
 
 void ComputedStyle::setFont(const Font& font) {
   m_styleInheritedData.access()->font = font;
+}
+
+bool ComputedStyle::hasIdenticalAscentDescentAndLineGap(
+    const ComputedStyle& other) const {
+  const SimpleFontData* fontData = font().primaryFont();
+  const SimpleFontData* otherFontData = other.font().primaryFont();
+  return fontData && otherFontData &&
+         fontData->getFontMetrics().hasIdenticalAscentDescentAndLineGap(
+             otherFontData->getFontMetrics());
 }
 
 const Length& ComputedStyle::specifiedLineHeight() const {
@@ -1824,7 +1885,7 @@ int ComputedStyle::computedLineHeight() const {
   // Negative value means the line height is not set. Use the font's built-in
   // spacing, if avalible.
   if (lh.isNegative() && font().primaryFont())
-    return getFontMetrics().lineSpacing();
+    return font().primaryFont()->getFontMetrics().lineSpacing();
 
   if (lh.isPercentOrCalc())
     return minimumValueForLength(lh, LayoutUnit(computedFontSize())).toInt();
@@ -2179,10 +2240,21 @@ void ComputedStyle::setOffsetPath(PassRefPtr<StylePath> path) {
 int ComputedStyle::outlineOutsetExtent() const {
   if (!hasOutline())
     return 0;
-  if (outlineStyleIsAuto())
-    return GraphicsContext::focusRingOutsetExtent(outlineOffset(),
-                                                  outlineWidth());
+  if (outlineStyleIsAuto()) {
+    return GraphicsContext::focusRingOutsetExtent(
+        outlineOffset(), std::ceil(getOutlineStrokeWidthForFocusRing()));
+  }
   return std::max(0, saturatedAddition(outlineWidth(), outlineOffset()));
+}
+
+float ComputedStyle::getOutlineStrokeWidthForFocusRing() const {
+#if OS(MACOSX)
+  return outlineWidth();
+#else
+  // Draw an outline with thickness in proportion to the zoom level, but never
+  // less than 1 pixel so that it remains visible.
+  return std::max(effectiveZoom(), 1.f);
+#endif
 }
 
 bool ComputedStyle::columnRuleEquivalent(

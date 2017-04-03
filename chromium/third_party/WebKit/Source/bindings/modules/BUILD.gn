@@ -34,12 +34,11 @@ generate_event_interfaces("modules_bindings_generated_event_interfaces") {
     "//third_party/WebKit/Source/modules/payments/PaymentRequestUpdateEvent.idl",
     "//third_party/WebKit/Source/modules/peerconnection/RTCDTMFToneChangeEvent.idl",
     "//third_party/WebKit/Source/modules/peerconnection/RTCDataChannelEvent.idl",
-    "//third_party/WebKit/Source/modules/peerconnection/RTCIceCandidateEvent.idl",
+    "//third_party/WebKit/Source/modules/peerconnection/RTCPeerConnectionIceEvent.idl",
     "//third_party/WebKit/Source/modules/presentation/PresentationConnectionAvailableEvent.idl",
     "//third_party/WebKit/Source/modules/presentation/PresentationConnectionCloseEvent.idl",
     "//third_party/WebKit/Source/modules/push_messaging/PushEvent.idl",
     "//third_party/WebKit/Source/modules/sensor/SensorErrorEvent.idl",
-    "//third_party/WebKit/Source/modules/sensor/SensorReadingEvent.idl",
     "//third_party/WebKit/Source/modules/serviceworkers/ExtendableEvent.idl",
     "//third_party/WebKit/Source/modules/serviceworkers/ExtendableMessageEvent.idl",
     "//third_party/WebKit/Source/modules/serviceworkers/FetchEvent.idl",
@@ -70,6 +69,12 @@ make_event_factory("event_modules") {
     "$blink_modules_output_dir/EventModulesHeaders.h",
   ]
   deps = make_core_generated_deps + [ "//third_party/WebKit/Source/bindings/modules:modules_bindings_generated_event_interfaces" ]
+  deps += [
+    "//device/generic_sensor/public/interfaces",
+    "//device/generic_sensor/public/interfaces:interfaces_blink",
+    "//device/vr:mojo_bindings_blink",
+    "//media/midi:mojo_blink",
+  ]
 }
 
 make_names("event_modules_names") {

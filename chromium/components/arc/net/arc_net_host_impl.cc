@@ -293,13 +293,12 @@ namespace arc {
 ArcNetHostImpl::ArcNetHostImpl(ArcBridgeService* bridge_service)
     : ArcService(bridge_service), binding_(this), weak_factory_(this) {
   arc_bridge_service()->net()->AddObserver(this);
-  GetStateHandler()->AddObserver(this, FROM_HERE);
 }
 
 ArcNetHostImpl::~ArcNetHostImpl() {
   DCHECK(thread_checker_.CalledOnValidThread());
   arc_bridge_service()->net()->RemoveObserver(this);
-  if (chromeos::NetworkHandler::IsInitialized()) {
+  if (observing_network_state_) {
     GetStateHandler()->RemoveObserver(this, FROM_HERE);
   }
 }
@@ -312,6 +311,19 @@ void ArcNetHostImpl::OnInstanceReady() {
   auto* instance = arc_bridge_service()->net()->GetInstanceForMethod("Init");
   DCHECK(instance);
   instance->Init(std::move(host));
+
+  if (chromeos::NetworkHandler::IsInitialized()) {
+    GetStateHandler()->AddObserver(this, FROM_HERE);
+    observing_network_state_ = true;
+  }
+}
+
+void ArcNetHostImpl::OnInstanceClosed() {
+  if (!observing_network_state_)
+    return;
+
+  GetStateHandler()->RemoveObserver(this, FROM_HERE);
+  observing_network_state_ = false;
 }
 
 void ArcNetHostImpl::GetNetworksDeprecated(
@@ -413,7 +425,7 @@ void ArcNetHostImpl::GetNetworks(mojom::GetNetworksRequestType type,
 }
 
 void ArcNetHostImpl::CreateNetworkSuccessCallback(
-    const arc::mojom::NetHost::CreateNetworkCallback& mojo_callback,
+    const mojom::NetHost::CreateNetworkCallback& mojo_callback,
     const std::string& service_path,
     const std::string& guid) {
   VLOG(1) << "CreateNetworkSuccessCallback";
@@ -425,7 +437,7 @@ void ArcNetHostImpl::CreateNetworkSuccessCallback(
 }
 
 void ArcNetHostImpl::CreateNetworkFailureCallback(
-    const arc::mojom::NetHost::CreateNetworkCallback& mojo_callback,
+    const mojom::NetHost::CreateNetworkCallback& mojo_callback,
     const std::string& error_name,
     std::unique_ptr<base::DictionaryValue> error_data) {
   VLOG(1) << "CreateNetworkFailureCallback: " << error_name;
@@ -630,7 +642,7 @@ void ArcNetHostImpl::DefaultNetworkChanged(
   std::string user_id_hash = chromeos::LoginState::Get()->primary_user_hash();
   GetManagedConfigurationHandler()->GetProperties(
       user_id_hash, network->path(),
-      base::Bind(&arc::ArcNetHostImpl::DefaultNetworkSuccessCallback,
+      base::Bind(&ArcNetHostImpl::DefaultNetworkSuccessCallback,
                  weak_factory_.GetWeakPtr()),
       base::Bind(&DefaultNetworkFailureCallback));
 }
@@ -647,7 +659,9 @@ void ArcNetHostImpl::DeviceListChanged() {
 }
 
 void ArcNetHostImpl::OnShuttingDown() {
+  DCHECK(observing_network_state_);
   GetStateHandler()->RemoveObserver(this, FROM_HERE);
+  observing_network_state_ = false;
 }
 
 }  // namespace arc

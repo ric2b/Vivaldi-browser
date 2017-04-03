@@ -16,8 +16,6 @@ namespace catalog {
 // contents of the store, so no one else must modify its contents.
 class Store {
  public:
-  // Value is an integer.
-  static const char kManifestVersionKey[];
   // Value is a string.
   static const char kNameKey[];
   // Value is a string.
@@ -25,15 +23,11 @@ class Store {
   // Value is a string.
   static const char kDisplayNameKey[];
   // Value is a dictionary.
-  static const char kCapabilitiesKey[];
+  static const char kInterfaceProviderSpecsKey[];
   // Value is a dictionary.
-  static const char kCapabilities_ProvidedKey[];
+  static const char kInterfaceProviderSpecs_ProvidesKey[];
   // Value is a dictionary.
-  static const char kCapabilities_RequiredKey[];
-  // Value is a list.
-  static const char kCapabilities_ClassesKey[];
-  // Value is a list.
-  static const char kCapabilities_InterfacesKey[];
+  static const char kInterfaceProviderSpecs_RequiresKey[];
   // Value is a list.
   static const char kServicesKey[];
 

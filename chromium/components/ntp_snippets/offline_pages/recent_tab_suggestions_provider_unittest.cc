@@ -9,14 +9,13 @@
 
 #include "base/bind.h"
 #include "base/files/file_path.h"
-#include "base/guid.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "components/ntp_snippets/category.h"
 #include "components/ntp_snippets/category_factory.h"
 #include "components/ntp_snippets/content_suggestions_provider.h"
 #include "components/ntp_snippets/mock_content_suggestions_provider_observer.h"
+#include "components/ntp_snippets/offline_pages/offline_pages_test_utils.h"
 #include "components/offline_pages/client_namespace_constants.h"
 #include "components/offline_pages/offline_page_item.h"
 #include "components/offline_pages/stub_offline_page_model.h"
@@ -24,6 +23,8 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
+using ntp_snippets::test::CaptureDismissedSuggestions;
+using ntp_snippets::test::FakeOfflinePageModel;
 using offline_pages::ClientId;
 using offline_pages::MultipleOfflinePageItemCallback;
 using offline_pages::OfflinePageItem;
@@ -39,12 +40,7 @@ namespace ntp_snippets {
 namespace {
 
 OfflinePageItem CreateDummyRecentTab(int id) {
-  std::string strid = base::IntToString(id);
-  return OfflinePageItem(
-      GURL("http://dummy.com/" + strid), id,
-      ClientId(offline_pages::kLastNNamespace, base::GenerateGUID()),
-      base::FilePath::FromUTF8Unsafe("some/folder/test" + strid + ".mhtml"), 0,
-      base::Time::Now());
+  return test::CreateDummyOfflinePageItem(id, offline_pages::kLastNNamespace);
 }
 
 std::vector<OfflinePageItem> CreateDummyRecentTabs(
@@ -62,32 +58,7 @@ OfflinePageItem CreateDummyRecentTab(int id, base::Time time) {
   return item;
 }
 
-void CaptureDismissedSuggestions(
-    std::vector<ContentSuggestion>* captured_suggestions,
-    std::vector<ContentSuggestion> dismissed_suggestions) {
-  std::move(dismissed_suggestions.begin(), dismissed_suggestions.end(),
-            std::back_inserter(*captured_suggestions));
-}
-
 }  // namespace
-
-// This model is needed only when a provider is expected to call |GetAllPages|.
-// In other cases, keeping this model empty ensures that provider listens to
-// proxy notifications without calling |GetAllPages|.
-class FakeOfflinePageModel : public StubOfflinePageModel {
- public:
-  FakeOfflinePageModel() {}
-
-  void GetAllPages(const MultipleOfflinePageItemCallback& callback) override {
-    callback.Run(items_);
-  }
-
-  const std::vector<OfflinePageItem>& items() { return items_; }
-  std::vector<OfflinePageItem>* mutable_items() { return &items_; }
-
- private:
-  std::vector<OfflinePageItem> items_;
-};
 
 class RecentTabSuggestionsProviderTest : public testing::Test {
  public:
@@ -96,9 +67,8 @@ class RecentTabSuggestionsProviderTest : public testing::Test {
     RecentTabSuggestionsProvider::RegisterProfilePrefs(
         pref_service()->registry());
 
-    scoped_refptr<OfflinePageProxy> proxy(new OfflinePageProxy(&model_));
     provider_.reset(new RecentTabSuggestionsProvider(
-        &observer_, &category_factory_, proxy, pref_service()));
+        &observer_, &category_factory_, &model_, pref_service()));
   }
 
   Category recent_tabs_category() {
@@ -110,7 +80,8 @@ class RecentTabSuggestionsProviderTest : public testing::Test {
   }
 
   void FireOfflinePageModelChanged(const std::vector<OfflinePageItem>& items) {
-    provider_->OfflinePageModelChanged(items);
+    *(model_.mutable_items()) = items;
+    provider_->OfflinePageModelChanged(&model_);
   }
 
   void FireOfflinePageDeleted(const OfflinePageItem& item) {
@@ -121,7 +92,7 @@ class RecentTabSuggestionsProviderTest : public testing::Test {
     return provider_->ReadDismissedIDsFromPrefs();
   }
 
-  ContentSuggestionsProvider* provider() { return provider_.get(); }
+  RecentTabSuggestionsProvider* provider() { return provider_.get(); }
   FakeOfflinePageModel* model() { return &model_; }
   MockContentSuggestionsProviderObserver* observer() { return &observer_; }
   TestingPrefServiceSimple* pref_service() { return pref_service_.get(); }
@@ -138,8 +109,6 @@ class RecentTabSuggestionsProviderTest : public testing::Test {
 };
 
 TEST_F(RecentTabSuggestionsProviderTest, ShouldConvertToSuggestions) {
-  std::vector<OfflinePageItem> offline_pages = CreateDummyRecentTabs({1, 2, 3});
-
   EXPECT_CALL(
       *observer(),
       OnNewSuggestions(_, recent_tabs_category(),
@@ -150,7 +119,7 @@ TEST_F(RecentTabSuggestionsProviderTest, ShouldConvertToSuggestions) {
                                     GURL("http://dummy.com/2")),
                            Property(&ContentSuggestion::url,
                                     GURL("http://dummy.com/3")))));
-  FireOfflinePageModelChanged(offline_pages);
+  FireOfflinePageModelChanged(CreateDummyRecentTabs({1, 2, 3}));
 }
 
 TEST_F(RecentTabSuggestionsProviderTest, ShouldSortByMostRecentlyVisited) {
@@ -176,14 +145,16 @@ TEST_F(RecentTabSuggestionsProviderTest, ShouldSortByMostRecentlyVisited) {
 
 TEST_F(RecentTabSuggestionsProviderTest, ShouldDeliverCorrectCategoryInfo) {
   EXPECT_FALSE(
-      provider()->GetCategoryInfo(recent_tabs_category()).has_more_button());
+      provider()->GetCategoryInfo(recent_tabs_category()).has_more_action());
+  EXPECT_FALSE(
+      provider()->GetCategoryInfo(recent_tabs_category()).has_reload_action());
+  EXPECT_FALSE(provider()
+                   ->GetCategoryInfo(recent_tabs_category())
+                   .has_view_all_action());
 }
 
 TEST_F(RecentTabSuggestionsProviderTest, ShouldDismiss) {
-  // OfflinePageModel is initialised here because
-  // |GetDismissedSuggestionsForDebugging| may need to call |GetAllPages|
-  *(model()->mutable_items()) = CreateDummyRecentTabs({1, 2, 3, 4});
-  FireOfflinePageModelChanged(model()->items());
+  FireOfflinePageModelChanged(CreateDummyRecentTabs({1, 2, 3, 4}));
 
   // Dismiss 2 and 3.
   EXPECT_CALL(*observer(), OnNewSuggestions(_, _, _)).Times(0);

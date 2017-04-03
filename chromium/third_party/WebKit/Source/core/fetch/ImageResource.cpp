@@ -32,7 +32,9 @@
 #include "core/svg/graphics/SVGImage.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/SharedBuffer.h"
+#include "platform/geometry/IntSize.h"
 #include "platform/graphics/BitmapImage.h"
+#include "platform/graphics/PlaceholderImage.h"
 #include "platform/tracing/TraceEvent.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebCachePolicy.h"
@@ -44,13 +46,40 @@
 #include <v8.h>
 
 namespace blink {
+namespace {
+// The amount of time to wait before informing the clients that the image has
+// been updated (in seconds). This effectively throttles invalidations that
+// result from new data arriving for this image.
+constexpr double kFlushDelaySeconds = 1.;
+}  // namespace
+
+class ImageResource::ImageResourceFactory : public ResourceFactory {
+  STACK_ALLOCATED();
+
+ public:
+  ImageResourceFactory(const FetchRequest& fetchRequest)
+      : ResourceFactory(Resource::Image), m_fetchRequest(&fetchRequest) {}
+
+  Resource* create(const ResourceRequest& request,
+                   const ResourceLoaderOptions& options,
+                   const String&) const override {
+    return new ImageResource(request, options,
+                             m_fetchRequest->placeholderImageRequestType() ==
+                                 FetchRequest::AllowPlaceholder);
+  }
+
+ private:
+  // Weak, unowned pointer. Must outlive |this|.
+  const FetchRequest* m_fetchRequest;
+};
 
 ImageResource* ImageResource::fetch(FetchRequest& request,
                                     ResourceFetcher* fetcher) {
   if (request.resourceRequest().requestContext() ==
-      WebURLRequest::RequestContextUnspecified)
+      WebURLRequest::RequestContextUnspecified) {
     request.mutableResourceRequest().setRequestContext(
         WebURLRequest::RequestContextImage);
+  }
   if (fetcher->context().pageDismissalEventBeingDispatched()) {
     KURL requestURL = request.resourceRequest().url();
     if (requestURL.isValid() &&
@@ -62,16 +91,30 @@ ImageResource* ImageResource::fetch(FetchRequest& request,
     return nullptr;
   }
 
-  return toImageResource(
-      fetcher->requestResource(request, ImageResourceFactory()));
+  ImageResource* resource = toImageResource(
+      fetcher->requestResource(request, ImageResourceFactory(request)));
+  if (resource &&
+      request.placeholderImageRequestType() != FetchRequest::AllowPlaceholder &&
+      resource->m_isPlaceholder) {
+    // If the image is a placeholder, but this fetch doesn't allow a
+    // placeholder, then load the original image. Note that the cache is not
+    // bypassed here - it should be fine to use a cached copy if possible.
+    resource->reloadIfLoFiOrPlaceholder(fetcher,
+                                        ReloadCachePolicy::UseExistingPolicy);
+  }
+  return resource;
 }
 
 ImageResource::ImageResource(const ResourceRequest& resourceRequest,
-                             const ResourceLoaderOptions& options)
+                             const ResourceLoaderOptions& options,
+                             bool isPlaceholder)
     : Resource(resourceRequest, Image, options),
       m_devicePixelRatioHeaderValue(1.0),
       m_image(nullptr),
-      m_hasDevicePixelRatioHeaderValue(false) {
+      m_hasDevicePixelRatioHeaderValue(false),
+      m_isSchedulingReload(false),
+      m_isPlaceholder(isPlaceholder),
+      m_flushTimer(this, &ImageResource::flushImageIfNeeded) {
   RESOURCE_LOADING_DVLOG(1) << "new ImageResource(ResourceRequest) " << this;
 }
 
@@ -80,7 +123,10 @@ ImageResource::ImageResource(blink::Image* image,
     : Resource(ResourceRequest(""), Image, options),
       m_devicePixelRatioHeaderValue(1.0),
       m_image(image),
-      m_hasDevicePixelRatioHeaderValue(false) {
+      m_hasDevicePixelRatioHeaderValue(false),
+      m_isSchedulingReload(false),
+      m_isPlaceholder(false),
+      m_flushTimer(this, &ImageResource::flushImageIfNeeded) {
   RESOURCE_LOADING_DVLOG(1) << "new ImageResource(Image) " << this;
   setStatus(Cached);
 }
@@ -98,6 +144,11 @@ DEFINE_TRACE(ImageResource) {
 }
 
 void ImageResource::checkNotify() {
+  // Don't notify observers and clients of completion if this ImageResource is
+  // about to be reloaded.
+  if (m_isSchedulingReload || shouldReloadBrokenPlaceholder())
+    return;
+
   notifyObserversInternal(MarkFinishedOption::ShouldMarkFinished);
   Resource::checkNotify();
 }
@@ -125,6 +176,12 @@ void ImageResource::markObserverFinished(ImageResourceObserver* observer) {
 
 void ImageResource::didAddClient(ResourceClient* client) {
   DCHECK((m_multipartParser && isLoading()) || !data() || m_image);
+
+  // Don't notify observers and clients of completion if this ImageResource is
+  // about to be reloaded.
+  if (m_isSchedulingReload || shouldReloadBrokenPlaceholder())
+    return;
+
   Resource::didAddClient(client);
 }
 
@@ -150,7 +207,7 @@ void ImageResource::addObserver(ImageResourceObserver* observer) {
     observer->imageChanged(this);
   }
 
-  if (isLoaded()) {
+  if (isLoaded() && !m_isSchedulingReload && !shouldReloadBrokenPlaceholder()) {
     markObserverFinished(observer);
     observer->imageNotifyFinished(this);
   }
@@ -216,12 +273,13 @@ void ImageResource::allClientsAndObserversRemoved() {
     // If possible, delay the resetting until back at the event loop. Doing so
     // after a conservative GC prevents resetAnimation() from upsetting ongoing
     // animation updates (crbug.com/613709)
-    if (!ThreadHeap::willObjectBeLazilySwept(this))
+    if (!ThreadHeap::willObjectBeLazilySwept(this)) {
       Platform::current()->currentThread()->getWebTaskRunner()->postTask(
           BLINK_FROM_HERE, WTF::bind(&ImageResource::doResetAnimation,
                                      wrapWeakPersistent(this)));
-    else
+    } else {
       m_image->resetAnimation();
+    }
   }
   if (m_multipartParser)
     m_multipartParser->cancel();
@@ -242,6 +300,41 @@ void ImageResource::appendData(const char* data, size_t length) {
     m_multipartParser->appendData(data, length);
   } else {
     Resource::appendData(data, length);
+
+    // If we don't have the size available yet, then update immediately since
+    // we need to know the image size as soon as possible. Likewise for
+    // animated images, update right away since we shouldn't throttle animated
+    // images.
+    if (m_sizeAvailable == Image::SizeUnavailable ||
+        (m_image && m_image->maybeAnimated())) {
+      updateImage(false);
+      return;
+    }
+
+    // For other cases, only update at |kFlushDelaySeconds| intervals. This
+    // throttles how frequently we update |m_image| and how frequently we
+    // inform the clients which causes an invalidation of this image. In other
+    // words, we only invalidate this image every |kFlushDelaySeconds| seconds
+    // while loading.
+    if (!m_flushTimer.isActive()) {
+      double now = WTF::monotonicallyIncreasingTime();
+      if (!m_lastFlushTime)
+        m_lastFlushTime = now;
+
+      DCHECK_LE(m_lastFlushTime, now);
+      double flushDelay = m_lastFlushTime - now + kFlushDelaySeconds;
+      if (flushDelay < 0.)
+        flushDelay = 0.;
+      m_flushTimer.startOneShot(flushDelay, BLINK_FROM_HERE);
+    }
+  }
+}
+
+void ImageResource::flushImageIfNeeded(TimerBase*) {
+  // We might have already loaded the image fully, in which case we don't need
+  // to call |updateImage()|.
+  if (isLoading()) {
+    m_lastFlushTime = WTF::monotonicallyIncreasingTime();
     updateImage(false);
   }
 }
@@ -302,11 +395,12 @@ LayoutSize ImageResource::imageSize(
   LayoutSize size;
 
   if (m_image->isBitmapImage() &&
-      shouldRespectImageOrientation == RespectImageOrientation)
+      shouldRespectImageOrientation == RespectImageOrientation) {
     size =
         LayoutSize(toBitmapImage(m_image.get())->sizeRespectingOrientation());
-  else
+  } else {
     size = LayoutSize(m_image->size());
+  }
 
   if (sizeType == IntrinsicCorrectedToDPR && m_hasDevicePixelRatioHeaderValue &&
       m_devicePixelRatioHeaderValue > 0)
@@ -363,6 +457,7 @@ inline void ImageResource::clearImage() {
   // pointer before dropping our reference.
   m_image->clearImageObserver();
   m_image.clear();
+  m_sizeAvailable = Image::SizeUnavailable;
 }
 
 void ImageResource::updateImage(bool allDataReceived) {
@@ -371,21 +466,35 @@ void ImageResource::updateImage(bool allDataReceived) {
   if (data())
     createImage();
 
-  Image::SizeAvailability sizeAvailable = Image::SizeUnavailable;
-
   // Have the image update its data from its internal buffer. It will not do
   // anything now, but will delay decoding until queried for info (like size or
   // specific image frames).
   if (data()) {
     DCHECK(m_image);
-    sizeAvailable = m_image->setData(data(), allDataReceived);
+    m_sizeAvailable = m_image->setData(data(), allDataReceived);
   }
 
   // Go ahead and tell our observers to try to draw if we have either received
   // all the data or the size is known. Each chunk from the network causes
   // observers to repaint, which will force that chunk to decode.
-  if (sizeAvailable == Image::SizeUnavailable && !allDataReceived)
+  if (m_sizeAvailable == Image::SizeUnavailable && !allDataReceived)
     return;
+
+  if (m_isPlaceholder && allDataReceived && m_image && !m_image->isNull()) {
+    if (m_sizeAvailable == Image::SizeAvailable) {
+      // TODO(sclittle): Show the original image if the response consists of the
+      // entire image, such as if the entire image response body is smaller than
+      // the requested range.
+      IntSize dimensions = m_image->size();
+      clearImage();
+      m_image = PlaceholderImage::create(this, dimensions);
+    } else {
+      // Clear the image so that it gets treated like a decoding error, since
+      // the attempt to build a placeholder image failed.
+      clearImage();
+    }
+  }
+
   if (!m_image || m_image->isNull()) {
     size_t size = encodedSize();
     clear();
@@ -424,14 +533,6 @@ void ImageResource::finish(double loadFinishTime) {
   Resource::finish(loadFinishTime);
 }
 
-void ImageResource::onMemoryDump(WebMemoryDumpLevelOfDetail levelOfDetail,
-                                 WebProcessMemoryDump* memoryDump) const {
-  Resource::onMemoryDump(levelOfDetail, memoryDump);
-  const String name = getMemoryDumpName() + "/encoded_data";
-  if (m_image && !m_image->isNull())
-    m_image->data()->onMemoryDump(name, memoryDump);
-}
-
 void ImageResource::error(const ResourceError& error) {
   if (m_multipartParser)
     m_multipartParser->cancel();
@@ -446,9 +547,10 @@ void ImageResource::responseReceived(
   DCHECK(!handle);
   DCHECK(!m_multipartParser);
   // If there's no boundary, just handle the request normally.
-  if (response.isMultipart() && !response.multipartBoundary().isEmpty())
+  if (response.isMultipart() && !response.multipartBoundary().isEmpty()) {
     m_multipartParser = new MultipartImageResourceParser(
         response, response.multipartBoundary(), this);
+  }
   Resource::responseReceived(response, std::move(handle));
   if (RuntimeEnabledFeatures::clientHintsEnabled()) {
     m_devicePixelRatioHeaderValue =
@@ -471,15 +573,7 @@ void ImageResource::decodedSizeChangedTo(const blink::Image* image,
   setDecodedSize(newSize);
 }
 
-void ImageResource::didDraw(const blink::Image* image) {
-  if (!image || image != m_image)
-    return;
-  // decodedSize() == 0 indicates that the image is decoded into
-  // DiscardableMemory, not in MemoryCache. So we don't need to call
-  // Resource::didAccessDecodedData() to update MemoryCache.
-  if (decodedSize() != 0)
-    Resource::didAccessDecodedData();
-}
+void ImageResource::didDraw(const blink::Image* image) {}
 
 bool ImageResource::shouldPauseAnimation(const blink::Image* image) {
   if (!image || image != m_image)
@@ -526,20 +620,52 @@ void ImageResource::updateImageAnimationPolicy() {
   }
 }
 
-void ImageResource::reloadIfLoFi(ResourceFetcher* fetcher) {
-  if (resourceRequest().loFiState() != WebURLRequest::LoFiOn)
+static bool isLoFiImage(const ImageResource& resource) {
+  if (resource.resourceRequest().loFiState() != WebURLRequest::LoFiOn)
+    return false;
+  return !resource.isLoaded() ||
+         resource.response()
+             .httpHeaderField("chrome-proxy-content-transform")
+             .contains("empty-image");
+}
+
+void ImageResource::reloadIfLoFiOrPlaceholder(
+    ResourceFetcher* fetcher,
+    ReloadCachePolicy reloadCachePolicy) {
+  if (!m_isPlaceholder && !isLoFiImage(*this))
     return;
-  if (isLoaded() &&
-      !response().httpHeaderField("chrome-proxy").contains("q=low"))
-    return;
-  setCachePolicyBypassingCache();
+
+  // Prevent clients and observers from being notified of completion while the
+  // reload is being scheduled, so that e.g. canceling an existing load in
+  // progress doesn't cause clients and observers to be notified of completion
+  // prematurely.
+  DCHECK(!m_isSchedulingReload);
+  m_isSchedulingReload = true;
+
+  if (reloadCachePolicy == ReloadCachePolicy::BypassCache)
+    setCachePolicyBypassingCache();
   setLoFiStateOff();
-  if (isLoading())
+
+  if (m_isPlaceholder) {
+    m_isPlaceholder = false;
+    clearRangeRequestHeader();
+  }
+
+  if (isLoading()) {
     loader()->cancel();
-  clear();
-  notifyObservers();
+    // Canceling the loader causes error() to be called, which in turn calls
+    // clear() and notifyObservers(), so there's no need to call these again
+    // here.
+  } else {
+    clear();
+    notifyObservers();
+  }
 
   setStatus(NotStarted);
+
+  DCHECK(m_isSchedulingReload);
+  m_isSchedulingReload = false;
+
   fetcher->startLoad(this);
 }
 
@@ -582,9 +708,10 @@ void ImageResource::multipartDataReceived(const char* bytes, size_t size) {
 }
 
 bool ImageResource::isAccessAllowed(SecurityOrigin* securityOrigin) {
-  if (response().wasFetchedViaServiceWorker())
+  if (response().wasFetchedViaServiceWorker()) {
     return response().serviceWorkerResponseType() !=
            WebServiceWorkerResponseTypeOpaque;
+  }
   if (!getImage()->currentFrameHasSingleSecurityOrigin())
     return false;
   if (passesAccessControlCheck(securityOrigin))

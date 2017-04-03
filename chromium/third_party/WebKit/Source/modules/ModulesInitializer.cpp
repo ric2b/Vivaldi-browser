@@ -21,9 +21,11 @@
 #include "modules/filesystem/DraggedIsolatedFileSystemImpl.h"
 #include "modules/imagebitmap/ImageBitmapRenderingContext.h"
 #include "modules/offscreencanvas2d/OffscreenCanvasRenderingContext2D.h"
+#include "modules/time_zone_monitor/TimeZoneMonitorClient.h"
 #include "modules/webdatabase/DatabaseManager.h"
 #include "modules/webgl/WebGL2RenderingContext.h"
 #include "modules/webgl/WebGLRenderingContext.h"
+#include "platform/mojo/MojoHelper.h"
 #include "wtf/PtrUtil.h"
 
 namespace blink {
@@ -47,24 +49,29 @@ void ModulesInitializer::initialize() {
   DraggedIsolatedFileSystem::init(
       DraggedIsolatedFileSystemImpl::prepareForDataObject);
   CSSPaintImageGenerator::init(CSSPaintImageGeneratorImpl::create);
+  // Some unit tests may have no message loop ready, so we can't initialize the
+  // mojo stuff here. They can initialize those mojo stuff they're interested in
+  // later after they got a message loop ready.
+  if (canInitializeMojo())
+    TimeZoneMonitorClient::Init();
 
   CoreInitializer::initialize();
 
   // Canvas context types must be registered with the HTMLCanvasElement.
   HTMLCanvasElement::registerRenderingContextFactory(
-      wrapUnique(new CanvasRenderingContext2D::Factory()));
+      makeUnique<CanvasRenderingContext2D::Factory>());
   HTMLCanvasElement::registerRenderingContextFactory(
-      wrapUnique(new WebGLRenderingContext::Factory()));
+      makeUnique<WebGLRenderingContext::Factory>());
   HTMLCanvasElement::registerRenderingContextFactory(
-      wrapUnique(new WebGL2RenderingContext::Factory()));
+      makeUnique<WebGL2RenderingContext::Factory>());
   HTMLCanvasElement::registerRenderingContextFactory(
-      wrapUnique(new ImageBitmapRenderingContext::Factory()));
+      makeUnique<ImageBitmapRenderingContext::Factory>());
 
   // OffscreenCanvas context types must be registered with the OffscreenCanvas.
   OffscreenCanvas::registerRenderingContextFactory(
-      wrapUnique(new OffscreenCanvasRenderingContext2D::Factory()));
+      makeUnique<OffscreenCanvasRenderingContext2D::Factory>());
   OffscreenCanvas::registerRenderingContextFactory(
-      wrapUnique(new WebGLRenderingContext::Factory()));
+      makeUnique<WebGLRenderingContext::Factory>());
 
   ASSERT(isInitialized());
 }

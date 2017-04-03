@@ -150,9 +150,10 @@ StyleRuleBase* StyleRuleBase::copy() const {
       return toStyleRuleKeyframes(this)->copy();
     case Viewport:
       return toStyleRuleViewport(this)->copy();
+    case Namespace:
+      return toStyleRuleNamespace(this)->copy();
     case Charset:
     case Keyframe:
-    case Namespace:
       ASSERT_NOT_REACHED();
       return nullptr;
   }
@@ -208,25 +209,62 @@ unsigned StyleRule::averageSizeInBytes() {
 }
 
 StyleRule::StyleRule(CSSSelectorList selectorList, StylePropertySet* properties)
-    : StyleRuleBase(Style), m_properties(properties) {
-  m_selectorList = std::move(selectorList);
+    : StyleRuleBase(Style),
+      m_selectorList(std::move(selectorList)),
+      m_properties(properties),
+      m_shouldConsiderForMatchingRules(ConsiderIfNonEmpty) {}
+
+StyleRule::StyleRule(CSSSelectorList selectorList,
+                     CSSLazyPropertyParser* lazyPropertyParser)
+    : StyleRuleBase(Style),
+      m_selectorList(std::move(selectorList)),
+      m_lazyPropertyParser(lazyPropertyParser),
+      m_shouldConsiderForMatchingRules(AlwaysConsider) {}
+
+const StylePropertySet& StyleRule::properties() const {
+  if (!m_properties) {
+    m_properties = m_lazyPropertyParser->parseProperties();
+    m_lazyPropertyParser.clear();
+  }
+  return *m_properties;
 }
 
 StyleRule::StyleRule(const StyleRule& o)
     : StyleRuleBase(o),
-      m_properties(o.m_properties->mutableCopy()),
-      m_selectorList(o.m_selectorList.copy()) {}
+      m_selectorList(o.m_selectorList.copy()),
+      m_properties(o.properties().mutableCopy()),
+      m_shouldConsiderForMatchingRules(ConsiderIfNonEmpty) {}
 
 StyleRule::~StyleRule() {}
 
 MutableStylePropertySet& StyleRule::mutableProperties() {
-  if (!m_properties->isMutable())
+  // Ensure m_properties is initialized.
+  if (!properties().isMutable())
     m_properties = m_properties->mutableCopy();
   return *toMutableStylePropertySet(m_properties.get());
 }
 
+bool StyleRule::propertiesHaveFailedOrCanceledSubresources() const {
+  return m_properties && m_properties->hasFailedOrCanceledSubresources();
+}
+
+bool StyleRule::shouldConsiderForMatchingRules(bool includeEmptyRules) const {
+  DCHECK(m_shouldConsiderForMatchingRules == AlwaysConsider || m_properties);
+  return includeEmptyRules ||
+         m_shouldConsiderForMatchingRules == AlwaysConsider ||
+         !m_properties->isEmpty();
+}
+
+bool StyleRule::hasParsedProperties() const {
+  // StyleRule should only have one of {m_lazyPropertyParser, m_properties} set.
+  DCHECK(m_lazyPropertyParser || m_properties);
+  DCHECK(!m_lazyPropertyParser || !m_properties);
+  return !m_lazyPropertyParser;
+}
+
 DEFINE_TRACE_AFTER_DISPATCH(StyleRule) {
   visitor->trace(m_properties);
+  visitor->trace(m_lazyPropertyParser);
   StyleRuleBase::traceAfterDispatch(visitor);
 }
 
@@ -236,10 +274,10 @@ StyleRulePage::StyleRulePage(CSSSelectorList selectorList,
       m_properties(properties),
       m_selectorList(std::move(selectorList)) {}
 
-StyleRulePage::StyleRulePage(const StyleRulePage& o)
-    : StyleRuleBase(o),
-      m_properties(o.m_properties->mutableCopy()),
-      m_selectorList(o.m_selectorList.copy()) {}
+StyleRulePage::StyleRulePage(const StyleRulePage& pageRule)
+    : StyleRuleBase(pageRule),
+      m_properties(pageRule.m_properties->mutableCopy()),
+      m_selectorList(pageRule.m_selectorList.copy()) {}
 
 StyleRulePage::~StyleRulePage() {}
 
@@ -257,8 +295,9 @@ DEFINE_TRACE_AFTER_DISPATCH(StyleRulePage) {
 StyleRuleFontFace::StyleRuleFontFace(StylePropertySet* properties)
     : StyleRuleBase(FontFace), m_properties(properties) {}
 
-StyleRuleFontFace::StyleRuleFontFace(const StyleRuleFontFace& o)
-    : StyleRuleBase(o), m_properties(o.m_properties->mutableCopy()) {}
+StyleRuleFontFace::StyleRuleFontFace(const StyleRuleFontFace& fontFaceRule)
+    : StyleRuleBase(fontFaceRule),
+      m_properties(fontFaceRule.m_properties->mutableCopy()) {}
 
 StyleRuleFontFace::~StyleRuleFontFace() {}
 
@@ -279,10 +318,10 @@ StyleRuleGroup::StyleRuleGroup(RuleType type,
   m_childRules.swap(adoptRule);
 }
 
-StyleRuleGroup::StyleRuleGroup(const StyleRuleGroup& o)
-    : StyleRuleBase(o), m_childRules(o.m_childRules.size()) {
+StyleRuleGroup::StyleRuleGroup(const StyleRuleGroup& groupRule)
+    : StyleRuleBase(groupRule), m_childRules(groupRule.m_childRules.size()) {
   for (unsigned i = 0; i < m_childRules.size(); ++i)
-    m_childRules[i] = o.m_childRules[i]->copy();
+    m_childRules[i] = groupRule.m_childRules[i]->copy();
 }
 
 void StyleRuleGroup::wrapperInsertRule(unsigned index, StyleRuleBase* rule) {
@@ -298,38 +337,53 @@ DEFINE_TRACE_AFTER_DISPATCH(StyleRuleGroup) {
   StyleRuleBase::traceAfterDispatch(visitor);
 }
 
+StyleRuleCondition::StyleRuleCondition(
+    RuleType type,
+    HeapVector<Member<StyleRuleBase>>& adoptRules)
+    : StyleRuleGroup(type, adoptRules) {}
+
+StyleRuleCondition::StyleRuleCondition(
+    RuleType type,
+    const String& conditionText,
+    HeapVector<Member<StyleRuleBase>>& adoptRules)
+    : StyleRuleGroup(type, adoptRules), m_conditionText(conditionText) {}
+
+StyleRuleCondition::StyleRuleCondition(const StyleRuleCondition& conditionRule)
+    : StyleRuleGroup(conditionRule),
+      m_conditionText(conditionRule.m_conditionText) {}
+
 StyleRuleMedia::StyleRuleMedia(MediaQuerySet* media,
                                HeapVector<Member<StyleRuleBase>>& adoptRules)
-    : StyleRuleGroup(Media, adoptRules), m_mediaQueries(media) {}
+    : StyleRuleCondition(Media, adoptRules), m_mediaQueries(media) {}
 
-StyleRuleMedia::StyleRuleMedia(const StyleRuleMedia& o) : StyleRuleGroup(o) {
-  if (o.m_mediaQueries)
-    m_mediaQueries = o.m_mediaQueries->copy();
+StyleRuleMedia::StyleRuleMedia(const StyleRuleMedia& mediaRule)
+    : StyleRuleCondition(mediaRule) {
+  if (mediaRule.m_mediaQueries)
+    m_mediaQueries = mediaRule.m_mediaQueries->copy();
 }
 
 DEFINE_TRACE_AFTER_DISPATCH(StyleRuleMedia) {
   visitor->trace(m_mediaQueries);
-  StyleRuleGroup::traceAfterDispatch(visitor);
+  StyleRuleCondition::traceAfterDispatch(visitor);
 }
 
 StyleRuleSupports::StyleRuleSupports(
     const String& conditionText,
     bool conditionIsSupported,
     HeapVector<Member<StyleRuleBase>>& adoptRules)
-    : StyleRuleGroup(Supports, adoptRules),
-      m_conditionText(conditionText),
+    : StyleRuleCondition(Supports, conditionText, adoptRules),
       m_conditionIsSupported(conditionIsSupported) {}
 
-StyleRuleSupports::StyleRuleSupports(const StyleRuleSupports& o)
-    : StyleRuleGroup(o),
-      m_conditionText(o.m_conditionText),
-      m_conditionIsSupported(o.m_conditionIsSupported) {}
+StyleRuleSupports::StyleRuleSupports(const StyleRuleSupports& supportsRule)
+    : StyleRuleCondition(supportsRule),
+      m_conditionIsSupported(supportsRule.m_conditionIsSupported) {}
 
 StyleRuleViewport::StyleRuleViewport(StylePropertySet* properties)
     : StyleRuleBase(Viewport), m_properties(properties) {}
 
-StyleRuleViewport::StyleRuleViewport(const StyleRuleViewport& o)
-    : StyleRuleBase(o), m_properties(o.m_properties->mutableCopy()) {}
+StyleRuleViewport::StyleRuleViewport(const StyleRuleViewport& viewportRule)
+    : StyleRuleBase(viewportRule),
+      m_properties(viewportRule.m_properties->mutableCopy()) {}
 
 StyleRuleViewport::~StyleRuleViewport() {}
 

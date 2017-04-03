@@ -7,6 +7,7 @@
 #include "base/android/jni_android.h"
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
+#include "base/memory/ptr_util.h"
 #include "cc/layers/solid_color_layer.h"
 #include "chrome/browser/android/compositor/layer/contextual_search_layer.h"
 #include "chrome/browser/profiles/profile.h"
@@ -62,8 +63,9 @@ void ContextualSearchSceneLayer::UpdateContextualSearchLayer(
     jint search_term_resource_id,
     jint search_caption_resource_id,
     jint search_bar_shadow_resource_id,
-    jint panel_icon_resource_id,
+    jint sprite_resource_id,
     jint search_provider_icon_sprite_metadata_resource_id,
+    jint quick_action_icon_resource_id,
     jint arrow_up_resource_id,
     jint close_icon_resource_id,
     jint progress_bar_background_resource_id,
@@ -91,7 +93,9 @@ void ContextualSearchSceneLayer::UpdateContextualSearchLayer(
     jfloat search_bar_margin_side,
     jfloat search_bar_height,
     jfloat search_context_opacity,
+    jfloat search_text_layer_min_height,
     jfloat search_term_opacity,
+    jfloat search_term_caption_spacing,
     jfloat search_caption_animation_percentage,
     jboolean search_caption_visible,
     jboolean search_bar_border_visible,
@@ -100,10 +104,11 @@ void ContextualSearchSceneLayer::UpdateContextualSearchLayer(
     jfloat search_bar_shadow_opacity,
     jboolean search_provider_icon_sprite_visible,
     jfloat search_provider_icon_sprite_completion_percentage,
+    jboolean quick_action_icon_visible,
     jboolean thumbnail_visible,
-    jfloat thumbnail_visibility_percentage,
-    jint thumbnail_size,
     jstring j_thumbnail_url,
+    jfloat static_image_visibility_percentage,
+    jint static_image_size,
     jfloat arrow_icon_opacity,
     jfloat arrow_icon_rotation,
     jfloat close_icon_opacity,
@@ -111,12 +116,20 @@ void ContextualSearchSceneLayer::UpdateContextualSearchLayer(
     jfloat progress_bar_height,
     jfloat progress_bar_opacity,
     jint progress_bar_completion,
+    jfloat divider_line_visibility_percentage,
+    jfloat divider_line_width,
+    jfloat divider_line_height,
+    jint divider_line_color,
+    jfloat divider_line_x_offset,
+    jboolean touch_highlight_visible,
+    jfloat touch_highlight_x_offset,
+    jfloat touch_highlight_width,
     jobject j_profile) {
 
   // Load the thumbnail if necessary.
   std::string thumbnail_url =
       base::android::ConvertJavaStringToUTF8(env, j_thumbnail_url);
-  if (thumbnail_url.compare(thumbnail_url_) != 0) {
+  if (thumbnail_url != thumbnail_url_) {
     thumbnail_url_ = thumbnail_url;
     FetchThumbnail(j_profile);
   }
@@ -150,8 +163,9 @@ void ContextualSearchSceneLayer::UpdateContextualSearchLayer(
       search_term_resource_id,
       search_caption_resource_id,
       search_bar_shadow_resource_id,
-      panel_icon_resource_id,
+      sprite_resource_id,
       search_provider_icon_sprite_metadata_resource_id,
+      quick_action_icon_resource_id,
       arrow_up_resource_id,
       close_icon_resource_id,
       progress_bar_background_resource_id,
@@ -177,7 +191,9 @@ void ContextualSearchSceneLayer::UpdateContextualSearchLayer(
       search_bar_margin_side,
       search_bar_height,
       search_context_opacity,
+      search_text_layer_min_height,
       search_term_opacity,
+      search_term_caption_spacing,
       search_caption_animation_percentage,
       search_caption_visible,
       search_bar_border_visible,
@@ -186,27 +202,37 @@ void ContextualSearchSceneLayer::UpdateContextualSearchLayer(
       search_bar_shadow_opacity,
       search_provider_icon_sprite_visible,
       search_provider_icon_sprite_completion_percentage,
+      quick_action_icon_visible,
       thumbnail_visible,
-      thumbnail_visibility_percentage,
-      thumbnail_size,
+      static_image_visibility_percentage,
+      static_image_size,
       arrow_icon_opacity,
       arrow_icon_rotation,
       close_icon_opacity,
       progress_bar_visible,
       progress_bar_height,
       progress_bar_opacity,
-      progress_bar_completion);
+      progress_bar_completion,
+      divider_line_visibility_percentage,
+      divider_line_width,
+      divider_line_height,
+      divider_line_color,
+      divider_line_x_offset,
+      touch_highlight_visible,
+      touch_highlight_x_offset,
+      touch_highlight_width);
 
   // Make the layer visible if it is not already.
   contextual_search_layer_->layer()->SetHideLayerAndSubtree(false);
 }
 
 void ContextualSearchSceneLayer::FetchThumbnail(jobject j_profile) {
-  if (thumbnail_url_.compare("") == 0) return;
+  if (thumbnail_url_.empty())
+    return;
 
-  GURL* gurl = new GURL(thumbnail_url_);
+  GURL gurl(thumbnail_url_);
   Profile* profile = ProfileAndroid::FromProfileAndroid(j_profile);
-  fetcher_.reset(new chrome::BitmapFetcher(*gurl, this));
+  fetcher_ = base::MakeUnique<chrome::BitmapFetcher>(gurl, this);
   fetcher_->Init(
       profile->GetRequestContext(),
       std::string(),
@@ -217,14 +243,14 @@ void ContextualSearchSceneLayer::FetchThumbnail(jobject j_profile) {
 
 void ContextualSearchSceneLayer::OnFetchComplete(const GURL& url,
                                                  const SkBitmap* bitmap) {
-  bool success = bitmap != NULL && !bitmap->drawsNothing();
+  bool success = bitmap && !bitmap->drawsNothing();
   Java_ContextualSearchSceneLayer_onThumbnailFetched(env_,
                                                      object_.obj(),
                                                      success);
+  if (success)
+    contextual_search_layer_->SetThumbnail(bitmap);
 
-  if (success) contextual_search_layer_->SetThumbnail(bitmap);
-
-  fetcher_.reset(nullptr);
+  fetcher_.reset();
 }
 
 void ContextualSearchSceneLayer::SetContentTree(

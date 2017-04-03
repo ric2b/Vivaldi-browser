@@ -13,7 +13,7 @@
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/constants.h"
-#include "ui/accessibility/ax_view_state.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/compositor/paint_recorder.h"
 #include "ui/events/event.h"
 #include "ui/gfx/canvas.h"
@@ -50,9 +50,9 @@ const char* PageActionImageView::GetClassName() const {
   return kViewClassName;
 }
 
-void PageActionImageView::GetAccessibleState(ui::AXViewState* state) {
-  state->role = ui::AX_ROLE_BUTTON;
-  state->name = base::UTF8ToUTF16(tooltip_);
+void PageActionImageView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
+  node_data->role = ui::AX_ROLE_BUTTON;
+  node_data->SetName(tooltip_);
 }
 
 bool PageActionImageView::OnMousePressed(const ui::MouseEvent& event) {
@@ -105,8 +105,8 @@ void PageActionImageView::UpdateVisibility(content::WebContents* contents) {
   SetTooltipText(base::UTF8ToUTF16(tooltip_));
 
   // Set the image.
-  gfx::Size size(extension_misc::EXTENSION_ICON_ACTION,
-                 extension_misc::EXTENSION_ICON_ACTION);
+  gfx::Size size(ExtensionAction::ActionIconSize(),
+                 ExtensionAction::ActionIconSize());
   gfx::Image icon = view_controller_->GetIcon(contents, size);
   if (!icon.IsEmpty())
     SetImage(*icon.ToImageSkia());

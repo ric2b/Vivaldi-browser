@@ -33,7 +33,7 @@
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
-#include "third_party/WebKit/public/web/WebInputEvent.h"
+#include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/display/display.h"
@@ -405,8 +405,9 @@ class PluginPowerSaverBrowserTest : public InProcessBrowserTest {
 
   // TODO(tommycli): Remove this once all flakiness resolved.
   bool PixelTestsEnabled() {
-#if defined(OS_WIN) || defined(ADDRESS_SANITIZER)
-    // Flaky on Windows and Asan bots. See crbug.com/549285.
+#if defined(OS_WIN) || defined(ADDRESS_SANITIZER) || defined(MEMORY_SANITIZER)
+    // Flaky on Windows, Asan, and Msan bots.
+    // See crbug.com/549285 and crbug.com/512140.
     return false;
 #elif defined(OS_CHROMEOS)
     // Because ChromeOS cannot use software rendering and the pixel tests
@@ -602,13 +603,7 @@ IN_PROC_BROWSER_TEST_F(PluginPowerSaverBrowserTest, LargePostersNotThrottled) {
   VerifyPluginMarkedEssential(GetActiveWebContents(), "poster_large");
 }
 
-// Flaky on ASAN bots: crbug.com/560765.
-#if defined(ADDRESS_SANITIZER)
-#define MAYBE_OriginWhitelisting DISABLED_OriginWhitelisting
-#else
-#define MAYBE_OriginWhitelisting OriginWhitelisting
-#endif
-IN_PROC_BROWSER_TEST_F(PluginPowerSaverBrowserTest, MAYBE_OriginWhitelisting) {
+IN_PROC_BROWSER_TEST_F(PluginPowerSaverBrowserTest, OriginWhitelisting) {
   LoadHTML(
       "<object id='plugin_small' data='http://a.com/fake1.swf' "
       "    type='application/x-shockwave-flash' width='100' height='100'>"

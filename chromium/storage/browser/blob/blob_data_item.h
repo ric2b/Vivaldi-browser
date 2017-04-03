@@ -21,7 +21,9 @@ class Entry;
 
 namespace storage {
 class BlobDataBuilder;
+class BlobMemoryController;
 class BlobStorageContext;
+class DataElement;
 
 // Ref counted blob item. This class owns the backing data of the blob item. The
 // backing data is immutable, and cannot change after creation. The purpose of
@@ -65,7 +67,11 @@ class STORAGE_EXPORT BlobDataItem : public base::RefCounted<BlobDataItem> {
 
  private:
   friend class BlobDataBuilder;
+  friend class BlobMemoryController;
   friend class BlobStorageContext;
+  friend struct BlobSlice;
+  friend class BlobSliceTest;
+  friend class BlobFlattenerTest;
   friend class base::RefCounted<BlobDataItem>;
   friend STORAGE_EXPORT void PrintTo(const BlobDataItem& x, ::std::ostream* os);
 
@@ -77,6 +83,7 @@ class STORAGE_EXPORT BlobDataItem : public base::RefCounted<BlobDataItem> {
                disk_cache::Entry* entry,
                int disk_cache_stream_index,
                int disk_cache_side_stream_index);
+
   virtual ~BlobDataItem();
 
   std::unique_ptr<DataElement> item_;

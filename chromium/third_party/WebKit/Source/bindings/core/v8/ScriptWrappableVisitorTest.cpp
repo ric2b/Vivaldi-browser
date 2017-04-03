@@ -5,6 +5,7 @@
 #include "bindings/core/v8/ScriptWrappableVisitor.h"
 
 #include "bindings/core/v8/ToV8.h"
+#include "bindings/core/v8/TraceWrapperV8Reference.h"
 #include "bindings/core/v8/V8BindingForTesting.h"
 #include "bindings/core/v8/V8GCController.h"
 #include "bindings/core/v8/V8PerIsolateData.h"
@@ -12,10 +13,6 @@
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace blink {
-
-class NullReporter : public v8::EmbedderReachableReferenceReporter {
-  void ReportExternalReference(v8::Value* object) override {}
-};
 
 static void preciselyCollectGarbage() {
   ThreadState::current()->collectAllGarbage();
@@ -29,6 +26,15 @@ static void runV8FullGc(v8::Isolate* isolate) {
   V8GCController::collectGarbage(isolate, false);
 }
 
+static bool DequeContains(const WTF::Deque<WrapperMarkingData>& deque,
+                          DeathAwareScriptWrappable* needle) {
+  for (auto item : deque) {
+    if (item.rawObjectPointer() == needle)
+      return true;
+  }
+  return false;
+}
+
 TEST(ScriptWrappableVisitorTest, ScriptWrappableVisitorTracesWrappers) {
   V8TestingScope scope;
   if (!RuntimeEnabledFeatures::traceWrappablesEnabled()) {
@@ -36,11 +42,11 @@ TEST(ScriptWrappableVisitorTest, ScriptWrappableVisitorTracesWrappers) {
   }
   ScriptWrappableVisitor* visitor =
       V8PerIsolateData::from(scope.isolate())->scriptWrappableVisitor();
-  visitor->TracePrologue(new NullReporter());
+  visitor->TracePrologue();
 
   DeathAwareScriptWrappable* target = DeathAwareScriptWrappable::create();
   DeathAwareScriptWrappable* dependency = DeathAwareScriptWrappable::create();
-  target->setDependency(dependency);
+  target->setRawDependency(dependency);
 
   HeapObjectHeader* targetHeader = HeapObjectHeader::fromPayload(target);
   HeapObjectHeader* dependencyHeader =
@@ -209,7 +215,7 @@ TEST(ScriptWrappableVisitorTest, NonMarkedObjectDoesNothingOnWriteBarrierHit) {
 
   EXPECT_TRUE(visitor->getMarkingDeque()->isEmpty());
 
-  target->setDependency(dependency);
+  target->setRawDependency(dependency);
 
   EXPECT_TRUE(visitor->getMarkingDeque()->isEmpty());
 }
@@ -225,14 +231,22 @@ TEST(ScriptWrappableVisitorTest,
       V8PerIsolateData::from(scope.isolate())->scriptWrappableVisitor();
 
   DeathAwareScriptWrappable* target = DeathAwareScriptWrappable::create();
-  DeathAwareScriptWrappable* dependency = DeathAwareScriptWrappable::create();
+  DeathAwareScriptWrappable* dependencies[] = {
+      DeathAwareScriptWrappable::create(), DeathAwareScriptWrappable::create(),
+      DeathAwareScriptWrappable::create(), DeathAwareScriptWrappable::create(),
+      DeathAwareScriptWrappable::create()};
 
   HeapObjectHeader::fromPayload(target)->markWrapperHeader();
-  HeapObjectHeader::fromPayload(dependency)->markWrapperHeader();
+  for (int i = 0; i < 5; i++) {
+    HeapObjectHeader::fromPayload(dependencies[i])->markWrapperHeader();
+  }
 
   EXPECT_TRUE(visitor->getMarkingDeque()->isEmpty());
 
-  target->setDependency(dependency);
+  target->setRawDependency(dependencies[0]);
+  target->setWrappedDependency(dependencies[1]);
+  target->addWrappedVectorDependency(dependencies[2]);
+  target->addWrappedHashMapDependency(dependencies[3], dependencies[4]);
 
   EXPECT_TRUE(visitor->getMarkingDeque()->isEmpty());
 }
@@ -248,18 +262,136 @@ TEST(ScriptWrappableVisitorTest,
       V8PerIsolateData::from(scope.isolate())->scriptWrappableVisitor();
 
   DeathAwareScriptWrappable* target = DeathAwareScriptWrappable::create();
-  DeathAwareScriptWrappable* dependency = DeathAwareScriptWrappable::create();
+  DeathAwareScriptWrappable* dependencies[] = {
+      DeathAwareScriptWrappable::create(), DeathAwareScriptWrappable::create(),
+      DeathAwareScriptWrappable::create(), DeathAwareScriptWrappable::create(),
+      DeathAwareScriptWrappable::create()};
 
   HeapObjectHeader::fromPayload(target)->markWrapperHeader();
 
   EXPECT_TRUE(visitor->getMarkingDeque()->isEmpty());
 
-  target->setDependency(dependency);
+  target->setRawDependency(dependencies[0]);
+  target->setWrappedDependency(dependencies[1]);
+  target->addWrappedVectorDependency(dependencies[2]);
+  target->addWrappedHashMapDependency(dependencies[3], dependencies[4]);
 
-  EXPECT_EQ(visitor->getMarkingDeque()->first().rawObjectPointer(), dependency);
+  for (int i = 0; i < 5; i++) {
+    EXPECT_TRUE(DequeContains(*visitor->getMarkingDeque(), dependencies[i]));
+  }
 
   visitor->getMarkingDeque()->clear();
   visitor->getVerifierDeque()->clear();
+}
+
+namespace {
+
+class HandleContainer
+    : public blink::GarbageCollectedFinalized<HandleContainer>,
+      blink::TraceWrapperBase {
+ public:
+  static HandleContainer* create() { return new HandleContainer(); }
+  virtual ~HandleContainer() {}
+
+  DEFINE_INLINE_TRACE() {}
+  DEFINE_INLINE_TRACE_WRAPPERS() {
+    visitor->traceWrappers(m_handle.cast<v8::Value>());
+  }
+
+  void setValue(v8::Isolate* isolate, v8::Local<v8::String> string) {
+    m_handle.set(isolate, string);
+  }
+
+ private:
+  HandleContainer() : m_handle(this) {}
+
+  TraceWrapperV8Reference<v8::String> m_handle;
+};
+
+class InterceptingScriptWrappableVisitor
+    : public blink::ScriptWrappableVisitor {
+ public:
+  InterceptingScriptWrappableVisitor(v8::Isolate* isolate)
+      : ScriptWrappableVisitor(isolate), m_markedWrappers(new size_t(0)) {}
+  ~InterceptingScriptWrappableVisitor() { delete m_markedWrappers; }
+
+  virtual void markWrapper(const v8::PersistentBase<v8::Value>* handle) const {
+    *m_markedWrappers += 1;
+    ScriptWrappableVisitor::markWrapper(handle);
+  }
+
+  size_t numberOfMarkedWrappers() const { return *m_markedWrappers; }
+
+ private:
+  size_t* m_markedWrappers;  // Indirection required because of const override.
+};
+
+void swapInNewVisitor(v8::Isolate* isolate,
+                      blink::ScriptWrappableVisitor* newVisitor) {
+  isolate->SetEmbedderHeapTracer(newVisitor);
+  std::unique_ptr<blink::ScriptWrappableVisitor> visitor(newVisitor);
+  V8PerIsolateData::from(isolate)->setScriptWrappableVisitor(
+      std::move(visitor));
+}
+
+}  // namespace
+
+TEST(ScriptWrappableVisitorTest, NoWriteBarrierOnUnmarkedContainer) {
+  if (!RuntimeEnabledFeatures::traceWrappablesEnabled())
+    return;
+  V8TestingScope scope;
+  auto rawVisitor = new InterceptingScriptWrappableVisitor(scope.isolate());
+  swapInNewVisitor(scope.isolate(), rawVisitor);
+  rawVisitor->TracePrologue();
+  v8::Local<v8::String> str =
+      v8::String::NewFromUtf8(scope.isolate(), "teststring",
+                              v8::NewStringType::kNormal, sizeof("teststring"))
+          .ToLocalChecked();
+  HandleContainer* container = HandleContainer::create();
+  CHECK_EQ(0u, rawVisitor->numberOfMarkedWrappers());
+  container->setValue(scope.isolate(), str);
+  CHECK_EQ(0u, rawVisitor->numberOfMarkedWrappers());
+  // Gracefully terminate tracing.
+  rawVisitor->AdvanceTracing(
+      0, v8::EmbedderHeapTracer::AdvanceTracingActions(
+             v8::EmbedderHeapTracer::ForceCompletionAction::FORCE_COMPLETION));
+  rawVisitor->TraceEpilogue();
+}
+
+TEST(ScriptWrappableVisitorTest, WriteBarrierTriggersOnMarkedContainer) {
+  if (!RuntimeEnabledFeatures::traceWrappablesEnabled())
+    return;
+  V8TestingScope scope;
+  auto rawVisitor = new InterceptingScriptWrappableVisitor(scope.isolate());
+  swapInNewVisitor(scope.isolate(), rawVisitor);
+  rawVisitor->TracePrologue();
+  v8::Local<v8::String> str =
+      v8::String::NewFromUtf8(scope.isolate(), "teststring",
+                              v8::NewStringType::kNormal, sizeof("teststring"))
+          .ToLocalChecked();
+  HandleContainer* container = HandleContainer::create();
+  HeapObjectHeader::fromPayload(container)->markWrapperHeader();
+  CHECK_EQ(0u, rawVisitor->numberOfMarkedWrappers());
+  container->setValue(scope.isolate(), str);
+  CHECK_EQ(1u, rawVisitor->numberOfMarkedWrappers());
+  // Gracefully terminate tracing.
+  rawVisitor->AdvanceTracing(
+      0, v8::EmbedderHeapTracer::AdvanceTracingActions(
+             v8::EmbedderHeapTracer::ForceCompletionAction::FORCE_COMPLETION));
+  rawVisitor->TraceEpilogue();
+}
+
+TEST(ScriptWrappableVisitorTest, VtableAtObjectStart) {
+  // This test makes sure that the subobject v8::EmbedderHeapTracer is placed
+  // at the start of a ScriptWrappableVisitor object. We do this to mitigate
+  // potential problems that could be caused by LTO when passing
+  // v8::EmbedderHeapTracer across the API boundary.
+  V8TestingScope scope;
+  std::unique_ptr<blink::ScriptWrappableVisitor> visitor(
+      new ScriptWrappableVisitor(scope.isolate()));
+  CHECK_EQ(
+      static_cast<void*>(visitor.get()),
+      static_cast<void*>(dynamic_cast<v8::EmbedderHeapTracer*>(visitor.get())));
 }
 
 }  // namespace blink

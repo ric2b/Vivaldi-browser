@@ -36,7 +36,8 @@ TEST_F(TextAutosizerTest, SimpleParagraph) {
   Element* autosized = document().getElementById("autosized");
   EXPECT_FLOAT_EQ(16.f,
                   autosized->layoutObject()->style()->specifiedFontSize());
-  // (specified font-size = 16px) * (viewport width = 800px) / (window width = 320px) = 40px.
+  // (specified font-size = 16px) * (viewport width = 800px) /
+  // (window width = 320px) = 40px.
   EXPECT_FLOAT_EQ(40.f, autosized->layoutObject()->style()->computedFontSize());
 }
 
@@ -283,7 +284,8 @@ TEST_F(TextAutosizerTest, AccessibilityFontScaleFactor) {
   Element* autosized = document().getElementById("autosized");
   EXPECT_FLOAT_EQ(16.f,
                   autosized->layoutObject()->style()->specifiedFontSize());
-  // 1.5 * (specified font-size = 16px) * (viewport width = 800px) / (window width = 320px) = 60px.
+  // 1.5 * (specified font-size = 16px) * (viewport width = 800px) /
+  // (window width = 320px) = 60px.
   EXPECT_FLOAT_EQ(60.f, autosized->layoutObject()->style()->computedFontSize());
 }
 
@@ -349,7 +351,8 @@ TEST_F(TextAutosizerTest, ChangingAccessibilityFontScaleFactor) {
   Element* autosized = document().getElementById("autosized");
   EXPECT_FLOAT_EQ(16.f,
                   autosized->layoutObject()->style()->specifiedFontSize());
-  // 1.0 * (specified font-size = 16px) * (viewport width = 800px) / (window width = 320px) = 40px.
+  // 1.0 * (specified font-size = 16px) * (viewport width = 800px) /
+  // (window width = 320px) = 40px.
   EXPECT_FLOAT_EQ(40.f, autosized->layoutObject()->style()->computedFontSize());
 
   document().settings()->setAccessibilityFontScaleFactor(2);
@@ -357,7 +360,8 @@ TEST_F(TextAutosizerTest, ChangingAccessibilityFontScaleFactor) {
 
   EXPECT_FLOAT_EQ(16.f,
                   autosized->layoutObject()->style()->specifiedFontSize());
-  // 2.0 * (specified font-size = 16px) * (viewport width = 800px) / (window width = 320px) = 80px.
+  // 2.0 * (specified font-size = 16px) * (viewport width = 800px) /
+  // (window width = 320px) = 80px.
   EXPECT_FLOAT_EQ(80.f, autosized->layoutObject()->style()->computedFontSize());
 }
 
@@ -401,7 +405,8 @@ TEST_F(TextAutosizerTest, TextSizeAdjustDoesNotDisableAccessibility) {
   EXPECT_FLOAT_EQ(
       48.f, textSizeAdjustDouble->layoutObject()->style()->computedFontSize());
 
-  // Changing the accessibility font scale factor should change the adjusted size.
+  // Changing the accessibility font scale factor should change the adjusted
+  // size.
   document().settings()->setAccessibilityFontScaleFactor(2);
   document().view()->updateAllLifecyclePhases();
 
@@ -462,7 +467,8 @@ TEST_F(TextAutosizerTest, DeviceScaleAdjustmentWithViewport) {
   Element* autosized = document().getElementById("autosized");
   EXPECT_FLOAT_EQ(16.f,
                   autosized->layoutObject()->style()->specifiedFontSize());
-  // (specified font-size = 16px) * (viewport width = 800px) / (window width = 320px) = 40px.
+  // (specified font-size = 16px) * (viewport width = 800px) /
+  // (window width = 320px) = 40px.
   // The device scale adjustment of 1.5 is ignored.
   EXPECT_FLOAT_EQ(40.f, autosized->layoutObject()->style()->computedFontSize());
 
@@ -472,7 +478,8 @@ TEST_F(TextAutosizerTest, DeviceScaleAdjustmentWithViewport) {
   autosized = document().getElementById("autosized");
   EXPECT_FLOAT_EQ(16.f,
                   autosized->layoutObject()->style()->specifiedFontSize());
-  // (device scale adjustment = 1.5) * (specified font-size = 16px) * (viewport width = 800px) / (window width = 320px) = 60px.
+  // (device scale adjustment = 1.5) * (specified font-size = 16px) *
+  // (viewport width = 800px) / (window width = 320px) = 60px.
   EXPECT_FLOAT_EQ(60.f, autosized->layoutObject()->style()->computedFontSize());
 }
 

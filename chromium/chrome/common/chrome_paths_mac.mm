@@ -18,6 +18,8 @@
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_paths_internal.h"
 
+#include "app/vivaldi_constants.h"
+
 namespace {
 
 #if !defined(OS_IOS)
@@ -184,14 +186,14 @@ base::FilePath GetVersionedDirectory() {
     // .app's versioned directory.
     path = path.DirName().DirName();
 #if defined(VIVALDI_BUILD)
-    DCHECK_EQ(path.BaseName().value(), kVivaldiVersion);
+    DCHECK_EQ(path.BaseName().value(), vivaldi::kVivaldiVersion);
 #else
     DCHECK_EQ(path.BaseName().value(), kChromeVersion);
 #endif
   } else {
     // Go into the versioned directory.
 #if defined(VIVALDI_BUILD)
-    path = path.Append("Versions").Append(kVivaldiVersion);
+    path = path.Append("Versions").Append(vivaldi::kVivaldiVersion);
 #else
     path = path.Append("Versions").Append(kChromeVersion);
 #endif

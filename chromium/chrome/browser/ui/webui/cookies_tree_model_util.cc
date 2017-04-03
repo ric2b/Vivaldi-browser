@@ -20,12 +20,13 @@
 #include "content/public/browser/cache_storage_context.h"
 #include "content/public/browser/indexed_db_context.h"
 #include "content/public/browser/service_worker_context.h"
+#include "extensions/features/features.h"
 #include "net/cookies/canonical_cookie.h"
 #include "storage/common/fileapi/file_system_types.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/text/bytes_formatting.h"
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "extensions/common/extension_set.h"
 #endif
 
@@ -37,7 +38,7 @@ const char kKeyIcon[] = "icon";
 const char kKeyType[] = "type";
 const char kKeyHasChildren[] = "hasChildren";
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 const char kKeyAppsProtectingThis[] = "appsProtectingThis";
 #endif
 const char kKeyName[] = "name";
@@ -90,6 +91,7 @@ std::string CookiesTreeModelUtil::GetTreeNodeId(const CookieTreeNode* node) {
 
 bool CookiesTreeModelUtil::GetCookieTreeNodeDictionary(
     const CookieTreeNode& node,
+    bool include_quota_nodes,
     base::DictionaryValue* dict) {
   // Use node's address as an id for WebUI to look it up.
   dict->SetString(kKeyId, GetTreeNodeId(&node));
@@ -216,6 +218,9 @@ bool CookiesTreeModelUtil::GetCookieTreeNodeDictionary(
       break;
     }
     case CookieTreeNode::DetailedInfo::TYPE_QUOTA: {
+      if (!include_quota_nodes)
+        return false;
+
       dict->SetString(kKeyType, "quota");
       dict->SetString(kKeyIcon, "chrome://theme/IDR_COOKIE_STORAGE_ICON");
 
@@ -295,6 +300,19 @@ bool CookiesTreeModelUtil::GetCookieTreeNodeDictionary(
       dict->SetString(kKeyDomain, node.GetDetailedInfo().flash_lso_domain);
       break;
     }
+    case CookieTreeNode::DetailedInfo::TYPE_MEDIA_LICENSE: {
+      dict->SetString(kKeyType, "media_license");
+      dict->SetString(kKeyIcon, "chrome://theme/IDR_COOKIE_STORAGE_ICON");
+
+      const BrowsingDataMediaLicenseHelper::MediaLicenseInfo&
+          media_license_info = *node.GetDetailedInfo().media_license_info;
+      dict->SetString(kKeyOrigin, media_license_info.origin.spec());
+      dict->SetString(kKeySize, ui::FormatBytes(media_license_info.size));
+      dict->SetString(kKeyModified,
+                      base::UTF16ToUTF8(base::TimeFormatFriendlyDateAndTime(
+                          media_license_info.last_modified_time)));
+      break;
+    }
     default:
 #if defined(OS_MACOSX)
       dict->SetString(kKeyIcon, "chrome://theme/IDR_BOOKMARK_BAR_FOLDER");
@@ -302,7 +320,7 @@ bool CookiesTreeModelUtil::GetCookieTreeNodeDictionary(
       break;
   }
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   const extensions::ExtensionSet* protecting_apps =
       node.GetModel()->ExtensionsProtectingNode(node);
   if (protecting_apps && !protecting_apps->is_empty()) {
@@ -322,14 +340,40 @@ bool CookiesTreeModelUtil::GetCookieTreeNodeDictionary(
   return true;
 }
 
+void CookiesTreeModelUtil::GetChildNodeDetails(const CookieTreeNode* parent,
+                                               int start,
+                                               int count,
+                                               bool include_quota_nodes,
+                                               base::ListValue* list) {
+  std::string id_path = GetTreeNodeId(parent);
+  for (int i = 0; i < count; ++i) {
+    const CookieTreeNode* child = parent->GetChild(start + i);
+    int cookie_count = child->child_count();
+    std::string cookie_id_path = id_path + "," + GetTreeNodeId(child) + ",";
+    for (int k = 0; k < cookie_count; ++k) {
+      const CookieTreeNode* details = child->GetChild(k);
+      std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue);
+      if (GetCookieTreeNodeDictionary(*details, include_quota_nodes,
+                                      dict.get())) {
+        // TODO(dschuyler): This ID path is an artifact from using tree nodes to
+        // hold the cookies. Can this be changed to a dictionary with a key
+        // lookup (and remove use of id_map_)?
+        dict->SetString("idPath", cookie_id_path + GetTreeNodeId(details));
+        list->Append(std::move(dict));
+      }
+    }
+  }
+}
+
 void CookiesTreeModelUtil::GetChildNodeList(const CookieTreeNode* parent,
                                             int start,
                                             int count,
+                                            bool include_quota_nodes,
                                             base::ListValue* nodes) {
   for (int i = 0; i < count; ++i) {
     std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue);
     const CookieTreeNode* child = parent->GetChild(start + i);
-    if (GetCookieTreeNodeDictionary(*child, dict.get()))
+    if (GetCookieTreeNodeDictionary(*child, include_quota_nodes, dict.get()))
       nodes->Append(std::move(dict));
   }
 }
@@ -357,4 +401,19 @@ const CookieTreeNode* CookiesTreeModelUtil::GetTreeNodeFromPath(
   }
 
   return child_index >= 0 ? child : NULL;
+}
+
+const CookieTreeNode* CookiesTreeModelUtil::GetTreeNodeFromTitle(
+    const CookieTreeNode* root,
+    const base::string16& title) {
+  // TODO(dschuyler): This method reduces an old O(n^2) lookup with an O(n)
+  // lookup for O(1) space, but it could be further improved to O(1) lookup if
+  // desired (by trading O(n) space for the time improvement).
+  int site_count = root->child_count();
+  for (int i = 0; i < site_count; ++i) {
+    const CookieTreeNode* child = root->GetChild(i);
+    if (title == child->GetTitle())
+      return child;
+  }
+  return nullptr;
 }

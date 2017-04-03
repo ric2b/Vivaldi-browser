@@ -47,7 +47,6 @@ namespace media {
 class AudioBufferConverter;
 class AudioBus;
 class AudioClock;
-class AudioSplicer;
 class DecryptingDemuxerStream;
 
 class MEDIA_EXPORT AudioRendererImpl
@@ -130,9 +129,10 @@ class MEDIA_EXPORT AudioRendererImpl
   void DecodedAudioReady(AudioBufferStream::Status status,
                          const scoped_refptr<AudioBuffer>& buffer);
 
-  // Handles buffers that come out of |splicer_|.
+  // Handles buffers that come out of decoder (MSE: after passing through
+  // |buffer_converter_|).
   // Returns true if more buffers are needed.
-  bool HandleSplicerBuffer_Locked(const scoped_refptr<AudioBuffer>& buffer);
+  bool HandleDecodedBuffer_Locked(const scoped_refptr<AudioBuffer>& buffer);
 
   // Helper functions for DecodeStatus values passed to
   // DecodedAudioReady().
@@ -196,18 +196,18 @@ class MEDIA_EXPORT AudioRendererImpl
   // Called when the |decoder_|.Reset() has completed.
   void ResetDecoderDone();
 
-  // Called by the AudioBufferStream when a splice buffer is demuxed.
-  void OnNewSpliceBuffer(base::TimeDelta);
-
   // Called by the AudioBufferStream when a config change occurs.
   void OnConfigChange();
 
   // Updates |buffering_state_| and fires |buffering_state_cb_|.
   void SetBufferingState_Locked(BufferingState buffering_state);
 
+  // Configure's the channel mask for |algorithm_|. Must be called if the layout
+  // changes. Expect the layout in |last_decoded_channel_layout_|.
+  void ConfigureChannelMask();
+
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
 
-  std::unique_ptr<AudioSplicer> splicer_;
   std::unique_ptr<AudioBufferConverter> buffer_converter_;
 
   // Whether or not we expect to handle config changes.
@@ -237,12 +237,16 @@ class MEDIA_EXPORT AudioRendererImpl
   std::unique_ptr<base::TickClock> tick_clock_;
 
   // Memory usage of |algorithm_| recorded during the last
-  // HandleSplicerBuffer_Locked() call.
+  // HandleDecodedBuffer_Locked() call.
   int64_t last_audio_memory_usage_;
 
   // Sample rate of the last decoded audio buffer. Allows for detection of
   // sample rate changes due to implicit AAC configuration change.
   int last_decoded_sample_rate_;
+
+  // Similar to |last_decoded_sample_rate_|, used to configure the channel mask
+  // given to the |algorithm_| for efficient playback rate changes.
+  ChannelLayout last_decoded_channel_layout_;
 
   // After Initialize() has completed, all variables below must be accessed
   // under |lock_|. ------------------------------------------------------------
@@ -296,9 +300,6 @@ class MEDIA_EXPORT AudioRendererImpl
   // Set by OnSuspend() and OnResume() to indicate when the system is about to
   // suspend/is suspended and when it resumes.
   bool is_suspending_;
-
-  // Track the last reported media time.
-  base::TimeDelta last_reported_media_time_;
 
   // End variables which must be accessed under |lock_|. ----------------------
 

@@ -24,7 +24,7 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram.h"
-#include "base/metrics/sparse_histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/scoped_native_library.h"
 #include "base/sequenced_task_runner.h"
 #include "base/stl_util.h"
@@ -39,8 +39,8 @@
 #include "components/policy/core/common/policy_map.h"
 #include "components/policy/core/common/policy_namespace.h"
 #include "components/policy/core/common/policy_types.h"
-#include "components/policy/core/common/preg_parser_win.h"
-#include "components/policy/core/common/registry_dict_win.h"
+#include "components/policy/core/common/preg_parser.h"
+#include "components/policy/core/common/registry_dict.h"
 #include "components/policy/core/common/schema.h"
 #include "components/policy/policy_constants.h"
 
@@ -479,6 +479,7 @@ bool PolicyLoaderWin::LoadGPOPolicy(PolicyScope scope,
 
       // Merge with existing forced policy, giving precedence to the existing
       // forced policy.
+      // TODO(ljusten): Same problem as below.
       new_forced_policy.Merge(forced_policy);
       forced_policy.Swap(&new_forced_policy);
     } else {
@@ -488,6 +489,11 @@ bool PolicyLoaderWin::LoadGPOPolicy(PolicyScope scope,
   }
 
   // Merge, give precedence to forced policy.
+  // TODO(ljusten): This doesn't work properly if policies are explicitly
+  // disabled or string list policies have less entries in the forced_policy.
+  // The merged dictionary still has excessive policies and strings. To fix
+  // this, use only one dict and call ReadPRegFile in the proper order (forced
+  // last). See crbug.com/659979.
   parsed_policy.Merge(forced_policy);
   policy->Swap(&parsed_policy);
 

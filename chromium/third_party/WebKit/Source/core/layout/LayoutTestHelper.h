@@ -10,6 +10,8 @@
 #include "core/frame/FrameView.h"
 #include "core/frame/Settings.h"
 #include "core/html/HTMLElement.h"
+#include "core/layout/api/LayoutAPIShim.h"
+#include "core/layout/api/LayoutViewItem.h"
 #include "core/loader/EmptyClients.h"
 #include "core/testing/DummyPageHolder.h"
 #include "wtf/Allocator.h"
@@ -17,6 +19,52 @@
 #include <memory>
 
 namespace blink {
+
+class SingleChildFrameLoaderClient final : public EmptyFrameLoaderClient {
+ public:
+  static SingleChildFrameLoaderClient* create() {
+    return new SingleChildFrameLoaderClient();
+  }
+
+  DEFINE_INLINE_VIRTUAL_TRACE() {
+    visitor->trace(m_child);
+    EmptyFrameLoaderClient::trace(visitor);
+  }
+
+  // FrameLoaderClient overrides:
+  LocalFrame* firstChild() const override { return m_child.get(); }
+  LocalFrame* createFrame(const FrameLoadRequest&,
+                          const AtomicString& name,
+                          HTMLFrameOwnerElement*) override;
+
+  void didDetachChild() { m_child = nullptr; }
+
+ private:
+  explicit SingleChildFrameLoaderClient() {}
+
+  Member<LocalFrame> m_child;
+};
+
+class FrameLoaderClientWithParent final : public EmptyFrameLoaderClient {
+ public:
+  static FrameLoaderClientWithParent* create(LocalFrame* parent) {
+    return new FrameLoaderClientWithParent(parent);
+  }
+
+  DEFINE_INLINE_VIRTUAL_TRACE() {
+    visitor->trace(m_parent);
+    EmptyFrameLoaderClient::trace(visitor);
+  }
+
+  // FrameClient overrides:
+  void detached(FrameDetachType) override;
+  LocalFrame* parent() const override { return m_parent.get(); }
+
+ private:
+  explicit FrameLoaderClientWithParent(LocalFrame* parent) : m_parent(parent) {}
+
+  Member<LocalFrame> m_parent;
+};
 
 class RenderingTest : public testing::Test {
   USING_FAST_MALLOC(RenderingTest);
@@ -33,6 +81,10 @@ class RenderingTest : public testing::Test {
   void TearDown() override;
 
   Document& document() const { return m_pageHolder->document(); }
+  LayoutView& layoutView() const {
+    return *toLayoutView(
+        LayoutAPIShim::layoutObjectFrom(document().view()->layoutViewItem()));
+  }
 
   // Both sets the inner html and runs the document lifecycle.
   void setBodyInnerHTML(const String& htmlContent) {
@@ -40,9 +92,11 @@ class RenderingTest : public testing::Test {
     document().view()->updateAllLifecyclePhases();
   }
 
-  // Returns the Document for the iframe.
-  Document& setupChildIframe(const AtomicString& iframeElementId,
-                             const String& htmlContentOfIframe);
+  Document& childDocument() {
+    return *toLocalFrame(m_pageHolder->frame().tree().firstChild())->document();
+  }
+
+  void setChildFrameHTML(const String&);
 
   // Both enables compositing and runs the document lifecycle.
   void enableCompositing() {
@@ -58,51 +112,8 @@ class RenderingTest : public testing::Test {
   }
 
  private:
-  Persistent<LocalFrame> m_subframe;
   Persistent<FrameLoaderClient> m_frameLoaderClient;
-  Persistent<FrameLoaderClient> m_childFrameLoaderClient;
   std::unique_ptr<DummyPageHolder> m_pageHolder;
-};
-
-class SingleChildFrameLoaderClient final : public EmptyFrameLoaderClient {
- public:
-  static SingleChildFrameLoaderClient* create() {
-    return new SingleChildFrameLoaderClient;
-  }
-
-  DEFINE_INLINE_VIRTUAL_TRACE() {
-    visitor->trace(m_child);
-    EmptyFrameLoaderClient::trace(visitor);
-  }
-
-  Frame* firstChild() const override { return m_child.get(); }
-  Frame* lastChild() const override { return m_child.get(); }
-
-  void setChild(Frame* child) { m_child = child; }
-
- private:
-  SingleChildFrameLoaderClient() : m_child(nullptr) {}
-
-  Member<Frame> m_child;
-};
-
-class FrameLoaderClientWithParent final : public EmptyFrameLoaderClient {
- public:
-  static FrameLoaderClientWithParent* create(Frame* parent) {
-    return new FrameLoaderClientWithParent(parent);
-  }
-
-  DEFINE_INLINE_VIRTUAL_TRACE() {
-    visitor->trace(m_parent);
-    EmptyFrameLoaderClient::trace(visitor);
-  }
-
-  Frame* parent() const override { return m_parent.get(); }
-
- private:
-  explicit FrameLoaderClientWithParent(Frame* parent) : m_parent(parent) {}
-
-  Member<Frame> m_parent;
 };
 
 }  // namespace blink

@@ -548,17 +548,6 @@ struct ParamTraits<std::pair<A, B> > {
   }
 };
 
-// IPC ParamTraits -------------------------------------------------------------
-template <>
-struct IPC_EXPORT ParamTraits<BrokerableAttachment::AttachmentId> {
-  typedef BrokerableAttachment::AttachmentId param_type;
-  static void Write(base::Pickle* m, const param_type& p);
-  static bool Read(const base::Pickle* m,
-                   base::PickleIterator* iter,
-                   param_type* r);
-  static void Log(const param_type& p, std::string* l);
-};
-
 // Base ParamTraits ------------------------------------------------------------
 
 template <>
@@ -1146,10 +1135,9 @@ struct IPC_EXPORT ParamTraits<MSG> {
 // Generic message subclasses
 
 // defined in ipc_logging.cc
-IPC_EXPORT void GenerateLogData(const std::string& channel,
-                                const Message& message,
-                                LogData* data, bool get_params);
-
+IPC_EXPORT void GenerateLogData(const Message& message,
+                                LogData* data,
+                                bool get_params);
 
 #if defined(IPC_MESSAGE_LOG_ENABLED)
 inline void AddOutputParamsToLog(const Message* msg, std::string* l) {
@@ -1176,7 +1164,7 @@ inline void ConnectMessageAndReply(const Message* msg, Message* reply) {
     // output parameters at that point.  Instead, save its data and log it
     // with the outgoing reply message when it's sent.
     LogData* data = new LogData;
-    GenerateLogData("", *msg, data, true);
+    GenerateLogData(*msg, data, true);
     msg->set_dont_log();
     reply->set_sync_log_data(data);
   }

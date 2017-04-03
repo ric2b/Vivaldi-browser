@@ -24,10 +24,12 @@
 #include "build/build_config.h"
 #include "chrome/browser/net/chrome_network_delegate.h"
 #include "chrome/common/features.h"
+#include "components/metrics/data_use_tracker.h"
 #include "components/prefs/pref_member.h"
 #include "components/ssl_config/ssl_config_service_manager.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/browser_thread_delegate.h"
+#include "extensions/features/features.h"
 #include "net/base/network_change_notifier.h"
 #include "net/http/http_network_session.h"
 
@@ -74,7 +76,6 @@ class CertVerifier;
 class ChannelIDService;
 class CookieStore;
 class CTLogVerifier;
-class FtpTransactionFactory;
 class HostMappingRules;
 class HostResolver;
 class HttpAuthHandlerRegistryFactory;
@@ -164,8 +165,6 @@ class IOThread : public content::BrowserThreadDelegate {
         proxy_script_fetcher_http_network_session;
     std::unique_ptr<net::HttpTransactionFactory>
         proxy_script_fetcher_http_transaction_factory;
-    std::unique_ptr<net::FtpTransactionFactory>
-        proxy_script_fetcher_ftp_transaction_factory;
     std::unique_ptr<net::URLRequestJobFactory>
         proxy_script_fetcher_url_request_job_factory;
     std::unique_ptr<net::HttpAuthPreferences> http_auth_preferences;
@@ -186,7 +185,7 @@ class IOThread : public content::BrowserThreadDelegate {
     // |system_cookie_store| and |system_channel_id_service| are shared
     // between |proxy_script_fetcher_context| and |system_request_context|.
     std::unique_ptr<net::CookieStore> system_cookie_store;
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
     scoped_refptr<extensions::EventRouterForwarder>
         extension_event_router_forwarder;
 #endif
@@ -298,7 +297,7 @@ class IOThread : public content::BrowserThreadDelegate {
   void UpdateNegotiateEnablePort();
 
   extensions::EventRouterForwarder* extension_event_router_forwarder() {
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
     return extension_event_router_forwarder_;
 #else
     return NULL;
@@ -329,7 +328,7 @@ class IOThread : public content::BrowserThreadDelegate {
   // threads during shutdown, but is used most frequently on the IOThread.
   net_log::ChromeNetLog* net_log_;
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   // The extensions::EventRouterForwarder allows for sending events to
   // extensions from the IOThread.
   extensions::EventRouterForwarder* extension_event_router_forwarder_;
@@ -402,7 +401,7 @@ class IOThread : public content::BrowserThreadDelegate {
   const base::TimeTicks creation_time_;
 
   // Callback for updating data use prefs which needs to be initialized on UI
-  // thread and passed to |ChromeNetworkDelegate|.
+  // thread and passed to |DataUseNetworkDelegate|.
   metrics::UpdateUsagePrefCallbackType metrics_data_use_forwarder_;
 
   base::WeakPtrFactory<IOThread> weak_factory_;

@@ -14,7 +14,7 @@
 #include "media/base/mock_filters.h"
 #include "media/base/test_helpers.h"
 #include "media/blink/buffered_data_source_host_impl.h"
-#include "media/blink/mock_weburlloader.h"
+#include "media/blink/mock_webassociatedurlloader.h"
 #include "media/blink/multibuffer_data_source.h"
 #include "media/blink/multibuffer_reader.h"
 #include "media/blink/resource_multibuffer_data_provider.h"
@@ -33,9 +33,9 @@ using ::testing::InSequence;
 using ::testing::NiceMock;
 using ::testing::StrictMock;
 
+using blink::WebAssociatedURLLoader;
 using blink::WebLocalFrame;
 using blink::WebString;
-using blink::WebURLLoader;
 using blink::WebURLResponse;
 using blink::WebView;
 
@@ -58,7 +58,8 @@ class TestMultiBufferDataProvider : public ResourceMultiBufferDataProvider {
   void Start() override {
     // Create a mock active loader.
     // Keep track of active loading state via loadAsynchronously() and cancel().
-    NiceMock<MockWebURLLoader>* url_loader = new NiceMock<MockWebURLLoader>();
+    NiceMock<MockWebAssociatedURLLoader>* url_loader =
+        new NiceMock<MockWebAssociatedURLLoader>();
     ON_CALL(*url_loader, cancel())
         .WillByDefault(Invoke([this]() {
           // Check that we have not been destroyed first.
@@ -68,7 +69,7 @@ class TestMultiBufferDataProvider : public ResourceMultiBufferDataProvider {
         }));
     loading_ = true;
     active_loader_.reset(
-        new ActiveLoader(std::unique_ptr<WebURLLoader>(url_loader)));
+        new ActiveLoader(std::unique_ptr<WebAssociatedURLLoader>(url_loader)));
     if (!on_start_.is_null()) {
       on_start_.Run();
     }
@@ -299,8 +300,7 @@ class MultibufferDataSourceTest : public testing::Test {
   // appropriate to do when tearing down a test.
   void Stop() {
     if (loading()) {
-      data_provider()->didFail(url_loader(),
-                               response_generator_->GenerateError());
+      data_provider()->didFail(response_generator_->GenerateError());
       base::RunLoop().RunUntilIdle();
     }
 
@@ -312,7 +312,7 @@ class MultibufferDataSourceTest : public testing::Test {
     EXPECT_TRUE(url_loader());
     if (!active_loader())
       return;
-    data_provider()->didReceiveResponse(url_loader(), response);
+    data_provider()->didReceiveResponse(response);
     base::RunLoop().RunUntilIdle();
   }
 
@@ -323,7 +323,7 @@ class MultibufferDataSourceTest : public testing::Test {
     std::unique_ptr<char[]> data(new char[size]);
     memset(data.get(), 0xA5, size);  // Arbitrary non-zero value.
 
-    data_provider()->didReceiveData(url_loader(), data.get(), size, size, size);
+    data_provider()->didReceiveData(data.get(), size);
   }
 
   void ReceiveData(int size) {
@@ -335,13 +335,12 @@ class MultibufferDataSourceTest : public testing::Test {
     EXPECT_TRUE(url_loader());
     if (!url_loader())
       return;
-    data_provider()->didFinishLoading(url_loader(), 0, -1);
+    data_provider()->didFinishLoading(0);
     base::RunLoop().RunUntilIdle();
   }
 
   void FailLoading() {
-    data_provider()->didFail(url_loader(),
-                             response_generator_->GenerateError());
+    data_provider()->didFail(response_generator_->GenerateError());
     base::RunLoop().RunUntilIdle();
   }
 
@@ -445,7 +444,7 @@ class MultibufferDataSourceTest : public testing::Test {
       return nullptr;
     return data_provider->active_loader_.get();
   }
-  WebURLLoader* url_loader() {
+  WebAssociatedURLLoader* url_loader() {
     EXPECT_TRUE(active_loader());
     if (!active_loader())
       return nullptr;
@@ -467,6 +466,11 @@ class MultibufferDataSourceTest : public testing::Test {
     return loader()->preload_low();
   }
   int data_source_bitrate() { return data_source_->bitrate_; }
+  int64_t max_buffer_forward() { return loader()->max_buffer_forward_; }
+  int64_t max_buffer_backward() { return loader()->max_buffer_backward_; }
+  int64_t buffer_size() {
+    return loader()->current_buffer_size_ * 32768 /* block size */;
+  }
   double data_source_playback_rate() { return data_source_->playback_rate_; }
   bool is_local_source() { return data_source_->assume_fully_buffered(); }
   scoped_refptr<UrlData> url_data() { return data_source_->url_data_; }
@@ -672,7 +676,7 @@ TEST_F(MultibufferDataSourceTest, Http_RetryOnError) {
   EXPECT_CALL(host_, AddBufferedByteRange(0, kDataSize * 2));
   ReadAt(kDataSize);
   base::RunLoop run_loop;
-  data_provider()->didFail(url_loader(), response_generator_->GenerateError());
+  data_provider()->didFail(response_generator_->GenerateError());
   data_provider()->RunOnStart(run_loop.QuitClosure());
   run_loop.Run();
   Respond(response_generator_->Generate206(kDataSize));
@@ -1019,6 +1023,7 @@ TEST_F(MultibufferDataSourceTest, Http_ShareData) {
 
   // This call would not be expected if we were not sharing data.
   EXPECT_CALL(host2, SetTotalBytes(response_generator_->content_length()));
+  EXPECT_CALL(host2, AddBufferedByteRange(0, kDataSize * 2));
   source2.Initialize(base::Bind(&MultibufferDataSourceTest::OnInitialize,
                                 base::Unretained(this)));
   base::RunLoop().RunUntilIdle();
@@ -1379,7 +1384,7 @@ TEST_F(MultibufferDataSourceTest, Http_RetryThenRedirect) {
   EXPECT_CALL(host_, AddBufferedByteRange(0, kDataSize * 2));
   ReadAt(kDataSize + 10, kDataSize - 10);
   base::RunLoop run_loop;
-  data_provider()->didFail(url_loader(), response_generator_->GenerateError());
+  data_provider()->didFail(response_generator_->GenerateError());
   data_provider()->RunOnStart(run_loop.QuitClosure());
   run_loop.Run();
 
@@ -1387,7 +1392,7 @@ TEST_F(MultibufferDataSourceTest, Http_RetryThenRedirect) {
   blink::WebURLRequest request((GURL(kHttpDifferentPathUrl)));
   blink::WebURLResponse response((GURL(kHttpUrl)));
   response.setHTTPStatusCode(307);
-  data_provider()->willFollowRedirect(url_loader(), request, response);
+  data_provider()->willFollowRedirect(request, response);
   Respond(response_generator_->Generate206(kDataSize));
   ReceiveData(kDataSize);
   EXPECT_CALL(host_, AddBufferedByteRange(0, kDataSize * 3));
@@ -1403,7 +1408,7 @@ TEST_F(MultibufferDataSourceTest, Http_NotStreamingAfterRedirect) {
   blink::WebURLRequest request((GURL(kHttpDifferentPathUrl)));
   blink::WebURLResponse response((GURL(kHttpUrl)));
   response.setHTTPStatusCode(307);
-  data_provider()->willFollowRedirect(url_loader(), request, response);
+  data_provider()->willFollowRedirect(request, response);
 
   EXPECT_CALL(host_, SetTotalBytes(response_generator_->content_length()));
   Respond(response_generator_->Generate206(0));
@@ -1425,10 +1430,23 @@ TEST_F(MultibufferDataSourceTest, Http_RangeNotSatisfiableAfterRedirect) {
   blink::WebURLRequest request((GURL(kHttpDifferentPathUrl)));
   blink::WebURLResponse response((GURL(kHttpUrl)));
   response.setHTTPStatusCode(307);
-  data_provider()->willFollowRedirect(url_loader(), request, response);
+  data_provider()->willFollowRedirect(request, response);
 
   EXPECT_CALL(host_, AddBufferedByteRange(0, kDataSize));
   Respond(response_generator_->GenerateResponse(416));
+  Stop();
+}
+
+TEST_F(MultibufferDataSourceTest, Http_404AfterRedirect) {
+  Initialize(kHttpUrl, false);
+
+  // Server responds with a redirect.
+  blink::WebURLRequest request((GURL(kHttpDifferentPathUrl)));
+  blink::WebURLResponse response((GURL(kHttpUrl)));
+  response.setHTTPStatusCode(307);
+  data_provider()->willFollowRedirect(request, response);
+
+  Respond(response_generator_->Generate404());
   Stop();
 }
 
@@ -1526,6 +1544,55 @@ TEST_F(MultibufferDataSourceTest, EtagTest) {
   EXPECT_EQ(url_data()->etag(), etag);
 }
 
+TEST_F(MultibufferDataSourceTest, CheckBufferSizes) {
+  InitializeWith206Response();
+
+  data_source_->SetBitrate(1 << 20);  // 1 mbit / s
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(1 << 20, data_source_bitrate());
+  EXPECT_EQ(2 << 20, preload_low());
+  EXPECT_EQ(3 << 20, preload_high());
+  EXPECT_EQ(25 << 20, max_buffer_forward());
+  EXPECT_EQ(2 << 20, max_buffer_backward());
+  EXPECT_EQ(1572864 /* 1.5Mb */, buffer_size());
+
+  data_source_->SetBitrate(8 << 20);  // 8 mbit / s
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(8 << 20, data_source_bitrate());
+  EXPECT_EQ(10 << 20, preload_low());
+  EXPECT_EQ(11 << 20, preload_high());
+  EXPECT_EQ(25 << 20, max_buffer_forward());
+  EXPECT_EQ(2 << 20, max_buffer_backward());
+  EXPECT_EQ(12 << 20, buffer_size());
+
+  data_source_->SetBitrate(16 << 20);  // 16 mbit / s
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(16 << 20, data_source_bitrate());
+  EXPECT_EQ(20 << 20, preload_low());
+  EXPECT_EQ(21 << 20, preload_high());
+  EXPECT_EQ(25 << 20, max_buffer_forward());
+  EXPECT_EQ(4 << 20, max_buffer_backward());
+  EXPECT_EQ(24 << 20, buffer_size());
+
+  data_source_->SetBitrate(32 << 20);  // 32 mbit / s
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(32 << 20, data_source_bitrate());
+  EXPECT_EQ(40 << 20, preload_low());
+  EXPECT_EQ(41 << 20, preload_high());
+  EXPECT_EQ(41 << 20, max_buffer_forward());
+  EXPECT_EQ(8 << 20, max_buffer_backward());
+  EXPECT_EQ(48 << 20, buffer_size());
+
+  data_source_->SetBitrate(80 << 20);  // 80 mbit / s
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(80 << 20, data_source_bitrate());
+  EXPECT_EQ(50 << 20, preload_low());
+  EXPECT_EQ(51 << 20, preload_high());
+  EXPECT_EQ(51 << 20, max_buffer_forward());
+  EXPECT_EQ(20 << 20, max_buffer_backward());
+  EXPECT_EQ(71 << 20, buffer_size());
+}
+
 // Provoke an edge case where the loading state may not end up transitioning
 // back to "idle" when we're done loading.
 TEST_F(MultibufferDataSourceTest, Http_CheckLoadingTransition) {
@@ -1553,7 +1620,7 @@ TEST_F(MultibufferDataSourceTest, Http_CheckLoadingTransition) {
   EXPECT_CALL(host_, AddBufferedByteRange(kDataSize, kDataSize + 1));
   ReceiveDataLow(1);
   EXPECT_CALL(host_, AddBufferedByteRange(0, kDataSize * 3));
-  data_provider()->didFinishLoading(url_loader(), 0, -1);
+  data_provider()->didFinishLoading(0);
 
   EXPECT_CALL(*this, ReadCallback(1));
   data_source_->Read(kDataSize, 2, buffer_,

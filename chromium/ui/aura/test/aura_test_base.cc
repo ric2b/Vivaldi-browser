@@ -4,8 +4,9 @@
 
 #include "ui/aura/test/aura_test_base.h"
 
-#include "ui/aura/client/window_tree_client.h"
-#include "ui/aura/test/aura_test_helper.h"
+#include "ui/aura/client/window_parenting_client.h"
+#include "ui/aura/mus/window_tree_client.h"
+#include "ui/aura/mus/window_tree_host_mus.h"
 #include "ui/aura/test/test_window_delegate.h"
 #include "ui/aura/window.h"
 #include "ui/base/ime/input_method_initializer.h"
@@ -20,9 +21,7 @@ namespace aura {
 namespace test {
 
 AuraTestBase::AuraTestBase()
-    : setup_called_(false),
-      teardown_called_(false) {
-}
+    : window_manager_delegate_(this), window_tree_client_delegate_(this) {}
 
 AuraTestBase::~AuraTestBase() {
   CHECK(setup_called_)
@@ -78,6 +77,10 @@ void AuraTestBase::SetUp() {
       ui::InitializeContextFactoryForTests(enable_pixel_output);
 
   helper_.reset(new AuraTestHelper(&message_loop_));
+  if (use_mus_) {
+    helper_->EnableMusWithTestWindowTree(window_tree_client_delegate_,
+                                         window_manager_delegate_);
+  }
   helper_->SetUp(context_factory);
 }
 
@@ -107,6 +110,16 @@ Window* AuraTestBase::CreateNormalWindow(int id, Window* parent,
   return window;
 }
 
+void AuraTestBase::EnableMusWithTestWindowTree() {
+  DCHECK(!setup_called_);
+  use_mus_ = true;
+}
+
+void AuraTestBase::ConfigureBackend(BackendType type) {
+  if (type == BackendType::MUS)
+    EnableMusWithTestWindowTree();
+}
+
 void AuraTestBase::RunAllPendingInMessageLoop() {
   helper_->RunAllPendingInMessageLoop();
 }
@@ -120,6 +133,89 @@ bool AuraTestBase::DispatchEventUsingWindowDispatcher(ui::Event* event) {
       event_processor()->OnEventFromSource(event);
   CHECK(!details.dispatcher_destroyed);
   return event->handled();
+}
+
+ui::mojom::WindowTreeClient* AuraTestBase::window_tree_client() {
+  return helper_->window_tree_client();
+}
+
+void AuraTestBase::OnEmbed(
+    std::unique_ptr<WindowTreeHostMus> window_tree_host) {}
+
+void AuraTestBase::OnUnembed(Window* root) {}
+
+void AuraTestBase::OnEmbedRootDestroyed(Window* root) {}
+
+void AuraTestBase::OnLostConnection(WindowTreeClient* client) {}
+
+void AuraTestBase::OnPointerEventObserved(const ui::PointerEvent& event,
+                                          Window* target) {}
+
+void AuraTestBase::SetWindowManagerClient(WindowManagerClient* client) {}
+
+bool AuraTestBase::OnWmSetBounds(Window* window, gfx::Rect* bounds) {
+  return true;
+}
+
+bool AuraTestBase::OnWmSetProperty(
+    Window* window,
+    const std::string& name,
+    std::unique_ptr<std::vector<uint8_t>>* new_data) {
+  return true;
+}
+
+Window* AuraTestBase::OnWmCreateTopLevelWindow(
+    std::map<std::string, std::vector<uint8_t>>* properties) {
+  return new Window(nullptr);
+}
+
+void AuraTestBase::OnWmClientJankinessChanged(
+    const std::set<Window*>& client_windows,
+    bool janky) {}
+
+void AuraTestBase::OnWmNewDisplay(
+    std::unique_ptr<WindowTreeHostMus> window_tree_host,
+    const display::Display& display) {
+  // Take ownership of the WindowTreeHost.
+  window_tree_host_mus_ = std::move(window_tree_host);
+}
+
+void AuraTestBase::OnWmDisplayRemoved(Window* window) {}
+
+void AuraTestBase::OnWmDisplayModified(const display::Display& display) {}
+
+ui::mojom::EventResult AuraTestBase::OnAccelerator(uint32_t id,
+                                                   const ui::Event& event) {
+  return ui::mojom::EventResult::HANDLED;
+}
+
+void AuraTestBase::OnWmPerformMoveLoop(
+    Window* window,
+    ui::mojom::MoveLoopSource source,
+    const gfx::Point& cursor_location,
+    const base::Callback<void(bool)>& on_done) {}
+
+void AuraTestBase::OnWmCancelMoveLoop(Window* window) {}
+
+client::CaptureClient* AuraTestBase::GetCaptureClient() {
+  return helper_->capture_client();
+}
+
+PropertyConverter* AuraTestBase::GetPropertyConverter() {
+  return &property_converter_;
+}
+
+AuraTestBaseWithType::AuraTestBaseWithType() {}
+
+AuraTestBaseWithType::~AuraTestBaseWithType() {
+  DCHECK(setup_called_);
+}
+
+void AuraTestBaseWithType::SetUp() {
+  DCHECK(!setup_called_);
+  setup_called_ = true;
+  ConfigureBackend(GetParam());
+  AuraTestBase::SetUp();
 }
 
 }  // namespace test

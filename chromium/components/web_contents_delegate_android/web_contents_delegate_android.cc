@@ -34,6 +34,7 @@ using content::ColorChooser;
 using content::RenderWidgetHostView;
 using content::WebContents;
 using content::WebContentsDelegate;
+using content::WebContentsUnresponsiveState;
 
 namespace web_contents_delegate_android {
 
@@ -130,8 +131,8 @@ void WebContentsDelegateAndroid::NavigationStateChanged(
                                                          changed_flags);
 }
 
-void WebContentsDelegateAndroid::VisibleSSLStateChanged(
-    const WebContents* source) {
+void WebContentsDelegateAndroid::VisibleSecurityStateChanged(
+    WebContents* source) {
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jobject> obj = GetJavaDelegate(env);
   if (obj.is_null())
@@ -164,7 +165,9 @@ void WebContentsDelegateAndroid::LoadProgressChanged(WebContents* source,
   Java_WebContentsDelegateAndroid_notifyLoadProgressChanged(env, obj, progress);
 }
 
-void WebContentsDelegateAndroid::RendererUnresponsive(WebContents* source) {
+void WebContentsDelegateAndroid::RendererUnresponsive(
+    WebContents* source,
+    const WebContentsUnresponsiveState& unresponsive_state) {
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jobject> obj = GetJavaDelegate(env);
   if (obj.is_null())
@@ -228,7 +231,8 @@ void WebContentsDelegateAndroid::WebContentsCreated(
     jnew_contents = new_contents->GetJavaWebContents();
 
   Java_WebContentsDelegateAndroid_webContentsCreated(
-      env, obj, jsource_contents, opener_render_frame_id,
+      env, obj, jsource_contents, opener_render_process_id,
+      opener_render_frame_id,
       base::android::ConvertUTF8ToJavaString(env, frame_name),
       base::android::ConvertUTF8ToJavaString(env, target_url.spec()),
       jnew_contents);
@@ -247,7 +251,7 @@ void WebContentsDelegateAndroid::MoveContents(WebContents* source,
   // Do nothing.
 }
 
-bool WebContentsDelegateAndroid::AddMessageToConsole(
+bool WebContentsDelegateAndroid::DidAddMessageToConsole(
     WebContents* source,
     int32_t level,
     const base::string16& message,
@@ -256,8 +260,8 @@ bool WebContentsDelegateAndroid::AddMessageToConsole(
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jobject> obj = GetJavaDelegate(env);
   if (obj.is_null())
-    return WebContentsDelegate::AddMessageToConsole(source, level, message,
-                                                    line_no, source_id);
+    return WebContentsDelegate::DidAddMessageToConsole(source, level, message,
+                                                       line_no, source_id);
   ScopedJavaLocalRef<jstring> jmessage(ConvertUTF16ToJavaString(env, message));
   ScopedJavaLocalRef<jstring> jsource_id(
       ConvertUTF16ToJavaString(env, source_id));

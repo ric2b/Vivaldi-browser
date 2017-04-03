@@ -122,7 +122,7 @@ static void normalizeCharacters(const TextRun& run,
 }
 
 HarfBuzzShaper::HarfBuzzShaper(const Font* font, const TextRun& run)
-    : Shaper(font, run), m_normalizedBufferLength(0) {
+    : m_font(font), m_textRun(run), m_normalizedBufferLength(0) {
   m_normalizedBuffer = wrapArrayUnique(new UChar[m_textRun.length() + 1]);
   normalizeCharacters(m_textRun, m_textRun.length(), m_normalizedBuffer.get(),
                       &m_normalizedBufferLength);
@@ -348,8 +348,6 @@ static inline hb_direction_t TextDirectionToHBDirection(
 
 inline bool HarfBuzzShaper::shapeRange(
     hb_buffer_t* harfBuzzBuffer,
-    unsigned startIndex,
-    unsigned numCharacters,
     const SimpleFontData* currentFont,
     PassRefPtr<UnicodeRangeSet> currentFontRangeSet,
     UScriptCode currentRunScript,
@@ -686,9 +684,7 @@ PassRefPtr<ShapeResult> HarfBuzzShaper::shapeResult() {
       CapsFeatureSettingsScopedOverlay capsOverlay(
           m_features, capsSupport.fontFeatureToUse(smallCapsBehavior));
 
-      if (!shapeRange(harfBuzzBuffer.get(), currentQueueItem.m_startIndex,
-                      currentQueueItem.m_numCharacters,
-                      directionAndSmallCapsAdjustedFont,
+      if (!shapeRange(harfBuzzBuffer.get(), directionAndSmallCapsAdjustedFont,
                       currentFontDataForRangeSet->ranges(), segmentRange.script,
                       language))
         DLOG(ERROR) << "Shaping range failed.";

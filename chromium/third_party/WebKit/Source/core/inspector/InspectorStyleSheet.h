@@ -44,7 +44,6 @@ class CSSMediaRule;
 class CSSStyleDeclaration;
 class CSSStyleRule;
 class CSSStyleSheet;
-class Document;
 class Element;
 class ExceptionState;
 class InspectorNetworkAgent;
@@ -173,6 +172,8 @@ class InspectorStyleSheet : public InspectorStyleSheetBase {
   buildObjectForStyleSheetInfo();
   std::unique_ptr<protocol::CSS::CSSRule> buildObjectForRuleWithoutMedia(
       CSSStyleRule*);
+  std::unique_ptr<protocol::CSS::RuleUsage> buildObjectForRuleUsage(CSSRule*,
+                                                                    bool);
   std::unique_ptr<protocol::CSS::CSSKeyframeRule> buildObjectForKeyframeRule(
       CSSKeyframeRule*);
   std::unique_ptr<protocol::CSS::SelectorList> buildObjectForSelectorList(

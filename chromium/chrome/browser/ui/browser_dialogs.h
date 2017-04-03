@@ -12,12 +12,11 @@
 #include "base/callback.h"
 #include "build/build_config.h"
 #include "chrome/browser/ui/bookmarks/bookmark_editor.h"
-#include "components/security_state/security_state_model.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/native_widget_types.h"
 
 #if defined(OS_CHROMEOS)
-#include "chrome/browser/chromeos/arc/arc_navigation_throttle.h"
+#include "chrome/browser/chromeos/arc/intent_helper/arc_navigation_throttle.h"
 #endif  // OS_CHROMEOS
 
 class Browser;
@@ -54,6 +53,10 @@ class AuthChallengeInfo;
 class URLRequest;
 }
 
+namespace security_state {
+struct SecurityInfo;
+}  // namespace security_state
+
 namespace task_manager {
 class TaskManagerTableModel;
 }
@@ -88,11 +91,23 @@ void HideTaskManager();
 gfx::NativeWindow ShowWebDialog(gfx::NativeView parent,
                                 content::BrowserContext* context,
                                 ui::WebDialogDelegate* delegate);
+#endif  // !defined(OS_MACOSX)
 
+#if defined(USE_ASH)
+// Creates and shows an HTML dialog with the given delegate and browser context.
+// The dialog is placed in the ash window hierarchy in the given container.
+// See ash/public/cpp/shell_window_ids.h for |container_id| values. The window
+// is destroyed when it is closed. See also chrome::ShowWebDialog().
+void ShowWebDialogInContainer(int container_id,
+                              content::BrowserContext* context,
+                              ui::WebDialogDelegate* delegate);
+#endif  // defined(USE_ASH)
+
+#if !defined(OS_MACOSX)
 // Shows the create web app shortcut dialog box.
 void ShowCreateWebAppShortcutsDialog(gfx::NativeWindow parent_window,
                                      content::WebContents* web_contents);
-#endif
+#endif  // !defined(OS_MACOSX)
 
 // Shows the create chrome app shortcut dialog box.
 // |close_callback| may be null.
@@ -122,7 +137,7 @@ void ShowWebsiteSettingsBubbleViewsAtPoint(
     Profile* profile,
     content::WebContents* web_contents,
     const GURL& virtual_url,
-    const security_state::SecurityStateModel::SecurityInfo& security_info);
+    const security_state::SecurityInfo& security_info);
 
 // Show a Views bookmark bubble at the given point. This occurs when the
 // bookmark star is clicked or "Bookmark This Page..." is selected from a menu
@@ -180,7 +195,8 @@ class ContentSettingBubbleViewsBridge {
 // these cases we return a dummy value which won't be used at all and has no
 // significance.
 using IntentPickerResponse =
-    base::Callback<void(std::string, arc::ArcNavigationThrottle::CloseReason)>;
+    base::Callback<void(const std::string&,
+                        arc::ArcNavigationThrottle::CloseReason)>;
 
 // Return a pointer to the IntentPickerBubbleView::ShowBubble method.
 using BubbleShowPtr =

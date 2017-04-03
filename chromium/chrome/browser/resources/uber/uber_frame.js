@@ -169,8 +169,7 @@ cr.define('uber_frame', function() {
   function setNavigationOverride(controls, override) {
     var navItem =
         document.querySelector('li[controls="' + controls + '"]');
-    if(navItem)
-      navItem.setAttribute('override', override);
+    navItem.setAttribute('override', override);
   }
 
   return {

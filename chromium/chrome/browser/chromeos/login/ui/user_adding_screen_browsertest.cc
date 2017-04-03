@@ -111,31 +111,33 @@ IN_PROC_BROWSER_TEST_F(UserAddingScreenTest, PRE_CancelAdding) {
 IN_PROC_BROWSER_TEST_F(UserAddingScreenTest, CancelAdding) {
   EXPECT_EQ(3u, user_manager::UserManager::Get()->GetUsers().size());
   EXPECT_EQ(0u, user_manager::UserManager::Get()->GetLoggedInUsers().size());
-  EXPECT_EQ(ash::SessionStateDelegate::SESSION_STATE_LOGIN_PRIMARY,
+  EXPECT_EQ(session_manager::SessionState::LOGIN_PRIMARY,
             ash::WmShell::Get()->GetSessionStateDelegate()->GetSessionState());
 
   LoginUser(kTestUsers[0]);
   EXPECT_EQ(1u, user_manager::UserManager::Get()->GetLoggedInUsers().size());
-  EXPECT_EQ(ash::SessionStateDelegate::SESSION_STATE_ACTIVE,
+  EXPECT_EQ(session_manager::SessionState::ACTIVE,
             ash::WmShell::Get()->GetSessionStateDelegate()->GetSessionState());
 
   UserAddingScreen::Get()->Start();
   content::RunAllPendingInMessageLoop();
   EXPECT_EQ(1, user_adding_started());
-  EXPECT_EQ(ash::SessionStateDelegate::SESSION_STATE_LOGIN_SECONDARY,
+  EXPECT_EQ(session_manager::SessionState::LOGIN_SECONDARY,
             ash::WmShell::Get()->GetSessionStateDelegate()->GetSessionState());
 
   UserAddingScreen::Get()->Cancel();
   WaitUntilUserAddingFinishedOrCancelled();
   content::RunAllPendingInMessageLoop();
   EXPECT_EQ(1, user_adding_finished());
-  EXPECT_EQ(ash::SessionStateDelegate::SESSION_STATE_ACTIVE,
+  EXPECT_EQ(session_manager::SessionState::ACTIVE,
             ash::WmShell::Get()->GetSessionStateDelegate()->GetSessionState());
 
   EXPECT_TRUE(LoginDisplayHost::default_host() == nullptr);
   EXPECT_EQ(1u, user_manager::UserManager::Get()->GetLoggedInUsers().size());
-  EXPECT_EQ(kTestUsers[0],
-            user_manager::UserManager::Get()->GetActiveUser()->email());
+  EXPECT_EQ(kTestUsers[0], user_manager::UserManager::Get()
+                               ->GetActiveUser()
+                               ->GetAccountId()
+                               .GetUserEmail());
 }
 
 IN_PROC_BROWSER_TEST_F(UserAddingScreenTest, PRE_AddingSeveralUsers) {
@@ -147,10 +149,10 @@ IN_PROC_BROWSER_TEST_F(UserAddingScreenTest, PRE_AddingSeveralUsers) {
 
 IN_PROC_BROWSER_TEST_F(UserAddingScreenTest, AddingSeveralUsers) {
   ash::WmShell* wm_shell = ash::WmShell::Get();
-  EXPECT_EQ(ash::SessionStateDelegate::SESSION_STATE_LOGIN_PRIMARY,
+  EXPECT_EQ(session_manager::SessionState::LOGIN_PRIMARY,
             wm_shell->GetSessionStateDelegate()->GetSessionState());
   LoginUser(kTestUsers[0]);
-  EXPECT_EQ(ash::SessionStateDelegate::SESSION_STATE_ACTIVE,
+  EXPECT_EQ(session_manager::SessionState::ACTIVE,
             wm_shell->GetSessionStateDelegate()->GetSessionState());
 
   user_manager::UserManager* user_manager = user_manager::UserManager::Get();
@@ -159,19 +161,19 @@ IN_PROC_BROWSER_TEST_F(UserAddingScreenTest, AddingSeveralUsers) {
     UserAddingScreen::Get()->Start();
     content::RunAllPendingInMessageLoop();
     EXPECT_EQ(i, user_adding_started());
-    EXPECT_EQ(ash::SessionStateDelegate::SESSION_STATE_LOGIN_SECONDARY,
+    EXPECT_EQ(session_manager::SessionState::LOGIN_SECONDARY,
               wm_shell->GetSessionStateDelegate()->GetSessionState());
     AddUser(kTestUsers[i]);
     WaitUntilUserAddingFinishedOrCancelled();
     content::RunAllPendingInMessageLoop();
     EXPECT_EQ(i, user_adding_finished());
-    EXPECT_EQ(ash::SessionStateDelegate::SESSION_STATE_ACTIVE,
+    EXPECT_EQ(session_manager::SessionState::ACTIVE,
               wm_shell->GetSessionStateDelegate()->GetSessionState());
     EXPECT_TRUE(LoginDisplayHost::default_host() == nullptr);
     ASSERT_EQ(unsigned(i + 1), user_manager->GetLoggedInUsers().size());
   }
 
-  EXPECT_EQ(ash::SessionStateDelegate::SESSION_STATE_ACTIVE,
+  EXPECT_EQ(session_manager::SessionState::ACTIVE,
             wm_shell->GetSessionStateDelegate()->GetSessionState());
 
   // Now check how unlock policy works for these users.
@@ -205,12 +207,12 @@ IN_PROC_BROWSER_TEST_F(UserAddingScreenTest, AddingSeveralUsers) {
                     MultiProfileUserController::kBehaviorUnrestricted);
   user_manager::UserList unlock_users = user_manager->GetUnlockUsers();
   ASSERT_EQ(1UL, unlock_users.size());
-  EXPECT_EQ(kTestUsers[0], unlock_users[0]->email());
+  EXPECT_EQ(kTestUsers[0], unlock_users[0]->GetAccountId().GetUserEmail());
 
   prefs1->SetBoolean(prefs::kEnableAutoScreenLock, false);
   unlock_users = user_manager->GetUnlockUsers();
   ASSERT_EQ(1UL, unlock_users.size());
-  EXPECT_EQ(kTestUsers[0], unlock_users[0]->email());
+  EXPECT_EQ(kTestUsers[0], unlock_users[0]->GetAccountId().GetUserEmail());
 
   // If all users have unrestricted policy then anyone can perform unlock.
   prefs1->SetString(prefs::kMultiProfileUserBehavior,
@@ -218,21 +220,21 @@ IN_PROC_BROWSER_TEST_F(UserAddingScreenTest, AddingSeveralUsers) {
   unlock_users = user_manager->GetUnlockUsers();
   ASSERT_EQ(3UL, unlock_users.size());
   for (int i = 0; i < 3; ++i)
-    EXPECT_EQ(kTestUsers[i], unlock_users[i]->email());
+    EXPECT_EQ(kTestUsers[i], unlock_users[i]->GetAccountId().GetUserEmail());
 
   // This preference doesn't affect list of unlock users.
   prefs2->SetBoolean(prefs::kEnableAutoScreenLock, true);
   unlock_users = user_manager->GetUnlockUsers();
   ASSERT_EQ(3UL, unlock_users.size());
   for (int i = 0; i < 3; ++i)
-    EXPECT_EQ(kTestUsers[i], unlock_users[i]->email());
+    EXPECT_EQ(kTestUsers[i], unlock_users[i]->GetAccountId().GetUserEmail());
 
   // Now one of the users is unable to unlock.
   SetUserCanLock(user_manager->GetLoggedInUsers()[2], false);
   unlock_users = user_manager->GetUnlockUsers();
   ASSERT_EQ(2UL, unlock_users.size());
   for (int i = 0; i < 2; ++i)
-    EXPECT_EQ(kTestUsers[i], unlock_users[i]->email());
+    EXPECT_EQ(kTestUsers[i], unlock_users[i]->GetAccountId().GetUserEmail());
   SetUserCanLock(user_manager->GetLoggedInUsers()[2], true);
 
   // Now one of the users has not-allowed policy.
@@ -244,7 +246,7 @@ IN_PROC_BROWSER_TEST_F(UserAddingScreenTest, AddingSeveralUsers) {
   unlock_users = user_manager->GetUnlockUsers();
   ASSERT_EQ(2UL, unlock_users.size());
   for (int i = 0; i < 2; ++i)
-    EXPECT_EQ(kTestUsers[i], unlock_users[i]->email());
+    EXPECT_EQ(kTestUsers[i], unlock_users[i]->GetAccountId().GetUserEmail());
 }
 
 IN_PROC_BROWSER_TEST_F(UserAddingScreenTest, PRE_ScreenVisibility) {

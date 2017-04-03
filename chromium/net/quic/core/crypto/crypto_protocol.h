@@ -103,9 +103,10 @@ const QuicTag k5RTO = TAG('5', 'R', 'T', 'O');   // Close connection on 5 RTOs
 const QuicTag kCTIM = TAG('C', 'T', 'I', 'M');   // Client timestamp in seconds
                                                  // since UNIX epoch.
 const QuicTag kDHDT = TAG('D', 'H', 'D', 'T');   // Disable HPACK dynamic table.
-const QuicTag kIPFS = TAG('I', 'P', 'F', 'S');   // No Immediate Forward Secrecy
 const QuicTag kCONH = TAG('C', 'O', 'N', 'H');   // Conservative Handshake
                                                  // Retransmissions.
+const QuicTag kLFAK = TAG('L', 'F', 'A', 'K');   // Don't invoke FACK on the
+                                                 // first ack.
 
 // Optional support of truncated Connection IDs.  If sent by a peer, the value
 // is the minimum number of bytes allowed for the connection ID sent to the
@@ -128,7 +129,11 @@ const QuicTag kBWS2 = TAG('B', 'W', 'S', '2');  // Server bw resumption v2.
 const QuicTag kMTUH = TAG('M', 'T', 'U', 'H');  // High-target MTU discovery.
 const QuicTag kMTUL = TAG('M', 'T', 'U', 'L');  // Low-target MTU discovery.
 
-const QuicTag kFHOL = TAG('F', 'H', 'O', 'L');   // Force head of line blocking.
+// Tags for async signing experiments
+const QuicTag kASYN = TAG('A', 'S', 'Y', 'N');  // Perform asynchronous signing
+const QuicTag kSYNC = TAG('S', 'Y', 'N', 'C');  // Perform synchronous signing
+
+const QuicTag kFHL2 = TAG('F', 'H', 'L', '2');   // Force head of line blocking.
 
 // Proof types (i.e. certificate types)
 // NOTE: although it would be silly to do so, specifying both kX509 and kX59R
@@ -147,8 +152,7 @@ const QuicTag kKEXS = TAG('K', 'E', 'X', 'S');   // Key exchange methods
 const QuicTag kAEAD = TAG('A', 'E', 'A', 'D');   // Authenticated
                                                  // encryption algorithms
 const QuicTag kCOPT = TAG('C', 'O', 'P', 'T');   // Connection options
-const QuicTag kICSL = TAG('I', 'C', 'S', 'L');   // Idle connection state
-                                                 // lifetime
+const QuicTag kICSL = TAG('I', 'C', 'S', 'L');   // Idle network timeout
 const QuicTag kSCLS = TAG('S', 'C', 'L', 'S');   // Silently close on timeout
 const QuicTag kMSPC = TAG('M', 'S', 'P', 'C');   // Max streams per connection.
 const QuicTag kMIDS = TAG('M', 'I', 'D', 'S');   // Max incoming dynamic streams
@@ -201,8 +205,6 @@ const QuicTag kPAD  = TAG('P', 'A', 'D', '\0');  // Padding
 // Server push tags
 const QuicTag kSPSH = TAG('S', 'P', 'S', 'H');  // Support server push.
 
-// Sent by clients with the fix to crbug/566156
-const QuicTag kFIXD = TAG('F', 'I', 'X', 'D');   // Client hello
 // clang-format on
 
 // These tags have a special form so that they appear either at the beginning
@@ -233,11 +235,6 @@ const size_t kMaxEntries = 128;  // Max number of entries in a message.
 const size_t kNonceSize = 32;  // Size in bytes of the connection nonce.
 
 const size_t kOrbitSize = 8;  // Number of bytes in an orbit value.
-
-// kProofSignatureLabel is prepended to server configs before signing to avoid
-// any cross-protocol attacks on the signature.
-// TODO(rch): Remove this when QUIC_VERSION_30 is removed.
-const char kProofSignatureLabelOld[] = "QUIC server config signature";
 
 // kProofSignatureLabel is prepended to the CHLO hash and server configs before
 // signing to avoid any cross-protocol attacks on the signature.

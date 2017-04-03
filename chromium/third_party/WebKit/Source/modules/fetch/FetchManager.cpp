@@ -30,12 +30,14 @@
 #include "modules/fetch/Response.h"
 #include "modules/fetch/ResponseInit.h"
 #include "platform/HTTPNames.h"
+#include "platform/network/NetworkUtils.h"
 #include "platform/network/ResourceError.h"
 #include "platform/network/ResourceRequest.h"
 #include "platform/network/ResourceResponse.h"
 #include "platform/weborigin/SchemeRegistry.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "platform/weborigin/SecurityPolicy.h"
+#include "platform/weborigin/Suborigin.h"
 #include "public/platform/WebURLRequest.h"
 #include "wtf/HashSet.h"
 #include "wtf/Vector.h"
@@ -45,11 +47,6 @@
 namespace blink {
 
 namespace {
-
-bool IsRedirectStatusCode(int statusCode) {
-  return (statusCode == 301 || statusCode == 302 || statusCode == 303 ||
-          statusCode == 307 || statusCode == 308);
-}
 
 class SRIBytesConsumer final : public BytesConsumer {
  public:
@@ -216,7 +213,7 @@ class FetchManager::Loader final
       if (r == WebDataConsumerHandle::Done) {
         if (SubresourceIntegrity::CheckSubresourceIntegrity(
                 m_integrityMetadata, m_buffer.data(), m_buffer.size(), m_url,
-                *m_loader->document(), errorMessage)) {
+                *m_loader->executionContext(), errorMessage)) {
           m_updater->update(
               new FormDataBytesConsumer(m_buffer.data(), m_buffer.size()));
           m_loader->m_resolver->resolve(m_response);
@@ -273,6 +270,7 @@ class FetchManager::Loader final
   void failed(const String& message);
   void notifyFinished();
   Document* document() const;
+  ExecutionContext* executionContext() { return m_executionContext; }
   void loadSucceeded();
 
   Member<FetchManager> m_fetchManager;
@@ -433,7 +431,7 @@ void FetchManager::Loader::didReceiveResponse(
 
   FetchResponseData* taintedResponse = nullptr;
 
-  if (IsRedirectStatusCode(m_responseHttpStatusCode)) {
+  if (NetworkUtils::isRedirectResponseCode(m_responseHttpStatusCode)) {
     Vector<String> locations;
     responseData->headerList()->getAll(HTTPNames::Location, locations);
     if (locations.size() > 1) {
@@ -764,17 +762,33 @@ void FetchManager::Loader::performHTTPFetch(bool corsFlag,
   // "5. Let |credentials flag| be set if either |HTTPRequest|'s credentials
   // mode is |include|, or |HTTPRequest|'s credentials mode is |same-origin|
   // and the |CORS flag| is unset, and unset otherwise.
+  //
+  // Also, for the last case,
+  // https://w3c.github.io/webappsec-suborigins/#security-model-opt-outs:
+  // "request's credentials mode is "same-origin" and request's environment
+  // settings object has the suborigin unsafe credentials flag set and the
+  // request’s current url is same-physical-origin with request origin."
   ResourceLoaderOptions resourceLoaderOptions;
   resourceLoaderOptions.dataBufferingPolicy = DoNotBufferData;
+  bool suboriginForcesCredentials =
+      (m_request->credentials() ==
+           WebURLRequest::FetchCredentialsModeSameOrigin &&
+       m_request->origin()->hasSuborigin() &&
+       m_request->origin()->suborigin()->policyContains(
+           Suborigin::SuboriginPolicyOptions::UnsafeCredentials) &&
+       SecurityOrigin::create(m_request->url())
+           ->isSameSchemeHostPort(m_request->origin().get()));
   if (m_request->credentials() == WebURLRequest::FetchCredentialsModeInclude ||
       m_request->credentials() == WebURLRequest::FetchCredentialsModePassword ||
       (m_request->credentials() ==
            WebURLRequest::FetchCredentialsModeSameOrigin &&
-       !corsFlag)) {
+       !corsFlag) ||
+      suboriginForcesCredentials) {
     resourceLoaderOptions.allowCredentials = AllowStoredCredentials;
   }
   if (m_request->credentials() == WebURLRequest::FetchCredentialsModeInclude ||
-      m_request->credentials() == WebURLRequest::FetchCredentialsModePassword) {
+      m_request->credentials() == WebURLRequest::FetchCredentialsModePassword ||
+      suboriginForcesCredentials) {
     resourceLoaderOptions.credentialsRequested = ClientRequestedCredentials;
   }
   resourceLoaderOptions.securityOrigin = m_request->origin().get();

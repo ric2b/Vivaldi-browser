@@ -20,47 +20,21 @@ class ChooserController;
  @private
   base::scoped_nsobject<NSTextField> titleView_;
   base::scoped_nsobject<NSButton> adapterOffHelpButton_;
+  base::scoped_nsobject<NSTextField> adapterOffMessage_;
   base::scoped_nsobject<NSScrollView> scrollView_;
   base::scoped_nsobject<NSTableColumn> tableColumn_;
   base::scoped_nsobject<NSTableView> tableView_;
   base::scoped_nsobject<SpinnerView> spinner_;
-  base::scoped_nsobject<NSTextField> status_;
-  base::scoped_nsobject<NSButton> rescanButton_;
   base::scoped_nsobject<NSButton> connectButton_;
   base::scoped_nsobject<NSButton> cancelButton_;
   base::scoped_nsobject<NSBox> separator_;
-  base::scoped_nsobject<NSTextField> message_;
   base::scoped_nsobject<NSButton> helpButton_;
+  base::scoped_nsobject<NSTextField> scanningMessage_;
+  base::scoped_nsobject<NSTextField> wordConnector_;
+  base::scoped_nsobject<NSButton> rescanButton_;
   std::unique_ptr<ChooserController> chooserController_;
   std::unique_ptr<ChooserContentViewController> chooserContentViewController_;
-
-  CGFloat titleHeight_;
-  CGFloat statusHeight_;
-  CGFloat rescanButtonHeight_;
-  CGFloat connectButtonWidth_;
-  CGFloat connectButtonHeight_;
-  CGFloat cancelButtonWidth_;
-  CGFloat cancelButtonHeight_;
-  CGFloat messageHeight_;
-
-  struct FrameAndOrigin {
-    NSRect scroll_view_frame;
-    NSPoint connect_button_origin;
-    NSPoint cancel_button_origin;
-  };
-
-  // The cached |scrollView_| frame and |connectButton_| and |cancelButton_|
-  // origins for views layout:
-  // When |status_| is shown.
-  FrameAndOrigin statusShown_;
-  // When |rescanButton_| is shown.
-  FrameAndOrigin rescanButtonShown_;
-  // When neither |status_| nor |rescanButton_| is shown.
-  FrameAndOrigin noStatusOrRescanButtonShown_;
-
-  // The cached |status_| and |rescanButton_| origins.
-  NSPoint statusOrigin_;
-  NSPoint rescanButtonOrigin_;
+  CGFloat separatorOriginY_;
 }
 
 // Designated initializer.
@@ -93,24 +67,6 @@ class ChooserController;
 - (base::scoped_nsobject<NSButton>)createHyperlinkButtonWithText:
     (NSString*)text;
 
-// Calculates the frame for the |scrollView_|.
-- (NSRect)calculateScrollViewFrame:(CGFloat)buttonRowHeight;
-
-// Calculates the origin for the |status_| text.
-- (NSPoint)calculateStatusOrigin:(CGFloat)buttonRowHeight;
-
-// Calculates the origin for the "Re-scan" button.
-- (NSPoint)calculateRescanButtonOrigin:(CGFloat)buttonRowHeight;
-
-// Calculates the origin for the "Connect" button.
-- (NSPoint)calculateConnectButtonOrigin:(CGFloat)buttonRowHeight;
-
-// Calculates the origin for the "Cancel" button.
-- (NSPoint)calculateCancelButtonOrigin:(CGFloat)buttonRowHeight;
-
-// Updates the origin and size of the view.
-- (void)updateView;
-
 // Gets the adapter off help button.
 - (NSButton*)adapterOffHelpButton;
 
@@ -120,12 +76,6 @@ class ChooserController;
 // Gets the spinner.
 - (SpinnerView*)spinner;
 
-// Gets the status text field.
-- (NSTextField*)status;
-
-// Gets the "Re-scan" button.
-- (NSButton*)rescanButton;
-
 // Gets the "Connect" button.
 - (NSButton*)connectButton;
 
@@ -134,6 +84,15 @@ class ChooserController;
 
 // Gets the "Get help" button.
 - (NSButton*)helpButton;
+
+// Gets the scanning message.
+- (NSTextField*)scanningMessage;
+
+// Gets the word connector.
+- (NSTextField*)wordConnector;
+
+// Gets the "Re-scan" button.
+- (NSButton*)rescanButton;
 
 // The number of options in the |tableView_|.
 - (NSInteger)numberOfOptions;

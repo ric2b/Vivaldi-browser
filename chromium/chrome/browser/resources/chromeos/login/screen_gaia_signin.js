@@ -518,6 +518,9 @@ login.createScreen('GaiaSigninScreen', 'gaia-signin', function() {
       // Header is hidden once GAIA reports on successful sign in.
       Oobe.getInstance().headerHidden = false;
 
+      // Re-enable navigation in case it was disabled before refresh.
+      this.navigation_.disabled = false;
+
       this.lastBackMessageValue_ = false;
       this.updateControlsState();
     },
@@ -819,7 +822,7 @@ login.createScreen('GaiaSigninScreen', 'gaia-signin', function() {
      * Invoked when the dialog where the user enters a manual password for the
      * device, when password scraping fails.
      * @param {string} password The password the user entered. Not necessarily
-     *     the same as his SAML password.
+     *     the same as their SAML password.
      */
     onManualPasswordCollected_: function(password) {
       this.gaiaAuthHost_.completeAuthWithManualPassword(password);

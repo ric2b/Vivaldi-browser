@@ -18,10 +18,10 @@
 #include "media/mojo/common/media_type_converters.h"
 #include "media/mojo/interfaces/content_decryption_module.mojom.h"
 #include "media/mojo/interfaces/decryptor.mojom.h"
+#include "media/mojo/interfaces/interface_factory.mojom.h"
 #include "media/mojo/interfaces/renderer.mojom.h"
-#include "media/mojo/interfaces/service_factory.mojom.h"
 #include "mojo/public/cpp/bindings/associated_binding.h"
-#include "services/shell/public/cpp/service_test.h"
+#include "services/service_manager/public/cpp/service_test.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
 using testing::Exactly;
@@ -48,7 +48,7 @@ class MockRendererClient : public mojom::RendererClient {
                void(base::TimeDelta time,
                     base::TimeDelta max_time,
                     base::TimeTicks capture_time));
-  MOCK_METHOD1(OnBufferingStateChange, void(mojom::BufferingState state));
+  MOCK_METHOD1(OnBufferingStateChange, void(BufferingState state));
   MOCK_METHOD0(OnEnded, void());
   MOCK_METHOD0(OnError, void());
   MOCK_METHOD1(OnVideoOpacityChange, void(bool opaque));
@@ -62,10 +62,10 @@ class MockRendererClient : public mojom::RendererClient {
   DISALLOW_COPY_AND_ASSIGN(MockRendererClient);
 };
 
-class MediaServiceTest : public shell::test::ServiceTest {
+class MediaServiceTest : public service_manager::test::ServiceTest {
  public:
   MediaServiceTest()
-      : ServiceTest("exe:media_mojo_unittests"),
+      : ServiceTest("media_mojo_unittests"),
         renderer_client_binding_(&renderer_client_),
         video_stream_(DemuxerStream::VIDEO) {}
   ~MediaServiceTest() override {}
@@ -73,11 +73,11 @@ class MediaServiceTest : public shell::test::ServiceTest {
   void SetUp() override {
     ServiceTest::SetUp();
 
-    connection_ = connector()->Connect("service:media");
+    connection_ = connector()->Connect("media");
     connection_->SetConnectionLostClosure(base::Bind(
         &MediaServiceTest::ConnectionClosed, base::Unretained(this)));
 
-    connection_->GetInterface(&service_factory_);
+    connection_->GetInterface(&interface_factory_);
 
     run_loop_.reset(new base::RunLoop());
   }
@@ -94,7 +94,7 @@ class MediaServiceTest : public shell::test::ServiceTest {
   void InitializeCdm(const std::string& key_system,
                      bool expected_result,
                      int cdm_id) {
-    service_factory_->CreateCdm(mojo::GetProxy(&cdm_));
+    interface_factory_->CreateCdm(mojo::GetProxy(&cdm_));
 
     EXPECT_CALL(*this, OnCdmInitializedInternal(expected_result, cdm_id))
         .Times(Exactly(1))
@@ -109,7 +109,8 @@ class MediaServiceTest : public shell::test::ServiceTest {
 
   void InitializeRenderer(const VideoDecoderConfig& video_config,
                           bool expected_result) {
-    service_factory_->CreateRenderer(std::string(), mojo::GetProxy(&renderer_));
+    interface_factory_->CreateRenderer(std::string(),
+                                       mojo::GetProxy(&renderer_));
 
     video_stream_.set_video_decoder_config(video_config);
 
@@ -126,6 +127,7 @@ class MediaServiceTest : public shell::test::ServiceTest {
         .WillOnce(InvokeWithoutArgs(run_loop_.get(), &base::RunLoop::Quit));
     renderer_->Initialize(std::move(client_ptr_info), nullptr,
                           std::move(video_stream_proxy), base::nullopt,
+                          base::nullopt,
                           base::Bind(&MediaServiceTest::OnRendererInitialized,
                                      base::Unretained(this)));
   }
@@ -135,7 +137,7 @@ class MediaServiceTest : public shell::test::ServiceTest {
  protected:
   std::unique_ptr<base::RunLoop> run_loop_;
 
-  mojom::ServiceFactoryPtr service_factory_;
+  mojom::InterfaceFactoryPtr interface_factory_;
   mojom::ContentDecryptionModulePtr cdm_;
   mojom::RendererPtr renderer_;
 
@@ -146,7 +148,7 @@ class MediaServiceTest : public shell::test::ServiceTest {
   std::unique_ptr<MojoDemuxerStreamImpl> mojo_video_stream_;
 
  private:
-  std::unique_ptr<shell::Connection> connection_;
+  std::unique_ptr<service_manager::Connection> connection_;
 
   DISALLOW_COPY_AND_ASSIGN(MediaServiceTest);
 };
@@ -192,12 +194,12 @@ TEST_F(MediaServiceTest, Lifetime) {
   cdm_.reset();
   renderer_.reset();
 
-  // Disconnecting ServiceFactory service should terminate the app, which will
+  // Disconnecting InterfaceFactory service should terminate the app, which will
   // close the connection.
   EXPECT_CALL(*this, ConnectionClosed())
       .Times(Exactly(1))
       .WillOnce(Invoke(run_loop_.get(), &base::RunLoop::Quit));
-  service_factory_.reset();
+  interface_factory_.reset();
 
   run_loop_->Run();
 }

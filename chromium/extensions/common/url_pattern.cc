@@ -21,21 +21,20 @@
 #include "url/gurl.h"
 #include "url/url_util.h"
 
+#include "app/vivaldi_constants.h"
+
 const char URLPattern::kAllUrlsPattern[] = "<all_urls>";
 
 namespace {
 
 // TODO(aa): What about more obscure schemes like data: and javascript: ?
 // Note: keep this array in sync with kValidSchemeMasks.
-const char* kValidSchemes[] = {
-    url::kHttpScheme,
-    url::kHttpsScheme,
-    url::kFileScheme,
-    url::kFtpScheme,
-    content::kChromeUIScheme,
-    content::kVivaldiUIScheme,
-    extensions::kExtensionScheme,
+const char* const kValidSchemes[] = {
+    url::kHttpScheme,         url::kHttpsScheme,
+    url::kFileScheme,         url::kFtpScheme,
+    content::kChromeUIScheme, extensions::kExtensionScheme,
     url::kFileSystemScheme,
+    vivaldi::kVivaldiUIScheme,
 };
 
 const int kValidSchemeMasks[] = {
@@ -44,9 +43,9 @@ const int kValidSchemeMasks[] = {
   URLPattern::SCHEME_FILE,
   URLPattern::SCHEME_FTP,
   URLPattern::SCHEME_CHROMEUI,
-  URLPattern::SCHEME_VIVALDIUI,
   URLPattern::SCHEME_EXTENSION,
   URLPattern::SCHEME_FILESYSTEM,
+  URLPattern::SCHEME_VIVALDIUI,
 };
 
 static_assert(arraysize(kValidSchemes) == arraysize(kValidSchemeMasks),
@@ -116,6 +115,13 @@ std::string StripTrailingWildcard(const std::string& path) {
   size_t wildcard_index = path.find('*');
   size_t path_last = path.size() - 1;
   return wildcard_index == path_last ? path.substr(0, path_last) : path;
+}
+
+// Removes trailing dot from |host_piece| if any.
+base::StringPiece CanonicalizeHostForMatching(base::StringPiece host_piece) {
+  if (host_piece.ends_with("."))
+    host_piece.remove_suffix(1);
+  return host_piece;
 }
 
 }  // namespace
@@ -409,14 +415,18 @@ bool URLPattern::MatchesHost(const std::string& host) const {
 }
 
 bool URLPattern::MatchesHost(const GURL& test) const {
+  const base::StringPiece test_host(
+      CanonicalizeHostForMatching(test.host_piece()));
+  const base::StringPiece pattern_host(CanonicalizeHostForMatching(host_));
+
   // If the hosts are exactly equal, we have a match.
-  if (test.host() == host_)
+  if (test_host == pattern_host)
     return true;
 
   // If we're matching subdomains, and we have no host in the match pattern,
   // that means that we're matching all hosts, which means we have a match no
   // matter what the test host is.
-  if (match_subdomains_ && host_.empty())
+  if (match_subdomains_ && pattern_host.empty())
     return true;
 
   // Otherwise, we can only match if our match pattern matches subdomains.
@@ -429,14 +439,13 @@ bool URLPattern::MatchesHost(const GURL& test) const {
     return false;
 
   // Check if the test host is a subdomain of our host.
-  if (test.host().length() <= (host_.length() + 1))
+  if (test_host.length() <= (pattern_host.length() + 1))
     return false;
 
-  if (test.host().compare(test.host().length() - host_.length(),
-                          host_.length(), host_) != 0)
+  if (!test_host.ends_with(pattern_host))
     return false;
 
-  return test.host()[test.host().length() - host_.length() - 1] == '.';
+  return test_host[test_host.length() - pattern_host.length() - 1] == '.';
 }
 
 bool URLPattern::ImpliesAllHosts() const {
@@ -450,28 +459,24 @@ bool URLPattern::ImpliesAllHosts() const {
   if (!match_subdomains_)
     return false;
 
-  // If |host_| is a recognized TLD, this will be 0. We don't include private
-  // TLDs, so that, e.g., *.appspot.com does not imply all hosts.
-  size_t registry_length = net::registry_controlled_domains::GetRegistryLength(
-      host_,
-      net::registry_controlled_domains::EXCLUDE_UNKNOWN_REGISTRIES,
-      net::registry_controlled_domains::EXCLUDE_PRIVATE_REGISTRIES);
   // If there was more than just a TLD in the host (e.g., *.foobar.com), it
-  // doesn't imply all hosts.
-  if (registry_length > 0)
+  // doesn't imply all hosts. We don't include private TLDs, so that, e.g.,
+  // *.appspot.com does not imply all hosts.
+  if (net::registry_controlled_domains::HostHasRegistryControlledDomain(
+          host_, net::registry_controlled_domains::EXCLUDE_UNKNOWN_REGISTRIES,
+          net::registry_controlled_domains::EXCLUDE_PRIVATE_REGISTRIES))
     return false;
 
   // At this point the host could either be just a TLD ("com") or some unknown
   // TLD-like string ("notatld"). To disambiguate between them construct a
-  // fake URL, and check the registry. This returns 0 if the TLD is
-  // unrecognized, or the length of the recognized TLD.
-  registry_length = net::registry_controlled_domains::GetRegistryLength(
-      base::StringPrintf("foo.%s", host_.c_str()),
+  // fake URL, and check the registry.
+  //
+  // If we recognized this TLD, then this is a pattern like *.com, and it
+  // should imply all hosts.
+  return net::registry_controlled_domains::HostHasRegistryControlledDomain(
+      "notatld." + host_,
       net::registry_controlled_domains::EXCLUDE_UNKNOWN_REGISTRIES,
       net::registry_controlled_domains::EXCLUDE_PRIVATE_REGISTRIES);
-  // If we recognized this TLD, then this is a pattern like *.com, and it
-  // should imply all hosts. Otherwise, this doesn't imply all hosts.
-  return registry_length > 0;
 }
 
 bool URLPattern::MatchesSingleOrigin() const {

@@ -4,9 +4,6 @@
 
 #include "components/gcm_driver/crypto/p256_key_util.h"
 
-#include <openssl/ec.h>
-#include <openssl/ecdh.h>
-#include <openssl/evp.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -16,7 +13,9 @@
 #include "base/logging.h"
 #include "base/strings/string_util.h"
 #include "crypto/ec_private_key.h"
-#include "crypto/scoped_openssl_types.h"
+#include "third_party/boringssl/src/include/openssl/ec.h"
+#include "third_party/boringssl/src/include/openssl/ecdh.h"
+#include "third_party/boringssl/src/include/openssl/evp.h"
 
 namespace gcm {
 
@@ -113,29 +112,27 @@ bool ComputeSharedP256Secret(const base::StringPiece& private_key,
     return false;
   }
 
-  crypto::ScopedEC_KEY ec_private_key(
-      EVP_PKEY_get1_EC_KEY(local_key_pair->key()));
-
-  if (!ec_private_key || !EC_KEY_check_key(ec_private_key.get())) {
+  EC_KEY* ec_private_key = EVP_PKEY_get0_EC_KEY(local_key_pair->key());
+  if (!ec_private_key || !EC_KEY_check_key(ec_private_key)) {
     DLOG(ERROR) << "The private key is invalid.";
     return false;
   }
 
-  crypto::ScopedEC_POINT point(
-      EC_POINT_new(EC_KEY_get0_group(ec_private_key.get())));
+  bssl::UniquePtr<EC_POINT> point(
+      EC_POINT_new(EC_KEY_get0_group(ec_private_key)));
 
   if (!point ||
-      !EC_POINT_oct2point(EC_KEY_get0_group(ec_private_key.get()), point.get(),
-                                            reinterpret_cast<const uint8_t*>(
-                                                peer_public_key.data()),
-                                            peer_public_key.size(), nullptr)) {
+      !EC_POINT_oct2point(
+          EC_KEY_get0_group(ec_private_key), point.get(),
+          reinterpret_cast<const uint8_t*>(peer_public_key.data()),
+          peer_public_key.size(), nullptr)) {
     DLOG(ERROR) << "Can't convert peer public value to curve point.";
     return false;
   }
 
   uint8_t result[kFieldBytes];
-  if (ECDH_compute_key(result, sizeof(result), point.get(),
-                       ec_private_key.get(), nullptr) != sizeof(result)) {
+  if (ECDH_compute_key(result, sizeof(result), point.get(), ec_private_key,
+                       nullptr) != sizeof(result)) {
     DLOG(ERROR) << "Unable to compute the ECDH shared secret.";
     return false;
   }

@@ -9,11 +9,10 @@
 #include "base/guid.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
-#include "base/strings/string16.h"
-#include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/android/shortcut_helper.h"
 #include "chrome/browser/android/shortcut_info.h"
 #include "chrome/browser/android/tab_android.h"
+#include "chrome/browser/android/webapk/chrome_webapk_host.h"
 #include "chrome/browser/android/webapk/webapk_installer.h"
 #include "chrome/browser/banners/app_banner_manager.h"
 #include "chrome/browser/banners/app_banner_metrics.h"
@@ -21,9 +20,7 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/ui/android/infobars/app_banner_infobar_android.h"
-#include "chrome/common/render_messages.h"
 #include "components/rappor/rappor_utils.h"
-#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/manifest.h"
 #include "jni/AppBannerInfoBarDelegateAndroid_jni.h"
@@ -55,13 +52,20 @@ bool AppBannerInfoBarDelegateAndroid::Create(
     std::unique_ptr<ShortcutInfo> shortcut_info,
     std::unique_ptr<SkBitmap> icon,
     int event_request_id,
-    bool is_webapk,
     webapk::InstallSource webapk_install_source) {
+  bool is_webapk = ChromeWebApkHost::AreWebApkEnabled();
+  std::string webapk_package_name = "";
+  if (is_webapk) {
+    webapk_package_name = ShortcutHelper::QueryWebApkPackage(
+        web_contents->GetLastCommittedURL());
+  }
+  bool is_webapk_already_installed = !webapk_package_name.empty();
   const GURL& url = shortcut_info->url;
   auto infobar_delegate =
       base::WrapUnique(new banners::AppBannerInfoBarDelegateAndroid(
           weak_manager, app_title, std::move(shortcut_info), std::move(icon),
-          event_request_id, is_webapk, webapk_install_source));
+          event_request_id, is_webapk, is_webapk_already_installed,
+          webapk_install_source));
   auto raw_delegate = infobar_delegate.get();
   auto infobar = base::MakeUnique<AppBannerInfoBarAndroid>(
       std::move(infobar_delegate), url, is_webapk);
@@ -71,8 +75,12 @@ bool AppBannerInfoBarDelegateAndroid::Create(
 
   if (is_webapk) {
     if (webapk_install_source == webapk::INSTALL_SOURCE_MENU) {
-      raw_delegate->Accept();
-      webapk::TrackInstallInfoBarShown(webapk::WEBAPK_INFOBAR_SHOWN_FROM_MENU);
+      webapk::TrackInstallInfoBarShown(
+          webapk::WEBAPK_INFOBAR_SHOWN_FROM_MENU);
+      if (is_webapk_already_installed)
+        raw_delegate->UpdateStateForInstalledWebAPK(webapk_package_name);
+      else
+        raw_delegate->Accept();
     } else {
       webapk::TrackInstallInfoBarShown(
           webapk::WEBAPK_INFOBAR_SHOWN_FROM_BANNER);
@@ -106,13 +114,15 @@ AppBannerInfoBarDelegateAndroid::~AppBannerInfoBarDelegateAndroid() {
     if (!native_app_data_.is_null()) {
       TrackUserResponse(USER_RESPONSE_NATIVE_APP_IGNORED);
     } else {
-      TrackUserResponse(USER_RESPONSE_WEB_APP_IGNORED);
+      if (TriggeredFromBanner())
+        TrackUserResponse(USER_RESPONSE_WEB_APP_IGNORED);
       if (is_webapk_)
         webapk::TrackInstallEvent(webapk::INFOBAR_IGNORED);
     }
   }
 
-  TrackDismissEvent(DISMISS_EVENT_DISMISSED);
+  if (TriggeredFromBanner())
+    TrackDismissEvent(DISMISS_EVENT_DISMISSED);
   JNIEnv* env = base::android::AttachCurrentThread();
   Java_AppBannerInfoBarDelegateAndroid_destroy(env, java_delegate_);
   java_delegate_.Reset();
@@ -170,58 +180,37 @@ void AppBannerInfoBarDelegateAndroid::OnInstallFinished(
   }
 }
 
-bool AppBannerInfoBarDelegateAndroid::AcceptWebApk(
-    content::WebContents* web_contents) {
-  if (IsInfoEmpty(shortcut_info_))
-    return true;
+bool AppBannerInfoBarDelegateAndroid::Accept() {
+  has_user_interaction_ = true;
 
+  content::WebContents* web_contents =
+      InfoBarService::WebContentsFromInfoBar(infobar());
+  if (!web_contents) {
+    if (TriggeredFromBanner())
+      TrackDismissEvent(DISMISS_EVENT_ERROR);
+    return true;
+  }
+
+  if (!native_app_data_.is_null())
+    return AcceptNativeApp(web_contents);
+
+  if (is_webapk_)
+    return AcceptWebApk(web_contents);
+
+  return AcceptWebApp(web_contents);
+}
+
+void AppBannerInfoBarDelegateAndroid::UpdateStateForInstalledWebAPK(
+    const std::string& webapk_package_name) {
   JNIEnv* env = base::android::AttachCurrentThread();
-  // |webapk_package_name_| is set when the WebAPK has finished installing.
-  // If the |webapk_package_name_| is empty, it means the "Add to Homescreen"
-  // button is pressed, so request WebAPK installation. Otherwise, it means
-  // the "Open" button is pressed, so open the installed WebAPK.
-  if (!webapk_package_name_.empty()) {
-    // Open the WebAPK.
-    ScopedJavaLocalRef<jstring> java_webapk_package_name =
-        base::android::ConvertUTF8ToJavaString(env, webapk_package_name_);
-    Java_AppBannerInfoBarDelegateAndroid_openWebApk(env, java_delegate_,
-                                                    java_webapk_package_name);
-    webapk::TrackUserAction(webapk::USER_ACTION_INSTALLED_OPEN);
-    SendBannerAccepted(web_contents, "web");
-    return true;
-  }
-
-  // Check whether the WebAPK has been installed.
-  std::string installed_webapk_package_name =
-      ShortcutHelper::QueryWebApkPackage(web_contents->GetLastCommittedURL());
-  if (installed_webapk_package_name.empty()) {
-    // Request install the WebAPK.
-    install_state_ = INSTALLING;
-    TrackUserResponse(USER_RESPONSE_WEB_APP_ACCEPTED);
-    webapk::TrackInstallSource(webapk_install_source_);
-    AppBannerSettingsHelper::RecordBannerInstallEvent(
-        web_contents, shortcut_info_->url.spec(), AppBannerSettingsHelper::WEB);
-
-    Java_AppBannerInfoBarDelegateAndroid_setWebApkInstallingState(
-        env, java_delegate_, true);
-    UpdateInstallState(env, nullptr);
-    WebApkInstaller::FinishCallback callback =
-        base::Bind(&AppBannerInfoBarDelegateAndroid::OnWebApkInstallFinished,
-                    weak_ptr_factory_.GetWeakPtr());
-    ShortcutHelper::InstallWebApkWithSkBitmap(web_contents->GetBrowserContext(),
-                                              *shortcut_info_,
-                                              *icon_.get(), callback);
-    SendBannerAccepted(web_contents, "web");
-
-    // Prevent the infobar from disappearing, because the infobar will show
-    // "Adding" during the installation process.
-    return false;
-  }
-
-  // Bypass the installation since WebAPK is already installed.
-  TrackUserResponse(USER_RESPONSE_WEB_APP_ACCEPTED);
-  OnWebApkInstallFinished(true, installed_webapk_package_name);
-  return false;
+  ScopedJavaLocalRef<jstring> java_webapk_package_name =
+      base::android::ConvertUTF8ToJavaString(env, webapk_package_name);
+  Java_AppBannerInfoBarDelegateAndroid_setWebApkInstallingState(
+      env, java_delegate_, false);
+  Java_AppBannerInfoBarDelegateAndroid_setWebApkPackageName(
+      env, java_delegate_, java_webapk_package_name);
+  UpdateInstallState(env, nullptr);
+  install_state_ = INSTALLED;
 }
 
 AppBannerInfoBarDelegateAndroid::AppBannerInfoBarDelegateAndroid(
@@ -231,6 +220,7 @@ AppBannerInfoBarDelegateAndroid::AppBannerInfoBarDelegateAndroid(
     std::unique_ptr<SkBitmap> icon,
     int event_request_id,
     bool is_webapk,
+    bool is_webapk_already_installed,
     webapk::InstallSource webapk_install_source)
     : weak_manager_(weak_manager),
       app_title_(app_title),
@@ -239,6 +229,7 @@ AppBannerInfoBarDelegateAndroid::AppBannerInfoBarDelegateAndroid(
       event_request_id_(event_request_id),
       has_user_interaction_(false),
       is_webapk_(is_webapk),
+      is_webapk_already_installed_(is_webapk_already_installed),
       install_state_(INSTALL_NOT_STARTED),
       webapk_install_source_(webapk_install_source),
       weak_ptr_factory_(this) {
@@ -271,76 +262,6 @@ void AppBannerInfoBarDelegateAndroid::CreateJavaDelegate() {
       reinterpret_cast<intptr_t>(this)));
 }
 
-void AppBannerInfoBarDelegateAndroid::SendBannerAccepted(
-    content::WebContents* web_contents,
-    const std::string& platform) {
-  web_contents->GetMainFrame()->Send(
-      new ChromeViewMsg_AppBannerAccepted(
-          web_contents->GetMainFrame()->GetRoutingID(),
-          event_request_id_,
-          platform));
-}
-
-infobars::InfoBarDelegate::InfoBarIdentifier
-AppBannerInfoBarDelegateAndroid::GetIdentifier() const {
-  return APP_BANNER_INFOBAR_DELEGATE_ANDROID;
-}
-
-gfx::Image AppBannerInfoBarDelegateAndroid::GetIcon() const {
-  return gfx::Image::CreateFrom1xBitmap(*icon_.get());
-}
-
-void AppBannerInfoBarDelegateAndroid::InfoBarDismissed() {
-  has_user_interaction_ = true;
-
-  content::WebContents* web_contents =
-      InfoBarService::WebContentsFromInfoBar(infobar());
-
-  web_contents->GetMainFrame()->Send(
-      new ChromeViewMsg_AppBannerDismissed(
-          web_contents->GetMainFrame()->GetRoutingID(),
-          event_request_id_));
-
-  if (native_app_data_.is_null()) {
-    if (is_webapk_)
-      TrackWebApkInstallationDismissEvents(install_state_);
-    TrackUserResponse(USER_RESPONSE_WEB_APP_DISMISSED);
-    AppBannerSettingsHelper::RecordBannerDismissEvent(
-        web_contents, shortcut_info_->url.spec(), AppBannerSettingsHelper::WEB);
-  } else {
-    TrackUserResponse(USER_RESPONSE_NATIVE_APP_DISMISSED);
-    AppBannerSettingsHelper::RecordBannerDismissEvent(
-        web_contents, native_app_package_, AppBannerSettingsHelper::NATIVE);
-  }
-}
-
-base::string16 AppBannerInfoBarDelegateAndroid::GetMessageText() const {
-  return app_title_;
-}
-
-int AppBannerInfoBarDelegateAndroid::GetButtons() const {
-  return BUTTON_OK;
-}
-
-bool AppBannerInfoBarDelegateAndroid::Accept() {
-  has_user_interaction_ = true;
-
-  content::WebContents* web_contents =
-      InfoBarService::WebContentsFromInfoBar(infobar());
-  if (!web_contents) {
-    TrackDismissEvent(DISMISS_EVENT_ERROR);
-    return true;
-  }
-
-  if (!native_app_data_.is_null())
-    return AcceptNativeApp(web_contents);
-
-  if (is_webapk_)
-    return AcceptWebApk(web_contents);
-
-  return AcceptWebApp(web_contents);
-}
-
 bool AppBannerInfoBarDelegateAndroid::AcceptNativeApp(
     content::WebContents* web_contents) {
   TrackUserResponse(USER_RESPONSE_NATIVE_APP_ACCEPTED);
@@ -361,7 +282,7 @@ bool AppBannerInfoBarDelegateAndroid::AcceptNativeApp(
   else
     TrackInstallEvent(INSTALL_EVENT_NATIVE_APP_INSTALL_TRIGGERED);
 
-  SendBannerAccepted(web_contents, "play");
+  SendBannerAccepted();
   return was_opened;
 }
 
@@ -381,8 +302,63 @@ bool AppBannerInfoBarDelegateAndroid::AcceptWebApp(
         *icon_.get(), weak_manager_->FetchWebappSplashScreenImageCallback(uid));
   }
 
-  SendBannerAccepted(web_contents, "web");
+  SendBannerAccepted();
   return true;
+}
+
+bool AppBannerInfoBarDelegateAndroid::AcceptWebApk(
+    content::WebContents* web_contents) {
+  if (IsInfoEmpty(shortcut_info_))
+    return true;
+
+  JNIEnv* env = base::android::AttachCurrentThread();
+
+  // If the WebAPK is installed and the "Open" button is clicked, open the
+  // WebAPK.
+  if (install_state_ == INSTALLED) {
+    Java_AppBannerInfoBarDelegateAndroid_openWebApk(env, java_delegate_);
+    if (is_webapk_already_installed_)
+      webapk::TrackUserAction(webapk::USER_ACTION_OPEN);
+    else
+      webapk::TrackUserAction(webapk::USER_ACTION_INSTALLED_OPEN);
+    SendBannerAccepted();
+    return true;
+  }
+
+  // If the WebAPK is not installed and the "Add to Home Screen" button is
+  // clicked, install the WebAPK.
+  install_state_ = INSTALLING;
+  webapk::TrackInstallSource(webapk_install_source_);
+
+  if (TriggeredFromBanner()) {
+    TrackUserResponse(USER_RESPONSE_WEB_APP_ACCEPTED);
+    AppBannerSettingsHelper::RecordBannerInstallEvent(
+        web_contents, shortcut_info_->url.spec(), AppBannerSettingsHelper::WEB);
+  }
+
+  Java_AppBannerInfoBarDelegateAndroid_setWebApkInstallingState(
+      env, java_delegate_, true);
+  UpdateInstallState(env, nullptr);
+  WebApkInstaller::FinishCallback callback =
+      base::Bind(&AppBannerInfoBarDelegateAndroid::OnWebApkInstallFinished,
+                  weak_ptr_factory_.GetWeakPtr());
+  ShortcutHelper::InstallWebApkWithSkBitmap(web_contents->GetBrowserContext(),
+                                            *shortcut_info_,
+                                            *icon_.get(), callback);
+  SendBannerAccepted();
+
+  // Prevent the infobar from disappearing, because the infobar will show
+  // "Adding" during the installation process.
+  return false;
+}
+
+bool AppBannerInfoBarDelegateAndroid::TriggeredFromBanner() const {
+  return !is_webapk_ || webapk_install_source_ == webapk::INSTALL_SOURCE_BANNER;
+}
+
+void AppBannerInfoBarDelegateAndroid::SendBannerAccepted() {
+  if (weak_manager_ && TriggeredFromBanner())
+    weak_manager_->SendBannerAccepted(event_request_id_);
 }
 
 void AppBannerInfoBarDelegateAndroid::OnWebApkInstallFinished(
@@ -398,15 +374,7 @@ void AppBannerInfoBarDelegateAndroid::OnWebApkInstallFinished(
     return;
   }
 
-  webapk_package_name_ = webapk_package_name;
-  ScopedJavaLocalRef<jstring> java_webapk_package_name =
-      base::android::ConvertUTF8ToJavaString(env, webapk_package_name);
-  Java_AppBannerInfoBarDelegateAndroid_setWebApkInstallingState(
-      env, java_delegate_, false);
-  Java_AppBannerInfoBarDelegateAndroid_setWebApkPackageName(
-      env, java_delegate_, java_webapk_package_name);
-  UpdateInstallState(env, nullptr);
-  install_state_ = INSTALLED;
+  UpdateStateForInstalledWebAPK(webapk_package_name);
   webapk::TrackInstallEvent(webapk::INSTALL_COMPLETED);
 }
 
@@ -417,10 +385,55 @@ void AppBannerInfoBarDelegateAndroid::TrackWebApkInstallationDismissEvents(
   } else if (install_state == INSTALLING) {
     webapk::TrackInstallEvent(webapk::INFOBAR_DISMISSED_DURING_INSTALLATION);
   } else if (install_state == INSTALLED) {
-    // When |install_state| is INSTALLED, the install Event will be recorded in
+    // If WebAPK is installed from this banner, TrackInstallEvent() is called in
     // OnWebApkInstallFinished().
-    webapk::TrackUserAction(webapk::USER_ACTION_INSTALLED_OPEN_DISMISS);
+    if (is_webapk_already_installed_)
+      webapk::TrackUserAction(webapk::USER_ACTION_OPEN_DISMISS);
+    else
+      webapk::TrackUserAction(webapk::USER_ACTION_INSTALLED_OPEN_DISMISS);
   }
+}
+
+infobars::InfoBarDelegate::InfoBarIdentifier
+AppBannerInfoBarDelegateAndroid::GetIdentifier() const {
+  return APP_BANNER_INFOBAR_DELEGATE_ANDROID;
+}
+
+gfx::Image AppBannerInfoBarDelegateAndroid::GetIcon() const {
+  return gfx::Image::CreateFrom1xBitmap(*icon_.get());
+}
+
+void AppBannerInfoBarDelegateAndroid::InfoBarDismissed() {
+  has_user_interaction_ = true;
+
+  content::WebContents* web_contents =
+      InfoBarService::WebContentsFromInfoBar(infobar());
+
+  if (weak_manager_ && TriggeredFromBanner())
+    weak_manager_->SendBannerDismissed(event_request_id_);
+
+  if (native_app_data_.is_null()) {
+    if (is_webapk_)
+      TrackWebApkInstallationDismissEvents(install_state_);
+    if (TriggeredFromBanner()) {
+      TrackUserResponse(USER_RESPONSE_WEB_APP_DISMISSED);
+      AppBannerSettingsHelper::RecordBannerDismissEvent(
+          web_contents, shortcut_info_->url.spec(),
+          AppBannerSettingsHelper::WEB);
+    }
+  } else {
+    TrackUserResponse(USER_RESPONSE_NATIVE_APP_DISMISSED);
+    AppBannerSettingsHelper::RecordBannerDismissEvent(
+        web_contents, native_app_package_, AppBannerSettingsHelper::NATIVE);
+  }
+}
+
+base::string16 AppBannerInfoBarDelegateAndroid::GetMessageText() const {
+  return app_title_;
+}
+
+int AppBannerInfoBarDelegateAndroid::GetButtons() const {
+  return BUTTON_OK;
 }
 
 bool AppBannerInfoBarDelegateAndroid::LinkClicked(
@@ -444,7 +457,7 @@ bool AppBannerInfoBarDelegateAndroid::LinkClicked(
 }
 
 bool RegisterAppBannerInfoBarDelegateAndroid(JNIEnv* env) {
- return RegisterNativesImpl(env);
+  return RegisterNativesImpl(env);
 }
 
 }  // namespace banners

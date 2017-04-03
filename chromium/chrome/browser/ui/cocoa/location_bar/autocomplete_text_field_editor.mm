@@ -16,6 +16,7 @@
 #import "chrome/browser/ui/cocoa/toolbar/toolbar_controller.h"
 #include "chrome/grit/generated_resources.h"
 #import "ui/base/cocoa/find_pasteboard.h"
+#import "ui/base/cocoa/touch_bar_forward_declarations.h"
 #include "ui/base/l10n/l10n_util_mac.h"
 #include "ui/base/material_design/material_design_controller.h"
 
@@ -76,6 +77,11 @@ BOOL ThePasteboardIsTooDamnBig() {
     [self setEnabledTextCheckingTypes:checkingTypes];
   }
   return self;
+}
+
+// Overridden to prevent unwanted items from appearing in the Touch Bar.
+- (NSTouchBar*)makeTouchBar {
+  return nil;
 }
 
 - (void)updateColorsToMatchTheme {
@@ -324,8 +330,8 @@ BOOL ThePasteboardIsTooDamnBig() {
     // responder dance between the field and the field editor is a little
     // weird.)
     [[BrowserWindowController browserWindowControllerForView:field]
-        lockBarVisibilityForOwner:field
-                    withAnimation:YES];
+        lockToolbarVisibilityForOwner:field
+                        withAnimation:YES];
   }
   return doAccept;
 }
@@ -338,8 +344,8 @@ BOOL ThePasteboardIsTooDamnBig() {
   if (doResign && field) {
     // Give the text field ownership of the visibility lock.
     [[BrowserWindowController browserWindowControllerForView:field]
-        releaseBarVisibilityForOwner:field
-                       withAnimation:YES];
+        releaseToolbarVisibilityForOwner:field
+                           withAnimation:YES];
 
     AutocompleteTextFieldObserver* observer = [self observer];
     if (observer)
@@ -588,7 +594,24 @@ BOOL ThePasteboardIsTooDamnBig() {
   [[FindPasteboard sharedInstance] setFindText:[selection string]];
 }
 
+- (BOOL)isOpaque {
+  // Even if you call -setDrawsBackground:NO, the background still gets drawn
+  // when editing. This is a problem because the left edge of the background
+  // overlaps the security decoration's hover rect. Return that the textview
+  // is transparent, and follow up below by disabling any background drawing.
+  // This will cause background drawing to fall through to the cell. See
+  // https://crbug.com/669870 .
+  return NO;
+}
+
+- (void)drawViewBackgroundInRect:(NSRect)aRect {
+  // See the comment in -isOpaque.
+}
+
 - (void)drawRect:(NSRect)rect {
+  AutocompleteTextFieldObserver* observer = [self observer];
+  if (observer)
+    observer->OnBeforeDrawRect();
   [super drawRect:rect];
   autocomplete_text_field::DrawGrayTextAutocompletion(
       [self textStorage],
@@ -596,7 +619,6 @@ BOOL ThePasteboardIsTooDamnBig() {
       [[self delegate] suggestColor],
       self,
       [self bounds]);
-  AutocompleteTextFieldObserver* observer = [self observer];
   if (observer)
     observer->OnDidDrawRect();
 }

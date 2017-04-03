@@ -4,11 +4,14 @@
 
 #include "ash/touch_hud/mus/touch_hud_application.h"
 
-#include "ash/public/interfaces/container.mojom.h"
+#include "ash/public/cpp/shell_window_ids.h"
 #include "ash/touch_hud/touch_hud_renderer.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "services/shell/public/cpp/connector.h"
+#include "services/service_manager/public/cpp/connector.h"
+#include "services/service_manager/public/cpp/interface_registry.h"
+#include "services/service_manager/public/cpp/service_context.h"
 #include "services/ui/public/cpp/property_type_converters.h"
 #include "services/ui/public/interfaces/window_manager_constants.mojom.h"
 #include "ui/views/mus/aura_init.h"
@@ -64,14 +67,16 @@ class TouchHudUI : public views::WidgetDelegateView,
 TouchHudApplication::TouchHudApplication() : binding_(this) {}
 TouchHudApplication::~TouchHudApplication() {}
 
-void TouchHudApplication::OnStart(const shell::Identity& identity) {
-  aura_init_.reset(new views::AuraInit(connector(), "views_mus_resources.pak"));
-  window_manager_connection_ =
-      views::WindowManagerConnection::Create(connector(), identity);
+void TouchHudApplication::OnStart() {
+  aura_init_ = base::MakeUnique<views::AuraInit>(
+      context()->connector(), context()->identity(), "views_mus_resources.pak");
+  window_manager_connection_ = views::WindowManagerConnection::Create(
+      context()->connector(), context()->identity());
 }
 
-bool TouchHudApplication::OnConnect(const shell::Identity& remote_identity,
-                                    shell::InterfaceRegistry* registry) {
+bool TouchHudApplication::OnConnect(
+    const service_manager::ServiceInfo& remote_info,
+    service_manager::InterfaceRegistry* registry) {
   registry->AddInterface<mash::mojom::Launchable>(this);
   return true;
 }
@@ -87,16 +92,16 @@ void TouchHudApplication::Launch(uint32_t what, mash::mojom::LaunchMode how) {
     params.delegate = new TouchHudUI(window_manager_connection_.get(), widget_);
 
     std::map<std::string, std::vector<uint8_t>> properties;
-    properties[ash::mojom::kWindowContainer_Property] =
+    properties[ui::mojom::WindowManager::kInitialContainerId_Property] =
         mojo::ConvertTo<std::vector<uint8_t>>(
-            static_cast<int32_t>(ash::mojom::Container::OVERLAY));
+            ash::kShellWindowId_OverlayContainer);
     properties[ui::mojom::WindowManager::kShowState_Property] =
         mojo::ConvertTo<std::vector<uint8_t>>(
             static_cast<int32_t>(ui::mojom::ShowState::FULLSCREEN));
     ui::Window* window =
-        window_manager_connection_.get()->NewWindow(properties);
+        window_manager_connection_.get()->NewTopLevelWindow(properties);
     params.native_widget = new views::NativeWidgetMus(
-        widget_, window, ui::mojom::SurfaceType::DEFAULT);
+        widget_, window, ui::mojom::CompositorFrameSinkType::DEFAULT);
     widget_->Init(params);
     widget_->Show();
   } else {
@@ -105,8 +110,9 @@ void TouchHudApplication::Launch(uint32_t what, mash::mojom::LaunchMode how) {
   }
 }
 
-void TouchHudApplication::Create(const shell::Identity& remote_identity,
-                                 mash::mojom::LaunchableRequest request) {
+void TouchHudApplication::Create(
+    const service_manager::Identity& remote_identity,
+    mash::mojom::LaunchableRequest request) {
   binding_.Close();
   binding_.Bind(std::move(request));
 }

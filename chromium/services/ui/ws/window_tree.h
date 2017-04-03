@@ -12,10 +12,10 @@
 #include <queue>
 #include <set>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "base/callback.h"
-#include "base/containers/hash_tables.h"
 #include "base/macros.h"
 #include "cc/ipc/surface_id.mojom.h"
 #include "mojo/public/cpp/bindings/associated_binding.h"
@@ -161,6 +161,9 @@ class WindowTree : public mojom::WindowTree,
   // Invoked when a tree is about to be destroyed.
   void OnWindowDestroyingTreeImpl(WindowTree* tree);
 
+  // Sends updated display information.
+  void OnWmDisplayModified(const display::Display& display);
+
   // These functions are synchronous variants of those defined in the mojom. The
   // WindowTree implementations all call into these. See the mojom for details.
   bool SetCapture(const ClientWindowId& client_window_id);
@@ -256,6 +259,10 @@ class WindowTree : public mojom::WindowTree,
   void ProcessTransientWindowRemoved(const ServerWindow* window,
                                      const ServerWindow* transient_window,
                                      bool originated_change);
+  void ProcessWindowSurfaceChanged(ServerWindow* window,
+                                   const cc::SurfaceId& surface_id,
+                                   const gfx::Size& frame_size,
+                                   float device_scale_factor);
 
   // Sends this event to the client if it matches an active pointer watcher.
   // |target_window| is the target of the event, and may be null or not known
@@ -409,10 +416,11 @@ class WindowTree : public mojom::WindowTree,
   void SetWindowOpacity(uint32_t change_id,
                         Id window_id,
                         float opacity) override;
-  void AttachSurface(Id transport_window_id,
-                     mojom::SurfaceType type,
-                     mojo::InterfaceRequest<mojom::Surface> surface,
-                     mojom::SurfaceClientPtr client) override;
+  void AttachCompositorFrameSink(
+      Id transport_window_id,
+      mojom::CompositorFrameSinkType type,
+      cc::mojom::MojoCompositorFrameSinkRequest compositor_frame_sink,
+      cc::mojom::MojoCompositorFrameSinkClientPtr client) override;
   void Embed(Id transport_window_id,
              mojom::WindowTreeClientPtr client,
              uint32_t flags,
@@ -532,13 +540,15 @@ class WindowTree : public mojom::WindowTree,
   std::set<const ServerWindow*> roots_;
 
   // The windows created by this tree. This tree owns these objects.
-  base::hash_map<WindowId, ServerWindow*> created_window_map_;
+  std::unordered_map<WindowId, ServerWindow*, WindowIdHash> created_window_map_;
 
   // The client is allowed to assign ids. These two maps providing the mapping
   // from the ids native to the server (WindowId) to those understood by the
   // client (ClientWindowId).
-  base::hash_map<ClientWindowId, WindowId> client_id_to_window_id_map_;
-  base::hash_map<WindowId, ClientWindowId> window_id_to_client_id_map_;
+  std::unordered_map<ClientWindowId, WindowId, ClientWindowIdHash>
+      client_id_to_window_id_map_;
+  std::unordered_map<WindowId, ClientWindowId, WindowIdHash>
+      window_id_to_client_id_map_;
 
   uint32_t event_ack_id_;
 

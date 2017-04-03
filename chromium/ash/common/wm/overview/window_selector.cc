@@ -14,7 +14,6 @@
 #include "ash/common/accessibility_types.h"
 #include "ash/common/metrics/user_metrics_action.h"
 #include "ash/common/shelf/wm_shelf.h"
-#include "ash/common/shell_window_ids.h"
 #include "ash/common/wm/mru_window_tracker.h"
 #include "ash/common/wm/overview/window_grid.h"
 #include "ash/common/wm/overview/window_selector_delegate.h"
@@ -27,6 +26,7 @@
 #include "ash/common/wm_root_window_controller.h"
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
+#include "ash/public/cpp/shell_window_ids.h"
 #include "base/auto_reset.h"
 #include "base/command_line.h"
 #include "base/metrics/histogram.h"
@@ -97,7 +97,7 @@ struct WindowSelectorItemTargetComparator {
       : target(target_window) {}
 
   bool operator()(WindowSelectorItem* window) const {
-    return window->GetWindow() == target;
+    return window->Contains(target);
   }
 
   const WmWindow* target;
@@ -203,7 +203,7 @@ views::Widget* CreateTextFilter(views::TextfieldController* controller,
 
   views::Textfield* textfield = new views::Textfield;
   textfield->set_controller(controller);
-  textfield->SetBorder(views::Border::NullBorder());
+  textfield->SetBorder(views::NullBorder());
   textfield->SetBackgroundColor(kTextFilterBackgroundColor);
   textfield->SetTextColor(kTextFilterTextColor);
   views::ImageView* image_view = new views::ImageView;
@@ -423,7 +423,8 @@ void WindowSelector::OnGridEmpty(WindowGrid* grid) {
     CancelSelection();
 }
 
-void WindowSelector::SelectWindow(WmWindow* window) {
+void WindowSelector::SelectWindow(WindowSelectorItem* item) {
+  WmWindow* window = item->GetWindow();
   std::vector<WmWindow*> window_list =
       WmShell::Get()->mru_window_tracker()->BuildMruWindowList();
   if (!window_list.empty()) {
@@ -441,7 +442,7 @@ void WindowSelector::SelectWindow(WmWindow* window) {
                                1 + it - window_list.begin());
     }
   }
-
+  item->EnsureVisible();
   window->GetWindowState()->Activate();
 }
 
@@ -497,8 +498,7 @@ bool WindowSelector::HandleKeyEvent(views::Textfield* sender,
                                   (num_key_presses_ * 100) / num_items_, 1, 300,
                                   30);
       WmShell::Get()->RecordUserMetricsAction(UMA_WINDOW_OVERVIEW_ENTER_KEY);
-      SelectWindow(
-          grid_list_[selected_grid_index_]->SelectedWindow()->GetWindow());
+      SelectWindow(grid_list_[selected_grid_index_]->SelectedWindow());
       break;
     default:
       // Not a key we are interested in, allow the textfield to handle it.
@@ -567,10 +567,8 @@ void WindowSelector::OnWindowActivated(WmWindow* gained_active,
   auto iter = std::find_if(windows.begin(), windows.end(),
                            WindowSelectorItemTargetComparator(gained_active));
 
-  if (iter != windows.end()) {
-    (*iter)->ShowWindowOnExit();
-  } else if (showing_text_filter_ &&
-             lost_active == GetTextFilterWidgetWindow()) {
+  if (iter == windows.end() && showing_text_filter_ &&
+      lost_active == GetTextFilterWidgetWindow()) {
     return;
   }
 

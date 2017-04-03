@@ -9,10 +9,10 @@
 #include "base/test/test_message_loop.h"
 #include "cc/quads/render_pass.h"
 #include "cc/quads/shared_quad_state.h"
-#include "services/ui/surfaces/display_compositor.h"
+#include "services/ui/ws/ids.h"
 #include "services/ui/ws/platform_display_init_params.h"
 #include "services/ui/ws/server_window.h"
-#include "services/ui/ws/server_window_surface_manager.h"
+#include "services/ui/ws/server_window_compositor_frame_sink_manager.h"
 #include "services/ui/ws/test_server_window_delegate.h"
 #include "services/ui/ws/test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -22,29 +22,38 @@ namespace ws {
 namespace test {
 namespace {
 
+// Typical id for the display root ServerWindow.
+constexpr WindowId kRootDisplayId(0, 2);
+const base::UnguessableToken kArbitraryToken = base::UnguessableToken::Create();
+
 // Makes the window visible and creates the default surface for it.
 void InitWindow(ServerWindow* window) {
   window->SetVisible(true);
-  ServerWindowSurfaceManager* surface_manager =
-      window->GetOrCreateSurfaceManager();
-  surface_manager->CreateSurface(mojom::SurfaceType::DEFAULT,
-                                 mojo::InterfaceRequest<mojom::Surface>(),
-                                 mojom::SurfaceClientPtr());
+  ServerWindowCompositorFrameSinkManager* compositor_frame_sink_manager =
+      window->GetOrCreateCompositorFrameSinkManager();
+  compositor_frame_sink_manager->SetLatestSurfaceInfo(
+      mojom::CompositorFrameSinkType::DEFAULT,
+      cc::SurfaceId(
+          cc::FrameSinkId(
+              WindowIdToTransportId(window->id()),
+              static_cast<uint32_t>(mojom::CompositorFrameSinkType::DEFAULT)),
+          cc::LocalFrameId(1u, kArbitraryToken)),
+      gfx::Size(100, 100));
 }
 
 }  // namespace
 
 class FrameGeneratorTest : public testing::Test {
  public:
-  FrameGeneratorTest() : display_compositor_(new DisplayCompositor()) {}
+  FrameGeneratorTest()
+      : root_window_(base::MakeUnique<ServerWindow>(&window_delegate_,
+                                                    kRootDisplayId)) {}
   ~FrameGeneratorTest() override {}
 
   // Calls DrawWindowTree() on |frame_generator_|
   void DrawWindowTree(cc::RenderPass* pass);
 
-  ServerWindow* root_window() {
-    return frame_generator_delegate_->GetRootWindow();
-  }
+  ServerWindow* root_window() { return root_window_.get(); }
 
   TestServerWindowDelegate* test_window_delegate() { return &window_delegate_; }
 
@@ -53,10 +62,10 @@ class FrameGeneratorTest : public testing::Test {
   void SetUp() override;
   void TearDown() override;
 
-  scoped_refptr<DisplayCompositor> display_compositor_;
   std::unique_ptr<FrameGenerator> frame_generator_;
   std::unique_ptr<TestFrameGeneratorDelegate> frame_generator_delegate_;
   TestServerWindowDelegate window_delegate_;
+  std::unique_ptr<ServerWindow> root_window_;
 
   // Needed so that Mojo classes can be initialized for ServerWindow use.
   base::TestMessageLoop message_loop_;
@@ -65,18 +74,16 @@ class FrameGeneratorTest : public testing::Test {
 };
 
 void FrameGeneratorTest::DrawWindowTree(cc::RenderPass* pass) {
-  frame_generator_->DrawWindowTree(pass,
-                                   frame_generator_delegate_->GetRootWindow(),
-                                   gfx::Vector2d(), 1.0f, nullptr);
+  frame_generator_->DrawWindowTree(pass, root_window_.get(), gfx::Vector2d(),
+                                   1.0f);
 }
 
 void FrameGeneratorTest::SetUp() {
   testing::Test::SetUp();
-  frame_generator_delegate_ = base::MakeUnique<TestFrameGeneratorDelegate>(
-      base::MakeUnique<ServerWindow>(&window_delegate_, WindowId()));
+  frame_generator_delegate_ = base::MakeUnique<TestFrameGeneratorDelegate>();
   PlatformDisplayInitParams init_params;
   frame_generator_ = base::MakeUnique<FrameGenerator>(
-      frame_generator_delegate_.get(), display_compositor_);
+      frame_generator_delegate_.get(), root_window_.get());
   InitWindow(root_window());
 }
 
@@ -111,11 +118,16 @@ TEST_F(FrameGeneratorTest, DrawWindowTree) {
   // which should be a product of the child and the parent opacity.
   EXPECT_EQ(child_opacity * root_opacity, child_sqs->opacity);
 
-  // Create the UNDERLAY Surface for the child window, and confirm that this
-  // creates an extra SharedQuadState in the CompositorFrame.
-  child_window.GetOrCreateSurfaceManager()->CreateSurface(
-      mojom::SurfaceType::UNDERLAY, mojo::InterfaceRequest<mojom::Surface>(),
-      mojom::SurfaceClientPtr());
+  // Pretend to create the UNDERLAY Surface for the child window, and confirm
+  // that this creates an extra SharedQuadState in the CompositorFrame.
+  child_window.GetOrCreateCompositorFrameSinkManager()->SetLatestSurfaceInfo(
+      mojom::CompositorFrameSinkType::UNDERLAY,
+      cc::SurfaceId(
+          cc::FrameSinkId(
+              WindowIdToTransportId(child_window.id()),
+              static_cast<uint32_t>(mojom::CompositorFrameSinkType::UNDERLAY)),
+          cc::LocalFrameId(1u, kArbitraryToken)),
+      gfx::Size(100, 100));
 
   render_pass = cc::RenderPass::Create();
   DrawWindowTree(render_pass.get());

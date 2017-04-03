@@ -8,6 +8,7 @@
 
 #include "ui/views/mus/native_widget_mus.h"
 
+#include <map>
 #include <utility>
 #include <vector>
 
@@ -26,7 +27,7 @@
 #include "services/ui/public/interfaces/window_manager_constants.mojom.h"
 #include "services/ui/public/interfaces/window_tree.mojom.h"
 #include "ui/aura/client/default_capture_client.h"
-#include "ui/aura/client/window_tree_client.h"
+#include "ui/aura/client/window_parenting_client.h"
 #include "ui/aura/layout_manager.h"
 #include "ui/aura/mus/mus_util.h"
 #include "ui/aura/window.h"
@@ -39,15 +40,20 @@
 #include "ui/gfx/path.h"
 #include "ui/native_theme/native_theme_aura.h"
 #include "ui/platform_window/platform_window_delegate.h"
+#include "ui/views/corewm/tooltip.h"
+#include "ui/views/corewm/tooltip_aura.h"
+#include "ui/views/corewm/tooltip_controller.h"
 #include "ui/views/drag_utils.h"
 #include "ui/views/mus/drag_drop_client_mus.h"
 #include "ui/views/mus/drop_target_mus.h"
+#include "ui/views/mus/input_method_mus.h"
 #include "ui/views/mus/window_manager_connection.h"
 #include "ui/views/mus/window_manager_constants_converters.h"
 #include "ui/views/mus/window_manager_frame_values.h"
 #include "ui/views/mus/window_tree_host_mus.h"
 #include "ui/views/widget/drop_helper.h"
 #include "ui/views/widget/native_widget_aura.h"
+#include "ui/views/widget/tooltip_manager_aura.h"
 #include "ui/views/widget/widget_delegate.h"
 #include "ui/views/window/custom_frame_view.h"
 #include "ui/wm/core/base_focus_rules.h"
@@ -132,17 +138,18 @@ class ContentWindowLayoutManager : public aura::LayoutManager {
   DISALLOW_COPY_AND_ASSIGN(ContentWindowLayoutManager);
 };
 
-class NativeWidgetMusWindowTreeClient : public aura::client::WindowTreeClient {
+class NativeWidgetMusWindowParentingClient
+    : public aura::client::WindowParentingClient {
  public:
-  explicit NativeWidgetMusWindowTreeClient(aura::Window* root_window)
+  explicit NativeWidgetMusWindowParentingClient(aura::Window* root_window)
       : root_window_(root_window) {
-    aura::client::SetWindowTreeClient(root_window_, this);
+    aura::client::SetWindowParentingClient(root_window_, this);
   }
-  ~NativeWidgetMusWindowTreeClient() override {
-    aura::client::SetWindowTreeClient(root_window_, nullptr);
+  ~NativeWidgetMusWindowParentingClient() override {
+    aura::client::SetWindowParentingClient(root_window_, nullptr);
   }
 
-  // Overridden from client::WindowTreeClient:
+  // Overridden from client::WindowParentingClient:
   aura::Window* GetDefaultParent(aura::Window* context,
                                  aura::Window* window,
                                  const gfx::Rect& bounds) override {
@@ -152,7 +159,7 @@ class NativeWidgetMusWindowTreeClient : public aura::client::WindowTreeClient {
  private:
   aura::Window* root_window_;
 
-  DISALLOW_COPY_AND_ASSIGN(NativeWidgetMusWindowTreeClient);
+  DISALLOW_COPY_AND_ASSIGN(NativeWidgetMusWindowParentingClient);
 };
 
 // A screen position client that applies the offset of the ui::Window.
@@ -524,13 +531,14 @@ class NativeWidgetMus::MusCaptureClient
 ////////////////////////////////////////////////////////////////////////////////
 // NativeWidgetMus, public:
 
-NativeWidgetMus::NativeWidgetMus(internal::NativeWidgetDelegate* delegate,
-                                 ui::Window* window,
-                                 ui::mojom::SurfaceType surface_type)
+NativeWidgetMus::NativeWidgetMus(
+    internal::NativeWidgetDelegate* delegate,
+    ui::Window* window,
+    ui::mojom::CompositorFrameSinkType compositor_frame_sink_type)
     : window_(window),
       last_cursor_(ui::mojom::Cursor::CURSOR_NULL),
       native_widget_delegate_(delegate),
-      surface_type_(surface_type),
+      compositor_frame_sink_type_(compositor_frame_sink_type),
       show_state_before_fullscreen_(ui::mojom::ShowState::DEFAULT),
       ownership_(Widget::InitParams::NATIVE_WIDGET_OWNS_WIDGET),
       content_(new aura::Window(this)),
@@ -543,6 +551,9 @@ NativeWidgetMus::NativeWidgetMus(internal::NativeWidgetDelegate* delegate,
   aura::SetMusWindow(content_, window_);
   window->SetLocalProperty(kNativeWidgetMusKey, this);
   window_tree_host_ = base::MakeUnique<WindowTreeHostMus>(this, window_);
+  input_method_ =
+      base::MakeUnique<InputMethodMus>(window_tree_host_.get(), window_);
+  window_tree_host_->SetSharedInputMethod(input_method_.get());
 }
 
 NativeWidgetMus::~NativeWidgetMus() {
@@ -593,7 +604,15 @@ aura::Window* NativeWidgetMus::GetRootWindow() {
 void NativeWidgetMus::OnPlatformWindowClosed() {
   native_widget_delegate_->OnNativeWidgetDestroying();
 
-  window_tree_client_.reset();  // Uses |content_|.
+  tooltip_manager_.reset();
+  if (tooltip_controller_.get()) {
+    window_tree_host_->window()->RemovePreTargetHandler(
+        tooltip_controller_.get());
+    aura::client::SetTooltipClient(window_tree_host_->window(), NULL);
+    tooltip_controller_.reset();
+  }
+
+  window_parenting_client_.reset();  // Uses |content_|.
   capture_client_.reset();      // Uses |content_|.
 
   window_tree_host_->RemoveObserver(this);
@@ -702,10 +721,8 @@ void NativeWidgetMus::InitNativeWidget(const Widget::InitParams& params) {
 
   // TODO(moshayedi): crbug.com/641039. Investigate whether there are any cases
   // where we need input method but don't have the WindowManagerConnection here.
-  if (WindowManagerConnection::Exists()) {
-    window_tree_host_->InitInputMethod(
-        WindowManagerConnection::Get()->connector());
-  }
+  if (WindowManagerConnection::Exists())
+    input_method_->Init(WindowManagerConnection::Get()->connector());
 
   focus_client_ =
       base::MakeUnique<FocusControllerMus>(new FocusRulesImpl(hosted_window));
@@ -723,6 +740,15 @@ void NativeWidgetMus::InitNativeWidget(const Widget::InitParams& params) {
   drop_helper_ = base::MakeUnique<DropHelper>(GetWidget()->GetRootView());
   aura::client::SetDragDropDelegate(content_, this);
 
+  if (params.type != Widget::InitParams::TYPE_TOOLTIP) {
+    tooltip_manager_ = base::MakeUnique<TooltipManagerAura>(GetWidget());
+    tooltip_controller_ = base::MakeUnique<corewm::TooltipController>(
+        base::MakeUnique<corewm::TooltipAura>());
+    aura::client::SetTooltipClient(window_tree_host_->window(),
+                                   tooltip_controller_.get());
+    window_tree_host_->window()->AddPreTargetHandler(tooltip_controller_.get());
+  }
+
   // TODO(erg): Remove this check when ash/mus/move_event_handler.cc's
   // direct usage of ui::Window::SetPredefinedCursor() is switched to a
   // private method on WindowManagerClient.
@@ -732,8 +758,8 @@ void NativeWidgetMus::InitNativeWidget(const Widget::InitParams& params) {
     aura::client::SetCursorClient(hosted_window, cursor_manager_.get());
   }
 
-  window_tree_client_ =
-      base::MakeUnique<NativeWidgetMusWindowTreeClient>(hosted_window);
+  window_parenting_client_ =
+      base::MakeUnique<NativeWidgetMusWindowParentingClient>(hosted_window);
   hosted_window->AddPreTargetHandler(focus_client_.get());
   hosted_window->SetLayoutManager(
       new ContentWindowLayoutManager(hosted_window, content_));
@@ -749,16 +775,21 @@ void NativeWidgetMus::InitNativeWidget(const Widget::InitParams& params) {
   content_->set_ignore_events(!params.accept_events);
   hosted_window->AddChild(content_);
 
+  ui::Window* parent_mus = params.parent_mus;
+
   // Set-up transiency if appropriate.
   if (params.parent && !params.child) {
-    aura::Window* parent_root = params.parent->GetRootWindow();
-    ui::Window* parent_mus = parent_root->GetProperty(kMusWindow);
-    if (parent_mus)
-      parent_mus->AddTransientWindow(window_);
+    aura::Window* parent_root_aura = params.parent->GetRootWindow();
+    ui::Window* parent_root_mus = parent_root_aura->GetProperty(kMusWindow);
+    if (parent_root_mus) {
+      parent_root_mus->AddTransientWindow(window_);
+      if (!parent_mus)
+        parent_mus = parent_root_mus;
+    }
   }
 
-  if (params.parent_mus)
-    params.parent_mus->AddChild(window_);
+  if (parent_mus)
+    parent_mus->AddChild(window_);
 
   // TODO(sky): deal with show state.
   if (!params.bounds.size().IsEmpty())
@@ -828,26 +859,26 @@ void NativeWidgetMus::ViewRemoved(View* view) {
   NOTIMPLEMENTED();
 }
 
-// These methods are wrong in mojo. They're not usually used to associate
-// data with a window; they are used exclusively in chrome/ to unsafely pass
-// raw pointers around. I can only find two places where we do the "safe"
-// thing (and even that requires casting an integer to a void*). They can't be
-// used safely in a world where we separate things with mojo. They should be
-// removed; not ported.
+// These methods are wrong in mojo. They're not usually used to associate data
+// with a window; they are used to pass data from one layer to another (and in
+// chrome/ to unsafely pass raw pointers around--I can only find two places
+// where we do the "safe" thing and even that requires casting an integer to a
+// void*). They can't be used safely in a world where we separate things with
+// mojo.
+//
+// It's also used to communicate between views and aura; in views, we set
+// properties on a widget, and read these properties directly in aura code.
 void NativeWidgetMus::SetNativeWindowProperty(const char* name, void* value) {
-  native_window_properties_[name] = value;
+  if (content_)
+    content_->SetNativeWindowProperty(name, value);
 }
 
 void* NativeWidgetMus::GetNativeWindowProperty(const char* name) const {
-  auto it = native_window_properties_.find(name);
-  if (it == native_window_properties_.end())
-    return nullptr;
-  return it->second;
+  return content_ ? content_->GetNativeWindowProperty(name) : nullptr;
 }
 
 TooltipManager* NativeWidgetMus::GetTooltipManager() const {
-  // NOTIMPLEMENTED();
-  return nullptr;
+  return tooltip_manager_.get();
 }
 
 void NativeWidgetMus::SetCapture() {
@@ -1091,11 +1122,11 @@ bool NativeWidgetMus::IsVisible() const {
 }
 
 void NativeWidgetMus::Activate() {
+  if (!window_)
+    return;
+
   static_cast<aura::client::ActivationClient*>(focus_client_.get())
       ->ActivateWindow(content_);
-  // FocusControllerMus should have focused |window_| when |content_| is
-  // activated.
-  DCHECK(!window_ || window_->HasFocus());
 }
 
 void NativeWidgetMus::Deactivate() {
@@ -1409,8 +1440,12 @@ void NativeWidgetMus::OnKeyEvent(ui::KeyEvent* event) {
 }
 
 void NativeWidgetMus::OnMouseEvent(ui::MouseEvent* event) {
-  // TODO(sky): forward to tooltipmanager. See NativeWidgetDesktopAura.
   DCHECK(content_->IsVisible());
+
+  if (tooltip_manager_.get())
+    tooltip_manager_->UpdateTooltip();
+  TooltipManagerAura::UpdateTooltipManagerForCapture(GetWidget());
+
   native_widget_delegate_->OnMouseEvent(event);
   // WARNING: we may have been deleted.
 }
@@ -1485,10 +1520,17 @@ void NativeWidgetMus::OnWindowInputEvent(
     ui::Window* view,
     const ui::Event& event_in,
     std::unique_ptr<base::Callback<void(EventResult)>>* ack_callback) {
+  std::unique_ptr<ui::Event> event = ui::Event::Clone(event_in);
+
+  if (event->IsKeyEvent()) {
+    input_method_->DispatchKeyEvent(event->AsKeyEvent(),
+                                    std::move(*ack_callback));
+    return;
+  }
+
   // Take ownership of the callback, indicating that we will handle it.
   EventAckHandler ack_handler(std::move(*ack_callback));
 
-  std::unique_ptr<ui::Event> event = ui::Event::Clone(event_in);
   // TODO(markdittmer): This should be this->OnEvent(event.get()), but that
   // can't happen until IME is refactored out of in WindowTreeHostMus.
   platform_window_delegate()->DispatchEvent(event.get());

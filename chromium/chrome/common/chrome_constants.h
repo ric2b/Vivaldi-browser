@@ -15,7 +15,6 @@
 namespace chrome {
 
 extern const char kChromeVersion[];
-extern const char kVivaldiVersion[];
 extern const base::FilePath::CharType kBrowserProcessExecutableName[];
 extern const base::FilePath::CharType kHelperProcessExecutableName[];
 extern const base::FilePath::CharType kBrowserProcessExecutablePath[];
@@ -60,6 +59,7 @@ extern const base::FilePath::CharType kOfflinePageArchivesDirname[];
 extern const base::FilePath::CharType kOfflinePageMetadataDirname[];
 extern const base::FilePath::CharType kOfflinePageRequestQueueDirname[];
 extern const base::FilePath::CharType kPreferencesFilename[];
+extern const base::FilePath::CharType kPreviewsOptOutDBFilename[];
 extern const base::FilePath::CharType kProtectedPreferencesFilenameDeprecated[];
 extern const base::FilePath::CharType kReadmeFilename[];
 extern const base::FilePath::CharType kSafeBrowsingBaseFilename[];
@@ -70,7 +70,6 @@ extern const base::FilePath::CharType kSingletonLockFilename[];
 extern const base::FilePath::CharType kSingletonSocketFilename[];
 extern const base::FilePath::CharType kSupervisedUserSettingsFilename[];
 extern const base::FilePath::CharType kThemePackFilename[];
-extern const base::FilePath::CharType kThemePackMaterialDesignFilename[];
 extern const base::FilePath::CharType kWebAppDirname[];
 
 #if defined(OS_WIN)

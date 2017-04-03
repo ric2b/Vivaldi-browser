@@ -19,6 +19,7 @@
 #include "net/cert/ct_policy_status.h"
 #include "net/cert/mock_cert_verifier.h"
 #include "net/cert/multi_log_ct_verifier.h"
+#include "net/cert/signed_certificate_timestamp_and_status.h"
 #include "net/http/http_cache.h"
 #include "net/http/http_network_session.h"
 #include "net/http/http_network_transaction.h"
@@ -209,7 +210,7 @@ class PriorityGetter : public BufferedSpdyFramerVisitorInterface {
                          size_t len) override {}
   void OnStreamEnd(SpdyStreamId stream_id) override {}
   void OnStreamPadding(SpdyStreamId stream_id, size_t len) override {}
-  void OnSettings(bool clear_persisted) override {}
+  void OnSettings() override {}
   void OnSetting(SpdySettingsIds id, uint8_t flags, uint32_t value) override {}
   void OnPing(SpdyPingId unique_id, bool is_ack) override {}
   void OnRstStream(SpdyStreamId stream_id,
@@ -434,7 +435,7 @@ class IgnoresCTVerifier : public net::CTVerifier {
   int Verify(net::X509Certificate* cert,
              const std::string& stapled_ocsp_response,
              const std::string& sct_list_from_tls_extension,
-             net::ct::CTVerifyResult* result,
+             SignedCertificateTimestampAndStatusList* output_scts,
              const net::NetLogWithSource& net_log) override {
     return net::OK;
   }

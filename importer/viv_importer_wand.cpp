@@ -3,9 +3,11 @@
 #include <string>
 #include <vector>
 
+#include <openssl/crypto.h>
+#include <openssl/digest.h>
+#include <openssl/evp.h>
+
 #include "base/files/file_util.h"
-#include "base/md5.h"
-#include "base/sha1.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
@@ -14,9 +16,6 @@
 #include "chrome/common/importer/importer_data_types.h"
 
 #include "components/autofill/core/common/password_form.h"
-
-#include "crypto/symmetric_key.h"
-#include "crypto/encryptor.h"
 
 #include "importer/viv_importer_utils.h"
 #include "importer/viv_importer.h"
@@ -75,43 +74,57 @@ bool DecryptMasterPasswordKeys(const std::string &password,
                                const std::string &salt,
                                const std::string &in_data,
                                std::string &out_data) {
-  base::MD5Digest res1;
+  uint8_t buffer[EVP_MAX_MD_SIZE];
+  unsigned int len = 0;
+  unsigned int count = 0;
   unsigned char key[24];
   unsigned char iv[8];
 
-  base::MD5Context ctx;
+  EVP_MD_CTX  ctx;
+  EVP_MD_CTX_init(&ctx);
 
-  base::MD5Init(&ctx);
-  base::MD5Update(&ctx, base::StringPiece(password));
-  base::MD5Update(&ctx, salt);
-  base::MD5Final(&res1, &ctx);
+  EVP_DigestInit(&ctx, EVP_md5());
+  EVP_DigestUpdate(&ctx, password.c_str(), password.size());
+  EVP_DigestUpdate(&ctx, salt.c_str(), salt.size());
+  EVP_DigestFinal(&ctx, buffer, &len);
+  DCHECK(len == 16);
 
-  memcpy(key, res1.a, sizeof(res1.a));
+  memcpy(key, buffer, len);
+  count += len;
 
-  base::MD5Init(&ctx);
-  base::MD5Update(&ctx,
-            base::StringPiece((const char *) res1.a, sizeof(res1.a)));
-  base::MD5Update(&ctx, base::StringPiece(password));
-  base::MD5Update(&ctx, salt);
-  base::MD5Final(&res1, &ctx);
+  EVP_DigestInit(&ctx, EVP_md5());
+  EVP_DigestUpdate(&ctx, buffer, len);
+  EVP_DigestUpdate(&ctx, password.c_str(), password.size());
+  EVP_DigestUpdate(&ctx, salt.c_str(), salt.size());
+  EVP_DigestFinal(&ctx, buffer, &len);
+  DCHECK(len == 16);
+  EVP_MD_CTX_cleanup(&ctx);
 
-  memcpy(key+sizeof(res1.a), res1.a, 8);
-  memcpy(iv, res1.a+8, 8);
-  memset(res1.a, 0, sizeof(res1.a));
+  memcpy(key+count, buffer, 8);
+  memcpy(iv, buffer+8, 8);
 
-  std::unique_ptr<crypto::SymmetricKey> dec_key(
-    crypto::SymmetricKey::Import(crypto::SymmetricKey::DES_EDE3,
-                                 key, sizeof(key)));
-  memset(key, 0, sizeof(key));
+  OPENSSL_cleanse(buffer, sizeof(buffer));
 
-  crypto::Encryptor decryptor;
-  if (!decryptor.Init(dec_key.get(), crypto::Encryptor::CBC, iv, sizeof(iv))) {
-    memset(iv, 0, sizeof(iv));
-    return true;
-  }
+  EVP_CIPHER_CTX decryptor;
+  EVP_CipherInit(&decryptor, EVP_des_ede3_cbc(), key, iv, 0);
 
-  if (!decryptor.Decrypt(in_data, &out_data))
-    return false;
+  OPENSSL_cleanse(key, sizeof(key));
+  OPENSSL_cleanse(iv, sizeof(iv));
+  out_data.resize(in_data.length());
+
+  int out_len = 0;
+  int total_len = 0;
+  EVP_CipherUpdate(&decryptor,
+      reinterpret_cast<uint8_t*>(const_cast<char*>(out_data.data())), &out_len,
+      reinterpret_cast<const uint8_t*>(in_data.data()), in_data.length());
+  total_len += out_len;
+  EVP_CipherFinal_ex(&decryptor,
+    reinterpret_cast<uint8_t*>(const_cast<char*>(out_data.data()+total_len)),
+    &out_len);
+  EVP_CIPHER_CTX_cleanup(&decryptor);
+  total_len += out_len;
+  out_data.resize(total_len);
+  OPENSSL_cleanse(iv, sizeof(iv));
 
   return true;
 }
@@ -122,15 +135,21 @@ bool ValidatePasswordBlock(const std::string &password, const std::string &salt,
   if (salt.length() != 8)
     return false;
 
-  base::SecureHashAlgorithm ctx;
+  uint8_t buffer[EVP_MAX_MD_SIZE];
+  unsigned int  len=0;
 
-  ctx.Init();
-  ctx.Update(password.c_str(), password.size());
-  ctx.Update(validation_string.c_str(), validation_string.size());
-  ctx.Update(in_data.c_str(), in_data.size());
-  ctx.Final();
+  EVP_MD_CTX  ctx;
+  EVP_MD_CTX_init(&ctx);
 
-  return (memcmp(salt.c_str(), ctx.Digest(), 8) == 0);
+  EVP_DigestInit(&ctx, EVP_sha1());
+  EVP_DigestUpdate(&ctx, password.c_str(), password.size());
+  EVP_DigestUpdate(&ctx, validation_string.c_str(), validation_string.size());
+  EVP_DigestUpdate(&ctx, in_data.c_str(), in_data.size());
+  EVP_DigestFinal(&ctx, buffer, &len);
+  EVP_MD_CTX_cleanup(&ctx);
+  bool ret = (memcmp(salt.c_str(), buffer, 8) == 0);
+  OPENSSL_cleanse(buffer, sizeof(buffer));
+  return ret;
 }
 
 bool WandReadUint32(std::string::iterator &buffer,
@@ -265,40 +284,45 @@ bool WandReadEncryptedField(std::string::iterator &buffer,
                                "Opera Email Password Verification", out_data))
       return false;
   } else {
-    base::MD5Digest res1, res2;
+    uint8_t buffer[EVP_MAX_MD_SIZE*2];
+    unsigned int len = 0;
 
-    base::MD5Context ctx;
+    EVP_MD_CTX  ctx;
+    EVP_MD_CTX_init(&ctx);
 
-    base::MD5Init(&ctx);
-    base::MD5Update(
-        &ctx, base::StringPiece(reinterpret_cast<char*>(OperaObfuscationPass),
-                                sizeof(OperaObfuscationPass)));
-    base::MD5Update(&ctx, iv);
-    base::MD5Final(&res1, &ctx);
+    EVP_DigestInit(&ctx, EVP_md5());
+    EVP_DigestUpdate(&ctx, OperaObfuscationPass, sizeof(OperaObfuscationPass));
+    EVP_DigestUpdate(&ctx, reinterpret_cast<const uint8_t*>(iv.data()),
+                           iv.size());
+    EVP_DigestFinal(&ctx, buffer, &len);
 
-    base::MD5Init(&ctx);
-    base::MD5Update(&ctx, base::StringPiece(reinterpret_cast<char*>(res1.a),
-                                            sizeof(res1.a)));
-    base::MD5Update(
-        &ctx, base::StringPiece(reinterpret_cast<char*>(OperaObfuscationPass),
-                                sizeof(OperaObfuscationPass)));
-    base::MD5Update(&ctx, iv);
-    base::MD5Final(&res2, &ctx);
+    EVP_DigestInit(&ctx, EVP_md5());
+    EVP_DigestUpdate(&ctx, buffer, len);
+    EVP_DigestUpdate(&ctx, OperaObfuscationPass, sizeof(OperaObfuscationPass));
+    EVP_DigestUpdate(&ctx, reinterpret_cast<const uint8_t*>(iv.data()),
+      iv.size());
+    EVP_DigestFinal(&ctx, buffer+len, &len);
 
-    std::string key;
-    key.append(reinterpret_cast<char *>(res1.a), sizeof(res1.a));
-    key.append(reinterpret_cast<char *>(res2.a), 3*8-sizeof(res2.a));
+    EVP_MD_CTX_cleanup(&ctx);
 
-    std::unique_ptr<crypto::SymmetricKey> dec_key(
-          crypto::SymmetricKey::Import(crypto::SymmetricKey::DES_EDE3, key));
+    EVP_CIPHER_CTX decryptor;
+    EVP_CipherInit(&decryptor, EVP_des_ede3_cbc(), buffer, buffer+24, 0);
 
-    crypto::Encryptor decryptor;
-    if (!decryptor.Init(dec_key.get(), crypto::Encryptor::CBC,
-          base::StringPiece(reinterpret_cast<char *>(res2.a) + 8, 8)))
-      return true;
+    OPENSSL_cleanse(buffer, sizeof(buffer));
+    out_data.resize(in_data.length());
 
-    if (!decryptor.Decrypt(in_data, &out_data))
-      return false;
+    int out_len = 0;
+    int total_len = 0;
+    EVP_CipherUpdate(&decryptor,
+      reinterpret_cast<uint8_t*>(const_cast<char*>(out_data.data())), &out_len,
+      reinterpret_cast<const uint8_t*>(in_data.data()), in_data.length());
+    total_len += out_len;
+    EVP_CipherFinal_ex(&decryptor,
+      reinterpret_cast<uint8_t*>(const_cast<char*>(out_data.data() + total_len)),
+      &out_len);
+    EVP_CIPHER_CTX_cleanup(&decryptor);
+    total_len += out_len;
+    out_data.resize(total_len);
   }
   result.clear();
   for (binary_string::iterator it = out_data.begin(); it < out_data.end();) {

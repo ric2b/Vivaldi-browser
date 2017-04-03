@@ -7,9 +7,9 @@ package org.chromium.content.browser;
 import android.content.Context;
 import android.util.TypedValue;
 
-import org.chromium.base.CommandLine;
 import org.chromium.base.VisibleForTesting;
-import org.chromium.content.common.ContentSwitches;
+
+import java.lang.ref.WeakReference;
 
 /**
  * Cached copy of all positions and scales (CSS-to-DIP-to-physical pixels)
@@ -39,7 +39,7 @@ public class RenderCoordinates {
     private float mMaxPageScaleFactor = 1.0f;
 
     // Cached device density.
-    private float mDeviceScaleFactor;
+    private float mDeviceScaleFactor = 1.0f;
 
     // Multiplier that determines how many (device) pixels to scroll per mouse
     // wheel tick. Defaults to the preferred list item height.
@@ -62,22 +62,19 @@ public class RenderCoordinates {
         mContentHeightCss = contentHeightCss;
     }
 
-    void setDeviceScaleFactor(Context context) {
-        String forceScaleFactor =
-                CommandLine.getInstance().getSwitchValue(ContentSwitches.FORCE_DEVICE_SCALE_FACTOR);
-        mDeviceScaleFactor = forceScaleFactor != null
-                ? Float.valueOf(forceScaleFactor)
-                : context.getResources().getDisplayMetrics().density;
+    void setDeviceScaleFactor(float dipScale, WeakReference<Context> displayContext) {
+        mDeviceScaleFactor = dipScale;
 
         // The wheel scroll factor depends on the theme in the context.
         // This code assumes that the theme won't change between this call and
-        // getWheelScrollScale().
+        // getWheelScrollFactor().
 
+        Context context = displayContext.get();
         TypedValue outValue = new TypedValue();
         // This is the same attribute used by Android Views to scale wheel
         // event motion into scroll deltas.
-        if (context.getTheme().resolveAttribute(
-                    android.R.attr.listPreferredItemHeight, outValue, true)) {
+        if (context != null && context.getTheme().resolveAttribute(
+                android.R.attr.listPreferredItemHeight, outValue, true)) {
             mWheelScrollFactor = outValue.getDimension(context.getResources().getDisplayMetrics());
         } else {
             // If attribute retrieval fails, just use a sensible default.
@@ -109,7 +106,7 @@ public class RenderCoordinates {
     /**
      * Sets several fields for unit test. (used by {@link CursorAnchorInfoControllerTest}).
      * @param deviceScaleFactor Device scale factor (maps DIP pixels to physical pixels).
-     * @param contentOffsetYPix Physical on-screen Y offset amount below the top controls.
+     * @param contentOffsetYPix Physical on-screen Y offset amount below the browser controls.
      */
     @VisibleForTesting
     public void setFrameInfoForTest(float deviceScaleFactor, float contentOffsetYPix) {
@@ -329,7 +326,7 @@ public class RenderCoordinates {
     }
 
     /**
-     * @return The Physical on-screen Y offset amount below the top controls.
+     * @return The Physical on-screen Y offset amount below the browser controls.
      */
     public float getContentOffsetYPix() {
         return mTopContentOffsetYPix;

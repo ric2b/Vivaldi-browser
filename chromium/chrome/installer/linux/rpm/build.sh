@@ -23,7 +23,7 @@ gen_spec() {
     local PACKAGE="${PACKAGE}-${CHANNEL}"
     local MENUNAME="${MENUNAME} (${CHANNEL})"
   fi
-  process_template "${SCRIPTDIR}/vivaldi.spec.template" "${SPEC}"
+  process_template "${BUILDDIR}/installer/rpm/vivaldi.spec.template" "${SPEC}"
 }
 
 # Setup the installation directory hierachy in the package staging area.

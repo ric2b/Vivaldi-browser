@@ -1,14 +1,19 @@
 {
-  "manifest_version": 1,
-  "name": "exe:navigation",
+  "name": "navigation",
   "display_name": "Navigation",
-  "capabilities": {
-    "provided": {
-      "app":  [ "navigation::mojom::ViewFactory" ]
-    },
-    "required": {
-      "*": { "classes": [ "app" ] },
-      "service:shell": { "classes": [ "shell:client_process", "shell:user_id", "shell:instance_name" ] }
+  "interface_provider_specs": {
+    "service_manager:connector": {
+      "provides": {
+        "app": [ "navigation::mojom::ViewFactory" ]
+      },
+      "requires": {
+        "*": [ "app" ],
+        "service_manager": [
+          "service_manager:client_process",
+          "service_manager:user_id",
+          "service_manager:instance_name"
+        ]
+      }
     }
   }
 }

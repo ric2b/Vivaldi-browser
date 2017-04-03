@@ -2,12 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <memory>
+
 #include "ui/views/animation/ink_drop_impl.h"
 
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/test/test_simple_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/views/animation/test/ink_drop_impl_test_api.h"
 #include "ui/views/animation/test/test_ink_drop_host.h"
 
@@ -20,13 +24,22 @@ class InkDropImplTest : public testing::Test {
   ~InkDropImplTest() override;
 
  protected:
-  TestInkDropHost ink_drop_host_;
+  TestInkDropHost* ink_drop_host() { return ink_drop_host_.get(); }
 
-  // The test target.
-  InkDropImpl ink_drop_;
+  InkDropImpl* ink_drop() { return ink_drop_.get(); }
 
-  // Allows privileged access to the the |ink_drop_highlight_|.
-  test::InkDropImplTestApi test_api_;
+  test::InkDropImplTestApi* test_api() { return test_api_.get(); }
+
+  // Runs all the pending tasks in |task_runner_|. This can be used to progress
+  // timers. e.g. HideHighlightOnRippleHiddenState's
+  // |highlight_after_ripple_timer_|.
+  void RunPendingTasks();
+
+  // Returns true if the ink drop layers have been added to |ink_drop_host_|.
+  bool AreLayersAddedToHost() const;
+
+  // Destroys the |ink_drop_| and associated |test_api_|.
+  void DestroyInkDrop();
 
   // Used to control the tasks scheduled by the InkDropImpl's Timer.
   scoped_refptr<base::TestSimpleTaskRunner> task_runner_;
@@ -35,339 +48,521 @@ class InkDropImplTest : public testing::Test {
   std::unique_ptr<base::ThreadTaskRunnerHandle> thread_task_runner_handle_;
 
  private:
+  std::unique_ptr<TestInkDropHost> ink_drop_host_;
+
+  // The test target.
+  std::unique_ptr<InkDropImpl> ink_drop_;
+
+  // Allows privileged access to the the |ink_drop_highlight_|.
+  std::unique_ptr<test::InkDropImplTestApi> test_api_;
+
   DISALLOW_COPY_AND_ASSIGN(InkDropImplTest);
 };
 
 InkDropImplTest::InkDropImplTest()
-    : ink_drop_(&ink_drop_host_),
-      test_api_(&ink_drop_),
-      task_runner_(new base::TestSimpleTaskRunner),
+    : task_runner_(new base::TestSimpleTaskRunner),
       thread_task_runner_handle_(
-          new base::ThreadTaskRunnerHandle(task_runner_)) {
-  ink_drop_host_.set_disable_timers_for_test(true);
+          new base::ThreadTaskRunnerHandle(task_runner_)),
+      ink_drop_host_(base::MakeUnique<TestInkDropHost>()),
+      ink_drop_(
+          base::MakeUnique<InkDropImpl>(ink_drop_host_.get(), gfx::Size())),
+      test_api_(base::MakeUnique<test::InkDropImplTestApi>(ink_drop_.get())) {
+  ink_drop_host_->set_disable_timers_for_test(true);
 }
 
 InkDropImplTest::~InkDropImplTest() {}
 
-TEST_F(InkDropImplTest, SetHoveredHighlightIsFadingInOrVisible) {
-  ink_drop_host_.set_should_show_highlight(true);
-
-  ink_drop_.SetHovered(true);
-  EXPECT_TRUE(test_api_.IsHighlightFadingInOrVisible());
-
-  test_api_.CompleteAnimations();
-
-  ink_drop_.SetHovered(false);
-  EXPECT_FALSE(test_api_.IsHighlightFadingInOrVisible());
-}
-
-TEST_F(InkDropImplTest, FocusAndHoverAtSameTime) {
-  ink_drop_host_.set_should_show_highlight(true);
-  EXPECT_FALSE(test_api_.IsHighlightFadingInOrVisible());
-
-  ink_drop_.SetFocused(true);
-  EXPECT_TRUE(test_api_.IsHighlightFadingInOrVisible());
-
-  test_api_.CompleteAnimations();
-  ink_drop_.SetHovered(false);
-  EXPECT_TRUE(test_api_.IsHighlightFadingInOrVisible());
-
-  test_api_.CompleteAnimations();
-  ink_drop_.SetHovered(true);
-  EXPECT_TRUE(test_api_.IsHighlightFadingInOrVisible());
-
-  test_api_.CompleteAnimations();
-  ink_drop_.SetFocused(false);
-  EXPECT_TRUE(test_api_.IsHighlightFadingInOrVisible());
-
-  test_api_.CompleteAnimations();
-  ink_drop_.SetHovered(false);
-  EXPECT_FALSE(test_api_.IsHighlightFadingInOrVisible());
-}
-
-TEST_F(InkDropImplTest, HighlightDoesntFadeInAfterAnimationIfHighlightNotSet) {
-  ink_drop_host_.set_should_show_highlight(true);
-  ink_drop_.SetHovered(false);
-  ink_drop_.AnimateToState(InkDropState::ACTION_TRIGGERED);
-  test_api_.CompleteAnimations();
-
-  EXPECT_FALSE(task_runner_->HasPendingTask());
-  EXPECT_FALSE(test_api_.IsHighlightFadingInOrVisible());
-}
-
-TEST_F(InkDropImplTest, HighlightFadesInAfterAnimationWhenHostIsHovered) {
-  ink_drop_host_.set_should_show_highlight(true);
-  ink_drop_.SetHovered(true);
-  ink_drop_.AnimateToState(InkDropState::ACTION_TRIGGERED);
-  test_api_.CompleteAnimations();
-
-  EXPECT_TRUE(task_runner_->HasPendingTask());
-
+void InkDropImplTest::RunPendingTasks() {
   task_runner_->RunPendingTasks();
+  EXPECT_FALSE(task_runner_->HasPendingTask());
+}
 
-  EXPECT_TRUE(test_api_.IsHighlightFadingInOrVisible());
+bool InkDropImplTest::AreLayersAddedToHost() const {
+  return ink_drop_host_->num_ink_drop_layers() >= 1;
+}
+
+void InkDropImplTest::DestroyInkDrop() {
+  test_api_.reset();
+  ink_drop_.reset();
+}
+
+// AutoHighlightMode parameterized test fixture.
+class InkDropImplAutoHighlightTest
+    : public InkDropImplTest,
+      public testing::WithParamInterface<
+          testing::tuple<InkDropImpl::AutoHighlightMode>> {
+ public:
+  InkDropImplAutoHighlightTest();
+  ~InkDropImplAutoHighlightTest() override;
+
+  InkDropImpl::AutoHighlightMode GetAutoHighlightMode() const;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(InkDropImplAutoHighlightTest);
+};
+
+InkDropImplAutoHighlightTest::InkDropImplAutoHighlightTest()
+    : InkDropImplTest() {
+  ink_drop()->SetAutoHighlightMode(GetAutoHighlightMode());
+}
+
+InkDropImplAutoHighlightTest::~InkDropImplAutoHighlightTest() {}
+
+InkDropImpl::AutoHighlightMode
+InkDropImplAutoHighlightTest::GetAutoHighlightMode() const {
+  return testing::get<0>(GetParam());
+}
+
+////////////////////////////////////////////////////////////////////////////////
+//
+// InkDropImpl tests
+//
+
+TEST_F(InkDropImplTest, ShouldHighlight) {
+  ink_drop()->SetShowHighlightOnHover(false);
+  ink_drop()->SetHovered(false);
+  ink_drop()->SetShowHighlightOnFocus(false);
+  ink_drop()->SetFocused(false);
+  EXPECT_FALSE(test_api()->ShouldHighlight());
+
+  ink_drop()->SetShowHighlightOnHover(true);
+  ink_drop()->SetHovered(false);
+  ink_drop()->SetShowHighlightOnFocus(false);
+  ink_drop()->SetFocused(false);
+  EXPECT_FALSE(test_api()->ShouldHighlight());
+
+  ink_drop()->SetShowHighlightOnHover(false);
+  ink_drop()->SetHovered(true);
+  ink_drop()->SetShowHighlightOnFocus(false);
+  ink_drop()->SetFocused(false);
+  EXPECT_FALSE(test_api()->ShouldHighlight());
+
+  ink_drop()->SetShowHighlightOnHover(false);
+  ink_drop()->SetHovered(false);
+  ink_drop()->SetShowHighlightOnFocus(true);
+  ink_drop()->SetFocused(false);
+  EXPECT_FALSE(test_api()->ShouldHighlight());
+
+  ink_drop()->SetShowHighlightOnHover(false);
+  ink_drop()->SetHovered(false);
+  ink_drop()->SetShowHighlightOnFocus(false);
+  ink_drop()->SetFocused(true);
+  EXPECT_FALSE(test_api()->ShouldHighlight());
+
+  ink_drop()->SetShowHighlightOnHover(true);
+  ink_drop()->SetHovered(true);
+  ink_drop()->SetShowHighlightOnFocus(false);
+  ink_drop()->SetFocused(false);
+  EXPECT_TRUE(test_api()->ShouldHighlight());
+
+  ink_drop()->SetShowHighlightOnHover(false);
+  ink_drop()->SetHovered(false);
+  ink_drop()->SetShowHighlightOnFocus(true);
+  ink_drop()->SetFocused(true);
+  EXPECT_TRUE(test_api()->ShouldHighlight());
+
+  test_api()->SetShouldHighlight(false);
+  EXPECT_FALSE(test_api()->ShouldHighlight());
+
+  test_api()->SetShouldHighlight(true);
+  EXPECT_TRUE(test_api()->ShouldHighlight());
 }
 
 TEST_F(InkDropImplTest,
-       HighlightDoesntFadeInAfterAnimationWhenHostIsNotHovered) {
-  ink_drop_host_.set_should_show_highlight(false);
-  ink_drop_.SetHovered(true);
-  ink_drop_.AnimateToState(InkDropState::ACTION_TRIGGERED);
-  test_api_.CompleteAnimations();
-
-  EXPECT_TRUE(task_runner_->HasPendingTask());
-
-  task_runner_->RunPendingTasks();
-
-  EXPECT_FALSE(test_api_.IsHighlightFadingInOrVisible());
+       VerifyInkDropLayersRemovedWhenPresentDuringDestruction) {
+  test_api()->SetShouldHighlight(true);
+  ink_drop()->AnimateToState(InkDropState::ACTION_PENDING);
+  EXPECT_TRUE(AreLayersAddedToHost());
+  DestroyInkDrop();
+  EXPECT_FALSE(AreLayersAddedToHost());
 }
 
-TEST_F(InkDropImplTest, HoveredStateNotVisibleOrFadingInAfterAnimateToState) {
-  ink_drop_host_.set_should_show_highlight(true);
+// Test that (re-)hiding or un-hovering a hidden ink drop doesn't add layers.
+TEST_F(InkDropImplTest, AlwaysHiddenInkDropHasNoLayers) {
+  EXPECT_FALSE(AreLayersAddedToHost());
 
-  ink_drop_.SetHovered(true);
-  test_api_.CompleteAnimations();
-  EXPECT_TRUE(test_api_.IsHighlightFadingInOrVisible());
+  ink_drop()->AnimateToState(InkDropState::HIDDEN);
+  EXPECT_FALSE(AreLayersAddedToHost());
 
-  ink_drop_.AnimateToState(InkDropState::ACTION_TRIGGERED);
-  EXPECT_FALSE(test_api_.IsHighlightFadingInOrVisible());
-}
-
-// Verifies that there is not a crash when setting hovered state and the host
-// returns null for the highlight.
-TEST_F(InkDropImplTest, SetHoveredFalseWorksWhenNoInkDropHighlightExists) {
-  ink_drop_host_.set_should_show_highlight(false);
-  ink_drop_.SetHovered(true);
-  EXPECT_FALSE(test_api_.highlight());
-  ink_drop_.SetHovered(false);
-  EXPECT_FALSE(test_api_.highlight());
-}
-
-TEST_F(InkDropImplTest, HighlightFadesOutOnSnapToActivated) {
-  ink_drop_host_.set_should_show_highlight(true);
-  ink_drop_.SetHovered(true);
-  test_api_.CompleteAnimations();
-
-  EXPECT_TRUE(test_api_.IsHighlightFadingInOrVisible());
-
-  ink_drop_.SnapToActivated();
-
-  EXPECT_FALSE(test_api_.IsHighlightFadingInOrVisible());
+  ink_drop()->SetHovered(false);
+  EXPECT_FALSE(AreLayersAddedToHost());
 }
 
 TEST_F(InkDropImplTest, LayersRemovedFromHostAfterHighlight) {
-  ink_drop_host_.set_should_show_highlight(true);
+  EXPECT_FALSE(AreLayersAddedToHost());
 
-  EXPECT_EQ(0, ink_drop_host_.num_ink_drop_layers());
+  test_api()->SetShouldHighlight(true);
+  EXPECT_TRUE(AreLayersAddedToHost());
 
-  ink_drop_.SetHovered(true);
-  EXPECT_EQ(1, ink_drop_host_.num_ink_drop_layers());
+  test_api()->CompleteAnimations();
 
-  test_api_.CompleteAnimations();
-
-  ink_drop_.SetHovered(false);
-  EXPECT_EQ(1, ink_drop_host_.num_ink_drop_layers());
-
-  test_api_.CompleteAnimations();
-  EXPECT_EQ(0, ink_drop_host_.num_ink_drop_layers());
+  test_api()->SetShouldHighlight(false);
+  test_api()->CompleteAnimations();
+  EXPECT_FALSE(AreLayersAddedToHost());
 }
 
 TEST_F(InkDropImplTest, LayersRemovedFromHostAfterInkDrop) {
-  ink_drop_host_.set_should_show_highlight(true);
+  EXPECT_FALSE(AreLayersAddedToHost());
 
-  EXPECT_EQ(0, ink_drop_host_.num_ink_drop_layers());
+  ink_drop()->AnimateToState(InkDropState::ACTION_PENDING);
+  EXPECT_TRUE(AreLayersAddedToHost());
 
-  ink_drop_.AnimateToState(InkDropState::ACTION_PENDING);
-  EXPECT_EQ(1, ink_drop_host_.num_ink_drop_layers());
+  test_api()->CompleteAnimations();
 
-  ink_drop_.AnimateToState(InkDropState::HIDDEN);
-  EXPECT_EQ(1, ink_drop_host_.num_ink_drop_layers());
+  ink_drop()->AnimateToState(InkDropState::HIDDEN);
+  EXPECT_TRUE(AreLayersAddedToHost());
 
-  test_api_.CompleteAnimations();
-  EXPECT_EQ(0, ink_drop_host_.num_ink_drop_layers());
-}
-
-TEST_F(InkDropImplTest, LayersAddedToHostWhenHighlightOrInkDropVisible) {
-  ink_drop_host_.set_should_show_highlight(true);
-
-  EXPECT_EQ(0, ink_drop_host_.num_ink_drop_layers());
-
-  ink_drop_.SetHovered(true);
-  EXPECT_EQ(1, ink_drop_host_.num_ink_drop_layers());
-
-  ink_drop_.AnimateToState(InkDropState::ACTION_PENDING);
-  EXPECT_EQ(1, ink_drop_host_.num_ink_drop_layers());
-
-  ink_drop_.AnimateToState(InkDropState::HIDDEN);
-  EXPECT_EQ(1, ink_drop_host_.num_ink_drop_layers());
-
-  test_api_.CompleteAnimations();
-  EXPECT_EQ(0, ink_drop_host_.num_ink_drop_layers());
-
-  EXPECT_TRUE(task_runner_->HasPendingTask());
-  task_runner_->RunPendingTasks();
-
-  // Highlight should be fading back in.
-  EXPECT_TRUE(test_api_.HasActiveAnimations());
-  EXPECT_EQ(1, ink_drop_host_.num_ink_drop_layers());
-}
-
-TEST_F(InkDropImplTest, LayersNotAddedToHostWhenHighlightTimeFires) {
-  ink_drop_host_.set_should_show_highlight(true);
-
-  EXPECT_EQ(0, ink_drop_host_.num_ink_drop_layers());
-
-  ink_drop_.SetHovered(true);
-  EXPECT_EQ(1, ink_drop_host_.num_ink_drop_layers());
-
-  ink_drop_.AnimateToState(InkDropState::ACTION_PENDING);
-  EXPECT_EQ(1, ink_drop_host_.num_ink_drop_layers());
-
-  ink_drop_.AnimateToState(InkDropState::HIDDEN);
-  test_api_.CompleteAnimations();
-  EXPECT_EQ(0, ink_drop_host_.num_ink_drop_layers());
-
-  ink_drop_host_.set_should_show_highlight(false);
-
-  EXPECT_TRUE(task_runner_->HasPendingTask());
-  task_runner_->RunPendingTasks();
-
-  EXPECT_EQ(0, ink_drop_host_.num_ink_drop_layers());
+  test_api()->CompleteAnimations();
+  EXPECT_FALSE(AreLayersAddedToHost());
 }
 
 TEST_F(InkDropImplTest, LayersArentRemovedWhenPreemptingFadeOut) {
-  ink_drop_host_.set_should_show_highlight(true);
+  EXPECT_FALSE(AreLayersAddedToHost());
 
-  EXPECT_EQ(0, ink_drop_host_.num_ink_drop_layers());
+  test_api()->SetShouldHighlight(true);
+  EXPECT_TRUE(AreLayersAddedToHost());
 
-  ink_drop_.SetHovered(true);
-  EXPECT_EQ(1, ink_drop_host_.num_ink_drop_layers());
+  test_api()->CompleteAnimations();
 
-  test_api_.CompleteAnimations();
+  ink_drop()->SetHovered(false);
+  EXPECT_TRUE(AreLayersAddedToHost());
 
-  ink_drop_.SetHovered(false);
-  EXPECT_EQ(1, ink_drop_host_.num_ink_drop_layers());
-
-  ink_drop_.SetHovered(true);
-  EXPECT_EQ(1, ink_drop_host_.num_ink_drop_layers());
+  ink_drop()->SetHovered(true);
+  EXPECT_TRUE(AreLayersAddedToHost());
 }
 
-TEST_F(InkDropImplTest, AnimationWhenDeactivated) {
-  EXPECT_EQ(0, ink_drop_host_.num_ink_drop_layers());
+#if DCHECK_IS_ON()
+TEST_F(InkDropImplTest, SettingHighlightStateDuringStateExitIsntAllowed) {
+  test::InkDropImplTestApi::SetStateOnExitHighlightState::Install(
+      test_api()->state_factory());
+  ASSERT_DEATH_IF_SUPPORTED(
+      test::InkDropImplTestApi::AccessFactoryOnExitHighlightState::Install(
+          test_api()->state_factory()),
+      ".*HighlightStates should not be changed within a call to "
+      "HighlightState::Exit\\(\\)\\..*");
+  // Need to set the |highlight_state_| directly because the
+  // SetStateOnExitHighlightState will recursively try to set it during tear
+  // down and cause a stack overflow.
+  test_api()->SetHighlightState(nullptr);
+}
+#endif
 
-  ink_drop_.AnimateToState(InkDropState::ACTIVATED);
-  EXPECT_EQ(1, ink_drop_host_.num_ink_drop_layers());
-  test_api_.CompleteAnimations();
-
-  ink_drop_.AnimateToState(InkDropState::DEACTIVATED);
-  EXPECT_EQ(1, ink_drop_host_.num_ink_drop_layers());
-  EXPECT_TRUE(test_api_.HasActiveAnimations());
-  EXPECT_FALSE(test_api_.IsHighlightFadingInOrVisible());
+// Verifies there is no use after free errors.
+TEST_F(InkDropImplTest,
+       TearingDownHighlightStateThatAccessesTheStateFactoryIsSafe) {
+  test::InkDropImplTestApi::AccessFactoryOnExitHighlightState::Install(
+      test_api()->state_factory());
+  test::InkDropImplTestApi::AccessFactoryOnExitHighlightState::Install(
+      test_api()->state_factory());
 }
 
-TEST_F(InkDropImplTest, AnimationSkippedWhenFocusedAndDeactivated) {
-  ink_drop_host_.set_should_show_highlight(true);
-
-  EXPECT_EQ(0, ink_drop_host_.num_ink_drop_layers());
-
-  ink_drop_.SetFocused(true);
-  EXPECT_EQ(1, ink_drop_host_.num_ink_drop_layers());
-
-  ink_drop_.AnimateToState(InkDropState::ACTIVATED);
-  EXPECT_EQ(1, ink_drop_host_.num_ink_drop_layers());
-  test_api_.CompleteAnimations();
-
-  ink_drop_.AnimateToState(InkDropState::DEACTIVATED);
-  EXPECT_EQ(1, ink_drop_host_.num_ink_drop_layers());
-  EXPECT_FALSE(test_api_.HasActiveAnimations());
-  EXPECT_TRUE(test_api_.IsHighlightFadingInOrVisible());
-  EXPECT_EQ(InkDropState::HIDDEN, ink_drop_.GetTargetInkDropState());
+// Tests that if during destruction, a rippl animation is successfully ended, no
+// crash happens (see https://crbug.com/663579).
+TEST_F(InkDropImplTest, SuccessfulAnimationEndedDuringDestruction) {
+  // Start a ripple animation with non-zero duration.
+  ink_drop()->AnimateToState(InkDropState::ACTION_PENDING);
+  {
+    // Start another ripple animation with zero duration that would be queued
+    // until the previous one is finished/aborted.
+    ui::ScopedAnimationDurationScaleMode duration_mode(
+        ui::ScopedAnimationDurationScaleMode::ZERO_DURATION);
+    ink_drop()->AnimateToState(InkDropState::ACTION_TRIGGERED);
+  }
+  // Abort the first animation, so that the queued animation is started (and
+  // finished immediately since it has zero duration). No crash should happen.
+  DestroyInkDrop();
 }
 
-TEST_F(InkDropImplTest, FocusHighlightComesBackImmediatelyAfterAction) {
-  ink_drop_host_.set_should_show_highlight(true);
+////////////////////////////////////////////////////////////////////////////////
+//
+// Common AutoHighlightMode tests
+//
 
-  EXPECT_EQ(0, ink_drop_host_.num_ink_drop_layers());
+typedef InkDropImplAutoHighlightTest InkDropImplCommonAutoHighlightTest;
+// Note: First argument is optional and intentionally left blank.
+// (it's a prefix for the generated test cases)
+INSTANTIATE_TEST_CASE_P(
+    ,
+    InkDropImplCommonAutoHighlightTest,
+    testing::Values(InkDropImpl::AutoHighlightMode::NONE,
+                    InkDropImpl::AutoHighlightMode::HIDE_ON_RIPPLE,
+                    InkDropImpl::AutoHighlightMode::SHOW_ON_RIPPLE));
 
-  ink_drop_.SetFocused(true);
-  EXPECT_EQ(1, ink_drop_host_.num_ink_drop_layers());
+// Verifies InkDropImplTestApi::SetShouldHighlight() works as expected.
+TEST_P(InkDropImplCommonAutoHighlightTest,
+       ShouldHighlightCausesHighlightToBeVisible) {
+  test_api()->SetShouldHighlight(true);
+  EXPECT_TRUE(test_api()->IsHighlightFadingInOrVisible());
 
-  ink_drop_.AnimateToState(InkDropState::ACTION_PENDING);
-  EXPECT_EQ(1, ink_drop_host_.num_ink_drop_layers());
-  EXPECT_FALSE(test_api_.IsHighlightFadingInOrVisible());
+  test_api()->SetShouldHighlight(false);
+  EXPECT_FALSE(test_api()->IsHighlightFadingInOrVisible());
+}
 
-  ink_drop_.AnimateToState(InkDropState::ACTION_TRIGGERED);
-  EXPECT_EQ(1, ink_drop_host_.num_ink_drop_layers());
+TEST_P(InkDropImplCommonAutoHighlightTest,
+       HighlightVisibilityForFocusAndHoverStates) {
+  ink_drop()->SetShowHighlightOnHover(true);
+  ink_drop()->SetShowHighlightOnFocus(true);
 
-  test_api_.CompleteAnimations();
+  EXPECT_FALSE(test_api()->IsHighlightFadingInOrVisible());
 
-  // No delay (unlike in the hover case).
+  ink_drop()->SetFocused(true);
+  EXPECT_TRUE(test_api()->IsHighlightFadingInOrVisible());
+
+  ink_drop()->SetHovered(false);
+  EXPECT_TRUE(test_api()->IsHighlightFadingInOrVisible());
+
+  ink_drop()->SetHovered(true);
+  EXPECT_TRUE(test_api()->IsHighlightFadingInOrVisible());
+
+  ink_drop()->SetFocused(false);
+  EXPECT_TRUE(test_api()->IsHighlightFadingInOrVisible());
+
+  ink_drop()->SetHovered(false);
+  EXPECT_FALSE(test_api()->IsHighlightFadingInOrVisible());
+}
+
+////////////////////////////////////////////////////////////////////////////////
+//
+// InkDropImpl::AutoHighlightMode::NONE specific tests
+//
+
+typedef InkDropImplAutoHighlightTest InkDropImplNoAutoHighlightTest;
+// Note: First argument is optional and intentionally left blank.
+// (it's a prefix for the generated test cases)
+INSTANTIATE_TEST_CASE_P(,
+                        InkDropImplNoAutoHighlightTest,
+                        testing::Values(InkDropImpl::AutoHighlightMode::NONE));
+
+TEST_P(InkDropImplNoAutoHighlightTest, VisibleHighlightDuringRippleAnimations) {
+  test_api()->SetShouldHighlight(true);
+
+  ink_drop()->AnimateToState(InkDropState::ACTION_PENDING);
+  test_api()->CompleteAnimations();
+  EXPECT_TRUE(test_api()->IsHighlightFadingInOrVisible());
+
+  ink_drop()->AnimateToState(InkDropState::HIDDEN);
+  test_api()->CompleteAnimations();
+  EXPECT_TRUE(test_api()->IsHighlightFadingInOrVisible());
+}
+
+TEST_P(InkDropImplNoAutoHighlightTest, HiddenHighlightDuringRippleAnimations) {
+  test_api()->SetShouldHighlight(false);
+
+  ink_drop()->AnimateToState(InkDropState::ACTION_PENDING);
+  test_api()->CompleteAnimations();
+  EXPECT_FALSE(test_api()->IsHighlightFadingInOrVisible());
+
+  ink_drop()->AnimateToState(InkDropState::HIDDEN);
+  test_api()->CompleteAnimations();
+  EXPECT_FALSE(test_api()->IsHighlightFadingInOrVisible());
+}
+
+////////////////////////////////////////////////////////////////////////////////
+//
+// InkDropImpl::AutoHighlightMode::HIDE_ON_RIPPLE specific tests
+//
+
+typedef InkDropImplAutoHighlightTest InkDropImplHideAutoHighlightTest;
+// Note: First argument is optional and intentionally left blank.
+// (it's a prefix for the generated test cases)
+INSTANTIATE_TEST_CASE_P(
+    ,
+    InkDropImplHideAutoHighlightTest,
+    testing::Values(InkDropImpl::AutoHighlightMode::HIDE_ON_RIPPLE));
+
+TEST_P(InkDropImplHideAutoHighlightTest,
+       VisibleHighlightDuringRippleAnimations) {
+  test_api()->SetShouldHighlight(true);
+
+  ink_drop()->AnimateToState(InkDropState::ACTION_PENDING);
+  test_api()->CompleteAnimations();
+  EXPECT_FALSE(test_api()->IsHighlightFadingInOrVisible());
+
+  ink_drop()->AnimateToState(InkDropState::HIDDEN);
+  test_api()->CompleteAnimations();
+  RunPendingTasks();
+  EXPECT_TRUE(test_api()->IsHighlightFadingInOrVisible());
+}
+
+TEST_P(InkDropImplHideAutoHighlightTest,
+       HiddenHighlightDuringRippleAnimations) {
+  test_api()->SetShouldHighlight(false);
+
+  ink_drop()->AnimateToState(InkDropState::ACTION_PENDING);
+  test_api()->CompleteAnimations();
+  EXPECT_FALSE(test_api()->IsHighlightFadingInOrVisible());
+
+  ink_drop()->AnimateToState(InkDropState::HIDDEN);
+  test_api()->CompleteAnimations();
+  RunPendingTasks();
+  EXPECT_FALSE(test_api()->IsHighlightFadingInOrVisible());
+}
+
+TEST_P(InkDropImplHideAutoHighlightTest, HighlightIsHiddenOnSnapToActivated) {
+  test_api()->SetShouldHighlight(true);
+
+  ink_drop()->SnapToActivated();
+  test_api()->CompleteAnimations();
+  EXPECT_FALSE(test_api()->IsHighlightFadingInOrVisible());
+
+  ink_drop()->AnimateToState(InkDropState::HIDDEN);
+  test_api()->CompleteAnimations();
+  RunPendingTasks();
+  EXPECT_TRUE(test_api()->IsHighlightFadingInOrVisible());
+}
+
+TEST_P(InkDropImplHideAutoHighlightTest,
+       HighlightDoesntFadeInAfterAnimationIfHighlightNotSet) {
+  test_api()->SetShouldHighlight(true);
+
+  ink_drop()->AnimateToState(InkDropState::ACTION_TRIGGERED);
+  test_api()->CompleteAnimations();
+  test_api()->SetShouldHighlight(false);
+  ink_drop()->AnimateToState(InkDropState::HIDDEN);
+  test_api()->CompleteAnimations();
+  RunPendingTasks();
+
+  EXPECT_FALSE(test_api()->IsHighlightFadingInOrVisible());
+}
+
+TEST_P(InkDropImplHideAutoHighlightTest,
+       HighlightFadesInAfterAnimationIfHovered) {
+  ink_drop()->SetShowHighlightOnHover(true);
+  ink_drop()->SetHovered(true);
+
+  ink_drop()->AnimateToState(InkDropState::ACTION_TRIGGERED);
+  test_api()->CompleteAnimations();
+  ink_drop()->AnimateToState(InkDropState::HIDDEN);
+  test_api()->CompleteAnimations();
+
+  EXPECT_FALSE(test_api()->IsHighlightFadingInOrVisible());
+  EXPECT_TRUE(task_runner_->HasPendingTask());
+
+  RunPendingTasks();
+
+  EXPECT_TRUE(test_api()->IsHighlightFadingInOrVisible());
+}
+
+TEST_P(InkDropImplHideAutoHighlightTest,
+       HighlightSnapsInAfterAnimationWhenHostIsFocused) {
+  ink_drop()->SetShowHighlightOnFocus(true);
+  ink_drop()->SetFocused(true);
+
+  ink_drop()->AnimateToState(InkDropState::ACTION_TRIGGERED);
+  test_api()->CompleteAnimations();
+  ink_drop()->AnimateToState(InkDropState::HIDDEN);
+  test_api()->CompleteAnimations();
+
   EXPECT_FALSE(task_runner_->HasPendingTask());
-
-  // Highlight should be back.
-  EXPECT_TRUE(test_api_.IsHighlightFadingInOrVisible());
+  EXPECT_TRUE(test_api()->IsHighlightFadingInOrVisible());
 }
 
-TEST_F(InkDropImplTest, HighlightCanCoexistWithRipple) {
-  ink_drop_host_.set_should_show_highlight(true);
-  ink_drop_host_.set_ripple_overrides_highlight(false);
+TEST_P(InkDropImplHideAutoHighlightTest, DeactivatedAnimatesWhenNotFocused) {
+  test_api()->SetShouldHighlight(false);
 
-  EXPECT_EQ(0, ink_drop_host_.num_ink_drop_layers());
+  ink_drop()->AnimateToState(InkDropState::ACTIVATED);
+  test_api()->CompleteAnimations();
 
-  ink_drop_.SetHovered(true);
-  EXPECT_EQ(1, ink_drop_host_.num_ink_drop_layers());
-
-  ink_drop_.AnimateToState(InkDropState::ACTION_PENDING);
-  EXPECT_EQ(1, ink_drop_host_.num_ink_drop_layers());
-  EXPECT_TRUE(test_api_.IsHighlightFadingInOrVisible());
-
-  ink_drop_.AnimateToState(InkDropState::ACTION_TRIGGERED);
-  EXPECT_EQ(1, ink_drop_host_.num_ink_drop_layers());
-  EXPECT_TRUE(test_api_.IsHighlightFadingInOrVisible());
-
-  test_api_.CompleteAnimations();
-
-  // Nothing to fade in because the highlight has always been visible.
-  EXPECT_FALSE(task_runner_->HasPendingTask());
-  EXPECT_TRUE(test_api_.IsHighlightFadingInOrVisible());
-
-  // Now try with the ripple showing before the highlight comes in.
-  ink_drop_.AnimateToState(InkDropState::HIDDEN);
-  ink_drop_.SetHovered(false);
-  test_api_.CompleteAnimations();
-  EXPECT_EQ(0, ink_drop_host_.num_ink_drop_layers());
-
-  ink_drop_.AnimateToState(InkDropState::ACTION_PENDING);
-  EXPECT_EQ(1, ink_drop_host_.num_ink_drop_layers());
-  ink_drop_.SetHovered(true);
-  EXPECT_EQ(1, ink_drop_host_.num_ink_drop_layers());
-  EXPECT_TRUE(test_api_.IsHighlightFadingInOrVisible());
+  ink_drop()->AnimateToState(InkDropState::DEACTIVATED);
+  EXPECT_FALSE(test_api()->IsHighlightFadingInOrVisible());
+  EXPECT_TRUE(test_api()->HasActiveAnimations());
 }
 
-TEST_F(InkDropImplTest, HighlightCanCoexistWithSnapToActivatedRipple) {
-  ink_drop_host_.set_should_show_highlight(true);
-  ink_drop_host_.set_ripple_overrides_highlight(false);
+TEST_P(InkDropImplHideAutoHighlightTest,
+       DeactivatedAnimationSkippedWhenFocused) {
+  ink_drop()->SetShowHighlightOnFocus(true);
+  ink_drop()->SetFocused(true);
 
-  EXPECT_EQ(0, ink_drop_host_.num_ink_drop_layers());
+  ink_drop()->AnimateToState(InkDropState::ACTIVATED);
+  test_api()->CompleteAnimations();
 
-  ink_drop_.SetHovered(true);
-  EXPECT_EQ(1, ink_drop_host_.num_ink_drop_layers());
+  ink_drop()->AnimateToState(InkDropState::DEACTIVATED);
+  EXPECT_TRUE(AreLayersAddedToHost());
 
-  ink_drop_.SnapToActivated();
-  EXPECT_EQ(1, ink_drop_host_.num_ink_drop_layers());
-  EXPECT_TRUE(test_api_.IsHighlightFadingInOrVisible());
+  test_api()->CompleteAnimations();
+  EXPECT_TRUE(test_api()->IsHighlightFadingInOrVisible());
+  EXPECT_EQ(InkDropState::HIDDEN, ink_drop()->GetTargetInkDropState());
+}
 
-  // Now try with the ripple showing before the highlight comes in.
-  ink_drop_.AnimateToState(InkDropState::HIDDEN);
-  ink_drop_.SetHovered(false);
-  test_api_.CompleteAnimations();
-  EXPECT_EQ(0, ink_drop_host_.num_ink_drop_layers());
+TEST_P(InkDropImplHideAutoHighlightTest,
+       FocusAndHoverChangesDontShowHighlightWhenRippleIsVisible) {
+  test_api()->SetShouldHighlight(true);
+  ink_drop()->AnimateToState(InkDropState::ACTION_PENDING);
+  test_api()->CompleteAnimations();
+  EXPECT_FALSE(test_api()->IsHighlightFadingInOrVisible());
 
-  ink_drop_.SnapToActivated();
-  EXPECT_EQ(1, ink_drop_host_.num_ink_drop_layers());
-  ink_drop_.SetHovered(true);
-  EXPECT_EQ(1, ink_drop_host_.num_ink_drop_layers());
-  EXPECT_TRUE(test_api_.IsHighlightFadingInOrVisible());
+  ink_drop()->SetHovered(false);
+  ink_drop()->SetFocused(false);
+
+  ink_drop()->SetHovered(true);
+  ink_drop()->SetFocused(true);
+
+  EXPECT_FALSE(test_api()->IsHighlightFadingInOrVisible());
+  EXPECT_TRUE(test_api()->ShouldHighlight());
+}
+
+// Verifies there is no crash when animations are started during the destruction
+// of the InkDropRipple. See https://crbug.com/663335.
+TEST_P(InkDropImplHideAutoHighlightTest, NoCrashDuringRippleTearDown) {
+  ink_drop()->SetShowHighlightOnFocus(true);
+  ink_drop()->SetFocused(true);
+  ink_drop()->AnimateToState(InkDropState::ACTIVATED);
+  ink_drop()->AnimateToState(InkDropState::DEACTIVATED);
+  ink_drop()->AnimateToState(InkDropState::DEACTIVATED);
+  DestroyInkDrop();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+//
+// InkDropImpl::AutoHighlightMode::SHOW_ON_RIPPLE specific tests
+//
+
+typedef InkDropImplAutoHighlightTest InkDropImplShowAutoHighlightTest;
+// Note: First argument is optional and intentionally left blank.
+// (it's a prefix for the generated test cases)
+INSTANTIATE_TEST_CASE_P(
+    ,
+    InkDropImplShowAutoHighlightTest,
+    testing::Values(InkDropImpl::AutoHighlightMode::SHOW_ON_RIPPLE));
+
+TEST_P(InkDropImplShowAutoHighlightTest,
+       VisibleHighlightDuringRippleAnimations) {
+  test_api()->SetShouldHighlight(true);
+
+  ink_drop()->AnimateToState(InkDropState::ACTION_PENDING);
+  test_api()->CompleteAnimations();
+  EXPECT_TRUE(test_api()->IsHighlightFadingInOrVisible());
+
+  ink_drop()->AnimateToState(InkDropState::HIDDEN);
+  test_api()->CompleteAnimations();
+  EXPECT_TRUE(test_api()->IsHighlightFadingInOrVisible());
+}
+
+TEST_P(InkDropImplShowAutoHighlightTest,
+       HiddenHighlightDuringRippleAnimations) {
+  test_api()->SetShouldHighlight(false);
+
+  ink_drop()->AnimateToState(InkDropState::ACTION_PENDING);
+  test_api()->CompleteAnimations();
+  EXPECT_TRUE(test_api()->IsHighlightFadingInOrVisible());
+
+  ink_drop()->AnimateToState(InkDropState::HIDDEN);
+  test_api()->CompleteAnimations();
+  EXPECT_FALSE(test_api()->IsHighlightFadingInOrVisible());
+}
+
+TEST_P(InkDropImplShowAutoHighlightTest,
+       FocusAndHoverChangesDontHideHighlightWhenRippleIsVisible) {
+  test_api()->SetShouldHighlight(true);
+  ink_drop()->AnimateToState(InkDropState::ACTION_PENDING);
+  test_api()->CompleteAnimations();
+  EXPECT_TRUE(test_api()->IsHighlightFadingInOrVisible());
+
+  ink_drop()->SetHovered(false);
+  ink_drop()->SetFocused(false);
+
+  EXPECT_TRUE(test_api()->IsHighlightFadingInOrVisible());
+  EXPECT_FALSE(test_api()->ShouldHighlight());
 }
 
 }  // namespace views

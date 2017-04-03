@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import("//build/config/features.gni")
+import("//extensions/features/features.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
 
 source_set("common_constants") {
@@ -19,13 +20,10 @@ if (enable_extensions) {
   mojom("mojo") {
     sources = [
       "mojo/keep_alive.mojom",
-      "mojo/stash.mojom",
     ]
     if (proprietary_codecs && enable_wifi_display) {
       sources += [ "mojo/wifi_display_session_service.mojom" ]
     }
-
-    use_new_wrapper_types = false
   }
 
   # This must be a static library because extensions common depends on
@@ -33,6 +31,7 @@ if (enable_extensions) {
   # in. TODO(brettw): This reverse dependency should be fixed.
   static_library("common") {
     sources = [
+      "alias.h",
       "api/bluetooth/bluetooth_manifest_data.cc",
       "api/bluetooth/bluetooth_manifest_data.h",
       "api/bluetooth/bluetooth_manifest_handler.cc",
@@ -91,6 +90,8 @@ if (enable_extensions) {
       "extension_urls.cc",
       "extension_urls.h",
       "extension_utility_messages.h",
+      "extensions_aliases.cc",
+      "extensions_aliases.h",
       "extensions_client.cc",
       "extensions_client.h",
       "feature_switch.cc",
@@ -336,6 +337,7 @@ if (enable_extensions) {
       "url_pattern_unittest.cc",
       "user_script_unittest.cc",
       "value_builder_unittest.cc",
+      "value_counter_unittest.cc",
     ]
 
     deps = [
@@ -345,6 +347,7 @@ if (enable_extensions) {
       "//base/test:test_support",
       "//components/crx_file",
       "//device/usb",
+      "//device/usb:test_support",
       "//extensions:extensions_resources",
 
       # TODO(brettw) these tests should not be including headers from browser.

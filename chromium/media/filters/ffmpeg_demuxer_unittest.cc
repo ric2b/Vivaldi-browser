@@ -443,6 +443,10 @@ TEST_F(FFmpegDemuxerTest, AbortPendingReads) {
   demuxer_->AbortPendingReads();
   base::RunLoop().Run();
 
+  // Additional reads should also be aborted (until a Seek()).
+  audio->Read(NewReadCB(FROM_HERE, 29, 0, true, DemuxerStream::kAborted));
+  base::RunLoop().Run();
+
   // Ensure blocking thread has completed outstanding work.
   demuxer_->Stop();
   EXPECT_EQ(format_context()->pb->eof_reached, 0);
@@ -1351,6 +1355,14 @@ TEST_F(FFmpegDemuxerTest, Read_Mp4_Multiple_Tracks) {
   EXPECT_EQ(audio_track2.label(), "SoundHandler");
   EXPECT_EQ(audio_track2.language(), "und");
 }
+
+// works when ffmpeg_branding=Chrome
+#if 0
+TEST_F(FFmpegDemuxerTest, Read_Mp4_Crbug657437) {
+  CreateDemuxer("crbug657437.mp4");
+  InitializeDemuxer();
+}
+#endif
 
 #endif  // defined(USE_PROPRIETARY_CODECS)
 

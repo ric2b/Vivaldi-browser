@@ -8,7 +8,6 @@
 #include "core/layout/LayoutText.h"
 #include "core/layout/api/LineLayoutItem.h"
 #include "platform/LayoutUnit.h"
-#include "platform/text/TextPath.h"
 #include "wtf/Forward.h"
 
 namespace blink {
@@ -21,7 +20,7 @@ class LineLayoutText : public LineLayoutItem {
       : LineLayoutItem(layoutObject) {}
 
   explicit LineLayoutText(const LineLayoutItem& item) : LineLayoutItem(item) {
-    ASSERT_WITH_SECURITY_IMPLICATION(!item || item.isText());
+    SECURITY_DCHECK(!item || item.isText());
   }
 
   explicit LineLayoutText(std::nullptr_t) : LineLayoutItem(nullptr) {}
@@ -80,8 +79,8 @@ class LineLayoutText : public LineLayoutItem {
 
   const String& text() const { return toText()->text(); }
 
-  bool canUseSimpleFontCodePath() const {
-    return toText()->canUseSimpleFontCodePath();
+  bool containsOnlyWhitespace(unsigned from, unsigned len) const {
+    return toText()->containsOnlyWhitespace(from, len);
   }
 
   float width(unsigned from,

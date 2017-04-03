@@ -32,12 +32,15 @@
 #define WebFrameWidget_h
 
 #include "../platform/WebCommon.h"
+#include "../platform/WebDragOperation.h"
 #include "../platform/WebPageVisibilityState.h"
 #include "public/web/WebWidget.h"
 
 namespace blink {
 
+class WebDragData;
 class WebLocalFrame;
+class WebInputMethodController;
 class WebView;
 class WebWidgetClient;
 
@@ -73,10 +76,45 @@ class WebFrameWidget : public WebWidget {
   virtual void setBaseBackgroundColor(WebColor) = 0;
 
   // Returns the local root of this WebFrameWidget.
-  virtual WebLocalFrame* localRoot() = 0;
+  virtual WebLocalFrame* localRoot() const = 0;
 
   // WebWidget implementation.
   bool isWebFrameWidget() const final { return true; }
+
+  // Current instance of the active WebInputMethodController, that is, the
+  // WebInputMethodController corresponding to (and owned by) the focused
+  // WebLocalFrameImpl. It might return nullptr when there are no focused
+  // frames or possibly when the WebFrameWidget does not accept IME events.
+  virtual WebInputMethodController* getActiveWebInputMethodController()
+      const = 0;
+
+  // Callback methods when a drag-and-drop operation is trying to drop something
+  // on the WebFrameWidget.
+  virtual WebDragOperation dragTargetDragEnter(
+      const WebDragData&,
+      const WebPoint& pointInViewport,
+      const WebPoint& screenPoint,
+      WebDragOperationsMask operationsAllowed,
+      int modifiers) = 0;
+  virtual WebDragOperation dragTargetDragOver(
+      const WebPoint& pointInViewport,
+      const WebPoint& screenPoint,
+      WebDragOperationsMask operationsAllowed,
+      int modifiers) = 0;
+  virtual void dragTargetDragLeave() = 0;
+  virtual void dragTargetDrop(const WebDragData&,
+                              const WebPoint& pointInViewport,
+                              const WebPoint& screenPoint,
+                              int modifiers) = 0;
+
+  // Notifies the WebFrameWidget that a drag has terminated.
+  virtual void dragSourceEndedAt(const WebPoint& pointInViewport,
+                                 const WebPoint& screenPoint,
+                                 WebDragOperation) = 0;
+
+  // Notfies the WebFrameWidget that the system drag and drop operation has
+  // ended.
+  virtual void dragSourceSystemDragEnded() = 0;
 };
 
 }  // namespace blink

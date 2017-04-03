@@ -76,14 +76,17 @@ class RemoteFontFaceSource final : public CSSFontFaceSource,
       FromNetwork
     };
 
-    FontLoadHistograms(DataSource dataSource)
+    FontLoadHistograms(DataSource dataSource, FontDisplay fontDisplay)
         : m_loadStartTime(0),
           m_blankPaintTime(0),
           m_isLongLimitExceeded(false),
-          m_dataSource(dataSource) {}
+          m_dataSource(dataSource),
+          m_fontDisplay(fontDisplay) {}
     void loadStarted();
     void fallbackFontPainted(DisplayPeriod);
-    void fontLoaded(bool isInterventionTriggered);
+    void fontLoaded(bool isCorsFailed,
+                    bool loadError,
+                    bool isInterventionTriggered);
     void longLimitExceeded(bool isInterventionTriggered);
     void recordFallbackTime(const FontResource*);
     void recordRemoteFont(const FontResource*, bool isInterventionTriggered);
@@ -101,11 +104,13 @@ class RemoteFontFaceSource final : public CSSFontFaceSource,
     double m_blankPaintTime;
     bool m_isLongLimitExceeded;
     DataSource m_dataSource;
+    FontDisplay m_fontDisplay;
   };
 
   void switchToSwapPeriod();
   void switchToFailurePeriod();
   bool shouldTriggerWebFontsIntervention();
+  bool isLowPriorityLoadingAllowedForRemoteFont() const override;
 
   Member<FontResource> m_font;
   Member<CSSFontSelector> m_fontSelector;

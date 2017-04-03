@@ -12,6 +12,7 @@
 #include "ui/native_theme/native_theme.h"
 #include "ui/views/animation/flood_fill_ink_drop_ripple.h"
 #include "ui/views/animation/ink_drop_highlight.h"
+#include "ui/views/animation/ink_drop_impl.h"
 #include "ui/views/animation/ink_drop_painted_layer_delegates.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
@@ -93,6 +94,15 @@ void MdTextButton::SetBgColorOverride(const base::Optional<SkColor>& color) {
   UpdateColors();
 }
 
+void MdTextButton::OnPaintBackground(gfx::Canvas* canvas) {
+  LabelButton::OnPaintBackground(canvas);
+  if (hover_animation().is_animating() || state() == STATE_HOVERED) {
+    const int kHoverAlpha = is_prominent_ ? 0x0c : 0x05;
+    SkScalar alpha = hover_animation().CurrentValueBetween(0, kHoverAlpha);
+    canvas->FillRect(GetLocalBounds(), SkColorSetA(SK_ColorBLACK, alpha));
+  }
+}
+
 void MdTextButton::OnFocus() {
   LabelButton::OnFocus();
   FocusRing::Install(this);
@@ -112,12 +122,16 @@ SkColor MdTextButton::GetInkDropBaseColor() const {
   return color_utils::DeriveDefaultIconColor(label()->enabled_color());
 }
 
+std::unique_ptr<InkDrop> MdTextButton::CreateInkDrop() {
+  return CreateDefaultFloodFillInkDropImpl();
+}
+
 std::unique_ptr<views::InkDropRipple> MdTextButton::CreateInkDropRipple()
     const {
   return std::unique_ptr<views::InkDropRipple>(
       new views::FloodFillInkDropRipple(
-          GetLocalBounds(), GetInkDropCenterBasedOnLastEvent(),
-          GetInkDropBaseColor(), ink_drop_visible_opacity()));
+          size(), GetInkDropCenterBasedOnLastEvent(), GetInkDropBaseColor(),
+          ink_drop_visible_opacity()));
 }
 
 void MdTextButton::StateChanged() {
@@ -127,9 +141,6 @@ void MdTextButton::StateChanged() {
 
 std::unique_ptr<views::InkDropHighlight> MdTextButton::CreateInkDropHighlight()
     const {
-  if (!ShouldShowInkDropHighlight())
-    return nullptr;
-
   // The prominent button hover effect is a shadow.
   const int kYOffset = 1;
   const int kSkiaBlurRadius = 2;
@@ -148,11 +159,6 @@ std::unique_ptr<views::InkDropHighlight> MdTextButton::CreateInkDropHighlight()
       gfx::RectF(GetLocalBounds()).CenterPoint(),
       base::WrapUnique(new BorderShadowLayerDelegate(
           shadows, GetLocalBounds(), fill_color, kInkDropSmallCornerRadius)));
-}
-
-bool MdTextButton::ShouldShowInkDropForFocus() const {
-  // These types of button use FocusRing.
-  return false;
 }
 
 void MdTextButton::SetEnabledTextColors(SkColor color) {
@@ -194,6 +200,8 @@ MdTextButton::MdTextButton(ButtonListener* listener)
   set_request_focus_on_press(false);
   LabelButton::SetFontList(GetMdFontList());
 
+  set_animate_on_state_change(true);
+
   // Paint to a layer so that the canvas is snapped to pixel boundaries (useful
   // for fractional DSF).
   SetPaintToLayer(true);
@@ -203,7 +211,7 @@ MdTextButton::MdTextButton(ButtonListener* listener)
 void MdTextButton::UpdatePadding() {
   // Don't use font-based padding when there's no text visible.
   if (GetText().empty()) {
-    SetBorder(Border::NullBorder());
+    SetBorder(NullBorder());
     return;
   }
 
@@ -232,8 +240,8 @@ void MdTextButton::UpdatePadding() {
   // TODO(estade): can we get rid of the platform style border hoopla if
   // we apply the MD treatment to all buttons, even GTK buttons?
   const int kHorizontalPadding = 16;
-  SetBorder(Border::CreateEmptyBorder(top_padding, kHorizontalPadding,
-                                      bottom_padding, kHorizontalPadding));
+  SetBorder(CreateEmptyBorder(top_padding, kHorizontalPadding, bottom_padding,
+                              kHorizontalPadding));
 }
 
 void MdTextButton::UpdateColors() {
@@ -270,8 +278,21 @@ void MdTextButton::UpdateColors() {
     bg_color = color_utils::GetResultingPaintColor(shade, bg_color);
   }
 
+  // Specified text color: 5a5a5a @ 1.0 alpha
+  // Specified stroke color: 000000 @ 0.2 alpha
+  // 000000 @ 0.2 is very close to 5a5a5a @ 0.308 (== 0x4e); both are cccccc @
+  // 1.0, and this way if NativeTheme changes the button color, the button
+  // stroke will also change colors to match.
   SkColor stroke_color =
-      is_prominent_ ? SK_ColorTRANSPARENT : SkColorSetA(text_color, 0x33);
+      is_prominent_ ? SK_ColorTRANSPARENT : SkColorSetA(text_color, 0x4e);
+
+  // Disabled, non-prominent buttons need their stroke lightened. Prominent
+  // buttons need it left at SK_ColorTRANSPARENT from above.
+  if (state() == STATE_DISABLED && !is_prominent_) {
+    stroke_color = color_utils::BlendTowardOppositeLuma(
+        stroke_color, gfx::kDisabledControlAlpha);
+  }
+
   DCHECK_EQ(SK_AlphaOPAQUE, static_cast<int>(SkColorGetA(bg_color)));
   set_background(Background::CreateBackgroundPainter(
       true, Painter::CreateRoundRectWith1PxBorderPainter(

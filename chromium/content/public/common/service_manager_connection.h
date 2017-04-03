@@ -11,10 +11,10 @@
 #include "base/sequenced_task_runner.h"
 #include "content/common/content_export.h"
 #include "content/public/common/service_info.h"
-#include "services/shell/public/cpp/identity.h"
-#include "services/shell/public/interfaces/service.mojom.h"
+#include "services/service_manager/public/cpp/identity.h"
+#include "services/service_manager/public/interfaces/service.mojom.h"
 
-namespace shell {
+namespace service_manager {
 class Connection;
 class Connector;
 class InterfaceProvider;
@@ -25,10 +25,11 @@ namespace content {
 
 class ConnectionFilter;
 
-// Encapsulates a connection to a //services/shell.
+// Encapsulates a connection to a //services/service_manager.
 // Access a global instance on the thread the ServiceContext was bound by
 // calling Holder::Get().
-// Clients can add shell::Service implementations whose exposed interfaces
+// Clients can add service_manager::Service implementations whose exposed
+// interfaces
 // will be exposed to inbound connections to this object's Service.
 // Alternatively clients can define named services that will be constructed when
 // requests for those service names are received.
@@ -37,7 +38,10 @@ class ConnectionFilter;
 class CONTENT_EXPORT ServiceManagerConnection {
  public:
   using ServiceRequestHandler =
-      base::Callback<void(shell::mojom::ServiceRequest)>;
+      base::Callback<void(service_manager::mojom::ServiceRequest)>;
+  using OnConnectHandler =
+      base::Callback<void(const service_manager::ServiceInfo&,
+                          const service_manager::ServiceInfo&)>;
   using Factory =
       base::Callback<std::unique_ptr<ServiceManagerConnection>(void)>;
 
@@ -65,7 +69,7 @@ class CONTENT_EXPORT ServiceManagerConnection {
   // its interfaces and accept new connections on |io_task_runner| only. Note
   // that no incoming connections are accepted until Start() is called.
   static std::unique_ptr<ServiceManagerConnection> Create(
-      shell::mojom::ServiceRequest request,
+      service_manager::mojom::ServiceRequest request,
       scoped_refptr<base::SequencedTaskRunner> io_task_runner);
 
   // Begins accepting incoming connections. Connection filters MUST be added
@@ -77,14 +81,16 @@ class CONTENT_EXPORT ServiceManagerConnection {
   // request from the shell.
   virtual void SetInitializeHandler(const base::Closure& handler) = 0;
 
-  // Returns the shell::Connector received via this connection's Service
+  // Returns the service_manager::Connector received via this connection's
+  // Service
   // implementation. Use this to initiate connections as this object's Identity.
-  virtual shell::Connector* GetConnector() = 0;
+  virtual service_manager::Connector* GetConnector() = 0;
 
   // Returns this connection's identity with the Service Manager. Connections
-  // initiated via the shell::Connector returned by GetConnector() will use
+  // initiated via the service_manager::Connector returned by GetConnector()
+  // will use
   // this.
-  virtual const shell::Identity& GetIdentity() const = 0;
+  virtual const service_manager::Identity& GetIdentity() const = 0;
 
   // Sets a closure that is called when the connection is lost. Note that
   // connection may already have been closed, in which case |closure| will be
@@ -104,8 +110,8 @@ class CONTENT_EXPORT ServiceManagerConnection {
   // TODO(rockot): Remove this. It's a temporary solution to avoid porting all
   // relevant code to ConnectionFilters at once.
   virtual void SetupInterfaceRequestProxies(
-      shell::InterfaceRegistry* registry,
-      shell::InterfaceProvider* provider) = 0;
+      service_manager::InterfaceRegistry* registry,
+      service_manager::InterfaceProvider* provider) = 0;
 
   static const int kInvalidConnectionFilterId = 0;
 
@@ -141,6 +147,12 @@ class CONTENT_EXPORT ServiceManagerConnection {
   virtual void AddServiceRequestHandler(
       const std::string& name,
       const ServiceRequestHandler& handler) = 0;
+
+  // Registers a callback to be run when the service_manager::Service
+  // implementation on the IO thread receives OnConnect(). Returns an id that
+  // can be passed to RemoveOnConnectHandler(), starting at 1.
+  virtual int AddOnConnectHandler(const OnConnectHandler& handler) = 0;
+  virtual void RemoveOnConnectHandler(int id) = 0;
 };
 
 }  // namespace content

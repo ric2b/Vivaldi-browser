@@ -5,7 +5,7 @@ product_extra_linker_configs = []
 
 # end users already contain product_extra_default_compiler_configs
 # and product_extra_linker_configs
-product_extra_executable_configs = []
+product_extra_executable_configs = [ "//vivaldi/gn/config:disable_new_dtags" ]
 
 # end users already contain product_extra_default_compiler_configs
 # and product_extra_linker_configs

@@ -8,21 +8,21 @@
 #include "base/macros.h"
 
 #include "base/threading/non_thread_safe.h"
+#include "device/generic_sensor/generic_sensor_export.h"
 #include "device/generic_sensor/platform_sensor.h"
 
 namespace device {
 
 // Base class that defines factory methods for PlatformSensor creation.
 // Its implementations must be accessed via GetInstance() method.
-class PlatformSensorProviderBase : public base::NonThreadSafe {
+class DEVICE_GENERIC_SENSOR_EXPORT PlatformSensorProviderBase
+    : public base::NonThreadSafe {
  public:
   using CreateSensorCallback =
       base::Callback<void(scoped_refptr<PlatformSensor>)>;
 
   // Creates new instance of PlatformSensor.
   void CreateSensor(mojom::SensorType type,
-                    uint64_t size,
-                    uint64_t offset,
                     const CreateSensorCallback& callback);
 
   // Gets previously created instance of PlatformSensor by sensor type |type|.
@@ -31,6 +31,15 @@ class PlatformSensorProviderBase : public base::NonThreadSafe {
   // Shared buffer getters.
   mojo::ScopedSharedBufferHandle CloneSharedBufferHandle();
 
+  // Returns 'true' if some of sensor instances produced by this provider are
+  // alive; 'false' otherwise.
+  bool HasSensors() const;
+
+  // Implementations might want to override this in order to be able
+  // to read from sensor files. For example, linux does so.
+  virtual void SetFileTaskRunner(
+      scoped_refptr<base::SingleThreadTaskRunner> file_task_runner) {}
+
  protected:
   PlatformSensorProviderBase();
   virtual ~PlatformSensorProviderBase();
@@ -38,8 +47,11 @@ class PlatformSensorProviderBase : public base::NonThreadSafe {
   // Method that must be implemented by platform specific classes.
   virtual void CreateSensorInternal(mojom::SensorType type,
                                     mojo::ScopedSharedBufferMapping mapping,
-                                    uint64_t buffer_size,
                                     const CreateSensorCallback& callback) = 0;
+
+  // Implementations might override this method to free resources when there
+  // are no sensors left.
+  virtual void AllSensorsRemoved() {}
 
  private:
   friend class PlatformSensor;  // To call RemoveSensor();

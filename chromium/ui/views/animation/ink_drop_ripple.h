@@ -7,6 +7,7 @@
 
 #include "base/macros.h"
 #include "ui/gfx/geometry/point.h"
+#include "ui/gfx/geometry/size.h"
 #include "ui/views/animation/ink_drop_ripple_observer.h"
 #include "ui/views/animation/ink_drop_state.h"
 #include "ui/views/views_export.h"
@@ -53,6 +54,10 @@ class VIEWS_EXPORT InkDropRipple {
   // AnimationStarted(s2).
   void set_observer(InkDropRippleObserver* observer) { observer_ = observer; }
 
+  // Called by ink drop whenever its host's size is changed in order to give the
+  // ripple an opportunity to handle dynamic host resizes.
+  virtual void HostSizeChanged(const gfx::Size& new_size);
+
   // Animates from the current InkDropState to the new |ink_drop_state|.
   //
   // NOTE: GetTargetInkDropState() should return the new |ink_drop_state| value
@@ -79,9 +84,6 @@ class VIEWS_EXPORT InkDropRipple {
   // the ink_drop_state() == HIDDEN because the ripple may be visible while it
   // animates to the target HIDDEN state.
   bool IsVisible();
-
-  // Returns true if this ripple is mutually exclusive with InkDropHighlight.
-  virtual bool OverridesHighlight() const = 0;
 
   // Returns a test api to access internals of this. Default implmentations
   // should return nullptr and test specific subclasses can override to return

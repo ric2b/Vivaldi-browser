@@ -165,6 +165,9 @@ class PDFEngine {
     // Notifies the client that the document has failed to load.
     virtual void DocumentLoadFailed() = 0;
 
+    // Notifies the client that the document has requested substitute fonts.
+    virtual void FontSubstituted() = 0;
+
     virtual pp::Instance* GetPluginInstance() = 0;
 
     // Notifies that an unsupported feature in the PDF was encountered.
@@ -182,6 +185,9 @@ class PDFEngine {
 
     // Get the background color of the PDF.
     virtual uint32_t GetBackgroundColor() = 0;
+
+    // Cancel browser initiated document download.
+    virtual void CancelBrowserDownload() = 0;
 
     // Sets selection status.
     virtual void IsSelectingChanged(bool is_selecting) {}
@@ -295,8 +301,6 @@ class PDFEngine {
   virtual void SetScrollPosition(const pp::Point& position) = 0;
 #endif
 
-  virtual bool IsProgressiveLoad() = 0;
-
   virtual std::string GetMetadata(const std::string& key) = 0;
 };
 
@@ -356,8 +360,10 @@ class PDFEngineExports {
 
   // See the definition of GetPDFPageSizeByIndex in pdf.cc for details.
   virtual bool GetPDFPageSizeByIndex(const void* pdf_buffer,
-                                     int pdf_buffer_size, int page_number,
-                                     double* width, double* height) = 0;
+                                     int pdf_buffer_size,
+                                     int page_number,
+                                     double* width,
+                                     double* height) = 0;
 };
 
 }  // namespace chrome_pdf

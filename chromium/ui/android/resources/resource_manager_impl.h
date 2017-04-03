@@ -7,7 +7,9 @@
 
 #include <memory>
 
+#include "base/android/scoped_java_ref.h"
 #include "base/macros.h"
+#include "base/trace_event/memory_dump_provider.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/android/resources/resource_manager.h"
 #include "ui/android/ui_android_export.h"
@@ -20,9 +22,12 @@ class UIResourceManager;
 
 namespace ui {
 
-class UI_ANDROID_EXPORT ResourceManagerImpl : public ResourceManager {
+class UI_ANDROID_EXPORT ResourceManagerImpl
+    : public ResourceManager,
+      public base::trace_event::MemoryDumpProvider {
  public:
-  static ResourceManagerImpl* FromJavaObject(jobject jobj);
+  static ResourceManagerImpl* FromJavaObject(
+      const base::android::JavaRef<jobject>& jobj);
 
   explicit ResourceManagerImpl(gfx::NativeWindow native_window);
   ~ResourceManagerImpl() override;
@@ -69,6 +74,11 @@ class UI_ANDROID_EXPORT ResourceManagerImpl : public ResourceManager {
       const base::android::JavaRef<jobject>& jobj,
       jint bitmap_res_id,
       const base::android::JavaRef<jobject>& bitmap);
+  void RemoveResource(
+      JNIEnv* env,
+      const base::android::JavaRef<jobject>& jobj,
+      jint res_type,
+      jint res_id);
   void ClearTintedResourceCache(JNIEnv* env,
       const base::android::JavaRef<jobject>& jobj);
 
@@ -77,6 +87,10 @@ class UI_ANDROID_EXPORT ResourceManagerImpl : public ResourceManager {
   // Helper method for processing crushed sprite metadata; public for testing.
   CrushedSpriteResource::SrcDstRects ProcessCrushedSpriteFrameRects(
       std::vector<std::vector<int>> frame_rects_vector);
+
+  // base::trace_event::MemoryDumpProvider implementation.
+  bool OnMemoryDump(const base::trace_event::MemoryDumpArgs& args,
+                    base::trace_event::ProcessMemoryDump* pmd) override;
 
  private:
   friend class TestResourceManagerImpl;

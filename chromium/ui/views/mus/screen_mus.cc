@@ -8,9 +8,11 @@
 
 #include "ui/views/mus/screen_mus.h"
 
-#include "services/shell/public/cpp/connection.h"
-#include "services/shell/public/cpp/connector.h"
+#include "services/service_manager/public/cpp/connection.h"
+#include "services/service_manager/public/cpp/connector.h"
+#include "services/ui/public/interfaces/constants.mojom.h"
 #include "ui/aura/window.h"
+#include "ui/views/mus/native_widget_mus.h"
 #include "ui/views/mus/screen_mus_delegate.h"
 #include "ui/views/mus/window_manager_frame_values.h"
 
@@ -33,15 +35,20 @@ struct TypeConverter<views::WindowManagerFrameValues,
 
 namespace views {
 
+using Type = display::DisplayList::Type;
+
 ScreenMus::ScreenMus(ScreenMusDelegate* delegate)
-    : delegate_(delegate),
-      display_manager_observer_binding_(this) {
+    : delegate_(delegate), display_manager_observer_binding_(this) {
+  display::Screen::SetScreenInstance(this);
 }
 
-ScreenMus::~ScreenMus() {}
+ScreenMus::~ScreenMus() {
+  DCHECK_EQ(this, display::Screen::GetScreen());
+  display::Screen::SetScreenInstance(nullptr);
+}
 
-void ScreenMus::Init(shell::Connector* connector) {
-  connector->ConnectToInterface("service:ui", &display_manager_);
+void ScreenMus::Init(service_manager::Connector* connector) {
+  connector->ConnectToInterface(ui::mojom::kServiceName, &display_manager_);
 
   display_manager_->AddObserver(
       display_manager_observer_binding_.CreateInterfacePtrAndBind());
@@ -55,13 +62,12 @@ void ScreenMus::Init(shell::Connector* connector) {
   // The WaitForIncomingMethodCall() should have supplied the set of Displays,
   // unless mus is going down, in which case encountered_error() is true, or the
   // call to WaitForIncomingMethodCall() failed.
-  if (display_list()->displays().empty()) {
+  if (display_list().displays().empty()) {
     DCHECK(display_manager_.encountered_error() || !success);
     // In this case we install a default display and assume the process is
     // going to exit shortly so that the real value doesn't matter.
-    display_list()->AddDisplay(
-        display::Display(0xFFFFFFFF, gfx::Rect(0, 0, 801, 802)),
-        display::DisplayList::Type::PRIMARY);
+    display_list().AddDisplay(
+        display::Display(0xFFFFFFFF, gfx::Rect(0, 0, 801, 802)), Type::PRIMARY);
   }
 }
 
@@ -81,16 +87,21 @@ bool ScreenMus::IsWindowUnderCursor(gfx::NativeWindow window) {
          window->GetBoundsInScreen().Contains(GetCursorScreenPoint());
 }
 
-void ScreenMus::OnDisplays(mojo::Array<ui::mojom::WsDisplayPtr> ws_displays) {
-  // This should only be called once from Init() before any observers have been
-  // added.
-  DCHECK(display_list()->displays().empty());
+aura::Window* ScreenMus::GetWindowAtScreenPoint(const gfx::Point& point) {
+  return delegate_->GetWindowAtScreenPoint(point);
+}
+
+void ScreenMus::OnDisplays(std::vector<ui::mojom::WsDisplayPtr> ws_displays,
+                           int64_t primary_display_id,
+                           int64_t internal_display_id) {
+  // This should only be called once when ScreenMus is added as an observer.
+  DCHECK(display_list().displays().empty());
+
   for (size_t i = 0; i < ws_displays.size(); ++i) {
-    const bool is_primary = ws_displays[i]->is_primary;
-    display_list()->AddDisplay(ws_displays[i]->display,
-                               is_primary
-                                   ? display::DisplayList::Type::PRIMARY
-                                   : display::DisplayList::Type::NOT_PRIMARY);
+    const display::Display& display = ws_displays[i]->display;
+    const bool is_primary = display.id() == primary_display_id;
+    display_list().AddDisplay(display,
+                              is_primary ? Type::PRIMARY : Type::NOT_PRIMARY);
     if (is_primary) {
       // TODO(sky): Make WindowManagerFrameValues per display.
       WindowManagerFrameValues frame_values =
@@ -99,14 +110,23 @@ void ScreenMus::OnDisplays(mojo::Array<ui::mojom::WsDisplayPtr> ws_displays) {
       WindowManagerFrameValues::SetInstance(frame_values);
     }
   }
-  DCHECK(!display_list()->displays().empty());
+
+  DCHECK(display_list().GetPrimaryDisplayIterator() !=
+         display_list().displays().end());
+
+  if (internal_display_id != display::Display::kInvalidDisplayID)
+    display::Display::SetInternalDisplayId(internal_display_id);
+
+  DCHECK(!display_list().displays().empty());
 }
 
 void ScreenMus::OnDisplaysChanged(
-    mojo::Array<ui::mojom::WsDisplayPtr> ws_displays) {
+    std::vector<ui::mojom::WsDisplayPtr> ws_displays) {
   for (size_t i = 0; i < ws_displays.size(); ++i) {
-    const bool is_primary = ws_displays[i]->is_primary;
-    ProcessDisplayChanged(ws_displays[i]->display, is_primary);
+    const display::Display& display = ws_displays[i]->display;
+    const bool is_primary =
+        display.id() == display_list().GetPrimaryDisplayIterator()->id();
+    ProcessDisplayChanged(display, is_primary);
     if (is_primary) {
       WindowManagerFrameValues frame_values =
           ws_displays[i]
@@ -118,8 +138,18 @@ void ScreenMus::OnDisplaysChanged(
   }
 }
 
-void ScreenMus::OnDisplayRemoved(int64_t id) {
-  display_list()->RemoveDisplay(id);
+void ScreenMus::OnDisplayRemoved(int64_t display_id) {
+  display_list().RemoveDisplay(display_id);
+}
+
+void ScreenMus::OnPrimaryDisplayChanged(int64_t primary_display_id) {
+  // TODO(kylechar): DisplayList would need to change to handle having no
+  // primary display.
+  if (primary_display_id == display::Display::kInvalidDisplayID)
+    return;
+
+  ProcessDisplayChanged(*display_list().FindDisplayById(primary_display_id),
+                        true);
 }
 
 }  // namespace views

@@ -28,8 +28,9 @@ import java.util.concurrent.Executors;
  */
 public class QuicTest extends CronetTestBase {
     private static final String TAG = "cr.QuicTest";
+    private static final String QUIC_PROTOCOL_STRING_PREFIX = "http/2+quic/";
     private CronetTestFramework mTestFramework;
-    private CronetEngine.Builder mBuilder;
+    private ExperimentalCronetEngine.Builder mBuilder;
 
     @Override
     protected void setUp() throws Exception {
@@ -38,8 +39,8 @@ public class QuicTest extends CronetTestBase {
         System.loadLibrary("cronet_tests");
         QuicTestServer.startQuicTestServer(getContext());
 
-        mBuilder = new CronetEngine.Builder(getContext());
-        mBuilder.enableQuic(true).enableNetworkQualityEstimator(true);
+        mBuilder = new ExperimentalCronetEngine.Builder(getContext());
+        mBuilder.enableNetworkQualityEstimator(true).enableQuic(true);
         mBuilder.addQuicHint(QuicTestServer.getServerHost(), QuicTestServer.getServerPort(),
                 QuicTestServer.getServerPort());
 
@@ -59,9 +60,10 @@ public class QuicTest extends CronetTestBase {
                                                  .put("QUIC", quicParams)
                                                  .put("HostResolverRules", hostResolverParams);
         mBuilder.setExperimentalOptions(experimentalOptions.toString());
-        mBuilder.setMockCertVerifierForTesting(QuicTestServer.createMockCertVerifier());
         mBuilder.setStoragePath(CronetTestFramework.getTestStorage(getContext()));
         mBuilder.enableHttpCache(CronetEngine.Builder.HTTP_CACHE_DISK_NO_HTTP, 1000 * 1024);
+        CronetTestUtil.setMockCertVerifierForTesting(
+                mBuilder, QuicTestServer.createMockCertVerifier());
     }
 
     @Override
@@ -82,15 +84,15 @@ public class QuicTest extends CronetTestBase {
         // since there is no http server running on the corresponding TCP port,
         // QUIC will always succeed with a 200 (see
         // net::HttpStreamFactoryImpl::Request::OnStreamFailed).
-        UrlRequest.Builder requestBuilder = new UrlRequest.Builder(
-                quicURL, callback, callback.getExecutor(), mTestFramework.mCronetEngine);
+        UrlRequest.Builder requestBuilder = mTestFramework.mCronetEngine.newUrlRequestBuilder(
+                quicURL, callback, callback.getExecutor());
         requestBuilder.build().start();
         callback.blockForDone();
 
         assertEquals(200, callback.mResponseInfo.getHttpStatusCode());
         String expectedContent = "This is a simple text file served by QUIC.\n";
         assertEquals(expectedContent, callback.mResponseAsString);
-        assertEquals("quic/1+spdy/3", callback.mResponseInfo.getNegotiatedProtocol());
+        assertIsQuic(callback.mResponseInfo);
         // The total received bytes should be larger than the content length, to account for
         // headers.
         assertTrue(callback.mResponseInfo.getReceivedBytesCount() > expectedContent.length());
@@ -112,7 +114,8 @@ public class QuicTest extends CronetTestBase {
         mTestFramework.mCronetEngine.shutdown();
 
         // Make another request using a new context but with no QUIC hints.
-        CronetEngine.Builder builder = new CronetEngine.Builder(getContext());
+        ExperimentalCronetEngine.Builder builder =
+                new ExperimentalCronetEngine.Builder(getContext());
         builder.setStoragePath(CronetTestFramework.getTestStorage(getContext()));
         builder.enableHttpCache(CronetEngine.Builder.HTTP_CACHE_DISK, 1000 * 1024);
         builder.enableQuic(true);
@@ -122,16 +125,17 @@ public class QuicTest extends CronetTestBase {
                                                  .put("QUIC", quicParams)
                                                  .put("HostResolverRules", hostResolverParams);
         builder.setExperimentalOptions(experimentalOptions.toString());
-        builder.setMockCertVerifierForTesting(QuicTestServer.createMockCertVerifier());
+        CronetTestUtil.setMockCertVerifierForTesting(
+                builder, QuicTestServer.createMockCertVerifier());
         mTestFramework = startCronetTestFrameworkWithUrlAndCronetEngineBuilder(null, builder);
         TestUrlRequestCallback callback2 = new TestUrlRequestCallback();
-        requestBuilder = new UrlRequest.Builder(
-                quicURL, callback2, callback2.getExecutor(), mTestFramework.mCronetEngine);
+        requestBuilder = mTestFramework.mCronetEngine.newUrlRequestBuilder(
+                quicURL, callback2, callback2.getExecutor());
         requestBuilder.build().start();
         callback2.blockForDone();
         assertEquals(200, callback2.mResponseInfo.getHttpStatusCode());
         assertEquals(expectedContent, callback2.mResponseAsString);
-        assertEquals("quic/1+spdy/3", callback2.mResponseInfo.getNegotiatedProtocol());
+        assertIsQuic(callback.mResponseInfo);
         // The total received bytes should be larger than the content length, to account for
         // headers.
         assertTrue(callback2.mResponseInfo.getReceivedBytesCount() > expectedContent.length());
@@ -174,15 +178,15 @@ public class QuicTest extends CronetTestBase {
         // since there is no http server running on the corresponding TCP port,
         // QUIC will always succeed with a 200 (see
         // net::HttpStreamFactoryImpl::Request::OnStreamFailed).
-        UrlRequest.Builder requestBuilder = new UrlRequest.Builder(
-                quicURL, callback, callback.getExecutor(), mTestFramework.mCronetEngine);
+        UrlRequest.Builder requestBuilder = mTestFramework.mCronetEngine.newUrlRequestBuilder(
+                quicURL, callback, callback.getExecutor());
         requestBuilder.build().start();
         callback.blockForDone();
 
         assertEquals(200, callback.mResponseInfo.getHttpStatusCode());
         String expectedContent = "This is a simple text file served by QUIC.\n";
         assertEquals(expectedContent, callback.mResponseAsString);
-        assertEquals("quic/1+spdy/3", callback.mResponseInfo.getNegotiatedProtocol());
+        assertIsQuic(callback.mResponseInfo);
 
         // Throughput observation is posted to the network quality estimator on the network thread
         // after the UrlRequest is completed. The observations are then eventually posted to
@@ -217,8 +221,8 @@ public class QuicTest extends CronetTestBase {
         String quicURL = QuicTestServer.getServerURL() + "/simple.txt";
         TestUrlRequestCallback callback = new TestUrlRequestCallback();
 
-        UrlRequest.Builder requestBuilder = new UrlRequest.Builder(
-                quicURL, callback, callback.getExecutor(), mTestFramework.mCronetEngine);
+        UrlRequest.Builder requestBuilder = mTestFramework.mCronetEngine.newUrlRequestBuilder(
+                quicURL, callback, callback.getExecutor());
         Date startTime = new Date();
         requestBuilder.build().start();
         callback.blockForDone();
@@ -226,22 +230,18 @@ public class QuicTest extends CronetTestBase {
         Date endTime = new Date();
 
         assertEquals(200, callback.mResponseInfo.getHttpStatusCode());
-        assertEquals("quic/1+spdy/3", callback.mResponseInfo.getNegotiatedProtocol());
+        assertIsQuic(callback.mResponseInfo);
 
         RequestFinishedInfo requestInfo = requestFinishedListener.getRequestInfo();
-        assertNotNull(requestInfo);
-        RequestFinishedInfo.Metrics metrics = requestInfo.getMetrics();
-        assertNotNull(metrics);
-
-        MetricsTestUtil.checkTimingMetrics(metrics, startTime, endTime);
-        MetricsTestUtil.checkHasConnectTiming(metrics, startTime, endTime, true);
-        assertTrue(metrics.getSentBytesCount() > 0);
+        MetricsTestUtil.checkRequestFinishedInfo(requestInfo, quicURL, startTime, endTime);
+        assertEquals(RequestFinishedInfo.SUCCEEDED, requestInfo.getFinishedReason());
+        MetricsTestUtil.checkHasConnectTiming(requestInfo.getMetrics(), startTime, endTime, true);
 
         // Second request should use the same connection and not have ConnectTiming numbers
         callback = new TestUrlRequestCallback();
         requestFinishedListener.reset();
-        requestBuilder = new UrlRequest.Builder(
-                quicURL, callback, callback.getExecutor(), mTestFramework.mCronetEngine);
+        requestBuilder = mTestFramework.mCronetEngine.newUrlRequestBuilder(
+                quicURL, callback, callback.getExecutor());
         startTime = new Date();
         requestBuilder.build().start();
         callback.blockForDone();
@@ -249,17 +249,18 @@ public class QuicTest extends CronetTestBase {
         endTime = new Date();
 
         assertEquals(200, callback.mResponseInfo.getHttpStatusCode());
-        assertEquals("quic/1+spdy/3", callback.mResponseInfo.getNegotiatedProtocol());
+        assertIsQuic(callback.mResponseInfo);
 
         requestInfo = requestFinishedListener.getRequestInfo();
-        assertNotNull(requestInfo);
-        metrics = requestInfo.getMetrics();
-        assertNotNull(metrics);
-
-        MetricsTestUtil.checkTimingMetrics(metrics, startTime, endTime);
-        MetricsTestUtil.checkNoConnectTiming(metrics);
-        assertTrue(metrics.getSentBytesCount() > 0);
+        MetricsTestUtil.checkRequestFinishedInfo(requestInfo, quicURL, startTime, endTime);
+        assertEquals(RequestFinishedInfo.SUCCEEDED, requestInfo.getFinishedReason());
+        MetricsTestUtil.checkNoConnectTiming(requestInfo.getMetrics());
 
         mTestFramework.mCronetEngine.shutdown();
+    }
+
+    // Helper method to assert that the request is negotiated over QUIC.
+    private void assertIsQuic(UrlResponseInfo responseInfo) {
+        assertTrue(responseInfo.getNegotiatedProtocol().startsWith(QUIC_PROTOCOL_STRING_PREFIX));
     }
 }

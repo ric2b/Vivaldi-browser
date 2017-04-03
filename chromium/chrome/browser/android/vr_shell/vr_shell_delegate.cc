@@ -6,12 +6,42 @@
 
 #include "base/android/jni_android.h"
 #include "chrome/browser/android/vr_shell/vr_shell.h"
+#include "device/vr/android/gvr/gvr_device_provider.h"
 #include "jni/VrShellDelegate_jni.h"
 
 using base::android::JavaParamRef;
 using base::android::AttachCurrentThread;
 
 namespace vr_shell {
+
+// A non presenting delegate for magic window mode.
+class GvrNonPresentingDelegate : public device::GvrDelegate {
+ public:
+  explicit GvrNonPresentingDelegate(jlong context) : weak_ptr_factory_(this) {
+    gvr_api_ =
+        gvr::GvrApi::WrapNonOwned(reinterpret_cast<gvr_context*>(context));
+  }
+
+  virtual ~GvrNonPresentingDelegate() = default;
+
+  // GvrDelegate implementation
+  void SetWebVRSecureOrigin(bool secure_origin) override {}
+  void SubmitWebVRFrame() override {}
+  void UpdateWebVRTextureBounds(const gvr::Rectf& left_bounds,
+                                const gvr::Rectf& right_bounds) override {}
+  void SetGvrPoseForWebVr(const gvr::Mat4f& pose,
+                          uint32_t pose_index) override {}
+  void SetWebVRRenderSurfaceSize(int width, int height) override {}
+  gvr::Sizei GetWebVRCompositorSurfaceSize() override {
+    return device::kInvalidRenderTargetSize; }
+  gvr::GvrApi* gvr_api() override { return gvr_api_.get(); }
+  base::WeakPtr<GvrNonPresentingDelegate> GetWeakPtr() {
+    return weak_ptr_factory_.GetWeakPtr();
+  }
+ private:
+  std::unique_ptr<gvr::GvrApi> gvr_api_;
+  base::WeakPtrFactory<GvrNonPresentingDelegate> weak_ptr_factory_;
+};
 
 VrShellDelegate::VrShellDelegate(JNIEnv* env, jobject obj)
     : device_provider_(nullptr) {
@@ -23,48 +53,84 @@ VrShellDelegate::~VrShellDelegate() {
   GvrDelegateProvider::SetInstance(nullptr);
 }
 
-VrShellDelegate* VrShellDelegate::getNativeDelegate(
+VrShellDelegate* VrShellDelegate::GetNativeDelegate(
     JNIEnv* env, jobject jdelegate) {
   long native_delegate = Java_VrShellDelegate_getNativePointer(env, jdelegate);
   return reinterpret_cast<VrShellDelegate*>(native_delegate);
 }
 
-bool VrShellDelegate::ExitWebVRIfNecessary(JNIEnv* env, jobject obj) {
-  if (!device_provider_)
-    return false;
-
-  device_provider_->OnGvrDelegateRemoved();
-  return true;
+base::WeakPtr<device::GvrDeviceProvider> VrShellDelegate::GetDeviceProvider() {
+  return device_provider_;
 }
 
-bool VrShellDelegate::RequestWebVRPresent(
-    device::GvrDeviceProvider* device_provider) {
-  // Only set one device provider at a time
-  DCHECK(!device_provider_);
-  device_provider_ = device_provider;
+void VrShellDelegate::SetPresentResult(JNIEnv* env, jobject obj,
+                                       jboolean result) {
+  CHECK(!present_callback_.is_null());
+  present_callback_.Run(result);
+  present_callback_.Reset();
+}
 
-  // If/When VRShell is ready for use it will call OnVrShellReady.
+void VrShellDelegate::DisplayActivate(JNIEnv* env, jobject obj) {
+  if (device_provider_) {
+    device_provider_->OnDisplayActivate();
+  }
+}
+
+void VrShellDelegate::SetDeviceProvider(
+    base::WeakPtr<device::GvrDeviceProvider> device_provider) {
+  device_provider_ = device_provider;
+}
+
+void VrShellDelegate::RequestWebVRPresent(
+    const base::Callback<void(bool)>& callback) {
+  if (!present_callback_.is_null()) {
+    // Can only handle one request at a time. This is also extremely unlikely to
+    // happen in practice.
+    callback.Run(false);
+    return;
+  }
+
+  present_callback_ = std::move(callback);
+
+  // If/When VRShell is ready for use it will call SetPresentResult.
   JNIEnv* env = AttachCurrentThread();
-  return Java_VrShellDelegate_enterVRIfNecessary(env,
-                                                 j_vr_shell_delegate_.obj(),
-                                                 true);
+  Java_VrShellDelegate_presentRequested(env, j_vr_shell_delegate_.obj());
 }
 
 void VrShellDelegate::ExitWebVRPresent() {
-  if (!device_provider_)
-    return;
-
-  device_provider_ = nullptr;
-
   // VRShell is no longer needed by WebVR, allow it to shut down if it's not
   // being used elsewhere.
   JNIEnv* env = AttachCurrentThread();
   Java_VrShellDelegate_exitWebVR(env, j_vr_shell_delegate_.obj());
 }
 
-void VrShellDelegate::OnVrShellReady(VrShell* vr_shell) {
-  if (device_provider_)
-    device_provider_->OnGvrDelegateReady(vr_shell);
+base::WeakPtr<device::GvrDelegate> VrShellDelegate::GetNonPresentingDelegate() {
+  if (!non_presenting_delegate_) {
+    JNIEnv* env = AttachCurrentThread();
+    jlong context = Java_VrShellDelegate_createNonPresentingNativeContext(
+        env, j_vr_shell_delegate_.obj());
+    if (!context)
+      return nullptr;
+
+    non_presenting_delegate_.reset(new GvrNonPresentingDelegate(context));
+  }
+  return static_cast<GvrNonPresentingDelegate*>(non_presenting_delegate_.get())
+      ->GetWeakPtr();
+}
+
+void VrShellDelegate::DestroyNonPresentingDelegate() {
+  if (non_presenting_delegate_) {
+    non_presenting_delegate_.reset(nullptr);
+    JNIEnv* env = AttachCurrentThread();
+    Java_VrShellDelegate_shutdownNonPresentingNativeContext(
+        env, j_vr_shell_delegate_.obj());
+  }
+}
+
+void VrShellDelegate::SetListeningForActivate(bool listening) {
+  JNIEnv* env = AttachCurrentThread();
+  Java_VrShellDelegate_setListeningForWebVrActivate(
+      env, j_vr_shell_delegate_.obj(), listening);
 }
 
 // ----------------------------------------------------------------------------

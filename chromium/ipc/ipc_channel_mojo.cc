@@ -54,8 +54,6 @@ class MojoChannelFactory : public ChannelFactory {
         mode_(mode),
         ipc_task_runner_(ipc_task_runner) {}
 
-  std::string GetName() const override { return ""; }
-
   std::unique_ptr<Channel> BuildChannel(Listener* listener) override {
     return ChannelMojo::Create(
         std::move(handle_), mode_, listener, ipc_task_runner_);
@@ -235,6 +233,18 @@ MojoResult UnwrapAttachment(mojom::SerializedHandlePtr handle,
   return MOJO_RESULT_UNKNOWN;
 }
 
+base::ProcessId GetSelfPID() {
+#if defined(OS_LINUX)
+  if (int global_pid = Channel::GetGlobalPid())
+    return global_pid;
+#endif  // OS_LINUX
+#if defined(OS_NACL)
+  return -1;
+#else
+  return base::GetCurrentProcId();
+#endif  // defined(OS_NACL)
+}
+
 }  // namespace
 
 //------------------------------------------------------------------------------
@@ -370,53 +380,21 @@ bool ChannelMojo::Send(Message* message) {
   return message_reader_->Send(std::move(scoped_message));
 }
 
-base::ProcessId ChannelMojo::GetPeerPID() const {
-  if (!message_reader_)
-    return base::kNullProcessId;
-  return message_reader_->GetPeerPid();
-}
-
-base::ProcessId ChannelMojo::GetSelfPID() const {
-#if defined(OS_LINUX)
-  if (int global_pid = GetGlobalPid())
-    return global_pid;
-#endif  // OS_LINUX
-#if defined(OS_NACL)
-  return -1;
-#else
-  return base::GetCurrentProcId();
-#endif  // defined(OS_NACL)
-}
-
 Channel::AssociatedInterfaceSupport*
 ChannelMojo::GetAssociatedInterfaceSupport() { return this; }
 
-void ChannelMojo::OnPeerPidReceived() {
-  listener_->OnChannelConnected(static_cast<int32_t>(GetPeerPID()));
+void ChannelMojo::OnPeerPidReceived(int32_t peer_pid) {
+  listener_->OnChannelConnected(peer_pid);
 }
 
 void ChannelMojo::OnMessageReceived(const Message& message) {
   TRACE_EVENT2("ipc,toplevel", "ChannelMojo::OnMessageReceived",
                "class", IPC_MESSAGE_ID_CLASS(message.type()),
                "line", IPC_MESSAGE_ID_LINE(message.type()));
-  if (AttachmentBroker* broker = AttachmentBroker::GetGlobal()) {
-    if (broker->OnMessageReceived(message))
-      return;
-  }
   listener_->OnMessageReceived(message);
   if (message.dispatch_error())
     listener_->OnBadMessageReceived(message);
 }
-
-#if defined(OS_POSIX) && !defined(OS_NACL_SFI)
-int ChannelMojo::GetClientFileDescriptor() const {
-  return -1;
-}
-
-base::ScopedFD ChannelMojo::TakeClientFileDescriptor() {
-  return base::ScopedFD(GetClientFileDescriptor());
-}
-#endif  // defined(OS_POSIX) && !defined(OS_NACL_SFI)
 
 // static
 MojoResult ChannelMojo::ReadFromMessageAttachmentSet(

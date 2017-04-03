@@ -11,16 +11,15 @@
 #include "base/memory/ref_counted.h"
 #include "base/test/test_simple_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "services/shell/public/interfaces/connector.mojom.h"
+#include "services/service_manager/public/interfaces/connector.mojom.h"
 #include "services/ui/common/event_matcher_util.h"
 #include "services/ui/surfaces/display_compositor.h"
 #include "services/ui/ws/accelerator.h"
 #include "services/ui/ws/display.h"
-#include "services/ui/ws/display_binding.h"
 #include "services/ui/ws/display_manager.h"
 #include "services/ui/ws/platform_display.h"
 #include "services/ui/ws/platform_display_init_params.h"
-#include "services/ui/ws/server_window_surface_manager_test_api.h"
+#include "services/ui/ws/server_window_compositor_frame_sink_manager_test_api.h"
 #include "services/ui/ws/test_change_tracker.h"
 #include "services/ui/ws/test_server_window_delegate.h"
 #include "services/ui/ws/test_utils.h"
@@ -548,12 +547,10 @@ TEST_F(WindowManagerStateTest, PostAcceleratorForgotten) {
 // with no roots.
 TEST(WindowManagerStateShutdownTest, DestroyTreeBeforeDisplay) {
   WindowServerTestHelper ws_test_helper;
-  ws_test_helper.window_server_delegate()->set_num_displays_to_create(1);
+  ws_test_helper.window_server_delegate()->CreateDisplays(1);
   WindowServer* window_server = ws_test_helper.window_server();
   const UserId kUserId1 = "2";
-  WindowManagerWindowTreeFactorySetTestApi(
-      window_server->window_manager_window_tree_factory_set())
-      .Add(kUserId1);
+  AddWindowManager(window_server, kUserId1);
   ASSERT_EQ(1u, window_server->display_manager()->displays().size());
   Display* display = *(window_server->display_manager()->displays().begin());
   WindowManagerDisplayRoot* window_manager_display_root =

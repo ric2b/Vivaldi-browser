@@ -45,7 +45,19 @@
 
 namespace blink {
 
-using PortState = MIDIAccessor::MIDIPortState;
+namespace {
+
+using midi::mojom::PortState;
+
+// Since "open" status is separately managed per MIDIAccess instance, we do not
+// expose service level PortState directly.
+PortState ToDeviceState(PortState state) {
+  if (state == PortState::OPENED)
+    return PortState::CONNECTED;
+  return state;
+}
+
+}  // namespace
 
 MIDIAccess::MIDIAccess(
     std::unique_ptr<MIDIAccessor> accessor,
@@ -63,11 +75,12 @@ MIDIAccess::MIDIAccess(
     const MIDIAccessInitializer::PortDescriptor& port = ports[i];
     if (port.type == MIDIPort::TypeInput) {
       m_inputs.append(MIDIInput::create(this, port.id, port.manufacturer,
-                                        port.name, port.version, port.state));
+                                        port.name, port.version,
+                                        ToDeviceState(port.state)));
     } else {
-      m_outputs.append(MIDIOutput::create(this, m_outputs.size(), port.id,
-                                          port.manufacturer, port.name,
-                                          port.version, port.state));
+      m_outputs.append(MIDIOutput::create(
+          this, m_outputs.size(), port.id, port.manufacturer, port.name,
+          port.version, ToDeviceState(port.state)));
     }
   }
 }
@@ -97,7 +110,7 @@ MIDIInputMap* MIDIAccess::inputs() const {
   HashSet<String> ids;
   for (size_t i = 0; i < m_inputs.size(); ++i) {
     MIDIInput* input = m_inputs[i];
-    if (input->getState() != PortState::MIDIPortStateDisconnected) {
+    if (input->getState() != PortState::DISCONNECTED) {
       inputs.append(input);
       ids.add(input->id());
     }
@@ -114,7 +127,7 @@ MIDIOutputMap* MIDIAccess::outputs() const {
   HashSet<String> ids;
   for (size_t i = 0; i < m_outputs.size(); ++i) {
     MIDIOutput* output = m_outputs[i];
-    if (output->getState() != PortState::MIDIPortStateDisconnected) {
+    if (output->getState() != PortState::DISCONNECTED) {
       outputs.append(output);
       ids.add(output->id());
     }
@@ -132,8 +145,8 @@ void MIDIAccess::didAddInputPort(const String& id,
                                  const String& version,
                                  PortState state) {
   DCHECK(isMainThread());
-  MIDIInput* port =
-      MIDIInput::create(this, id, manufacturer, name, version, state);
+  MIDIInput* port = MIDIInput::create(this, id, manufacturer, name, version,
+                                      ToDeviceState(state));
   m_inputs.append(port);
   dispatchEvent(MIDIConnectionEvent::create(port));
 }
@@ -146,7 +159,7 @@ void MIDIAccess::didAddOutputPort(const String& id,
   DCHECK(isMainThread());
   unsigned portIndex = m_outputs.size();
   MIDIOutput* port = MIDIOutput::create(this, portIndex, id, manufacturer, name,
-                                        version, state);
+                                        version, ToDeviceState(state));
   m_outputs.append(port);
   dispatchEvent(MIDIConnectionEvent::create(port));
 }
@@ -156,7 +169,9 @@ void MIDIAccess::didSetInputPortState(unsigned portIndex, PortState state) {
   if (portIndex >= m_inputs.size())
     return;
 
-  m_inputs[portIndex]->setState(state);
+  PortState deviceState = ToDeviceState(state);
+  if (m_inputs[portIndex]->getState() != deviceState)
+    m_inputs[portIndex]->setState(deviceState);
 }
 
 void MIDIAccess::didSetOutputPortState(unsigned portIndex, PortState state) {
@@ -164,7 +179,9 @@ void MIDIAccess::didSetOutputPortState(unsigned portIndex, PortState state) {
   if (portIndex >= m_outputs.size())
     return;
 
-  m_outputs[portIndex]->setState(state);
+  PortState deviceState = ToDeviceState(state);
+  if (m_outputs[portIndex]->getState() != deviceState)
+    m_outputs[portIndex]->setState(deviceState);
 }
 
 void MIDIAccess::didReceiveMIDIData(unsigned portIndex,
@@ -175,21 +192,7 @@ void MIDIAccess::didReceiveMIDIData(unsigned portIndex,
   if (portIndex >= m_inputs.size())
     return;
 
-  // Convert from time in seconds which is based on the time coordinate system
-  // of monotonicallyIncreasingTime() into time in milliseconds (a
-  // DOMHighResTimeStamp) according to the same time coordinate system as
-  // performance.now().  This is how timestamps are defined in the Web MIDI
-  // spec.
-  Document* document = toDocument(getExecutionContext());
-  DCHECK(document);
-
-  double timeStampInMilliseconds =
-      1000 *
-      document->loader()->timing().monotonicTimeToZeroBasedDocumentTime(
-          timeStamp);
-
-  m_inputs[portIndex]->didReceiveMIDIData(portIndex, data, length,
-                                          timeStampInMilliseconds);
+  m_inputs[portIndex]->didReceiveMIDIData(portIndex, data, length, timeStamp);
 }
 
 void MIDIAccess::sendMIDIData(unsigned portIndex,

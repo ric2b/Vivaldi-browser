@@ -14,18 +14,15 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "cc/base/cc_export.h"
-#include "cc/input/top_controls_state.h"
+#include "cc/input/browser_controls_state.h"
 #include "cc/scheduler/begin_frame_source.h"
 #include "cc/trees/task_runner_provider.h"
 
 namespace gfx {
 class Rect;
-class Vector2d;
 }
 
 namespace cc {
-class BeginFrameSource;
-class LayerTreeDebugState;
 class LayerTreeMutator;
 class CompositorFrameSink;
 
@@ -73,9 +70,9 @@ class CC_EXPORT Proxy {
 
   virtual bool SupportsImplScrolling() const = 0;
 
-  virtual void UpdateTopControlsState(TopControlsState constraints,
-                                      TopControlsState current,
-                                      bool animate) = 0;
+  virtual void UpdateBrowserControlsState(BrowserControlsState constraints,
+                                          BrowserControlsState current,
+                                          bool animate) = 0;
 
   // Testing hooks
   virtual bool MainFrameWillHappenForTesting() = 0;

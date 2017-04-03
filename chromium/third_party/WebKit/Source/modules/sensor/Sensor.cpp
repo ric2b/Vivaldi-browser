@@ -13,7 +13,6 @@
 #include "modules/sensor/SensorPollingStrategy.h"
 #include "modules/sensor/SensorProviderProxy.h"
 #include "modules/sensor/SensorReading.h"
-#include "modules/sensor/SensorReadingEvent.h"
 
 using namespace device::mojom::blink;
 
@@ -29,8 +28,7 @@ Sensor::Sensor(ScriptState* scriptState,
           toDocument(scriptState->getExecutionContext())->page()),
       m_sensorOptions(sensorOptions),
       m_type(type),
-      m_state(Sensor::SensorState::IDLE),
-      m_storedData() {
+      m_state(Sensor::SensorState::Idle) {
   // Check secure context.
   String errorMessage;
   if (!scriptState->getExecutionContext()->isSecureContext(errorMessage)) {
@@ -66,11 +64,11 @@ Sensor::Sensor(ScriptState* scriptState,
 Sensor::~Sensor() = default;
 
 void Sensor::start(ScriptState* scriptState, ExceptionState& exceptionState) {
-  if (m_state != Sensor::SensorState::IDLE &&
-      m_state != Sensor::SensorState::ERRORED) {
+  if (m_state != Sensor::SensorState::Idle &&
+      m_state != Sensor::SensorState::Errored) {
     exceptionState.throwDOMException(
         InvalidStateError,
-        "Cannot start because SensorState is not idle or errored");
+        "Cannot start because SensorState is not Idle or errored");
     return;
   }
 
@@ -86,11 +84,11 @@ void Sensor::start(ScriptState* scriptState, ExceptionState& exceptionState) {
 }
 
 void Sensor::stop(ScriptState*, ExceptionState& exceptionState) {
-  if (m_state == Sensor::SensorState::IDLE ||
-      m_state == Sensor::SensorState::ERRORED) {
+  if (m_state == Sensor::SensorState::Idle ||
+      m_state == Sensor::SensorState::Errored) {
     exceptionState.throwDOMException(
         InvalidStateError,
-        "Cannot stop because SensorState is either idle or errored");
+        "Cannot stop because SensorState is either Idle or errored");
     return;
   }
 
@@ -99,13 +97,13 @@ void Sensor::stop(ScriptState*, ExceptionState& exceptionState) {
 
 static String ToString(Sensor::SensorState state) {
   switch (state) {
-    case Sensor::SensorState::IDLE:
+    case Sensor::SensorState::Idle:
       return "idle";
-    case Sensor::SensorState::ACTIVATING:
+    case Sensor::SensorState::Activating:
       return "activating";
-    case Sensor::SensorState::ACTIVE:
+    case Sensor::SensorState::Active:
       return "active";
-    case Sensor::SensorState::ERRORED:
+    case Sensor::SensorState::Errored:
       return "errored";
     default:
       NOTREACHED();
@@ -119,12 +117,14 @@ String Sensor::state() const {
 }
 
 SensorReading* Sensor::reading() const {
-  return m_sensorReading.get();
+  if (m_state != Sensor::SensorState::Active)
+    return nullptr;
+  DCHECK(m_sensorProxy);
+  return m_sensorProxy->sensorReading();
 }
 
 DEFINE_TRACE(Sensor) {
   visitor->trace(m_sensorProxy);
-  visitor->trace(m_sensorReading);
   ActiveScriptWrappable::trace(visitor);
   ContextLifecycleObserver::trace(visitor);
   PageVisibilityObserver::trace(visitor);
@@ -132,10 +132,27 @@ DEFINE_TRACE(Sensor) {
 }
 
 bool Sensor::hasPendingActivity() const {
-  if (m_state == Sensor::SensorState::IDLE ||
-      m_state == Sensor::SensorState::ERRORED)
+  if (m_state == Sensor::SensorState::Idle ||
+      m_state == Sensor::SensorState::Errored)
     return false;
   return hasEventListeners();
+}
+
+auto Sensor::createSensorConfig() -> SensorConfigurationPtr {
+  auto result = SensorConfiguration::New();
+
+  double defaultFrequency = m_sensorProxy->defaultConfig()->frequency;
+  double maximumFrequency = m_sensorProxy->maximumFrequency();
+
+  double frequency = m_sensorOptions.hasFrequency()
+                         ? m_sensorOptions.frequency()
+                         : defaultFrequency;
+
+  if (frequency > maximumFrequency)
+    frequency = maximumFrequency;
+
+  result->frequency = frequency;
+  return result;
 }
 
 void Sensor::initSensorProxyIfNeeded() {
@@ -146,18 +163,23 @@ void Sensor::initSensorProxyIfNeeded() {
   if (!document || !document->frame())
     return;
 
-  m_sensorProxy =
-      SensorProviderProxy::from(document->frame())->getOrCreateSensor(m_type);
+  auto provider = SensorProviderProxy::from(document->frame());
+  m_sensorProxy = provider->getSensor(m_type);
+
+  if (!m_sensorProxy) {
+    m_sensorProxy =
+        provider->createSensor(m_type, createSensorReadingFactory());
+  }
 }
 
 void Sensor::contextDestroyed() {
-  if (m_state == Sensor::SensorState::ACTIVE ||
-      m_state == Sensor::SensorState::ACTIVATING)
+  if (m_state == Sensor::SensorState::Active ||
+      m_state == Sensor::SensorState::Activating)
     stopListening();
 }
 
 void Sensor::onSensorInitialized() {
-  if (m_state != Sensor::SensorState::ACTIVATING)
+  if (m_state != Sensor::SensorState::Activating)
     return;
 
   startListening();
@@ -175,7 +197,7 @@ void Sensor::onSensorError(ExceptionCode code,
 }
 
 void Sensor::onStartRequestCompleted(bool result) {
-  if (m_state != Sensor::SensorState::ACTIVATING)
+  if (m_state != Sensor::SensorState::Activating)
     return;
 
   if (!result) {
@@ -192,11 +214,11 @@ void Sensor::onStartRequestCompleted(bool result) {
   m_polling = SensorPollingStrategy::create(1 / m_configuration->frequency,
                                             std::move(pollCallback),
                                             m_sensorProxy->reportingMode());
-  updateState(Sensor::SensorState::ACTIVE);
+  updateState(Sensor::SensorState::Active);
 }
 
 void Sensor::onStopRequestCompleted(bool result) {
-  if (m_state == Sensor::SensorState::IDLE)
+  if (m_state == Sensor::SensorState::Idle)
     return;
 
   if (!result)
@@ -221,11 +243,7 @@ void Sensor::pageVisibilityChanged() {
 
 void Sensor::startListening() {
   DCHECK(m_sensorProxy);
-  updateState(Sensor::SensorState::ACTIVATING);
-  if (!m_sensorReading) {
-    m_sensorReading = createSensorReading(m_sensorProxy);
-    DCHECK(m_sensorReading);
-  }
+  updateState(Sensor::SensorState::Activating);
 
   m_sensorProxy->addObserver(this);
   if (!m_sensorProxy->isInitialized()) {
@@ -234,9 +252,10 @@ void Sensor::startListening() {
   }
 
   if (!m_configuration) {
-    m_configuration =
-        createSensorConfig(m_sensorOptions, *m_sensorProxy->defaultConfig());
+    m_configuration = createSensorConfig();
     DCHECK(m_configuration);
+    DCHECK(m_configuration->frequency > 0 &&
+           m_configuration->frequency <= m_sensorProxy->maximumFrequency());
   }
 
   auto startCallback =
@@ -247,8 +266,7 @@ void Sensor::startListening() {
 
 void Sensor::stopListening() {
   DCHECK(m_sensorProxy);
-  m_sensorReading = nullptr;
-  updateState(Sensor::SensorState::IDLE);
+  updateState(Sensor::SensorState::Idle);
 
   if (m_sensorProxy->isInitialized()) {
     auto callback =
@@ -262,7 +280,7 @@ void Sensor::stopListening() {
 }
 
 void Sensor::pollForData() {
-  if (m_state != Sensor::SensorState::ACTIVE) {
+  if (m_state != Sensor::SensorState::Active) {
     DCHECK(m_polling);
     m_polling->stopPolling();
     return;
@@ -270,37 +288,39 @@ void Sensor::pollForData() {
 
   DCHECK(m_sensorProxy);
   DCHECK(m_sensorProxy->isInitialized());
-  m_sensorProxy->updateInternalReading();
+  m_sensorProxy->updateSensorReading();
 
-  DCHECK(m_sensorReading);
+  DCHECK(m_sensorProxy->sensorReading());
   if (getExecutionContext() &&
-      m_sensorReading->isReadingUpdated(m_storedData)) {
+      m_sensorProxy->sensorReading()->isReadingUpdated(m_storedData)) {
     getExecutionContext()->postTask(
         BLINK_FROM_HERE,
         createSameThreadTask(&Sensor::notifySensorReadingChanged,
                              wrapWeakPersistent(this)));
   }
 
-  m_storedData = m_sensorProxy->reading();
+  m_storedData = m_sensorProxy->sensorReading()->data();
 }
 
 void Sensor::updateState(Sensor::SensorState newState) {
   if (newState == m_state)
     return;
-  m_state = newState;
-  if (getExecutionContext()) {
+
+  if (newState == SensorState::Active && getExecutionContext()) {
+    DCHECK_EQ(SensorState::Activating, m_state);
     getExecutionContext()->postTask(
-        BLINK_FROM_HERE, createSameThreadTask(&Sensor::notifyStateChanged,
+        BLINK_FROM_HERE, createSameThreadTask(&Sensor::notifyOnActivate,
                                               wrapWeakPersistent(this)));
   }
 
+  m_state = newState;
   updatePollingStatus();
 }
 
 void Sensor::reportError(ExceptionCode code,
                          const String& sanitizedMessage,
                          const String& unsanitizedMessage) {
-  updateState(Sensor::SensorState::ERRORED);
+  updateState(Sensor::SensorState::Errored);
   if (getExecutionContext()) {
     auto error =
         DOMException::create(code, sanitizedMessage, unsanitizedMessage);
@@ -315,7 +335,7 @@ void Sensor::updatePollingStatus() {
   if (!m_polling)
     return;
 
-  if (m_state != Sensor::SensorState::ACTIVE ||
+  if (m_state != Sensor::SensorState::Active ||
       page()->visibilityState() != PageVisibilityStateVisible) {
     m_polling->stopPolling();
   } else {
@@ -324,12 +344,11 @@ void Sensor::updatePollingStatus() {
 }
 
 void Sensor::notifySensorReadingChanged() {
-  dispatchEvent(
-      SensorReadingEvent::create(EventTypeNames::change, m_sensorReading));
+  dispatchEvent(Event::create(EventTypeNames::change));
 }
 
-void Sensor::notifyStateChanged() {
-  dispatchEvent(Event::create(EventTypeNames::statechange));
+void Sensor::notifyOnActivate() {
+  dispatchEvent(Event::create(EventTypeNames::activate));
 }
 
 void Sensor::notifyError(DOMException* error) {

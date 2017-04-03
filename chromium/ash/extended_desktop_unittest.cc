@@ -3,10 +3,9 @@
 // found in the LICENSE file.
 
 #include "ash/aura/wm_window_aura.h"
-#include "ash/common/shell_window_ids.h"
 #include "ash/common/system/tray/system_tray.h"
 #include "ash/common/wm/root_window_finder.h"
-#include "ash/display/display_manager.h"
+#include "ash/public/cpp/shell_window_ids.h"
 #include "ash/root_window_controller.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
@@ -23,6 +22,7 @@
 #include "ui/base/cursor/cursor.h"
 #include "ui/display/display.h"
 #include "ui/display/manager/display_layout.h"
+#include "ui/display/manager/display_manager.h"
 #include "ui/display/screen.h"
 #include "ui/events/event_handler.h"
 #include "ui/events/test/event_generator.h"

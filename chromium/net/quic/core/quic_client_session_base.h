@@ -50,17 +50,6 @@ class NET_EXPORT_PRIVATE QuicClientSessionBase
   void OnCryptoHandshakeEvent(CryptoHandshakeEvent event) override;
 
   // Called by |headers_stream_| when push promise headers have been
-  // received for a stream.
-  void OnPromiseHeaders(QuicStreamId stream_id,
-                        base::StringPiece headers_data) override;
-
-  // Called by |headers_stream_| when push promise headers have been
-  // completely received.
-  void OnPromiseHeadersComplete(QuicStreamId stream_id,
-                                QuicStreamId promised_stream_id,
-                                size_t frame_len) override;
-
-  // Called by |headers_stream_| when push promise headers have been
   // completely received.
   void OnPromiseHeaderList(QuicStreamId stream_id,
                            QuicStreamId promised_stream_id,
@@ -76,8 +65,9 @@ class NET_EXPORT_PRIVATE QuicClientSessionBase
   // Called by |QuicSpdyClientStream| on receipt of PUSH_PROMISE, does
   // some session level validation and creates the
   // |QuicClientPromisedInfo| inserting into maps by (promised) id and
-  // url.
-  virtual void HandlePromised(QuicStreamId associated_id,
+  // url. Returns true if a new push promise is accepted. Reset the promised
+  // stream and returns false otherwiese.
+  virtual bool HandlePromised(QuicStreamId associated_id,
                               QuicStreamId promised_id,
                               const SpdyHeaderBlock& headers);
 
@@ -103,11 +93,19 @@ class NET_EXPORT_PRIVATE QuicClientSessionBase
   // promised.
   virtual void DeletePromised(QuicClientPromisedInfo* promised);
 
+  virtual void OnPushStreamTimedOut(QuicStreamId stream_id);
+
   // Sends Rst for the stream, and makes sure that future calls to
   // IsClosedStream(id) return true, which ensures that any subsequent
   // frames related to this stream will be ignored (modulo flow
   // control accounting).
   void ResetPromised(QuicStreamId id, QuicRstStreamErrorCode error_code);
+
+  // Release headers stream's sequencer buffer if it's empty.
+  void CloseStreamInner(QuicStreamId stream_id, bool locally_reset) override;
+
+  // Returns true if there are no active requests and no promised streams.
+  bool ShouldReleaseHeadersStreamSequencerBuffer() override;
 
   size_t get_max_promises() const {
     return max_open_incoming_streams() * kMaxPromisedStreamsMultiplier;
@@ -124,7 +122,7 @@ class NET_EXPORT_PRIVATE QuicClientSessionBase
       std::unordered_map<QuicStreamId, std::unique_ptr<QuicClientPromisedInfo>>;
 
   // As per rfc7540, section 10.5: track promise streams in "reserved
-  // (remote)".  The primary key is URL from he promise request
+  // (remote)".  The primary key is URL from the promise request
   // headers.  The promised stream id is a secondary key used to get
   // promise info when the response headers of the promised stream
   // arrive.

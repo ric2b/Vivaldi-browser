@@ -18,11 +18,6 @@ class TracedValue;
 
 namespace cc {
 
-namespace proto {
-class TransformCachedNodeData;
-class TreeNode;
-}  // namespace proto
-
 struct CC_EXPORT TransformNode {
   TransformNode();
   TransformNode(const TransformNode&);
@@ -94,14 +89,14 @@ struct CC_EXPORT TransformNode {
 
   bool scrolls : 1;
 
-  bool needs_surface_contents_scale : 1;
+  bool should_be_snapped : 1;
 
   // These are used to position nodes wrt the right or bottom of the inner or
   // outer viewport.
-  bool affected_by_inner_viewport_bounds_delta_x : 1;
-  bool affected_by_inner_viewport_bounds_delta_y : 1;
-  bool affected_by_outer_viewport_bounds_delta_x : 1;
-  bool affected_by_outer_viewport_bounds_delta_y : 1;
+  bool moved_by_inner_viewport_bounds_delta_x : 1;
+  bool moved_by_inner_viewport_bounds_delta_y : 1;
+  bool moved_by_outer_viewport_bounds_delta_x : 1;
+  bool moved_by_outer_viewport_bounds_delta_y : 1;
 
   // Layer scale factor is used as a fallback when we either cannot adjust
   // raster scale or if the raster scale cannot be extracted from the screen
@@ -115,14 +110,13 @@ struct CC_EXPORT TransformNode {
   // TODO(vollick): will be moved when accelerated effects are implemented.
   float post_local_scale_factor;
 
-  gfx::Vector2dF surface_contents_scale;
-
   // TODO(vollick): will be moved when accelerated effects are implemented.
   gfx::ScrollOffset scroll_offset;
 
-  // We scroll snap where possible, but this means fixed-pos elements must be
-  // adjusted.  This value stores the snapped amount for this purpose.
-  gfx::Vector2dF scroll_snap;
+  // This value stores the snapped amount whenever we snap. If the snap is due
+  // to a scroll, we need it to calculate fixed-pos elements adjustment, even
+  // otherwise we may need it to undo the snapping next frame.
+  gfx::Vector2dF snap_amount;
 
   // TODO(vollick): will be moved when accelerated effects are implemented.
   gfx::Vector2dF source_offset;
@@ -140,9 +134,6 @@ struct CC_EXPORT TransformNode {
   void update_post_local_transform(const gfx::PointF& position,
                                    const gfx::Point3F& transform_origin);
 
-  void ToProtobuf(proto::TreeNode* proto) const;
-  void FromProtobuf(const proto::TreeNode& proto);
-
   void AsValueInto(base::trace_event::TracedValue* value) const;
 };
 
@@ -152,8 +143,6 @@ struct CC_EXPORT TransformCachedNodeData {
   TransformCachedNodeData(const TransformCachedNodeData& other);
   ~TransformCachedNodeData();
 
-  gfx::Transform from_target;
-  gfx::Transform to_target;
   gfx::Transform from_screen;
   gfx::Transform to_screen;
   int target_id;
@@ -161,10 +150,9 @@ struct CC_EXPORT TransformCachedNodeData {
   // with this transform node.
   int content_target_id;
 
-  bool operator==(const TransformCachedNodeData& other) const;
+  bool is_showing_backface : 1;
 
-  void ToProtobuf(proto::TransformCachedNodeData* proto) const;
-  void FromProtobuf(const proto::TransformCachedNodeData& proto);
+  bool operator==(const TransformCachedNodeData& other) const;
 };
 
 }  // namespace cc

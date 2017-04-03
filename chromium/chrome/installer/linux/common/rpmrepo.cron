@@ -16,16 +16,15 @@
 
 @@include@@rpm.include
 
-# Check for presence of future key and add if missing
-install_future_rpm_key
-
 ## MAIN ##
 DEFAULTS_FILE="/etc/default/@@PACKAGE@@"
 if [ -r "$DEFAULTS_FILE" ]; then
   . "$DEFAULTS_FILE"
 fi
 
+remove_old_rpm_key
 install_rpm_key
+install_future_rpm_key
 
 if [ "$repo_add_once" = "true" ]; then
   determine_rpm_package_manager

@@ -19,7 +19,9 @@
 #include "ui/gfx/geometry/rect.h"
 
 #define SET_STATE(state) SetState(state, __func__)
-#define VLOG_EVENT(event) if (VLOG_IS_ON(0)) VlogEvent(event, __func__)
+#define VLOG_EVENT(event) \
+  if (VLOG_IS_ON(1))      \
+  VlogEvent(event, __func__)
 
 namespace ui {
 
@@ -63,13 +65,17 @@ void TouchExplorationController::SetTouchAccessibilityAnchorPoint(
   anchor_point_state_ = ANCHOR_POINT_EXPLICITLY_SET;
 }
 
+void TouchExplorationController::SetExcludeBounds(const gfx::Rect& bounds) {
+  exclude_bounds_ = bounds;
+}
+
 ui::EventRewriteStatus TouchExplorationController::RewriteEvent(
     const ui::Event& event,
     std::unique_ptr<ui::Event>* rewritten_event) {
   if (!event.IsTouchEvent()) {
     if (event.IsKeyEvent()) {
       const ui::KeyEvent& key_event = static_cast<const ui::KeyEvent&>(event);
-      VLOG(0) << "\nKeyboard event: " << key_event.name()
+      VLOG(1) << "\nKeyboard event: " << key_event.name()
               << "\n Key code: " << key_event.key_code()
               << ", Flags: " << key_event.flags()
               << ", Is char: " << key_event.is_char();
@@ -77,6 +83,23 @@ ui::EventRewriteStatus TouchExplorationController::RewriteEvent(
     return ui::EVENT_REWRITE_CONTINUE;
   }
   const ui::TouchEvent& touch_event = static_cast<const ui::TouchEvent&>(event);
+
+  if (!exclude_bounds_.IsEmpty()) {
+    gfx::Point location = touch_event.location();
+    root_window_->GetHost()->ConvertPointFromNativeScreen(&location);
+    bool in_exclude_area = exclude_bounds_.Contains(location);
+    if (in_exclude_area) {
+      if (state_ == NO_FINGERS_DOWN)
+        return ui::EVENT_REWRITE_CONTINUE;
+      if (touch_event.type() == ui::ET_TOUCH_MOVED ||
+          touch_event.type() == ui::ET_TOUCH_PRESSED) {
+        return ui::EVENT_REWRITE_DISCARD;
+      }
+      // Otherwise, continue handling events. Basically, we want to let
+      // CANCELLED or RELEASE events through so this can get back to
+      // the NO_FINGERS_DOWN state.
+    }
+  }
 
   // If the tap timer should have fired by now but hasn't, run it now and
   // stop the timer. This is important so that behavior is consistent with
@@ -111,7 +134,8 @@ ui::EventRewriteStatus TouchExplorationController::RewriteEvent(
     std::vector<int>::iterator it = std::find(
         current_touch_ids_.begin(), current_touch_ids_.end(), touch_id);
 
-    // Can happen if touch exploration is enabled while fingers were down.
+    // Can happen if touch exploration is enabled while fingers were down
+    // or if an additional press occurred within the exclusion bounds.
     if (it == current_touch_ids_.end())
       return ui::EVENT_REWRITE_CONTINUE;
 
@@ -138,7 +162,7 @@ ui::EventRewriteStatus TouchExplorationController::RewriteEvent(
       FindEdgesWithinBounds(touch_event.location(), kLeavingScreenEdge) !=
           NO_EDGE) {
     if (VLOG_on_)
-      VLOG(0) << "Leaving screen";
+      VLOG(1) << "Leaving screen";
 
     // Indicates to the user that they are leaving the screen.
     delegate_->PlayExitScreenEarcon();
@@ -146,7 +170,7 @@ ui::EventRewriteStatus TouchExplorationController::RewriteEvent(
     if (current_touch_ids_.size() == 0) {
       SET_STATE(NO_FINGERS_DOWN);
       if (VLOG_on_) {
-        VLOG(0) << "Reset to no fingers in Rewrite event because the touch  "
+        VLOG(1) << "Reset to no fingers in Rewrite event because the touch  "
                    "release or cancel was on the edge of the screen.";
       }
       return ui::EVENT_REWRITE_DISCARD;
@@ -308,7 +332,7 @@ ui::EventRewriteStatus TouchExplorationController::InSingleTapPressed(
         (event.time_stamp() - initial_press_->time_stamp()).InSecondsF();
     float velocity = distance / delta_time;
     if (VLOG_on_) {
-      VLOG(0) << "\n Delta time: " << delta_time << "\n Distance: " << distance
+      VLOG(1) << "\n Delta time: " << delta_time << "\n Distance: " << distance
               << "\n Velocity of click: " << velocity
               << "\n Minimum swipe velocity: "
               << gesture_detector_config_.minimum_swipe_velocity;
@@ -876,7 +900,7 @@ void TouchExplorationController::SideSlideControl(ui::GestureEvent* gesture) {
   float ratio = (location.y() - kMaxDistanceFromEdge) / volume_adjust_height;
   float volume = 100 - 100 * ratio;
   if (VLOG_on_) {
-    VLOG(0) << "\n Volume = " << volume
+    VLOG(1) << "\n Volume = " << volume
             << "\n Location = " << location.ToString()
             << "\n Bounds = " << root_window_->bounds().right();
   }
@@ -891,7 +915,7 @@ void TouchExplorationController::OnSwipeEvent(ui::GestureEvent* swipe_gesture) {
   GestureEventDetails event_details = swipe_gesture->details();
   int num_fingers = event_details.touch_points();
   if (VLOG_on_)
-    VLOG(0) << "\nSwipe with " << num_fingers << " fingers.";
+    VLOG(1) << "\nSwipe with " << num_fingers << " fingers.";
 
   ui::AXGesture gesture = ui::AX_GESTURE_NONE;
   if (event_details.swipe_left()) {
@@ -1004,7 +1028,7 @@ void TouchExplorationController::DispatchKeyWithFlags(
   DispatchEvent(&key_down);
   DispatchEvent(&key_up);
   if (VLOG_on_) {
-    VLOG(0) << "\nKey down: key code : " << key_down.key_code()
+    VLOG(1) << "\nKey down: key code : " << key_down.key_code()
             << ", flags: " << key_down.flags()
             << "\nKey up: key code : " << key_up.key_code()
             << ", flags: " << key_up.flags();
@@ -1096,7 +1120,7 @@ void TouchExplorationController::VlogState(const char* function_name) {
     return;
   prev_state_ = state_;
   const char* state_string = EnumStateToString(state_);
-  VLOG(0) << "\n Function name: " << function_name
+  VLOG(1) << "\n Function name: " << function_name
           << "\n State: " << state_string;
 }
 
@@ -1121,8 +1145,7 @@ void TouchExplorationController::VlogEvent(const ui::TouchEvent& touch_event,
   const gfx::PointF& location = touch_event.location_f();
   const int touch_id = touch_event.touch_id();
 
-  VLOG(0) << "\n Function name: " << function_name
-          << "\n Event Type: " << type
+  VLOG(1) << "\n Function name: " << function_name << "\n Event Type: " << type
           << "\n Location: " << location.ToString()
           << "\n Touch ID: " << touch_id;
   prev_event_.reset(new TouchEvent(touch_event));

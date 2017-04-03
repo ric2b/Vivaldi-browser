@@ -47,9 +47,9 @@
 
 #include "core/CoreExport.h"
 #include "core/layout/ClipRectsCache.h"
-#include "core/layout/ScrollEnums.h"
 
 #include "platform/graphics/paint/GeometryMapper.h"
+#include "platform/scroll/ScrollTypes.h"
 
 #include "wtf/Allocator.h"
 
@@ -210,6 +210,7 @@ class CORE_EXPORT PaintLayerClipper {
 
   void getOrCalculateClipRects(const ClipRectsContext&, ClipRects&) const;
 
+  bool shouldClipOverflow(const ClipRectsContext&) const;
   bool shouldRespectOverflowClip(const ClipRectsContext&) const;
 
   ClipRect clipRectWithGeometryMapper(const ClipRectsContext&,

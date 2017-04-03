@@ -116,8 +116,8 @@ TabSpecificContentSettings::TabSpecificContentSettings(WebContents* tab)
 }
 
 TabSpecificContentSettings::~TabSpecificContentSettings() {
-  FOR_EACH_OBSERVER(
-      SiteDataObserver, observer_list_, ContentSettingsDestroyed());
+  for (SiteDataObserver& observer : observer_list_)
+    observer.ContentSettingsDestroyed();
 }
 
 TabSpecificContentSettings* TabSpecificContentSettings::GetForFrame(
@@ -810,10 +810,8 @@ bool TabSpecificContentSettings::OnMessageReceived(
 
 void TabSpecificContentSettings::DidStartNavigation(
     content::NavigationHandle* navigation_handle) {
-  if (!navigation_handle->IsInMainFrame() || navigation_handle->IsSamePage() ||
-      navigation_handle->IsSynchronousNavigation()) {
+  if (!navigation_handle->IsInMainFrame() || navigation_handle->IsSamePage())
     return;
-  }
 
   const content::NavigationController& controller =
       web_contents()->GetController();
@@ -874,7 +872,8 @@ void TabSpecificContentSettings::RemoveSiteDataObserver(
 }
 
 void TabSpecificContentSettings::NotifySiteDataObservers() {
-  FOR_EACH_OBSERVER(SiteDataObserver, observer_list_, OnSiteDataAccessed());
+  for (SiteDataObserver& observer : observer_list_)
+    observer.OnSiteDataAccessed();
 }
 
 void TabSpecificContentSettings::ClearGeolocationContentSettings() {

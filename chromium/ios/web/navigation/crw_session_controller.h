@@ -13,7 +13,6 @@
 
 @class CRWSessionEntry;
 @class CRWSessionCertificatePolicyManager;
-@class XCallbackParameters;
 
 namespace web {
 class NavigationManagerImpl;
@@ -31,6 +30,9 @@ struct SSLStatus;
 @property(nonatomic, readonly, copy) NSString* tabId;
 @property(nonatomic, readonly, assign) NSInteger currentNavigationIndex;
 @property(nonatomic, readonly, assign) NSInteger previousNavigationIndex;
+// The index of the pending entry if it is in entries_, or -1 if pendingEntry is
+// a new entry (created by addPendingEntry:).
+@property(nonatomic, readwrite, assign) NSInteger pendingEntryIndex;
 @property(nonatomic, readonly, strong) NSArray* entries;
 @property(nonatomic, copy) NSString* windowName;
 // Indicates whether the page was opened by DOM (e.g. with |window.open|
@@ -54,7 +56,6 @@ struct SSLStatus;
 @property(nonatomic, assign) NSTimeInterval lastVisitedTimestamp;
 @property(nonatomic, readonly, copy) NSString* openerId;
 @property(nonatomic, readonly, assign) NSInteger openerNavigationIndex;
-@property(nonatomic, strong) XCallbackParameters* xCallbackParameters;
 
 // CRWSessionController doesn't have public constructors. New
 // CRWSessionControllers are created by deserialization, or via a
@@ -104,26 +105,22 @@ struct SSLStatus;
 // Returns YES if there is a pending entry.
 - (BOOL)hasPendingEntry;
 
+// Inserts history state from the given CRWSessionController to the front of
+// this controller.
+- (void)insertStateFromSessionController:(CRWSessionController*)otherController;
+
 // Copies history state from the given CRWSessionController and adds it to this
 // controller. If |replaceState|, replaces the state of this controller with
 // the state of |otherSession|, instead of appending.
+// DEPRECATED, use insertStateFromSessionController: instead.
+// TODO(crbug.com/664344): Remove this method.
 - (void)copyStateFromAndPrune:(CRWSessionController*)otherSession
                  replaceState:(BOOL)replaceState;
 
-// Returns YES if there are entries to go back or forward to, given the
-// current entry.
-- (BOOL)canGoBack;
-- (BOOL)canGoForward;
-// Adjusts the current entry to reflect the navigation in the corresponding
-// direction in history.
-- (void)goBack;
-- (void)goForward;
-// Calls goBack or goForward the appropriate number of times to adjust
-// currentNavigationIndex_ by delta.
-- (void)goDelta:(int)delta;
-// Sets |currentNavigationIndex_| to the index of |entry| if |entries_| contains
-// |entry|.
-- (void)goToEntry:(CRWSessionEntry*)entry;
+// Returns YES if there are entries to go with given delta.
+- (BOOL)canGoDelta:(int)delta;
+// Sets |currentNavigationIndex_| to the |index| if it's in the entries bounds.
+- (void)goToEntryAtIndex:(NSInteger)index;
 
 // Removes the entry at |index| after discarding any noncomitted entries.
 // |index| must not be the index of the last committed entry, or a noncomitted
@@ -153,6 +150,11 @@ struct SSLStatus;
 // Set |useDesktopUserAgentForNextPendingEntry_| to YES if there is no pending
 // entry, otherwise set |useDesktopUserAgent| in the pending entry.
 - (void)useDesktopUserAgentForNextPendingEntry;
+
+// Returns the navigation index that differs from the current entry by the
+// specified |delta|, skipping redirect navigation items. The index returned is
+// not guaranteed to be valid.
+- (NSInteger)indexOfEntryForDelta:(int)delta;
 
 @end
 

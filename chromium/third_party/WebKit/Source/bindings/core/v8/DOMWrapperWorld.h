@@ -55,7 +55,6 @@ enum WorldIdConstants {
 };
 
 class DOMObjectHolderBase;
-class DOMWrapperWorldVisitor;
 template <typename T>
 class DOMObjectHolder;
 
@@ -77,8 +76,7 @@ class CORE_EXPORT DOMWrapperWorld : public RefCounted<DOMWrapperWorld> {
   static bool isolatedWorldsExist() { return isolatedWorldCount; }
   static void allWorldsInMainThread(Vector<RefPtr<DOMWrapperWorld>>& worlds);
   static void markWrappersInAllWorlds(ScriptWrappable*,
-                                      const ScriptWrappableVisitor*,
-                                      v8::EmbedderReachableReferenceReporter*);
+                                      const ScriptWrappableVisitor*);
   static void setWrapperReferencesInAllWorlds(
       const v8::Persistent<v8::Object>& parent,
       ScriptWrappable*,
@@ -94,6 +92,9 @@ class CORE_EXPORT DOMWrapperWorld : public RefCounted<DOMWrapperWorld> {
 
   static DOMWrapperWorld& mainWorld();
   static DOMWrapperWorld& privateScriptIsolatedWorld();
+  static PassRefPtr<DOMWrapperWorld> fromWorldId(v8::Isolate*,
+                                                 int worldId,
+                                                 int extensionGroup);
 
   static void setIsolatedWorldHumanReadableName(int worldID, const String&);
   String isolatedWorldHumanReadableName();

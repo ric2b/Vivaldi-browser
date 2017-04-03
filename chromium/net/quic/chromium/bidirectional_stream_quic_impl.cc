@@ -234,7 +234,7 @@ void BidirectionalStreamQuicImpl::OnHeadersAvailable(
     const SpdyHeaderBlock& headers,
     size_t frame_len) {
   headers_bytes_received_ += frame_len;
-  negotiated_protocol_ = kProtoQUIC1SPDY3;
+  negotiated_protocol_ = kProtoQUIC;
   if (!has_received_headers_) {
     has_received_headers_ = true;
     connect_timing_ = session_->GetConnectTiming();
@@ -288,6 +288,9 @@ void BidirectionalStreamQuicImpl::OnCryptoHandshakeConfirmed() {
   if (waiting_for_confirmation_)
     NotifyStreamReady();
 }
+
+void BidirectionalStreamQuicImpl::OnSuccessfulVersionNegotiation(
+    const QuicVersion& version) {}
 
 void BidirectionalStreamQuicImpl::OnSessionClosed(
     int error,

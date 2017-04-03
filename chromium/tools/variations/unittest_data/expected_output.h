@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 // GENERATED FROM THE SCHEMA DEFINITION AND DESCRIPTION IN
-//   fieldtrial_testing_config_schema.json
+//   field_trial_testing_config_schema.json
 //   test_config.json
 // DO NOT EDIT.
 
@@ -26,6 +26,7 @@ struct FieldTrialTestingExperiment {
   const size_t enable_features_size;
   const char* const * disable_features;
   const size_t disable_features_size;
+  const char* const forcing_flag;
 };
 
 struct FieldTrialTestingStudy {

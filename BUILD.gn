@@ -47,6 +47,7 @@ group("All") {
     "//media/cast:cast_unittests",
     "//net:net_unittests",
     "//ppapi:ppapi_unittests",
+    "//printing:printing_unittests",
     "//sql:sql_unittests",
     "//third_party/cacheinvalidation:cacheinvalidation_unittests",
     "//ui/gfx:gfx_unittests",
@@ -103,9 +104,6 @@ group("All") {
     if (!is_chromecast) {
       deps += [ "//ui/views:views_unittests" ]
     }
-  }
-  if (enable_basic_printing && enable_print_preview) {
-    deps += [ "//printing:printing_unittests" ]
   }
   if (is_win) {
     deps += ["//vivaldi/testing:testing"]

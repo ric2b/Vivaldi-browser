@@ -153,17 +153,22 @@ void LayoutSVGRoot::layout() {
 
   SVGLayoutSupport::layoutResourcesIfNeeded(this);
 
+  // selfNeedsLayout() will cover changes to one (or more) of viewBox,
+  // current{Scale,Translate} and decorations.
+  const bool viewportMayHaveChanged = selfNeedsLayout() || oldSize != size();
+
+  // The scale of one or more of the SVG elements may have changed, or new
+  // content may have been exposed, so mark the entire subtree as needing paint
+  // invalidation checking. (It is only somewhat by coincidence that this
+  // condition happens to be the same as the one for viewport changes.)
+  if (viewportMayHaveChanged)
+    setMayNeedPaintInvalidationSubtree();
+
   SVGSVGElement* svg = toSVGSVGElement(node());
   ASSERT(svg);
   // When hasRelativeLengths() is false, no descendants have relative lengths
   // (hence no one is interested in viewport size changes).
-  m_isLayoutSizeChanged =
-      svg->hasRelativeLengths() && (selfNeedsLayout() || oldSize != size());
-
-  // The scale of one or more of the SVG elements may have changed, so mark
-  // the entire subtree as needing paint invalidation checking.
-  if (m_isLayoutSizeChanged)
-    setMayNeedPaintInvalidationSubtree();
+  m_isLayoutSizeChanged = viewportMayHaveChanged && svg->hasRelativeLengths();
 
   SVGLayoutSupport::layoutChildren(
       firstChild(), false, m_didScreenScaleFactorChange, m_isLayoutSizeChanged);
@@ -177,12 +182,9 @@ void LayoutSVGRoot::layout() {
   addVisualEffectOverflow();
 
   if (!shouldApplyViewportClip()) {
-    FloatRect contentPaintInvalidationRect =
-        paintInvalidationRectInLocalSVGCoordinates();
-    contentPaintInvalidationRect =
-        m_localToBorderBoxTransform.mapRect(contentPaintInvalidationRect);
-    addContentsVisualOverflow(
-        enclosingLayoutRect(contentPaintInvalidationRect));
+    FloatRect contentVisualRect = visualRectInLocalSVGCoordinates();
+    contentVisualRect = m_localToBorderBoxTransform.mapRect(contentVisualRect);
+    addContentsVisualOverflow(enclosingLayoutRect(contentVisualRect));
   }
 
   updateLayerTransformAfterLayout();
@@ -358,44 +360,40 @@ const AffineTransform& LayoutSVGRoot::localToSVGParentTransform() const {
   return m_localToParentTransform;
 }
 
-LayoutRect LayoutSVGRoot::localOverflowRectForPaintInvalidation() const {
-  // This is an open-coded aggregate of SVGLayoutSupport::
-  // localOverflowRectForPaintInvalidation, and LayoutReplaced::
-  // localOverflowRectForPaintInvalidation.
-  // The reason for this is to optimize/minimize the paint invalidation rect
-  // when the box is not "decorated" (does not have background/border/etc., see
-  // LayoutSVGRootTest.OverflowRectMappingWithViewportClipWithoutBorder).
+LayoutRect LayoutSVGRoot::localVisualRect() const {
+  // This is an open-coded aggregate of SVGLayoutSupport::localVisualRect
+  // and LayoutReplaced::localVisualRect. The reason for this is to optimize/
+  // minimize the visual rect when the box is not "decorated" (does not have
+  // background/border/etc., see
+  // LayoutSVGRootTest.VisualRectMappingWithViewportClipWithoutBorder).
 
   // Return early for any cases where we don't actually paint.
   if (style()->visibility() != EVisibility::Visible &&
       !enclosingLayer()->hasVisibleContent())
     return LayoutRect();
 
-  // Compute the paint invalidation rect of the content of the SVG in the
-  // border-box coordinate space.
-  FloatRect contentPaintInvalidationRect =
-      paintInvalidationRectInLocalSVGCoordinates();
-  contentPaintInvalidationRect =
-      m_localToBorderBoxTransform.mapRect(contentPaintInvalidationRect);
+  // Compute the visual rect of the content of the SVG in the border-box
+  // coordinate space.
+  FloatRect contentVisualRect = visualRectInLocalSVGCoordinates();
+  contentVisualRect = m_localToBorderBoxTransform.mapRect(contentVisualRect);
 
   // Apply initial viewport clip, overflow:visible content is added to
   // visualOverflow but the most common case is that overflow is hidden, so
   // always intersect.
-  contentPaintInvalidationRect.intersect(pixelSnappedBorderBoxRect());
+  contentVisualRect.intersect(pixelSnappedBorderBoxRect());
 
-  LayoutRect paintInvalidationRect =
-      enclosingLayoutRect(contentPaintInvalidationRect);
+  LayoutRect visualRect = enclosingLayoutRect(contentVisualRect);
   // If the box is decorated or is overflowing, extend it to include the
   // border-box and overflow.
   if (m_hasBoxDecorationBackground || hasOverflowModel()) {
     // The selectionRect can project outside of the overflowRect, so take their
     // union for paint invalidation to avoid selection painting glitches.
-    LayoutRect decoratedPaintInvalidationRect =
+    LayoutRect decoratedVisualRect =
         unionRect(localSelectionRect(), visualOverflowRect());
-    paintInvalidationRect.unite(decoratedPaintInvalidationRect);
+    visualRect.unite(decoratedVisualRect);
   }
 
-  return LayoutRect(enclosingIntRect(paintInvalidationRect));
+  return LayoutRect(enclosingIntRect(visualRect));
 }
 
 // This method expects local CSS box coordinates.
@@ -418,9 +416,7 @@ const LayoutObject* LayoutSVGRoot::pushMappingToContainer(
 void LayoutSVGRoot::updateCachedBoundaries() {
   SVGLayoutSupport::computeContainerBoundingBoxes(
       this, m_objectBoundingBox, m_objectBoundingBoxValid, m_strokeBoundingBox,
-      m_paintInvalidationBoundingBox);
-  SVGLayoutSupport::intersectPaintInvalidationRectWithResources(
-      this, m_paintInvalidationBoundingBox);
+      m_visualRectInLocalSVGCoordinates);
 }
 
 bool LayoutSVGRoot::nodeAtPoint(HitTestResult& result,

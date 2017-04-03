@@ -9,6 +9,7 @@
 goog.provide('Output');
 goog.provide('Output.EventType');
 
+goog.require('AutomationTreeWalker');
 goog.require('EarconEngine');
 goog.require('Spannable');
 goog.require('Stubs');
@@ -92,7 +93,7 @@ Output = function() {
    * @type {boolean}
    * @private
    */
-  this.outputContextFirst_ = localStorage['outputContextFirst'] == 'true';
+  this.outputContextFirst_ = false;
 };
 
 /**
@@ -106,20 +107,20 @@ Output.SPACE = ' ';
  * @const {Object<{msgId: string,
  *                 earconId: (string|undefined),
  *                 inherits: (string|undefined),
- *                 ignoreAncestry: (boolean|undefined)}>}
+ *                 outputContextFirst: (boolean|undefined)}>}
  * msgId: the message id of the role.
  * earconId: an optional earcon to play when encountering the role.
  * inherits: inherits rules from this role.
- * ignoreAncestry: don't output ancestry changes when encountering this role.
+ * outputContextFirst: where to place the context output.
  * @private
  */
 Output.ROLE_INFO_ = {
   alert: {
-    msgId: 'role_alert',
-    earconId: 'ALERT_NONMODAL'
+    msgId: 'role_alert'
   },
   alertDialog: {
-    msgId: 'role_alertdialog'
+    msgId: 'role_alertdialog',
+    outputContextFirst: true
   },
   article: {
     msgId: 'role_article',
@@ -149,7 +150,8 @@ Output.ROLE_INFO_ = {
     inherits: 'cell'
   },
   comboBox: {
-    msgId: 'role_combobox'
+    msgId: 'role_combobox',
+    earconId: 'LISTBOX'
   },
   complementary: {
     msgId: 'role_complementary',
@@ -168,7 +170,8 @@ Output.ROLE_INFO_ = {
     inherits: 'abstractContainer'
   },
   dialog: {
-    msgId: 'role_dialog'
+    msgId: 'role_dialog',
+    outputContextFirst: true
   },
   directory: {
     msgId: 'role_directory',
@@ -230,7 +233,8 @@ Output.ROLE_INFO_ = {
     inherits: 'abstractContainer'
   },
   menu: {
-    msgId: 'role_menu'
+    msgId: 'role_menu',
+    outputContextFirst: true
   },
   menuBar: {
     msgId: 'role_menubar',
@@ -267,6 +271,9 @@ Output.ROLE_INFO_ = {
   },
   radioGroup: {
     msgId: 'role_radiogroup',
+  },
+  rootWebArea: {
+    outputContextFirst: true
   },
   row: {
     msgId: 'role_row',
@@ -335,52 +342,29 @@ Output.ROLE_INFO_ = {
 
 /**
  * Metadata about supported automation states.
- * @const {!Object<{on: {msgId: string, earconId: string},
- *                  off: {msgId: string, earconId: string},
- *                  omitted: {msgId: string, earconId: string}}>}
+ * @const {!Object<string, {on: {msgId: string, earconId: string},
+ *                          off: {msgId: string, earconId: string},
+ *                          isRoleSpecific: (boolean|undefined)}>}
  *     on: info used to describe a state that is set to true.
- *     off: info used to describe a state that is set to false.
- *     omitted: info used to describe a state that is undefined.
+ *     off: info used to describe a state that is set to undefined.
+ *     isRoleSpecific: info used for specific roles.
  * @private
  */
 Output.STATE_INFO_ = {
-  checked: {
-    on: {
-      msgId: 'checkbox_checked_state'
-    },
-    off: {
-      msgId: 'checkbox_unchecked_state'
-    },
-    omitted: {
-      msgId: 'checkbox_unchecked_state'
-    }
+  busy: {on: {msgId: 'busy_state'}},
+  collapsed: {on: {msgId: 'aria_expanded_false'}},
+  default: {on: {msgId: 'default_state'}},
+  disabled: {on: {msgId: 'aria_disabled_true'}},
+  expanded: {on: {msgId: 'aria_expanded_true'}},
+  multiselectable: {on: {msgId: 'aria_multiselectable_true'}},
+  pressed: {
+    isRoleSpecific: true,
+    on: {msgId: 'aria_pressed_true'},
+    off: {msgId: 'aria_pressed_false'}
   },
-  collapsed: {
-    on: {
-      msgId: 'aria_expanded_false'
-    },
-    off: {
-      msgId: 'aria_expanded_true'
-    }
-  },
-  disabled: {
-    on: {
-      msgId: 'aria_disabled_true'
-    }
-  },
-  expanded: {
-    on: {
-      msgId: 'aria_expanded_true'
-    },
-    off: {
-      msgId: 'aria_expanded_false'
-    }
-  },
-  visited: {
-    on: {
-      msgId: 'visited_state'
-    }
-  }
+  required: {on: {msgId: 'aria_required_true'}},
+  selected: {on: {msgId: 'aria_selected_true'}},
+  visited: {on: {msgId: 'visited_state'}}
 };
 
 /**
@@ -413,11 +397,12 @@ Output.RULES = {
       leave: '@exited_container($role)'
     },
     alert: {
-      speak: '!doNotInterrupt $role $descendants $state'
+      enter: '$name $role $state',
+      speak: '$earcon(ALERT_NONMODAL) $role $nameOrTextContent $state'
     },
     alertDialog: {
-      enter: '$nameFromNode $role $description',
-      speak: '$name $role $descendants $state'
+      enter: '$earcon(ALERT_MODAL) $name $state',
+      speak: '$earcon(ALERT_MODAL) $name $nameOrTextContent $state $role'
     },
     cell: {
       enter: '@cell_summary($tableCellRowIndex, $tableCellColumnIndex) ' +
@@ -440,7 +425,10 @@ Output.RULES = {
     },
     div: {
       enter: '$nameFromNode',
-      speak: '$name $description $descendants'
+      speak: '$nameOrTextContent $description'
+    },
+    embeddedObject: {
+      speak: '$name'
     },
     grid: {
       enter: '$nameFromNode $role $description'
@@ -457,6 +445,10 @@ Output.RULES = {
       speak: '!relativePitch(hierarchicalLevel) ' +
           '$nameOrDescendants= ' +
           '$if($hierarchicalLevel, @tag_h+$hierarchicalLevel, $role) $state'
+    },
+    image: {
+      speak: '$if($name, $name, $urlFilename) ' +
+          '$value $state $role $description',
     },
     inlineTextBox: {
       speak: '$name='
@@ -527,13 +519,13 @@ Output.RULES = {
       speak: '$if($name, $name, $docUrl)'
     },
     region: {
-      speak: '$descendants'
+      speak: '$nameOrTextContent'
     },
     row: {
       enter: '$node(tableRowHeader)'
     },
     rowHeader: {
-      speak: '$descendants $state'
+      speak: '$nameOrTextContent $state'
     },
     slider: {
       speak: '$earcon(SLIDER) @describe_slider($value, $name) $description ' +
@@ -542,15 +534,21 @@ Output.RULES = {
     staticText: {
       speak: '$name='
     },
+    switch: {
+      speak: '$if($checked, $earcon(CHECK_ON), $earcon(CHECK_OFF)) ' +
+          '$if($checked, @describe_switch_on($name), ' +
+          '@describe_switch_off($name)) $description $state'
+    },
     tab: {
-      speak: '@describe_tab($name) $state $description'
+      speak: '@describe_tab($name) $state $description ' +
+          '$if($setSize, @describe_index($posInSet, $setSize))',
     },
     table: {
       enter: '@table_summary($name, $tableRowCount, $tableColumnCount) ' +
           '$node(tableHeader)'
     },
     tableHeaderContainer: {
-      speak: '$descendants $state $description'
+      speak: '$nameOrTextContent $state $description'
     },
     textField: {
       speak: '$name $value $if($multiline, @tag_textarea, $if(' +
@@ -562,9 +560,7 @@ Output.RULES = {
     },
     toggleButton: {
       speak: '$if($pressed, $earcon(CHECK_ON), $earcon(CHECK_OFF)) ' +
-          '$name $role ' +
-          '$if($pressed, @aria_pressed_true, @aria_pressed_false) ' +
-          '$description $state'
+          '$name $role $pressed $description $state'
     },
     toolbar: {
       enter: '$name $role $description'
@@ -605,8 +601,8 @@ Output.RULES = {
   },
   alert: {
     default: {
-      speak: '!doNotInterrupt @role_alert ' +
-          '$if($name, $name, $descendants) $earcon(ALERT_NONMODAL) $description'
+      speak: '$earcon(ALERT_NONMODAL) @role_alert ' +
+          '$nameOrTextContent $description'
     }
   }
 };
@@ -654,14 +650,12 @@ Output.EarconAction.prototype = {
  * Annotation for text with a selection inside it.
  * @param {number} startIndex
  * @param {number} endIndex
- * @param {number=} opt_offset
  * @constructor
  */
-Output.SelectionSpan = function(startIndex, endIndex, opt_offset) {
+Output.SelectionSpan = function(startIndex, endIndex) {
   // TODO(dtseng): Direction lost below; should preserve for braille panning.
   this.startIndex = startIndex < endIndex ? startIndex : endIndex;
   this.endIndex = endIndex > startIndex ? endIndex : startIndex;
-  this.offset = opt_offset || 0;
 };
 
 /**
@@ -876,7 +870,6 @@ Output.prototype = {
 
     this.formatOptions_ = {speech: false, braille: true, auralStyle: false};
     this.format_(node, formatStr, this.brailleBuffer_);
-
     return this;
   },
 
@@ -898,21 +891,24 @@ Output.prototype = {
    */
   go: function() {
     // Speech.
-    var queueMode = this.queueMode_;
-    this.speechBuffer_.forEach(function(buff, i, a) {
-      if (Output.forceModeForNextSpeechUtterance_ !== undefined &&
-          buff.length > 0) {
-        queueMode = Output.forceModeForNextSpeechUtterance_;
-        Output.forceModeForNextSpeechUtterance_ = undefined;
-      }
+    var queueMode = cvox.QueueMode.FLUSH;
+    if (Output.forceModeForNextSpeechUtterance_ !== undefined)
+      queueMode = Output.forceModeForNextSpeechUtterance_;
+    else if (this.queueMode_ !== undefined)
+      queueMode = this.queueMode_;
 
-      var speechProps = {};
+    if (this.speechBuffer_.length > 0)
+      Output.forceModeForNextSpeechUtterance_ = undefined;
+
+    for (var i = 0; i < this.speechBuffer_.length; i++) {
+      var buff = this.speechBuffer_[i];
+      var speechProps = /** @type {Object} */(
+          buff.getSpanInstanceOf(Output.SpeechProperties)) || {};
+
+      speechProps.category = this.speechCategory_;
+
       (function() {
         var scopedBuff = buff;
-        speechProps =
-            scopedBuff.getSpanInstanceOf(Output.SpeechProperties) || {};
-        speechProps.category = this.speechCategory_;
-
         speechProps['startCallback'] = function() {
           var actions = scopedBuff.getSpansInstanceOf(Output.Action);
           if (actions) {
@@ -921,20 +917,19 @@ Output.prototype = {
             });
           }
         };
-      }.bind(this)());
+      }());
 
-      if (this.speechEndCallback_ && i == a.length - 1)
+      if (i == this.speechBuffer_.length - 1)
         speechProps['endCallback'] = this.speechEndCallback_;
-      else
-        speechProps['endCallback'] = null;
+
       cvox.ChromeVox.tts.speak(
           buff.toString(), queueMode, speechProps);
       queueMode = cvox.QueueMode.QUEUE;
-    }.bind(this));
+    }
 
     // Braille.
     if (this.brailleBuffer_.length) {
-      var buff = this.createBrailleOutput_();
+      var buff = this.mergeBraille_(this.brailleBuffer_);
       var selSpan =
           buff.getSpanInstanceOf(Output.SelectionSpan);
       var startIndex = -1, endIndex = -1;
@@ -943,7 +938,7 @@ Output.prototype = {
         var valueEnd = buff.getSpanEnd(selSpan);
         startIndex = valueStart + selSpan.startIndex;
         endIndex = valueStart + selSpan.endIndex;
-        buff.setSpan(new cvox.ValueSpan(selSpan.offset), valueStart, valueEnd);
+        buff.setSpan(new cvox.ValueSpan(0), valueStart, valueEnd);
         buff.setSpan(new cvox.ValueSelectionSpan(), startIndex, endIndex);
       }
 
@@ -973,6 +968,22 @@ Output.prototype = {
   render_: function(range, prevRange, type, buff) {
     if (prevRange && !prevRange.isValid())
       prevRange = null;
+
+    // Scan unique ancestors to get the value of |outputContextFirst|.
+    var parent = range.start.node;
+    var prevParent = prevRange ? prevRange.start.node : parent;
+    if (!parent || !prevParent)
+      return;
+    var uniqueAncestors = AutomationUtil.getUniqueAncestors(prevParent, parent);
+    for (var i = 0; parent = uniqueAncestors[i]; i++) {
+      if (parent.role == RoleType.window)
+        break;
+      if (Output.ROLE_INFO_[parent.role] &&
+          Output.ROLE_INFO_[parent.role].outputContextFirst) {
+        this.outputContextFirst_ = true;
+        break;
+      }
+    }
 
     if (range.isSubNode())
       this.subNode_(range, prevRange, type, buff);
@@ -1024,11 +1035,6 @@ Output.prototype = {
       if (options.isUnique)
         token = token.substring(0, token.length - 1);
 
-      // Annotate braille output with the corresponding automation nodes
-      // to support acting on nodes based on location in the output.
-      if (node && this.formatOptions_.braille)
-        options.annotation.push(new Output.NodeSpan(node));
-
       // Process token based on prefix.
       var prefix = token[0];
       token = token.slice(1);
@@ -1039,21 +1045,44 @@ Output.prototype = {
           var text = node.value;
           if (!node.state.editable && node.name == text)
             return;
+
+          var selectedText = '';
           if (text !== undefined) {
             if (node.textSelStart !== undefined) {
               options.annotation.push(new Output.SelectionSpan(
                   node.textSelStart,
                   node.textSelEnd));
+
+              selectedText =
+                  node.value.substring(node.textSelStart, node.textSelEnd);
             }
           }
           options.annotation.push(token);
-          this.append_(buff, text, options);
+          if (selectedText) {
+            this.append_(buff, selectedText, options);
+            this.append_(buff, Msgs.getMsg('selected'));
+          } else {
+            this.append_(buff, text, options);
+          }
         } else if (token == 'name') {
           options.annotation.push(token);
           var earcon = node ? this.findEarcon_(node, opt_prevNode) : null;
           if (earcon)
             options.annotation.push(earcon);
           this.append_(buff, node.name, options);
+        } else if (token == 'urlFilename') {
+          options.annotation.push('name');
+          var url = node.url;
+          var filename = '';
+          if (url.substring(0, 4) != 'data') {
+            filename =
+                url.substring(url.lastIndexOf('/') + 1, url.lastIndexOf('.'));
+
+            // Hack to not speak the filename if it's ridiculously long.
+            if (filename.length >= 30)
+            filename = filename.substring(0, 16) + '...';
+          }
+          this.append_(buff, filename, options);
         } else if (token == 'nameFromNode') {
           if (chrome.automation.NameFromType[node.nameFrom] ==
               'contents')
@@ -1092,10 +1121,28 @@ Output.prototype = {
             }).length;
             this.append_(buff, String(count));
           }
+        } else if (token == 'checked') {
+          var msg;
+          var ariaChecked = node.htmlAttributes['aria-checked'];
+          switch (ariaChecked) {
+            case 'mixed':
+              msg = 'aria_checked_mixed';
+              break;
+            case 'true':
+              msg = 'aria_checked_true';
+              break;
+            case 'false':
+              msg = 'aria_checked_false';
+              break;
+            default:
+            msg =
+                node.state.checked ? 'aria_checked_true' : 'aria_checked_false';
+          }
+          this.format_(node, '@' + msg, buff);
         } else if (token == 'state') {
           Object.getOwnPropertyNames(node.state).forEach(function(s) {
             var stateInfo = Output.STATE_INFO_[s];
-            if (stateInfo && stateInfo.on)
+            if (stateInfo && !stateInfo.isRoleSpecific && stateInfo.on)
               this.format_(node, '@' + stateInfo.on.msgId, buff);
           }.bind(this));
         } else if (token == 'find') {
@@ -1173,6 +1220,23 @@ Output.prototype = {
             return;
           var related = node[tree.firstChild.value];
           this.node_(related, related, Output.EventType.NAVIGATE, buff);
+        } else if (token == 'nameOrTextContent') {
+          if (node.name) {
+            this.format_(node, '$name', buff);
+          } else {
+            var walker = new AutomationTreeWalker(node,
+                Dir.FORWARD,
+                {visit: AutomationPredicate.leafOrStaticText,
+                 leaf: AutomationPredicate.leafOrStaticText});
+            var outputStrings = [];
+            while (walker.next().node &&
+                walker.phase == AutomationTreeWalkerPhase.DESCENDANT) {
+              if (walker.node.name)
+                outputStrings.push(walker.node.name);
+            }
+            var joinedOutput = outputStrings.join(' ');
+            this.append_(buff, joinedOutput, options);
+          }
         } else if (node[token] !== undefined) {
           options.annotation.push(token);
           var value = node[token];
@@ -1183,10 +1247,7 @@ Output.prototype = {
           options.annotation.push('state');
           var stateInfo = Output.STATE_INFO_[token];
           var resolvedInfo = {};
-          if (node.state[token] === undefined)
-            resolvedInfo = stateInfo.omitted;
-          else
-            resolvedInfo = node.state[token] ? stateInfo.on : stateInfo.off;
+          resolvedInfo = node.state[token] ? stateInfo.on : stateInfo.off;
           if (!resolvedInfo)
             return;
           if (this.formatOptions_.speech && resolvedInfo.earconId) {
@@ -1346,6 +1407,7 @@ Output.prototype = {
       return buff;
     }.bind(this);
 
+    var unit = range.isInlineText() ? cursors.Unit.LINE : cursors.Unit.NODE;
     while (cursor.node &&
         range.end.node &&
         AutomationUtil.getDirection(cursor.node, range.end.node) ==
@@ -1353,7 +1415,7 @@ Output.prototype = {
       var node = cursor.node;
       rangeBuff.push.apply(rangeBuff, formatNodeAndAncestors(node, prevNode));
       prevNode = node;
-      cursor = cursor.move(cursors.Unit.NODE,
+      cursor = cursor.move(unit,
                            cursors.Movement.DIRECTIONAL,
                            Dir.FORWARD);
 
@@ -1371,14 +1433,29 @@ Output.prototype = {
    * @private
    */
   ancestry_: function(node, prevNode, type, buff) {
-    // Check to see if ancestry output is ignored.
-    if (Output.ROLE_INFO_[node.role] &&
-        Output.ROLE_INFO_[node.role].ignoreAncestry)
-      return;
-
-    var prevUniqueAncestors =
-        AutomationUtil.getUniqueAncestors(node, prevNode);
-    var uniqueAncestors = AutomationUtil.getUniqueAncestors(prevNode, node);
+    // Expects |ancestors| to be ordered from root down to leaf. Outputs in
+    // reverse; place context first nodes at the end.
+    function byContextFirst(ancestors) {
+      var contextFirst = [];
+      var rest = [];
+      for (i = 0; i < ancestors.length - 1; i++) {
+        var node = ancestors[i];
+        // Discard ancestors of deepest window.
+        if (node.role == RoleType.window) {
+          contextFirst = [];
+          rest = [];
+        }
+        if ((Output.ROLE_INFO_[node.role] || {}).outputContextFirst)
+          contextFirst.push(node);
+        else
+          rest.push(node);
+      }
+      return rest.concat(contextFirst.reverse());
+    }
+    var prevUniqueAncestors = byContextFirst(AutomationUtil.getUniqueAncestors(
+        node, prevNode));
+    var uniqueAncestors = byContextFirst(AutomationUtil.getUniqueAncestors(
+        prevNode, node));
 
     // First, look up the event type's format block.
     // Navigate is the default event.
@@ -1398,7 +1475,7 @@ Output.prototype = {
 
     // Hash the roles we've entered.
     var enteredRoleSet = {};
-    for (var j = uniqueAncestors.length - 2, hashNode;
+    for (var j = uniqueAncestors.length - 1, hashNode;
          (hashNode = uniqueAncestors[j]);
          j--)
       enteredRoleSet[hashNode.role] = true;
@@ -1417,20 +1494,29 @@ Output.prototype = {
         this.format_(formatPrevNode, roleBlock.leave, buff, prevNode);
     }
 
-    var enterOutputs = [];
+    // Customize for braille node annotations.
+    var originalBuff = buff;
     var enterRole = {};
-    for (var j = uniqueAncestors.length - 2, formatNode;
+    for (var j = uniqueAncestors.length - 1, formatNode;
          (formatNode = uniqueAncestors[j]);
          j--) {
       var roleBlock = getMergedRoleBlock(formatNode.role);
       if (roleBlock.enter) {
         if (enterRole[formatNode.role])
           continue;
+
+        if (this.formatOptions_.braille)
+          buff = [];
+
         enterRole[formatNode.role] = true;
         this.format_(formatNode, roleBlock.enter, buff, prevNode);
+
+        if (this.formatOptions_.braille && buff.length) {
+          var nodeSpan = this.mergeBraille_(buff);
+          nodeSpan.setSpan(new Output.NodeSpan(formatNode), 0, nodeSpan.length);
+          originalBuff.push(nodeSpan);
+        }
       }
-      if (formatNode.role == 'window')
-        break;
     }
   },
 
@@ -1442,6 +1528,11 @@ Output.prototype = {
    * @private
    */
   node_: function(node, prevNode, type, buff) {
+    var originalBuff = buff;
+
+    if (this.formatOptions_.braille)
+      buff = [];
+
     // Navigate is the default event.
     var eventBlock = Output.RULES[type] || Output.RULES['navigate'];
     var roleBlock = eventBlock[node.role] || {};
@@ -1452,6 +1543,13 @@ Output.prototype = {
         eventBlock['default'].speak;
 
     this.format_(node, speakFormat, buff, prevNode);
+
+    // Restore braille and add an annotation for this node.
+    if (this.formatOptions_.braille) {
+      var nodeSpan = this.mergeBraille_(buff);
+      nodeSpan.setSpan(new Output.NodeSpan(node), 0, nodeSpan.length);
+      originalBuff.push(nodeSpan);
+    }
   },
 
   /**
@@ -1471,18 +1569,32 @@ Output.prototype = {
       return;
 
     var options = {annotation: ['name'], isUnique: true};
-    var startIndex = range.start.index;
-    var endIndex = range.end.index;
+    var rangeStart = range.start.index;
+    var rangeEnd = range.end.index;
     if (this.formatOptions_.braille) {
       options.annotation.push(new Output.NodeSpan(node));
       var selStart = node.textSelStart;
       var selEnd = node.textSelEnd;
+
       if (selStart !== undefined &&
-          (selEnd >= startIndex && selStart <= endIndex)) {
+          selEnd >= rangeStart && selStart <= rangeEnd) {
+        // Editable text selection.
+
+        // |rangeStart| and |rangeEnd| are indices set by the caller and are
+        // assumed to be inside of the range. In braille, we only ever expect to
+        // get ranges surrounding a line as anything smaller doesn't make sense.
+
+        // |selStart| and |selEnd| reflect the editable selection. The relative
+        // selStart and relative selEnd for the current line are then just the
+        // difference between |selStart|, |selEnd| with |rangeStart|.
+        // See editing_test.js for examples.
         options.annotation.push(new Output.SelectionSpan(
-            selStart - startIndex,
-            selEnd - startIndex,
-            startIndex));
+            selStart - rangeStart, selEnd - rangeStart));
+      } else if (rangeStart != 0 || rangeEnd != range.start.getText().length) {
+        // Non-editable text selection over less than the full contents covered
+        // by the range. We exclude full content underlines because it is
+        // distracting to read braille with all cells underlined with a cursor.
+        options.annotation.push(new Output.SelectionSpan(rangeStart, rangeEnd));
       }
     }
 
@@ -1491,13 +1603,24 @@ Output.prototype = {
     var earcon = this.findEarcon_(node, prevNode);
     if (earcon)
       options.annotation.push(earcon);
-    this.append_(buff, range.start.getText().substring(startIndex, endIndex),
-        options);
+    var text = '';
+
+    if (this.formatOptions_.braille && !node.state.editable) {
+      // In braille, we almost always want to show the entire contents and
+      // simply place the cursor under the SelectionSpan we set above.
+      text = range.start.getText();
+    } else {
+      // This is output for speech or editable braille.
+      text = range.start.getText().substring(rangeStart, rangeEnd);
+    }
+
+    this.append_(buff, text, options);
+
     if (!this.outputContextFirst_)
       this.ancestry_(node, prevNode, type, buff);
 
     var loc =
-        range.start.node.boundsForRange(startIndex, endIndex);
+        range.start.node.boundsForRange(rangeStart, rangeEnd);
     if (loc)
       this.locations_.push(loc);
   },
@@ -1594,65 +1717,60 @@ Output.prototype = {
   },
 
   /**
-   * Converts the currently rendered braille buffers to a single spannable.
+   * Converts the braille |spans| buffer to a single spannable.
+   * @param {!Array<Spannable>} spans
    * @return {!Spannable}
    * @private
    */
-  createBrailleOutput_: function() {
-    var result = new Spannable();
+  mergeBraille_: function(spans) {
     var separator = '';  // Changes to space as appropriate.
-    this.brailleBuffer_.forEach(function(cur) {
-      // If this chunk is empty, don't add it since it won't result
-      // in any output on the braille display, but node spans would
-      // start before the separator in that case, which is not desired.
-      // The exception is if this chunk contains a selectionm, in which
-      // case it will result in a cursor which has to be preserved.
-      // In this case, having separators, potentially both before and after
-      // the empty string is correct.
-      if (cur.length == 0 && !cur.getSpanInstanceOf(Output.SelectionSpan))
-        return;
-      var spansToExtend = [];
-      var spansToRemove = [];
-      // Nodes that have node spans both on the character to the left
-      // of the separator and to the right should also cover the separator.
-      // We extend the left span to cover both the separator and what the
-      // right span used to cover, removing the right span, mostly for
-      // ease of writing tests and debug.
-      // Note that getSpan(position) never returns zero length spans
-      // (because they don't cover any position).  Still, we want to include
-      // these because they can be included (the selection span in an empty
-      // text field is an example), which is why we write the below code
-      // using getSpansInstanceOf and check the endpoints (isntead of doing
-      // the opposite).
-      result.getSpansInstanceOf(Output.NodeSpan).forEach(function(leftSpan) {
-        if (result.getSpanEnd(leftSpan) < result.length)
-          return;
-        var newEnd = result.length;
-        cur.getSpansInstanceOf(Output.NodeSpan).forEach(function(rightSpan) {
-          if (cur.getSpanStart(rightSpan) == 0 &&
-              leftSpan.node === rightSpan.node) {
-            newEnd = Math.max(
-                newEnd,
-                result.length + separator.length +
-                    cur.getSpanEnd(rightSpan));
-            spansToRemove.push(rightSpan);
-          }
-        });
-        if (newEnd > result.length)
-          spansToExtend.push({span: leftSpan, end: newEnd});
-      });
+    var prevHasInlineNode = false;
+    return spans.reduce(function(result, cur) {
+      // Ignore empty spans except when they contain a selection.
+      var hasSelection = cur.getSpanInstanceOf(Output.SelectionSpan);
+      if (cur.length == 0 && !hasSelection)
+        return result;
+
+      // For empty selections, we just add the space separator to account for
+      // showing the braille cursor.
+      if (cur.length == 0 && hasSelection) {
+        result.append(cur);
+        result.append(Output.SPACE);
+        separator = '';
+        return result;
+      }
+
+      // Keep track of if there's an inline node associated with
+      // |cur|.
+      var hasInlineNode = cur.getSpansInstanceOf(Output.NodeSpan)
+          .some(function(s) {
+            if (!s.node)
+              return false;
+            return s.node.display == 'inline' ||
+                s.node.role == RoleType.inlineTextBox;
+          });
+
+      // Now, decide whether we should include separators between the previous
+      // span and |cur|.
+      // Never separate chunks without something already there at this point.
+
+      // The only case where we know for certain that a separator is not needed
+      // is when the previous and current node are in-lined. In all other cases,
+      // use the surrounding whitespace to ensure we only have one separator
+      // between the node text.
+      if (result.length == 0 || (hasInlineNode && prevHasInlineNode))
+        separator = '';
+      else if (result.toString()[result.length - 1] == Output.SPACE ||
+          cur.toString()[0] == Output.SPACE)
+        separator = '';
+      else
+        separator = Output.SPACE;
+
+      prevHasInlineNode = hasInlineNode;
       result.append(separator);
       result.append(cur);
-      spansToExtend.forEach(function(elem) {
-        result.setSpan(
-            elem.span,
-            result.getSpanStart(elem.span),
-            elem.end);
-      });
-      spansToRemove.forEach(result.removeSpan.bind(result));
-      separator = Output.SPACE;
-    });
-    return result;
+      return result;
+    }, new Spannable());
   },
 
   /**
@@ -1717,7 +1835,7 @@ Output.prototype = {
    * @return {!Spannable}
    */
   get brailleOutputForTest() {
-    return this.createBrailleOutput_();
+    return this.mergeBraille_(this.brailleBuffer_);
   }
 };
 

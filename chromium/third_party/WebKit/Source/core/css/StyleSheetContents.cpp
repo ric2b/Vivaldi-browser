@@ -21,6 +21,7 @@
 #include "core/css/StyleSheetContents.h"
 
 #include "core/css/CSSStyleSheet.h"
+#include "core/css/CSSTiming.h"
 #include "core/css/StylePropertySet.h"
 #include "core/css/StyleRule.h"
 #include "core/css/StyleRuleImport.h"
@@ -66,6 +67,7 @@ StyleSheetContents::StyleSheetContents(StyleRuleImport* ownerRule,
       m_didLoadErrorOccur(false),
       m_isMutable(false),
       m_hasFontFaceRule(false),
+      m_hasViewportRule(false),
       m_hasMediaQueries(false),
       m_hasSingleOwnerDocument(true),
       m_isUsedFromTextCache(false),
@@ -83,6 +85,7 @@ StyleSheetContents::StyleSheetContents(const StyleSheetContents& o)
       m_didLoadErrorOccur(false),
       m_isMutable(false),
       m_hasFontFaceRule(o.m_hasFontFaceRule),
+      m_hasViewportRule(o.m_hasViewportRule),
       m_hasMediaQueries(o.m_hasMediaQueries),
       m_hasSingleOwnerDocument(true),
       m_isUsedFromTextCache(false),
@@ -90,6 +93,13 @@ StyleSheetContents::StyleSheetContents(const StyleSheetContents& o)
   // FIXME: Copy import rules.
   ASSERT(o.m_importRules.isEmpty());
 
+  for (unsigned i = 0; i < m_namespaceRules.size(); ++i) {
+    m_namespaceRules[i] =
+        static_cast<StyleRuleNamespace*>(o.m_namespaceRules[i]->copy());
+  }
+
+  // LazyParseCSS: Copying child rules is a strict point for lazy parsing, so
+  // there is no need to copy lazy parsing state here.
   for (unsigned i = 0; i < m_childRules.size(); ++i)
     m_childRules[i] = o.m_childRules[i]->copy();
 }
@@ -178,7 +188,7 @@ void StyleSheetContents::setHasMediaQueries() {
 }
 
 StyleRuleBase* StyleSheetContents::ruleAt(unsigned index) const {
-  ASSERT_WITH_SECURITY_IMPLICATION(index < ruleCount());
+  SECURITY_DCHECK(index < ruleCount());
 
   if (index < m_importRules.size())
     return m_importRules[index].get();
@@ -210,7 +220,7 @@ void StyleSheetContents::clearRules() {
 bool StyleSheetContents::wrapperInsertRule(StyleRuleBase* rule,
                                            unsigned index) {
   ASSERT(m_isMutable);
-  ASSERT_WITH_SECURITY_IMPLICATION(index <= ruleCount());
+  SECURITY_DCHECK(index <= ruleCount());
 
   if (index < m_importRules.size() ||
       (index == m_importRules.size() && rule->isImportRule())) {
@@ -270,7 +280,7 @@ bool StyleSheetContents::wrapperInsertRule(StyleRuleBase* rule,
 
 bool StyleSheetContents::wrapperDeleteRule(unsigned index) {
   ASSERT(m_isMutable);
-  ASSERT_WITH_SECURITY_IMPLICATION(index < ruleCount());
+  SECURITY_DCHECK(index < ruleCount());
 
   if (index < m_importRules.size()) {
     m_importRules[index]->clearParentStyleSheet();
@@ -318,7 +328,7 @@ void StyleSheetContents::parseAuthorStyleSheet(
     const SecurityOrigin* securityOrigin) {
   TRACE_EVENT1("blink,devtools.timeline", "ParseAuthorStyleSheet", "data",
                InspectorParseAuthorStyleSheetEvent::data(cachedStyleSheet));
-  SCOPED_BLINK_UMA_HISTOGRAM_TIMER("Style.AuthorStyleSheet.ParseTime");
+  double startTimeMS = monotonicallyIncreasingTimeMS();
 
   bool isSameOriginRequest =
       securityOrigin && securityOrigin->canRequest(baseURL());
@@ -349,7 +359,18 @@ void StyleSheetContents::parseAuthorStyleSheet(
   }
 
   CSSParserContext context(parserContext(), UseCounter::getFrom(this));
-  CSSParser::parseSheet(context, this, sheetText);
+  CSSParser::parseSheet(context, this, sheetText,
+                        RuntimeEnabledFeatures::lazyParseCSSEnabled());
+
+  DEFINE_STATIC_LOCAL(CustomCountHistogram, parseHistogram,
+                      ("Style.AuthorStyleSheet.ParseTime", 0, 10000000, 50));
+  double parseDurationMS = (monotonicallyIncreasingTimeMS() - startTimeMS);
+  parseHistogram.count(parseDurationMS * 1000);
+  if (Document* document = singleOwnerDocument()) {
+    // CSSTiming expects time in seconds.
+    CSSTiming::from(*document).recordAuthorStyleSheetParseTime(parseDurationMS /
+                                                               1000);
+  }
 }
 
 void StyleSheetContents::parseString(const String& sheetText) {
@@ -476,7 +497,7 @@ static bool childRulesHaveFailedOrCanceledSubresources(
     const StyleRuleBase* rule = rules[i].get();
     switch (rule->type()) {
       case StyleRuleBase::Style:
-        if (toStyleRule(rule)->properties().hasFailedOrCanceledSubresources())
+        if (toStyleRule(rule)->propertiesHaveFailedOrCanceledSubresources())
           return true;
         break;
       case StyleRuleBase::FontFace:

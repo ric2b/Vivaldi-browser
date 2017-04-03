@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/cocoa/apps/native_app_window_cocoa.h"
 
+#include "base/command_line.h"
 #include "base/mac/foundation_util.h"
 #include "base/mac/mac_util.h"
 #include "base/mac/sdk_forward_declarations.h"

@@ -9,12 +9,13 @@ upload a CL, triggery try jobs, and make any changes that are required for
 new failing tests before committing.
 """
 
+import logging
 import argparse
 import json
 
 from webkitpy.common.net.git_cl import GitCL
 from webkitpy.common.webkit_finder import WebKitFinder
-from webkitpy.layout_tests.models.test_expectations import TestExpectations
+from webkitpy.layout_tests.models.test_expectations import TestExpectations, TestExpectationParser
 
 # Import destination directories (under LayoutTests/imported/).
 WPT_DEST_NAME = 'wpt'
@@ -24,7 +25,8 @@ CSS_DEST_NAME = 'csswg-test'
 WPT_REPO_URL = 'https://chromium.googlesource.com/external/w3c/web-platform-tests.git'
 CSS_REPO_URL = 'https://chromium.googlesource.com/external/w3c/csswg-test.git'
 
-POLL_DELAY_SECONDS = 900
+
+_log = logging.getLogger(__file__)
 
 
 class DepsUpdater(object):
@@ -40,13 +42,15 @@ class DepsUpdater(object):
     def main(self, argv=None):
         options = self.parse_args(argv)
         self.verbose = options.verbose
+        log_level = logging.DEBUG if self.verbose else logging.INFO
+        logging.basicConfig(level=log_level, format='%(message)s')
 
         if not self.checkout_is_okay(options.allow_local_commits):
             return 1
 
         self.git_cl = GitCL(self.host, auth_refresh_token_json=options.auth_refresh_token_json)
 
-        self.print_('## Noting the current Chromium commit.')
+        _log.info('Noting the current Chromium commit.')
         _, show_ref_output = self.run(['git', 'show-ref', 'HEAD'])
         chromium_commitish = show_ref_output.split()[0]
 
@@ -87,20 +91,20 @@ class DepsUpdater(object):
     def checkout_is_okay(self, allow_local_commits):
         git_diff_retcode, _ = self.run(['git', 'diff', '--quiet', 'HEAD'], exit_on_failure=False)
         if git_diff_retcode:
-            self.print_('## Checkout is dirty; aborting.')
+            _log.warning('Checkout is dirty; aborting.')
             return False
 
         local_commits = self.run(['git', 'log', '--oneline', 'origin/master..HEAD'])[1]
         if local_commits and not allow_local_commits:
-            self.print_('## Checkout has local commits; aborting. Use --allow-local-commits to allow this.')
+            _log.warning('Checkout has local commits; aborting. Use --allow-local-commits to allow this.')
             return False
 
         if self.fs.exists(self.path_from_webkit_base(WPT_DEST_NAME)):
-            self.print_('## WebKit/%s exists; aborting.' % WPT_DEST_NAME)
+            _log.warning('WebKit/%s exists; aborting.', WPT_DEST_NAME)
             return False
 
         if self.fs.exists(self.path_from_webkit_base(CSS_DEST_NAME)):
-            self.print_('## WebKit/%s repo exists; aborting.' % CSS_DEST_NAME)
+            _log.warning('WebKit/%s repo exists; aborting.', CSS_DEST_NAME)
             return False
 
         return True
@@ -122,6 +126,8 @@ class DepsUpdater(object):
         If this method is changed, the lists of files expected to be identical
         in LayoutTests/PRESUBMIT.py should also be changed.
         """
+        # TODO(tkent): resources_to_copy_to_wpt is unnecessary after enabling
+        # WPTServe.
         resources_to_copy_to_wpt = [
             ('testharnessreport.js', 'resources'),
             ('WebIDLParser.js', 'resources'),
@@ -142,6 +148,20 @@ class DepsUpdater(object):
             self.copyfile(source, destination)
             self.run(['git', 'add', destination])
 
+    def _generate_manifest(self, original_repo_path, dest_path):
+        """Generate MANIFEST.json for imported tests.
+
+        Run 'manifest' command if it exists in original_repo_path, and
+        add generated MANIFEST.json to dest_path.
+        """
+        manifest_command = self.fs.join(original_repo_path, 'manifest')
+        if not self.fs.exists(manifest_command):
+            # Do nothing for csswg-test.
+            return
+        _log.info('Generating MANIFEST.json')
+        self.run([manifest_command, '--tests-root', dest_path])
+        self.run(['git', 'add', self.fs.join(dest_path, 'MANIFEST.json')])
+
     def update(self, dest_dir_name, url, keep_w3c_repos_around, revision):
         """Updates an imported repository.
 
@@ -154,110 +174,91 @@ class DepsUpdater(object):
             A string for the commit description "<destination>@<commitish>".
         """
         temp_repo_path = self.path_from_webkit_base(dest_dir_name)
-        self.print_('## Cloning %s into %s.' % (url, temp_repo_path))
+        _log.info('Cloning %s into %s.', url, temp_repo_path)
         self.run(['git', 'clone', url, temp_repo_path])
 
         if revision is not None:
-            self.print_('## Checking out %s' % revision)
+            _log.info('Checking out %s', revision)
             self.run(['git', 'checkout', revision], cwd=temp_repo_path)
         self.run(['git', 'submodule', 'update', '--init', '--recursive'], cwd=temp_repo_path)
 
-        self.print_('## Noting the revision we are importing.')
+        _log.info('Noting the revision we are importing.')
         _, show_ref_output = self.run(['git', 'show-ref', 'origin/master'], cwd=temp_repo_path)
         master_commitish = show_ref_output.split()[0]
 
-        self.print_('## Cleaning out tests from LayoutTests/imported/%s.' % dest_dir_name)
+        _log.info('Cleaning out tests from LayoutTests/imported/%s.', dest_dir_name)
         dest_path = self.path_from_webkit_base('LayoutTests', 'imported', dest_dir_name)
-        files_to_delete = self.fs.files_under(dest_path, file_filter=self.is_not_baseline)
+        is_not_baseline_filter = lambda fs, dirname, basename: not self.is_baseline(basename)
+        files_to_delete = self.fs.files_under(dest_path, file_filter=is_not_baseline_filter)
         for subpath in files_to_delete:
             self.remove('LayoutTests', 'imported', subpath)
 
-        self.print_('## Importing the tests.')
+        _log.info('Importing the tests.')
         src_repo = self.path_from_webkit_base(dest_dir_name)
         import_path = self.path_from_webkit_base('Tools', 'Scripts', 'import-w3c-tests')
         self.run([self.host.executable, import_path, '-d', 'imported', src_repo])
 
         self.run(['git', 'add', '--all', 'LayoutTests/imported/%s' % dest_dir_name])
 
-        self.print_('## Deleting manual tests.')
-        files_to_delete = self.fs.files_under(dest_path, file_filter=self.is_manual_test)
-        for subpath in files_to_delete:
-            self.remove('LayoutTests', 'imported', subpath)
+        _log.info('Deleting any orphaned baselines.')
 
-        self.print_('## Deleting any orphaned baselines.')
-        previous_baselines = self.fs.files_under(dest_path, file_filter=self.is_baseline)
+        is_baseline_filter = lambda fs, dirname, basename: self.is_baseline(basename)
+        previous_baselines = self.fs.files_under(dest_path, file_filter=is_baseline_filter)
+
         for subpath in previous_baselines:
             full_path = self.fs.join(dest_path, subpath)
             if self.fs.glob(full_path.replace('-expected.txt', '*')) == [full_path]:
                 self.fs.remove(full_path)
 
+        self._generate_manifest(temp_repo_path, dest_path)
+
         if not keep_w3c_repos_around:
-            self.print_('## Deleting temp repo directory %s.' % temp_repo_path)
+            _log.info('Deleting temp repo directory %s.', temp_repo_path)
             self.rmtree(temp_repo_path)
 
-        self.print_('## Updating TestExpectations for any removed or renamed tests.')
-        self.update_test_expectations(self._list_deleted_tests(), self._list_renamed_tests())
+        _log.info('Updating TestExpectations for any removed or renamed tests.')
+        self.update_all_test_expectations_files(self._list_deleted_tests(), self._list_renamed_tests())
 
         return '%s@%s' % (dest_dir_name, master_commitish)
 
     def commit_changes_if_needed(self, chromium_commitish, import_commitish):
         if self.run(['git', 'diff', '--quiet', 'HEAD'], exit_on_failure=False)[0]:
-            self.print_('## Committing changes.')
+            _log.info('Committing changes.')
             commit_msg = ('Import %s\n'
                           '\n'
                           'Using update-w3c-deps in Chromium %s.\n'
                           % (import_commitish, chromium_commitish))
             path_to_commit_msg = self.path_from_webkit_base('commit_msg')
-            if self.verbose:
-                self.print_('cat > %s <<EOF' % path_to_commit_msg)
-                self.print_(commit_msg)
-                self.print_('EOF')
+            _log.debug('cat > %s <<EOF', path_to_commit_msg)
+            _log.debug(commit_msg)
+            _log.debug('EOF')
             self.fs.write_text_file(path_to_commit_msg, commit_msg)
             self.run(['git', 'commit', '-a', '-F', path_to_commit_msg])
             self.remove(path_to_commit_msg)
-            self.print_('## Done: changes imported and committed.')
+            _log.info('Done: changes imported and committed.')
             return True
         else:
-            self.print_('## Done: no changes to import.')
+            _log.info('Done: no changes to import.')
             return False
 
-    def is_manual_test(self, fs, dirname, basename):
-        """Returns True if the file should be removed because it's a manual test.
-
-        Tests with "-manual" in the name are not considered manual tests
-        if there is a corresponding JS automation file.
-        """
-        basename_without_extension, _ = self.fs.splitext(basename)
-        if not basename_without_extension.endswith('-manual'):
-            return False
-        dir_from_wpt = fs.relpath(dirname, self.path_from_webkit_base('LayoutTests', 'imported', 'wpt'))
-        automation_dir = self.path_from_webkit_base('LayoutTests', 'imported', 'wpt_automation', dir_from_wpt)
-        if fs.isfile(fs.join(automation_dir, '%s-automation.js' % basename_without_extension)):
-            return False
-        return True
-
-    # Callback for FileSystem.files_under; not all arguments used - pylint: disable=unused-argument
-    def is_baseline(self, fs, dirname, basename):
+    @staticmethod
+    def is_baseline(basename):
         return basename.endswith('-expected.txt')
 
-    def is_not_baseline(self, fs, dirname, basename):
-        return not self.is_baseline(fs, dirname, basename)
-
     def run(self, cmd, exit_on_failure=True, cwd=None):
-        if self.verbose:
-            self.print_(' '.join(cmd))
+        _log.debug('Running command: %s', ' '.join(cmd))
 
         cwd = cwd or self.finder.webkit_base()
         proc = self.executive.popen(cmd, stdout=self.executive.PIPE, stderr=self.executive.PIPE, cwd=cwd)
         out, err = proc.communicate()
         if proc.returncode or self.verbose:
-            self.print_('# ret> %d' % proc.returncode)
+            _log.info('# ret> %d', proc.returncode)
             if out:
                 for line in out.splitlines():
-                    self.print_('# out> %s' % line)
+                    _log.info('# out> %s', line)
             if err:
                 for line in err.splitlines():
-                    self.print_('# err> %s' % line)
+                    _log.info('# err> %s', line)
         if exit_on_failure and proc.returncode:
             self.host.exit(proc.returncode)
         return proc.returncode, out
@@ -269,27 +270,21 @@ class DepsUpdater(object):
         return out
 
     def copyfile(self, source, destination):
-        if self.verbose:
-            self.print_('cp %s %s' % (source, destination))
+        _log.debug('cp %s %s', source, destination)
         self.fs.copyfile(source, destination)
 
     def remove(self, *comps):
         dest = self.path_from_webkit_base(*comps)
-        if self.verbose:
-            self.print_('rm %s' % dest)
+        _log.debug('rm %s', dest)
         self.fs.remove(dest)
 
     def rmtree(self, *comps):
         dest = self.path_from_webkit_base(*comps)
-        if self.verbose:
-            self.print_('rm -fr %s' % dest)
+        _log.debug('rm -fr %s', dest)
         self.fs.rmtree(dest)
 
     def path_from_webkit_base(self, *comps):
         return self.finder.path_from_webkit_base(*comps)
-
-    def print_(self, msg):
-        self.host.print_(msg)
 
     def do_auto_update(self):
         """Attempts to upload a CL, make any required adjustments, and commit.
@@ -303,49 +298,65 @@ class DepsUpdater(object):
             True if successfully committed, False otherwise.
         """
         self._upload_cl()
-        self.print_('## ' + self.git_cl.run(['issue']).strip())
+        _log.info('Issue: %s', self.git_cl.run(['issue']).strip())
 
         # First try: if there are failures, update expectations.
-        self.print_('## Triggering try jobs.')
+        _log.info('Triggering try jobs.')
         for try_bot in self.host.builders.all_try_builder_names():
             self.git_cl.run(['try', '-b', try_bot])
-        try_results = self.git_cl.wait_for_try_jobs()
+        try_results = self.git_cl.wait_for_try_jobs(timeout_seconds=180 * 60)
         if not try_results:
-            self.print_('## Timed out waiting for try results.')
+            _log.error('Timed out waiting for try results.')
             return
         if try_results and self.git_cl.has_failing_try_results(try_results):
             self.fetch_new_expectations_and_baselines()
 
         # Second try: if there are failures, then abort.
         self.git_cl.run(['set-commit', '--rietveld'])
-        try_results = self.git_cl.wait_for_try_jobs()
+        try_results = self.git_cl.wait_for_try_jobs(timeout_seconds=180 * 60)
         if not try_results:
-            self.print_('Timed out waiting for try results.')
+            _log.info('Timed out waiting for try results.')
             self.git_cl.run(['set-close'])
             return False
         if self.git_cl.has_failing_try_results(try_results):
-            self.print_('CQ failed; aborting.')
+            _log.info('CQ failed; aborting.')
             self.git_cl.run(['set-close'])
             return False
-        self.print_('## Update completed.')
+        _log.info('Update completed.')
         return True
 
     def _upload_cl(self):
-        self.print_('## Uploading change list.')
+        _log.info('Uploading change list.')
         cc_list = self.get_directory_owners_to_cc()
-        last_commit_message = self.check_run(['git', 'log', '-1', '--format=%B'])
-        commit_message = last_commit_message + 'TBR=qyearsley@chromium.org'
+        description = self._cl_description()
         self.git_cl.run([
             'upload',
             '-f',
             '--rietveld',
             '-m',
-            commit_message,
+            description,
         ] + ['--cc=' + email for email in cc_list])
+
+    def _cl_description(self):
+        description = self.check_run(['git', 'log', '-1', '--format=%B'])
+        build_link = self._build_link()
+        if build_link:
+            description += 'Build: %s\n\n' % build_link
+        description += 'TBR=qyearsley@chromium.org'
+        return description
+
+    def _build_link(self):
+        """Returns a link to a job, if running on buildbot."""
+        master_name = self.host.environ.get('BUILDBOT_MASTERNAME')
+        builder_name = self.host.environ.get('BUILDBOT_BUILDERNAME')
+        build_number = self.host.environ.get('BUILDBOT_BUILDNUMBER')
+        if not (master_name and builder_name and build_number):
+            return None
+        return 'https://build.chromium.org/p/%s/builders/%s/builds/%s' % (master_name, builder_name, build_number)
 
     def get_directory_owners_to_cc(self):
         """Returns a list of email addresses to CC for the current import."""
-        self.print_('## Gathering directory owners emails to CC.')
+        _log.info('Gathering directory owners emails to CC.')
         directory_owners_file_path = self.finder.path_from_webkit_base(
             'Tools', 'Scripts', 'webkitpy', 'w3c', 'directory_owners.json')
         with open(directory_owners_file_path) as data_file:
@@ -385,25 +396,29 @@ class DepsUpdater(object):
 
     def fetch_new_expectations_and_baselines(self):
         """Adds new expectations and downloads baselines based on try job results, then commits and uploads the change."""
-        self.print_('## Adding test expectations lines to LayoutTests/TestExpectations.')
+        _log.info('Adding test expectations lines to LayoutTests/TestExpectations.')
         script_path = self.path_from_webkit_base('Tools', 'Scripts', 'update-w3c-test-expectations')
         self.run([self.host.executable, script_path, '--verbose'])
         message = 'Modify TestExpectations or download new baselines for tests.'
         self.check_run(['git', 'commit', '-a', '-m', message])
         self.git_cl.run(['upload', '-m', message, '--rietveld'])
 
-    def update_test_expectations(self, deleted_tests, renamed_tests):
-        """Updates the TestExpectations file entries for tests that have been deleted or renamed."""
+    def update_all_test_expectations_files(self, deleted_tests, renamed_tests):
+        """Updates all test expectations files for tests that have been deleted or renamed."""
         port = self.host.port_factory.get()
-        test_expectations = TestExpectations(port, include_overrides=False)
-        # Tests for which files don't exist aren't stored in TestExpectationsModel,
-        # so methods like TestExpectations.remove_expectation_line don't work; instead
-        # we can run through the TestExpectationLine objects that were parsed.
+        for path, file_contents in port.all_expectations_dict().iteritems():
+
+            parser = TestExpectationParser(port, all_tests=None, is_lint_mode=False)
+            expectation_lines = parser.parse(path, file_contents)
+            self._update_single_test_expectations_file(path, expectation_lines, deleted_tests, renamed_tests)
+
+    def _update_single_test_expectations_file(self, path, expectation_lines, deleted_tests, renamed_tests):
+        """Updates single test expectations file."""
         # FIXME: This won't work for removed or renamed directories with test expectations
         # that are directories rather than individual tests.
         new_lines = []
         changed_lines = []
-        for expectation_line in test_expectations.expectations():
+        for expectation_line in expectation_lines:
             if expectation_line.name in deleted_tests:
                 continue
             if expectation_line.name in renamed_tests:
@@ -415,13 +430,12 @@ class DepsUpdater(object):
                 expectation_line.warnings = []
                 changed_lines.append(expectation_line)
             new_lines.append(expectation_line)
-        self.host.filesystem.write_text_file(
-            port.path_to_generic_test_expectations_file(),
-            TestExpectations.list_to_string(new_lines, reconstitute_only_these=changed_lines))
+        new_file_contents = TestExpectations.list_to_string(new_lines, reconstitute_only_these=changed_lines)
+        self.host.filesystem.write_text_file(path, new_file_contents)
 
     def _list_deleted_tests(self):
         """Returns a list of layout tests that have been deleted."""
-        out = self.check_run(['git', 'diff', 'origin/master', '--diff-filter=D', '--name-only'])
+        out = self.check_run(['git', 'diff', 'origin/master', '-M100%', '--diff-filter=D', '--name-only'])
         deleted_tests = []
         for line in out.splitlines():
             test = self.finder.layout_test_name(line)
@@ -431,7 +445,7 @@ class DepsUpdater(object):
 
     def _list_renamed_tests(self):
         """Returns a dict mapping source to dest name for layout tests that have been renamed."""
-        out = self.check_run(['git', 'diff', 'origin/master', '--diff-filter=R', '--name-status'])
+        out = self.check_run(['git', 'diff', 'origin/master', '-M100%', '--diff-filter=R', '--name-status'])
         renamed_tests = {}
         for line in out.splitlines():
             _, source_path, dest_path = line.split()

@@ -9,15 +9,13 @@
 #include "core/style/ShadowData.h"
 #include "platform/geometry/LayoutSize.h"
 #include "platform/graphics/GraphicsTypes.h"
-#include "third_party/skia/include/core/SkXfermode.h"
+#include "third_party/skia/include/core/SkBlendMode.h"
 #include "wtf/Allocator.h"
 
 namespace blink {
 
-class BackgroundImageGeometry;
 class ComputedStyle;
 class FillLayer;
-class FloatRoundedRect;
 class GraphicsContext;
 class Image;
 class InlineFlowBox;
@@ -36,6 +34,7 @@ class BoxPainter {
   BoxPainter(const LayoutBox& layoutBox) : m_layoutBox(layoutBox) {}
   void paint(const PaintInfo&, const LayoutPoint&);
 
+  void paintChildren(const PaintInfo&, const LayoutPoint&);
   void paintBoxDecorationBackground(const PaintInfo&, const LayoutPoint&);
   void paintMask(const PaintInfo&, const LayoutPoint&);
   void paintClippingMask(const PaintInfo&, const LayoutPoint&);
@@ -58,7 +57,7 @@ class BoxPainter {
                        const FillLayer&,
                        const LayoutRect&,
                        BackgroundBleedAvoidance = BackgroundBleedNone,
-                       SkXfermode::Mode = SkXfermode::kSrcOver_Mode,
+                       SkBlendMode = SkBlendMode::kSrcOver,
                        const LayoutObject* backgroundObject = nullptr);
   void paintMaskImages(const PaintInfo&, const LayoutRect&);
   void paintBoxDecorationBackgroundWithRect(const PaintInfo&,
@@ -72,7 +71,7 @@ class BoxPainter {
                              BackgroundBleedAvoidance,
                              const InlineFlowBox* = nullptr,
                              const LayoutSize& = LayoutSize(),
-                             SkXfermode::Mode = SkXfermode::kSrcOver_Mode,
+                             SkBlendMode = SkBlendMode::kSrcOver,
                              const LayoutObject* backgroundObject = nullptr);
   static InterpolationQuality chooseInterpolationQuality(const LayoutObject&,
                                                          Image*,
@@ -83,7 +82,7 @@ class BoxPainter {
                                   const LayoutRect&,
                                   const ComputedStyle&,
                                   const NinePieceImage&,
-                                  SkXfermode::Mode = SkXfermode::kSrcOver_Mode);
+                                  SkBlendMode = SkBlendMode::kSrcOver);
   static void paintBorder(const LayoutBoxModelObject&,
                           const PaintInfo&,
                           const LayoutRect&,

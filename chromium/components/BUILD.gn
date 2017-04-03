@@ -2,8 +2,10 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/chrome_build.gni")
 import("//build/config/features.gni")
 import("//build/config/ui.gni")
+import("//printing/features/features.gni")
 import("//testing/test.gni")
 import("//tools/grit/repack.gni")
 
@@ -56,7 +58,6 @@ test("components_unittests") {
 
   deps = [
     "//base",
-    "//base/test:test_support",
     "//components/autofill/core/browser:unit_tests",
     "//components/autofill/core/common:unit_tests",
     "//components/base32:unit_tests",
@@ -72,8 +73,6 @@ test("components_unittests") {
     "//components/content_settings/core/browser:unit_tests",
     "//components/content_settings/core/common:unit_tests",
     "//components/crx_file:unit_tests",
-    "//components/data_reduction_proxy/core/browser:unit_tests",
-    "//components/data_reduction_proxy/core/common:unit_tests",
     "//components/data_usage/core:unit_tests",
     "//components/device_event_log:unit_tests",
     "//components/dom_distiller/core:unit_tests",
@@ -83,6 +82,7 @@ test("components_unittests") {
     "//components/gcm_driver:unit_tests",
     "//components/gcm_driver/crypto:unit_tests",
     "//components/google/core/browser:unit_tests",
+    "//components/grpc_support/test:unit_tests",
     "//components/history/core/browser:unit_tests",
     "//components/history/core/common:unit_tests",
     "//components/image_fetcher:unit_tests",
@@ -110,6 +110,7 @@ test("components_unittests") {
     "//components/password_manager/core/browser:unit_tests",
     "//components/password_manager/core/common:unit_tests",
     "//components/password_manager/sync/browser:unit_tests",
+    "//components/payments:unit_tests",
     "//components/physical_web/data_source:unit_tests",
     "//components/precache/core:unit_tests",
     "//components/prefs:unit_tests",
@@ -120,7 +121,7 @@ test("components_unittests") {
     "//components/search:unit_tests",
     "//components/search_engines:unit_tests",
     "//components/search_provider_logos:unit_tests",
-    "//components/security_state:unit_tests",
+    "//components/security_state/core:unit_tests",
     "//components/sessions:unit_tests",
     "//components/signin/core/browser:unit_tests",
     "//components/ssl_config:unit_tests",
@@ -131,8 +132,9 @@ test("components_unittests") {
     "//components/supervised_user_error_page:unit_tests",
     "//components/sync:unit_tests",
     "//components/sync_bookmarks:unit_tests",
+    "//components/sync_preferences:unit_tests",
     "//components/sync_sessions:unit_tests",
-    "//components/syncable_prefs:unit_tests",
+    "//components/test:test_support",
     "//components/translate/core/browser:unit_tests",
     "//components/translate/core/common:unit_tests",
     "//components/translate/core/language_detection:unit_tests",
@@ -146,14 +148,6 @@ test("components_unittests") {
     "//components/variations/service:unit_tests",
     "//components/web_resource:unit_tests",
     "//components/webdata/common:unit_tests",
-
-    # Direct dependencies of components/test/run_all_unittests.cc.
-    "//components/content_settings/core/common",
-    "//mojo/edk/system",
-    "//net",
-    "//testing/gtest",
-    "//ui/base",
-    "//ui/resources:ui_test_pak",
   ]
 
   if (enable_nacl) {
@@ -168,7 +162,7 @@ test("components_unittests") {
   } else {  # !iOS
     deps += [
       "//components/autofill/content/browser:unit_tests",
-      "//components/autofill/content/public/cpp:unit_tests",
+      "//components/autofill/content/common:unit_tests",
       "//components/autofill/content/renderer:unit_tests",
       "//components/cast_certificate:unit_tests",
       "//components/certificate_reporting:unit_tests",
@@ -177,7 +171,11 @@ test("components_unittests") {
       "//components/crash/content/app:unit_tests",
       "//components/crash/core/common:unit_tests",
       "//components/data_reduction_proxy/content/browser:unit_tests",
-      "//components/data_use_measurement/content:unit_tests",
+      "//components/data_reduction_proxy/core/browser:unit_tests",
+      "//components/data_reduction_proxy/core/common:unit_tests",
+      "//components/data_use_measurement/core:unit_tests",
+      "//components/discardable_memory/common:unit_tests",
+      "//components/discardable_memory/service:unit_tests",
       "//components/display_compositor:unit_tests",
       "//components/dom_distiller/content/browser:unit_tests",
       "//components/domain_reliability:unit_tests",
@@ -197,6 +195,7 @@ test("components_unittests") {
       "//components/precache/content:unit_tests",
       "//components/safe_browsing_db:unit_tests",
       "//components/safe_json:unit_tests",
+      "//components/security_state/content:unit_tests",
       "//components/spellcheck/browser:unit_tests",
       "//components/spellcheck/renderer:unit_tests",
       "//components/subresource_filter/content/browser:unit_tests",
@@ -207,11 +206,6 @@ test("components_unittests") {
       "//components/web_cache/browser:unit_tests",
       "//components/webcrypto:unit_tests",
       "//components/zoom:unit_tests",
-
-      # These are the deps required by the code in this target.
-      "//components/policy/core/browser",
-      "//content/test:test_support",
-      "//ui/gl:test_support",
     ]
 
     data_deps = [
@@ -278,9 +272,9 @@ test("components_unittests") {
       "//components/arc:unit_tests",
       "//components/ownership:unit_tests",
       "//components/pairing:unit_tests",
+      "//components/sync_wifi:unit_tests",
       "//components/timers:unit_tests",
       "//components/user_manager:unit_tests",
-      "//components/wifi_sync:unit_tests",
     ]
   }
 
@@ -327,6 +321,12 @@ repack("components_tests_pak") {
     "//components/resources",
     "//components/strings",
   ]
+
+  if (is_chrome_branded) {
+    sources += [ "${root_gen_dir}/components/strings/components_google_chrome_strings_en-US.pak" ]
+  } else {
+    sources += [ "${root_gen_dir}/components/strings/components_chromium_strings_en-US.pak" ]
+  }
 }
 
 if (is_android) {
@@ -391,6 +391,7 @@ if (!is_ios) {
       "dom_distiller/content/browser/distiller_page_web_contents_browsertest.cc",
       "dom_distiller/content/browser/test/dom_distiller_js_browsertest.cc",
       "password_manager/content/renderer/credential_manager_client_browsertest.cc",
+      "security_state/content/content_utils_browsertest.cc",
       "tracing/child/child_trace_message_filter_browsertest.cc",
     ]
 
@@ -414,8 +415,11 @@ if (!is_ios) {
       "//components/dom_distiller/core:test_support",
       "//components/password_manager/content/browser",
       "//components/password_manager/content/renderer",
+      "//components/security_state/content",
+      "//components/security_state/core",
       "//components/strings",
       "//components/tracing",
+      "//content/public/browser",
       "//content/shell:content_shell_lib",
       "//content/test:browsertest_support",
       "//content/test:test_support",
@@ -423,10 +427,12 @@ if (!is_ios) {
       "//device/geolocation",
       "//ipc:test_support",
       "//net:test_support",
-      "//services/shell/public/cpp",
+      "//printing/features",
+      "//services/service_manager/public/cpp",
       "//testing/gmock",
       "//testing/gtest",
       "//ui/base",
+      "//url",
     ]
 
     data_deps = [
@@ -475,6 +481,8 @@ if (!is_ios) {
 
   test("components_perftests") {
     sources = [
+      "omnibox/browser/history_quick_provider_performance_unittest.cc",
+      "test/run_all_perftests.cc",
       "visitedlink/test/visitedlink_perftest.cc",
     ]
 
@@ -483,13 +491,18 @@ if (!is_ios) {
 
     deps = [
       "//base",
-      "//base/test:test_support",
+      "//components/history/core/test",
+      "//components/omnibox/browser",
+      "//components/omnibox/browser:test_support",
+      "//components/test:test_support",
       "//components/visitedlink/browser",
-      "//content/test:test_support",
-      "//mojo/edk/test:run_all_perftests",
-      "//testing/gtest",
       "//testing/perf",
       "//url",
     ]
+
+    if (!is_ios) {
+      sources += [ "discardable_memory/common/discardable_shared_memory_heap_perftest.cc" ]
+      deps += [ "//components/discardable_memory/common" ]
+    }
   }
 }

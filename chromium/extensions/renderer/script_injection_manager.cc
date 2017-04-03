@@ -12,6 +12,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/values.h"
+#include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_frame_observer.h"
 #include "content/public/renderer/render_thread.h"
@@ -26,6 +27,7 @@
 #include "extensions/renderer/scripts_run_info.h"
 #include "extensions/renderer/web_ui_injection_host.h"
 #include "ipc/ipc_message_macros.h"
+#include "third_party/WebKit/public/platform/WebURLError.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebFrame.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
@@ -77,6 +79,7 @@ class ScriptInjectionManager::RFOHelper : public content::RenderFrameObserver {
   void DidFinishLoad() override;
   void FrameDetached() override;
   void OnDestruct() override;
+  void OnStop() override;
 
   virtual void OnExecuteCode(const ExtensionMsg_ExecuteCode_Params& params);
   virtual void OnExecuteDeclarativeScript(int tab_id,
@@ -205,6 +208,15 @@ void ScriptInjectionManager::RFOHelper::OnDestruct() {
   manager_->RemoveObserver(this);
 }
 
+void ScriptInjectionManager::RFOHelper::OnStop() {
+  // With PlzNavigate, we won't get a provisional load failed notification
+  // for 204/205/downloads since these don't notify the renderer. However the
+  // browser does fire the OnStop IPC. So use that signal instead to avoid
+  // keeping the frame in a START state indefinitely which leads to deadlocks.
+  if (content::IsBrowserSideNavigationEnabled())
+    DidFailProvisionalLoad(blink::WebURLError());
+}
+
 void ScriptInjectionManager::RFOHelper::OnExecuteCode(
     const ExtensionMsg_ExecuteCode_Params& params) {
   manager_->HandleExecuteCode(params, render_frame());
@@ -218,7 +230,7 @@ void ScriptInjectionManager::RFOHelper::OnExecuteDeclarativeScript(
   // TODO(markdittmer): URL-checking isn't the best security measure.
   // Begin script injection workflow only if the current URL is identical to
   // the one that matched declarative conditions in the browser.
-  if (render_frame()->GetWebFrame()->document().url() == url) {
+  if (GURL(render_frame()->GetWebFrame()->document().url()) == url) {
     manager_->HandleExecuteDeclarativeScript(render_frame(),
                                              tab_id,
                                              extension_id,
@@ -448,8 +460,7 @@ void ScriptInjectionManager::HandleExecuteCode(
   }
 
   std::unique_ptr<ScriptInjection> injection(new ScriptInjection(
-      std::unique_ptr<ScriptInjector>(
-          new ProgrammaticScriptInjector(params, render_frame)),
+      std::unique_ptr<ScriptInjector>(new ProgrammaticScriptInjector(params)),
       render_frame, std::move(injection_host),
       static_cast<UserScript::RunLocation>(params.run_at),
       activity_logging_enabled_));

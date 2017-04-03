@@ -4,6 +4,7 @@
 
 if (!is_android) {
   import("//build/config/features.gni")
+  import("//chrome/common/features.gni")
   import("//tools/grit/grit_rule.gni")
 }
 
@@ -54,7 +55,6 @@ static_library("devtools") {
     "//build/config/compiler:no_size_t_to_int_warning",
     "//build/config/compiler:wexit_time_destructors",
     "//build/config:precompiled_headers",
-    "//third_party/WebKit/public:debug_devtools",
   ]
 
   deps = [
@@ -62,6 +62,7 @@ static_library("devtools") {
     "//base",
     "//content/public/browser",
     "//net",
+    "//third_party/WebKit/public:features",
     "//ui/events:dom_keycode_converter",
   ]
 
@@ -71,6 +72,7 @@ static_library("devtools") {
       "//chrome:resources",
       "//chrome:strings",
       "//chrome/app/theme:theme_resources",
+      "//chrome/common",
       "//chrome/common/extensions/api",
       "//net:http_server",
       "//skia",
@@ -90,6 +92,8 @@ static_library("devtools") {
       "device/android_web_socket.cc",
       "device/devtools_android_bridge.cc",
       "device/devtools_android_bridge.h",
+      "device/devtools_device_discovery.cc",
+      "device/devtools_device_discovery.h",
       "device/port_forwarding_controller.cc",
       "device/port_forwarding_controller.h",
       "device/tcp_device_provider.cc",
@@ -126,6 +130,8 @@ static_library("devtools") {
       "global_confirm_info_bar.h",
       "remote_debugging_server.cc",
       "remote_debugging_server.h",
+      "url_constants.cc",
+      "url_constants.h",
     ]
     if (enable_service_discovery) {
       sources += [

@@ -22,6 +22,7 @@
 #ifndef NodeRareData_h
 #define NodeRareData_h
 
+#include "bindings/core/v8/TraceWrapperMember.h"
 #include "core/dom/MutationObserverRegistration.h"
 #include "core/dom/NodeListsNodeData.h"
 #include "platform/heap/Handle.h"
@@ -34,29 +35,60 @@ class NodeMutationObserverData final
   WTF_MAKE_NONCOPYABLE(NodeMutationObserverData);
 
  public:
-  HeapVector<Member<MutationObserverRegistration>> registry;
-  HeapHashSet<Member<MutationObserverRegistration>> transientRegistry;
-
   static NodeMutationObserverData* create() {
     return new NodeMutationObserverData;
   }
 
+  const HeapVector<TraceWrapperMember<MutationObserverRegistration>>&
+  registry() {
+    return m_registry;
+  }
+
+  const HeapHashSet<TraceWrapperMember<MutationObserverRegistration>>&
+  transientRegistry() {
+    return m_transientRegistry;
+  }
+
+  void addTransientRegistration(MutationObserverRegistration* registration) {
+    m_transientRegistry.add(
+        TraceWrapperMember<MutationObserverRegistration>(this, registration));
+  }
+
+  void removeTransientRegistration(MutationObserverRegistration* registration) {
+    DCHECK(m_transientRegistry.contains(registration));
+    m_transientRegistry.remove(registration);
+  }
+
+  void addRegistration(MutationObserverRegistration* registration) {
+    m_registry.append(
+        TraceWrapperMember<MutationObserverRegistration>(this, registration));
+  }
+
+  void removeRegistration(MutationObserverRegistration* registration) {
+    DCHECK(m_registry.contains(registration));
+    m_registry.remove(m_registry.find(registration));
+  }
+
   DEFINE_INLINE_TRACE() {
-    visitor->trace(registry);
-    visitor->trace(transientRegistry);
+    visitor->trace(m_registry);
+    visitor->trace(m_transientRegistry);
   }
 
   DECLARE_TRACE_WRAPPERS() {
-    for (auto registration : registry) {
+    for (auto registration : m_registry) {
       visitor->traceWrappers(registration);
     }
-    for (auto registration : transientRegistry) {
+    for (auto registration : m_transientRegistry) {
       visitor->traceWrappers(registration);
     }
   }
 
  private:
   NodeMutationObserverData() {}
+
+  HeapVector<TraceWrapperMember<MutationObserverRegistration>> m_registry;
+  HeapHashSet<TraceWrapperMember<MutationObserverRegistration>>
+      m_transientRegistry;
 };
 
 class NodeRareData : public GarbageCollectedFinalized<NodeRareData>,
@@ -75,8 +107,10 @@ class NodeRareData : public GarbageCollectedFinalized<NodeRareData>,
   // initialized m_nodeLists is cleared by NodeRareData::traceAfterDispatch().
   NodeListsNodeData& ensureNodeLists() {
     DCHECK(ThreadState::current()->isGCForbidden());
-    if (!m_nodeLists)
+    if (!m_nodeLists) {
       m_nodeLists = NodeListsNodeData::create();
+      ScriptWrappableVisitor::writeBarrier(this, m_nodeLists);
+    }
     return *m_nodeLists;
   }
 
@@ -84,8 +118,10 @@ class NodeRareData : public GarbageCollectedFinalized<NodeRareData>,
     return m_mutationObserverData.get();
   }
   NodeMutationObserverData& ensureMutationObserverData() {
-    if (!m_mutationObserverData)
+    if (!m_mutationObserverData) {
       m_mutationObserverData = NodeMutationObserverData::create();
+      ScriptWrappableVisitor::writeBarrier(this, m_mutationObserverData);
+    }
     return *m_mutationObserverData;
   }
 

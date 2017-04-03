@@ -9,9 +9,9 @@
 #include <utility>
 
 #include "base/trace_event/trace_event.h"
-#include "components/sync/engine/events/get_updates_response_event.h"
 #include "components/sync/engine_impl/cycle/status_controller.h"
 #include "components/sync/engine_impl/cycle/sync_cycle.h"
+#include "components/sync/engine_impl/events/get_updates_response_event.h"
 #include "components/sync/engine_impl/get_updates_delegate.h"
 #include "components/sync/engine_impl/syncer_proto_util.h"
 #include "components/sync/engine_impl/update_handler.h"
@@ -76,9 +76,9 @@ void PartitionUpdatesByType(const sync_pb::GetUpdatesResponse& gu_response,
 
     TypeSyncEntityMap::iterator it = updates_by_type->find(type);
     if (it == updates_by_type->end()) {
-      DLOG(WARNING)
-          << "Received update for unexpected type or the type is throttled:"
-          << ModelTypeToString(type);
+      DLOG(WARNING) << "Received update for unexpected type, or the type is "
+                       "throttled or failed with partial failure:"
+                    << ModelTypeToString(type);
       continue;
     }
 
@@ -227,9 +227,11 @@ SyncerError GetUpdatesProcessor::ExecuteDownloadUpdates(
   DVLOG(2) << SyncerProtoUtil::ClientToServerResponseDebugString(
       update_response);
 
-  if (result == SERVER_RETURN_PARTIAL_FAILURE) {
+  if (!partial_failure_data_types.Empty()) {
     request_types->RemoveAll(partial_failure_data_types);
-  } else if (result != SYNCER_OK) {
+  }
+
+  if (result != SYNCER_OK) {
     GetUpdatesResponseEvent response_event(base::Time::Now(), update_response,
                                            result);
     cycle->SendProtocolEvent(response_event);

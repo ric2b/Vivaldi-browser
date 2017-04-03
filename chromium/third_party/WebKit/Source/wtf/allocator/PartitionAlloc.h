@@ -769,8 +769,8 @@ ALWAYS_INLINE void partitionFreeWithPage(void* ptr, PartitionPage* page) {
   ASSERT(!freelistHead || partitionPointerIsValid(freelistHead));
   SECURITY_CHECK(ptr != freelistHead);  // Catches an immediate double free.
   // Look for double free one level deeper in debug.
-  ASSERT_WITH_SECURITY_IMPLICATION(
-      !freelistHead || ptr != partitionFreelistMask(freelistHead->next));
+  SECURITY_DCHECK(!freelistHead ||
+                  ptr != partitionFreelistMask(freelistHead->next));
   PartitionFreelistEntry* entry = static_cast<PartitionFreelistEntry*>(ptr);
   entry->next = partitionFreelistMask(freelistHead);
   page->freelistHead = entry;
@@ -829,15 +829,6 @@ ALWAYS_INLINE void* partitionAllocGenericFlags(PartitionRootGeneric* root,
   void* ret = nullptr;
   {
     SpinLock::Guard guard(root->lock);
-// TODO(bashi): Remove following RELEAE_ASSERT()s once we find the cause of
-// http://crbug.com/514141
-#if OS(ANDROID)
-    RELEASE_ASSERT(bucket >= &root->buckets[0] ||
-                   bucket == &PartitionRootGeneric::gPagedBucket);
-    RELEASE_ASSERT(bucket <= &root->buckets[kGenericNumBuckets - 1] ||
-                   bucket == &PartitionRootGeneric::gPagedBucket);
-    RELEASE_ASSERT(root->initialized);
-#endif
     ret = partitionBucketAlloc(root, flags, size, bucket);
   }
   PartitionAllocHooks::allocationHookIfEnabled(ret, requestedSize, typeName);

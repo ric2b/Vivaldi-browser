@@ -18,13 +18,11 @@ namespace base {
 namespace trace_event {
 class BlameContext;
 }  // namespace trace_event
-class SingleThreadTaskRunner;
 }  // namespace base
 
 namespace blink {
 namespace scheduler {
 
-class AutoAdvancingVirtualTimeDomain;
 class RendererSchedulerImpl;
 class TaskQueue;
 class WebTaskRunnerImpl;
@@ -54,6 +52,7 @@ class BLINK_PLATFORM_EXPORT WebFrameSchedulerImpl : public WebFrameScheduler {
   friend class WebViewSchedulerImpl;
 
   void DetachFromWebViewScheduler();
+  void RemoveTimerQueueFromBackgroundTimeBudgetPool();
   void ApplyPolicyToTimerQueue();
   bool ShouldThrottleTimers() const;
   void UpdateTimerThrottling(bool was_throttled);

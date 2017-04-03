@@ -1,6 +1,6 @@
 <div id="settings" class="page" hidden>
   <header>
-    <h1 i18n-content="settingsTitle" hidden></h1>
+    <h1 i18n-content="settingsTitle"></h1>
   </header>
   <include src="automatic_settings_reset_banner.html">
 <if expr="chromeos">
@@ -35,7 +35,7 @@
     <div id="proxy-section-content"></div>
   </section>
 
-  <section id="appearance-section" hidden>
+  <section id="appearance-section">
     <h3 i18n-content="sectionTitleAppearance"></h3>
     <div class="settings-row">
 <if expr="chromeos">
@@ -134,7 +134,7 @@
           </button>
         </span>
         <button id="storage-manager-button"
-            i18n-content="storageManagerButtonTitle" hidden>
+            i18n-content="storageManagerButtonTitle">
         </button>
       </div>
       <div id="stylus-row" hidden>
@@ -148,7 +148,7 @@
     </div>
   </section>
 </if>
-  <section id="search-section" hidden>
+  <section id="search-section">
     <h3 i18n-content="sectionTitleSearch"></h3>
       <div id="search-section-content">
         <span id="default-search-engine-label"
@@ -255,18 +255,18 @@
     </div>
   </section>
 </if>
-  <section id="sync-users-section" hidden>
-    <h3 i18n-content="sectionTitleUsers" hidden></h3>
+  <section id="sync-users-section" guest-visibility="hidden">
+    <h3 i18n-content="sectionTitleUsers"></h3>
 <if expr="chromeos">
     <include src="sync_section.html">
 </if>
     <div id="profiles-section" hidden>
       <list id="profiles-list" class="settings-list" hidden></list>
       <div id="profiles-single-message" class="settings-row"
-          i18n-content="profilesSingleUser" hidden>
+          i18n-content="profilesSingleUser">
       </div>
 <if expr="not chromeos">
-      <div id="profiles-enable-guest" class="checkbox" hidden>
+      <div id="profiles-enable-guest" class="checkbox">
         <label>
           <input pref="profile.browser_guest_enabled"
                  type="checkbox"
@@ -274,7 +274,7 @@
           <span i18n-content="profileBrowserGuestEnable"></span>
         </label>
       </div>
-      <div id="profiles-enable-add-person" class="checkbox" hidden>
+      <div id="profiles-enable-add-person" class="checkbox">
         <label>
           <input pref="profile.add_person_enabled"
                  type="checkbox"
@@ -298,7 +298,7 @@
     </div>
   </section>
 <if expr="not chromeos">
-  <section id="set-default-browser-section" style="display: none">
+  <section id="set-default-browser-section">
     <h3 i18n-content="sectionTitleDefaultBrowser"></h3>
     <div>
       <button id="set-as-default-browser"
@@ -404,13 +404,12 @@
       <div class="checkbox controlled-setting-with-label">
         <label>
           <input
+              id="safeBrowsingExtendedReportingCheckbox"
               metric="Options_SafeBrowsingExtendedReportingCheckbox"
-              pref="safebrowsing.extended_reporting_enabled"
               type="checkbox">
           <span>
             <span i18n-content="safeBrowsingEnableExtendedReporting"></span>
-            <span class="controlled-setting-indicator"
-                pref="safebrowsing.extended_reporting_enabled"></span>
+            <span class="controlled-setting-indicator"></span>
           </span>
         </label>
       </div>
@@ -762,6 +761,21 @@
 </if>
       </div>
   </section>
+<if expr="chromeos">
+  <section id="cups-printers-section" hidden>
+    <h3 i18n-content="advancedSectionTitleCupsPrint"></h3>
+    <div class="settings-row">
+      <span i18n-content="cupsPrintOptionLabel"></span>
+      <a target="_blank" i18n-content="learnMore"
+          i18n-values="href:cupsPrintLearnMoreURL">
+      </a>
+    </div>
+    <div class="settings-row">
+      <button id="cupsPrintersManageButton"
+          i18n-content="cupsPrintersManageButton"></button>
+    </div>
+  </section>
+</if>
 <if expr="enable_service_discovery">
     <section id="cloudprint-options-mdns">
       <h3 i18n-content="advancedSectionTitleCloudPrint"></h3>
@@ -951,7 +965,7 @@
             aria-labelledby="accessibility-autoclick-label"
             pref="settings.a11y.autoclick_delay_ms">
           <!-- i18n strings contain the autoclick duration; if the autoclick
-               timing gets changed, then the 18n strings also needs to be
+               timing gets changed, then the i18n strings also needs to be
                updated. -->
           <option value="600"
               i18n-content="autoclickDelayExtremelyShort"></option>

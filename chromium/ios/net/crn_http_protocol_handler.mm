@@ -40,6 +40,10 @@
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_getter.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 namespace net {
 class HttpProtocolHandlerCore;
 }
@@ -551,9 +555,9 @@ void HttpProtocolHandlerCore::OnReadCompleted(URLRequest* request,
     if ([data length] > 0) {
       // If the data is not encoded in UTF8, the NSString is nil.
       DVLOG(3) << "To client:" << std::endl
-               << base::SysNSStringToUTF8([[[NSString alloc]
+               << base::SysNSStringToUTF8([[NSString alloc]
                       initWithData:data
-                          encoding:NSUTF8StringEncoding] autorelease]);
+                          encoding:NSUTF8StringEncoding]);
       [top_level_client_ didLoadData:data];
     }
     if (bytes_read == 0) {
@@ -602,13 +606,13 @@ void HttpProtocolHandlerCore::SetLoadFlags() {
         load_flags |= LOAD_VALIDATE_CACHE;
         break;
       case RequestTracker::CACHE_HISTORY:
-        load_flags |= LOAD_PREFERRING_CACHE;
+        load_flags |= LOAD_SKIP_CACHE_VALIDATION;
         break;
       case RequestTracker::CACHE_BYPASS:
         load_flags |= LOAD_DISABLE_CACHE | LOAD_BYPASS_CACHE;
         break;
       case RequestTracker::CACHE_ONLY:
-        load_flags |= LOAD_ONLY_FROM_CACHE;
+        load_flags |= LOAD_ONLY_FROM_CACHE | LOAD_SKIP_CACHE_VALIDATION;
         break;
       case RequestTracker::CACHE_NORMAL:
         // Do nothing, normal load.
@@ -622,10 +626,10 @@ void HttpProtocolHandlerCore::SetLoadFlags() {
         load_flags |= LOAD_DISABLE_CACHE;
         break;
       case NSURLRequestReturnCacheDataElseLoad:
-        load_flags |= LOAD_PREFERRING_CACHE;
+        load_flags |= LOAD_SKIP_CACHE_VALIDATION;
         break;
       case NSURLRequestReturnCacheDataDontLoad:
-        load_flags |= LOAD_ONLY_FROM_CACHE;
+        load_flags |= LOAD_ONLY_FROM_CACHE | LOAD_SKIP_CACHE_VALIDATION;
         break;
       case NSURLRequestReloadRevalidatingCacheData:
         load_flags |= LOAD_VALIDATE_CACHE;
@@ -1064,7 +1068,6 @@ void HttpProtocolHandlerCore::PushClients(NSArray* clients) {
 
 - (void)dealloc {
   [self scheduleCancelRequest];
-  [super dealloc];
 }
 
 #pragma mark NSURLProtocol overrides.

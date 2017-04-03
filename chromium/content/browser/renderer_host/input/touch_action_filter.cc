@@ -7,7 +7,7 @@
 #include <math.h>
 
 #include "base/logging.h"
-#include "third_party/WebKit/public/web/WebInputEvent.h"
+#include "third_party/WebKit/public/platform/WebGestureEvent.h"
 
 using blink::WebInputEvent;
 using blink::WebGestureEvent;
@@ -96,11 +96,11 @@ bool TouchActionFilter::FilterGestureEvent(WebGestureEvent* gesture_event) {
       return drop_pinch_gesture_events_;
 
     case WebInputEvent::GesturePinchEnd:
-      // TODO(mustaq): Don't reset drop_pinch_gesture_events_ here because a
-      // pinch-zoom-out-then-zoom-in sends two separate pinch sequences within a
-      // single gesture-scroll sequence, see crbug.com/662047#c13. Is it
-      // expected?
-      return drop_pinch_gesture_events_;
+      if (drop_pinch_gesture_events_) {
+        drop_pinch_gesture_events_ = false;
+        return true;
+      }
+      break;
 
     // The double tap gesture is a tap ending event. If a double tap gesture is
     // filtered out, replace it with a tap event.

@@ -7,11 +7,11 @@
 #include "ash/aura/wm_window_aura.h"
 #include "ash/common/multi_profile_uma.h"
 #include "ash/common/session/session_state_delegate.h"
-#include "ash/common/shell_window_ids.h"
 #include "ash/common/system/tray/system_tray_notifier.h"
 #include "ash/common/wm/maximize_mode/maximize_mode_controller.h"
 #include "ash/common/wm/window_state.h"
 #include "ash/common/wm_shell.h"
+#include "ash/public/cpp/shell_window_ids.h"
 #include "ash/root_window_controller.h"
 #include "ash/shell.h"
 #include "ash/wm/window_state_aura.h"
@@ -327,7 +327,8 @@ void MultiUserWindowManagerChromeOS::SetWindowOwner(
   AddTransientOwnerRecursive(window, window);
 
   // Notify entry adding.
-  FOR_EACH_OBSERVER(Observer, observers_, OnOwnerEntryAdded(window));
+  for (Observer& observer : observers_)
+    observer.OnOwnerEntryAdded(window);
 
   if (!IsWindowOnDesktopOfUser(window, current_account_id_))
     SetWindowVisibility(window, false, 0);
@@ -460,7 +461,8 @@ void MultiUserWindowManagerChromeOS::OnWindowDestroyed(aura::Window* window) {
   window_to_entry_.erase(window);
 
   // Notify entry change.
-  FOR_EACH_OBSERVER(Observer, observers_, OnOwnerEntryRemoved(window));
+  for (Observer& observer : observers_)
+    observer.OnOwnerEntryRemoved(window);
 }
 
 void MultiUserWindowManagerChromeOS::OnWindowVisibilityChanging(
@@ -587,7 +589,8 @@ bool MultiUserWindowManagerChromeOS::ShowWindowForUserIntern(
   }
 
   // Notify entry change.
-  FOR_EACH_OBSERVER(Observer, observers_, OnOwnerEntryChanged(window));
+  for (Observer& observer : observers_)
+    observer.OnOwnerEntryChanged(window);
   return true;
 }
 
@@ -632,7 +635,8 @@ void MultiUserWindowManagerChromeOS::SetWindowVisibility(
 }
 
 void MultiUserWindowManagerChromeOS::NotifyAfterUserSwitchAnimationFinished() {
-  FOR_EACH_OBSERVER(Observer, observers_, OnUserSwitchAnimationFinished());
+  for (Observer& observer : observers_)
+    observer.OnUserSwitchAnimationFinished();
 }
 
 void MultiUserWindowManagerChromeOS::AddBrowserWindow(Browser* browser) {

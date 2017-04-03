@@ -52,12 +52,12 @@ InkDropTest::InkDropTest() : ink_drop_(nullptr) {
   zero_duration_mode_.reset(new ui::ScopedAnimationDurationScaleMode(
       ui::ScopedAnimationDurationScaleMode::ZERO_DURATION));
 
-  switch (InkDropType()) {
+  switch (GetInkDropType()) {
     case INK_DROP_STUB:
       ink_drop_.reset(new InkDropStub());
       break;
     case INK_DROP_IMPL:
-      ink_drop_.reset(new InkDropImpl(&test_ink_drop_host_));
+      ink_drop_.reset(new InkDropImpl(&test_ink_drop_host_, gfx::Size()));
       // The Timer's used by the InkDropImpl class require a
       // base::ThreadTaskRunnerHandle instance.
       scoped_refptr<base::TestMockTimeTaskRunner> task_runner(
@@ -83,14 +83,6 @@ INSTANTIATE_TEST_CASE_P(,
 TEST_P(InkDropTest,
        VerifyInkDropLayersRemovedAfterDestructionWhenRippleIsActive) {
   ink_drop_->AnimateToState(InkDropState::ACTION_PENDING);
-  ink_drop_.reset();
-  EXPECT_EQ(0, test_ink_drop_host_.num_ink_drop_layers());
-}
-
-TEST_P(InkDropTest,
-       VerifyInkDropLayersRemovedAfterDestructionWhenHoverIsActive) {
-  test_ink_drop_host_.set_should_show_highlight(true);
-  ink_drop_->SetHovered(true);
   ink_drop_.reset();
   EXPECT_EQ(0, test_ink_drop_host_.num_ink_drop_layers());
 }

@@ -18,9 +18,6 @@ namespace chrome {
 // Returns a version string to be displayed in "About Chromium" dialog.
 std::string GetVersionString();
 
-// Returns a version string to be displayed in "About Vivaldi" dialog.
-std::string GetVivaldiVersionString();
-
 // Returns a human-readable modifier for the version string. For a branded
 // build, this modifier is the channel ("canary", "dev", or "beta", but ""
 // for stable). On Windows, this may be modified with additional information

@@ -294,6 +294,18 @@ void WebContentsObserverProxy::DidFirstVisuallyNonEmptyPaint() {
   Java_WebContentsObserverProxy_didFirstVisuallyNonEmptyPaint(env, obj);
 }
 
+void WebContentsObserverProxy::WasShown() {
+  JNIEnv* env = AttachCurrentThread();
+  ScopedJavaLocalRef<jobject> obj(java_observer_);
+  Java_WebContentsObserverProxy_wasShown(env, obj);
+}
+
+void WebContentsObserverProxy::WasHidden() {
+  JNIEnv* env = AttachCurrentThread();
+  ScopedJavaLocalRef<jobject> obj(java_observer_);
+  Java_WebContentsObserverProxy_wasHidden(env, obj);
+}
+
 void WebContentsObserverProxy::DidStartNavigationToPendingEntry(
     const GURL& url,
     ReloadType reload_type) {
@@ -304,22 +316,6 @@ void WebContentsObserverProxy::DidStartNavigationToPendingEntry(
 
   Java_WebContentsObserverProxy_didStartNavigationToPendingEntry(env, obj,
                                                                  jstring_url);
-}
-
-void WebContentsObserverProxy::MediaSessionStateChanged(
-    bool is_controllable,
-    bool is_suspended,
-    const base::Optional<MediaMetadata>& metadata) {
-  JNIEnv* env = AttachCurrentThread();
-
-  ScopedJavaLocalRef<jobject> obj(java_observer_);
-  ScopedJavaLocalRef<jobject> j_metadata;
-
-  if (metadata.has_value())
-    j_metadata = MediaMetadataAndroid::CreateJavaObject(env, metadata.value());
-
-  Java_WebContentsObserverProxy_mediaSessionStateChanged(
-      env, obj, is_controllable, is_suspended, j_metadata);
 }
 
 void WebContentsObserverProxy::SetToBaseURLForDataURLIfNeeded(

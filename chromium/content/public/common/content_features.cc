@@ -9,6 +9,11 @@ namespace features {
 
 // All features in alphabetical order.
 
+// Enables asm.js to WebAssembly V8 backend.
+// http://asmjs.org/spec/latest/
+const base::Feature kAsmJsToWebAssembly{"AsmJsToWebAssembly",
+                                        base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enables brotli "Accept-Encoding" advertising and "Content-Encoding" support.
 // Brotli format specification: http://www.ietf.org/id/draft-alakuijala-brotli
 const base::Feature kBrotliEncoding{"brotli-encoding",
@@ -18,6 +23,11 @@ const base::Feature kBrotliEncoding{"brotli-encoding",
 // enabled.
 const base::Feature kCanvas2DImageChromium{"Canvas2DImageChromium",
                                            base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Enables the compositing of fixed position content that is opaque and can
+// preserve LCD text.
+const base::Feature kCompositeOpaqueFixedPosition{
+    "CompositeOpaqueFixedPosition", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enables the compositing of scrolling content that supports painting the
 // background with the foreground, such that LCD text will still be enabled.
@@ -31,14 +41,25 @@ const base::Feature kCredentialManagementAPI{"CredentialManagementAPI",
 
 // Enable GPU Rasterization by default. This can still be overridden by
 // --force-gpu-rasterization or --disable-gpu-rasterization.
+#if defined(OS_ANDROID) || defined(OS_MACOSX)
+// DefaultEnableGpuRasterization has launched on Android and Mac.
+const base::Feature kDefaultEnableGpuRasterization{
+    "DefaultEnableGpuRasterization", base::FEATURE_ENABLED_BY_DEFAULT};
+#else
 const base::Feature kDefaultEnableGpuRasterization{
     "DefaultEnableGpuRasterization", base::FEATURE_DISABLED_BY_DEFAULT};
+#endif
 
 // Speculatively pre-evaluate Javascript which will likely use document.write to
 // load an external script. The feature extracts the written markup and sends it
 // to the preload scanner.
 const base::Feature kDocumentWriteEvaluator{"DocumentWriteEvaluator",
                                             base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Throttle tasks in Blink background timer queues based on CPU budgets
+// for the background tab. Bug: https://crbug.com/639852.
+const base::Feature kExpensiveBackgroundTimerThrottling{
+    "ExpensiveBackgroundTimerThrottling", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enables the Feature Policy framework for granting and removing access to
 // other features through HTTP headers.
@@ -61,6 +82,20 @@ const base::Feature kFramebustingNeedsSameOriginOrUserGesture{
 const base::Feature kGamepadExtensions{"GamepadExtensions",
                                        base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Enables sensors based on Generic Sensor API:
+// https://w3c.github.io/sensors/
+const base::Feature kGenericSensor{"GenericSensor",
+                                   base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Causes the implementations of guests (inner WebContents) to use
+// out-of-process iframes.
+const base::Feature kGuestViewCrossProcessFrames{
+    "GuestViewCrossProcessFrames", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enables lazily parsing css properties for performance.
+const base::Feature kLazyParseCSS{"LazyParseCSS",
+                                  base::FEATURE_DISABLED_BY_DEFAULT};
+
 // FeatureList definition for trials to enable the download button on
 // MediaDocument.
 const base::Feature kMediaDocumentDownloadButton{
@@ -76,21 +111,14 @@ const base::Feature kMemoryCoordinator {
   "MemoryCoordinator", base::FEATURE_DISABLED_BY_DEFAULT
 };
 
-// Enable the material design playback UI for media elements.  This is always
-// on for OS_ANDROID, but may be enabled by experiment for other platforms.
-const base::Feature kNewMediaPlaybackUi{"NewMediaPlaybackUi",
-                                        base::FEATURE_ENABLED_BY_DEFAULT};
-
 // Non-validating reload for desktop.
 // See https://crbug.com/591245
 const base::Feature kNonValidatingReloadOnNormalReload{
     "NonValidatingReloadOnNormalReload", base::FEATURE_ENABLED_BY_DEFAULT};
 
-// Non-validating reload on reload-to-refresh-content (e.g. pull-to-refresh).
-// See https://crbug.com/591245
-const base::Feature kNonValidatingReloadOnRefreshContent{
-    "NonValidatingReloadOnRefreshContentV2",
-    base::FEATURE_ENABLED_BY_DEFAULT};
+// Kill switch for Web Notification content images.
+const base::Feature kNotificationContentImage{"NotificationContentImage",
+                                              base::FEATURE_ENABLED_BY_DEFAULT};
 
 // An experiment to optimize resource loading IPC for small resources.
 // http://crbug.com/580928
@@ -108,7 +136,7 @@ const base::Feature kParseHTMLOnMainThread{"ParseHTMLOnMainThread",
 
 // Whether document level event listeners should default 'passive' to true.
 const base::Feature kPassiveDocumentEventListeners{
-    "PassiveDocumentEventListeners", base::FEATURE_DISABLED_BY_DEFAULT};
+    "PassiveDocumentEventListeners", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Whether we should force a touchstart and first touchmove per scroll event
 // listeners to be 'passive' during fling.
@@ -124,9 +152,17 @@ const base::Feature kPointerEvents{"PointerEvent",
 const base::Feature kPointerEventV1SpecCapturing{
     "PointerEventV1SpecCapturing", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// RAF aligned input events support.
-const base::Feature kRafAlignedInputEvents{"RafAlignedInput",
-                                           base::FEATURE_DISABLED_BY_DEFAULT};
+// Enables purge and suspend.
+const base::Feature kPurgeAndSuspend{"PurgeAndSuspend",
+                                     base::FEATURE_DISABLED_BY_DEFAULT};
+
+// RAF aligned mouse input events support.
+const base::Feature kRafAlignedMouseInputEvents{
+    "RafAlignedMouseInput", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// RAF aligned touch input events support.
+const base::Feature kRafAlignedTouchInputEvents{
+    "RafAlignedTouchInput", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // If Pepper 3D Image Chromium is allowed, this feature controls whether it is
 // enabled.
@@ -139,7 +175,17 @@ const base::Feature kRenderingPipelineThrottling{
 
 // Scrolls to compensate for layout movements (bit.ly/scroll-anchoring).
 const base::Feature kScrollAnchoring{"ScrollAnchoring",
-                                     base::FEATURE_DISABLED_BY_DEFAULT};
+                                     base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Navigation preload feature of service workers.
+// TODO(horo): Revise link when this lands in the spec:
+// https://github.com/w3c/ServiceWorker/pull/983/files
+const base::Feature kServiceWorkerNavigationPreload{
+    "ServiceWorkerNavigationPreload", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// http://tc39.github.io/ecmascript_sharedmem/shmem.html
+const base::Feature kSharedArrayBuffer{"SharedArrayBuffer",
+                                       base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Speculatively launches Service Workers on mouse/touch events.
 const base::Feature kSpeculativeLaunchServiceWorker{
@@ -163,6 +209,14 @@ const base::Feature kTokenBinding{"token-binding",
 // Enables touchpad and wheel scroll latching.
 const base::Feature kTouchpadAndWheelScrollLatching{
     "TouchpadAndWheelScrollLatching", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enables VR UI.
+const base::Feature kVrShell{"VrShell", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enable WebAssembly.
+// http://webassembly.org/
+const base::Feature kWebAssembly{"WebAssembly",
+                                 base::FEATURE_DISABLED_BY_DEFAULT};
 
 // If WebGL Image Chromium is allowed, this feature controls whether it is
 // enabled.
@@ -189,10 +243,6 @@ const base::Feature kSendBeaconThrowForBlobWithNonSimpleType{
     base::FEATURE_DISABLED_BY_DEFAULT};
 
 #if defined(OS_ANDROID)
-// Allow videos to autoplay without a user gesture if muted.
-const base::Feature kAutoplayMutedVideos{"AutoplayMutedVideos",
-                                         base::FEATURE_ENABLED_BY_DEFAULT};
-
 // Use IME's own thread instead of using main UI thread. It also means that
 // we will not use replica editor and do a round trip to renderer to synchronize
 // with Blink data.

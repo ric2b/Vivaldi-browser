@@ -30,7 +30,7 @@
 #include "chromecast/browser/cast_network_delegate.h"
 #include "chromecast/browser/cast_quota_permission_context.h"
 #include "chromecast/browser/cast_resource_dispatcher_host_delegate.h"
-#include "chromecast/browser/devtools/cast_devtools_delegate.h"
+#include "chromecast/browser/devtools/cast_devtools_manager_delegate.h"
 #include "chromecast/browser/grit/cast_browser_resources.h"
 #include "chromecast/browser/media/media_caps_impl.h"
 #include "chromecast/browser/service/cast_service_simple.h"
@@ -50,26 +50,26 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_descriptors.h"
 #include "content/public/common/content_switches.h"
-#include "content/public/common/service_names.h"
+#include "content/public/common/service_names.mojom.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/common/web_preferences.h"
 #include "net/ssl/ssl_cert_request_info.h"
 #include "net/url_request/url_request_context_getter.h"
-#include "services/shell/public/cpp/interface_registry.h"
+#include "services/service_manager/public/cpp/interface_registry.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "ui/gl/gl_switches.h"
 
 #if defined(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
-#include "chromecast/browser/media/cast_mojo_media_client.h"
-#include "media/mojo/services/mojo_media_application.h"  // nogncheck
+#include "chromecast/media/service/cast_mojo_media_client.h"
+#include "media/mojo/services/media_service.h"  // nogncheck
 #endif  // ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS
 
 #if defined(OS_ANDROID)
 #include "components/crash/content/browser/crash_dump_manager_android.h"
 #else
-#include "chromecast/browser/media/cast_browser_cdm_factory.h"
+#include "chromecast/media/cdm/cast_cdm_factory.h"
 #endif  // defined(OS_ANDROID)
 
 namespace chromecast {
@@ -77,9 +77,8 @@ namespace shell {
 
 namespace {
 #if defined(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
-static std::unique_ptr<::shell::Service> CreateMojoMediaApplication(
-    CastContentBrowserClient* browser_client,
-    const base::Closure& quit_closure) {
+static std::unique_ptr<service_manager::Service> CreateMediaService(
+    CastContentBrowserClient* browser_client) {
   std::unique_ptr<media::CastMojoMediaClient> mojo_media_client(
       new media::CastMojoMediaClient(
           base::Bind(&CastContentBrowserClient::CreateMediaPipelineBackend,
@@ -88,9 +87,8 @@ static std::unique_ptr<::shell::Service> CreateMojoMediaApplication(
                      base::Unretained(browser_client)),
           browser_client->GetVideoResolutionPolicy(),
           browser_client->media_resource_tracker()));
-  return std::unique_ptr<::shell::Service>(
-      new ::media::MojoMediaApplication(std::move(mojo_media_client),
-                                        quit_closure));
+  return std::unique_ptr<service_manager::Service>(
+      new ::media::MediaService(std::move(mojo_media_client)));
 }
 #endif  // defined(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
 
@@ -416,7 +414,7 @@ bool CastContentBrowserClient::CanCreateWindow(
 }
 
 void CastContentBrowserClient::ExposeInterfacesToRenderer(
-    ::shell::InterfaceRegistry* registry,
+    service_manager::InterfaceRegistry* registry,
     content::RenderProcessHost* render_process_host) {
   registry->AddInterface(
       base::Bind(&media::MediaCapsImpl::AddBinding,
@@ -428,10 +426,9 @@ void CastContentBrowserClient::RegisterInProcessServices(
     StaticServiceMap* services) {
 #if defined(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
   content::ServiceInfo info;
-  info.factory =
-      base::Bind(&CreateMojoMediaApplication, base::Unretained(this));
+  info.factory = base::Bind(&CreateMediaService, base::Unretained(this));
   info.task_runner = GetMediaTaskRunner();
-  services->insert(std::make_pair("service:media", info));
+  services->insert(std::make_pair("media", info));
 #endif
 }
 
@@ -439,7 +436,7 @@ std::unique_ptr<base::Value>
 CastContentBrowserClient::GetServiceManifestOverlay(
     const std::string& service_name) {
   ResourceBundle& rb = ResourceBundle::GetSharedInstance();
-  if (service_name != content::kBrowserServiceName)
+  if (service_name != content::mojom::kBrowserServiceName)
     return nullptr;
   base::StringPiece manifest_contents =
       rb.GetRawDataResourceForScale(IDR_CAST_CONTENT_BROWSER_MANIFEST_OVERLAY,
@@ -486,8 +483,8 @@ void CastContentBrowserClient::GetAdditionalMappedFilesForChildProcess(
 std::unique_ptr<::media::CdmFactory>
 CastContentBrowserClient::CreateCdmFactory() {
 #if defined(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
-  return base::MakeUnique<media::CastBrowserCdmFactory>(
-      GetMediaTaskRunner(), media_resource_tracker());
+  return base::MakeUnique<media::CastCdmFactory>(GetMediaTaskRunner(),
+                                                 media_resource_tracker());
 #endif  // defined(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
   return nullptr;
 }
@@ -511,7 +508,7 @@ void CastContentBrowserClient::GetAdditionalWebUISchemes(
 
 content::DevToolsManagerDelegate*
 CastContentBrowserClient::GetDevToolsManagerDelegate() {
-  return new CastDevToolsDelegate();
+  return new CastDevToolsManagerDelegate();
 }
 
 #if !defined(OS_ANDROID)

@@ -34,6 +34,7 @@
 <translation id="2148716181193084225">I dag</translation>
 <translation id="2226276347425096477">Forkort denne tekst til <ph name="MAX_CHARACTERS" /> tegn eller færre (du bruger i øjeblikket <ph name="CURRENT_LENGTH" /> tegn).</translation>
 <translation id="2247351761944213033">Uge <ph name="WEEKNUMBER" />, <ph name="YEAR" /></translation>
+<translation id="2277199496770840904">Spor <ph name="NUMBER" /></translation>
 <translation id="2291999235780842123">afkrydsningsfelt</translation>
 <translation id="2335594187091864976">dato- og tidsvælger</translation>
 <translation id="248395913932153421">Dag</translation>
@@ -116,7 +117,6 @@
 <translation id="5643186887447432888">knap</translation>
 <translation id="5677946354068040947">flere valgmuligheder</translation>
 <translation id="57838592816432529">Slå lyden fra</translation>
-<translation id="583281660410589416">Ukendt</translation>
 <translation id="5843503607508392247">Andet...</translation>
 <translation id="5860033963881614850">Fra</translation>
 <translation id="588258955323874662">Fuld skærm</translation>
@@ -127,7 +127,7 @@
 <translation id="6015796118275082299">År</translation>
 <translation id="6023896073578205740">listefelt</translation>
 <translation id="6101327004457443354">slå lydspor til</translation>
-<translation id="6119846243427417423">aktiver</translation>
+<translation id="6119846243427417423">aktivér</translation>
 <translation id="6164829606128959761">måler</translation>
 <translation id="6270583010843788609">miniature for tidslinje</translation>
 <translation id="6359256949422175976">miniature for filmtidsskyder</translation>

@@ -46,13 +46,12 @@ Scheduler::Scheduler(
       state_machine_(settings),
       inside_process_scheduled_actions_(false),
       inside_action_(SchedulerStateMachine::ACTION_NONE),
+      stopped_(false),
       weak_factory_(this) {
   TRACE_EVENT1("cc", "Scheduler::Scheduler", "settings", settings_.AsValue());
   DCHECK(client_);
   DCHECK(!state_machine_.BeginFrameNeeded());
 
-  begin_retro_frame_closure_ =
-      base::Bind(&Scheduler::BeginRetroFrame, weak_factory_.GetWeakPtr());
   begin_impl_frame_deadline_closure_ = base::Bind(
       &Scheduler::OnBeginImplFrameDeadline, weak_factory_.GetWeakPtr());
 
@@ -61,6 +60,10 @@ Scheduler::Scheduler(
 
 Scheduler::~Scheduler() {
   SetBeginFrameSource(nullptr);
+}
+
+void Scheduler::Stop() {
+  stopped_ = true;
 }
 
 base::TimeTicks Scheduler::Now() const {
@@ -126,21 +129,21 @@ void Scheduler::SetNeedsPrepareTiles() {
   ProcessScheduledActions();
 }
 
-void Scheduler::DidSwapBuffers() {
-  compositor_timing_history_->DidSwapBuffers();
-  state_machine_.DidSwapBuffers();
+void Scheduler::DidSubmitCompositorFrame() {
+  compositor_timing_history_->DidSubmitCompositorFrame();
+  state_machine_.DidSubmitCompositorFrame();
 
   // There is no need to call ProcessScheduledActions here because
-  // swapping should not trigger any new actions.
+  // submitting a CompositorFrame should not trigger any new actions.
   if (!inside_process_scheduled_actions_) {
     DCHECK_EQ(state_machine_.NextAction(), SchedulerStateMachine::ACTION_NONE);
   }
 }
 
-void Scheduler::DidSwapBuffersComplete() {
-  DCHECK_GT(state_machine_.pending_swaps(), 0) << AsValue()->ToString();
-  compositor_timing_history_->DidSwapBuffersComplete();
-  state_machine_.DidSwapBuffersComplete();
+void Scheduler::DidReceiveCompositorFrameAck() {
+  DCHECK_GT(state_machine_.pending_submit_frames(), 0) << AsValue()->ToString();
+  compositor_timing_history_->DidReceiveCompositorFrameAck();
+  state_machine_.DidReceiveCompositorFrameAck();
   ProcessScheduledActions();
 }
 
@@ -181,8 +184,6 @@ void Scheduler::DidPrepareTiles() {
 
 void Scheduler::DidLoseCompositorFrameSink() {
   TRACE_EVENT0("cc", "Scheduler::DidLoseCompositorFrameSink");
-  begin_retro_frame_args_.clear();
-  begin_retro_frame_task_.Cancel();
   state_machine_.DidLoseCompositorFrameSink();
   UpdateCompositorTimingHistoryRecordingEnabled();
   ProcessScheduledActions();
@@ -219,29 +220,26 @@ void Scheduler::BeginImplFrameNotExpectedSoon() {
 }
 
 void Scheduler::SetupNextBeginFrameIfNeeded() {
-  // Never call SetNeedsBeginFrames if the frame source already has the right
-  // value.
-  if (observing_begin_frame_source_ != state_machine_.BeginFrameNeeded()) {
-    if (state_machine_.BeginFrameNeeded()) {
-      // Call AddObserver as soon as possible.
-      observing_begin_frame_source_ = true;
-      if (begin_frame_source_)
-        begin_frame_source_->AddObserver(this);
-      devtools_instrumentation::NeedsBeginFrameChanged(layer_tree_host_id_,
-                                                       true);
-    } else if (state_machine_.begin_impl_frame_state() ==
-               SchedulerStateMachine::BEGIN_IMPL_FRAME_STATE_IDLE) {
-      // Call RemoveObserver in between frames only.
-      observing_begin_frame_source_ = false;
-      if (begin_frame_source_)
-        begin_frame_source_->RemoveObserver(this);
-      BeginImplFrameNotExpectedSoon();
-      devtools_instrumentation::NeedsBeginFrameChanged(layer_tree_host_id_,
-                                                       false);
-    }
+  if (state_machine_.begin_impl_frame_state() !=
+      SchedulerStateMachine::BEGIN_IMPL_FRAME_STATE_IDLE) {
+    return;
   }
 
-  PostBeginRetroFrameIfNeeded();
+  bool needs_begin_frames = state_machine_.BeginFrameNeeded();
+  if (needs_begin_frames && !observing_begin_frame_source_) {
+    observing_begin_frame_source_ = true;
+    if (begin_frame_source_)
+      begin_frame_source_->AddObserver(this);
+    devtools_instrumentation::NeedsBeginFrameChanged(layer_tree_host_id_, true);
+  } else if (!needs_begin_frames && observing_begin_frame_source_) {
+    observing_begin_frame_source_ = false;
+    if (begin_frame_source_)
+      begin_frame_source_->RemoveObserver(this);
+    missed_begin_frame_task_.Cancel();
+    BeginImplFrameNotExpectedSoon();
+    devtools_instrumentation::NeedsBeginFrameChanged(layer_tree_host_id_,
+                                                     false);
+  }
 }
 
 void Scheduler::OnBeginFrameSourcePausedChanged(bool paused) {
@@ -260,6 +258,12 @@ void Scheduler::OnBeginFrameSourcePausedChanged(bool paused) {
 bool Scheduler::OnBeginFrameDerivedImpl(const BeginFrameArgs& args) {
   TRACE_EVENT1("cc,benchmark", "Scheduler::BeginFrame", "args", args.AsValue());
 
+  if (!state_machine_.BeginFrameNeeded()) {
+    TRACE_EVENT_INSTANT0("cc", "Scheduler::BeginFrameDropped",
+                         TRACE_EVENT_SCOPE_THREAD);
+    return false;
+  }
+
   // Trace this begin frame time through the Chrome stack
   TRACE_EVENT_FLOW_BEGIN0(
       TRACE_DISABLED_BY_DEFAULT("cc.debug.scheduler.frames"), "BeginFrameArgs",
@@ -270,31 +274,18 @@ bool Scheduler::OnBeginFrameDerivedImpl(const BeginFrameArgs& args) {
     return true;
   }
 
-  // We have just called SetNeedsBeginFrame(true) and the BeginFrameSource has
-  // sent us the last BeginFrame we have missed. As we might not be able to
-  // actually make rendering for this call, handle it like a "retro frame".
-  // TODO(brainderson): Add a test for this functionality ASAP!
-  if (args.type == BeginFrameArgs::MISSED) {
-    begin_retro_frame_args_.push_back(args);
-    PostBeginRetroFrameIfNeeded();
+  if (inside_process_scheduled_actions_) {
+    // The BFS can send a missed begin frame inside AddObserver. We can't handle
+    // a begin frame inside ProcessScheduledActions so post a task.
+    DCHECK_EQ(args.type, BeginFrameArgs::MISSED);
+    DCHECK(missed_begin_frame_task_.IsCancelled());
+    missed_begin_frame_task_.Reset(base::Bind(
+        &Scheduler::BeginImplFrameWithDeadline, base::Unretained(this), args));
+    task_runner_->PostTask(FROM_HERE, missed_begin_frame_task_.callback());
     return true;
   }
 
-  bool should_defer_begin_frame =
-      !begin_retro_frame_args_.empty() ||
-      !begin_retro_frame_task_.IsCancelled() ||
-      !observing_begin_frame_source_ ||
-      (state_machine_.begin_impl_frame_state() !=
-       SchedulerStateMachine::BEGIN_IMPL_FRAME_STATE_IDLE);
-
-  if (should_defer_begin_frame) {
-    begin_retro_frame_args_.push_back(args);
-    TRACE_EVENT_INSTANT0("cc", "Scheduler::BeginFrame deferred",
-                         TRACE_EVENT_SCOPE_THREAD);
-    // Queuing the frame counts as "using it", so we need to return true.
-  } else {
-    BeginImplFrameWithDeadline(args);
-  }
+  BeginImplFrameWithDeadline(args);
   return true;
 }
 
@@ -318,87 +309,47 @@ void Scheduler::OnDrawForCompositorFrameSink(bool resourceless_software_draw) {
   state_machine_.SetResourcelessSoftwareDraw(false);
 }
 
-// BeginRetroFrame is called for BeginFrames that we've deferred because
-// the scheduler was in the middle of processing a previous BeginFrame.
-void Scheduler::BeginRetroFrame() {
-  TRACE_EVENT0("cc,benchmark", "Scheduler::BeginRetroFrame");
-  DCHECK(!settings_.using_synchronous_renderer_compositor);
-  DCHECK(!begin_retro_frame_args_.empty());
-  DCHECK(!begin_retro_frame_task_.IsCancelled());
+void Scheduler::BeginImplFrameWithDeadline(const BeginFrameArgs& args) {
+  // The storage for |args| is owned by the missed begin frame task. Therefore
+  // save |args| before cancelling the task either here or in the deadline.
+  BeginFrameArgs adjusted_args = args;
+  // Cancel the missed begin frame task in case the BFS sends a begin frame
+  // before the missed frame task runs.
+  missed_begin_frame_task_.Cancel();
+
+  base::TimeTicks now = Now();
+
+  // Discard missed begin frames if they are too late.
+  if (adjusted_args.type == BeginFrameArgs::MISSED &&
+      now > adjusted_args.deadline) {
+    begin_frame_source_->DidFinishFrame(this, 0);
+    return;
+  }
+
+  // Run the previous deadline if any.
+  if (state_machine_.begin_impl_frame_state() ==
+      SchedulerStateMachine::BEGIN_IMPL_FRAME_STATE_INSIDE_BEGIN_FRAME) {
+    OnBeginImplFrameDeadline();
+    // We may not need begin frames any longer.
+    if (!observing_begin_frame_source_) {
+      begin_frame_source_->DidFinishFrame(this, 0);
+      return;
+    }
+  }
   DCHECK_EQ(state_machine_.begin_impl_frame_state(),
             SchedulerStateMachine::BEGIN_IMPL_FRAME_STATE_IDLE);
 
-  begin_retro_frame_task_.Cancel();
-
-  // Discard expired BeginRetroFrames
-  // Today, we should always end up with at most one un-expired BeginRetroFrame
-  // because deadlines will not be greater than the next frame time. We don't
-  // DCHECK though because some systems don't always have monotonic timestamps.
-  // TODO(brianderson): In the future, long deadlines could result in us not
-  // draining the queue if we don't catch up. If we consistently can't catch
-  // up, our fallback should be to lower our frame rate.
-  base::TimeTicks now = Now();
-
-  while (!begin_retro_frame_args_.empty()) {
-    const BeginFrameArgs& args = begin_retro_frame_args_.front();
-    base::TimeTicks expiration_time = args.deadline;
-    if (now <= expiration_time)
-      break;
-    TRACE_EVENT_INSTANT2(
-        "cc", "Scheduler::BeginRetroFrame discarding", TRACE_EVENT_SCOPE_THREAD,
-        "expiration_time - now", (expiration_time - now).InMillisecondsF(),
-        "BeginFrameArgs", begin_retro_frame_args_.front().AsValue());
-    begin_retro_frame_args_.pop_front();
-    if (begin_frame_source_)
-      begin_frame_source_->DidFinishFrame(this, begin_retro_frame_args_.size());
-  }
-
-  if (begin_retro_frame_args_.empty()) {
-    TRACE_EVENT_INSTANT0("cc", "Scheduler::BeginRetroFrames all expired",
-                         TRACE_EVENT_SCOPE_THREAD);
-  } else {
-    BeginFrameArgs front = begin_retro_frame_args_.front();
-    begin_retro_frame_args_.pop_front();
-    BeginImplFrameWithDeadline(front);
-  }
-}
-
-// There could be a race between the posted BeginRetroFrame and a new
-// BeginFrame arriving via the normal mechanism. Scheduler::BeginFrame
-// will check if there is a pending BeginRetroFrame to ensure we handle
-// BeginFrames in FIFO order.
-void Scheduler::PostBeginRetroFrameIfNeeded() {
-  TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("cc.debug.scheduler"),
-               "Scheduler::PostBeginRetroFrameIfNeeded", "state", AsValue());
-  if (!observing_begin_frame_source_)
-    return;
-
-  if (begin_retro_frame_args_.empty() || !begin_retro_frame_task_.IsCancelled())
-    return;
-
-  // begin_retro_frame_args_ should always be empty for the
-  // synchronous compositor.
-  DCHECK(!settings_.using_synchronous_renderer_compositor);
-
-  if (state_machine_.begin_impl_frame_state() !=
-      SchedulerStateMachine::BEGIN_IMPL_FRAME_STATE_IDLE)
-    return;
-
-  begin_retro_frame_task_.Reset(begin_retro_frame_closure_);
-
-  task_runner_->PostTask(FROM_HERE, begin_retro_frame_task_.callback());
-}
-
-void Scheduler::BeginImplFrameWithDeadline(const BeginFrameArgs& args) {
   bool main_thread_is_in_high_latency_mode =
       state_machine_.main_thread_missed_last_deadline();
   TRACE_EVENT2("cc,benchmark", "Scheduler::BeginImplFrame", "args",
-               args.AsValue(), "main_thread_missed_last_deadline",
+               adjusted_args.AsValue(), "main_thread_missed_last_deadline",
                main_thread_is_in_high_latency_mode);
   TRACE_COUNTER1(TRACE_DISABLED_BY_DEFAULT("cc.debug.scheduler"),
                  "MainThreadLatency", main_thread_is_in_high_latency_mode);
 
-  BeginFrameArgs adjusted_args = args;
+  DCHECK_EQ(state_machine_.begin_impl_frame_state(),
+            SchedulerStateMachine::BEGIN_IMPL_FRAME_STATE_IDLE);
+
   adjusted_args.deadline -= compositor_timing_history_->DrawDurationEstimate();
   adjusted_args.deadline -= kDeadlineFudgeFactor;
 
@@ -413,7 +364,7 @@ void Scheduler::BeginImplFrameWithDeadline(const BeginFrameArgs& args) {
       compositor_timing_history_->BeginMainFrameQueueDurationCriticalEstimate();
 
   state_machine_.SetCriticalBeginMainFrameToActivateIsFast(
-      bmf_to_activate_estimate_critical < args.interval);
+      bmf_to_activate_estimate_critical < adjusted_args.interval);
 
   // Update the BeginMainFrame args now that we know whether the main
   // thread will be on the critical path or not.
@@ -430,7 +381,7 @@ void Scheduler::BeginImplFrameWithDeadline(const BeginFrameArgs& args) {
 
   bool can_activate_before_deadline =
       CanBeginMainFrameAndActivateBeforeDeadline(adjusted_args,
-                                                 bmf_to_activate_estimate);
+                                                 bmf_to_activate_estimate, now);
 
   if (ShouldRecoverMainLatency(adjusted_args, can_activate_before_deadline)) {
     TRACE_EVENT_INSTANT0("cc", "SkipBeginMainFrameToReduceLatency",
@@ -441,7 +392,7 @@ void Scheduler::BeginImplFrameWithDeadline(const BeginFrameArgs& args) {
     TRACE_EVENT_INSTANT0("cc", "SkipBeginImplFrameToReduceLatency",
                          TRACE_EVENT_SCOPE_THREAD);
     if (begin_frame_source_)
-      begin_frame_source_->DidFinishFrame(this, begin_retro_frame_args_.size());
+      begin_frame_source_->DidFinishFrame(this, 0);
     return;
   }
 
@@ -470,7 +421,7 @@ void Scheduler::FinishImplFrame() {
 
   client_->DidFinishImplFrame();
   if (begin_frame_source_)
-    begin_frame_source_->DidFinishFrame(this, begin_retro_frame_args_.size());
+    begin_frame_source_->DidFinishFrame(this, 0);
   begin_impl_frame_tracker_.Finish();
 }
 
@@ -576,28 +527,28 @@ void Scheduler::OnBeginImplFrameDeadline() {
   FinishImplFrame();
 }
 
-void Scheduler::DrawAndSwapIfPossible() {
+void Scheduler::DrawIfPossible() {
   bool drawing_with_new_active_tree =
       state_machine_.active_tree_needs_first_draw();
   bool main_thread_missed_last_deadline =
       state_machine_.main_thread_missed_last_deadline();
   compositor_timing_history_->WillDraw();
   state_machine_.WillDraw();
-  DrawResult result = client_->ScheduledActionDrawAndSwapIfPossible();
+  DrawResult result = client_->ScheduledActionDrawIfPossible();
   state_machine_.DidDraw(result);
   compositor_timing_history_->DidDraw(
       drawing_with_new_active_tree, main_thread_missed_last_deadline,
       begin_impl_frame_tracker_.DangerousMethodCurrentOrLast().frame_time);
 }
 
-void Scheduler::DrawAndSwapForced() {
+void Scheduler::DrawForced() {
   bool drawing_with_new_active_tree =
       state_machine_.active_tree_needs_first_draw();
   bool main_thread_missed_last_deadline =
       state_machine_.main_thread_missed_last_deadline();
   compositor_timing_history_->WillDraw();
   state_machine_.WillDraw();
-  DrawResult result = client_->ScheduledActionDrawAndSwapForced();
+  DrawResult result = client_->ScheduledActionDrawForced();
   state_machine_.DidDraw(result);
   compositor_timing_history_->DidDraw(
       drawing_with_new_active_tree, main_thread_missed_last_deadline,
@@ -612,6 +563,10 @@ void Scheduler::SetDeferCommits(bool defer_commits) {
 }
 
 void Scheduler::ProcessScheduledActions() {
+  // Do not perform actions during compositor shutdown.
+  if (stopped_)
+    return;
+
   // We do not allow ProcessScheduledActions to be recursive.
   // The top-level call will iteratively execute the next action for us anyway.
   if (inside_process_scheduled_actions_)
@@ -649,16 +604,16 @@ void Scheduler::ProcessScheduledActions() {
         client_->ScheduledActionActivateSyncTree();
         compositor_timing_history_->DidActivate();
         break;
-      case SchedulerStateMachine::ACTION_DRAW_AND_SWAP_IF_POSSIBLE:
-        DrawAndSwapIfPossible();
+      case SchedulerStateMachine::ACTION_DRAW_IF_POSSIBLE:
+        DrawIfPossible();
         break;
-      case SchedulerStateMachine::ACTION_DRAW_AND_SWAP_FORCED:
-        DrawAndSwapForced();
+      case SchedulerStateMachine::ACTION_DRAW_FORCED:
+        DrawForced();
         break;
-      case SchedulerStateMachine::ACTION_DRAW_AND_SWAP_ABORT: {
+      case SchedulerStateMachine::ACTION_DRAW_ABORT: {
         // No action is actually performed, but this allows the state machine to
         // drain the pipeline without actually drawing.
-        state_machine_.AbortDrawAndSwap();
+        state_machine_.AbortDraw();
         compositor_timing_history_->DrawAborted();
         break;
       }
@@ -695,12 +650,10 @@ Scheduler::AsValue() const {
   state->BeginDictionary("scheduler_state");
   state->SetBoolean("observing_begin_frame_source",
                     observing_begin_frame_source_);
-  state->SetInteger("begin_retro_frame_args",
-                    static_cast<int>(begin_retro_frame_args_.size()));
-  state->SetBoolean("begin_retro_frame_task",
-                    !begin_retro_frame_task_.IsCancelled());
   state->SetBoolean("begin_impl_frame_deadline_task",
                     !begin_impl_frame_deadline_task_.IsCancelled());
+  state->SetBoolean("missed_begin_frame_task",
+                    !missed_begin_frame_task_.IsCancelled());
   state->SetString("inside_action",
                    SchedulerStateMachine::ActionToString(inside_action_));
 
@@ -762,7 +715,7 @@ bool Scheduler::ShouldRecoverImplLatency(
 
   // If we are swap throttled at the BeginFrame, that means the impl thread is
   // very likely in a high latency mode.
-  bool impl_thread_is_likely_high_latency = state_machine_.SwapThrottled();
+  bool impl_thread_is_likely_high_latency = state_machine_.IsDrawThrottled();
   if (!impl_thread_is_likely_high_latency)
     return false;
 
@@ -788,11 +741,11 @@ bool Scheduler::ShouldRecoverImplLatency(
 
 bool Scheduler::CanBeginMainFrameAndActivateBeforeDeadline(
     const BeginFrameArgs& args,
-    base::TimeDelta bmf_to_activate_estimate) const {
+    base::TimeDelta bmf_to_activate_estimate,
+    base::TimeTicks now) const {
   // Check if the main thread computation and commit can be finished before the
   // impl thread's deadline.
-  base::TimeTicks estimated_draw_time =
-      args.frame_time + bmf_to_activate_estimate;
+  base::TimeTicks estimated_draw_time = now + bmf_to_activate_estimate;
 
   return estimated_draw_time < args.deadline;
 }

@@ -34,12 +34,14 @@
 #include "platform/weborigin/SchemeRegistry.h"
 #include "platform/weborigin/SecurityPolicy.h"
 #include "platform/weborigin/URLSecurityOriginMap.h"
+#include "url/url_canon.h"
 #include "url/url_canon_ip.h"
 #include "wtf/HexNumber.h"
 #include "wtf/NotFound.h"
 #include "wtf/PtrUtil.h"
 #include "wtf/StdLibExtras.h"
 #include "wtf/text/StringBuilder.h"
+#include "wtf/text/StringUTF8Adaptor.h"
 #include <memory>
 
 namespace blink {
@@ -102,11 +104,7 @@ static bool shouldTreatAsUniqueOrigin(const KURL& url) {
       (relevantURL.protocolIsInHTTPFamily() || relevantURL.protocolIs("ftp")) &&
       relevantURL.host().isEmpty()));
 
-  // SchemeRegistry needs a lower case protocol because it uses HashMaps
-  // that assume the scheme has already been canonicalized.
-  String protocol = relevantURL.protocol().lower();
-
-  if (SchemeRegistry::shouldTreatURLSchemeAsNoAccess(protocol))
+  if (SchemeRegistry::shouldTreatURLSchemeAsNoAccess(relevantURL.protocol()))
     return true;
 
   // This is the common case.
@@ -114,8 +112,8 @@ static bool shouldTreatAsUniqueOrigin(const KURL& url) {
 }
 
 SecurityOrigin::SecurityOrigin(const KURL& url)
-    : m_protocol(url.protocol().isNull() ? "" : url.protocol().lower()),
-      m_host(url.host().isNull() ? "" : url.host().lower()),
+    : m_protocol(url.protocol()),
+      m_host(url.host()),
       m_port(url.port()),
       m_effectivePort(url.port() ? url.port()
                                  : defaultPortForProtocol(m_protocol)),
@@ -124,11 +122,20 @@ SecurityOrigin::SecurityOrigin(const KURL& url)
       m_domainWasSetInDOM(false),
       m_blockLocalAccessFromLocalOrigin(false),
       m_isUniqueOriginPotentiallyTrustworthy(false) {
+  if (m_protocol.isNull())
+    m_protocol = emptyString();
+  if (m_host.isNull())
+    m_host = emptyString();
+
   // Suborigins are serialized into the host, so extract it if necessary.
   String suboriginName;
   if (deserializeSuboriginAndProtocolAndHost(m_protocol, m_host, suboriginName,
-                                             m_protocol, m_host))
+                                             m_protocol, m_host)) {
+    if (!url.port())
+      m_effectivePort = defaultPortForProtocol(m_protocol);
+
     m_suborigin.setName(suboriginName);
+  }
 
   // document.domain starts as m_host, but can be set by the DOM.
   m_domain = m_host;
@@ -141,9 +148,9 @@ SecurityOrigin::SecurityOrigin(const KURL& url)
 }
 
 SecurityOrigin::SecurityOrigin()
-    : m_protocol(""),
-      m_host(""),
-      m_domain(""),
+    : m_protocol(emptyString()),
+      m_host(emptyString()),
+      m_domain(emptyString()),
       m_port(InvalidPort),
       m_effectivePort(InvalidPort),
       m_isUnique(true),
@@ -208,8 +215,7 @@ bool SecurityOrigin::isSecure(const KURL& url) {
                                     extractInnerURL(url).protocol()))
     return true;
 
-  if (SecurityPolicy::isOriginWhiteListedTrustworthy(
-          *SecurityOrigin::create(url).get()))
+  if (SecurityPolicy::isUrlWhiteListedTrustworthy(url))
     return true;
 
   return false;
@@ -319,8 +325,7 @@ bool SecurityOrigin::canDisplay(const KURL& url) const {
   if (m_universalAccess)
     return true;
 
-  String protocol = url.protocol().lower();
-
+  String protocol = url.protocol();
   if (SchemeRegistry::canDisplayOnlyIfCanRequest(protocol))
     return canRequest(url);
 
@@ -387,7 +392,9 @@ bool SecurityOrigin::isLocal() const {
 }
 
 bool SecurityOrigin::isLocalhost() const {
-  // TODO(mkwst): Update this to call into net::IsLocalhost.
+  // Note: net::isLocalhost has looser checks which allow uppercase hosts, as
+  // well as hosts like "a.localhost". The net code is also less optimized and
+  // slower (mainly string and vector allocations).
   if (m_host == "localhost")
     return true;
 
@@ -395,15 +402,15 @@ bool SecurityOrigin::isLocalhost() const {
     return true;
 
   // Test if m_host matches 127.0.0.1/8
-  ASSERT(m_host.containsOnlyASCII());
-  CString hostAscii = m_host.ascii();
+  DCHECK(m_host.containsOnlyASCII());
+  StringUTF8Adaptor utf8(m_host);
   Vector<uint8_t, 4> ipNumber;
   ipNumber.resize(4);
 
   int numComponents;
-  url::Component hostComponent(0, hostAscii.length());
+  url::Component hostComponent(0, utf8.length());
   url::CanonHostInfo::Family family = url::IPv4AddressToNumber(
-      hostAscii.data(), hostComponent, &(ipNumber)[0], &numComponents);
+      utf8.data(), hostComponent, &(ipNumber)[0], &numComponents);
   if (family != url::CanonHostInfo::IPV4)
     return false;
   return ipNumber[0] == 127;
@@ -459,9 +466,6 @@ bool SecurityOrigin::deserializeSuboriginAndProtocolAndHost(
     String& suboriginName,
     String& newProtocol,
     String& newHost) {
-  if (!RuntimeEnabledFeatures::suboriginsEnabled())
-    return false;
-
   String originalProtocol = oldProtocol;
   if (oldProtocol != "http-so" && oldProtocol != "https-so")
     return false;
@@ -527,6 +531,16 @@ PassRefPtr<SecurityOrigin> SecurityOrigin::create(const String& protocol,
   return create(KURL(KURL(), protocol + "://" + host + portPart + "/"));
 }
 
+PassRefPtr<SecurityOrigin> SecurityOrigin::create(const String& protocol,
+                                                  const String& host,
+                                                  int port,
+                                                  const String& suborigin) {
+  RefPtr<SecurityOrigin> origin = create(protocol, host, port);
+  if (!suborigin.isEmpty())
+    origin->m_suborigin.setName(suborigin);
+  return origin.release();
+}
+
 bool SecurityOrigin::isSameSchemeHostPort(const SecurityOrigin* other) const {
   if (this == other)
     return true;
@@ -586,6 +600,21 @@ void SecurityOrigin::setUniqueOriginIsPotentiallyTrustworthy(
     bool isUniqueOriginPotentiallyTrustworthy) {
   ASSERT(!isUniqueOriginPotentiallyTrustworthy || isUnique());
   m_isUniqueOriginPotentiallyTrustworthy = isUniqueOriginPotentiallyTrustworthy;
+}
+
+String SecurityOrigin::canonicalizeHost(const String& host, bool* success) {
+  url::Component outHost;
+  url::RawCanonOutputT<char> canonOutput;
+  if (host.is8Bit()) {
+    StringUTF8Adaptor utf8(host);
+    *success = url::CanonicalizeHost(
+        utf8.data(), url::Component(0, utf8.length()), &canonOutput, &outHost);
+  } else {
+    *success = url::CanonicalizeHost(host.characters16(),
+                                     url::Component(0, host.length()),
+                                     &canonOutput, &outHost);
+  }
+  return String::fromUTF8(canonOutput.data(), canonOutput.length());
 }
 
 }  // namespace blink

@@ -16,7 +16,6 @@
 #include "chrome/browser/ui/sync/one_click_signin_sync_starter.h"
 #include "chrome/common/features.h"
 #include "components/content_settings/core/common/content_settings_types.h"
-#include "components/security_state/security_state_model.h"
 #include "components/signin/core/browser/signin_header_helper.h"
 #include "components/translate/core/common/translate_errors.h"
 #include "ui/base/base_window.h"
@@ -58,6 +57,10 @@ class Rect;
 class Size;
 }
 
+namespace security_state {
+struct SecurityInfo;
+}  // namespace security_state
+
 namespace signin_metrics {
 enum class AccessPoint;
 }
@@ -67,6 +70,18 @@ class WebContentsModalDialogHost;
 }
 
 enum class ImeWarningBubblePermissionStatus;
+
+enum class ShowTranslateBubbleResult {
+  // The translate bubble was successfully shown.
+  SUCCESS,
+
+  // The various reasons for which the translate bubble could fail to be shown.
+  BROWSER_WINDOW_NOT_VALID,
+  BROWSER_WINDOW_MINIMIZED,
+  BROWSER_WINDOW_NOT_ACTIVE,
+  WEB_CONTENTS_NOT_ACTIVE,
+  EDITABLE_FIELD_IS_ACTIVE,
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 // BrowserWindow interface
@@ -139,7 +154,7 @@ class BrowserWindow : public ui::BaseWindow {
   // + or - in the app menu to change zoom).
   virtual void ZoomChangedForActiveTab(bool can_show_bubble) = 0;
 
-  // Windows and GTK remove the top controls in fullscreen, but Mac and Ash
+  // Windows and GTK remove the browser controls in fullscreen, but Mac and Ash
   // keep the controls in a slide-down panel.
   virtual bool ShouldHideUIForFullscreen() const = 0;
 
@@ -210,12 +225,6 @@ class BrowserWindow : public ui::BaseWindow {
   // Returns whether the tool bar is visible or not.
   virtual bool IsToolbarVisible() const = 0;
 
-  // Returns the rect where the resize corner should be drawn by the render
-  // widget host view (on top of what the renderer returns). We return an empty
-  // rect to identify that there shouldn't be a resize corner (in the cases
-  // where we take care of it ourselves at the browser level).
-  virtual gfx::Rect GetRootWindowResizerRect() const = 0;
-
   // Shows the Update Recommended dialog box.
   virtual void ShowUpdateChromeDialog() = 0;
 
@@ -248,7 +257,7 @@ class BrowserWindow : public ui::BaseWindow {
   //
   // |is_user_gesture| is true when the bubble is shown on the user's deliberate
   // action.
-  virtual void ShowTranslateBubble(
+  virtual ShowTranslateBubbleResult ShowTranslateBubble(
       content::WebContents* contents,
       translate::TranslateStep step,
       translate::TranslateErrors::Type error_type,
@@ -295,8 +304,7 @@ class BrowserWindow : public ui::BaseWindow {
       Profile* profile,
       content::WebContents* web_contents,
       const GURL& virtual_url,
-      const security_state::SecurityStateModel::SecurityInfo&
-          security_info) = 0;
+      const security_state::SecurityInfo& security_info) = 0;
 
   // Vivaldi version of ShowWebsiteSettings.  For Vivaldi the difference is more
   // than just the anchor (pos) as now the ShowWebsiteSettings (which called
@@ -308,7 +316,7 @@ class BrowserWindow : public ui::BaseWindow {
   virtual void VivaldiShowWebsiteSettingsAt(Profile* profile,
       content::WebContents* web_contents,
       const GURL& url,
-      const security_state::SecurityStateModel::SecurityInfo& security_info,
+      const security_state::SecurityInfo& security_info,
       gfx::Point pos) {}
 
   // Shows the app menu (for accessibility).

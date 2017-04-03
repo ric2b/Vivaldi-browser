@@ -8,23 +8,6 @@ import("//testing/test.gni")
 component("blink") {
   output_name = "media_blink"
 
-  deps = [
-    "//base",
-    "//cc",
-    "//cc/blink",
-    "//gpu",
-    "//media",
-    "//media:shared_memory_support",
-    "//net",
-    "//skia",
-    "//third_party/WebKit/public:blink",
-    "//ui/gfx",
-    "//ui/gfx/geometry",
-    "//url",
-  ]
-
-  defines = [ "MEDIA_BLINK_IMPLEMENTATION" ]
-
   sources = [
     "active_loader.cc",
     "active_loader.h",
@@ -87,6 +70,24 @@ component("blink") {
     "websourcebuffer_impl.h",
   ]
 
+  defines = [ "MEDIA_BLINK_IMPLEMENTATION" ]
+
+  deps = [
+    "//base",
+    "//cc",
+    "//cc/blink",
+    "//gpu",
+    "//media",
+    "//media:shared_memory_support",
+    "//net",
+    "//ppapi/features",
+    "//skia",
+    "//third_party/WebKit/public:blink",
+    "//ui/gfx",
+    "//ui/gfx/geometry",
+    "//url",
+  ]
+
   if (media_use_ffmpeg || !is_android) {
     sources += [
       "webmediaplayer_impl.cc",
@@ -113,6 +114,7 @@ test("media_blink_unittests") {
     "//media",
     "//media:shared_memory_support",
     "//media/base:test_support",
+    "//mojo/edk/system",
     "//net",
     "//testing/gmock",
     "//testing/gtest",
@@ -134,8 +136,8 @@ test("media_blink_unittests") {
     "interval_map_unittest.cc",
     "key_system_config_selector_unittest.cc",
     "lru_unittest.cc",
-    "mock_weburlloader.cc",
-    "mock_weburlloader.h",
+    "mock_webassociatedurlloader.cc",
+    "mock_webassociatedurlloader.h",
     "multibuffer_data_source_unittest.cc",
     "multibuffer_unittest.cc",
     "resource_multibuffer_data_provider_unittest.cc",

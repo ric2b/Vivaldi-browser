@@ -42,7 +42,7 @@
 #include "core/workers/WorkerGlobalScope.h"
 #include "core/workers/WorkerThread.h"
 #include "platform/CrossThreadFunctional.h"
-#include "public/platform/WebTaskRunner.h"
+#include "platform/WebTaskRunner.h"
 #include "wtf/Functional.h"
 #include "wtf/PtrUtil.h"
 #include <memory>
@@ -182,6 +182,7 @@ InProcessWorkerObjectProxy::InProcessWorkerObjectProxy(
     const WeakPtr<InProcessWorkerMessagingProxy>& messagingProxy)
     : m_messagingProxy(messagingProxy.get()),
       m_messagingProxyWeakPtr(messagingProxy),
+      m_defaultIntervalInSec(kDefaultIntervalInSec),
       m_nextIntervalInSec(kDefaultIntervalInSec),
       m_maxIntervalInSec(kMaxIntervalInSec) {}
 
@@ -210,7 +211,7 @@ void InProcessWorkerObjectProxy::checkPendingActivity(TimerBase*) {
 
     // Don't schedule a timer. It will be started again when a message event
     // is dispatched.
-    m_nextIntervalInSec = kDefaultIntervalInSec;
+    m_nextIntervalInSec = m_defaultIntervalInSec;
     return;
   }
 

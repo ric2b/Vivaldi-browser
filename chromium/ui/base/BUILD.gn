@@ -116,8 +116,6 @@ component("base") {
     "cocoa/menu_controller.mm",
     "cocoa/nib_loading.h",
     "cocoa/nib_loading.mm",
-    "cocoa/nscolor_additions.h",
-    "cocoa/nscolor_additions.mm",
     "cocoa/nsgraphics_context_additions.h",
     "cocoa/nsgraphics_context_additions.mm",
     "cocoa/nsview_additions.h",
@@ -130,6 +128,7 @@ component("base") {
     "cocoa/three_part_image.mm",
     "cocoa/tool_tip_base_view.h",
     "cocoa/tool_tip_base_view.mm",
+    "cocoa/touch_bar_forward_declarations.h",
     "cocoa/tracking_area.h",
     "cocoa/tracking_area.mm",
     "cocoa/underlay_opengl_hosting_window.h",
@@ -597,7 +596,7 @@ component("base") {
 
   # Aura clipboard.
   if (use_aura) {
-    if (use_clipboard_aurax11) {
+    if (use_x11 && is_desktop_linux) {
       sources += [
         "clipboard/clipboard_aurax11.cc",
         "clipboard/clipboard_aurax11.h",
@@ -627,6 +626,7 @@ static_library("test_support") {
     "test/ui_controls_internal_win.h",
     "test/ui_controls_mac.mm",
     "test/ui_controls_win.cc",
+    "test/user_interactive_test_case.h",
   ]
 
   if (!is_ios) {
@@ -653,6 +653,12 @@ static_library("test_support") {
       "test/ios/ui_view_test_utils.h",
       "test/ios/ui_view_test_utils.mm",
     ]
+  }
+
+  if (is_mac) {
+    sources += [ "test/user_interactive_test_case_mac.mm" ]
+  } else {
+    sources += [ "test/user_interactive_test_case.cc" ]
   }
 
   public_deps = [
@@ -772,7 +778,6 @@ test("ui_base_unittests") {
       "cocoa/fullscreen_window_manager_unittest.mm",
       "cocoa/hover_image_button_unittest.mm",
       "cocoa/menu_controller_unittest.mm",
-      "cocoa/nscolor_additions_unittest.mm",
       "cocoa/nsgraphics_context_additions_unittest.mm",
       "cocoa/nsview_additions_unittest.mm",
       "cocoa/three_part_image_unittest.mm",

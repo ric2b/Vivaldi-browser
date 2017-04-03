@@ -31,6 +31,7 @@
 #ifndef ScopedPersistent_h
 #define ScopedPersistent_h
 
+#include "bindings/core/v8/ScriptWrappableVisitor.h"
 #include "wtf/Allocator.h"
 #include "wtf/Noncopyable.h"
 #include <memory>
@@ -55,7 +56,7 @@ class ScopedPersistent {
       m_handle.Reset(isolate, local);
   }
 
-  ~ScopedPersistent() { clear(); }
+  virtual ~ScopedPersistent() { clear(); }
 
   ALWAYS_INLINE v8::Local<T> newLocal(v8::Isolate* isolate) const {
     return v8::Local<T>::New(isolate, m_handle);
@@ -79,7 +80,7 @@ class ScopedPersistent {
   bool isEmpty() const { return m_handle.IsEmpty(); }
   bool isWeak() const { return m_handle.IsWeak(); }
 
-  void set(v8::Isolate* isolate, v8::Local<T> handle) {
+  virtual void set(v8::Isolate* isolate, v8::Local<T> handle) {
     m_handle.Reset(isolate, handle);
   }
 

@@ -21,6 +21,10 @@ namespace base {
 class TimeTicks;
 }
 
+namespace update_client {
+enum class Error;
+}
+
 namespace component_updater {
 
 class OnDemandUpdater;
@@ -57,8 +61,7 @@ class CrxUpdateService : public ComponentUpdateService,
   void OnEvent(Events event, const std::string& id) override;
 
   // Overrides for OnDemandUpdater.
-  void OnDemandUpdate(const std::string& id,
-                      CompletionCallback callback) override;
+  void OnDemandUpdate(const std::string& id, const Callback& callback) override;
 
  private:
   void Start();
@@ -66,8 +69,7 @@ class CrxUpdateService : public ComponentUpdateService,
 
   bool CheckForUpdates();
 
-  void OnDemandUpdateInternal(const std::string& id,
-                              CompletionCallback callback);
+  void OnDemandUpdateInternal(const std::string& id, const Callback& callback);
   bool OnDemandUpdateWithCooldown(const std::string& id);
 
   bool DoUnregisterComponent(const CrxComponent& component);
@@ -78,16 +80,10 @@ class CrxUpdateService : public ComponentUpdateService,
 
   void OnUpdate(const std::vector<std::string>& ids,
                 std::vector<CrxComponent>* components);
-  void OnUpdateComplete(CompletionCallback callback,
+  void OnUpdateComplete(Callback callback,
                         const base::TimeTicks& start_time,
-                        int error);
+                        update_client::Error error);
 
-  // Returns the map of installer attributes for the recovery component
-  // installer. This data corresponds to the Omaha updater state and it is
-  // serialized as part of the update check for the recovery component.
-  update_client::InstallerAttributes
-  GetInstallerAttributesForRecoveryComponentInstaller(
-      const CrxComponent& crx_component) const;
   base::ThreadChecker thread_checker_;
 
   scoped_refptr<Configurator> config_;

@@ -100,12 +100,11 @@ class CryptoTestUtils {
                                      const QuicServerId& server_id,
                                      const FakeClientOptions& options);
 
-  // SetupCryptoServerConfigForTest configures |config| and |crypto_config|
+  // SetupCryptoServerConfigForTest configures |crypto_config|
   // with sensible defaults for testing.
   static void SetupCryptoServerConfigForTest(
       const QuicClock* clock,
       QuicRandom* rand,
-      QuicConfig* config,
       QuicCryptoServerConfig* crypto_config,
       const FakeServerOptions& options);
 
@@ -219,7 +218,7 @@ class CryptoTestUtils {
                                IPEndPoint client_addr,
                                QuicVersion version,
                                const QuicClock* clock,
-                               QuicCryptoProof* proof,
+                               scoped_refptr<QuicCryptoProof> proof,
                                QuicCompressedCertsCache* compressed_certs_cache,
                                CryptoHandshakeMessage* out);
 

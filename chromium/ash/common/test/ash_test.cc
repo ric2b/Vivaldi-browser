@@ -4,11 +4,14 @@
 
 #include "ash/common/test/ash_test.h"
 
+#include "ash/common/shelf/wm_shelf.h"
+#include "ash/common/system/status_area_widget.h"
 #include "ash/common/test/ash_test_impl.h"
+#include "ash/common/test/test_session_state_delegate.h"
+#include "ash/common/test/test_system_tray_delegate.h"
 #include "ash/common/wm_root_window_controller.h"
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
-#include "ash/test/test_session_state_delegate.h"
 #include "base/run_loop.h"
 #include "ui/compositor/layer_type.h"
 #include "ui/display/display.h"
@@ -31,6 +34,17 @@ WmShelf* AshTest::GetPrimaryShelf() {
       ->GetPrimaryRootWindow()
       ->GetRootWindowController()
       ->GetShelf();
+}
+
+// static
+SystemTray* AshTest::GetPrimarySystemTray() {
+  return GetPrimaryShelf()->GetStatusAreaWidget()->system_tray();
+}
+
+// static
+test::TestSystemTrayDelegate* AshTest::GetSystemTrayDelegate() {
+  return static_cast<test::TestSystemTrayDelegate*>(
+      WmShell::Get()->system_tray_delegate());
 }
 
 bool AshTest::SupportsMultipleDisplays() const {
@@ -65,6 +79,26 @@ std::unique_ptr<WindowOwner> AshTest::CreateChildWindow(WmWindow* parent,
   parent->AddChild(window_owner->window());
   window_owner->window()->Show();
   return window_owner;
+}
+
+// static
+std::unique_ptr<views::Widget> AshTest::CreateTestWidget(
+    const gfx::Rect& bounds,
+    views::WidgetDelegate* delegate,
+    int container_id) {
+  std::unique_ptr<views::Widget> widget(new views::Widget);
+  views::Widget::InitParams params;
+  params.delegate = delegate;
+  params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
+  params.bounds = bounds;
+  WmShell::Get()
+      ->GetPrimaryRootWindow()
+      ->GetRootWindowController()
+      ->ConfigureWidgetInitParamsForContainer(widget.get(), container_id,
+                                              &params);
+  widget->Init(params);
+  widget->Show();
+  return widget;
 }
 
 display::Display AshTest::GetSecondaryDisplay() {

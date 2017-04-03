@@ -118,6 +118,14 @@ enum LatencyComponentType {
       INPUT_EVENT_LATENCY_TERMINATED_SWAP_FAILED_COMPONENT,
 };
 
+enum SourceEventType {
+  UNKNOWN,
+  WHEEL,
+  TOUCH,
+  OTHER,
+  SOURCE_EVENT_TYPE_LAST = OTHER,
+};
+
 class EVENTS_BASE_EXPORT LatencyInfo {
  public:
   struct LatencyComponent {
@@ -129,6 +137,10 @@ class EVENTS_BASE_EXPORT LatencyInfo {
     base::TimeTicks event_time;
     // Count of events that happened in this component
     uint32_t event_count;
+    // Time of the oldest event that happened in this component.
+    base::TimeTicks first_event_time;
+    // Time of the most recent event that happened in this component.
+    base::TimeTicks last_event_time;
   };
 
   // Empirically determined constant based on a typical scroll sequence.
@@ -144,6 +156,7 @@ class EVENTS_BASE_EXPORT LatencyInfo {
 
   LatencyInfo();
   LatencyInfo(const LatencyInfo& other);
+  LatencyInfo(SourceEventType type);
   ~LatencyInfo();
 
   // For test only.
@@ -205,6 +218,13 @@ class EVENTS_BASE_EXPORT LatencyInfo {
 
   const LatencyMap& latency_components() const { return latency_components_; }
 
+  const SourceEventType& source_event_type() const {
+    return source_event_type_;
+  }
+  void set_source_event_type(SourceEventType type) {
+    source_event_type_ = type;
+  }
+
   bool terminated() const { return terminated_; }
   void set_coalesced() { coalesced_ = true; }
   bool coalesced() const { return coalesced_; }
@@ -240,6 +260,8 @@ class EVENTS_BASE_EXPORT LatencyInfo {
   bool coalesced_;
   // Whether a terminal component has been added.
   bool terminated_;
+  // Stores the type of the first source event.
+  SourceEventType source_event_type_;
 
 #if !defined(OS_IOS)
   friend struct IPC::ParamTraits<ui::LatencyInfo>;

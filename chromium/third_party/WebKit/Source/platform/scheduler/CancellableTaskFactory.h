@@ -6,8 +6,8 @@
 #define CancellableTaskFactory_h
 
 #include "platform/PlatformExport.h"
+#include "platform/WebTaskRunner.h"
 #include "platform/heap/Handle.h"
-#include "public/platform/WebTaskRunner.h"
 #include "wtf/Allocator.h"
 #include "wtf/Functional.h"
 #include "wtf/Noncopyable.h"
@@ -16,28 +16,40 @@
 #include <memory>
 #include <type_traits>
 
+// WebTaskRunner::postCancellableTask will replace CancellableTaskFactory.
+// Use postCancellableTask in new code.
+// Example: For |task_runner| and |foo| below.
+//   WebTaskRunner* task_runner;
+//   Foo* foo;
+//
+//   CancellableTaskFactory factory(foo, &Foo::bar);
+//   task_runner->postTask(BLINK_FROM_HERE, factory.cancelAndCreate());
+//   factory.cancel();
+//
+// Above is equivalent to below:
+//
+//   std::unique_ptr<WTF::Closure> task =
+//       WTF::bind(wrapPersistent(foo), &Foo::bar);
+//   TaskHandle handle =
+//       task_runner->postCancellableTask(BLINK_FROM_HERE, std::move(task));
+//   handle.cancel();
 namespace blink {
-
-class TraceLocation;
 
 class PLATFORM_EXPORT CancellableTaskFactory {
   WTF_MAKE_NONCOPYABLE(CancellableTaskFactory);
   USING_FAST_MALLOC(CancellableTaskFactory);
 
  public:
-  // A pair of mutually exclusive factory methods are provided for constructing
-  // a CancellableTaskFactory, one for when a Oilpan heap object owns a
-  // CancellableTaskFactory, and one when that owning object isn't controlled
-  // by Oilpan.
+  // As WTF::Closure objects are off-heap, we have to construct the closure in
+  // such a manner that it doesn't end up referring back to the owning heap
+  // object with a strong Persistent<> GC root reference. If we do, this will
+  // create a heap <-> off-heap cycle and leak, the owning object can never be
+  // GCed. Instead, the closure will keep an off-heap persistent reference of
+  // the weak, which will refer back to the owner heap object safely (but
+  // weakly.)
   //
-  // In the Oilpan case, as WTF::Closure objects are off-heap, we have to
-  // construct the closure in such a manner that it doesn't end up referring
-  // back to the owning heap object with a strong Persistent<> GC root
-  // reference. If we do, this will create a heap <-> off-heap cycle and leak,
-  // the owning object can never be GCed. Instead, the closure will keep an
-  // off-heap persistent reference of the weak, which will refer back to the
-  // owner heap object safely (but weakly.)
-  //
+  // DEPRECATED: Please use WebTaskRunner::postCancellableTask instead.
+  // (https://crbug.com/665285)
   template <typename T>
   static std::unique_ptr<CancellableTaskFactory> create(
       T* thisObject,
@@ -46,16 +58,6 @@ class PLATFORM_EXPORT CancellableTaskFactory {
           nullptr) {
     return wrapUnique(new CancellableTaskFactory(
         WTF::bind(method, wrapWeakPersistent(thisObject))));
-  }
-
-  template <typename T>
-  static std::unique_ptr<CancellableTaskFactory> create(
-      T* thisObject,
-      void (T::*method)(),
-      typename std::enable_if<!IsGarbageCollectedType<T>::value>::type* =
-          nullptr) {
-    return wrapUnique(new CancellableTaskFactory(
-        WTF::bind(method, WTF::unretained(thisObject))));
   }
 
   bool isPending() const { return m_weakPtrFactory.hasWeakPtrs(); }

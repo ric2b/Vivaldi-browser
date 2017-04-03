@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "base/memory/free_deleter.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/sha1.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -78,6 +79,8 @@ int MapSecurityError(SECURITY_STATUS err) {
       return ERR_CERT_COMMON_NAME_INVALID;
     case SEC_E_UNTRUSTED_ROOT:  // Schannel
     case CERT_E_UNTRUSTEDROOT:  // CryptoAPI
+    case TRUST_E_CERT_SIGNATURE:  // CryptoAPI. Caused by weak crypto or bad
+                                  // signatures, but not differentiable.
       return ERR_CERT_AUTHORITY_INVALID;
     case SEC_E_CERT_EXPIRED:  // Schannel
     case CERT_E_EXPIRED:  // CryptoAPI
@@ -283,8 +286,44 @@ bool IsIssuedByKnownRoot(PCCERT_CHAIN_CONTEXT chain_context) {
   PCCERT_CONTEXT cert = element[num_elements - 1]->pCertContext;
 
   SHA256HashValue hash = X509Certificate::CalculateFingerprint256(cert);
-  return IsSHA256HashInSortedArray(hash, &kKnownRootCertSHA256Hashes[0][0],
-                                   sizeof(kKnownRootCertSHA256Hashes));
+  bool is_builtin =
+      IsSHA256HashInSortedArray(hash, &kKnownRootCertSHA256Hashes[0][0],
+                                sizeof(kKnownRootCertSHA256Hashes));
+
+  // Test to see if the use of a built-in set of known roots on Windows can be
+  // replaced with using AuthRoot's SHA-256 property. On any system other than
+  // a fresh RTM with no AuthRoot updates, this property should always exist for
+  // roots delivered via AuthRoot.stl, but should not exist on any manually or
+  // administratively deployed roots.
+  BYTE hash_prop[32] = {0};
+  DWORD size = sizeof(hash_prop);
+  bool found_property =
+      CertGetCertificateContextProperty(
+          cert, CERT_AUTH_ROOT_SHA256_HASH_PROP_ID, &hash_prop, &size) &&
+      size == sizeof(hash_prop);
+
+  enum BuiltinStatus {
+    BUILT_IN_PROPERTY_NOT_FOUND_BUILTIN_NOT_SET = 0,
+    BUILT_IN_PROPERTY_NOT_FOUND_BUILTIN_SET = 1,
+    BUILT_IN_PROPERTY_FOUND_BUILTIN_NOT_SET = 2,
+    BUILT_IN_PROPERTY_FOUND_BUILTIN_SET = 3,
+    BUILT_IN_MAX_VALUE,
+  } status;
+  if (!found_property && !is_builtin) {
+    status = BUILT_IN_PROPERTY_NOT_FOUND_BUILTIN_NOT_SET;
+  } else if (!found_property && is_builtin) {
+    status = BUILT_IN_PROPERTY_NOT_FOUND_BUILTIN_SET;
+  } else if (found_property && !is_builtin) {
+    status = BUILT_IN_PROPERTY_FOUND_BUILTIN_NOT_SET;
+  } else if (found_property && is_builtin) {
+    status = BUILT_IN_PROPERTY_FOUND_BUILTIN_SET;
+  } else {
+    status = BUILT_IN_MAX_VALUE;
+  }
+  UMA_HISTOGRAM_ENUMERATION("Net.SSL_AuthRootConsistency", status,
+                            BUILT_IN_MAX_VALUE);
+
+  return is_builtin;
 }
 
 // Saves some information about the certificate chain |chain_context| in
@@ -974,16 +1013,68 @@ int CertVerifyProcWin::VerifyInternal(
         CERT_SET_PROPERTY_IGNORE_PERSIST_ERROR_FLAG, &ocsp_response_blob);
   }
 
+  CERT_STRONG_SIGN_SERIALIZED_INFO strong_signed_info;
+  memset(&strong_signed_info, 0, sizeof(strong_signed_info));
+  strong_signed_info.dwFlags = 0;  // Don't check OCSP or CRL signatures.
+
+  // Note that the following two configurations result in disabling support for
+  // any CNG-added algorithms, which may result in some disruption for internal
+  // PKI operations that use national forms of crypto (e.g. GOST). However, the
+  // fallback mechanism for this (to support SHA-1 chains) will re-enable them,
+  // so they should continue to work - just with added latency.
+  wchar_t hash_algs[] =
+      L"RSA/SHA256;RSA/SHA384;RSA/SHA512;"
+      L"ECDSA/SHA256;ECDSA/SHA384;ECDSA/SHA512";
+  strong_signed_info.pwszCNGSignHashAlgids = hash_algs;
+
+  // RSA-1024 bit support is intentionally enabled here. More investigation is
+  // needed to determine if setting CERT_STRONG_SIGN_DISABLE_END_CHECK_FLAG in
+  // the dwStrongSignFlags of |chain_para| would allow the ability to disable
+  // support for intermediates/roots < 2048-bits, while still ensuring that
+  // end-entity certs signed with SHA-1 are flagged/rejected.
+  wchar_t key_sizes[] = L"RSA/1024;ECDSA/256";
+  strong_signed_info.pwszCNGPubKeyMinBitLengths = key_sizes;
+
+  CERT_STRONG_SIGN_PARA strong_sign_params;
+  memset(&strong_sign_params, 0, sizeof(strong_sign_params));
+  strong_sign_params.cbSize = sizeof(strong_sign_params);
+  strong_sign_params.dwInfoChoice = CERT_STRONG_SIGN_SERIALIZED_INFO_CHOICE;
+  strong_sign_params.pSerializedInfo = &strong_signed_info;
+
+  chain_para.dwStrongSignFlags = 0;
+  chain_para.pStrongSignPara = &strong_sign_params;
+
   PCCERT_CHAIN_CONTEXT chain_context = nullptr;
-  if (!CertGetCertificateChain(
-           chain_engine,
-           cert_list.get(),
-           NULL,  // current system time
-           cert_list->hCertStore,
-           &chain_para,
-           chain_flags,
-           NULL,  // reserved
-           &chain_context)) {
+
+  // First, try to verify with strong signing enabled. If this fails, or if the
+  // chain is rejected, then clear it from |chain_para| so that all subsequent
+  // calls will use the fallback path.
+  BOOL chain_result =
+      CertGetCertificateChain(chain_engine, cert_list.get(),
+                              NULL,  // current system time
+                              cert_list->hCertStore, &chain_para, chain_flags,
+                              NULL,  // reserved
+                              &chain_context);
+  if (chain_result && chain_context &&
+      (chain_context->TrustStatus.dwErrorStatus &
+       (CERT_TRUST_HAS_WEAK_SIGNATURE | CERT_TRUST_IS_NOT_SIGNATURE_VALID))) {
+    // The attempt to verify with strong-sign (only SHA-2) failed, so fall back
+    // to disabling it. This will allow SHA-1 chains to be returned, which will
+    // then be subsequently signalled as weak if necessary.
+    CertFreeCertificateChain(chain_context);
+    chain_context = nullptr;
+
+    chain_para.pStrongSignPara = nullptr;
+    chain_para.dwStrongSignFlags = 0;
+    chain_result =
+        CertGetCertificateChain(chain_engine, cert_list.get(),
+                                NULL,  // current system time
+                                cert_list->hCertStore, &chain_para, chain_flags,
+                                NULL,  // reserved
+                                &chain_context);
+  }
+
+  if (!chain_result) {
     verify_result->cert_status |= CERT_STATUS_INVALID;
     return MapSecurityError(GetLastError());
   }

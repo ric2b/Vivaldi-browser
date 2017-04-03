@@ -70,7 +70,9 @@ class PermissionRequestManager
   // at which time the caller is free to delete the request.
   void CancelRequest(PermissionRequest* request);
 
-  // Hides the bubble.
+  // Temporarily hides the bubble, and destroys the prompt UI surface. Any
+  // existing requests will be reshown when DisplayPendingRequests is called
+  // (e.g. when switching tabs away and back to a page with a prompt).
   void HideBubble();
 
   // Will show a permission bubble if there is a pending permission request on
@@ -83,6 +85,10 @@ class PermissionRequestManager
   // True if a permission bubble is currently visible.
   // TODO(hcarmona): Remove this as part of the bubble API work.
   bool IsBubbleVisible();
+
+  // Whether PermissionRequestManager is reused on Android, instead of
+  // PermissionQueueController.
+  static bool IsEnabled();
 
   // Get the native window of the bubble.
   // TODO(hcarmona): Remove this as part of the bubble API work.

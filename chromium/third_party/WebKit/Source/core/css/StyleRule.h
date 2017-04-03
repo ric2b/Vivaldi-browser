@@ -83,7 +83,7 @@ class CORE_EXPORT StyleRuleBase
 
  protected:
   StyleRuleBase(RuleType type) : m_type(type) {}
-  StyleRuleBase(const StyleRuleBase& o) : m_type(o.m_type) {}
+  StyleRuleBase(const StyleRuleBase& rule) : m_type(rule.m_type) {}
 
  private:
   CSSRule* createCSSOMWrapper(CSSStyleSheet* parentSheet,
@@ -99,11 +99,15 @@ class CORE_EXPORT StyleRule : public StyleRuleBase {
                            StylePropertySet* properties) {
     return new StyleRule(std::move(selectorList), properties);
   }
+  static StyleRule* createLazy(CSSSelectorList selectorList,
+                               CSSLazyPropertyParser* lazyPropertyParser) {
+    return new StyleRule(std::move(selectorList), lazyPropertyParser);
+  }
 
   ~StyleRule();
 
   const CSSSelectorList& selectorList() const { return m_selectorList; }
-  const StylePropertySet& properties() const { return *m_properties; }
+  const StylePropertySet& properties() const;
   MutableStylePropertySet& mutableProperties();
 
   void wrapperAdoptSelectorList(CSSSelectorList selectors) {
@@ -114,14 +118,34 @@ class CORE_EXPORT StyleRule : public StyleRuleBase {
 
   static unsigned averageSizeInBytes();
 
+  // Helper methods to avoid parsing lazy properties when not needed.
+  bool propertiesHaveFailedOrCanceledSubresources() const;
+  bool shouldConsiderForMatchingRules(bool includeEmptyRules) const;
+
   DECLARE_TRACE_AFTER_DISPATCH();
 
  private:
+  friend class CSSLazyParsingTest;
+  bool hasParsedProperties() const;
+
   StyleRule(CSSSelectorList, StylePropertySet*);
+  StyleRule(CSSSelectorList, CSSLazyPropertyParser*);
   StyleRule(const StyleRule&);
 
-  Member<StylePropertySet> m_properties;  // Cannot be null.
   CSSSelectorList m_selectorList;
+  mutable Member<StylePropertySet> m_properties;
+  mutable Member<CSSLazyPropertyParser> m_lazyPropertyParser;
+
+  // Whether or not we should consider this for matching rules. Usually we try
+  // to avoid considering empty property sets, as an optimization. This is
+  // not possible for lazy properties, which always need to be considered. The
+  // lazy parser does its best to avoid lazy parsing for properties that look
+  // empty due to lack of tokens.
+  enum ConsiderForMatching {
+    AlwaysConsider,
+    ConsiderIfNonEmpty,
+  };
+  mutable ConsiderForMatching m_shouldConsiderForMatchingRules;
 };
 
 class StyleRuleFontFace : public StyleRuleBase {
@@ -176,7 +200,7 @@ class StyleRulePage : public StyleRuleBase {
   CSSSelectorList m_selectorList;
 };
 
-class StyleRuleGroup : public StyleRuleBase {
+class CORE_EXPORT StyleRuleGroup : public StyleRuleBase {
  public:
   const HeapVector<Member<StyleRuleBase>>& childRules() const {
     return m_childRules;
@@ -195,7 +219,24 @@ class StyleRuleGroup : public StyleRuleBase {
   HeapVector<Member<StyleRuleBase>> m_childRules;
 };
 
-class StyleRuleMedia : public StyleRuleGroup {
+class CORE_EXPORT StyleRuleCondition : public StyleRuleGroup {
+ public:
+  String conditionText() const { return m_conditionText; }
+
+  DEFINE_INLINE_TRACE_AFTER_DISPATCH() {
+    StyleRuleGroup::traceAfterDispatch(visitor);
+  }
+
+ protected:
+  StyleRuleCondition(RuleType, HeapVector<Member<StyleRuleBase>>& adoptRule);
+  StyleRuleCondition(RuleType,
+                     const String& conditionText,
+                     HeapVector<Member<StyleRuleBase>>& adoptRule);
+  StyleRuleCondition(const StyleRuleCondition&);
+  String m_conditionText;
+};
+
+class CORE_EXPORT StyleRuleMedia : public StyleRuleCondition {
  public:
   static StyleRuleMedia* create(MediaQuerySet* media,
                                 HeapVector<Member<StyleRuleBase>>& adoptRules) {
@@ -215,7 +256,7 @@ class StyleRuleMedia : public StyleRuleGroup {
   Member<MediaQuerySet> m_mediaQueries;
 };
 
-class StyleRuleSupports : public StyleRuleGroup {
+class StyleRuleSupports : public StyleRuleCondition {
  public:
   static StyleRuleSupports* create(
       const String& conditionText,
@@ -225,12 +266,11 @@ class StyleRuleSupports : public StyleRuleGroup {
                                  adoptRules);
   }
 
-  String conditionText() const { return m_conditionText; }
   bool conditionIsSupported() const { return m_conditionIsSupported; }
   StyleRuleSupports* copy() const { return new StyleRuleSupports(*this); }
 
   DEFINE_INLINE_TRACE_AFTER_DISPATCH() {
-    StyleRuleGroup::traceAfterDispatch(visitor);
+    StyleRuleCondition::traceAfterDispatch(visitor);
   }
 
  private:

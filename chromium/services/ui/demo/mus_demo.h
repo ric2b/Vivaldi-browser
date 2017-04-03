@@ -14,10 +14,11 @@
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/timer/timer.h"
-#include "services/shell/public/cpp/service.h"
+#include "services/service_manager/public/cpp/service.h"
 #include "services/ui/public/cpp/window_manager_delegate.h"
 #include "services/ui/public/cpp/window_tree_client_delegate.h"
 #include "third_party/skia/include/core/SkBitmap.h"
+#include "ui/display/screen_base.h"
 
 namespace ui {
 class BitmapUploader;
@@ -25,10 +26,10 @@ class GpuService;
 
 namespace demo {
 
-// A simple MUS Demo mojo app. This app connects to the mojo:ui, creates a new
-// window and draws a spinning square in the center of the window. Provides a
-// simple way to demonstrate that the graphic stack works as intended.
-class MusDemo : public shell::Service,
+// A simple MUS Demo service. This service connects to the service:ui, creates a
+// new window and draws a spinning square in the center of the window. Provides
+// a simple way to demonstrate that the graphic stack works as intended.
+class MusDemo : public service_manager::Service,
                 public WindowTreeClientDelegate,
                 public WindowManagerDelegate {
  public:
@@ -36,10 +37,10 @@ class MusDemo : public shell::Service,
   ~MusDemo() override;
 
  private:
-  // shell::Service:
-  void OnStart(const shell::Identity& identity) override;
-  bool OnConnect(const shell::Identity& remote_identity,
-                 shell::InterfaceRegistry* registry) override;
+  // service_manager::Service:
+  void OnStart() override;
+  bool OnConnect(const service_manager::ServiceInfo& remote_info,
+                 service_manager::InterfaceRegistry* registry) override;
 
   // WindowTreeClientDelegate:
   void OnEmbed(Window* root) override;
@@ -61,6 +62,7 @@ class MusDemo : public shell::Service,
                                   bool janky) override;
   void OnWmNewDisplay(Window* window, const display::Display& display) override;
   void OnWmDisplayRemoved(ui::Window* window) override;
+  void OnWmDisplayModified(const display::Display& display) override;
   void OnWmPerformMoveLoop(Window* window,
                            mojom::MoveLoopSource source,
                            const gfx::Point& cursor_location,
@@ -77,6 +79,9 @@ class MusDemo : public shell::Service,
   std::unique_ptr<WindowTreeClient> window_tree_client_;
   std::unique_ptr<GpuService> gpu_service_;
 
+  // Dummy screen required to be the screen instance.
+  std::unique_ptr<display::ScreenBase> screen_;
+
   // Used to send frames to mus.
   std::unique_ptr<BitmapUploader> uploader_;
 
@@ -88,6 +93,9 @@ class MusDemo : public shell::Service,
 
   // Current rotation angle for drawing.
   double angle_ = 0.0;
+
+  // Last time a frame was drawn.
+  base::TimeTicks last_draw_frame_time_;
 
   DISALLOW_COPY_AND_ASSIGN(MusDemo);
 };

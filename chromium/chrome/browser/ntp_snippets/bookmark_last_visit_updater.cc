@@ -4,10 +4,24 @@
 
 #include "chrome/browser/ntp_snippets/bookmark_last_visit_updater.h"
 
+#include "chrome/common/features.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_node.h"
 #include "components/ntp_snippets/bookmarks/bookmark_last_visit_utils.h"
+#include "content/public/browser/browser_context.h"
 #include "content/public/browser/navigation_handle.h"
+
+namespace {
+
+bool IsMobilePlatform() {
+#if BUILDFLAG(ANDROID_JAVA_UI)  // There are no tab helpers on iOS.
+  return true;
+#else
+  return false;
+#endif
+}
+
+}  // namespace
 
 DEFINE_WEB_CONTENTS_USER_DATA_KEY(BookmarkLastVisitUpdater);
 
@@ -16,9 +30,15 @@ BookmarkLastVisitUpdater::~BookmarkLastVisitUpdater() {
 }
 
 // static
-void BookmarkLastVisitUpdater::CreateForWebContentsWithBookmarkModel(
+void BookmarkLastVisitUpdater::MaybeCreateForWebContentsWithBookmarkModel(
     content::WebContents* web_contents,
     bookmarks::BookmarkModel* bookmark_model) {
+  // Do not create the helper for missing |bookmark_model| (in some unit-tests)
+  // or for incognito profiles where tracking bookmark visits is not desired.
+  content::BrowserContext* browser_context = web_contents->GetBrowserContext();
+  if (!bookmark_model || browser_context->IsOffTheRecord()) {
+    return;
+  }
   web_contents->SetUserData(UserDataKey(), new BookmarkLastVisitUpdater(
                                                web_contents, bookmark_model));
 }
@@ -29,7 +49,8 @@ BookmarkLastVisitUpdater::BookmarkLastVisitUpdater(
     : content::WebContentsObserver(web_contents),
       bookmark_model_(bookmark_model),
       web_contents_(web_contents) {
-  bookmark_model->AddObserver(this);
+  DCHECK(bookmark_model_);
+  bookmark_model_->AddObserver(this);
 }
 
 void BookmarkLastVisitUpdater::DidStartNavigation(
@@ -47,11 +68,12 @@ void BookmarkLastVisitUpdater::DidRedirectNavigation(
 
 void BookmarkLastVisitUpdater::NewURLVisited(
     content::NavigationHandle* navigation_handle) {
-  if (!navigation_handle->IsInMainFrame() || navigation_handle->IsErrorPage())
+  if (!navigation_handle->IsInMainFrame() || navigation_handle->IsErrorPage()) {
     return;
+  }
 
   ntp_snippets::UpdateBookmarkOnURLVisitedInMainFrame(
-      bookmark_model_, navigation_handle->GetURL());
+      bookmark_model_, navigation_handle->GetURL(), IsMobilePlatform());
 }
 
 void BookmarkLastVisitUpdater::BookmarkNodeAdded(
@@ -64,6 +86,6 @@ void BookmarkLastVisitUpdater::BookmarkNodeAdded(
     // Consider in this TabHelper only bookmarks created from this tab (and not
     // the ones created from other tabs or created through bookmark sync).
     ntp_snippets::UpdateBookmarkOnURLVisitedInMainFrame(
-        bookmark_model_, new_bookmark_url);
+        bookmark_model_, new_bookmark_url, IsMobilePlatform());
   }
 }

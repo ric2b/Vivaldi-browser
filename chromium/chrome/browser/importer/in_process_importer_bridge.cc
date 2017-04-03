@@ -26,14 +26,14 @@
 #include "content/public/browser/browser_thread.h"
 #include "ui/base/l10n/l10n_util.h"
 
-#include "importer/imported_notes_entry.h"
-#include "importer/imported_speeddial_entry.h"
-
 #if defined(OS_WIN)
 #include "components/os_crypt/ie7_password_win.h"
 #endif
 
 #include <iterator>
+
+#include "importer/imported_notes_entry.h"
+#include "importer/imported_speeddial_entry.h"
 
 namespace {
 

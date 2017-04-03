@@ -29,6 +29,8 @@ class TrayAccessibility;
 class TrayAudio;
 class TrayCast;
 class TrayDate;
+class TraySystemInfo;
+class TrayTiles;
 class TrayUpdate;
 class TrayUser;
 class WebNotificationTray;
@@ -145,9 +147,6 @@ class ASH_EXPORT SystemTray : public TrayBackgroundView,
   void OnMouseEnteredView() override;
   void OnMouseExitedView() override;
   base::string16 GetAccessibleNameForBubble() override;
-  gfx::Rect GetAnchorRect(views::Widget* anchor_widget,
-                          AnchorType anchor_type,
-                          AnchorAlignment anchor_alignment) const override;
   void OnBeforeBubbleWidgetInit(
       views::Widget* anchor_widget,
       views::Widget* bubble_widget,
@@ -166,6 +165,8 @@ class ASH_EXPORT SystemTray : public TrayBackgroundView,
 
   TrayCast* GetTrayCastForTesting() const;
   TrayDate* GetTrayDateForTesting() const;
+  TraySystemInfo* GetTraySystemInfoForTesting() const;
+  TrayTiles* GetTrayTilesForTesting() const;
   TrayUpdate* GetTrayUpdateForTesting() const;
 
   // Activates the system tray bubble.
@@ -197,15 +198,6 @@ class ASH_EXPORT SystemTray : public TrayBackgroundView,
   // tray bar.
   base::string16 GetAccessibleTimeString(const base::Time& now) const;
 
-  // Calculates the x-offset for the item in the tray. Returns -1 if its tray
-  // item view is not visible.
-  int GetTrayXOffset(SystemTrayItem* item) const;
-
-  // Shows the default view and its arrow position is shifted by |x_offset|.
-  void ShowDefaultViewWithOffset(BubbleCreationType creation_type,
-                                 int x_offset,
-                                 bool persistent);
-
   // Constructs or re-constructs |system_bubble_| and populates it with |items|.
   // Specify |change_tray_status| to true if want to change the tray background
   // status. The bubble will be opened in inactive state. If |can_activate| is
@@ -217,7 +209,6 @@ class ASH_EXPORT SystemTray : public TrayBackgroundView,
                  bool details,
                  bool can_activate,
                  BubbleCreationType creation_type,
-                 int x_offset,
                  bool persistent);
 
   // Constructs or re-constructs |notification_bubble_| and populates it with
@@ -276,7 +267,9 @@ class ASH_EXPORT SystemTray : public TrayBackgroundView,
   TrayAccessibility* tray_accessibility_;
   TrayAudio* tray_audio_;  // May be null.
   TrayCast* tray_cast_;
-  TrayDate* tray_date_;
+  TrayDate* tray_date_;    // null for material design.
+  TrayTiles* tray_tiles_;  // only used in material design.
+  TraySystemInfo* tray_system_info_;  // only used in material design.
   TrayUpdate* tray_update_;
 
   // A reference to the Screen share and capture item.

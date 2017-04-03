@@ -1,13 +1,11 @@
 {
-  "manifest_version": 1,
-  "name": "exe:navigation_unittests",
+  "name": "navigation_unittests",
   "display_name": "Navigation Unittests",
-  "capabilities": {
-    "required": {
-      "exe:navigation": {
-        "interfaces":  [ "navigation::mojom::ViewFactory" ]
-      },
-      "*": { "classes": [ "app" ] }
+  "interface_provider_specs": {
+    "service_manager:connector": {
+      "requires": {
+        "*": [ "app" ]
+      }
     }
   }
 }

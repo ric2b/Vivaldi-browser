@@ -7,16 +7,14 @@
 
 #include "base/macros.h"
 #include "cc/base/cc_export.h"
-#include "cc/input/top_controls_state.h"
+#include "cc/input/browser_controls_state.h"
 #include "cc/trees/channel_main.h"
 #include "cc/trees/proxy.h"
 #include "cc/trees/proxy_common.h"
-#include "cc/trees/remote_proto_channel.h"
 
 namespace cc {
 
-class AnimationEvents;
-class BeginFrameSource;
+class MutatorEvents;
 class ChannelMain;
 class CompositorFrameSink;
 class LayerTreeHostInProcess;
@@ -28,11 +26,6 @@ class LayerTreeMutator;
 class CC_EXPORT ProxyMain : public Proxy {
  public:
   static std::unique_ptr<ProxyMain> CreateThreaded(
-      LayerTreeHostInProcess* layer_tree_host,
-      TaskRunnerProvider* task_runner_provider);
-
-  static std::unique_ptr<ProxyMain> CreateRemote(
-      RemoteProtoChannel* remote_proto_channel,
       LayerTreeHostInProcess* layer_tree_host,
       TaskRunnerProvider* task_runner_provider);
 
@@ -48,10 +41,10 @@ class CC_EXPORT ProxyMain : public Proxy {
     COMMIT_PIPELINE_STAGE,
   };
 
-  void DidCompleteSwapBuffers();
+  void DidReceiveCompositorFrameAck();
   void BeginMainFrameNotExpectedSoon();
   void DidCommitAndDrawFrame();
-  void SetAnimationEvents(std::unique_ptr<AnimationEvents> events);
+  void SetAnimationEvents(std::unique_ptr<MutatorEvents> events);
   void DidLoseCompositorFrameSink();
   void RequestNewCompositorFrameSink();
   void DidInitializeCompositorFrameSink(bool success);
@@ -99,9 +92,9 @@ class CC_EXPORT ProxyMain : public Proxy {
   void SetMutator(std::unique_ptr<LayerTreeMutator> mutator) override;
   bool MainFrameWillHappenForTesting() override;
   void ReleaseCompositorFrameSink() override;
-  void UpdateTopControlsState(TopControlsState constraints,
-                              TopControlsState current,
-                              bool animate) override;
+  void UpdateBrowserControlsState(BrowserControlsState constraints,
+                                  BrowserControlsState current,
+                                  bool animate) override;
 
   // This sets the channel used by ProxyMain to communicate with ProxyImpl.
   void SetChannel(std::unique_ptr<ChannelMain> channel_main);

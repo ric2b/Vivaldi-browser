@@ -49,7 +49,6 @@
 #include "core/editing/commands/DeleteSelectionCommand.h"
 #include "core/editing/commands/IndentOutdentCommand.h"
 #include "core/editing/commands/InsertListCommand.h"
-#include "core/editing/commands/MoveSelectionCommand.h"
 #include "core/editing/commands/RemoveFormatCommand.h"
 #include "core/editing/commands/ReplaceSelectionCommand.h"
 #include "core/editing/commands/SimplifyMarkupCommand.h"
@@ -146,12 +145,6 @@ Editor::RevealSelectionScope::~RevealSelectionScope() {
   DCHECK(m_editor->m_preventRevealSelection);
   --m_editor->m_preventRevealSelection;
   if (!m_editor->m_preventRevealSelection) {
-    // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
-    // needs to be audited.  See http://crbug.com/590369 for more details.
-    m_editor->frame()
-        .document()
-        ->updateStyleAndLayoutIgnorePendingStylesheets();
-
     m_editor->frame().selection().revealSelection(
         ScrollAlignment::alignToEdgeIfNeeded, RevealExtent);
   }
@@ -159,6 +152,8 @@ Editor::RevealSelectionScope::~RevealSelectionScope() {
 
 // When an event handler has moved the selection outside of a text control
 // we should use the target control's selection for this editing operation.
+// TODO(yosin): We should make |Editor::selectionForCommand()| to return
+// |SelectionInDOMTree| instead of |VisibleSelection|.
 VisibleSelection Editor::selectionForCommand(Event* event) {
   frame().selection().updateIfNeeded();
   VisibleSelection selection = frame().selection().selection();
@@ -166,19 +161,21 @@ VisibleSelection Editor::selectionForCommand(Event* event) {
     return selection;
   // If the target is a text control, and the current selection is outside of
   // its shadow tree, then use the saved selection for that text control.
-  HTMLTextFormControlElement* textFormControlOfSelectionStart =
-      enclosingTextFormControl(selection.start());
-  HTMLTextFormControlElement* textFromControlOfTarget =
-      isHTMLTextFormControlElement(*event->target()->toNode())
-          ? toHTMLTextFormControlElement(event->target()->toNode())
-          : 0;
-  if (textFromControlOfTarget &&
+  TextControlElement* textControlOfSelectionStart =
+      enclosingTextControl(selection.start());
+  TextControlElement* textControlOfTarget =
+      isTextControlElement(*event->target()->toNode())
+          ? toTextControlElement(event->target()->toNode())
+          : nullptr;
+  if (textControlOfTarget &&
       (selection.start().isNull() ||
-       textFromControlOfTarget != textFormControlOfSelectionStart)) {
-    if (Range* range = textFromControlOfTarget->selection()) {
-      return createVisibleSelection(EphemeralRange(range),
-                                    TextAffinity::Downstream,
-                                    selection.isDirectional());
+       textControlOfTarget != textControlOfSelectionStart)) {
+    if (Range* range = textControlOfTarget->selection()) {
+      return createVisibleSelection(
+          SelectionInDOMTree::Builder()
+              .setBaseAndExtent(EphemeralRange(range))
+              .setIsDirectional(selection.isDirectional())
+              .build());
     }
   }
   return selection;
@@ -448,6 +445,13 @@ void Editor::pasteWithPasteboard(Pasteboard* pasteboard) {
     String text = pasteboard->plainText();
     if (!text.isEmpty()) {
       chosePlainText = true;
+
+      // TODO(xiaochengh): Use of updateStyleAndLayoutIgnorePendingStylesheets
+      // needs to be audited.  See http://crbug.com/590369 for more details.
+      // |selectedRange| requires clean layout for visible selection
+      // normalization.
+      frame().document()->updateStyleAndLayoutIgnorePendingStylesheets();
+
       fragment = createFragmentFromText(selectedRange(), text);
     }
   }
@@ -673,12 +677,6 @@ bool Editor::canDeleteRange(const EphemeralRange& range) const {
   return hasEditableStyle(*startContainer) && hasEditableStyle(*endContainer);
 }
 
-void Editor::notifyComponentsOnChangedSelection() {
-  client().respondToChangedSelection(m_frame,
-                                     frame().selection().getSelectionType());
-  setStartNewKillRingSequence(true);
-}
-
 void Editor::respondToChangedContents(const VisibleSelection& endingSelection) {
   if (frame().settings() && frame().settings()->accessibilityEnabled()) {
     Node* node = endingSelection.start().anchorNode();
@@ -802,7 +800,6 @@ static void dispatchEditableContentChangedEvents(Element* startRoot,
 void Editor::appliedEditing(CompositeEditCommand* cmd) {
   DCHECK(!cmd->isCommandGroupWrapper());
   EventQueueScope scope;
-  frame().document()->updateStyleAndLayout();
 
   // Request spell checking before any further DOM change.
   spellChecker().markMisspellingsAfterApplyingCommand(*cmd);
@@ -846,19 +843,35 @@ void Editor::appliedEditing(CompositeEditCommand* cmd) {
   respondToChangedContents(newSelection);
 }
 
+static VisibleSelection correctedVisibleSelection(
+    const VisibleSelection& passedSelection) {
+  if (!passedSelection.base().isConnected() ||
+      !passedSelection.extent().isConnected())
+    return VisibleSelection();
+  DCHECK(!passedSelection.base().document()->needsLayoutTreeUpdate());
+  VisibleSelection correctedSelection = passedSelection;
+  correctedSelection.updateIfNeeded();
+  return correctedSelection;
+}
+
 void Editor::unappliedEditing(EditCommandComposition* cmd) {
   EventQueueScope scope;
-  frame().document()->updateStyleAndLayout();
 
   dispatchEditableContentChangedEvents(cmd->startingRootEditableElement(),
                                        cmd->endingRootEditableElement());
   dispatchInputEventEditableContentChanged(
       cmd->startingRootEditableElement(), cmd->endingRootEditableElement(),
-      InputEvent::InputType::Undo, nullAtom,
+      InputEvent::InputType::HistoryUndo, nullAtom,
       InputEvent::EventIsComposing::NotComposing);
 
-  VisibleSelection newSelection(cmd->startingSelection());
-  newSelection.validatePositionsIfNeeded();
+  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
+  // needs to be audited.  See http://crbug.com/590369 for more details.
+  // In the long term, we should stop editing commands from storing
+  // VisibleSelections as starting and ending selections.
+  frame().document()->updateStyleAndLayoutIgnorePendingStylesheets();
+
+  VisibleSelection newSelection =
+      correctedVisibleSelection(cmd->startingSelection());
   if (newSelection.start().document() == frame().document() &&
       newSelection.end().document() == frame().document())
     changeSelectionAfterCommand(
@@ -872,13 +885,12 @@ void Editor::unappliedEditing(EditCommandComposition* cmd) {
 
 void Editor::reappliedEditing(EditCommandComposition* cmd) {
   EventQueueScope scope;
-  frame().document()->updateStyleAndLayout();
 
   dispatchEditableContentChangedEvents(cmd->startingRootEditableElement(),
                                        cmd->endingRootEditableElement());
   dispatchInputEventEditableContentChanged(
       cmd->startingRootEditableElement(), cmd->endingRootEditableElement(),
-      InputEvent::InputType::Redo, nullAtom,
+      InputEvent::InputType::HistoryRedo, nullAtom,
       InputEvent::EventIsComposing::NotComposing);
 
   // TODO(yosin): Since |dispatchEditableContentChangedEvents()| and
@@ -953,13 +965,6 @@ bool Editor::insertTextWithoutSendingTextEvent(const String& text,
     if (Page* page = editedFrame->page()) {
       LocalFrame* focusedOrMainFrame =
           toLocalFrame(page->focusController().focusedOrMainFrame());
-
-      // TODO(xiaochengh): The use of
-      // updateStyleAndLayoutIgnorePendingStylesheets
-      // needs to be audited.  See http://crbug.com/590369 for more details.
-      focusedOrMainFrame->document()
-          ->updateStyleAndLayoutIgnorePendingStylesheets();
-
       focusedOrMainFrame->selection().revealSelection(
           ScrollAlignment::alignCenterIfNeeded);
     }
@@ -1009,10 +1014,17 @@ void Editor::cut(EditorCommandSource source) {
     return;  // DHTML did the whole operation
   if (!canCut())
     return;
+
+  // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
+  // needs to be audited.  See http://crbug.com/590369 for more details.
+  // |tryDHTMLCut| dispatches cut event, which may make layout dirty, but we
+  // need clean layout to obtain the selected content.
+  frame().document()->updateStyleAndLayoutIgnorePendingStylesheets();
+
   // TODO(yosin) We should use early return style here.
   if (canDeleteRange(selectedRange())) {
     spellChecker().updateMarkersForWordsAffectedByEditing(true);
-    if (enclosingTextFormControl(frame().selection().start())) {
+    if (enclosingTextControl(frame().selection().start())) {
       String plainText = frame().selectedTextForClipboard();
       Pasteboard::generalPasteboard()->writePlainText(
           plainText, canSmartCopyOrDelete() ? Pasteboard::CanSmartReplace
@@ -1042,7 +1054,14 @@ void Editor::copy() {
     return;  // DHTML did the whole operation
   if (!canCopy())
     return;
-  if (enclosingTextFormControl(frame().selection().start())) {
+
+  // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
+  // needs to be audited.  See http://crbug.com/590369 for more details.
+  // |tryDHTMLCopy| dispatches copy event, which may make layout dirty, but
+  // we need clean layout to obtain the selected content.
+  frame().document()->updateStyleAndLayoutIgnorePendingStylesheets();
+
+  if (enclosingTextControl(frame().selection().start())) {
     Pasteboard::generalPasteboard()->writePlainText(
         frame().selectedTextForClipboard(),
         canSmartCopyOrDelete() ? Pasteboard::CanSmartReplace
@@ -1105,6 +1124,12 @@ void Editor::pasteAsPlainText(EditorCommandSource source) {
 void Editor::performDelete() {
   if (!canDelete())
     return;
+
+  // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
+  // needs to be audited.  See http://crbug.com/590369 for more details.
+  // |selectedRange| requires clean layout for visible selection normalization.
+  frame().document()->updateStyleAndLayoutIgnorePendingStylesheets();
+
   addToKillRing(selectedRange());
   // TODO(chongz): |Editor::performDelete()| has no direction.
   // https://github.com/w3c/editing/issues/130
@@ -1140,7 +1165,7 @@ static void countEditingEvent(ExecutionContext* executionContext,
     return;
   }
 
-  HTMLTextFormControlElement* control = enclosingTextFormControl(node);
+  TextControlElement* control = enclosingTextControl(node);
   if (isHTMLInputElement(control)) {
     UseCounter::count(executionContext, featureOnInput);
     return;
@@ -1210,13 +1235,12 @@ void Editor::redo() {
 
 void Editor::setBaseWritingDirection(WritingDirection direction) {
   Element* focusedElement = frame().document()->focusedElement();
-  if (isHTMLTextFormControlElement(focusedElement)) {
+  if (isTextControlElement(focusedElement)) {
     if (direction == NaturalWritingDirection)
       return;
     focusedElement->setAttribute(
         dirAttr, direction == LeftToRightWritingDirection ? "ltr" : "rtl");
     focusedElement->dispatchInputEvent();
-    frame().document()->updateStyleAndLayoutTree();
     return;
   }
 
@@ -1228,8 +1252,8 @@ void Editor::setBaseWritingDirection(WritingDirection direction) {
           ? "ltr"
           : direction == RightToLeftWritingDirection ? "rtl" : "inherit",
       false);
-  applyParagraphStyleToSelection(style,
-                                 InputEvent::InputType::SetWritingDirection);
+  applyParagraphStyleToSelection(
+      style, InputEvent::InputType::FormatSetBlockTextDirection);
 }
 
 void Editor::revealSelectionAfterEditingOperation(
@@ -1237,11 +1261,6 @@ void Editor::revealSelectionAfterEditingOperation(
     RevealExtentOption revealExtentOption) {
   if (m_preventRevealSelection)
     return;
-
-  // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
-  // needs to be audited.  See http://crbug.com/590369 for more details.
-  frame().document()->updateStyleAndLayoutIgnorePendingStylesheets();
-
   frame().selection().revealSelection(alignment, revealExtentOption);
 }
 
@@ -1266,7 +1285,8 @@ void Editor::transpose() {
   const EphemeralRange range = makeRange(previous, next);
   if (range.isNull())
     return;
-  VisibleSelection newSelection = createVisibleSelection(range);
+  VisibleSelection newSelection = createVisibleSelection(
+      SelectionInDOMTree::Builder().setBaseAndExtent(range).build());
 
   // Transpose the two characters.
   String text = plainText(range);
@@ -1404,7 +1424,9 @@ bool Editor::findString(const String& target, FindOptions options) {
     return false;
 
   frame().selection().setSelection(
-      createVisibleSelection(EphemeralRange(resultRange)));
+      SelectionInDOMTree::Builder()
+          .setBaseAndExtent(EphemeralRange(resultRange))
+          .build());
   frame().selection().revealSelection();
   return true;
 }
@@ -1556,11 +1578,13 @@ void Editor::setMarkedTextMatchesAreHighlighted(bool flag) {
 }
 
 void Editor::respondToChangedSelection(
-    const VisibleSelection& oldSelection,
+    const Position& oldSelectionStart,
     FrameSelection::SetSelectionOptions options) {
-  spellChecker().respondToChangedSelection(oldSelection, options);
+  spellChecker().respondToChangedSelection(oldSelectionStart, options);
   frame().inputMethodController().cancelCompositionIfSelectionIsInvalid();
-  notifyComponentsOnChangedSelection();
+  client().respondToChangedSelection(&frame(),
+                                     frame().selection().getSelectionType());
+  setStartNewKillRingSequence(true);
 }
 
 SpellChecker& Editor::spellChecker() const {

@@ -34,6 +34,7 @@
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
 #include "content/browser/service_worker/service_worker_metrics.h"
 #include "content/browser/service_worker/service_worker_registration.h"
+#include "content/common/origin_trials/trial_token_validator.h"
 #include "content/common/service_worker/embedded_worker_messages.h"
 #include "content/common/service_worker/embedded_worker_start_params.h"
 #include "content/common/service_worker/service_worker_messages.h"
@@ -345,6 +346,11 @@ ServiceWorkerVersion::~ServiceWorkerVersion() {
   embedded_worker_->RemoveListener(this);
 }
 
+void ServiceWorkerVersion::SetNavigationPreloadState(
+    const NavigationPreloadState& state) {
+  navigation_preload_state_ = state;
+}
+
 void ServiceWorkerVersion::SetStatus(Status status) {
   if (status_ == status)
     return;
@@ -373,7 +379,8 @@ void ServiceWorkerVersion::SetStatus(Status status) {
   // property.
   // TODO(shimazu): Clarify the dependency of OnVersionStateChanged and
   // |status_change_callbacks_|
-  FOR_EACH_OBSERVER(Listener, listeners_, OnVersionStateChanged(this));
+  for (auto& observer : listeners_)
+    observer.OnVersionStateChanged(this);
 
   std::vector<base::Closure> callbacks;
   callbacks.swap(status_change_callbacks_);
@@ -564,6 +571,24 @@ int ServiceWorkerVersion::StartRequestWithCustomTimeout(
   return request_id;
 }
 
+bool ServiceWorkerVersion::StartExternalRequest(
+    const std::string& request_uuid) {
+  // It's possible that the renderer is lying or the version started stopping
+  // right around the time of the IPC.
+  if (running_status() != EmbeddedWorkerStatus::RUNNING)
+    return false;
+
+  if (external_request_uuid_to_request_id_.count(request_uuid) > 0u)
+    return false;
+
+  int request_id =
+      StartRequest(ServiceWorkerMetrics::EventType::EXTERNAL_REQUEST,
+                   base::Bind(&ServiceWorkerVersion::CleanUpExternalRequest,
+                              this, request_uuid));
+  external_request_uuid_to_request_id_[request_uuid] = request_id;
+  return true;
+}
+
 bool ServiceWorkerVersion::FinishRequest(int request_id,
                                          bool was_handled,
                                          base::Time dispatch_event_time) {
@@ -583,9 +608,32 @@ bool ServiceWorkerVersion::FinishRequest(int request_id,
   TRACE_EVENT_ASYNC_END1("ServiceWorker", "ServiceWorkerVersion::Request",
                          request, "Handled", was_handled);
   pending_requests_.Remove(request_id);
-  if (!HasWork())
-    FOR_EACH_OBSERVER(Listener, listeners_, OnNoWork(this));
+  if (!HasWork()) {
+    for (auto& observer : listeners_)
+      observer.OnNoWork(this);
+  }
 
+  return true;
+}
+
+bool ServiceWorkerVersion::FinishExternalRequest(
+    const std::string& request_uuid) {
+  // It's possible that the renderer is lying or the version started stopping
+  // right around the time of the IPC.
+  if (running_status() != EmbeddedWorkerStatus::RUNNING)
+    return false;
+
+  RequestUUIDToRequestIDMap::iterator iter =
+      external_request_uuid_to_request_id_.find(request_uuid);
+  if (iter != external_request_uuid_to_request_id_.end()) {
+    int request_id = iter->second;
+    external_request_uuid_to_request_id_.erase(iter);
+    return FinishRequest(request_id, true, base::Time::Now());
+  }
+
+  // It is possible that the request was cancelled or timed out before and we
+  // won't find it in |external_request_uuid_to_request_id_|.
+  // Return true so we don't kill the process.
   return true;
 }
 
@@ -631,8 +679,8 @@ void ServiceWorkerVersion::AddControllee(
   controllee_map_[uuid] = provider_host;
   // Keep the worker alive a bit longer right after a new controllee is added.
   RestartTick(&idle_time_);
-  FOR_EACH_OBSERVER(Listener, listeners_,
-                    OnControlleeAdded(this, provider_host));
+  for (auto& observer : listeners_)
+    observer.OnControlleeAdded(this, provider_host);
 }
 
 void ServiceWorkerVersion::RemoveControllee(
@@ -640,10 +688,12 @@ void ServiceWorkerVersion::RemoveControllee(
   const std::string& uuid = provider_host->client_uuid();
   DCHECK(base::ContainsKey(controllee_map_, uuid));
   controllee_map_.erase(uuid);
-  FOR_EACH_OBSERVER(Listener, listeners_,
-                    OnControlleeRemoved(this, provider_host));
-  if (!HasControllee())
-    FOR_EACH_OBSERVER(Listener, listeners_, OnNoControllees(this));
+  for (auto& observer : listeners_)
+    observer.OnControlleeRemoved(this, provider_host);
+  if (!HasControllee()) {
+    for (auto& observer : listeners_)
+      observer.OnNoControllees(this);
+  }
 }
 
 void ServiceWorkerVersion::AddStreamingURLRequestJob(
@@ -656,8 +706,10 @@ void ServiceWorkerVersion::AddStreamingURLRequestJob(
 void ServiceWorkerVersion::RemoveStreamingURLRequestJob(
     const ServiceWorkerURLRequestJob* request_job) {
   streaming_url_request_jobs_.erase(request_job);
-  if (!HasWork())
-    FOR_EACH_OBSERVER(Listener, listeners_, OnNoWork(this));
+  if (!HasWork()) {
+    for (auto& observer : listeners_)
+      observer.OnNoWork(this);
+  }
 }
 
 void ServiceWorkerVersion::AddListener(Listener* listener) {
@@ -698,6 +750,12 @@ void ServiceWorkerVersion::Doom() {
   std::vector<ServiceWorkerDatabase::ResourceRecord> resources;
   script_cache_map_.GetResources(&resources);
   context_->storage()->PurgeResources(resources);
+}
+
+void ServiceWorkerVersion::SetValidOriginTrialTokens(
+    const TrialTokenValidator::FeatureToTokensMap& tokens) {
+  origin_trial_tokens_ =
+      TrialTokenValidator::GetValidTokens(url::Origin(scope()), tokens);
 }
 
 void ServiceWorkerVersion::SetDevToolsAttached(bool attached) {
@@ -741,8 +799,20 @@ void ServiceWorkerVersion::SetDevToolsAttached(bool attached) {
 void ServiceWorkerVersion::SetMainScriptHttpResponseInfo(
     const net::HttpResponseInfo& http_info) {
   main_script_http_info_.reset(new net::HttpResponseInfo(http_info));
-  FOR_EACH_OBSERVER(Listener, listeners_,
-                    OnMainScriptHttpResponseInfoSet(this));
+
+  // Updates |origin_trial_tokens_| if it is not set yet. This happens when:
+  //  1) The worker is a new one.
+  //  OR
+  //  2) The worker is an existing one but the entry in ServiceWorkerDatabase
+  //     was written by old version Chrome (< M56), so |origin_trial_tokens|
+  //     wasn't set in the entry.
+  if (!origin_trial_tokens_) {
+    origin_trial_tokens_ = TrialTokenValidator::GetValidTokensFromHeaders(
+        url::Origin(scope()), http_info.headers.get());
+  }
+
+  for (auto& observer : listeners_)
+    observer.OnMainScriptHttpResponseInfoSet(this);
 }
 
 void ServiceWorkerVersion::SimulatePingTimeoutForTesting() {
@@ -811,7 +881,8 @@ void ServiceWorkerVersion::OnThreadStarted() {
 }
 
 void ServiceWorkerVersion::OnStarting() {
-  FOR_EACH_OBSERVER(Listener, listeners_, OnRunningStateChanged(this));
+  for (auto& observer : listeners_)
+    observer.OnRunningStateChanged(this);
 }
 
 void ServiceWorkerVersion::OnStarted() {
@@ -821,7 +892,8 @@ void ServiceWorkerVersion::OnStarted() {
   // Fire all start callbacks.
   scoped_refptr<ServiceWorkerVersion> protect(this);
   FinishStartWorker(SERVICE_WORKER_OK);
-  FOR_EACH_OBSERVER(Listener, listeners_, OnRunningStateChanged(this));
+  for (auto& observer : listeners_)
+    observer.OnRunningStateChanged(this);
 }
 
 void ServiceWorkerVersion::OnStopping() {
@@ -837,7 +909,8 @@ void ServiceWorkerVersion::OnStopping() {
   // when the worker starts up again.
   SetTimeoutTimerInterval(
       base::TimeDelta::FromSeconds(kStopWorkerTimeoutSeconds));
-  FOR_EACH_OBSERVER(Listener, listeners_, OnRunningStateChanged(this));
+  for (auto& observer : listeners_)
+    observer.OnRunningStateChanged(this);
 }
 
 void ServiceWorkerVersion::OnStopped(EmbeddedWorkerStatus old_status) {
@@ -870,7 +943,8 @@ void ServiceWorkerVersion::OnScriptLoadFailed() {
 }
 
 void ServiceWorkerVersion::OnRegisteredToDevToolsManager() {
-  FOR_EACH_OBSERVER(Listener, listeners_, OnDevToolsRoutingIdChanged(this));
+  for (auto& observer : listeners_)
+    observer.OnDevToolsRoutingIdChanged(this);
 }
 
 void ServiceWorkerVersion::OnReportException(
@@ -878,11 +952,10 @@ void ServiceWorkerVersion::OnReportException(
     int line_number,
     int column_number,
     const GURL& source_url) {
-  FOR_EACH_OBSERVER(
-      Listener,
-      listeners_,
-      OnErrorReported(
-          this, error_message, line_number, column_number, source_url));
+  for (auto& observer : listeners_) {
+    observer.OnErrorReported(this, error_message, line_number, column_number,
+                             source_url);
+  }
 }
 
 void ServiceWorkerVersion::OnReportConsoleMessage(int source_identifier,
@@ -890,14 +963,10 @@ void ServiceWorkerVersion::OnReportConsoleMessage(int source_identifier,
                                                   const base::string16& message,
                                                   int line_number,
                                                   const GURL& source_url) {
-  FOR_EACH_OBSERVER(Listener,
-                    listeners_,
-                    OnReportConsoleMessage(this,
-                                           source_identifier,
-                                           message_level,
-                                           message,
-                                           line_number,
-                                           source_url));
+  for (auto& observer : listeners_) {
+    observer.OnReportConsoleMessage(this, source_identifier, message_level,
+                                    message, line_number, source_url);
+  }
 }
 
 bool ServiceWorkerVersion::OnMessageReceived(const IPC::Message& message) {
@@ -1094,7 +1163,8 @@ void ServiceWorkerVersion::OnSetCachedMetadataFinished(int64_t callback_id,
   TRACE_EVENT_ASYNC_END1("ServiceWorker",
                          "ServiceWorkerVersion::OnSetCachedMetadata",
                          callback_id, "result", result);
-  FOR_EACH_OBSERVER(Listener, listeners_, OnCachedMetadataUpdated(this));
+  for (auto& observer : listeners_)
+    observer.OnCachedMetadataUpdated(this);
 }
 
 void ServiceWorkerVersion::OnClearCachedMetadata(const GURL& url) {
@@ -1112,7 +1182,8 @@ void ServiceWorkerVersion::OnClearCachedMetadataFinished(int64_t callback_id,
   TRACE_EVENT_ASYNC_END1("ServiceWorker",
                          "ServiceWorkerVersion::OnClearCachedMetadata",
                          callback_id, "result", result);
-  FOR_EACH_OBSERVER(Listener, listeners_, OnCachedMetadataUpdated(this));
+  for (auto& observer : listeners_)
+    observer.OnCachedMetadataUpdated(this);
 }
 
 void ServiceWorkerVersion::OnPostMessageToClient(
@@ -1765,6 +1836,7 @@ void ServiceWorkerVersion::OnStoppedInternal(EmbeddedWorkerStatus old_status) {
     iter.Advance();
   }
   pending_requests_.Clear();
+  external_request_uuid_to_request_id_.clear();
 
   // Close all mojo services. This will also fire and clear all callbacks
   // for messages that are still outstanding for those services.
@@ -1773,11 +1845,14 @@ void ServiceWorkerVersion::OnStoppedInternal(EmbeddedWorkerStatus old_status) {
   // TODO(falken): Call SWURLRequestJob::ClearStream here?
   streaming_url_request_jobs_.clear();
 
-  FOR_EACH_OBSERVER(Listener, listeners_, OnRunningStateChanged(this));
-  if (should_restart)
+  for (auto& observer : listeners_)
+    observer.OnRunningStateChanged(this);
+  if (should_restart) {
     StartWorkerInternal();
-  else if (!HasWork())
-    FOR_EACH_OBSERVER(Listener, listeners_, OnNoWork(this));
+  } else if (!HasWork()) {
+    for (auto& observer : listeners_)
+      observer.OnNoWork(this);
+  }
 }
 
 void ServiceWorkerVersion::OnMojoConnectionError(const char* service_name) {
@@ -1799,6 +1874,14 @@ void ServiceWorkerVersion::OnBeginEvent() {
 void ServiceWorkerVersion::FinishStartWorker(ServiceWorkerStatusCode status) {
   start_worker_first_purpose_ = base::nullopt;
   RunCallbacks(this, &start_callbacks_, status);
+}
+
+void ServiceWorkerVersion::CleanUpExternalRequest(
+    const std::string& request_uuid,
+    ServiceWorkerStatusCode status) {
+  if (status == SERVICE_WORKER_OK)
+    return;
+  external_request_uuid_to_request_id_.erase(request_uuid);
 }
 
 }  // namespace content

@@ -13,8 +13,8 @@
 #include "net/quic/test_tools/quic_connection_peer.h"
 #include "net/quic/test_tools/quic_headers_stream_peer.h"
 #include "net/quic/test_tools/quic_spdy_session_peer.h"
+#include "net/quic/test_tools/quic_stream_peer.h"
 #include "net/quic/test_tools/quic_test_utils.h"
-#include "net/quic/test_tools/reliable_quic_stream_peer.h"
 #include "net/spdy/spdy_alt_svc_wire_format.h"
 #include "net/spdy/spdy_flags.h"
 #include "net/spdy/spdy_protocol.h"
@@ -257,6 +257,13 @@ class QuicHeadersStreamTest : public ::testing::TestWithParam<TestParamsTuple> {
       saved_data_.append(static_cast<char*>(iov[i].iov_base), iov[i].iov_len);
       consumed += iov[i].iov_len;
     }
+    return QuicConsumedData(consumed, false);
+  }
+
+  QuicConsumedData SaveIovShort(const QuicIOVector& data) {
+    const iovec* iov = data.iov;
+    int consumed = 1;
+    saved_data_.append(static_cast<char*>(iov[0].iov_base), consumed);
     return QuicConsumedData(consumed, false);
   }
 
@@ -627,6 +634,7 @@ TEST_P(QuicHeadersStreamTest, NonEmptyHeaderHOLBlockedTime) {
 }
 
 TEST_P(QuicHeadersStreamTest, ProcessLargeRawData) {
+  headers_stream_->set_max_uncompressed_header_bytes(256 * 1024);
   // We want to create a frame that is more than the SPDY Framer's max control
   // frame size, which is 16K, but less than the HPACK decoders max decode
   // buffer size, which is 32K.
@@ -842,7 +850,7 @@ TEST_P(QuicHeadersStreamTest, ProcessSpdyWindowUpdateFrame) {
 }
 
 TEST_P(QuicHeadersStreamTest, NoConnectionLevelFlowControl) {
-  EXPECT_FALSE(ReliableQuicStreamPeer::StreamContributesToConnectionFlowControl(
+  EXPECT_FALSE(QuicStreamPeer::StreamContributesToConnectionFlowControl(
       headers_stream_));
 }
 
@@ -990,6 +998,68 @@ TEST_P(QuicHeadersStreamTest, WritevStreamData) {
       saved_payloads_.clear();
     }
   }
+}
+
+TEST_P(QuicHeadersStreamTest, WritevStreamDataFinOnly) {
+  FLAGS_quic_bugfix_fhol_writev_fin_only_v2 = true;
+  struct iovec iov;
+  string data;
+
+  EXPECT_CALL(session_,
+              WritevData(headers_stream_, kHeadersStreamId, _, _, false, _))
+      .WillOnce(WithArgs<2, 5>(
+          Invoke(this, &QuicHeadersStreamTest::SaveIovAndNotifyAckListener)));
+
+  QuicConsumedData consumed_data = headers_stream_->WritevStreamData(
+      kClientDataStreamId1, MakeIOVector(data, &iov), 0, true, nullptr);
+
+  EXPECT_EQ(consumed_data.bytes_consumed, 0u);
+  EXPECT_EQ(consumed_data.fin_consumed, true);
+}
+
+TEST_P(QuicHeadersStreamTest, WritevStreamDataSendBlocked) {
+  FLAGS_quic_bugfix_fhol_writev_fin_only_v2 = true;
+  QuicStreamId id = kClientDataStreamId1;
+  QuicStreamOffset offset = 0;
+  struct iovec iov;
+  string data;
+
+  // This test will issue a write that will require fragmenting into
+  // multiple HTTP/2 DATA frames.  It will ensure that only 1 frame
+  // will go out in the case that the underlying session becomes write
+  // blocked.  Buffering is required to preserve framing, but the
+  // amount of buffering is limited to one HTTP/2 data frame.
+  const int kMinDataFrames = 4;
+  const size_t data_len = kSpdyInitialFrameSizeLimit * kMinDataFrames + 1024;
+  // Set headers stream send window large enough for data written below.
+  headers_stream_->flow_controller()->UpdateSendWindowOffset(data_len * 2 * 4);
+  test::GenerateBody(&data, data_len);
+
+  bool fin = true;
+  // So force the underlying |WritevData| to consume only 1 byte.
+  // In that case, |WritevStreamData| should consume just one
+  // HTTP/2 data frame's worth of data.
+  EXPECT_CALL(session_,
+              WritevData(headers_stream_, kHeadersStreamId, _, _, false, _))
+      .WillOnce(
+          WithArgs<2>(Invoke(this, &QuicHeadersStreamTest::SaveIovShort)));
+
+  QuicConsumedData consumed_data = headers_stream_->WritevStreamData(
+      id, MakeIOVector(data, &iov), offset, fin, nullptr);
+
+  // bytes_consumed is max HTTP/2 data frame size minus the HTTP/2
+  // data header size.
+  EXPECT_EQ(consumed_data.bytes_consumed,
+            kSpdyInitialFrameSizeLimit -
+                SpdyConstants::GetDataFrameMinimumSize(HTTP2));
+  EXPECT_EQ(consumed_data.fin_consumed, false);
+
+  // If session already blocked, then bytes_consumed should be zero.
+  consumed_data = headers_stream_->WritevStreamData(
+      id, MakeIOVector(data, &iov), offset, fin, nullptr);
+
+  EXPECT_EQ(consumed_data.bytes_consumed, 0u);
+  EXPECT_EQ(consumed_data.fin_consumed, false);
 }
 
 }  // namespace

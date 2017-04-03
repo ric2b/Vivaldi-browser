@@ -106,8 +106,6 @@ class MEDIA_EXPORT VideoDecodeAccelerator {
 
   // Config structure contains parameters required for the VDA initialization.
   struct MEDIA_EXPORT Config {
-    enum { kNoSurfaceID = SurfaceManager::kNoSurfaceID };
-
     // Specifies the allocation and handling mode for output PictureBuffers.
     // When set to ALLOCATE, the VDA is expected to allocate backing memory
     // for PictureBuffers at the time of AssignPictureBuffers() call.
@@ -146,7 +144,7 @@ class MEDIA_EXPORT VideoDecodeAccelerator {
     // An optional graphics surface that the VDA should render to. For setting
     // an output SurfaceView on Android. It's only valid when not equal to
     // |kNoSurfaceID|.
-    int surface_id = kNoSurfaceID;
+    int surface_id = SurfaceManager::kNoSurfaceID;
 
     // Coded size of the video frame hint, subject to change.
     gfx::Size initial_expected_coded_size = gfx::Size(320, 240);
@@ -156,6 +154,12 @@ class MEDIA_EXPORT VideoDecodeAccelerator {
     // The list of picture buffer formats that the client knows how to use. An
     // empty list means any format is supported.
     std::vector<VideoPixelFormat> supported_output_formats;
+
+    // The H264 SPS and PPS configuration data. Not all clients populate these
+    // fields, so they should be parsed from the bitstream instead, if required.
+    // Each SPS and PPS is prefixed with the Annex B framing bytes: 0, 0, 0, 1.
+    std::vector<uint8_t> sps;
+    std::vector<uint8_t> pps;
   };
 
   // Interface for collaborating with picture interface to provide memory for
@@ -284,6 +288,11 @@ class MEDIA_EXPORT VideoDecodeAccelerator {
   // NotifyResetDone() being called on the client.  Can be used to implement
   // "seek".
   virtual void Reset() = 0;
+
+  // An optional graphics surface that the VDA should render to. For setting
+  // an output SurfaceView on Android. Passing |kNoSurfaceID| will clear any
+  // previously set surface in favor of an internally generated texture.
+  virtual void SetSurface(int32_t surface_id);
 
   // Destroys the decoder: all pending inputs are dropped immediately and the
   // component is freed.  This call may asynchornously free system resources,

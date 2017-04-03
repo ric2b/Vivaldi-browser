@@ -2,9 +2,9 @@ include_rules = [
   "+crypto",
   "+gin",
   "+jni",
-  "+mojo/common",
   "+mojo/public",
   "+third_party/apple_apsl",
+  "+third_party/boringssl/src/include",
   "+third_party/nss",
   "+third_party/protobuf/src/google/protobuf",
   "+third_party/zlib",
@@ -55,10 +55,6 @@ specific_include_rules = {
 
   "run_all_unittests\.cc": [
     "+mojo/edk",
-  ],
-
-  "brotli_filter\.cc": [
-    "+third_party/brotli",
   ],
 
   "brotli_source_stream\.cc": [

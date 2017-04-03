@@ -41,7 +41,6 @@ class Document;
 class EnumerationHistogram;
 class ExecutionContext;
 class Frame;
-class LocalFrame;
 class StyleSheetContents;
 
 // UseCounter is used for counting the number of times features of
@@ -49,10 +48,11 @@ class StyleSheetContents;
 // features are used and thus when it's safe to remove or change them.
 //
 // The Chromium Content layer controls what is done with this data.
-// For instance, in Google Chrome, these counts are submitted
-// anonymously through the Histogram recording system in Chrome
-// for users who opt-in to "Usage Statistics" submission
-// during their install of Google Chrome:
+//
+// For instance, in Google Chrome, these counts are submitted anonymously
+// through the UMA histogram recording system in Chrome for users who have the
+// "Automatically send usage statistics and crash reports to Google" setting
+// enabled:
 // http://www.google.com/chrome/intl/en/privacy.html
 
 class CORE_EXPORT UseCounter {
@@ -166,8 +166,6 @@ class CORE_EXPORT UseCounter {
     HTMLEmbedElementLegacyCall = 152,
     HTMLObjectElementLegacyCall = 153,
     GetMatchedCSSRules = 155,
-    AttributeOwnerElement = 160,
-    AttributeSpecified = 162,
     PrefixedAudioDecodedByteCount = 164,
     PrefixedVideoDecodedByteCount = 165,
     PrefixedVideoSupportsFullscreen = 166,
@@ -253,11 +251,8 @@ class CORE_EXPORT UseCounter {
     DocumentXPathCreateExpression = 295,
     DocumentXPathCreateNSResolver = 296,
     DocumentXPathEvaluate = 297,
-    AttrGetValue = 298,
-    AttrSetValue = 299,
     AnimationConstructorKeyframeListEffectObjectTiming = 300,
     AnimationConstructorKeyframeListEffectNoTiming = 302,
-    AttrSetValueWithElement = 303,
     PrefixedCancelAnimationFrame = 304,
     PrefixedCancelRequestAnimationFrame = 305,
     NamedNodeMapGetNamedItem = 306,
@@ -285,8 +280,6 @@ class CORE_EXPORT UseCounter {
     EventCancelBubble = 344,
     EventPath = 345,
     NodeIteratorDetach = 347,
-    AttrNodeValue = 348,
-    AttrTextContent = 349,
     EventGetReturnValueTrue = 350,
     EventGetReturnValueFalse = 351,
     EventSetReturnValueTrue = 352,
@@ -369,7 +362,6 @@ class CORE_EXPORT UseCounter {
     UseAsm = 473,
     DOMWindowOpen = 475,
     DOMWindowOpenFeatures = 476,
-    MediaStreamTrackGetSources = 478,
     AspectRatioFlexItem = 479,
     DetailsElement = 480,
     DialogElement = 481,
@@ -476,9 +468,6 @@ class CORE_EXPORT UseCounter {
     MixedContentPlugin = 616,
     MixedContentPrefetch = 617,
     MixedContentVideo = 618,
-    AudioListenerDopplerFactor = 620,
-    AudioListenerSpeedOfSound = 621,
-    AudioListenerSetVelocity = 622,
     CSSSelectorPseudoFullScreenAncestor = 628,
     CSSSelectorPseudoFullScreen = 629,
     WebKitCSSMatrix = 630,
@@ -639,8 +628,6 @@ class CORE_EXPORT UseCounter {
     TextInputFired = 830,
     V8TextEvent_Data_AttributeGetter = 831,
     V8TextEvent_InitTextEvent_Method = 832,
-    V8SVGSVGElement_UseCurrentView_AttributeGetter = 833,
-    V8SVGSVGElement_CurrentView_AttributeGetter = 834,
     ClientHintsDPR = 835,
     ClientHintsResourceWidth = 836,
     ClientHintsViewportWidth = 837,
@@ -650,7 +637,6 @@ class CORE_EXPORT UseCounter {
     FormDataAppendBlob = 841,
     FormDataAppendBlobWithFilename = 842,
     FormDataAppendNull = 843,
-    HTMLDocumentCreateAttributeNameNotLowercase = 844,
     NonHTMLElementSetAttributeNodeFromHTMLDocumentNameNotLowercase = 845,
     DOMStringList_Item_AttributeGetter_IndexedDB = 846,
     DOMStringList_Item_AttributeGetter_Location = 847,
@@ -823,7 +809,6 @@ class CORE_EXPORT UseCounter {
     OfflineAudioContextStartRendering = 1031,
     OfflineAudioContextSuspend = 1032,
     OfflineAudioContextResume = 1033,
-    AttrCloneNode = 1034,
     SVG1DOMPaintServer = 1035,
     SVGSVGElementFragmentSVGView = 1036,
     SVGSVGElementFragmentSVGViewElement = 1037,
@@ -859,7 +844,6 @@ class CORE_EXPORT UseCounter {
     CrossOriginApplicationScript = 1070,
     CrossOriginOtherScript = 1071,
     SVG1DOMSVGTests = 1072,
-    V8SVGViewElement_ViewTarget_AttributeGetter = 1073,
     DisableRemotePlaybackAttribute = 1074,
     V8SloppyMode = 1075,
     V8StrictMode = 1076,
@@ -990,7 +974,6 @@ class CORE_EXPORT UseCounter {
 
     CSSAtRuleApply = 1249,
     CSSSelectorPseudoAny = 1250,
-    PannerNodeSetVelocity = 1251,
     DocumentAllItemNoArguments = 1252,
     DocumentAllItemNamed = 1253,
     DocumentAllItemIndexed = 1254,
@@ -1105,9 +1088,6 @@ class CORE_EXPORT UseCounter {
     CSSSelectorPseudoReadWrite = 1378,
     // The above items are available in M52 branch
 
-    TouchStartUserGestureUtilized = 1380,
-    TouchMoveUserGestureUtilized = 1381,
-    TouchEndDuringScrollUserGestureUtilized = 1382,
     CSSSelectorPseudoDefined = 1383,
     RTCPeerConnectionAddIceCandidatePromise = 1384,
     RTCPeerConnectionAddIceCandidateLegacy = 1385,
@@ -1122,7 +1102,6 @@ class CORE_EXPORT UseCounter {
     V8RegExpPrototypeSourceGetter = 1396,
     V8RegExpPrototypeOldFlagGetter = 1397,
     V8DecimalWithLeadingZeroInStrictMode = 1398,
-    FormSubmissionNotInDocumentTree = 1399,
     GetUserMediaPrefixed = 1400,
     GetUserMediaLegacy = 1401,
     GetUserMediaPromise = 1402,
@@ -1280,7 +1259,6 @@ class CORE_EXPORT UseCounter {
     DragAndDropScrollStart = 1554,
     PresentationConnectionListConnectionAvailableEventListener = 1555,
     WebAudioAutoplayCrossOriginIframe = 1556,
-    ScriptInvalidTypeOrLanguage = 1557,
     VRGetDisplays = 1558,
     VRPresent = 1559,
     VRDeprecatedGetPose = 1560,
@@ -1303,7 +1281,6 @@ class CORE_EXPORT UseCounter {
     WebAudioWaveShaperNode = 1577,
     CSSZoomReset = 1578,
     CSSZoomDocument = 1579,
-    PaymentAddressCareOf = 1580,
     XSSAuditorBlockedScript = 1581,
     XSSAuditorBlockedEntirePage = 1582,
     XSSAuditorDisabled = 1583,
@@ -1341,7 +1318,87 @@ class CORE_EXPORT UseCounter {
     LongTaskObserver = 1615,
     CSSMotionInEffect = 1616,
     CSSOffsetInEffect = 1617,
+    // The above items are available in M55 branch
 
+    VRGetDisplaysInsecureOrigin = 1618,
+    VRRequestPresent = 1619,
+    VRRequestPresentInsecureOrigin = 1620,
+    VRDeprecatedFieldOfView = 1621,
+    VideoInCanvas = 1622,
+    HiddenAutoplayedVideoInCanvas = 1623,
+    OffscreenCanvas = 1624,
+    GamepadPose = 1625,
+    GamepadHand = 1626,
+    GamepadDisplayId = 1627,
+    GamepadButtonTouched = 1628,
+    GamepadPoseHasOrientation = 1629,
+    GamepadPoseHasPosition = 1630,
+    GamepadPosePosition = 1631,
+    GamepadPoseLinearVelocity = 1632,
+    GamepadPoseLinearAcceleration = 1633,
+    GamepadPoseOrientation = 1634,
+    GamepadPoseAngularVelocity = 1635,
+    GamepadPoseAngularAcceleration = 1636,
+    V8RTCDataChannel_MaxRetransmitTime_AttributeGetter = 1638,
+    V8RTCDataChannel_MaxRetransmits_AttributeGetter = 1639,
+    V8RTCDataChannel_Reliable_AttributeGetter = 1640,
+    V8RTCPeerConnection_AddStream_Method = 1641,
+    V8RTCPeerConnection_CreateDTMFSender_Method = 1642,
+    V8RTCPeerConnection_GetLocalStreams_Method = 1643,
+    V8RTCPeerConnection_GetRemoteStreams_Method = 1644,
+    V8RTCPeerConnection_GetStreamById_Method = 1645,
+    V8RTCPeerConnection_RemoveStream_Method = 1646,
+    V8RTCPeerConnection_UpdateIce_Method = 1647,
+    RTCPeerConnectionCreateDataChannelMaxRetransmitTime = 1648,
+    RTCPeerConnectionCreateDataChannelMaxRetransmits = 1649,
+    AudioContextCreateConstantSource = 1650,
+    WebAudioConstantSourceNode = 1651,
+    LoopbackEmbeddedInSecureContext = 1652,
+    LoopbackEmbeddedInNonSecureContext = 1653,
+    BlinkMacSystemFont = 1654,
+    RTCConfigurationIceTransportsNone = 1655,
+    RTCIceServerURL = 1656,
+    RTCIceServerURLs = 1657,
+    OffscreenCanvasTransferToImageBitmap2D = 1658,
+    OffscreenCanvasTransferToImageBitmapWebGL = 1659,
+    OffscreenCanvasCommit2D = 1660,
+    OffscreenCanvasCommitWebGL = 1661,
+    RTCConfigurationIceTransportPolicy = 1662,
+    RTCConfigurationIceTransportPolicyNone = 1663,
+    RTCConfigurationIceTransports = 1664,
+    DocumentFullscreenElementInV0Shadow = 1665,
+    ScriptWithCSPBypassingSchemeParserInserted = 1666,
+    ScriptWithCSPBypassingSchemeNotParserInserted = 1667,
+    DocumentCreateElement2ndArgStringHandling = 1668,
+    V8MediaRecorder_Start_Method = 1669,
+    WebBluetoothRequestDevice = 1670,
+    UnitlessPerspectiveInPerspectiveProperty = 1671,
+    UnitlessPerspectiveInTransformProperty = 1672,
+    V8RTCSessionDescription_Type_AttributeGetter = 1673,
+    V8RTCSessionDescription_Type_AttributeSetter = 1674,
+    V8RTCSessionDescription_Sdp_AttributeGetter = 1675,
+    V8RTCSessionDescription_Sdp_AttributeSetter = 1676,
+    RTCSessionDescriptionInitNoType = 1677,
+    RTCSessionDescriptionInitNoSdp = 1678,
+    HTMLMediaElementPreloadForcedMetadata = 1679,
+    GenericSensorStart = 1680,
+    GenericSensorStop = 1681,
+    TouchEventPreventedNoTouchAction = 1682,
+    TouchEventPreventedForcedDocumentPassiveNoTouchAction = 1683,
+    V8Event_StopPropagation_Method = 1684,
+    V8Event_StopImmediatePropagation_Method = 1685,
+    ImageCaptureConstructor = 1686,
+    V8Document_RootScroller_AttributeGetter = 1687,
+    V8Document_RootScroller_AttributeSetter = 1688,
+    CustomElementRegistryDefine = 1689,
+    LinkHeaderServiceWorker = 1690,
+    CSSShadowPiercingDescendantCombinator = 1691,
+    FullscreenAllowedByOrientationChange = 1696,
+    TopNavInSandbox = 1749,
+    TopNavInSandboxWithoutGesture = 1750,
+    TopNavInSandboxWithPerm = 1751,
+    TopNavInSandboxWithPermButNoGesture = 1752,
+    
     // Add new features immediately above this line. Don't change assigned
     // numbers of any item, and don't reuse removed slots.
     // Also, run update_use_counter_feature_enum.py in

@@ -33,6 +33,7 @@ import org.chromium.chrome.browser.tab.TabTestUtils;
  * Tests for splash screens.
  */
 public class WebappSplashScreenTest extends WebappActivityTestBase {
+
     private int getHistogramTotalCountFor(String histogram, int buckets) {
         int count = 0;
 
@@ -129,6 +130,7 @@ public class WebappSplashScreenTest extends WebappActivityTestBase {
 
     @SmallTest
     @Feature({"Webapps"})
+    @RetryOnFailure
     public void testHidesAfterLoadFails() throws Exception {
         startWebappActivity();
         assertTrue(getActivity().isSplashScreenVisibleForTests());
@@ -235,9 +237,14 @@ public class WebappSplashScreenTest extends WebappActivityTestBase {
         Context context = getInstrumentation().getTargetContext();
         int thresholdSize = context.getResources().getDimensionPixelSize(
                 R.dimen.webapp_splash_image_size_threshold);
-        int bitmapSize = thresholdSize + 1;
-        Bitmap splashBitmap = Bitmap.createBitmap(bitmapSize, bitmapSize, Bitmap.Config.ARGB_8888);
-        WebappDataStorage.open(WEBAPP_ID).updateSplashScreenImage(splashBitmap);
+        int size = thresholdSize + 1;
+        Bitmap splashBitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+        String bitmapString = ShortcutHelper.encodeBitmapAsString(splashBitmap);
+
+        TestFetchStorageCallback callback = new TestFetchStorageCallback();
+        WebappRegistry.getInstance().register(WEBAPP_ID, callback);
+        callback.waitForCallback(0);
+        callback.getStorage().updateSplashScreenImage(bitmapString);
 
         startWebappActivity(createIntent());
         ViewGroup splashScreen = waitUntilSplashScreenAppears();
@@ -245,8 +252,8 @@ public class WebappSplashScreenTest extends WebappActivityTestBase {
 
         ImageView splashImage =
                 (ImageView) splashScreen.findViewById(R.id.webapp_splash_screen_icon);
-        assertEquals(bitmapSize, splashImage.getMeasuredWidth());
-        assertEquals(bitmapSize, splashImage.getMeasuredHeight());
+        assertEquals(size, splashImage.getMeasuredWidth());
+        assertEquals(size, splashImage.getMeasuredHeight());
 
         TextView splashText = (TextView) splashScreen.findViewById(R.id.webapp_splash_screen_name);
         int[] rules = ((RelativeLayout.LayoutParams) splashText.getLayoutParams()).getRules();
@@ -262,10 +269,15 @@ public class WebappSplashScreenTest extends WebappActivityTestBase {
         Context context = getInstrumentation().getTargetContext();
         int thresholdSize = context.getResources().getDimensionPixelSize(
                 R.dimen.webapp_splash_image_size_threshold);
-        int bitmapSize = context.getResources().getDimensionPixelSize(
+        int size = context.getResources().getDimensionPixelSize(
                 R.dimen.webapp_splash_image_size_minimum);
-        Bitmap splashBitmap = Bitmap.createBitmap(bitmapSize, bitmapSize, Bitmap.Config.ARGB_8888);
-        WebappDataStorage.open(WEBAPP_ID).updateSplashScreenImage(splashBitmap);
+        Bitmap splashBitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+        String bitmapString = ShortcutHelper.encodeBitmapAsString(splashBitmap);
+
+        TestFetchStorageCallback callback = new TestFetchStorageCallback();
+        WebappRegistry.getInstance().register(WEBAPP_ID, callback);
+        callback.waitForCallback(0);
+        callback.getStorage().updateSplashScreenImage(bitmapString);
 
         startWebappActivity(createIntent());
         ViewGroup splashScreen = waitUntilSplashScreenAppears();
@@ -286,13 +298,19 @@ public class WebappSplashScreenTest extends WebappActivityTestBase {
 
     @SmallTest
     @Feature({"Webapps"})
+    @RetryOnFailure
     public void testSplashScreenWithoutImageAppears() throws Exception {
         // Register an image that's too small for the splash screen.
         Context context = getInstrumentation().getTargetContext();
-        int bitmapSize = context.getResources().getDimensionPixelSize(
+        int size = context.getResources().getDimensionPixelSize(
                 R.dimen.webapp_splash_image_size_minimum) - 1;
-        Bitmap splashBitmap = Bitmap.createBitmap(bitmapSize, bitmapSize, Bitmap.Config.ARGB_8888);
-        WebappDataStorage.open(WEBAPP_ID).updateSplashScreenImage(splashBitmap);
+        Bitmap splashBitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+        String bitmapString = ShortcutHelper.encodeBitmapAsString(splashBitmap);
+
+        TestFetchStorageCallback callback = new TestFetchStorageCallback();
+        WebappRegistry.getInstance().register(WEBAPP_ID, callback);
+        callback.waitForCallback(0);
+        callback.getStorage().updateSplashScreenImage(bitmapString);
 
         Intent intent = createIntent();
         intent.putExtra(ShortcutHelper.EXTRA_IS_ICON_GENERATED, true);
@@ -318,6 +336,7 @@ public class WebappSplashScreenTest extends WebappActivityTestBase {
 
     @SmallTest
     @Feature({"Webapps"})
+    @RetryOnFailure
     public void testSplashScreenAppearsWithoutRegisteredSplashImage() throws Exception {
         // Don't register anything for the web app, which represents apps that were added to the
         // home screen before splash screen images were downloaded.

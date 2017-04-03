@@ -7,11 +7,10 @@
 #include <utility>
 #include <vector>
 
-#include "ash/common/shell_window_ids.h"
 #include "ash/common/wallpaper/wallpaper_controller.h"
 #include "ash/common/wallpaper/wallpaper_delegate.h"
 #include "ash/common/wm_shell.h"
-#include "ash/public/interfaces/container.mojom.h"
+#include "ash/public/cpp/shell_window_ids.h"
 #include "ash/shell.h"
 #include "base/bind.h"
 #include "base/command_line.h"
@@ -89,6 +88,7 @@
 #include "content/public/browser/web_ui.h"
 #include "media/audio/sounds/sounds_manager.h"
 #include "services/ui/public/cpp/property_type_converters.h"
+#include "services/ui/public/interfaces/window_manager.mojom.h"
 #include "ui/aura/window.h"
 #include "ui/base/ime/chromeos/extension_ime_util.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
@@ -799,8 +799,8 @@ void LoginDisplayHostImpl::OnBrowserCreated() {
 
 OobeUI* LoginDisplayHostImpl::GetOobeUI() const {
   if (!login_view_)
-    return NULL;
-  return static_cast<OobeUI*>(login_view_->GetWebUI()->GetController());
+    return nullptr;
+  return login_view_->GetOobeUI();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1132,9 +1132,10 @@ void LoginDisplayHostImpl::InitLoginWindowAndView() {
         ash::Shell::GetContainer(ash::Shell::GetPrimaryRootWindow(),
                                  ash::kShellWindowId_LockScreenContainer);
   } else {
-    params.mus_properties[ash::mojom::kWindowContainer_Property] =
+    using ui::mojom::WindowManager;
+    params.mus_properties[WindowManager::kInitialContainerId_Property] =
         mojo::ConvertTo<std::vector<uint8_t>>(
-            static_cast<int32_t>(ash::mojom::Container::LOGIN_WINDOWS));
+            ash::kShellWindowId_LockScreenContainer);
   }
   login_window_ = new views::Widget;
   params.delegate = new LoginWidgetDelegate(login_window_);
@@ -1273,10 +1274,10 @@ void ShowLoginWizard(const std::string& first_screen_name) {
 
   gfx::Rect screen_bounds(chromeos::CalculateScreenBounds(gfx::Size()));
 
-  g_browser_process->platform_part()->SessionManager()->SetSessionState(
+  session_manager::SessionManager::Get()->SetSessionState(
       StartupUtils::IsOobeCompleted()
-          ? session_manager::SESSION_STATE_LOGIN_PRIMARY
-          : session_manager::SESSION_STATE_OOBE);
+          ? session_manager::SessionState::LOGIN_PRIMARY
+          : session_manager::SessionState::OOBE);
 
   LoginDisplayHostImpl* display_host = new LoginDisplayHostImpl(screen_bounds);
 

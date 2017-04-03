@@ -25,17 +25,23 @@ class GbmBuffer : public GbmBufferBase {
  public:
   static scoped_refptr<GbmBuffer> CreateBuffer(
       const scoped_refptr<GbmDevice>& gbm,
-      gfx::BufferFormat format,
+      uint32_t format,
       const gfx::Size& size,
-      gfx::BufferUsage usage);
+      uint32_t flags);
+  static scoped_refptr<GbmBuffer> CreateBufferWithModifiers(
+      const scoped_refptr<GbmDevice>& gbm,
+      uint32_t format,
+      const gfx::Size& size,
+      uint32_t flags,
+      const std::vector<uint64_t>& modifiers);
   static scoped_refptr<GbmBuffer> CreateBufferFromFds(
       const scoped_refptr<GbmDevice>& gbm,
-      gfx::BufferFormat format,
+      uint32_t format,
       const gfx::Size& size,
       std::vector<base::ScopedFD>&& fds,
       const std::vector<gfx::NativePixmapPlane>& planes);
-  gfx::BufferFormat GetFormat() const { return format_; }
-  gfx::BufferUsage GetUsage() const { return usage_; }
+  uint32_t GetFormat() const { return format_; }
+  uint32_t GetFlags() const { return flags_; }
   bool AreFdsValid() const;
   size_t GetFdCount() const;
   int GetFd(size_t plane) const;
@@ -48,15 +54,26 @@ class GbmBuffer : public GbmBufferBase {
  private:
   GbmBuffer(const scoped_refptr<GbmDevice>& gbm,
             gbm_bo* bo,
-            gfx::BufferFormat format,
-            gfx::BufferUsage usage,
+            uint32_t format,
+            uint32_t flags,
+            uint64_t modifier,
+            uint32_t addfb_flags,
             std::vector<base::ScopedFD>&& fds,
             const gfx::Size& size,
             const std::vector<gfx::NativePixmapPlane>&& planes);
   ~GbmBuffer() override;
 
-  gfx::BufferFormat format_;
-  gfx::BufferUsage usage_;
+  static scoped_refptr<GbmBuffer> CreateBufferForBO(
+      const scoped_refptr<GbmDevice>& gbm,
+      gbm_bo* bo,
+      uint32_t format,
+      const gfx::Size& size,
+      uint32_t flags,
+      uint64_t modifiers,
+      uint32_t addfb_flags);
+
+  uint32_t format_;
+  uint32_t flags_;
   std::vector<base::ScopedFD> fds_;
   gfx::Size size_;
 

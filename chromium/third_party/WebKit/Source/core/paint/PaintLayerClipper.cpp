@@ -80,7 +80,7 @@ static void applyClipRects(const ClipRectsContext& context,
   LayoutView* view = layoutObject.view();
   DCHECK(view);
   if (clipRects.fixed() && context.rootLayer->layoutObject() == view)
-    offset -= toIntSize(view->frameView()->scrollPosition());
+    offset -= LayoutSize(view->frameView()->scrollOffset());
   if (layoutObject.hasOverflowClip() ||
       (layoutObject.isSVGRoot() &&
        toLayoutSVGRoot(&layoutObject)->shouldApplyViewportClip()) ||
@@ -214,11 +214,11 @@ LayoutRect PaintLayerClipper::localClipRect(
     FloatRect clippedRectInLocalSpace =
         m_geometryMapper->mapRectToDestinationSpace(
             FloatRect(clipRect.rect()), clippingRootLayer->layoutObject()
-                                            ->objectPaintProperties()
+                                            ->paintProperties()
                                             ->localBorderBoxProperties()
                                             ->propertyTreeState,
             m_layer.layoutObject()
-                ->objectPaintProperties()
+                ->paintProperties()
                 ->localBorderBoxProperties()
                 ->propertyTreeState,
             success);
@@ -257,16 +257,15 @@ void PaintLayerClipper::mapLocalToRootWithGeometryMapper(
   bool success;
 
   const ObjectPaintProperties::PropertyTreeStateWithOffset*
-      layerBorderBoxProperties = m_layer.layoutObject()
-                                     ->objectPaintProperties()
-                                     ->localBorderBoxProperties();
+      layerBorderBoxProperties =
+          m_layer.layoutObject()->paintProperties()->localBorderBoxProperties();
   FloatRect localRect(layoutRect);
   localRect.moveBy(FloatPoint(layerBorderBoxProperties->paintOffset));
 
   layoutRect = LayoutRect(m_geometryMapper->mapRectToDestinationSpace(
       localRect, layerBorderBoxProperties->propertyTreeState,
       context.rootLayer->layoutObject()
-          ->objectPaintProperties()
+          ->paintProperties()
           ->localBorderBoxProperties()
           ->propertyTreeState,
       success));
@@ -344,9 +343,7 @@ void PaintLayerClipper::calculateRects(
   layerBounds = LayoutRect(offset, LayoutSize(m_layer.size()));
 
   // Update the clip rects that will be passed to child layers.
-  if ((layoutObject.hasOverflowClip() ||
-       layoutObject.styleRef().containsPaint()) &&
-      shouldRespectOverflowClip(context)) {
+  if (shouldClipOverflow(context)) {
     foregroundRect.intersect(
         toLayoutBox(layoutObject)
             .overflowClipRect(offset, context.overlayScrollbarClipBehavior));
@@ -407,16 +404,15 @@ void PaintLayerClipper::calculateClipRects(const ClipRectsContext& context,
 
   adjustClipRectsForChildren(layoutObject, clipRects);
 
-  if ((layoutObject.hasOverflowClip() && shouldRespectOverflowClip(context)) ||
+  if (shouldClipOverflow(context) || layoutObject.hasClip() ||
       (layoutObject.isSVGRoot() &&
-       toLayoutSVGRoot(&layoutObject)->shouldApplyViewportClip()) ||
-      layoutObject.hasClip() || layoutObject.styleRef().containsPaint()) {
+       toLayoutSVGRoot(&layoutObject)->shouldApplyViewportClip())) {
     // This offset cannot use convertToLayerCoords, because sometimes our
     // rootLayer may be across some transformed layer boundary, for example, in
     // the PaintLayerCompositor overlapMap, where clipRects are needed in view
     // space.
     applyClipRects(context, layoutObject,
-                   roundedLayoutPoint(layoutObject.localToAncestorPoint(
+                   LayoutPoint(layoutObject.localToAncestorPoint(
                        FloatPoint(), context.rootLayer->layoutObject())),
                    clipRects);
   }
@@ -439,24 +435,15 @@ ClipRect PaintLayerClipper::clipRectWithGeometryMapper(
   DCHECK(m_geometryMapper);
   LayoutRect source(LayoutRect::infiniteIntRect());
   bool success = false;
-  const ObjectPaintProperties* properties =
-      m_layer.layoutObject()->objectPaintProperties();
+  const auto* properties = m_layer.layoutObject()->paintProperties();
   PropertyTreeState propertyTreeState =
       properties->localBorderBoxProperties()->propertyTreeState;
 
-  if (properties->cssClip())
-    propertyTreeState.setClip(properties->cssClip());
+  if (isForeground && shouldClipOverflow(context) && properties->overflowClip())
+    propertyTreeState.setClip(properties->overflowClip());
 
-  const LayoutObject& layoutObject = *m_layer.layoutObject();
-  if (shouldRespectOverflowClip(context) && isForeground &&
-      (layoutObject.hasOverflowClip() ||
-       layoutObject.styleRef().containsPaint())) {
-    if (properties->overflowClip())
-      propertyTreeState.setClip(properties->overflowClip());
-  }
-
-  const ObjectPaintProperties* ancestorProperties =
-      context.rootLayer->layoutObject()->objectPaintProperties();
+  const auto* ancestorProperties =
+      context.rootLayer->layoutObject()->paintProperties();
   PropertyTreeState destinationPropertyTreeState =
       ancestorProperties->localBorderBoxProperties()->propertyTreeState;
   if (!context.rootLayer->clipper().shouldRespectOverflowClip(context)) {
@@ -476,9 +463,7 @@ ClipRect PaintLayerClipper::applyOverflowClipToBackgroundRectWithGeometryMapper(
     const ClipRect& clip) const {
   const LayoutObject& layoutObject = *m_layer.layoutObject();
   FloatRect clipRect(clip.rect());
-  if ((layoutObject.hasOverflowClip() ||
-       layoutObject.styleRef().containsPaint()) &&
-      shouldRespectOverflowClip(context)) {
+  if (shouldClipOverflow(context)) {
     LayoutRect layerBoundsWithVisualOverflow =
         layoutObject.isLayoutView()
             ? toLayoutView(layoutObject).viewRect()
@@ -525,7 +510,7 @@ ClipRect PaintLayerClipper::backgroundClipRect(
   if (parentClipRects->fixed() &&
       context.rootLayer->layoutObject() == layoutView &&
       result != LayoutRect(LayoutRect::infiniteIntRect()))
-    result.move(toIntSize(layoutView->frameView()->scrollPosition()));
+    result.move(LayoutSize(layoutView->frameView()->scrollOffset()));
 
   return result;
 }
@@ -536,6 +521,13 @@ void PaintLayerClipper::getOrCalculateClipRects(const ClipRectsContext& context,
     clipRects = getClipRects(context);
   else
     calculateClipRects(context, clipRects);
+}
+
+bool PaintLayerClipper::shouldClipOverflow(
+    const ClipRectsContext& context) const {
+  return (m_layer.layoutObject()->hasOverflowClip() ||
+          m_layer.layoutObject()->styleRef().containsPaint()) &&
+         shouldRespectOverflowClip(context);
 }
 
 bool PaintLayerClipper::shouldRespectOverflowClip(

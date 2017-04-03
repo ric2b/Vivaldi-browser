@@ -22,7 +22,6 @@
 #include "remoting/protocol/video_renderer.h"
 #include "remoting/protocol/webrtc_transport.h"
 #include "third_party/libyuv/include/libyuv/convert_from.h"
-#include "third_party/webrtc/media/base/videoframe.h"
 #include "third_party/webrtc/modules/desktop_capture/desktop_frame.h"
 
 namespace remoting {
@@ -78,10 +77,9 @@ void WebrtcVideoRendererAdapter::SetMediaStream(
   media_stream_ = std::move(media_stream);
 
   webrtc::VideoTrackVector video_tracks = media_stream_->GetVideoTracks();
-  if (video_tracks.empty()) {
-    LOG(ERROR) << "Received media stream with no video tracks.";
-    return;
-  }
+
+  // Caller must verify that the media stream contains video tracks.
+  DCHECK(!video_tracks.empty());
 
   if (video_tracks.size() > 1U) {
     LOG(WARNING) << "Received media stream with multiple video tracks.";
@@ -97,7 +95,7 @@ void WebrtcVideoRendererAdapter::SetVideoStatsChannel(
   video_stats_dispatcher_->Init(std::move(message_pipe), this);
 }
 
-void WebrtcVideoRendererAdapter::OnFrame(const cricket::VideoFrame& frame) {
+void WebrtcVideoRendererAdapter::OnFrame(const webrtc::VideoFrame& frame) {
   if (static_cast<uint64_t>(frame.timestamp_us()) >= rtc::TimeMicros()) {
     // The host sets playout delay to 0, so all incoming frames are expected to
     // be rendered as so as they are received.

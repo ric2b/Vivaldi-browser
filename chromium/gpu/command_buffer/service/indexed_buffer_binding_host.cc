@@ -80,6 +80,7 @@ IndexedBufferBindingHost::IndexedBufferBindingHost(
     uint32_t max_bindings, bool needs_emulation)
     : needs_emulation_(needs_emulation),
       max_non_null_binding_index_plus_one_(0u) {
+  DCHECK(needs_emulation);
   buffer_bindings_.resize(max_bindings);
 }
 
@@ -262,6 +263,17 @@ void IndexedBufferBindingHost::UpdateMaxNonNullBindingIndex(
       }
     }
   }
+}
+
+bool IndexedBufferBindingHost::UsesBuffer(
+    size_t used_binding_count, const Buffer* buffer) const {
+  DCHECK(buffer);
+  DCHECK_LE(used_binding_count, buffer_bindings_.size());
+  for (size_t ii = 0; ii < used_binding_count; ++ii) {
+    if (buffer == buffer_bindings_[ii].buffer)
+      return true;
+  }
+  return false;
 }
 
 }  // namespace gles2

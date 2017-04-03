@@ -18,7 +18,10 @@ TEST_F(SelectionAdjusterTest, adjustSelectionInFlatTree) {
   Node* const foo = sample->firstChild();
   // Select "foo"
   VisibleSelection selection =
-      createVisibleSelection(Position(foo, 0), Position(foo, 3));
+      createVisibleSelection(SelectionInDOMTree::Builder()
+                                 .collapse(Position(foo, 0))
+                                 .extend(Position(foo, 3))
+                                 .build());
   SelectionAdjuster::adjustSelectionInFlatTree(&selectionInFlatTree, selection);
   EXPECT_EQ(PositionInFlatTree(foo, 0), selectionInFlatTree.start());
   EXPECT_EQ(PositionInFlatTree(foo, 3), selectionInFlatTree.end());
@@ -31,8 +34,11 @@ TEST_F(SelectionAdjusterTest, adjustSelectionInDOMTree) {
   Node* const sample = document().getElementById("sample");
   Node* const foo = sample->firstChild();
   // Select "foo"
-  VisibleSelectionInFlatTree selectionInFlatTree = createVisibleSelection(
-      PositionInFlatTree(foo, 0), PositionInFlatTree(foo, 3));
+  VisibleSelectionInFlatTree selectionInFlatTree =
+      createVisibleSelection(SelectionInFlatTree::Builder()
+                                 .collapse(PositionInFlatTree(foo, 0))
+                                 .extend(PositionInFlatTree(foo, 3))
+                                 .build());
   SelectionAdjuster::adjustSelectionInDOMTree(&selection, selectionInFlatTree);
   EXPECT_EQ(Position(foo, 0), selection.start());
   EXPECT_EQ(Position(foo, 3), selection.end());

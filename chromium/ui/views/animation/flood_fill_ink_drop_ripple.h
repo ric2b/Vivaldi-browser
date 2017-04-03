@@ -14,6 +14,7 @@
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animator.h"
 #include "ui/gfx/animation/tween.h"
+#include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/transform.h"
@@ -33,8 +34,13 @@ namespace test {
 class FloodFillInkDropRippleTestApi;
 }  // namespace test
 
-// An ink drop ripple that starts as a small circle and flood fills a
-// rectangle of the given size. The circle is clipped to the rectangles bounds.
+// An ink drop ripple that starts as a small circle and flood fills a rectangle
+// of the size determined by |host_size| and |clip_insets| (if provided). The
+// circle is clipped to this rectangle's bounds.
+// Constructors take |host_size| and |clip_insets| and calculate the effective
+// bounds of the flood fill based on them. This way, the ripple's bounds are
+// defined relative to the host size and can be recalculated whenever the host
+// size is changed.
 //
 // The valid InkDropState transitions are defined below:
 //
@@ -48,16 +54,21 @@ class FloodFillInkDropRippleTestApi;
 //
 class VIEWS_EXPORT FloodFillInkDropRipple : public InkDropRipple {
  public:
-  FloodFillInkDropRipple(const gfx::Rect& clip_bounds,
+  FloodFillInkDropRipple(const gfx::Size& host_size,
+                         const gfx::Insets& clip_insets,
+                         const gfx::Point& center_point,
+                         SkColor color,
+                         float visible_opacity);
+  FloodFillInkDropRipple(const gfx::Size& host_size,
                          const gfx::Point& center_point,
                          SkColor color,
                          float visible_opacity);
   ~FloodFillInkDropRipple() override;
 
   // InkDropRipple:
+  void HostSizeChanged(const gfx::Size& new_size) override;
   void SnapToActivated() override;
   ui::Layer* GetRootLayer() override;
-  bool OverridesHighlight() const override;
 
  private:
   friend class test::FloodFillInkDropRippleTestApi;
@@ -80,6 +91,12 @@ class VIEWS_EXPORT FloodFillInkDropRipple : public InkDropRipple {
       gfx::Tween::Type tween,
       ui::LayerAnimationObserver* observer);
 
+  // Creates a pause animation for transform property.
+  void PauseTransformAnimation(
+      base::TimeDelta duration,
+      ui::LayerAnimator::PreemptionStrategy preemption_strategy,
+      ui::LayerAnimationObserver* observer);
+
   // Sets the opacity of the ink drop. Note that this does not perform any
   // animation.
   void SetOpacity(float opacity);
@@ -95,6 +112,12 @@ class VIEWS_EXPORT FloodFillInkDropRipple : public InkDropRipple {
       gfx::Tween::Type tween,
       ui::LayerAnimationObserver* observer);
 
+  // Creates a pause animation for opacity property.
+  void PauseOpacityAnimation(
+      base::TimeDelta duration,
+      ui::LayerAnimator::PreemptionStrategy preemption_strategy,
+      ui::LayerAnimationObserver* observer);
+
   // Returns the Transform to be applied to the |painted_layer_| for the given
   // |target_radius|.
   gfx::Transform CalculateTransform(float target_radius) const;
@@ -105,6 +128,9 @@ class VIEWS_EXPORT FloodFillInkDropRipple : public InkDropRipple {
   // Returns the largest distance from |point| to the corners of the
   // |root_layer_| bounds.
   float MaxDistanceToCorners(const gfx::Point& point) const;
+
+  // Insets of the clip area relative to the host bounds.
+  gfx::Insets clip_insets_;
 
   // The point where the Center of the ink drop's circle should be drawn.
   gfx::Point center_point_;

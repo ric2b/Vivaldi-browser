@@ -7,11 +7,13 @@
 
 #include "bindings/core/v8/DOMWrapperWorld.h"
 #include "core/CoreExport.h"
+#include "platform/feature_policy/FeaturePolicy.h"
 #include <v8.h>
 
 namespace blink {
 
 class ScriptState;
+class LocalFrame;
 
 using InstallConditionalFeaturesFunction = void (*)(const WrapperTypeInfo*,
                                                     const ScriptState*,
@@ -39,6 +41,9 @@ CORE_EXPORT InstallConditionalFeaturesFunction
 // interfaces which need to be visible on the global object are installed even
 // when the V8 context is reused (i.e., after navigation)
 CORE_EXPORT void installPendingConditionalFeaturesOnWindow(const ScriptState*);
+
+CORE_EXPORT bool isFeatureEnabledInFrame(const FeaturePolicy::Feature&,
+                                         const LocalFrame*);
 
 }  // namespace blink
 

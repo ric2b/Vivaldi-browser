@@ -19,10 +19,12 @@
 #include "services/navigation/public/cpp/view_delegate.h"
 #include "services/navigation/public/cpp/view_observer.h"
 #include "services/navigation/public/interfaces/view.mojom.h"
-#include "services/shell/public/c/main.h"
-#include "services/shell/public/cpp/connector.h"
-#include "services/shell/public/cpp/service.h"
-#include "services/shell/public/cpp/service_runner.h"
+#include "services/service_manager/public/c/main.h"
+#include "services/service_manager/public/cpp/connector.h"
+#include "services/service_manager/public/cpp/interface_registry.h"
+#include "services/service_manager/public/cpp/service.h"
+#include "services/service_manager/public/cpp/service_context.h"
+#include "services/service_manager/public/cpp/service_runner.h"
 #include "services/tracing/public/cpp/provider.h"
 #include "services/ui/public/cpp/window.h"
 #include "services/ui/public/cpp/window_tree_client.h"
@@ -205,7 +207,8 @@ class TabStrip : public views::View,
     AddObserver(tab);
     tabs_.push_back(tab);
     tab_container_->AddChildView(tab);
-    FOR_EACH_OBSERVER(TabStripObserver, observers_, OnTabAdded(tab));
+    for (auto& observer : observers_)
+      observer.OnTabAdded(tab);
     SelectTab(tab);
   }
 
@@ -236,7 +239,8 @@ class TabStrip : public views::View,
         SelectTab(tabs_[next_selected_index]);
     }
     Layout();
-    FOR_EACH_OBSERVER(TabStripObserver, observers_, OnTabRemoved(tab));
+    for (auto& observer : observers_)
+      observer.OnTabRemoved(tab);
     delete tab;
   }
 
@@ -246,7 +250,8 @@ class TabStrip : public views::View,
     auto it = std::find(tabs_.begin(), tabs_.end(), tab);
     DCHECK(it != tabs_.end());
     selected_index_ = it - tabs_.begin();
-    FOR_EACH_OBSERVER(TabStripObserver, observers_, OnTabSelected(tab));
+    for (auto& observer : observers_)
+      observer.OnTabSelected(tab);
   }
   Tab* selected_tab() {
     return selected_index_ != -1 ? tabs_[selected_index_] : nullptr;
@@ -860,21 +865,21 @@ void Browser::RemoveWindow(views::Widget* window) {
 
 std::unique_ptr<navigation::View> Browser::CreateView() {
   navigation::mojom::ViewFactoryPtr factory;
-  connector()->ConnectToInterface("exe:navigation", &factory);
+  context()->connector()->ConnectToInterface("navigation", &factory);
   return base::MakeUnique<navigation::View>(std::move(factory));
 }
 
-void Browser::OnStart(const shell::Identity& identity) {
-  tracing_.Initialize(connector(), identity.name());
+void Browser::OnStart() {
+  tracing_.Initialize(context()->connector(), context()->identity().name());
 
-  aura_init_.reset(
-      new views::AuraInit(connector(), "views_mus_resources.pak"));
-  window_manager_connection_ =
-      views::WindowManagerConnection::Create(connector(), identity);
+  aura_init_ = base::MakeUnique<views::AuraInit>(
+      context()->connector(), context()->identity(), "views_mus_resources.pak");
+  window_manager_connection_ = views::WindowManagerConnection::Create(
+      context()->connector(), context()->identity());
 }
 
-bool Browser::OnConnect(const shell::Identity& remote_identity,
-                        shell::InterfaceRegistry* registry) {
+bool Browser::OnConnect(const service_manager::ServiceInfo& remote_info,
+                        service_manager::InterfaceRegistry* registry) {
   registry->AddInterface<mojom::Launchable>(this);
   return true;
 }
@@ -895,7 +900,7 @@ void Browser::Launch(uint32_t what, mojom::LaunchMode how) {
   AddWindow(window);
 }
 
-void Browser::Create(const shell::Identity& remote_identity,
+void Browser::Create(const service_manager::Identity& remote_identity,
                      mojom::LaunchableRequest request) {
   bindings_.AddBinding(this, std::move(request));
 }

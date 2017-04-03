@@ -9,6 +9,8 @@
 
 #include "base/bind.h"
 #include "base/files/file_util.h"
+#include "base/sequenced_task_runner.h"
+#include "base/single_thread_task_runner.h"
 #include "components/drive/chromeos/change_list_loader.h"
 #include "components/drive/chromeos/directory_loader.h"
 #include "components/drive/chromeos/file_cache.h"
@@ -824,8 +826,8 @@ void FileSystem::SearchByHashes(const std::set<std::string>& hashes,
 void FileSystem::OnFileChangedByOperation(const FileChange& changed_files) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  FOR_EACH_OBSERVER(
-      FileSystemObserver, observers_, OnFileChanged(changed_files));
+  for (auto& observer : observers_)
+    observer.OnFileChanged(changed_files);
 }
 
 void FileSystem::OnEntryUpdatedByOperation(const ClientContext& context,
@@ -855,9 +857,8 @@ void FileSystem::OnDriveSyncErrorAfterGetFilePath(
     FileError error) {
   if (error != FILE_ERROR_OK)
     return;
-  FOR_EACH_OBSERVER(FileSystemObserver,
-                    observers_,
-                    OnDriveSyncError(type, *file_path));
+  for (auto& observer : observers_)
+    observer.OnDriveSyncError(type, *file_path);
 }
 
 bool FileSystem::WaitForSyncComplete(const std::string& local_id,
@@ -868,15 +869,15 @@ bool FileSystem::WaitForSyncComplete(const std::string& local_id,
 void FileSystem::OnDirectoryReloaded(const base::FilePath& directory_path) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  FOR_EACH_OBSERVER(
-      FileSystemObserver, observers_, OnDirectoryChanged(directory_path));
+  for (auto& observer : observers_)
+    observer.OnDirectoryChanged(directory_path);
 }
 
 void FileSystem::OnFileChanged(const FileChange& changed_files) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  FOR_EACH_OBSERVER(
-      FileSystemObserver, observers_, OnFileChanged(changed_files));
+  for (auto& observer : observers_)
+    observer.OnFileChanged(changed_files);
 }
 
 void FileSystem::OnLoadFromServerComplete() {

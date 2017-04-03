@@ -133,7 +133,7 @@ void GpuVideoDecodeAcceleratorHost::AssignPictureBuffers(
       PostNotifyError(INVALID_ARGUMENT);
       return;
     }
-    texture_ids.push_back(buffer.texture_ids());
+    texture_ids.push_back(buffer.client_texture_ids());
     buffer_ids.push_back(buffer.id());
   }
   Send(new AcceleratedVideoDecoderMsg_AssignPictureBuffers(
@@ -161,6 +161,14 @@ void GpuVideoDecodeAcceleratorHost::Reset() {
   if (!channel_)
     return;
   Send(new AcceleratedVideoDecoderMsg_Reset(decoder_route_id_));
+}
+
+void GpuVideoDecodeAcceleratorHost::SetSurface(int32_t surface_id) {
+  DCHECK(CalledOnValidThread());
+  if (!channel_)
+    return;
+  Send(
+      new AcceleratedVideoDecoderMsg_SetSurface(decoder_route_id_, surface_id));
 }
 
 void GpuVideoDecodeAcceleratorHost::Destroy() {
@@ -239,17 +247,14 @@ void GpuVideoDecodeAcceleratorHost::OnDismissPictureBuffer(
 }
 
 void GpuVideoDecodeAcceleratorHost::OnPictureReady(
-    int32_t picture_buffer_id,
-    int32_t bitstream_buffer_id,
-    const gfx::Rect& visible_rect,
-    bool allow_overlay,
-    bool size_changed) {
+    const AcceleratedVideoDecoderHostMsg_PictureReady_Params& params) {
   DCHECK(CalledOnValidThread());
   if (!client_)
     return;
-  Picture picture(picture_buffer_id, bitstream_buffer_id, visible_rect,
-                  allow_overlay);
-  picture.set_size_changed(size_changed);
+  Picture picture(params.picture_buffer_id, params.bitstream_buffer_id,
+                  params.visible_rect, params.color_space,
+                  params.allow_overlay);
+  picture.set_size_changed(params.size_changed);
   client_->PictureReady(picture);
 }
 

@@ -33,11 +33,12 @@
 #include "content/browser/service_worker/service_worker_metrics.h"
 #include "content/browser/service_worker/service_worker_script_cache_map.h"
 #include "content/common/content_export.h"
+#include "content/common/origin_trials/trial_token_validator.h"
 #include "content/common/service_worker/service_worker_status_code.h"
 #include "content/common/service_worker/service_worker_types.h"
 #include "ipc/ipc_message.h"
 #include "mojo/public/cpp/bindings/interface_ptr.h"
-#include "services/shell/public/cpp/interface_provider.h"
+#include "services/service_manager/public/cpp/interface_provider.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerEventResult.h"
 #include "url/gurl.h"
 #include "url/origin.h"
@@ -53,7 +54,6 @@ class HttpResponseInfo;
 
 namespace content {
 
-class EmbeddedWorkerRegistry;
 class ServiceWorkerContextCore;
 class ServiceWorkerProviderHost;
 class ServiceWorkerRegistration;
@@ -169,6 +169,17 @@ class CONTENT_EXPORT ServiceWorkerVersion
     foreign_fetch_origins_ = origins;
   }
 
+  // Meaningful only if this version is active.
+  const NavigationPreloadState& navigation_preload_state() const {
+    DCHECK(status_ == ACTIVATING || status_ == ACTIVATED) << status_;
+    return navigation_preload_state_;
+  }
+  // Only intended for use by ServiceWorkerRegistration. Generally use
+  // ServiceWorkerRegistration::EnableNavigationPreload or
+  // ServiceWorkerRegistration::SetNavigationPreloadHeader instead of this
+  // function.
+  void SetNavigationPreloadState(const NavigationPreloadState& state);
+
   ServiceWorkerMetrics::Site site_for_uma() const { return site_for_uma_; }
 
   // This sets the new status and also run status change callbacks
@@ -235,6 +246,12 @@ class CONTENT_EXPORT ServiceWorkerVersion
                                     const base::TimeDelta& timeout,
                                     TimeoutBehavior timeout_behavior);
 
+  // Starts a request of type EventType::EXTERNAL_REQUEST.
+  // Provides a mechanism to external clients to keep the worker running.
+  // |request_uuid| is a GUID for clients to identify the request.
+  // Returns true if the request was successfully scheduled to starrt.
+  bool StartExternalRequest(const std::string& request_uuid);
+
   // Informs ServiceWorkerVersion that an event has finished being dispatched.
   // Returns false if no pending requests with the provided id exist, for
   // example if the request has already timed out.
@@ -244,6 +261,11 @@ class CONTENT_EXPORT ServiceWorkerVersion
   bool FinishRequest(int request_id,
                      bool was_handled,
                      base::Time dispatch_event_time);
+
+  // Finishes an external request that was started by StartExternalRequest().
+  // Returns false if there was an error finishing the request: e.g. the request
+  // was not found or the worker already terminated.
+  bool FinishExternalRequest(const std::string& request_uuid);
 
   // Connects to a specific mojo service exposed by the (running) service
   // worker. If a connection to a service for the same Interface already exists
@@ -353,6 +375,19 @@ class CONTENT_EXPORT ServiceWorkerVersion
     pause_after_download_ = pause_after_download;
   }
 
+  // Returns nullptr if the main script is not loaded yet and:
+  //  1) The worker is a new one.
+  //  OR
+  //  2) The worker is an existing one but the entry in ServiceWorkerDatabase
+  //     was written by old version of Chrome (< M56), so |origin_trial_tokens|
+  //     wasn't set in the entry.
+  const TrialTokenValidator::FeatureToTokensMap* origin_trial_tokens() const {
+    return origin_trial_tokens_.get();
+  }
+  // Set valid tokens in |tokens|. Invalid tokens in |tokens| are ignored.
+  void SetValidOriginTrialTokens(
+      const TrialTokenValidator::FeatureToTokensMap& tokens);
+
   void SetDevToolsAttached(bool attached);
 
   // Sets the HttpResponseInfo used to load the main script.
@@ -369,6 +404,11 @@ class CONTENT_EXPORT ServiceWorkerVersion
   // requests, in-progress streaming URLRequestJobs, or pending start callbacks.
   bool HasWork() const;
 
+  // Returns the number of pending external request count of this worker.
+  size_t GetExternalRequestCountForTest() const {
+    return external_request_uuid_to_request_id_.size();
+  }
+
  private:
   friend class base::RefCounted<ServiceWorkerVersion>;
   friend class ServiceWorkerMetrics;
@@ -376,22 +416,23 @@ class CONTENT_EXPORT ServiceWorkerVersion
   friend class ServiceWorkerStallInStoppingTest;
   friend class ServiceWorkerURLRequestJobTest;
   friend class ServiceWorkerVersionBrowserTest;
-  friend class ServiceWorkerVersionTest;
+  friend class ServiceWorkerVersionTestP;
 
-  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerControlleeRequestHandlerTest,
+  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerControlleeRequestHandlerTestP,
                            ActivateWaitingVersion);
-  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerControlleeRequestHandlerTest,
+  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerControlleeRequestHandlerTestP,
                            FallbackWithNoFetchHandler);
-  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTest, IdleTimeout);
-  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTest, SetDevToolsAttached);
-  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTest, StaleUpdate_FreshWorker);
-  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTest,
+  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTestP, IdleTimeout);
+  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTestP, SetDevToolsAttached);
+  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTestP, StaleUpdate_FreshWorker);
+  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTestP,
                            StaleUpdate_NonActiveWorker);
-  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTest, StaleUpdate_StartWorker);
-  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTest, StaleUpdate_RunningWorker);
-  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTest,
+  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTestP, StaleUpdate_StartWorker);
+  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTestP,
+                           StaleUpdate_RunningWorker);
+  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTestP,
                            StaleUpdate_DoNotDeferTimer);
-  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTest, RequestTimeout);
+  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTestP, RequestTimeout);
   FRIEND_TEST_ALL_PREFIXES(ServiceWorkerFailToStartTest, Timeout);
   FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionBrowserTest,
                            TimeoutStartingWorker);
@@ -399,12 +440,12 @@ class CONTENT_EXPORT ServiceWorkerVersion
                            TimeoutWorkerInEvent);
   FRIEND_TEST_ALL_PREFIXES(ServiceWorkerStallInStoppingTest, DetachThenStart);
   FRIEND_TEST_ALL_PREFIXES(ServiceWorkerStallInStoppingTest, DetachThenRestart);
-  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTest,
+  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTestP,
                            RegisterForeignFetchScopes);
-  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTest, RequestCustomizedTimeout);
-  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTest,
+  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTestP, RequestCustomizedTimeout);
+  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTestP,
                            RequestCustomizedTimeoutKill);
-  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTest, MixedRequestTimeouts);
+  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTestP, MixedRequestTimeouts);
   FRIEND_TEST_ALL_PREFIXES(ServiceWorkerURLRequestJobTest, EarlyResponse);
   FRIEND_TEST_ALL_PREFIXES(ServiceWorkerURLRequestJobTest, CancelRequest);
   FRIEND_TEST_ALL_PREFIXES(ServiceWorkerActivationTest, SkipWaiting);
@@ -681,6 +722,10 @@ class CONTENT_EXPORT ServiceWorkerVersion
   // callbacks.
   void FinishStartWorker(ServiceWorkerStatusCode status);
 
+  // Removes any pending external request that has GUID of |request_uuid|.
+  void CleanUpExternalRequest(const std::string& request_uuid,
+                              ServiceWorkerStatusCode status);
+
   const int64_t version_id_;
   const int64_t registration_id_;
   const GURL script_url_;
@@ -688,6 +733,11 @@ class CONTENT_EXPORT ServiceWorkerVersion
   std::vector<GURL> foreign_fetch_scopes_;
   std::vector<url::Origin> foreign_fetch_origins_;
   FetchHandlerExistence fetch_handler_existence_;
+  // The source of truth for navigation preload state is the
+  // ServiceWorkerRegistration. |navigation_preload_state_| is essentially a
+  // cached value because it must be looked up quickly and a live registration
+  // doesn't necessarily exist whenever there is a live version.
+  NavigationPreloadState navigation_preload_state_;
   ServiceWorkerMetrics::Site site_for_uma_;
 
   Status status_ = NEW;
@@ -699,6 +749,11 @@ class CONTENT_EXPORT ServiceWorkerVersion
   // Holds in-flight requests, including requests due to outstanding push,
   // fetch, sync, etc. events.
   IDMap<PendingRequest, IDMapOwnPointer> pending_requests_;
+
+  // Container for pending external requests for this service worker.
+  // (key, value): (request uuid, request id).
+  using RequestUUIDToRequestIDMap = std::map<std::string, int>;
+  RequestUUIDToRequestIDMap external_request_uuid_to_request_id_;
 
   // Stores all open connections to mojo services. Maps the service name to
   // the actual interface pointer. When a connection is closed it is removed
@@ -747,6 +802,8 @@ class CONTENT_EXPORT ServiceWorkerVersion
 
   std::vector<int> pending_skip_waiting_requests_;
   std::unique_ptr<net::HttpResponseInfo> main_script_http_info_;
+
+  std::unique_ptr<TrialTokenValidator::FeatureToTokensMap> origin_trial_tokens_;
 
   // If not OK, the reason that StartWorker failed. Used for
   // running |start_callbacks_|.

@@ -33,6 +33,7 @@
 
 #include "public/platform/WebCString.h"
 #include "public/platform/WebCommon.h"
+#include "public/platform/WebSecurityStyle.h"
 #include "public/platform/WebString.h"
 #include "public/platform/WebVector.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerResponseType.h"
@@ -54,13 +55,6 @@ class WebURLResponse {
     HTTPVersion_1_0,
     HTTPVersion_1_1,
     HTTPVersion_2_0
-  };
-  enum SecurityStyle {
-    SecurityStyleUnknown,
-    SecurityStyleUnauthenticated,
-    SecurityStyleAuthenticationBroken,
-    SecurityStyleWarning,
-    SecurityStyleAuthenticated
   };
 
   struct SignedCertificateTimestamp {
@@ -120,6 +114,8 @@ class WebURLResponse {
           sctList(sctList) {}
     // All strings are human-readable values.
     WebString protocol;
+    // keyExchange is the empty string if not applicable for the connection's
+    // protocol.
     WebString keyExchange;
     // keyExchangeGroup is the empty string if not applicable for the
     // connection's key exchange.
@@ -209,8 +205,8 @@ class WebURLResponse {
 
   BLINK_PLATFORM_EXPORT void setHasMajorCertificateErrors(bool);
 
-  BLINK_PLATFORM_EXPORT SecurityStyle getSecurityStyle() const;
-  BLINK_PLATFORM_EXPORT void setSecurityStyle(SecurityStyle);
+  BLINK_PLATFORM_EXPORT WebSecurityStyle getSecurityStyle() const;
+  BLINK_PLATFORM_EXPORT void setSecurityStyle(WebSecurityStyle);
 
   BLINK_PLATFORM_EXPORT void setSecurityDetails(const WebSecurityDetails&);
 
@@ -292,15 +288,15 @@ class WebURLResponse {
   BLINK_PLATFORM_EXPORT void setRemotePort(unsigned short);
 
   // Original size of the response before decompression.
-  BLINK_PLATFORM_EXPORT long long encodedDataLength() const;
+  BLINK_PLATFORM_EXPORT long long encodedDataLengthForTesting() const;
   BLINK_PLATFORM_EXPORT void addToEncodedDataLength(long long);
 
   // Original size of the response body before decompression.
-  BLINK_PLATFORM_EXPORT long long encodedBodyLength() const;
+  BLINK_PLATFORM_EXPORT long long encodedBodyLengthForTesting() const;
   BLINK_PLATFORM_EXPORT void addToEncodedBodyLength(long long);
 
   // Size of the response body after removing any content encoding.
-  BLINK_PLATFORM_EXPORT long long decodedBodyLength() const;
+  BLINK_PLATFORM_EXPORT long long decodedBodyLengthForTesting() const;
   BLINK_PLATFORM_EXPORT void addToDecodedBodyLength(long long);
 
   // Extra data associated with the underlying resource response. Resource

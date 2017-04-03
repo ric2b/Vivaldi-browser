@@ -8,10 +8,10 @@
 #include <memory>
 
 #include "base/macros.h"
-#include "services/shell/public/interfaces/service.mojom.h"
+#include "services/service_manager/public/interfaces/service.mojom.h"
 
-namespace shell {
-class Service;
+namespace service_manager {
+class ServiceContext;
 }
 
 // Responsible for running mash, both child and main processes.
@@ -20,15 +20,20 @@ class MashRunner {
   MashRunner();
   ~MashRunner();
 
-  void Run();
+  // Returns 0 if the process was initialized correctly, or error code on
+  // failure.
+  int Run();
 
  private:
   void RunMain();
-  void RunChild();
 
-  void StartChildApp(shell::mojom::ServiceRequest service_request);
+  // Returns 0 if the child process was initialized correctly, or error code on
+  // failure.
+  int RunChild();
 
-  std::unique_ptr<shell::Service> service_;
+  void StartChildApp(service_manager::mojom::ServiceRequest service_request);
+
+  std::unique_ptr<service_manager::ServiceContext> context_;
 
   DISALLOW_COPY_AND_ASSIGN(MashRunner);
 };

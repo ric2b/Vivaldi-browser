@@ -17,13 +17,6 @@
 
 namespace base {
 
-SharedMemoryCreateOptions::SharedMemoryCreateOptions()
-    : name_deprecated(nullptr),
-      open_existing_deprecated(false),
-      size(0),
-      executable(false),
-      share_read_only(false) {}
-
 SharedMemory::SharedMemory()
     : mapped_file_(-1),
       mapped_size_(0),
@@ -127,6 +120,14 @@ bool SharedMemory::Unmap() {
 
 SharedMemoryHandle SharedMemory::handle() const {
   return FileDescriptor(mapped_file_, false);
+}
+
+SharedMemoryHandle SharedMemory::TakeHandle() {
+  FileDescriptor handle(mapped_file_, true);
+  mapped_file_ = -1;
+  memory_ = nullptr;
+  mapped_size_ = 0;
+  return handle;
 }
 
 void SharedMemory::Close() {

@@ -20,9 +20,14 @@
 #include "components/update_client/update_engine.h"
 #include "url/gurl.h"
 
+namespace base {
+class FilePath;
+}
+
 namespace update_client {
 
 class UpdateChecker;
+enum class UnpackError;
 
 // Defines a template method design pattern for ActionUpdate. This class
 // implements the common code for updating a single CRX using either
@@ -53,8 +58,13 @@ class ActionUpdate : public Action, protected ActionImpl {
   virtual void OnInstallStart(CrxUpdateItem* item) = 0;
   virtual void OnInstallSuccess(CrxUpdateItem* item) = 0;
   virtual void OnInstallError(CrxUpdateItem* item,
-                              ComponentUnpacker::Error error,
+                              ErrorCategory error_category,
+                              int error,
                               int extended_error) = 0;
+
+  void StartDownload(CrxUpdateItem* item);
+  void DownloadComplete(const std::string& id,
+                        const CrxDownloader::Result& download_result);
 
   // Called when progress is being made downloading a CRX. The progress may
   // not monotonically increase due to how the CRX downloader switches between
@@ -62,27 +72,31 @@ class ActionUpdate : public Action, protected ActionImpl {
   void DownloadProgress(const std::string& id,
                         const CrxDownloader::Result& download_result);
 
-  // Called when the CRX package has been downloaded to a temporary location.
-  void DownloadComplete(const std::string& id,
-                        const CrxDownloader::Result& download_result);
+  void StartInstall(CrxUpdateItem* item, const base::FilePath& crx_path);
+  void InstallComplete(const std::string& id,
+                       ErrorCategory error_category,
+                       int error,
+                       int extended_error);
 
-  void Install(const std::string& id, const base::FilePath& crx_path);
+  void StartUnpackOnBlockingTaskRunner(CrxUpdateItem* item,
+                                       const base::FilePath& crx_path);
+  void UnpackCompleteOnBlockingTaskRunner(
+      CrxUpdateItem* item,
+      const base::FilePath& crx_path,
+      const ComponentUnpacker::Result& result);
 
-  // TODO(sorin): refactor the public interface of ComponentUnpacker so
-  // that these calls can run on the main thread.
-  void DoInstallOnBlockingTaskRunner(UpdateContext* update_context,
-                                     CrxUpdateItem* item,
-                                     const base::FilePath& crx_path);
-
-  void EndUnpackingOnBlockingTaskRunner(UpdateContext* update_context,
-                                        CrxUpdateItem* item,
+  void StartInstallOnBlockingTaskRunner(CrxUpdateItem* item,
                                         const base::FilePath& crx_path,
-                                        ComponentUnpacker::Error error,
-                                        int extended_error);
+                                        const base::FilePath& unpack_path);
+  void InstallCompleteOnBlockingTaskRunner(CrxUpdateItem* item,
+                                           const base::FilePath& crx_path,
+                                           ErrorCategory error_category,
+                                           int error,
+                                           int extended_error);
 
-  void DoneInstalling(const std::string& id,
-                      ComponentUnpacker::Error error,
-                      int extended_error);
+  CrxInstaller::Result DoInstall(CrxUpdateItem* item,
+                                 const base::FilePath& crx_path,
+                                 const base::FilePath& unpack_path);
 
   // Downloads updates for one CRX id only.
   std::unique_ptr<CrxDownloader> crx_downloader_;
@@ -115,7 +129,8 @@ class ActionUpdateDiff : public ActionUpdate {
   void OnInstallStart(CrxUpdateItem* item) override;
   void OnInstallSuccess(CrxUpdateItem* item) override;
   void OnInstallError(CrxUpdateItem* item,
-                      ComponentUnpacker::Error error,
+                      ErrorCategory error_category,
+                      int error,
                       int extended_error) override;
 
   DISALLOW_COPY_AND_ASSIGN(ActionUpdateDiff);
@@ -141,7 +156,8 @@ class ActionUpdateFull : public ActionUpdate {
   void OnInstallStart(CrxUpdateItem* item) override;
   void OnInstallSuccess(CrxUpdateItem* item) override;
   void OnInstallError(CrxUpdateItem* item,
-                      ComponentUnpacker::Error error,
+                      ErrorCategory error_category,
+                      int error,
                       int extended_error) override;
 
   DISALLOW_COPY_AND_ASSIGN(ActionUpdateFull);

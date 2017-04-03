@@ -13,7 +13,6 @@ namespace bookmark_api_constants {
 // Keys.
 extern const char kParentIdKey[];
 extern const char kUrlKey[];
-extern const char kSpeedDialKey[];
 extern const char kTitleKey[];
 
 // Errors.
@@ -23,7 +22,6 @@ extern const char kFolderNotEmptyError[];
 extern const char kInvalidIdError[];
 extern const char kInvalidIndexError[];
 extern const char kInvalidUrlError[];
-extern const char kNicknameExists[];
 extern const char kModifySpecialError[];
 extern const char kEditBookmarksDisabled[];
 extern const char kModifyManagedError[];

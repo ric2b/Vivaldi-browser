@@ -7,6 +7,10 @@
 
 #include "ui/views/mus/mus_export.h"
 
+namespace aura {
+class Window;
+}
+
 namespace gfx {
 class Point;
 }
@@ -20,7 +24,9 @@ class VIEWS_MUS_EXPORT ScreenMusDelegate {
 
   virtual gfx::Point GetCursorScreenPoint() = 0;
 
-protected:
+  virtual aura::Window* GetWindowAtScreenPoint(const gfx::Point& point) = 0;
+
+ protected:
   virtual ~ScreenMusDelegate() {}
 };
 

@@ -56,7 +56,6 @@ class DISPLAY_EXPORT DisplayList {
   const Displays& displays() const { return displays_; }
 
   Displays::const_iterator FindDisplayById(int64_t id) const;
-  Displays::iterator FindDisplayById(int64_t id);
 
   Displays::const_iterator GetPrimaryDisplayIterator() const;
 
@@ -65,8 +64,11 @@ class DISPLAY_EXPORT DisplayList {
   // callers release the last lock they call the observers appropriately.
   std::unique_ptr<DisplayListObserverLock> SuspendObserverUpdates();
 
-  // Updates the cached id based on display.id() as well as whether the Display
-  // is the primary display.
+  // Updates the cached display based on display.id().
+  void UpdateDisplay(const display::Display& display);
+
+  // Updates the cached display based on display.id(). Also updates the primary
+  // display if |type| indicates |display| is the primary display.
   void UpdateDisplay(const display::Display& display, Type type);
 
   // Adds a new Display.
@@ -87,6 +89,10 @@ class DISPLAY_EXPORT DisplayList {
   }
   void IncrementObserverSuspendLockCount();
   void DecrementObserverSuspendLockCount();
+
+  Type GetTypeByDisplayId(int64_t display_id) const;
+
+  Displays::iterator FindDisplayByIdInternal(int64_t id);
 
   std::vector<display::Display> displays_;
   int primary_display_index_ = -1;

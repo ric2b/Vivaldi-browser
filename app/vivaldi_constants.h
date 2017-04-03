@@ -9,6 +9,11 @@ namespace vivaldi {
 
 // All constants in alphabetical order. The constants should be documented
 // alongside the definition of their values in the .cc file.
+
+extern const char kExtDataKey[];
+
+extern const char kNicknameExists[];
+
 extern const char kVivaldiAppId[];
 
 extern const char kVivaldiAppURLDomain[];
@@ -19,6 +24,10 @@ extern const char kVivaldiReservedApiError[];
 extern const char kVivaldiUIScheme[];
 extern const char kVivaldiUINewTabHost[];
 extern const char kVivaldiUINewTabURL[];
+
+extern const char kVivaldiVersion[];
+
+extern const char kWindowExtDataKey[];
 
 }  // namespace vivaldi
 

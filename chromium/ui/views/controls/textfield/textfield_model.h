@@ -39,7 +39,7 @@ enum MergeType {
 
 namespace test {
 class BridgedNativeWidgetTest;
-}  // namsespace test
+}  // namespace test
 
 // A model that represents text content for a views::Textfield.
 // It supports editing, selection and cursor manipulation.
@@ -126,7 +126,8 @@ class VIEWS_EXPORT TextfieldModel {
   // will be confirmed, which may alter the specified selection range start.
   bool MoveCursorTo(const gfx::SelectionModel& cursor);
 
-  // Helper function to call MoveCursorTo on the TextfieldModel.
+  // Calls the corresponding function on the associated RenderText instance. Any
+  // composition text will be confirmed.
   bool MoveCursorTo(const gfx::Point& point, bool select);
 
   // Selection related methods.
@@ -265,9 +266,8 @@ class VIEWS_EXPORT TextfieldModel {
                                size_t new_text_start);
   void ExecuteAndRecordInsert(const base::string16& new_text, bool mergeable);
 
-  // Adds or merge |edit| into edit history. Return true if the edit
-  // has been merged and must be deleted after redo.
-  bool AddOrMergeEditHistory(internal::Edit* edit);
+  // Adds or merges |edit| into the edit history.
+  void AddOrMergeEditHistory(std::unique_ptr<internal::Edit> edit);
 
   // Modify the text buffer in following way:
   // 1) Delete the string from |delete_from| to |delte_to|.
@@ -294,11 +294,13 @@ class VIEWS_EXPORT TextfieldModel {
   // The composition range.
   gfx::Range composition_range_;
 
-  typedef std::list<internal::Edit*> EditHistory;
+  // The list of Edits. The oldest Edits are at the front of the list, and the
+  // newest ones are at the back of the list.
+  using EditHistory = std::list<std::unique_ptr<internal::Edit>>;
   EditHistory edit_history_;
 
   // An iterator that points to the current edit that can be undone.
-  // This iterator moves from the |end()|, meaining no edit to undo,
+  // This iterator moves from the |end()|, meaning no edit to undo,
   // to the last element (one before |end()|), meaning no edit to redo.
   //
   // There is no edit to undo (== end()) when:

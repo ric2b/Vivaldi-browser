@@ -14,14 +14,11 @@ class TextInputClient;
 
 namespace views {
 
-class InputMethodMus;
-
 // TextInputClientImpl receieves updates from IME drivers over Mojo IPC, and
 // notifies the underlying ui::TextInputClient accordingly.
 class TextInputClientImpl : public ui::mojom::TextInputClient {
  public:
-  TextInputClientImpl(ui::TextInputClient* text_input_client,
-                      InputMethodMus* input_method);
+  explicit TextInputClientImpl(ui::TextInputClient* text_input_client);
   ~TextInputClientImpl() override;
 
   ui::mojom::TextInputClientPtr CreateInterfacePtrAndBind();
@@ -29,10 +26,8 @@ class TextInputClientImpl : public ui::mojom::TextInputClient {
  private:
   // ui::mojom::TextInputClient:
   void OnCompositionEvent(ui::mojom::CompositionEventPtr event) override;
-  void OnUnhandledEvent(std::unique_ptr<ui::Event> key_event) override;
 
   ui::TextInputClient* text_input_client_;
-  InputMethodMus* input_method_;
   mojo::Binding<ui::mojom::TextInputClient> binding_;
 
   DISALLOW_COPY_AND_ASSIGN(TextInputClientImpl);

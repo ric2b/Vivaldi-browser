@@ -7,6 +7,7 @@
 #include <memory>
 
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/chooser_controller/mock_chooser_controller.h"
 #include "chrome/grit/generated_resources.h"
@@ -46,37 +47,30 @@ class ChooserContentViewTest : public views::ViewsTestBase {
     std::unique_ptr<MockChooserController> mock_chooser_controller(
         new MockChooserController(nullptr));
     mock_chooser_controller_ = mock_chooser_controller.get();
-    mock_table_view_observer_.reset(new MockTableViewObserver());
-    chooser_content_view_.reset(new ChooserContentView(
-        mock_table_view_observer_.get(), std::move(mock_chooser_controller)));
-    table_view_ = chooser_content_view_->table_view_for_test();
+    mock_table_view_observer_ = base::MakeUnique<MockTableViewObserver>();
+    chooser_content_view_ = base::MakeUnique<ChooserContentView>(
+        mock_table_view_observer_.get(), std::move(mock_chooser_controller));
+    table_view_ = chooser_content_view_->table_view_;
     ASSERT_TRUE(table_view_);
     table_model_ = table_view_->model();
     ASSERT_TRUE(table_model_);
-    throbber_ = chooser_content_view_->throbber_for_test();
+    throbber_ = chooser_content_view_->throbber_;
     ASSERT_TRUE(throbber_);
-    turn_adapter_off_help_ =
-        chooser_content_view_->turn_adapter_off_help_for_test();
+    turn_adapter_off_help_ = chooser_content_view_->turn_adapter_off_help_;
     ASSERT_TRUE(turn_adapter_off_help_);
-    discovery_state_.reset(chooser_content_view_->CreateExtraView());
-    ASSERT_TRUE(discovery_state_);
-    styled_label_.reset(chooser_content_view_->CreateFootnoteView());
-    ASSERT_TRUE(styled_label_);
+    footnote_link_ = chooser_content_view_->footnote_link();
+    ASSERT_TRUE(footnote_link_);
   }
 
  protected:
-  // |discovery_state_| needs to be valid when |chooser_content_view_| is
-  // released, since ChooserContentView's destructor needs to access it.
-  // So it is declared before |chooser_content_view_|.
-  std::unique_ptr<views::Link> discovery_state_;
   std::unique_ptr<MockTableViewObserver> mock_table_view_observer_;
   std::unique_ptr<ChooserContentView> chooser_content_view_;
-  MockChooserController* mock_chooser_controller_;
-  views::TableView* table_view_;
-  ui::TableModel* table_model_;
-  views::Throbber* throbber_;
-  views::Link* turn_adapter_off_help_;
-  std::unique_ptr<views::StyledLabel> styled_label_;
+  MockChooserController* mock_chooser_controller_ = nullptr;
+  views::TableView* table_view_ = nullptr;
+  ui::TableModel* table_model_ = nullptr;
+  views::Throbber* throbber_ = nullptr;
+  views::StyledLabel* turn_adapter_off_help_ = nullptr;
+  views::StyledLabel* footnote_link_ = nullptr;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(ChooserContentViewTest);
@@ -99,7 +93,7 @@ TEST_F(ChooserContentViewTest, InitialState) {
   EXPECT_EQ(-1, table_view_->FirstSelectedRow());
   EXPECT_FALSE(throbber_->visible());
   EXPECT_FALSE(turn_adapter_off_help_->visible());
-  EXPECT_TRUE(discovery_state_->text().empty());
+  EXPECT_EQ(chooser_content_view_->help_text_, footnote_link_->text());
 }
 
 TEST_F(ChooserContentViewTest, AddOption) {
@@ -494,9 +488,8 @@ TEST_F(ChooserContentViewTest, AdapterOnAndOffAndOn) {
   EXPECT_EQ(-1, table_view_->FirstSelectedRow());
   EXPECT_FALSE(throbber_->visible());
   EXPECT_FALSE(turn_adapter_off_help_->visible());
-  EXPECT_TRUE(discovery_state_->enabled());
-  EXPECT_EQ(l10n_util::GetStringUTF16(IDS_BLUETOOTH_DEVICE_CHOOSER_RE_SCAN),
-            discovery_state_->text());
+  EXPECT_EQ(chooser_content_view_->help_and_re_scan_text_,
+            footnote_link_->text());
 
   mock_chooser_controller_->OptionAdded(
       base::ASCIIToUTF16("a"),
@@ -518,11 +511,7 @@ TEST_F(ChooserContentViewTest, AdapterOnAndOffAndOn) {
   EXPECT_FALSE(table_view_->visible());
   EXPECT_FALSE(throbber_->visible());
   EXPECT_TRUE(turn_adapter_off_help_->visible());
-  EXPECT_EQ(
-      l10n_util::GetStringUTF16(IDS_BLUETOOTH_DEVICE_CHOOSER_TURN_ADAPTER_OFF),
-      turn_adapter_off_help_->text());
-  EXPECT_FALSE(discovery_state_->enabled());
-  EXPECT_TRUE(discovery_state_->text().empty());
+  EXPECT_EQ(chooser_content_view_->help_text_, footnote_link_->text());
 
   mock_chooser_controller_->OnAdapterPresenceChanged(
       content::BluetoothChooser::AdapterPresence::POWERED_ON);
@@ -537,9 +526,8 @@ TEST_F(ChooserContentViewTest, AdapterOnAndOffAndOn) {
   EXPECT_EQ(-1, table_view_->FirstSelectedRow());
   EXPECT_FALSE(throbber_->visible());
   EXPECT_FALSE(turn_adapter_off_help_->visible());
-  EXPECT_TRUE(discovery_state_->enabled());
-  EXPECT_EQ(l10n_util::GetStringUTF16(IDS_BLUETOOTH_DEVICE_CHOOSER_RE_SCAN),
-            discovery_state_->text());
+  EXPECT_EQ(chooser_content_view_->help_and_re_scan_text_,
+            footnote_link_->text());
 }
 
 TEST_F(ChooserContentViewTest, DiscoveringAndNoOptionAddedAndIdle) {
@@ -562,10 +550,8 @@ TEST_F(ChooserContentViewTest, DiscoveringAndNoOptionAddedAndIdle) {
       content::BluetoothChooser::DiscoveryState::DISCOVERING);
   EXPECT_FALSE(table_view_->visible());
   EXPECT_TRUE(throbber_->visible());
-  // |discovery_state_| is disabled and shows a label instead of a link.
-  EXPECT_FALSE(discovery_state_->enabled());
-  EXPECT_EQ(l10n_util::GetStringUTF16(IDS_BLUETOOTH_DEVICE_CHOOSER_SCANNING),
-            discovery_state_->text());
+  EXPECT_EQ(chooser_content_view_->help_and_scanning_text_,
+            footnote_link_->text());
 
   mock_chooser_controller_->OnDiscoveryStateChanged(
       content::BluetoothChooser::DiscoveryState::IDLE);
@@ -582,10 +568,8 @@ TEST_F(ChooserContentViewTest, DiscoveringAndNoOptionAddedAndIdle) {
   EXPECT_EQ(0, table_view_->SelectedRowCount());
   EXPECT_EQ(-1, table_view_->FirstSelectedRow());
   EXPECT_FALSE(throbber_->visible());
-  // |discovery_state_| is enabled and shows a link.
-  EXPECT_TRUE(discovery_state_->enabled());
-  EXPECT_EQ(l10n_util::GetStringUTF16(IDS_BLUETOOTH_DEVICE_CHOOSER_RE_SCAN),
-            discovery_state_->text());
+  EXPECT_EQ(chooser_content_view_->help_and_re_scan_text_,
+            footnote_link_->text());
 }
 
 TEST_F(ChooserContentViewTest, DiscoveringAndOneOptionAddedAndSelectedAndIdle) {
@@ -618,10 +602,8 @@ TEST_F(ChooserContentViewTest, DiscoveringAndOneOptionAddedAndSelectedAndIdle) {
   EXPECT_EQ(0, table_view_->SelectedRowCount());
   EXPECT_EQ(-1, table_view_->FirstSelectedRow());
   EXPECT_FALSE(throbber_->visible());
-  // |discovery_state_| is disabled and shows a label instead of a link.
-  EXPECT_FALSE(discovery_state_->enabled());
-  EXPECT_EQ(l10n_util::GetStringUTF16(IDS_BLUETOOTH_DEVICE_CHOOSER_SCANNING),
-            discovery_state_->text());
+  EXPECT_EQ(chooser_content_view_->help_and_scanning_text_,
+            footnote_link_->text());
   table_view_->Select(0);
   EXPECT_EQ(1, table_view_->SelectedRowCount());
   EXPECT_EQ(0, table_view_->FirstSelectedRow());
@@ -636,23 +618,23 @@ TEST_F(ChooserContentViewTest, DiscoveringAndOneOptionAddedAndSelectedAndIdle) {
   EXPECT_EQ(1, table_view_->SelectedRowCount());
   EXPECT_EQ(0, table_view_->FirstSelectedRow());
   EXPECT_FALSE(throbber_->visible());
-  // |discovery_state_| is enabled and shows a link.
-  EXPECT_TRUE(discovery_state_->enabled());
-  EXPECT_EQ(l10n_util::GetStringUTF16(IDS_BLUETOOTH_DEVICE_CHOOSER_RE_SCAN),
-            discovery_state_->text());
+  EXPECT_EQ(chooser_content_view_->help_and_re_scan_text_,
+            footnote_link_->text());
 }
 
 TEST_F(ChooserContentViewTest, ClickAdapterOffHelpLink) {
   EXPECT_CALL(*mock_chooser_controller_, OpenAdapterOffHelpUrl()).Times(1);
-  chooser_content_view_->LinkClicked(turn_adapter_off_help_, 0);
+  turn_adapter_off_help_->LinkClicked(nullptr, 0);
 }
 
 TEST_F(ChooserContentViewTest, ClickRescanLink) {
   EXPECT_CALL(*mock_chooser_controller_, RefreshOptions()).Times(1);
-  chooser_content_view_->LinkClicked(discovery_state_.get(), 0);
+  chooser_content_view_->StyledLabelLinkClicked(
+      footnote_link_, chooser_content_view_->re_scan_text_range_, 0);
 }
 
-TEST_F(ChooserContentViewTest, ClickStyledLabelLink) {
+TEST_F(ChooserContentViewTest, ClickGetHelpLink) {
   EXPECT_CALL(*mock_chooser_controller_, OpenHelpCenterUrl()).Times(1);
-  styled_label_->LinkClicked(nullptr, 0);
+  chooser_content_view_->StyledLabelLinkClicked(
+      footnote_link_, chooser_content_view_->help_text_range_, 0);
 }

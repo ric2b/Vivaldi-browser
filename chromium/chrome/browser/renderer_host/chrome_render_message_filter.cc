@@ -25,14 +25,13 @@
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/network_hints/common/network_hints_common.h"
 #include "components/network_hints/common/network_hints_messages.h"
-#include "components/rappor/rappor_service.h"
-#include "components/rappor/rappor_utils.h"
 #include "components/web_cache/browser/web_cache_manager.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/service_worker_context.h"
+#include "extensions/features/features.h"
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "extensions/browser/guest_view/web_view/web_view_permission_helper.h"
 #include "extensions/browser/guest_view/web_view/web_view_renderer_state.h"
 #include "extensions/common/manifest_handlers/default_locale_handler.h"
@@ -89,8 +88,6 @@ bool ChromeRenderMessageFilter::OnMessageReceived(const IPC::Message& message) {
 #endif
     IPC_MESSAGE_HANDLER(ChromeViewHostMsg_FieldTrialActivated,
                         OnFieldTrialActivated)
-    IPC_MESSAGE_HANDLER(ChromeViewHostMsg_RecordRappor, OnRecordRappor)
-    IPC_MESSAGE_HANDLER(ChromeViewHostMsg_RecordRapporURL, OnRecordRapporURL)
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
 
@@ -105,8 +102,6 @@ void ChromeRenderMessageFilter::OverrideThreadForMessage(
     case ChromeViewHostMsg_IsCrashReportingEnabled::ID:
 #endif
     case ChromeViewHostMsg_UpdatedCacheStats::ID:
-    case ChromeViewHostMsg_RecordRappor::ID:
-    case ChromeViewHostMsg_RecordRapporURL::ID:
       *thread = BrowserThread::UI;
       break;
     default:
@@ -214,7 +209,7 @@ void ChromeRenderMessageFilter::OnRequestFileSystemAccessSyncResponse(
   Send(reply_msg);
 }
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 void ChromeRenderMessageFilter::FileSystemAccessedSyncOnUIThread(
     int render_process_id,
     int render_frame_id,
@@ -270,7 +265,7 @@ void ChromeRenderMessageFilter::OnRequestFileSystemAccess(
   bool allowed =
       cookie_settings_->IsSettingCookieAllowed(origin_url, top_origin_url);
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   bool is_web_view_guest = extensions::WebViewRendererState::GetInstance()
       ->IsGuest(render_process_id_);
   if (is_web_view_guest) {
@@ -299,7 +294,7 @@ void ChromeRenderMessageFilter::OnRequestFileSystemAccess(
                  !allowed));
 }
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 void ChromeRenderMessageFilter::FileSystemAccessedOnUIThread(
     int render_process_id,
     int render_frame_id,
@@ -362,18 +357,4 @@ void ChromeRenderMessageFilter::OnFieldTrialActivated(
   // renderer. This is done by calling FindFullName which finalizes the group
   // and activates the trial.
   base::FieldTrialList::FindFullName(trial_name);
-}
-
-void ChromeRenderMessageFilter::OnRecordRappor(const std::string& metric,
-                                               const std::string& sample) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  rappor::SampleString(g_browser_process->rappor_service(), metric,
-                       rappor::ETLD_PLUS_ONE_RAPPOR_TYPE, sample);
-}
-
-void ChromeRenderMessageFilter::OnRecordRapporURL(const std::string& metric,
-                                                  const GURL& sample) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  rappor::SampleDomainAndRegistryFromGURL(g_browser_process->rappor_service(),
-                                          metric, sample);
 }

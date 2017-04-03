@@ -2,15 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include <openssl/bytestring.h>
-#include <openssl/digest.h>
-#include <openssl/ecdsa.h>
-#include <openssl/err.h>
-#include <openssl/evp.h>
-#include <openssl/pem.h>
-#include <openssl/rsa.h>
-#include <openssl/x509.h>
-
 #include "base/android/jni_android.h"
 #include "base/android/jni_array.h"
 #include "base/android/scoped_java_ref.h"
@@ -29,6 +20,14 @@
 #include "net/test/jni/AndroidKeyStoreTestUtil_jni.h"
 #include "net/test/test_data_directory.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/boringssl/src/include/openssl/bytestring.h"
+#include "third_party/boringssl/src/include/openssl/digest.h"
+#include "third_party/boringssl/src/include/openssl/ecdsa.h"
+#include "third_party/boringssl/src/include/openssl/err.h"
+#include "third_party/boringssl/src/include/openssl/evp.h"
+#include "third_party/boringssl/src/include/openssl/pem.h"
+#include "third_party/boringssl/src/include/openssl/rsa.h"
+#include "third_party/boringssl/src/include/openssl/x509.h"
 
 namespace net {
 
@@ -109,6 +108,7 @@ ScopedJava GetPKCS8PrivateKeyJava(android::PrivateKeyType key_type,
 }
 
 const char kTestRsaKeyFile[] = "client_1.pk8";
+const char kTestRsaCertificateFile[] = "client_1.pem";
 
 // Retrieve a JNI local ref for our test RSA key.
 ScopedJava GetRSATestKeyJava() {
@@ -287,10 +287,14 @@ static const struct {
 TEST(SSLPlatformKeyAndroid, RSA) {
   crypto::OpenSSLErrStackTracer err_tracer(FROM_HERE);
 
+  scoped_refptr<X509Certificate> cert =
+      ImportCertFromFile(GetTestCertsDirectory(), kTestRsaCertificateFile);
+  ASSERT_TRUE(cert);
   ScopedJava rsa_key = GetRSATestKeyJava();
   ASSERT_FALSE(rsa_key.is_null());
 
-  scoped_refptr<SSLPrivateKey> wrapper_key = WrapJavaPrivateKey(rsa_key);
+  scoped_refptr<SSLPrivateKey> wrapper_key =
+      WrapJavaPrivateKey(cert.get(), rsa_key);
   ASSERT_TRUE(wrapper_key);
 
   bssl::UniquePtr<EVP_PKEY> openssl_key = ImportPrivateKeyFile(kTestRsaKeyFile);
@@ -319,10 +323,14 @@ TEST(SSLPlatformKeyAndroid, RSA) {
 TEST(SSLPlatformKeyAndroid, ECDSA) {
   crypto::OpenSSLErrStackTracer err_tracer(FROM_HERE);
 
+  scoped_refptr<X509Certificate> cert =
+      ImportCertFromFile(GetTestCertsDirectory(), kTestEcdsaCertificateFile);
+  ASSERT_TRUE(cert);
   ScopedJava ecdsa_key = GetECDSATestKeyJava();
   ASSERT_FALSE(ecdsa_key.is_null());
 
-  scoped_refptr<SSLPrivateKey> wrapper_key = WrapJavaPrivateKey(ecdsa_key);
+  scoped_refptr<SSLPrivateKey> wrapper_key =
+      WrapJavaPrivateKey(cert.get(), ecdsa_key);
   ASSERT_TRUE(wrapper_key);
 
   bssl::UniquePtr<EVP_PKEY> openssl_key =
@@ -330,7 +338,7 @@ TEST(SSLPlatformKeyAndroid, ECDSA) {
   ASSERT_TRUE(openssl_key);
 
   // Check that the wrapper key returns the correct length and type.
-  EXPECT_EQ(SSLPrivateKey::Type::ECDSA, wrapper_key->GetType());
+  EXPECT_EQ(SSLPrivateKey::Type::ECDSA_P256, wrapper_key->GetType());
   EXPECT_EQ(static_cast<size_t>(EVP_PKEY_size(openssl_key.get())),
             wrapper_key->GetMaxSignatureLengthInBytes());
 

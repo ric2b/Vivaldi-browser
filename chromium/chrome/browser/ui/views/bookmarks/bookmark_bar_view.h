@@ -154,10 +154,10 @@ class BookmarkBarView : public views::AccessiblePaneView,
       int max_tooltip_width,
       const gfx::FontList& font_list,
       const GURL& url,
-      const base::string16& title, 
+      const base::string16& title,
       const base::string16 *nickname=NULL,
       const base::string16 *description=NULL,
-      const base::Time *created_time=NULL, 
+      const base::Time *created_time=NULL,
       const base::Time *visited_time=NULL);
 
   // Returns true if Bookmarks Bar is currently detached from the Toolbar.
@@ -188,7 +188,7 @@ class BookmarkBarView : public views::AccessiblePaneView,
   void VisibilityChanged(View* starting_from, bool is_visible) override;
 
   // AccessiblePaneView:
-  void GetAccessibleState(ui::AXViewState* state) override;
+  void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
 
   // gfx::AnimationDelegate:
   void AnimationProgressed(const gfx::Animation* animation) override;
@@ -292,7 +292,7 @@ class BookmarkBarView : public views::AccessiblePaneView,
   views::LabelButton* GetBookmarkButton(int index);
 
   // Returns BOOKMARK_LAUNCH_LOCATION_DETACHED_BAR or
-  // BOOKMARK_LAUNCH_LOCATION_ATTACHED_BAR based on detached state.
+  // BOOKMARK_LAUNCH_LOCATION_ATTACHED_BAR based on detached node_data.
   BookmarkLaunchLocation GetBookmarkLaunchLocation() const;
 
   // Returns the index of the first hidden bookmark button. If all buttons are

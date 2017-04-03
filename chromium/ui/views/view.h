@@ -53,14 +53,13 @@ class Transform;
 }
 
 namespace ui {
-struct AXViewState;
+struct AXActionData;
+struct AXNodeData;
 class Compositor;
 class InputMethod;
 class Layer;
 class NativeTheme;
 class PaintContext;
-class TextInputClient;
-class Texture;
 class ThemeProvider;
 }
 
@@ -281,10 +280,11 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   // windows.
   virtual gfx::Size GetMaximumSize() const;
 
-  // Return the height necessary to display this view with the provided width.
-  // View's implementation returns the value from getPreferredSize.cy.
-  // Override if your View's preferred height depends upon the width (such
-  // as with Labels).
+  // Return the preferred height for a specific width. Override if the
+  // preferred height depends upon the width (such as a multi-line label). If
+  // a LayoutManger has been installed this returns the value of
+  // LayoutManager::GetPreferredHeightForWidth(), otherwise this returns
+  // GetPreferredSize().height().
   virtual int GetHeightForWidth(int w) const;
 
   // Sets whether this view is visible. Painting is scheduled as needed. Also,
@@ -944,8 +944,15 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
 
   // Accessibility -------------------------------------------------------------
 
-  // Modifies |state| to reflect the current accessible state of this view.
-  virtual void GetAccessibleState(ui::AXViewState* state) { }
+  // Modifies |node_data| to reflect the current accessible state of this view.
+  virtual void GetAccessibleNodeData(ui::AXNodeData* node_data) {}
+
+  // Handle a request from assistive technology to perform an action on this
+  // view. Returns true on success, but note that the success/failure is
+  // not propagated to the client that requested the action, since the
+  // request is sometimes asynchronous. The right way to send a response is
+  // via NotifyAccessibilityEvent(), below.
+  virtual bool HandleAccessibleAction(const ui::AXActionData& action_data);
 
   // Returns an instance of the native accessibility interface for this view.
   virtual gfx::NativeViewAccessible GetNativeViewAccessible();
@@ -1122,7 +1129,6 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   void OnPaintLayer(const ui::PaintContext& context) override;
   void OnDelegatedFrameDamage(const gfx::Rect& damage_rect_in_dip) override;
   void OnDeviceScaleFactorChanged(float device_scale_factor) override;
-  base::Closure PrepareForLayerBoundsChange() override;
 
   // Finds the layer that this view paints to (it may belong to an ancestor
   // view), then reorders the immediate children of that layer to match the

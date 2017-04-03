@@ -16,7 +16,7 @@
 #include "chrome/common/pref_names.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/scoped_user_pref_update.h"
-#include "components/syncable_prefs/pref_service_syncable.h"
+#include "components/sync_preferences/pref_service_syncable.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/notification_registrar.h"
@@ -105,8 +105,8 @@ void UserImageSyncObserver::OnInitialSync() {
     UpdateLocalImageFromSynced();
     local_image_updated = true;
   }
-  FOR_EACH_OBSERVER(UserImageSyncObserver::Observer, observer_list_,
-      OnInitialSync(local_image_updated));
+  for (auto& observer : observer_list_)
+    observer.OnInitialSync(local_image_updated);
 }
 
 void UserImageSyncObserver::OnPreferenceChanged(const std::string& pref_name) {
@@ -199,4 +199,3 @@ bool UserImageSyncObserver::CanUpdateLocalImageNow() {
 }
 
 }  // namespace chromeos
-

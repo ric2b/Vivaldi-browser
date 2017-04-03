@@ -29,6 +29,7 @@
  */
 
 #include "platform/CrossThreadFunctional.h"
+#include "platform/WebTaskRunner.h"
 #include "platform/heap/Handle.h"
 #include "platform/heap/Heap.h"
 #include "platform/heap/HeapLinkedStack.h"
@@ -39,7 +40,6 @@
 #include "platform/heap/Visitor.h"
 #include "platform/testing/UnitTestHelpers.h"
 #include "public/platform/Platform.h"
-#include "public/platform/WebTaskRunner.h"
 #include "public/platform/WebTraceLocation.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "wtf/HashTraits.h"
@@ -742,6 +742,11 @@ class ClassWithMember : public GarbageCollected<ClassWithMember> {
 
   DEFINE_INLINE_TRACE() {
     EXPECT_TRUE(ThreadHeap::isHeapObjectAlive(this));
+
+    // Const pointer should also be alive. See http://crbug.com/661363.
+    const ClassWithMember* constPtr = static_cast<const ClassWithMember*>(this);
+    EXPECT_TRUE(ThreadHeap::isHeapObjectAlive(constPtr));
+
     if (!traceCount())
       EXPECT_FALSE(ThreadHeap::isHeapObjectAlive(m_traceCounter));
     else
@@ -1286,11 +1291,12 @@ class FinalizationObserverWithHashMap {
   static ObserverMap& observe(Observable& target) {
     ObserverMap& map = observers();
     ObserverMap::AddResult result = map.add(&target, nullptr);
-    if (result.isNewEntry)
+    if (result.isNewEntry) {
       result.storedValue->value =
-          wrapUnique(new FinalizationObserverWithHashMap(target));
-    else
+          makeUnique<FinalizationObserverWithHashMap>(target);
+    } else {
       ASSERT(result.storedValue->value);
+    }
     return map;
   }
 
@@ -6483,7 +6489,7 @@ class WeakPersistentHolder final {
 TEST(HeapTest, WeakPersistent) {
   Persistent<IntWrapper> object = new IntWrapper(20);
   std::unique_ptr<WeakPersistentHolder> holder =
-      wrapUnique(new WeakPersistentHolder(object));
+      makeUnique<WeakPersistentHolder>(object);
   preciselyCollectGarbage();
   EXPECT_TRUE(holder->object());
   object = nullptr;

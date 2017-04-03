@@ -8,11 +8,9 @@
 
 #include "ash/common/wallpaper/wallpaper_controller.h"
 #include "ash/common/wm_shell.h"
-#include "ash/display/display_manager.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/ash_test_helper.h"
-#include "ash/test/display_manager_test_api.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
@@ -28,14 +26,16 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chromeos/chromeos_switches.h"
-#include "chromeos/login/user_names.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/signin/core/account_id/account_id.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
+#include "components/user_manager/user_names.h"
 #include "components/wallpaper/wallpaper_files_id.h"
 #include "content/public/test/test_utils.h"
 #include "ui/aura/env.h"
+#include "ui/display/manager/display_manager.h"
+#include "ui/display/test/display_manager_test_api.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/image/image_skia.h"
@@ -85,9 +85,9 @@ class WallpaperManagerBrowserTest : public InProcessBrowserTest {
   void TearDownOnMainThread() override { controller_ = NULL; }
 
   // Update the display configuration as given in |display_specs|.  See
-  // ash::test::DisplayManagerTestApi::UpdateDisplay for more details.
+  // display::test::DisplayManagerTestApi::UpdateDisplay for more details.
   void UpdateDisplay(const std::string& display_specs) {
-    ash::test::DisplayManagerTestApi(
+    display::test::DisplayManagerTestApi(
         ash::Shell::GetInstance()->display_manager())
         .UpdateDisplay(display_specs);
   }
@@ -118,7 +118,7 @@ class WallpaperManagerBrowserTest : public InProcessBrowserTest {
                                                    false);
     // Adding a secondary display creates a shelf on that display, which
     // assumes a shelf on the primary display if the user was logged in.
-    ash::Shell::GetInstance()->CreateShelf();
+    ash::WmShell::Get()->CreateShelf();
     WaitAsyncWallpaperLoadStarted();
   }
 
@@ -367,7 +367,8 @@ IN_PROC_BROWSER_TEST_F(WallpaperManagerBrowserTest,
                        HotPlugInScreenAtGAIALoginScreen) {
   UpdateDisplay("800x600");
   // Set initial wallpaper to the default wallpaper.
-  WallpaperManager::Get()->SetDefaultWallpaperNow(login::StubAccountId());
+  WallpaperManager::Get()->SetDefaultWallpaperNow(
+      user_manager::StubAccountId());
   wallpaper_manager_test_utils::WaitAsyncWallpaperLoadFinished();
 
   // Hook up a 2000x2000 display. The large resolution custom wallpaper should
@@ -766,8 +767,7 @@ IN_PROC_BROWSER_TEST_F(WallpaperManagerBrowserTest, SmallGuestWallpaper) {
     return;
   CreateCmdlineWallpapers();
   user_manager::UserManager::Get()->UserLoggedIn(
-      chromeos::login::GuestAccountId(), chromeos::login::kGuestUserName,
-      false);
+      user_manager::GuestAccountId(), user_manager::kGuestUserName, false);
   UpdateDisplay("800x600");
   WallpaperManager::Get()->SetDefaultWallpaperNow(EmptyAccountId());
   wallpaper_manager_test_utils::WaitAsyncWallpaperLoadFinished();
@@ -782,8 +782,7 @@ IN_PROC_BROWSER_TEST_F(WallpaperManagerBrowserTest, LargeGuestWallpaper) {
 
   CreateCmdlineWallpapers();
   user_manager::UserManager::Get()->UserLoggedIn(
-      chromeos::login::GuestAccountId(), chromeos::login::kGuestUserName,
-      false);
+      user_manager::GuestAccountId(), user_manager::kGuestUserName, false);
   UpdateDisplay("1600x1200");
   WallpaperManager::Get()->SetDefaultWallpaperNow(EmptyAccountId());
   wallpaper_manager_test_utils::WaitAsyncWallpaperLoadFinished();
@@ -824,8 +823,8 @@ IN_PROC_BROWSER_TEST_F(WallpaperManagerBrowserTest,
   // Start loading the default wallpaper.
   UpdateDisplay("640x480");
   CreateCmdlineWallpapers();
-  user_manager::UserManager::Get()->UserLoggedIn(
-      chromeos::login::StubAccountId(), "test_hash", false);
+  user_manager::UserManager::Get()->UserLoggedIn(user_manager::StubAccountId(),
+                                                 "test_hash", false);
 
   WallpaperManager::Get()->SetDefaultWallpaperNow(EmptyAccountId());
 
@@ -834,7 +833,7 @@ IN_PROC_BROWSER_TEST_F(WallpaperManagerBrowserTest,
   gfx::ImageSkia image = wallpaper_manager_test_utils::CreateTestImage(
       640, 480, wallpaper_manager_test_utils::kCustomWallpaperColor);
   WallpaperManager::Get()->SetCustomWallpaper(
-      chromeos::login::StubAccountId(),
+      user_manager::StubAccountId(),
       wallpaper::WallpaperFilesId::FromString("test_hash"), "test-nofile.jpeg",
       WALLPAPER_LAYOUT_STRETCH, user_manager::User::CUSTOMIZED, image, true);
   wallpaper_manager_test_utils::WaitAsyncWallpaperLoadFinished();

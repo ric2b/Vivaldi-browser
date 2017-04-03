@@ -6,16 +6,9 @@
 //    DISABLE(foo,bar)
 //    DISABLE(foo,baz)
 
-/*
-  // Disabled in v51 due to flakiness
-  DISABLE(BrowserWindowControllerTest,
-          FullscreenToolbarIsVisibleAccordingToPrefs)
-*/
   DISABLE(DumpAccessibilityTreeTest, AccessibilityInputTime)
 
   DISABLE(SearchProviderTest, TestIsSearchProviderInstalled)
-
-//  DISABLE(WebRtcAudioDebugRecordingsBrowserTest, CallWithAudioDebugRecordings)
 
   DISABLE(ExtensionApiTest, Bookmarks)
 
@@ -39,8 +32,6 @@
   DISABLE(SpeechViewTest, ClickMicButton)
 
   // Broke in v52
-  //DISABLE(WebViewPopupInteractiveTest, PopupPositioningBasic)
-  //DISABLE(WebViewPopupInteractiveTest, PopupPositioningMoved)
   DISABLE(BrowserWindowControllerTest, FullscreenResizeFlags)
   DISABLE(ExtensionInstallUIBrowserTest, TestInstallThemeInFullScreen)
   DISABLE(FullscreenControllerTest, FullscreenOnFileURL)
@@ -55,3 +46,10 @@
   // Broke in v55
   DISABLE(ServiceProcessControlBrowserTest, LaunchAndReconnect)
   DISABLE(FindBarBrowserTest, EscapeKey)
+
+  // Broke in v56
+  DISABLE(WebstoreInlineInstallerTest,
+          BlockInlineInstallFromFullscreenForBrowser)
+  DISABLE(WebstoreInlineInstallerTest, BlockInlineInstallFromFullscreenForTab)
+  DISABLE(PipelineIntegrationTest,
+          EncryptedPlayback_MP4_CENC_SENC_NO_SAIZ_SAIO_Video)

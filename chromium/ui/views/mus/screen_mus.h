@@ -6,11 +6,11 @@
 #define UI_VIEWS_MUS_SCREEN_MUS_H_
 
 #include "mojo/public/cpp/bindings/binding.h"
-#include "services/ui/public/interfaces/display.mojom.h"
+#include "services/ui/public/interfaces/display_manager.mojom.h"
 #include "ui/display/screen_base.h"
 #include "ui/views/mus/mus_export.h"
 
-namespace shell {
+namespace service_manager {
 class Connector;
 }
 
@@ -27,18 +27,22 @@ class VIEWS_MUS_EXPORT ScreenMus
   explicit ScreenMus(ScreenMusDelegate* delegate);
   ~ScreenMus() override;
 
-  void Init(shell::Connector* connector);
+  void Init(service_manager::Connector* connector);
 
  private:
   // display::Screen:
   gfx::Point GetCursorScreenPoint() override;
   bool IsWindowUnderCursor(gfx::NativeWindow window) override;
+  aura::Window* GetWindowAtScreenPoint(const gfx::Point& point) override;
 
   // ui::mojom::DisplayManager:
-  void OnDisplays(mojo::Array<ui::mojom::WsDisplayPtr> ws_displays) override;
+  void OnDisplays(std::vector<ui::mojom::WsDisplayPtr> ws_displays,
+                  int64_t primary_display_id,
+                  int64_t internal_display_id) override;
   void OnDisplaysChanged(
-      mojo::Array<ui::mojom::WsDisplayPtr> ws_displays) override;
-  void OnDisplayRemoved(int64_t id) override;
+      std::vector<ui::mojom::WsDisplayPtr> ws_displays) override;
+  void OnDisplayRemoved(int64_t display_id) override;
+  void OnPrimaryDisplayChanged(int64_t primary_display_id) override;
 
   ScreenMusDelegate* delegate_;  // Can be nullptr.
   ui::mojom::DisplayManagerPtr display_manager_;

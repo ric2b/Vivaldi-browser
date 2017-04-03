@@ -17,20 +17,19 @@
 #include "base/memory/weak_ptr.h"
 #include "services/ui/public/cpp/input_event_handler.h"
 #include "services/ui/public/interfaces/window_tree.mojom.h"
+#include "ui/aura/client/drag_drop_delegate.h"
 #include "ui/aura/window_delegate.h"
 #include "ui/aura/window_tree_host_observer.h"
 #include "ui/platform_window/platform_window_delegate.h"
 #include "ui/views/mus/mus_export.h"
 #include "ui/views/mus/window_tree_host_mus.h"
 #include "ui/views/widget/native_widget_private.h"
-#include "ui/wm/public/drag_drop_delegate.h"
 
 namespace aura {
 namespace client {
-class DefaultCaptureClient;
 class DragDropClient;
 class ScreenPositionClient;
-class WindowTreeClient;
+class WindowParentingClient;
 }
 class Window;
 }
@@ -54,9 +53,13 @@ class FocusController;
 }
 
 namespace views {
+namespace corewm {
+class TooltipController;
+}
 class DropHelper;
 class DropTargetMus;
-class WidgetDelegate;
+class InputMethodMus;
+class TooltipManagerAura;
 
 // An implementation of NativeWidget that binds to a ui::Window. Because Aura
 // is used extensively within Views code, this code uses aura and binds to the
@@ -71,9 +74,10 @@ class VIEWS_MUS_EXPORT NativeWidgetMus
       public aura::client::DragDropDelegate,
       public NON_EXPORTED_BASE(ui::InputEventHandler) {
  public:
-  NativeWidgetMus(internal::NativeWidgetDelegate* delegate,
-                  ui::Window* window,
-                  ui::mojom::SurfaceType surface_type);
+  NativeWidgetMus(
+      internal::NativeWidgetDelegate* delegate,
+      ui::Window* window,
+      ui::mojom::CompositorFrameSinkType compositor_frame_sink_type);
   ~NativeWidgetMus() override;
 
   // Configures the set of properties supplied to the window manager when
@@ -91,7 +95,9 @@ class VIEWS_MUS_EXPORT NativeWidgetMus
   // Returns the widget for a ui::Window, or null if there is none.
   static Widget* GetWidgetForWindow(ui::Window* window);
 
-  ui::mojom::SurfaceType surface_type() const { return surface_type_; }
+  ui::mojom::CompositorFrameSinkType compositor_frame_sink_type() const {
+    return compositor_frame_sink_type_;
+  }
   ui::Window* window() { return window_; }
   WindowTreeHostMus* window_tree_host() { return window_tree_host_.get(); }
 
@@ -249,7 +255,8 @@ class VIEWS_MUS_EXPORT NativeWidgetMus
   // Returns true if this NativeWidgetMus exists on the window manager side
   // to provide the frame decorations.
   bool is_parallel_widget_in_window_manager() {
-    return surface_type_ == ui::mojom::SurfaceType::UNDERLAY;
+    return compositor_frame_sink_type_ ==
+           ui::mojom::CompositorFrameSinkType::UNDERLAY;
   }
 
   void set_last_cursor(ui::mojom::Cursor cursor) { last_cursor_ = cursor; }
@@ -268,7 +275,7 @@ class VIEWS_MUS_EXPORT NativeWidgetMus
 
   internal::NativeWidgetDelegate* native_widget_delegate_;
 
-  const ui::mojom::SurfaceType surface_type_;
+  const ui::mojom::CompositorFrameSinkType compositor_frame_sink_type_;
   ui::mojom::ShowState show_state_before_fullscreen_;
 
   // See class documentation for Widget in widget.h for a note about ownership.
@@ -277,11 +284,6 @@ class VIEWS_MUS_EXPORT NativeWidgetMus
   // Functions with the same name require the ui::WindowObserver to be in
   // a separate class.
   std::unique_ptr<MusWindowObserver> mus_window_observer_;
-
-  // This is misnamed; The native widget interface offers something called
-  // "native window properties" which are properties which it stores locally,
-  // and this is used to unsafely pass void* pointers around chrome.
-  std::map<std::string, void*> native_window_properties_;
 
   // Receives drop events for |window_|.
   std::unique_ptr<DropTargetMus> drop_target_;
@@ -292,12 +294,17 @@ class VIEWS_MUS_EXPORT NativeWidgetMus
   std::unique_ptr<wm::FocusController> focus_client_;
   std::unique_ptr<MusCaptureClient> capture_client_;
   std::unique_ptr<aura::client::DragDropClient> drag_drop_client_;
-  std::unique_ptr<aura::client::WindowTreeClient> window_tree_client_;
+  std::unique_ptr<aura::client::WindowParentingClient> window_parenting_client_;
   std::unique_ptr<aura::client::ScreenPositionClient> screen_position_client_;
   std::unique_ptr<wm::CursorManager> cursor_manager_;
 
   std::unique_ptr<DropHelper> drop_helper_;
   int last_drop_operation_;
+
+  std::unique_ptr<corewm::TooltipController> tooltip_controller_;
+  std::unique_ptr<TooltipManagerAura> tooltip_manager_;
+
+  std::unique_ptr<InputMethodMus> input_method_;
 
   base::WeakPtrFactory<NativeWidgetMus> close_widget_factory_;
 

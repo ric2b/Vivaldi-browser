@@ -23,17 +23,22 @@ class ArcServiceLauncher;
 
 namespace chromeos {
 
+class ArcKioskAppManager;
 class DataPromoNotification;
 class EventRewriter;
 class EventRewriterController;
+class ExtensionVolumeObserver;
 class IdleActionWarningObserver;
 class LoginLockStateNotifier;
 class LowDiskNotification;
 class MagnificationManager;
+class NetworkPrefStateObserver;
+class NetworkThrottlingObserver;
 class PeripheralBatteryObserver;
 class PowerPrefs;
 class RendererFreezer;
 class SessionManagerObserver;
+class ShutdownPolicyForwarder;
 class SwapMetrics;
 class WakeOnWifiManager;
 
@@ -68,6 +73,8 @@ class ChromeBrowserMainPartsChromeos : public ChromeBrowserMainPartsLinux {
 
  private:
   std::unique_ptr<default_app_order::ExternalLoader> app_order_loader_;
+  std::unique_ptr<NetworkPrefStateObserver> network_pref_state_observer_;
+  std::unique_ptr<ExtensionVolumeObserver> extension_volume_observer_;
   std::unique_ptr<PeripheralBatteryObserver> peripheral_battery_observer_;
   std::unique_ptr<PowerPrefs> power_prefs_;
   std::unique_ptr<LoginLockStateNotifier> login_lock_state_notifier_;
@@ -75,10 +82,13 @@ class ChromeBrowserMainPartsChromeos : public ChromeBrowserMainPartsLinux {
   std::unique_ptr<DataPromoNotification> data_promo_notification_;
   std::unique_ptr<RendererFreezer> renderer_freezer_;
   std::unique_ptr<WakeOnWifiManager> wake_on_wifi_manager_;
+  std::unique_ptr<NetworkThrottlingObserver> network_throttling_observer_;
 
   std::unique_ptr<internal::DBusServices> dbus_services_;
 
   std::unique_ptr<session_manager::SessionManager> session_manager_;
+
+  std::unique_ptr<ShutdownPolicyForwarder> shutdown_policy_forwarder_;
 
   std::unique_ptr<EventRewriterController> keyboard_event_rewriters_;
 
@@ -87,6 +97,7 @@ class ChromeBrowserMainPartsChromeos : public ChromeBrowserMainPartsLinux {
   std::unique_ptr<arc::ArcServiceLauncher> arc_service_launcher_;
 
   std::unique_ptr<LowDiskNotification> low_disk_notification_;
+  std::unique_ptr<ArcKioskAppManager> arc_kiosk_app_manager_;
 
   DISALLOW_COPY_AND_ASSIGN(ChromeBrowserMainPartsChromeos);
 };

@@ -10,7 +10,7 @@
 
 #include "chrome/browser/ui/validation_message_bubble.h"
 
-#include "third_party/WebKit/public/web/WebInputEvent.h"
+#include "third_party/WebKit/public/platform/WebInputEvent.h"
 
 #include "chrome/browser/ui/tabs/tab_utils.h"
 

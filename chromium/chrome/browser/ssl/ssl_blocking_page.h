@@ -18,10 +18,11 @@
 #include "chrome/browser/ssl/ssl_cert_reporter.h"
 #include "components/certificate_reporting/error_report.h"
 #include "content/public/browser/certificate_request_result_type.h"
+#include "extensions/features/features.h"
 #include "net/ssl/ssl_info.h"
 #include "url/gurl.h"
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 namespace extensions {
 class ExperienceSamplingEvent;
 }
@@ -116,8 +117,8 @@ class SSLBlockingPage : public SecurityInterstitialPage {
   // expired.
   const bool expired_but_previously_allowed_;
 
-  std::unique_ptr<security_interstitials::SSLErrorUI> ssl_error_ui_;
-  std::unique_ptr<CertReportHelper> cert_report_helper_;
+  const std::unique_ptr<CertReportHelper> cert_report_helper_;
+  const std::unique_ptr<security_interstitials::SSLErrorUI> ssl_error_ui_;
 
   DISALLOW_COPY_AND_ASSIGN(SSLBlockingPage);
 };

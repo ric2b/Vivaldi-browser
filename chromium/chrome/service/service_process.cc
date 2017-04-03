@@ -122,20 +122,6 @@ void PrepareRestartOnCrashEnviroment(
   env->SetVar(env_vars::kRestartInfo, base::UTF16ToUTF8(dlg_strings));
 }
 
-#if defined(OS_POSIX)
-mojo::edk::ScopedPlatformHandle CreateServerHandle(
-    const IPC::ChannelHandle& channel_handle) {
-#if defined(OS_MACOSX)
-  mojo::edk::PlatformHandle platform_handle(channel_handle.socket.fd);
-  platform_handle.needs_connection = true;
-  return mojo::edk::ScopedPlatformHandle(platform_handle);
-#else
-  return mojo::edk::CreateServerHandle(
-      mojo::edk::NamedPlatformHandle(channel_handle.name), false);
-#endif
-}
-#endif
-
 }  // namespace
 
 ServiceProcess::ServiceProcess()
@@ -251,6 +237,11 @@ bool ServiceProcess::Teardown() {
 
   mojo_ipc_support_.reset();
   ipc_server_.reset();
+
+  // On POSIX, this must be called before joining |io_thread_| because it posts
+  // a DeleteSoon() task to that thread.
+  service_process_state_->SignalStopped();
+
   // Signal this event before shutting down the service process. That way all
   // background threads can cleanup.
   shutdown_event_.Signal();
@@ -271,7 +262,6 @@ bool ServiceProcess::Teardown() {
   // might use it have been shut down.
   network_change_notifier_.reset();
 
-  service_process_state_->SignalStopped();
   return true;
 }
 
@@ -320,12 +310,16 @@ bool ServiceProcess::OnIPCClientDisconnect() {
 
 mojo::ScopedMessagePipeHandle ServiceProcess::CreateChannelMessagePipe() {
   if (!server_handle_.is_valid()) {
-#if defined(OS_POSIX)
-    server_handle_ =
-        CreateServerHandle(service_process_state_->GetServiceProcessChannel());
+#if defined(OS_MACOSX)
+    mojo::edk::PlatformHandle platform_handle(
+        service_process_state_->GetServiceProcessChannel().release());
+    platform_handle.needs_connection = true;
+    server_handle_.reset(platform_handle);
+#elif defined(OS_POSIX)
+    server_handle_ = mojo::edk::CreateServerHandle(
+        service_process_state_->GetServiceProcessChannel());
 #elif defined(OS_WIN)
-    server_handle_ = mojo::edk::NamedPlatformHandle(
-        service_process_state_->GetServiceProcessChannel().name);
+    server_handle_ = service_process_state_->GetServiceProcessChannel();
 #endif
     DCHECK(server_handle_.is_valid());
   }
@@ -334,7 +328,9 @@ mojo::ScopedMessagePipeHandle ServiceProcess::CreateChannelMessagePipe() {
 #if defined(OS_POSIX)
   channel_handle = mojo::edk::DuplicatePlatformHandle(server_handle_.get());
 #elif defined(OS_WIN)
-  channel_handle = mojo::edk::CreateServerHandle(server_handle_, false);
+  mojo::edk::CreateServerHandleOptions options;
+  options.enforce_uniqueness = false;
+  channel_handle = mojo::edk::CreateServerHandle(server_handle_, options);
 #endif
   CHECK(channel_handle.is_valid());
 

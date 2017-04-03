@@ -8,7 +8,6 @@
 
 #include "base/command_line.h"
 #include "base/macros.h"
-#include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "build/build_config.h"
 #include "components/url_formatter/elide_url.h"
@@ -58,7 +57,7 @@ std::unique_ptr<views::Border> MakeEmptyBorder(int top,
                                                int left,
                                                int bottom,
                                                int right) {
-  return views::Border::CreateEmptyBorder(top, left, bottom, right);
+  return views::CreateEmptyBorder(top, left, bottom, right);
 }
 
 // static
@@ -84,7 +83,7 @@ std::unique_ptr<views::Border> MakeProgressBarBorder(int top, int bottom) {
 std::unique_ptr<views::Border> MakeSeparatorBorder(int top,
                                                    int left,
                                                    SkColor color) {
-  return views::Border::CreateSolidSidedBorder(top, left, 0, 0, color);
+  return views::CreateSolidSidedBorder(top, left, 0, 0, color);
 }
 
 // ItemView ////////////////////////////////////////////////////////////////////
@@ -509,8 +508,8 @@ void NotificationView::CreateOrUpdateProgressBarView(
 
 void NotificationView::CreateOrUpdateListItemViews(
     const Notification& notification) {
-  for (size_t i = 0; i < item_views_.size(); ++i)
-    delete item_views_[i];
+  for (auto item_view : item_views_)
+    delete item_view;
   item_views_.clear();
 
   int padding = kMessageLineHeight - views::Label().font_list().GetHeight();
@@ -578,7 +577,7 @@ void NotificationView::CreateOrUpdateImageView(
   gfx::Size scaled_size = message_center::GetImageSizeForContainerSize(
       ideal_size, notification.image().Size());
   image_view_->SetBorder(ideal_size != scaled_size
-                             ? views::Border::CreateSolidBorder(
+                             ? views::CreateSolidBorder(
                                    message_center::kNotificationImageBorderSize,
                                    SK_ColorTRANSPARENT)
                              : NULL);
@@ -590,9 +589,12 @@ void NotificationView::CreateOrUpdateActionButtonViews(
   bool new_buttons = action_buttons_.size() != buttons.size();
 
   if (new_buttons || buttons.size() == 0) {
-    // STLDeleteElements also clears the container.
-    base::STLDeleteElements(&separators_);
-    base::STLDeleteElements(&action_buttons_);
+    for (auto item : separators_)
+      delete item;
+    separators_.clear();
+    for (auto item : action_buttons_)
+      delete item;
+    action_buttons_.clear();
   }
 
   DCHECK(bottom_view_);

@@ -8,7 +8,6 @@
 #include "base/test/test_io_thread.h"
 #include "chrome/test/base/chrome_unit_test_suite.h"
 #include "content/public/test/unittest_test_suite.h"
-#include "mojo/edk/embedder/embedder.h"
 #include "mojo/edk/test/scoped_ipc_support.h"
 
 #if defined(VIVALDI_BUILD)
@@ -24,7 +23,6 @@ int main(int argc, char **argv) {
 #endif
         );
 
-  mojo::edk::Init();
   base::TestIOThread test_io_thread(base::TestIOThread::kAutoStart);
   mojo::edk::test::ScopedIPCSupport ipc_support(test_io_thread.task_runner());
 

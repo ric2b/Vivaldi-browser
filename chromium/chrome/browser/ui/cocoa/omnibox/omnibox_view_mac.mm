@@ -30,7 +30,6 @@
 #include "components/omnibox/browser/omnibox_edit_controller.h"
 #include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/omnibox/browser/omnibox_popup_model.h"
-#include "components/security_state/security_state_model.h"
 #include "components/toolbar/toolbar_model.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/common/constants.h"
@@ -175,18 +174,17 @@ NSColor* OmniboxViewMac::BaseTextColor(bool in_dark_mode) {
 
 // static
 NSColor* OmniboxViewMac::GetSecureTextColor(
-    security_state::SecurityStateModel::SecurityLevel security_level,
+    security_state::SecurityLevel security_level,
     bool in_dark_mode) {
-  if (security_level == security_state::SecurityStateModel::EV_SECURE ||
-      security_level == security_state::SecurityStateModel::SECURE) {
+  if (security_level == security_state::EV_SECURE ||
+      security_level == security_state::SECURE) {
     return SecureSchemeColor(in_dark_mode);
   }
 
-  if (security_level == security_state::SecurityStateModel::DANGEROUS)
+  if (security_level == security_state::DANGEROUS)
     return SecurityErrorSchemeColor(in_dark_mode);
 
-  DCHECK_EQ(security_state::SecurityStateModel::SECURITY_WARNING,
-            security_level);
+  DCHECK_EQ(security_state::SECURITY_WARNING, security_level);
   return SecurityWarningSchemeColor(in_dark_mode);
 }
 
@@ -311,8 +309,11 @@ void OmniboxViewMac::OpenMatch(const AutocompleteMatch& match,
   OmniboxView::OpenMatch(
       match, disposition, alternate_nav_url, pasted_text, selected_line);
   in_coalesced_update_block_ = false;
-  if (do_coalesced_text_update_)
+  if (do_coalesced_text_update_) {
     SetText(coalesced_text_update_);
+    // Ensure location bar icon is updated to reflect text.
+    controller()->OnChanged();
+  }
   do_coalesced_text_update_ = false;
   if (do_coalesced_range_update_)
     SetSelectedRange(coalesced_range_update_);
@@ -375,10 +376,8 @@ void OmniboxViewMac::EnterKeywordModeForDefaultSearchProvider() {
   FocusLocation(true);
 
   // Transition the user into keyword mode using their default search provider.
-  // Select their query if they typed one.
   model()->EnterKeywordModeForDefaultSearchProvider(
       KeywordModeEntryMethod::KEYBOARD_SHORTCUT);
-  SelectAll(false);
 }
 
 bool OmniboxViewMac::IsSelectAll() const {
@@ -442,7 +441,7 @@ void OmniboxViewMac::UpdatePopup() {
   }
 
   model()->StartAutocomplete([editor selectedRange].length != 0,
-                            prevent_inline_autocomplete, false);
+                            prevent_inline_autocomplete);
 }
 
 void OmniboxViewMac::CloseOmniboxPopup() {
@@ -598,14 +597,15 @@ void OmniboxViewMac::ApplyTextAttributes(
   // TODO(shess): GTK has this as a member var, figure out why.
   // [Could it be to not change if no change?  If so, I'm guessing
   // AppKit may already handle that.]
-  const security_state::SecurityStateModel::SecurityLevel security_level =
+  const security_state::SecurityLevel security_level =
       controller()->GetToolbarModel()->GetSecurityLevel(false);
 
   // Emphasize the scheme for security UI display purposes (if necessary).
   if (!model()->user_input_in_progress() && model()->CurrentTextIsURL() &&
       scheme.is_nonempty() &&
-      (security_level != security_state::SecurityStateModel::NONE)) {
-    if (security_level == security_state::SecurityStateModel::DANGEROUS) {
+      (security_level != security_state::NONE) &&
+      (security_level != security_state::HTTP_SHOW_WARNING)) {
+    if (security_level == security_state::DANGEROUS) {
       // Add a strikethrough through the scheme.
       [attributedString addAttribute:NSStrikethroughStyleAttributeName
                  value:[NSNumber numberWithInt:NSUnderlineStyleSingle]
@@ -769,10 +769,16 @@ void OmniboxViewMac::OnInsertText() {
     insert_char_time_ = base::TimeTicks::Now();
 }
 
+void OmniboxViewMac::OnBeforeDrawRect() {
+  draw_rect_start_time_ = base::TimeTicks::Now();
+}
+
 void OmniboxViewMac::OnDidDrawRect() {
+  base::TimeTicks now = base::TimeTicks::Now();
+  UMA_HISTOGRAM_TIMES("Omnibox.PaintTime", now - draw_rect_start_time_);
   if (!insert_char_time_.is_null()) {
     UMA_HISTOGRAM_TIMES("Omnibox.CharTypedToRepaintLatency",
-                        base::TimeTicks::Now() - insert_char_time_);
+                        now - insert_char_time_);
     insert_char_time_ = base::TimeTicks();
   }
 }

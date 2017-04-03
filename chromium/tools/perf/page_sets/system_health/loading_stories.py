@@ -8,6 +8,8 @@ from page_sets.system_health import system_health_story
 from page_sets.login_helpers import dropbox_login
 from page_sets.login_helpers import google_login
 
+from telemetry import decorators
+
 
 class _LoadingStory(system_health_story.SystemHealthStory):
   """Abstract base class for single-page System Health user stories."""
@@ -291,6 +293,7 @@ class _LoadGmailBaseStory(_LoadingStory):
     # navigate to a sub-URL to set up the session and hit the resulting
     # redirection loop. Afterwards, we can safely navigate to
     # https://mail.google.com.
+    action_runner.tab.WaitForDocumentReadyStateToBeComplete()
     action_runner.Navigate(
         'https://mail.google.com/mail/mu/mp/872/trigger_redirection_loop')
     action_runner.tab.WaitForDocumentReadyStateToBeComplete()
@@ -308,15 +311,10 @@ class LoadGmailMobileStory(_LoadGmailBaseStory):
   SUPPORTED_PLATFORMS = platforms.MOBILE_ONLY
 
   def _DidLoadDocument(self, action_runner):
-    # Close the "Get Inbox by Gmail" interstitial.
-    action_runner.WaitForJavaScriptCondition(
-        'document.querySelector("#isppromo a") !== null')
-    action_runner.ExecuteJavaScript(
-        'document.querySelector("#isppromo a").click()')
     # Wait until the UI loads.
+    action_runner.WaitForElement('#apploadingdiv')
     action_runner.WaitForJavaScriptCondition(
         'document.getElementById("apploadingdiv").style.height === "0px"')
-
 
 class LoadMapsStory(_LoadingStory):
   NAME = 'load:tools:maps'
@@ -385,6 +383,7 @@ class LoadSpyChaseStory(_LoadingStory):
         'document.querySelector("#game canvas").style.background !== ""')
 
 
+@decorators.Disabled('mac') # crbug.com/664661
 class LoadMiniclipStory(_LoadingStory):
   NAME = 'load:games:miniclip'
   # Using "https://" causes "404 Not Found" during WPR recording.

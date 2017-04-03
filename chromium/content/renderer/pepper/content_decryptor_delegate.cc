@@ -10,7 +10,7 @@
 
 #include "base/callback_helpers.h"
 #include "base/macros.h"
-#include "base/metrics/sparse_histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/trace_event/trace_event.h"
 #include "content/renderer/pepper/ppb_buffer_impl.h"
@@ -36,6 +36,7 @@
 #include "ppapi/thunk/ppb_buffer_api.h"
 #include "ui/gfx/geometry/rect.h"
 
+using media::CdmPromise;
 using media::Decryptor;
 using media::MediaKeys;
 using media::NewSessionCdmPromise;
@@ -205,6 +206,19 @@ PP_DecryptedFrameFormat MediaVideoFormatToPpDecryptedFrameFormat(
   }
 }
 
+media::VideoPixelFormat PpDecryptedFrameFormatToMediaVideoFormat(
+    PP_DecryptedFrameFormat format) {
+  switch (format) {
+    case PP_DECRYPTEDFRAMEFORMAT_YV12:
+      return media::PIXEL_FORMAT_YV12;
+    case PP_DECRYPTEDFRAMEFORMAT_I420:
+      return media::PIXEL_FORMAT_I420;
+    default:
+      NOTREACHED() << "Unknown decrypted frame format: " << format;
+      return media::PIXEL_FORMAT_UNKNOWN;
+  }
+}
+
 Decryptor::Status PpDecryptResultToMediaDecryptorStatus(
     PP_DecryptResult result) {
   switch (result) {
@@ -289,26 +303,26 @@ PP_InitDataType MediaInitDataTypeToPpInitDataType(
   return PP_INITDATATYPE_KEYIDS;
 }
 
-MediaKeys::Exception PpExceptionTypeToMediaException(
+CdmPromise::Exception PpExceptionTypeToCdmPromiseException(
     PP_CdmExceptionCode exception_code) {
   switch (exception_code) {
     case PP_CDMEXCEPTIONCODE_NOTSUPPORTEDERROR:
-      return MediaKeys::NOT_SUPPORTED_ERROR;
+      return CdmPromise::NOT_SUPPORTED_ERROR;
     case PP_CDMEXCEPTIONCODE_INVALIDSTATEERROR:
-      return MediaKeys::INVALID_STATE_ERROR;
+      return CdmPromise::INVALID_STATE_ERROR;
     case PP_CDMEXCEPTIONCODE_INVALIDACCESSERROR:
-      return MediaKeys::INVALID_ACCESS_ERROR;
+      return CdmPromise::INVALID_ACCESS_ERROR;
     case PP_CDMEXCEPTIONCODE_QUOTAEXCEEDEDERROR:
-      return MediaKeys::QUOTA_EXCEEDED_ERROR;
+      return CdmPromise::QUOTA_EXCEEDED_ERROR;
     case PP_CDMEXCEPTIONCODE_UNKNOWNERROR:
-      return MediaKeys::UNKNOWN_ERROR;
+      return CdmPromise::UNKNOWN_ERROR;
     case PP_CDMEXCEPTIONCODE_CLIENTERROR:
-      return MediaKeys::CLIENT_ERROR;
+      return CdmPromise::CLIENT_ERROR;
     case PP_CDMEXCEPTIONCODE_OUTPUTERROR:
-      return MediaKeys::OUTPUT_ERROR;
+      return CdmPromise::OUTPUT_ERROR;
     default:
       NOTREACHED();
-      return MediaKeys::UNKNOWN_ERROR;
+      return CdmPromise::UNKNOWN_ERROR;
   }
 }
 
@@ -416,8 +430,8 @@ void ContentDecryptorDelegate::SetServerCertificate(
     std::unique_ptr<media::SimpleCdmPromise> promise) {
   if (certificate.size() < media::limits::kMinCertificateLength ||
       certificate.size() > media::limits::kMaxCertificateLength) {
-    promise->reject(
-        media::MediaKeys::INVALID_ACCESS_ERROR, 0, "Incorrect certificate.");
+    promise->reject(CdmPromise::INVALID_ACCESS_ERROR, 0,
+                    "Incorrect certificate.");
     return;
   }
 
@@ -470,8 +484,7 @@ void ContentDecryptorDelegate::CloseSession(
     const std::string& session_id,
     std::unique_ptr<SimpleCdmPromise> promise) {
   if (session_id.length() > media::limits::kMaxSessionIdLength) {
-    promise->reject(
-        media::MediaKeys::INVALID_ACCESS_ERROR, 0, "Incorrect session.");
+    promise->reject(CdmPromise::INVALID_ACCESS_ERROR, 0, "Incorrect session.");
     return;
   }
 
@@ -484,8 +497,7 @@ void ContentDecryptorDelegate::RemoveSession(
     const std::string& session_id,
     std::unique_ptr<SimpleCdmPromise> promise) {
   if (session_id.length() > media::limits::kMaxSessionIdLength) {
-    promise->reject(
-        media::MediaKeys::INVALID_ACCESS_ERROR, 0, "Incorrect session.");
+    promise->reject(CdmPromise::INVALID_ACCESS_ERROR, 0, "Incorrect session.");
     return;
   }
 
@@ -743,6 +755,7 @@ void ContentDecryptorDelegate::OnPromiseResolvedWithSession(uint32_t promise_id,
                                                             PP_Var session_id) {
   StringVar* session_id_string = StringVar::FromPPVar(session_id);
   DCHECK(session_id_string);
+  cdm_session_tracker_.AddSession(session_id_string->value());
   cdm_promise_adapter_.ResolvePromise(promise_id, session_id_string->value());
 }
 
@@ -756,8 +769,8 @@ void ContentDecryptorDelegate::OnPromiseRejected(
   StringVar* error_description_string = StringVar::FromPPVar(error_description);
   DCHECK(error_description_string);
   cdm_promise_adapter_.RejectPromise(
-      promise_id, PpExceptionTypeToMediaException(exception_code), system_code,
-      error_description_string->value());
+      promise_id, PpExceptionTypeToCdmPromiseException(exception_code),
+      system_code, error_description_string->value());
 }
 
 void ContentDecryptorDelegate::OnSessionMessage(PP_Var session_id,
@@ -822,13 +835,12 @@ void ContentDecryptorDelegate::OnSessionExpirationChange(
 }
 
 void ContentDecryptorDelegate::OnSessionClosed(PP_Var session_id) {
-  if (session_closed_cb_.is_null())
-    return;
-
   StringVar* session_id_string = StringVar::FromPPVar(session_id);
   DCHECK(session_id_string);
 
-  session_closed_cb_.Run(session_id_string->value());
+  cdm_session_tracker_.RemoveSession(session_id_string->value());
+  if (!session_closed_cb_.is_null())
+    session_closed_cb_.Run(session_id_string->value());
 }
 
 void ContentDecryptorDelegate::DecoderInitializeDone(
@@ -990,11 +1002,18 @@ void ContentDecryptorDelegate::DeliverFrame(
   }
 
   gfx::Size frame_size(frame_info->width, frame_info->height);
-  DCHECK_EQ(frame_info->format, PP_DECRYPTEDFRAMEFORMAT_YV12);
+
+  media::VideoPixelFormat video_pixel_format =
+      PpDecryptedFrameFormatToMediaVideoFormat(frame_info->format);
+  if (video_pixel_format == media::PIXEL_FORMAT_UNKNOWN) {
+    FreeBuffer(frame_info->tracking_info.buffer_id);
+    video_decode_cb.Run(Decryptor::kError, NULL);
+    return;
+  }
 
   scoped_refptr<media::VideoFrame> decoded_frame =
       media::VideoFrame::WrapExternalYuvData(
-          media::PIXEL_FORMAT_YV12, frame_size, gfx::Rect(frame_size),
+          video_pixel_format, frame_size, gfx::Rect(frame_size),
           natural_size_, frame_info->strides[PP_DECRYPTEDFRAMEPLANES_Y],
           frame_info->strides[PP_DECRYPTEDFRAMEPLANES_U],
           frame_info->strides[PP_DECRYPTEDFRAMEPLANES_V],
@@ -1258,6 +1277,8 @@ void ContentDecryptorDelegate::SatisfyAllPendingCallbacksOnError() {
     video_decode_cb_.ResetAndReturn().Run(media::Decryptor::kError, NULL);
 
   cdm_promise_adapter_.Clear();
+
+  cdm_session_tracker_.CloseRemainingSessions(session_closed_cb_);
 }
 
 }  // namespace content

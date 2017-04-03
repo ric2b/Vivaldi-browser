@@ -17,11 +17,11 @@
 #include "base/timer/timer.h"
 #include "components/invalidation/public/invalidation.h"
 #include "components/sync/base/cancelation_signal.h"
-#include "components/sync/core/shutdown_reason.h"
-#include "components/sync/core/sync_encryption_handler.h"
+#include "components/sync/base/system_encryptor.h"
 #include "components/sync/driver/glue/sync_backend_host_impl.h"
-#include "components/sync/driver/system_encryptor.h"
 #include "components/sync/engine/cycle/type_debug_info_observer.h"
+#include "components/sync/engine/shutdown_reason.h"
+#include "components/sync/engine/sync_encryption_handler.h"
 #include "url/gurl.h"
 
 namespace syncer {
@@ -43,9 +43,11 @@ struct DoInitializeOptions {
       const std::string& invalidator_client_id,
       std::unique_ptr<SyncManagerFactory> sync_manager_factory,
       bool delete_sync_data_folder,
+      bool enable_local_sync_backend,
+      const base::FilePath& local_sync_backend_folder,
       const std::string& restored_key_for_bootstrapping,
       const std::string& restored_keystore_key_for_bootstrapping,
-      std::unique_ptr<InternalComponentsFactory> internal_components_factory,
+      std::unique_ptr<EngineComponentsFactory> engine_components_factory,
       const WeakHandle<UnrecoverableErrorHandler>& unrecoverable_error_handler,
       const base::Closure& report_unrecoverable_error_function,
       std::unique_ptr<SyncEncryptionHandler::NigoriState> saved_nigori_state,
@@ -66,9 +68,11 @@ struct DoInitializeOptions {
   std::unique_ptr<SyncManagerFactory> sync_manager_factory;
   std::string lsid;
   bool delete_sync_data_folder;
+  bool enable_local_sync_backend;
+  const base::FilePath local_sync_backend_folder;
   std::string restored_key_for_bootstrapping;
   std::string restored_keystore_key_for_bootstrapping;
-  std::unique_ptr<InternalComponentsFactory> internal_components_factory;
+  std::unique_ptr<EngineComponentsFactory> engine_components_factory;
   const WeakHandle<UnrecoverableErrorHandler> unrecoverable_error_handler;
   base::Closure report_unrecoverable_error_function;
   std::unique_ptr<SyncEncryptionHandler::NigoriState> saved_nigori_state;
@@ -268,10 +272,10 @@ class SyncBackendHostCore
   WeakHandle<SyncBackendHostImpl> host_;
 
   // The loop where all the sync backend operations happen.
-  // Non-NULL only between calls to DoInitialize() and ~Core().
+  // Non-null only between calls to DoInitialize() and ~Core().
   base::MessageLoop* sync_loop_;
 
-  // Our parent's registrar (not owned).  Non-NULL only between
+  // Our parent's registrar (not owned).  Non-null only between
   // calls to DoInitialize() and DoShutdown().
   SyncBackendRegistrar* registrar_;
 

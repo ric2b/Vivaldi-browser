@@ -9,7 +9,9 @@
 #include "base/files/file.h"
 #include "base/files/file_path.h"
 #include "mojo/public/cpp/system/platform_handle.h"
-#include "services/shell/public/cpp/connection.h"
+#include "services/service_manager/public/cpp/connection.h"
+#include "services/service_manager/public/cpp/interface_registry.h"
+#include "services/service_manager/public/cpp/service_context.h"
 
 static_assert(
     static_cast<uint32_t>(SkFontStyle::kUpright_Slant) ==
@@ -48,23 +50,23 @@ FontServiceApp::FontServiceApp() {}
 
 FontServiceApp::~FontServiceApp() {}
 
-void FontServiceApp::OnStart(const shell::Identity& identity) {
-  tracing_.Initialize(connector(), identity.name());
+void FontServiceApp::OnStart() {
+  tracing_.Initialize(context()->connector(), context()->identity().name());
 }
 
-bool FontServiceApp::OnConnect(const shell::Identity& remote_identity,
-                               shell::InterfaceRegistry* registry) {
+bool FontServiceApp::OnConnect(const service_manager::ServiceInfo& remote_info,
+                               service_manager::InterfaceRegistry* registry) {
   registry->AddInterface(this);
   return true;
 }
 
 void FontServiceApp::Create(
-    const shell::Identity& remote_identity,
+    const service_manager::Identity& remote_identity,
     mojo::InterfaceRequest<mojom::FontService> request) {
   bindings_.AddBinding(this, std::move(request));
 }
 
-void FontServiceApp::MatchFamilyName(const mojo::String& family_name,
+void FontServiceApp::MatchFamilyName(const std::string& family_name,
                                      mojom::TypefaceStylePtr requested_style,
                                      const MatchFamilyNameCallback& callback) {
   SkFontConfigInterface::FontIdentity result_identity;

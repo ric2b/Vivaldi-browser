@@ -83,12 +83,10 @@ class StringSet {
 class ScopedPixelUnpackBufferOverride {
  public:
   explicit ScopedPixelUnpackBufferOverride(
-      bool is_es3_capable,
-      ContextType context_type,
+      bool enable_es3,
       GLuint binding_override)
       : orig_binding_(-1) {
-    if (!(context_type == CONTEXT_TYPE_WEBGL1 ||
-          context_type == CONTEXT_TYPE_OPENGLES2) && is_es3_capable) {
+    if (enable_es3) {
       GLint orig_binding;
       glGetIntegerv(GL_PIXEL_UNPACK_BUFFER_BINDING, &orig_binding);
       if (static_cast<GLuint>(orig_binding) != binding_override) {
@@ -199,9 +197,6 @@ void FeatureInfo::InitializeBasicState(const base::CommandLine* command_line) {
   feature_flags_.is_swiftshader =
       (command_line->GetSwitchValueASCII(switches::kUseGL) == "swiftshader");
 
-  enable_unsafe_es3_apis_switch_ =
-      command_line->HasSwitch(switches::kEnableUnsafeES3APIs);
-
   // The shader translator is needed to translate from WebGL-conformant GLES SL
   // to normal GLES SL, enforce WebGL conformance, translate from GLES SL 1.0 to
   // target context GLSL, implement emulation of OpenGL ES features on OpenGL,
@@ -210,13 +205,9 @@ void FeatureInfo::InitializeBasicState(const base::CommandLine* command_line) {
   disable_shader_translator_ =
       command_line->HasSwitch(switches::kDisableGLSLTranslator);
 
-  unsafe_es3_apis_enabled_ = false;
-
   // Default context_type_ to a GLES2 Context.
   context_type_ = CONTEXT_TYPE_OPENGLES2;
 
-  chromium_color_buffer_float_rgba_available_ = false;
-  chromium_color_buffer_float_rgb_available_ = false;
   ext_color_buffer_float_available_ = false;
   oes_texture_float_linear_available_ = false;
   oes_texture_half_float_linear_available_ = false;
@@ -300,7 +291,7 @@ void FeatureInfo::EnableEXTColorBufferFloat() {
 }
 
 void FeatureInfo::EnableCHROMIUMColorBufferFloatRGBA() {
-  if (!chromium_color_buffer_float_rgba_available_)
+  if (!feature_flags_.chromium_color_buffer_float_rgba)
     return;
   validators_.texture_internal_format.AddValue(GL_RGBA32F);
   validators_.texture_sized_color_renderable_internal_format.AddValue(
@@ -309,7 +300,7 @@ void FeatureInfo::EnableCHROMIUMColorBufferFloatRGBA() {
 }
 
 void FeatureInfo::EnableCHROMIUMColorBufferFloatRGB() {
-  if (!chromium_color_buffer_float_rgb_available_)
+  if (!feature_flags_.chromium_color_buffer_float_rgb)
     return;
   validators_.texture_internal_format.AddValue(GL_RGB32F);
   validators_.texture_sized_color_renderable_internal_format.AddValue(
@@ -351,10 +342,9 @@ void FeatureInfo::InitializeFeatures() {
   gl_version_info_.reset(
       new gl::GLVersionInfo(version_str, renderer_str, extensions.GetImpl()));
 
-  // TODO(kainino): This call to IsES3Capable is sort of a hack to get some
-  // mocked tests working.
-  ScopedPixelUnpackBufferOverride scoped_pbo_override(
-      IsES3Capable(), context_type_, 0);
+  bool enable_es3 = IsWebGL2OrES3Context();
+
+  ScopedPixelUnpackBufferOverride scoped_pbo_override(enable_es3, 0);
 
   AddExtensionString("GL_ANGLE_translated_shader_source");
   AddExtensionString("GL_CHROMIUM_async_pixel_transfers");
@@ -644,14 +634,17 @@ void FeatureInfo::InitializeFeatures() {
   // that compatibility. So if EXT_texture_format_BGRA8888 (but not
   // APPLE_texture_format_BGRA8888) is present on an underlying ES3 context, we
   // have to choose which one of BGRA vs texture storage we expose.
-  // When creating ES2 contexts, we prefer support BGRA to texture storage, so
-  // we disable texture storage if only EXT_texture_format_BGRA8888 is present.
+  // When creating ES2 contexts, we prefer support BGRA to texture storage, in
+  // order to use BGRA as platform color in the compositor, so we disable
+  // texture storage if only EXT_texture_format_BGRA8888 is present.
   // If neither is present, we expose texture storage.
   // When creating ES3 contexts, we do need to expose texture storage, so we
   // disable BGRA if we have to.
+  // When WebGL contexts, BRGA is not needed, because WebGL doesn't expose it.
   bool has_apple_bgra = extensions.Contains("GL_APPLE_texture_format_BGRA8888");
   bool has_ext_bgra = extensions.Contains("GL_EXT_texture_format_BGRA8888");
-  bool has_bgra = has_ext_bgra || has_apple_bgra || !gl_version_info_->is_es;
+  bool enable_texture_format_bgra8888 =
+      has_ext_bgra || has_apple_bgra || !gl_version_info_->is_es;
 
   bool has_ext_texture_storage = extensions.Contains("GL_EXT_texture_storage");
   bool has_arb_texture_storage = extensions.Contains("GL_ARB_texture_storage");
@@ -660,7 +653,6 @@ void FeatureInfo::InitializeFeatures() {
       (has_ext_texture_storage || has_arb_texture_storage ||
        gl_version_info_->is_es3 || gl_version_info_->IsAtLeastGL(4, 2));
 
-  bool enable_texture_format_bgra8888 = has_bgra;
   bool enable_texture_storage = has_texture_storage;
 
   bool texture_storage_incompatible_with_bgra =
@@ -669,10 +661,10 @@ void FeatureInfo::InitializeFeatures() {
       enable_texture_format_bgra8888 && enable_texture_storage) {
     switch (context_type_) {
       case CONTEXT_TYPE_OPENGLES2:
-      case CONTEXT_TYPE_WEBGL1:
         enable_texture_storage = false;
         break;
       case CONTEXT_TYPE_OPENGLES3:
+      case CONTEXT_TYPE_WEBGL1:
       case CONTEXT_TYPE_WEBGL2:
         enable_texture_format_bgra8888 = false;
         break;
@@ -855,7 +847,7 @@ void FeatureInfo::InitializeFeatures() {
 
     // For desktop systems, check to see if we support rendering to the full
     // range of formats supported by EXT_color_buffer_float
-    if (status_rgba == GL_FRAMEBUFFER_COMPLETE && IsES3Capable()) {
+    if (status_rgba == GL_FRAMEBUFFER_COMPLETE && enable_es3) {
       bool full_float_support = true;
 
       glTexImage2D(GL_TEXTURE_2D, 0, GL_R16F, width, width, 0, GL_RED,
@@ -895,19 +887,19 @@ void FeatureInfo::InitializeFeatures() {
     DCHECK(glGetError() == GL_NO_ERROR);
 
     if (status_rgba == GL_FRAMEBUFFER_COMPLETE) {
-      chromium_color_buffer_float_rgba_available_ = true;
+      feature_flags_.chromium_color_buffer_float_rgba = true;
       if (!disallowed_features_.chromium_color_buffer_float_rgba)
         EnableCHROMIUMColorBufferFloatRGBA();
     }
     if (status_rgb == GL_FRAMEBUFFER_COMPLETE) {
-      chromium_color_buffer_float_rgb_available_ = true;
+      feature_flags_.chromium_color_buffer_float_rgb = true;
       if (!disallowed_features_.chromium_color_buffer_float_rgb)
         EnableCHROMIUMColorBufferFloatRGB();
     }
   }
 
   // Enable the GL_EXT_color_buffer_float extension for WebGL 2.0
-  if (enable_ext_color_buffer_float && IsES3Capable()) {
+  if (enable_ext_color_buffer_float && enable_es3) {
     ext_color_buffer_float_available_ = true;
     if (!disallowed_features_.ext_color_buffer_float)
       EnableEXTColorBufferFloat();
@@ -1017,9 +1009,9 @@ void FeatureInfo::InitializeFeatures() {
 
   // TODO(kainino): Once we have a way to query whether ANGLE is exposing
   // native support for ETC2 textures, require that here.
-  if (gl_version_info_->is_es3) {
-    AddExtensionString("GL_CHROMIUM_compressed_texture_es3_0");
-    validators_.UpdateES30CompressedTextureFormats();
+  if (gl_version_info_->is_es3 && !gl_version_info_->is_angle) {
+    AddExtensionString("GL_CHROMIUM_compressed_texture_etc");
+    validators_.UpdateETCCompressedTextureFormats();
   }
 
   if (extensions.Contains("GL_AMD_compressed_ATC_texture")) {
@@ -1104,8 +1096,13 @@ void FeatureInfo::InitializeFeatures() {
     feature_flags_.ext_texture_storage = true;
     AddExtensionString("GL_EXT_texture_storage");
     validators_.texture_parameter.AddValue(GL_TEXTURE_IMMUTABLE_FORMAT_EXT);
-    if (enable_texture_format_bgra8888)
-        validators_.texture_internal_format_storage.AddValue(GL_BGRA8_EXT);
+    if (enable_texture_format_bgra8888) {
+      validators_.texture_internal_format_storage.AddValue(GL_BGRA8_EXT);
+      validators_.texture_sized_color_renderable_internal_format.AddValue(
+          GL_BGRA8_EXT);
+      validators_.texture_sized_texture_filterable_internal_format.AddValue(
+          GL_BGRA8_EXT);
+    }
     if (enable_texture_float) {
         validators_.texture_internal_format_storage.AddValue(GL_RGBA32F_EXT);
         validators_.texture_internal_format_storage.AddValue(GL_RGB32F_EXT);
@@ -1401,11 +1398,21 @@ void FeatureInfo::InitializeFeatures() {
     // but we emulate ES 3.0 on top of Desktop GL 4.2+.
     feature_flags_.emulate_primitive_restart_fixed_index = true;
   }
+
+  feature_flags_.angle_robust_client_memory =
+      extensions.Contains("GL_ANGLE_robust_client_memory");
+
+  feature_flags_.khr_debug = gl_version_info_->IsAtLeastGL(4, 3) ||
+                             gl_version_info_->IsAtLeastGLES(3, 2) ||
+                             extensions.Contains("GL_KHR_debug");
+
+  feature_flags_.chromium_bind_generates_resource =
+      extensions.Contains("GL_CHROMIUM_bind_generates_resource");
+  feature_flags_.angle_webgl_compatibility =
+      extensions.Contains("GL_ANGLE_webgl_compatibility");
 }
 
 bool FeatureInfo::IsES3Capable() const {
-  if (!enable_unsafe_es3_apis_switch_)
-    return false;
   if (workarounds_.disable_texture_storage)
     return false;
   if (gl_version_info_)
@@ -1477,22 +1484,17 @@ void FeatureInfo::EnableES3Validators() {
         kTotalDrawBufferEnums - max_draw_buffers);
   }
 
-  unsafe_es3_apis_enabled_ = true;
+  if (feature_flags_.ext_texture_format_bgra8888) {
+    validators_.texture_internal_format.AddValue(GL_BGRA8_EXT);
+    validators_.texture_sized_color_renderable_internal_format.AddValue(
+        GL_BGRA8_EXT);
+    validators_.texture_sized_texture_filterable_internal_format.AddValue(
+        GL_BGRA8_EXT);
+  }
 }
 
 bool FeatureInfo::IsWebGLContext() const {
-  // Switch statement to cause a compile-time error if we miss a case.
-  switch (context_type_) {
-    case CONTEXT_TYPE_WEBGL1:
-    case CONTEXT_TYPE_WEBGL2:
-      return true;
-    case CONTEXT_TYPE_OPENGLES2:
-    case CONTEXT_TYPE_OPENGLES3:
-      return false;
-  }
-
-  NOTREACHED();
-  return false;
+  return IsWebGLContextType(context_type_);
 }
 
 bool FeatureInfo::IsWebGL1OrES2Context() const {

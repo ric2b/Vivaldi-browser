@@ -18,14 +18,11 @@
 #include "third_party/WebKit/public/platform/WebPageVisibilityState.h"
 #include "third_party/WebKit/public/web/WebNavigationPolicy.h"
 
-class GURL;
-
 namespace blink {
 class WebFrame;
 class WebLocalFrame;
 class WebPlugin;
 class WebURLRequest;
-class WebURLResponse;
 struct WebPluginParams;
 }
 
@@ -34,7 +31,7 @@ class Range;
 class Size;
 }
 
-namespace shell {
+namespace service_manager {
 class InterfaceRegistry;
 class InterfaceProvider;
 }
@@ -151,11 +148,11 @@ class CONTENT_EXPORT RenderFrame : public IPC::Listener,
 
   // Returns the InterfaceRegistry that this process uses to expose interfaces
   // to the application running in this frame.
-  virtual shell::InterfaceRegistry* GetInterfaceRegistry() = 0;
+  virtual service_manager::InterfaceRegistry* GetInterfaceRegistry() = 0;
 
   // Returns the InterfaceProvider that this process can use to bind
   // interfaces exposed to it by the application running in this frame.
-  virtual shell::InterfaceProvider* GetRemoteInterfaces() = 0;
+  virtual service_manager::InterfaceProvider* GetRemoteInterfaces() = 0;
 
   // Returns the AssociatedInterfaceRegistry this frame can use to expose
   // frame-specific Channel-associated interfaces to the remote RenderFrameHost.
@@ -239,6 +236,10 @@ class CONTENT_EXPORT RenderFrame : public IPC::Listener,
 
   // Returns the current visibility of the frame.
   virtual blink::WebPageVisibilityState GetVisibilityState() const = 0;
+
+  // If PlzNavigate is enabled, returns true in between teh time that Blink
+  // requests navigation until the browser responds with the result.
+  virtual bool IsBrowserSideNavigationPending() = 0;
 
  protected:
   ~RenderFrame() override {}

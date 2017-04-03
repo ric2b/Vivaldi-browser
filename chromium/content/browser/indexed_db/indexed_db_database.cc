@@ -10,7 +10,6 @@
 #include <set>
 
 #include "base/auto_reset.h"
-#include "base/command_line.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
@@ -383,10 +382,7 @@ IndexedDBDatabase::IndexedDBDatabase(const base::string16& name,
                 IndexedDBDatabaseMetadata::NO_VERSION,
                 kInvalidId),
       identifier_(unique_identifier),
-      factory_(factory),
-      experimental_web_platform_features_enabled_(
-          base::CommandLine::ForCurrentProcess()->HasSwitch(
-              switches::kEnableExperimentalWebPlatformFeatures)) {
+      factory_(factory) {
   DCHECK(factory != NULL);
 }
 
@@ -934,7 +930,7 @@ void IndexedDBDatabase::SendObservations(
   for (auto* conn : connections_) {
     auto it = changes_map.find(conn->id());
     if (it != changes_map.end())
-      conn->callbacks()->OnDatabaseChange(it->first, std::move(it->second));
+      conn->callbacks()->OnDatabaseChange(std::move(it->second));
   }
 }
 
@@ -1210,7 +1206,7 @@ void IndexedDBDatabase::GetAllOperation(
   if (!cursor) {
     // Doesn't matter if key or value array here - will be empty array when it
     // hits JavaScript.
-    callbacks->OnSuccessArray(&found_values, object_store_metadata.key_path);
+    callbacks->OnSuccessArray(&found_values);
     return;
   }
 
@@ -1276,7 +1272,7 @@ void IndexedDBDatabase::GetAllOperation(
     // to return an array of keys - no need to create our own array of keys.
     callbacks->OnSuccess(IndexedDBKey(found_keys));
   } else {
-    callbacks->OnSuccessArray(&found_values, object_store_metadata.key_path);
+    callbacks->OnSuccessArray(&found_values);
   }
 }
 
@@ -1323,7 +1319,7 @@ struct IndexedDBDatabase::PutOperationParams {
   std::unique_ptr<IndexedDBKey> key;
   blink::WebIDBPutMode put_mode;
   scoped_refptr<IndexedDBCallbacks> callbacks;
-  std::vector<IndexKeys> index_keys;
+  std::vector<IndexedDBIndexKeys> index_keys;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(PutOperationParams);
@@ -1337,7 +1333,7 @@ void IndexedDBDatabase::Put(
     std::unique_ptr<IndexedDBKey> key,
     blink::WebIDBPutMode put_mode,
     scoped_refptr<IndexedDBCallbacks> callbacks,
-    const std::vector<IndexKeys>& index_keys) {
+    const std::vector<IndexedDBIndexKeys>& index_keys) {
   IDB_TRACE1("IndexedDBDatabase::Put", "txn.id", transaction_id);
   IndexedDBTransaction* transaction = GetTransaction(transaction_id);
   if (!transaction)
@@ -1505,10 +1501,11 @@ void IndexedDBDatabase::PutOperation(std::unique_ptr<PutOperationParams> params,
                     IndexedDBKeyRange(*key));
 }
 
-void IndexedDBDatabase::SetIndexKeys(int64_t transaction_id,
-                                     int64_t object_store_id,
-                                     std::unique_ptr<IndexedDBKey> primary_key,
-                                     const std::vector<IndexKeys>& index_keys) {
+void IndexedDBDatabase::SetIndexKeys(
+    int64_t transaction_id,
+    int64_t object_store_id,
+    std::unique_ptr<IndexedDBKey> primary_key,
+    const std::vector<IndexedDBIndexKeys>& index_keys) {
   IDB_TRACE1("IndexedDBDatabase::SetIndexKeys", "txn.id", transaction_id);
   IndexedDBTransaction* transaction = GetTransaction(transaction_id);
   if (!transaction)
@@ -1838,11 +1835,7 @@ void IndexedDBDatabase::DeleteRangeOperation(
     }
     return;
   }
-  if (experimental_web_platform_features_enabled_) {
-    callbacks->OnSuccess(base::checked_cast<int64_t>(delete_count));
-  } else {
-    callbacks->OnSuccess();
-  }
+  callbacks->OnSuccess();
   FilterObservation(transaction, object_store_id, blink::WebIDBDelete,
                     *key_range);
 }

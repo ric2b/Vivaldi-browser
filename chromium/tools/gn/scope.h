@@ -320,16 +320,16 @@ class Scope {
 
   // <Vivaldi>
   static ProcessParseMap &GetTargetPreProcessing() {
-  	return target_pre_process_list;
+    return target_pre_process_list;
   }
   static ProcessParseMap &GetTargetPostProcessing() {
-  	return target_post_process_list;
+    return target_post_process_list;
   }
   static ProcessParseMap &GetTemplatePreProcessing() {
-  	return template_pre_process_list;
+    return template_pre_process_list;
   }
   static ProcessParseMap &GetTemplatePostProcessing() {
-  	return template_post_process_list;
+    return template_post_process_list;
   }
   // </Vivaldi>
 

@@ -170,7 +170,8 @@ PasswordManager::PasswordManager(PasswordManagerClient* client)
 }
 
 PasswordManager::~PasswordManager() {
-  FOR_EACH_OBSERVER(LoginModelObserver, observers_, OnLoginModelDestroying());
+  for (LoginModelObserver& observer : observers_)
+    observer.OnLoginModelDestroying();
 }
 
 void PasswordManager::GenerationAvailableForForm(const PasswordForm& form) {
@@ -283,12 +284,6 @@ void PasswordManager::ProvisionallySavePassword(const PasswordForm& form) {
       continue;
 
     (*iter)->SetSubmittedForm(form);
-
-    if ((*iter)->is_ignorable_change_password_form()) {
-      if (logger)
-        logger->LogMessage(Logger::STRING_CHANGE_PASSWORD_FORM);
-      continue;
-    }
 
     if (result == PasswordFormManager::RESULT_COMPLETE_MATCH) {
       // If we find a manager that exactly matches the submitted form including
@@ -569,11 +564,9 @@ bool PasswordManager::ShouldPromptUserToSavePassword() const {
           provisional_save_manager_
               ->is_possible_change_password_form_without_username() ||
           provisional_save_manager_->retry_password_form_password_update() ||
-          (provisional_save_manager_->password_overridden() &&
-           client_->IsUpdatePasswordUIEnabled())) &&
+          provisional_save_manager_->password_overridden()) &&
          !(provisional_save_manager_->has_generated_password() &&
-           (provisional_save_manager_->IsNewLogin() ||
-            !client_->IsUpdatePasswordUIEnabled())) &&
+           provisional_save_manager_->IsNewLogin()) &&
          !provisional_save_manager_->IsPendingCredentialsPublicSuffixMatch();
 }
 
@@ -811,8 +804,8 @@ void PasswordManager::AutofillHttpAuth(
                        observers_.might_have_observers());
   }
 
-  FOR_EACH_OBSERVER(LoginModelObserver, observers_,
-                    OnAutofillDataAvailable(preferred_match));
+  for (LoginModelObserver& observer : observers_)
+    observer.OnAutofillDataAvailable(preferred_match);
   DCHECK(!best_matches.empty());
   client_->PasswordWasAutofilled(best_matches,
                                  best_matches.begin()->second->origin, nullptr);
@@ -821,10 +814,17 @@ void PasswordManager::AutofillHttpAuth(
 void PasswordManager::ProcessAutofillPredictions(
     password_manager::PasswordManagerDriver* driver,
     const std::vector<autofill::FormStructure*>& forms) {
+  std::unique_ptr<BrowserSavePasswordProgressLogger> logger;
+  if (password_manager_util::IsLoggingActive(client_))
+    logger.reset(
+        new BrowserSavePasswordProgressLogger(client_->GetLogManager()));
+
   // Leave only forms that contain fields that are useful for password manager.
   std::map<autofill::FormData, autofill::PasswordFormFieldPredictionMap>
       predictions;
-  for (autofill::FormStructure* form : forms) {
+  for (const autofill::FormStructure* form : forms) {
+    if (logger)
+      logger->LogFormStructure(Logger::STRING_SERVER_PREDICTIONS, *form);
     for (std::vector<autofill::AutofillField*>::const_iterator field =
              form->begin();
          field != form->end(); ++field) {

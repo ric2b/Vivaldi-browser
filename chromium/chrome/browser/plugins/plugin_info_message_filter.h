@@ -14,17 +14,18 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequenced_task_runner_helpers.h"
+#include "chrome/browser/plugins/plugin_metadata.h"
 #include "chrome/browser/plugins/plugin_prefs.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/prefs/pref_member.h"
 #include "content/public/browser/browser_message_filter.h"
+#include "extensions/features/features.h"
+#include "ppapi/features/features.h"
 
 struct ChromeViewHostMsg_GetPluginInfo_Output;
 enum class ChromeViewHostMsg_GetPluginInfo_Status;
 class GURL;
 class HostContentSettingsMap;
-class PluginFinder;
-class PluginMetadata;
 class Profile;
 
 namespace base {
@@ -61,9 +62,11 @@ class PluginInfoMessageFilter : public content::BrowserMessageFilter {
     ~Context();
 
     void DecidePluginStatus(
-        const GetPluginInfo_Params& params,
+        const GURL& url,
+        const url::Origin& main_frame_origin,
         const content::WebPluginInfo& plugin,
-        const PluginMetadata* plugin_metadata,
+        PluginMetadata::SecurityStatus security_status,
+        const std::string& plugin_identifier,
         ChromeViewHostMsg_GetPluginInfo_Status* status) const;
     bool FindEnabledPlugin(
         int render_frame_id,
@@ -81,7 +84,7 @@ class PluginInfoMessageFilter : public content::BrowserMessageFilter {
    private:
     int render_process_id_;
     content::ResourceContext* resource_context_;
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
     extensions::ExtensionRegistry* extension_registry_;
 #endif
     const HostContentSettingsMap* host_content_settings_map_;
@@ -129,7 +132,7 @@ class PluginInfoMessageFilter : public content::BrowserMessageFilter {
       std::unique_ptr<PluginMetadata> plugin_metadata,
       IPC::Message* reply_msg);
 
-#if defined(ENABLE_PEPPER_CDMS)
+#if BUILDFLAG(ENABLE_PEPPER_CDMS)
   // Returns whether any internal plugin supporting |mime_type| is registered
   // and enabled. Does not determine whether the plugin can actually be
   // instantiated (e.g. whether it has all its dependencies).

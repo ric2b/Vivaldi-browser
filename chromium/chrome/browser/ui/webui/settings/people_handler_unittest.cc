@@ -30,8 +30,8 @@
 #include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/fake_auth_status_provider.h"
 #include "components/signin/core/browser/signin_manager.h"
-#include "components/sync/driver/sync_prefs.h"
-#include "components/syncable_prefs/pref_service_syncable.h"
+#include "components/sync/base/sync_prefs.h"
+#include "components/sync_preferences/pref_service_syncable.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/test/test_browser_thread.h"
 #include "content/public/test/test_browser_thread_bundle.h"
@@ -404,7 +404,7 @@ TEST_F(PeopleHandlerTest,
   EXPECT_CALL(*mock_pss_, IsBackendInitialized()).WillRepeatedly(Return(false));
   SetDefaultExpectationsForConfigPage();
 
-  handler_->OpenSyncSetup(false /* creating_supervised_user */);
+  handler_->OpenSyncSetup();
 
   EXPECT_EQ(1U, web_ui_.call_data().size());
   ExpectPageStatusChanged(PeopleHandler::kSpinnerPageStatus);
@@ -440,7 +440,7 @@ TEST_F(PeopleHandlerTest,
       .WillOnce(Return(false))
       .WillRepeatedly(Return(true));
   SetDefaultExpectationsForConfigPage();
-  handler_->OpenSyncSetup(false /* creating_supervised_user */);
+  handler_->OpenSyncSetup();
 
   // It's important to tell sync the user cancelled the setup flow before we
   // tell it we're through with the setup progress.
@@ -461,7 +461,7 @@ TEST_F(PeopleHandlerTest,
   error_ = GoogleServiceAuthError::AuthErrorNone();
   EXPECT_CALL(*mock_pss_, IsBackendInitialized()).WillRepeatedly(Return(false));
 
-  handler_->OpenSyncSetup(false /* creating_supervised_user */);
+  handler_->OpenSyncSetup();
   ExpectPageStatusChanged(PeopleHandler::kSpinnerPageStatus);
   Mock::VerifyAndClearExpectations(mock_pss_);
   error_ = GoogleServiceAuthError(
@@ -488,7 +488,7 @@ TEST_F(PeopleHandlerNonCrosTest, HandleGaiaAuthFailure) {
       .WillRepeatedly(Return(false));
   EXPECT_CALL(*mock_pss_, IsFirstSetupComplete()).WillRepeatedly(Return(false));
   // Open the web UI.
-  handler_->OpenSyncSetup(false /* creating_supervised_user */);
+  handler_->OpenSyncSetup();
 
   ASSERT_FALSE(handler_->is_configuring_sync());
 }
@@ -498,7 +498,7 @@ TEST_F(PeopleHandlerNonCrosTest, UnrecoverableErrorInitializingSync) {
   EXPECT_CALL(*mock_pss_, CanSyncStart()).WillRepeatedly(Return(false));
   EXPECT_CALL(*mock_pss_, IsFirstSetupComplete()).WillRepeatedly(Return(false));
   // Open the web UI.
-  handler_->OpenSyncSetup(false /* creating_supervised_user */);
+  handler_->OpenSyncSetup();
 
   ASSERT_FALSE(handler_->is_configuring_sync());
 }
@@ -507,7 +507,7 @@ TEST_F(PeopleHandlerNonCrosTest, GaiaErrorInitializingSync) {
   EXPECT_CALL(*mock_pss_, CanSyncStart()).WillRepeatedly(Return(false));
   EXPECT_CALL(*mock_pss_, IsFirstSetupComplete()).WillRepeatedly(Return(false));
   // Open the web UI.
-  handler_->OpenSyncSetup(false /* creating_supervised_user */);
+  handler_->OpenSyncSetup();
 
   ASSERT_FALSE(handler_->is_configuring_sync());
 }
@@ -707,7 +707,7 @@ TEST_F(PeopleHandlerTest, ShowSyncSetup) {
   SetupInitializedProfileSyncService();
   // This should display the sync setup dialog (not login).
   SetDefaultExpectationsForConfigPage();
-  handler_->OpenSyncSetup(false /* creating_supervised_user */);
+  handler_->OpenSyncSetup();
 
   ExpectSyncPrefsChanged();
 }
@@ -742,7 +742,7 @@ TEST_F(PeopleHandlerTest, ShowSigninOnAuthError) {
 
   // On ChromeOS, this should display the spinner while we try to startup the
   // sync backend, and on desktop this displays the login dialog.
-  handler_->OpenSyncSetup(false /* creating_supervised_user */);
+  handler_->OpenSyncSetup();
 
   // Sync setup is closed when re-auth is in progress.
   EXPECT_EQ(NULL,
@@ -761,7 +761,7 @@ TEST_F(PeopleHandlerTest, ShowSetupSyncEverything) {
   SetupInitializedProfileSyncService();
   SetDefaultExpectationsForConfigPage();
   // This should display the sync setup dialog (not login).
-  handler_->OpenSyncSetup(false /* creating_supervised_user */);
+  handler_->OpenSyncSetup();
 
   const base::DictionaryValue* dictionary = ExpectSyncPrefsChanged();
   CheckBool(dictionary, "syncAllDataTypes", true);
@@ -791,7 +791,7 @@ TEST_F(PeopleHandlerTest, ShowSetupManuallySyncAll) {
   sync_prefs.SetKeepEverythingSynced(false);
   SetDefaultExpectationsForConfigPage();
   // This should display the sync setup dialog (not login).
-  handler_->OpenSyncSetup(false /* creating_supervised_user */);
+  handler_->OpenSyncSetup();
 
   const base::DictionaryValue* dictionary = ExpectSyncPrefsChanged();
   CheckConfigDataTypeArguments(dictionary, CHOOSE_WHAT_TO_SYNC, GetAllTypes());
@@ -815,7 +815,7 @@ TEST_F(PeopleHandlerTest, ShowSetupSyncForAllTypesIndividually) {
         WillRepeatedly(Return(types));
 
     // This should display the sync setup dialog (not login).
-    handler_->OpenSyncSetup(false /* creating_supervised_user */);
+    handler_->OpenSyncSetup();
 
     // Close the config overlay.
     LoginUIServiceFactory::GetForProfile(profile_)->LoginUIClosed(
@@ -839,7 +839,7 @@ TEST_F(PeopleHandlerTest, ShowSetupOldGaiaPassphraseRequired) {
   SetDefaultExpectationsForConfigPage();
 
   // This should display the sync setup dialog (not login).
-  handler_->OpenSyncSetup(false /* creating_supervised_user */);
+  handler_->OpenSyncSetup();
 
   const base::DictionaryValue* dictionary = ExpectSyncPrefsChanged();
   CheckBool(dictionary, "passphraseRequired", true);
@@ -855,7 +855,7 @@ TEST_F(PeopleHandlerTest, ShowSetupCustomPassphraseRequired) {
   SetDefaultExpectationsForConfigPage();
 
   // This should display the sync setup dialog (not login).
-  handler_->OpenSyncSetup(false /* creating_supervised_user */);
+  handler_->OpenSyncSetup();
 
   const base::DictionaryValue* dictionary = ExpectSyncPrefsChanged();
   CheckBool(dictionary, "passphraseRequired", true);
@@ -873,7 +873,7 @@ TEST_F(PeopleHandlerTest, ShowSetupEncryptAll) {
       .WillRepeatedly(Return(true));
 
   // This should display the sync setup dialog (not login).
-  handler_->OpenSyncSetup(false /* creating_supervised_user */);
+  handler_->OpenSyncSetup();
 
   const base::DictionaryValue* dictionary = ExpectSyncPrefsChanged();
   CheckBool(dictionary, "encryptAllData", true);
@@ -890,7 +890,7 @@ TEST_F(PeopleHandlerTest, ShowSetupEncryptAllDisallowed) {
       .WillRepeatedly(Return(false));
 
   // This should display the sync setup dialog (not login).
-  handler_->OpenSyncSetup(false /* creating_supervised_user */);
+  handler_->OpenSyncSetup();
 
   const base::DictionaryValue* dictionary = ExpectSyncPrefsChanged();
   CheckBool(dictionary, "encryptAllData", false);

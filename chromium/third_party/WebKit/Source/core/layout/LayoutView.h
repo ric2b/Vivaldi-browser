@@ -64,7 +64,8 @@ class CORE_EXPORT LayoutView final : public LayoutBlockFlow {
   ~LayoutView() override;
   void willBeDestroyed() override;
 
-  // hitTest() will update layout, style and compositing first while hitTestNoLifecycleUpdate() does not.
+  // hitTest() will update layout, style and compositing first while
+  // hitTestNoLifecycleUpdate() does not.
   bool hitTest(HitTestResult&);
   bool hitTestNoLifecycleUpdate(HitTestResult&);
 
@@ -122,7 +123,7 @@ class CORE_EXPORT LayoutView final : public LayoutBlockFlow {
       const LayoutBoxModelObject* ancestor,
       LayoutRect&,
       VisualRectFlags = DefaultVisualRectFlags) const override;
-  void adjustOffsetForFixedPosition(LayoutRect&) const;
+  LayoutSize offsetForFixedPosition(bool includePendingScroll = false) const;
 
   void invalidatePaintForViewAndCompositedLayers();
 
@@ -167,13 +168,7 @@ class CORE_EXPORT LayoutView final : public LayoutBlockFlow {
   }
 
   LayoutUnit pageLogicalHeight() const { return m_pageLogicalHeight; }
-  void setPageLogicalHeight(LayoutUnit height) {
-    if (m_pageLogicalHeight != height) {
-      m_pageLogicalHeight = height;
-      m_pageLogicalHeightChanged = true;
-    }
-  }
-  bool pageLogicalHeightChanged() const { return m_pageLogicalHeightChanged; }
+  void setPageLogicalHeight(LayoutUnit height) { m_pageLogicalHeight = height; }
 
   // Notification that this view moved into or out of a native window.
   void setIsInWindow(bool);
@@ -181,11 +176,10 @@ class CORE_EXPORT LayoutView final : public LayoutBlockFlow {
   PaintLayerCompositor* compositor();
   bool usesCompositing() const;
 
-  LayoutRect backgroundRect(LayoutBox* backgroundLayoutObject) const;
-
   IntRect documentRect() const;
 
-  // LayoutObject that paints the root background has background-images which all have background-attachment: fixed.
+  // LayoutObject that paints the root background has background-images which
+  // all have background-attachment: fixed.
   bool rootBackgroundIsEntirelyFixed() const;
 
   IntervalArena* intervalArena();
@@ -194,9 +188,9 @@ class CORE_EXPORT LayoutView final : public LayoutBlockFlow {
   LayoutQuote* layoutQuoteHead() const { return m_layoutQuoteHead; }
 
   // FIXME: This is a work around because the current implementation of counters
-  // requires walking the entire tree repeatedly and most pages don't actually use either
-  // feature so we shouldn't take the performance hit when not needed. Long term we should
-  // rewrite the counter and quotes code.
+  // requires walking the entire tree repeatedly and most pages don't actually
+  // use either feature so we shouldn't take the performance hit when not
+  // needed. Long term we should rewrite the counter and quotes code.
   void addLayoutCounter() { m_layoutCounterCount++; }
   void removeLayoutCounter() {
     ASSERT(m_layoutCounterCount > 0);
@@ -207,7 +201,8 @@ class CORE_EXPORT LayoutView final : public LayoutBlockFlow {
   bool backgroundIsKnownToBeOpaqueInRect(
       const LayoutRect& localRect) const override;
 
-  // Returns the viewport size in (CSS pixels) that vh and vw units are calculated from.
+  // Returns the viewport size in (CSS pixels) that vh and vw units are
+  // calculated from.
   FloatSize viewportSizeForViewportUnits() const;
 
   void pushLayoutState(LayoutState& layoutState) {
@@ -219,14 +214,20 @@ class CORE_EXPORT LayoutView final : public LayoutBlockFlow {
   }
 
   LayoutRect visualOverflowRect() const override;
-  LayoutRect localOverflowRectForPaintInvalidation() const override;
+  LayoutRect localVisualRect() const override;
 
-  // Invalidates paint for the entire view, including composited descendants, but not including child frames.
+  // Invalidates paint for the entire view, including composited descendants,
+  // but not including child frames.
   // It is very likely you do not want to call this method.
   void setShouldDoFullPaintInvalidationForViewAndAllDescendants();
 
-  // The document scrollbar is always on the right, even in RTL. This is to prevent it from moving around on navigations.
-  // TODO(skobes): This is not quite the ideal behavior, see http://crbug.com/250514 and http://crbug.com/249860.
+  void setShouldDoFullPaintInvalidationOnResizeIfNeeded(bool widthChanged,
+                                                        bool heightChanged);
+
+  // The document scrollbar is always on the right, even in RTL. This is to
+  // prevent it from moving around on navigations.
+  // TODO(skobes): This is not quite the ideal behavior, see
+  // http://crbug.com/250514 and http://crbug.com/249860.
   bool shouldPlaceBlockDirectionScrollbarOnLogicalLeft() const override {
     return false;
   }
@@ -267,8 +268,6 @@ class CORE_EXPORT LayoutView final : public LayoutBlockFlow {
   void checkLayoutState();
 #endif
 
-  void setShouldDoFullPaintInvalidationOnResizeIfNeeded();
-
   void updateFromStyle() override;
   bool allowsOverflowClip() const override;
 
@@ -302,7 +301,6 @@ class CORE_EXPORT LayoutView final : public LayoutBlockFlow {
   // This is only used during printing to split the content into pages.
   // Outside of printing, this is 0.
   LayoutUnit m_pageLogicalHeight;
-  bool m_pageLogicalHeightChanged;
 
   // LayoutState is an optimization used during layout.
   // |m_layoutState| will be nullptr outside of layout.

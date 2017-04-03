@@ -15,7 +15,7 @@ The frontend is available through a git subtree mirror on [chromium.googlesource
 1. Clone the repo
 2. Go to repo root and run:  `npm start`
     - This launches Chrome Canary and starts the dev server with 1 command
-3. Go to http://localhost:8090
+3. Go to http://localhost:9222#custom=true&experiments=true
 
 > **Power user tips:**
 >
@@ -30,6 +30,15 @@ The frontend is available through a git subtree mirror on [chromium.googlesource
 > npm run chrome -- https://news.ycombinator.com
 > ```
 > (e.g. this launches Hacker News on startup)
+>
+> If you want to reset your development profile for Chrome, pass in "--reset-profile":
+> ```
+> npm start -- --reset-profile
+> ```
+> *OR*
+> ```
+> npm run chrome -- --reset-profile
+> ```
 
 ### Hacking
 * DevTools documentation: [devtools.chrome.com](https://devtools.chrome.com)
@@ -37,6 +46,21 @@ The frontend is available through a git subtree mirror on [chromium.googlesource
 * [awesome-chrome-devtools](https://github.com/paulirish/awesome-chrome-devtools): recommended tools and resources
 * Contributing to DevTools: [bit.ly/devtools-contribution-guide](http://bit.ly/devtools-contribution-guide)
 
+### Useful Commands
+
+Basic:
+* `npm run format` - formats your code using clang-format
+* `npm test` - builds devtools and runs all inspector layout tests
+
+> Note: If you're using a full chromium checkout and compiled content shell in out/Release, then `npm test` uses that. Otherwise, with only a front-end checkout (i.e. cloning from GitHub), then `npm test` will fetch a previously compiled content shell from the cloud (and cache it for future test runs).
+
+Advanced testing:
+* `npm test -- --fetch-content-shell` - even if you're using a full chromium checkout and have a compiled content shell, this will fetch a pre-compiled content shell. This is useful if you haven't compiled your content shell recently.
+* `npm test -- -f --child-processes=16` - pass in additional flags to the test harness
+* `npm test -- inspector/sources inspector/console` - run specific tests
+* `npm test -- inspector/cookie-resource-match.html --debug-devtools` - debug a specific test (non-bundled & minified). You can use "-d" as a shorthand for "--debug-devtools".
+* `npm run test:build` - only builds devtools (in debug mode)
+* `npm run test:run` - only runs devtools tests
 
 #### Development
 * All devtools commits: [View the log], [RSS feed] or [@DevToolsCommits] on Twitter

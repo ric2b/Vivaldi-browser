@@ -129,13 +129,11 @@ ChannelNacl::ChannelNacl(const IPC::ChannelHandle& channel_handle,
       mode_(mode),
       waiting_connect_(true),
       pipe_(-1),
-      pipe_name_(channel_handle.name),
       weak_ptr_factory_(this) {
   if (!CreatePipe(channel_handle)) {
     // The pipe may have been closed already.
     const char *modestr = (mode_ & MODE_SERVER_FLAG) ? "server" : "client";
-    LOG(WARNING) << "Unable to create pipe named \"" << channel_handle.name
-                 << "\" in " << modestr << " mode";
+    LOG(WARNING) << "Unable to create pipe in " << modestr << " mode";
   }
 }
 
@@ -144,21 +142,11 @@ ChannelNacl::~ChannelNacl() {
   Close();
 }
 
-base::ProcessId ChannelNacl::GetPeerPID() const {
-  // This shouldn't actually get used in the untrusted side of the proxy, and we
-  // don't have the real pid anyway.
-  return -1;
-}
-
-base::ProcessId ChannelNacl::GetSelfPID() const {
-  return -1;
-}
-
 bool ChannelNacl::Connect() {
   WillConnect();
 
   if (pipe_ == -1) {
-    DLOG(WARNING) << "Channel creation failed: " << pipe_name_;
+    DLOG(WARNING) << "Channel creation failed";
     return false;
   }
 
@@ -211,7 +199,7 @@ bool ChannelNacl::Send(Message* message) {
   std::unique_ptr<Message> message_ptr(message);
 
 #ifdef IPC_MESSAGE_LOG_ENABLED
-  Logging::GetInstance()->OnSendMessage(message_ptr.get(), "");
+  Logging::GetInstance()->OnSendMessage(message_ptr.get());
 #endif  // IPC_MESSAGE_LOG_ENABLED
 
   TRACE_EVENT_WITH_FLOW0(TRACE_DISABLED_BY_DEFAULT("ipc.flow"),
@@ -223,10 +211,6 @@ bool ChannelNacl::Send(Message* message) {
     return ProcessOutgoingMessages();
 
   return true;
-}
-
-AttachmentBroker* ChannelNacl::GetAttachmentBroker() {
-  return nullptr;
 }
 
 void ChannelNacl::DidRecvMsg(std::unique_ptr<MessageContents> contents) {
@@ -323,7 +307,7 @@ bool ChannelNacl::ProcessOutgoingMessages() {
 }
 
 void ChannelNacl::CallOnChannelConnected() {
-  listener()->OnChannelConnected(GetPeerPID());
+  listener()->OnChannelConnected(-1);
 }
 
 ChannelNacl::ReadState ChannelNacl::ReadData(
@@ -384,16 +368,6 @@ void ChannelNacl::HandleInternalMessage(const Message& msg) {
   // The trusted side IPC::Channel should handle the "hello" handshake; we
   // should not receive the "Hello" message.
   NOTREACHED();
-}
-
-base::ProcessId ChannelNacl::GetSenderPID() {
-  // The untrusted side of the IPC::Channel should never have to worry about
-  // sender's process id.
-  return base::kNullProcessId;
-}
-
-bool ChannelNacl::IsAttachmentBrokerEndpoint() {
-  return is_attachment_broker_endpoint();
 }
 
 // Channel's methods

@@ -6,38 +6,10 @@ import unittest
 
 from webkitpy.w3c.deps_updater import DepsUpdater
 from webkitpy.common.host_mock import MockHost
-from webkitpy.common.system.filesystem_mock import MockFileSystem
+from webkitpy.common.system.executive_mock import MockExecutive2
 
 
 class DepsUpdaterTest(unittest.TestCase):
-
-    def test_is_manual_test_regular_test(self):
-        # TODO(qyearsley): Refactor these tests to re-use the MockFileSystem from the MockHost.
-        updater = DepsUpdater(MockHost())
-        fs = MockFileSystem()
-        dirname = '/mock-checkout/third_party/WebKit/LayoutTests/imported/wpt/a'
-        self.assertFalse(updater.is_manual_test(fs, dirname, 'test.html'))
-        self.assertFalse(updater.is_manual_test(fs, dirname, 'manual-foo.htm'))
-        self.assertFalse(updater.is_manual_test(fs, dirname, 'script.js'))
-        self.assertFalse(updater.is_manual_test(fs, dirname, 'foo'))
-
-    def test_is_manual_test_no_automation_file(self):
-        updater = DepsUpdater(MockHost())
-        fs = MockFileSystem()
-        dirname = '/mock-checkout/third_party/WebKit/LayoutTests/imported/wpt/a'
-        self.assertTrue(updater.is_manual_test(fs, dirname, 'test-manual.html'))
-        self.assertTrue(updater.is_manual_test(fs, dirname, 'test-manual.htm'))
-        self.assertTrue(updater.is_manual_test(fs, dirname, 'test-manual.xht'))
-
-    def test_is_manual_test_with_corresponding_automation_file(self):
-        updater = DepsUpdater(MockHost())
-        imported_dir = '/mock-checkout/third_party/WebKit/LayoutTests/imported/'
-        fs = MockFileSystem(files={
-            imported_dir + 'wpt_automation/a/x-manual-input.js': '',
-            imported_dir + 'wpt_automation/a/y-manual-automation.js': '',
-        })
-        self.assertTrue(updater.is_manual_test(fs, imported_dir + 'wpt/a', 'x-manual.html'))
-        self.assertFalse(updater.is_manual_test(fs, imported_dir + 'wpt/a', 'y-manual.html'))
 
     def test_generate_email_list(self):
         updater = DepsUpdater(MockHost())
@@ -82,8 +54,36 @@ class DepsUpdaterTest(unittest.TestCase):
             'some/test/a.html': 'new/a.html',
             'some/test/c.html': 'new/c.html',
         }
-        updater.update_test_expectations(deleted_tests, renamed_test_pairs)
+        updater.update_all_test_expectations_files(deleted_tests, renamed_test_pairs)
         self.assertMultiLineEqual(
             host.filesystem.read_text_file('/mock-checkout/third_party/WebKit/LayoutTests/TestExpectations'),
             ('Bug(test) new/a.html [ Failure ]\n'
              'Bug(test) new/c.html [ Failure ]\n'))
+
+    # Tests for protected methods - pylint: disable=protected-access
+
+    def test_cl_description_with_empty_environ(self):
+        host = MockHost()
+        host.executive = MockExecutive2(output='Last commit message\n')
+        updater = DepsUpdater(host)
+        description = updater._cl_description()
+        self.assertEqual(
+            description,
+            ('Last commit message\n'
+             'TBR=qyearsley@chromium.org'))
+        self.assertEqual(host.executive.calls, [['git', 'log', '-1', '--format=%B']])
+
+    def test_cl_description_with_environ_variables(self):
+        host = MockHost()
+        host.executive = MockExecutive2(output='Last commit message\n')
+        updater = DepsUpdater(host)
+        updater.host.environ['BUILDBOT_MASTERNAME'] = 'my.master'
+        updater.host.environ['BUILDBOT_BUILDERNAME'] = 'b'
+        updater.host.environ['BUILDBOT_BUILDNUMBER'] = '123'
+        description = updater._cl_description()
+        self.assertEqual(
+            description,
+            ('Last commit message\n'
+             'Build: https://build.chromium.org/p/my.master/builders/b/builds/123\n\n'
+             'TBR=qyearsley@chromium.org'))
+        self.assertEqual(host.executive.calls, [['git', 'log', '-1', '--format=%B']])

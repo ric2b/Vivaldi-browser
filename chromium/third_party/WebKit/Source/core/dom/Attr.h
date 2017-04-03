@@ -26,6 +26,7 @@
 #ifndef Attr_h
 #define Attr_h
 
+#include "bindings/core/v8/TraceWrapperMember.h"
 #include "core/CoreExport.h"
 #include "core/dom/Node.h"
 #include "core/dom/QualifiedName.h"
@@ -49,9 +50,6 @@ class CORE_EXPORT Attr final : public Node {
   const AtomicString& value() const;
   void setValue(const AtomicString&);
 
-  const AtomicString& valueForBindings() const;
-  void setValueForBindings(const AtomicString&);
-
   const QualifiedName getQualifiedName() const;
 
   void attachToElement(Element*, const AtomicString&);
@@ -62,7 +60,6 @@ class CORE_EXPORT Attr final : public Node {
   const AtomicString& prefix() const { return m_name.prefix(); }
 
   DECLARE_VIRTUAL_TRACE();
-
   DECLARE_VIRTUAL_TRACE_WRAPPERS();
 
  private:
@@ -85,7 +82,7 @@ class CORE_EXPORT Attr final : public Node {
   // standalone Node.)
   // Note that m_name is always set, but m_element/m_standaloneValue may be
   // null.
-  Member<Element> m_element;
+  TraceWrapperMember<Element> m_element;
   QualifiedName m_name;
   // Holds the value if it is a standalone Node, or the local name of the
   // attribute it is attached to on an Element. The latter may (letter case)

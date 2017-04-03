@@ -99,7 +99,8 @@ LayoutBlock::LayoutBlock(ContainerNode* node)
       m_isSelfCollapsing(false),
       m_descendantsWithFloatsMarkedForLayout(false),
       m_hasPositionedObjects(false),
-      m_hasPercentHeightDescendants(false) {
+      m_hasPercentHeightDescendants(false),
+      m_paginationStateChanged(false) {
   // LayoutBlockFlow calls setChildrenInline(true).
   // By default, subclasses do not have inline children.
 }
@@ -396,7 +397,7 @@ void LayoutBlock::layout() {
   bool needsScrollAnchoring =
       hasOverflowClip() && getScrollableArea()->shouldPerformScrollAnchoring();
   if (needsScrollAnchoring)
-    getScrollableArea()->scrollAnchor()->save();
+    getScrollableArea()->scrollAnchor()->notifyBeforeLayout();
 
   // Table cells call layoutBlock directly, so don't add any logic here.  Put
   // code into layoutBlock().
@@ -409,16 +410,6 @@ void LayoutBlock::layout() {
     clearLayoutOverflow();
 
   invalidateBackgroundObscurationStatus();
-
-  // If clamping is delayed, we will restore in
-  // PaintLayerScrollableArea::clampScrollPositionsAfterLayout.
-  // Restoring during the intermediate layout may clamp the scroller to the
-  // wrong bounds.
-  bool clampingDelayed = PaintLayerScrollableArea::
-      DelayScrollPositionClampScope::clampingIsDelayed();
-  if (needsScrollAnchoring && !clampingDelayed)
-    getScrollableArea()->scrollAnchor()->restore();
-
   m_heightAvailableToChildrenChanged = false;
 }
 
@@ -538,7 +529,8 @@ bool LayoutBlock::createsNewFormattingContext() const {
          style()->specifiesColumns() || isLayoutFlowThread() || isTableCell() ||
          isTableCaption() || isFieldset() || isWritingModeRoot() ||
          isDocumentElement() || isColumnSpanAll() || isGridItem() ||
-         style()->containsPaint() || style()->containsLayout();
+         style()->containsPaint() || style()->containsLayout() ||
+         isSVGForeignObject();
 }
 
 static inline bool changeInAvailableLogicalHeightAffectsChild(
@@ -581,7 +573,7 @@ void LayoutBlock::updateBlockChildDirtyBitsBeforeLayout(bool relayoutChildren,
 
 void LayoutBlock::simplifiedNormalFlowLayout() {
   if (childrenInline()) {
-    ASSERT_WITH_SECURITY_IMPLICATION(isLayoutBlockFlow());
+    SECURITY_DCHECK(isLayoutBlockFlow());
     LayoutBlockFlow* blockFlow = toLayoutBlockFlow(this);
     blockFlow->simplifiedNormalFlowInlineLayout();
   } else {
@@ -608,7 +600,7 @@ bool LayoutBlock::simplifiedLayout() {
 
   {
     // LayoutState needs this deliberate scope to pop before paint invalidation.
-    LayoutState state(*this, locationOffset());
+    LayoutState state(*this);
 
     if (needsPositionedMovementLayout() &&
         !tryLayoutDoingPositionedMovementOnly())
@@ -687,9 +679,13 @@ void LayoutBlock::markFixedPositionObjectForLayoutIfNeeded(
   LayoutObject* o = child->parent();
   while (o && !o->isLayoutView() && o->style()->position() != AbsolutePosition)
     o = o->parent();
-  if (o->style()->position() != AbsolutePosition)
+  // The LayoutView is absolute-positioned, but does not move.
+  if (o->isLayoutView())
     return;
 
+  // We must compute child's width and height, but not update them now.
+  // The child will update its width and height when it gets laid out, and needs
+  // to see them change there.
   LayoutBox* box = toLayoutBox(child);
   if (hasStaticInlinePosition) {
     LogicalExtentComputedValues computedValues;
@@ -698,9 +694,10 @@ void LayoutBlock::markFixedPositionObjectForLayoutIfNeeded(
     if (newLeft != box->logicalLeft())
       layoutScope.setChildNeedsLayout(child);
   } else if (hasStaticBlockPosition) {
-    LayoutUnit oldTop = box->logicalTop();
-    box->updateLogicalHeight();
-    if (box->logicalTop() != oldTop)
+    LogicalExtentComputedValues computedValues;
+    box->computeLogicalHeight(computedValues);
+    LayoutUnit newTop = computedValues.m_position;
+    if (newTop != box->logicalTop())
       layoutScope.setChildNeedsLayout(child);
   }
 }
@@ -759,10 +756,9 @@ void LayoutBlock::layoutPositionedObjects(bool relayoutChildren,
     positionedObject->setMayNeedPaintInvalidation();
 
     SubtreeLayoutScope layoutScope(*positionedObject);
-    // A fixed position element with an absolute positioned ancestor has no way
-    // of knowing if the latter has changed position. So if this is a fixed
-    // position element, mark it for layout if it has an abspos ancestor and
-    // needs to move with that ancestor, i.e. it has static position.
+    // If positionedObject is fixed-positioned and moves with an absolute-
+    // positioned ancestor (other than the LayoutView, which cannot move),
+    // mark it for layout now.
     markFixedPositionObjectForLayoutIfNeeded(positionedObject, layoutScope);
     if (info == LayoutOnlyFixedPositionedObjects) {
       positionedObject->layoutIfNeeded();
@@ -829,6 +825,9 @@ void LayoutBlock::layoutPositionedObjects(bool relayoutChildren,
     if (!layoutChanged && needsBlockDirectionLocationSetBeforeLayout &&
         logicalTopEstimate != logicalTopForChild(*positionedObject))
       positionedObject->forceChildLayout();
+
+    if (isPaginated)
+      updateFragmentationInfoForChild(*positionedObject);
   }
 }
 
@@ -1687,7 +1686,12 @@ int LayoutBlock::baselinePosition(FontBaseline baselineType,
   // Note that inline-block counts as replaced here.
   ASSERT(linePositionMode == PositionOfInteriorLineBoxes);
 
-  const FontMetrics& fontMetrics = style(firstLine)->getFontMetrics();
+  const SimpleFontData* fontData = style(firstLine)->font().primaryFont();
+  DCHECK(fontData);
+  if (!fontData)
+    return -1;
+
+  const FontMetrics& fontMetrics = fontData->getFontMetrics();
   return (fontMetrics.ascent(baselineType) +
           (lineHeight(firstLine, direction, linePositionMode) -
            fontMetrics.height()) /
@@ -1756,8 +1760,9 @@ int LayoutBlock::inlineBlockBaseline(LineDirectionMode lineDirection) const {
             .toInt();  // Translate to our coordinate space.
     }
   }
-  if (!haveNormalFlowChild && hasLineIfEmpty()) {
-    const FontMetrics& fontMetrics = firstLineStyle()->getFontMetrics();
+  const SimpleFontData* fontData = firstLineStyle()->font().primaryFont();
+  if (fontData && !haveNormalFlowChild && hasLineIfEmpty()) {
+    const FontMetrics& fontMetrics = fontData->getFontMetrics();
     return (fontMetrics.ascent() +
             (lineHeight(true, lineDirection, PositionOfInteriorLineBoxes) -
              fontMetrics.height()) /
@@ -1781,7 +1786,7 @@ const LayoutBlock* LayoutBlock::enclosingFirstLineStyleBlock() const {
         firstLineBlock->isFloatingOrOutOfFlowPositioned() || !parentBlock ||
         !parentBlock->behavesLikeBlockContainer())
       break;
-    ASSERT_WITH_SECURITY_IMPLICATION(parentBlock->isLayoutBlock());
+    SECURITY_DCHECK(parentBlock->isLayoutBlock());
     if (toLayoutBlock(parentBlock)->firstChild() != firstLineBlock)
       break;
     firstLineBlock = toLayoutBlock(parentBlock);
@@ -1819,18 +1824,13 @@ void LayoutBlock::updateHitTestResult(HitTestResult& result,
 // so the firstChild() is nullptr if the only child is an empty inline-block.
 inline bool LayoutBlock::isInlineBoxWrapperActuallyChild() const {
   return isInlineBlockOrInlineTable() && !size().isEmpty() && node() &&
-         editingIgnoresContent(node());
-}
-
-static inline bool caretBrowsingEnabled(const LocalFrame* frame) {
-  Settings* settings = frame->settings();
-  return settings && settings->caretBrowsingEnabled();
+         editingIgnoresContent(*node());
 }
 
 bool LayoutBlock::hasCursorCaret() const {
   LocalFrame* frame = this->frame();
   return frame->selection().caretLayoutObject() == this &&
-         (frame->selection().hasEditableStyle() || caretBrowsingEnabled(frame));
+         frame->selection().hasEditableStyle();
 }
 
 bool LayoutBlock::hasDragCaret() const {
@@ -2020,7 +2020,7 @@ bool LayoutBlock::recalcChildOverflowAfterStyleChange() {
   bool childrenOverflowChanged = false;
 
   if (childrenInline()) {
-    ASSERT_WITH_SECURITY_IMPLICATION(isLayoutBlockFlow());
+    SECURITY_DCHECK(isLayoutBlockFlow());
     childrenOverflowChanged =
         toLayoutBlockFlow(this)->recalcInlineChildrenOverflowAfterStyleChange();
   } else {

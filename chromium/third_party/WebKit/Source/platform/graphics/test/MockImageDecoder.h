@@ -62,12 +62,12 @@ class MockImageDecoder : public ImageDecoder {
  public:
   static std::unique_ptr<MockImageDecoder> create(
       MockImageDecoderClient* client) {
-    return wrapUnique(new MockImageDecoder(client));
+    return makeUnique<MockImageDecoder>(client);
   }
 
   MockImageDecoder(MockImageDecoderClient* client)
       : ImageDecoder(AlphaPremultiplied,
-                     GammaAndColorProfileApplied,
+                     ColorSpaceApplied,
                      noDecodedImageByteLimit),
         m_client(client) {}
 
@@ -111,8 +111,8 @@ class MockImageDecoder : public ImageDecoder {
   }
 
   void initializeNewFrame(size_t index) override {
-    m_frameBufferCache[index].setSizeAndColorProfile(
-        size().width(), size().height(), colorProfile());
+    m_frameBufferCache[index].setSizeAndColorSpace(
+        size().width(), size().height(), colorSpace());
     m_frameBufferCache[index].setHasAlpha(false);
   }
 

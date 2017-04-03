@@ -13,6 +13,14 @@ Polymer({
   behaviors: [SiteSettingsBehavior],
 
   properties: {
+    /** @private */
+    enableSiteSettings_: {
+      type: Boolean,
+      value: function() {
+        return loadTimeData.getBoolean('enableSiteSettings');
+      },
+    },
+
     /**
      * The category selected by the user.
      */
@@ -59,15 +67,12 @@ Polymer({
   },
 
   /**
-   * Handles selection of a single category and navigates to the details for
-   * that category.
+   * Navigate to the route specified in the event dataset.
    * @param {!Event} event The tap event.
+   * @private
    */
-  onTapCategory: function(event) {
-    var category = event.currentTarget.getAttribute('category');
-    if (category == settings.ALL_SITES)
-      settings.navigateTo(settings.Route.SITE_SETTINGS_ALL);
-    else
-      settings.navigateTo(this.computeCategoryRoute(category));
+  onTapNavigate_: function(event) {
+    var dataSet = /** @type {{route: string}} */(event.currentTarget.dataset);
+    settings.navigateTo(settings.Route[dataSet.route]);
   },
 });

@@ -7,3 +7,14 @@ post_process_target("//chrome/installer/setup:setup") {
     "//vivaldi/installer/util/vivaldi_progress_dialog.h",
   ]
 }
+
+post_process_target("//chrome/installer/install_static:install_static_util") {
+  sources -= [
+    "chromium_install_modes.cc",
+    "chromium_install_modes.h",
+  ]
+  sources += [
+    "//vivaldi/installer/vivaldi_install_modes.cc",
+    "//vivaldi/installer/vivaldi_install_modes.h",
+  ]
+}

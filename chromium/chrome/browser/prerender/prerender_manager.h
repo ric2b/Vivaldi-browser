@@ -14,6 +14,7 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/time/clock.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
@@ -35,6 +36,9 @@ struct ChromeCookieDetails;
 namespace base {
 class DictionaryValue;
 class ListValue;
+class SimpleTestClock;
+class SimpleTestTickClock;
+class TickClock;
 }
 
 namespace chrome {
@@ -261,6 +265,11 @@ class PrerenderManager : public content::NotificationObserver,
   virtual PrerenderContents* GetPrerenderContentsForRoute(
       int child_id, int route_id) const;
 
+  // Returns the PrerenderContents object that is found in active prerenders to
+  // match the |render_process_id|. Otherwise returns a nullptr.
+  PrerenderContents* GetPrerenderContentsForProcess(
+      int render_process_id) const;
+
   // Returns a list of all WebContents being prerendered.
   std::vector<content::WebContents*> GetAllPrerenderingContents() const;
 
@@ -312,11 +321,13 @@ class PrerenderManager : public content::NotificationObserver,
 
   Profile* profile() const { return profile_; }
 
-  // Classes which will be tested in prerender unit browser tests should use
-  // these methods to get times for comparison, so that the test framework can
-  // mock advancing/retarding time.
-  virtual base::Time GetCurrentTime() const;
-  virtual base::TimeTicks GetCurrentTimeTicks() const;
+  // Return current time and ticks with ability to mock the clock out for
+  // testing.
+  base::Time GetCurrentTime() const;
+  base::TimeTicks GetCurrentTimeTicks() const;
+  void SetClockForTesting(std::unique_ptr<base::SimpleTestClock> clock);
+  void SetTickClockForTesting(
+      std::unique_ptr<base::SimpleTestTickClock> tick_clock);
 
   // Notification that a prerender has completed and its bytes should be
   // recorded.
@@ -595,6 +606,9 @@ class PrerenderManager : public content::NotificationObserver,
   // Set of process hosts being prerendered.
   using PrerenderProcessSet = std::set<content::RenderProcessHost*>;
   PrerenderProcessSet prerender_process_hosts_;
+
+  std::unique_ptr<base::Clock> clock_;
+  std::unique_ptr<base::TickClock> tick_clock_;
 
   base::WeakPtrFactory<PrerenderManager> weak_factory_;
 

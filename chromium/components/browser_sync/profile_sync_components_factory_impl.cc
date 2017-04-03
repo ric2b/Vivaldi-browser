@@ -26,14 +26,10 @@
 #include "components/password_manager/core/browser/password_store.h"
 #include "components/password_manager/sync/browser/password_data_type_controller.h"
 #include "components/prefs/pref_service.h"
-#include "components/sync/core/attachments/attachment_downloader.h"
-#include "components/sync/core/attachments/attachment_service.h"
-#include "components/sync/core/attachments/attachment_service_impl.h"
-#include "components/sync/core/attachments/attachment_uploader_impl.h"
+#include "components/sync/base/report_unrecoverable_error.h"
 #include "components/sync/device_info/device_info_data_type_controller.h"
 #include "components/sync/device_info/local_device_info_provider_impl.h"
 #include "components/sync/driver/data_type_manager_impl.h"
-#include "components/sync/driver/glue/chrome_report_unrecoverable_error.h"
 #include "components/sync/driver/glue/sync_backend_host.h"
 #include "components/sync/driver/glue/sync_backend_host_impl.h"
 #include "components/sync/driver/model_type_controller.h"
@@ -41,6 +37,9 @@
 #include "components/sync/driver/sync_client.h"
 #include "components/sync/driver/sync_driver_switches.h"
 #include "components/sync/driver/ui_data_type_controller.h"
+#include "components/sync/engine/attachments/attachment_downloader.h"
+#include "components/sync/engine/attachments/attachment_uploader.h"
+#include "components/sync/model/attachments/attachment_service.h"
 #include "components/sync_bookmarks/bookmark_change_processor.h"
 #include "components/sync_bookmarks/bookmark_data_type_controller.h"
 #include "components/sync_bookmarks/bookmark_model_associator.h"
@@ -81,13 +80,6 @@ syncer::ModelTypeSet GetEnabledTypesFromCommandLine(
     const base::CommandLine& command_line) {
   return syncer::ModelTypeSet();
 }
-
-// Used to gate syncing preferences, see crbug.com/374865 for more information.
-// Has always been on for desktop/ChromeOS, so default to on. This feature is
-// mainly to give us a kill switch should something go wrong with starting to
-// sync prefs on mobile.
-const base::Feature kSyncPreferencesFeature{"SyncPreferences",
-                                            base::FEATURE_ENABLED_BY_DEFAULT};
 
 }  // namespace
 
@@ -143,7 +135,7 @@ void ProfileSyncComponentsFactoryImpl::RegisterCommonDataTypes(
     syncer::ModelTypeSet disabled_types,
     syncer::ModelTypeSet enabled_types) {
   base::Closure error_callback =
-      base::Bind(&syncer::ChromeReportUnrecoverableError, channel_);
+      base::Bind(&syncer::ReportUnrecoverableError, channel_);
 
   // TODO(stanisc): can DEVICE_INFO be one of disabled datatypes?
   if (base::FeatureList::IsEnabled(switches::kSyncUSSDeviceInfo)) {
@@ -257,8 +249,7 @@ void ProfileSyncComponentsFactoryImpl::RegisterCommonDataTypes(
             sync_client_->GetPasswordStateChangedCallback(), password_store_));
   }
 
-  if (!disabled_types.Has(syncer::PREFERENCES) &&
-      base::FeatureList::IsEnabled(kSyncPreferencesFeature)) {
+  if (!disabled_types.Has(syncer::PREFERENCES)) {
     if (!override_prefs_controller_to_uss_for_test_) {
       sync_service->RegisterDataTypeController(
           base::MakeUnique<UIDataTypeController>(syncer::PREFERENCES,
@@ -367,11 +358,11 @@ ProfileSyncComponentsFactoryImpl::CreateAttachmentService(
     // TODO(maniscalco): Use shared (one per profile) thread-safe instances of
     // AttachmentUploader and AttachmentDownloader instead of creating a new one
     // per AttachmentService (bug 369536).
-    attachment_uploader.reset(new syncer::AttachmentUploaderImpl(
+    attachment_uploader = syncer::AttachmentUploader::Create(
         sync_service_url_, url_request_context_getter_,
         user_share.sync_credentials.account_id,
         user_share.sync_credentials.scope_set, token_service_provider,
-        store_birthday, model_type));
+        store_birthday, model_type);
 
     token_service_provider =
         new TokenServiceProvider(ui_thread_, token_service_);
@@ -389,12 +380,10 @@ ProfileSyncComponentsFactoryImpl::CreateAttachmentService(
   const base::TimeDelta initial_backoff_delay =
       base::TimeDelta::FromMinutes(30);
   const base::TimeDelta max_backoff_delay = base::TimeDelta::FromHours(4);
-  std::unique_ptr<syncer::AttachmentService> attachment_service(
-      new syncer::AttachmentServiceImpl(
-          std::move(attachment_store), std::move(attachment_uploader),
-          std::move(attachment_downloader), delegate, initial_backoff_delay,
-          max_backoff_delay));
-  return attachment_service;
+  return syncer::AttachmentService::Create(
+      std::move(attachment_store), std::move(attachment_uploader),
+      std::move(attachment_downloader), delegate, initial_backoff_delay,
+      max_backoff_delay);
 }
 
 syncer::SyncApiComponentFactory::SyncComponents

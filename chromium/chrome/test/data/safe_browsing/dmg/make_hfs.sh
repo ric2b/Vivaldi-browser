@@ -75,5 +75,24 @@ popd  # Original PWD
 
 # Unmount the volume, copy the raw device to a file, and then destroy it.
 diskutil unmount ${RAMDISK_VOLUME}
+max_tries=0;
+while :;
+do
+    if ((max_tries > 10))
+    then
+        mail -s "HFS Issue on monteverdi.viv.int" tomas@vivaldi.com yngve@vivaldi.com hlini@vivaldi.com
+        break
+    fi
+    if ( df | awk '{print $9}' | grep "/Volumes/${VOLUME_NAME}")
+    then
+        sleep 1
+        diskutil unmount ${RAMDISK_VOLUME}
+
+    else
+        break
+    fi
+    ((max_tries++))
+done
+
 dd if=${RAMDISK_VOLUME} of="${OUT_FILE}"
 diskutil eject ${RAMDISK_VOLUME}

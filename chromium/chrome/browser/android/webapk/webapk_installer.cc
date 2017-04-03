@@ -9,7 +9,6 @@
 #include "base/android/jni_string.h"
 #include "base/android/path_utils.h"
 #include "base/bind.h"
-#include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/memory/ref_counted.h"
@@ -18,11 +17,12 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task_runner_util.h"
 #include "base/threading/sequenced_worker_pool.h"
+#include "chrome/browser/android/chrome_feature_list.h"
 #include "chrome/browser/android/shortcut_helper.h"
 #include "chrome/browser/android/webapk/webapk.pb.h"
 #include "chrome/browser/android/webapk/webapk_icon_hasher.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/common/chrome_switches.h"
+#include "components/variations/variations_associated_data.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/manifest_util.h"
@@ -35,11 +35,11 @@
 namespace {
 
 // The default WebAPK server URL.
-const char kDefaultWebApkServerUrl[] =
-    "https://webapk.googleapis.com/v1alpha/webApks/";
+const char kDefaultServerUrl[] =
+    "https://webapk.googleapis.com/v1alpha/webApks/?alt=proto";
 
-// The response format type expected from the WebAPK server.
-const char kDefaultWebApkServerUrlResponseType[] = "?alt=proto";
+// Flag for setting the WebAPK server URL.
+const char kServerUrlVariationsParamKey[] = "ServerUrl";
 
 // The MIME type of the POST data sent to the server.
 const char kProtoMimeType[] = "application/x-protobuf";
@@ -55,6 +55,14 @@ const int kDownloadTimeoutMs = 60000;
 const int kWorldReadableFilePermission = base::FILE_PERMISSION_READ_BY_USER |
                                          base::FILE_PERMISSION_READ_BY_GROUP |
                                          base::FILE_PERMISSION_READ_BY_OTHERS;
+
+// Returns the WebAPK server URL based on the command line flags and the
+// currently active field trials.
+GURL GetServerUrl() {
+  GURL server_url(variations::GetVariationParamValueByFeature(
+      chrome::android::kWebApks, kServerUrlVariationsParamKey));
+  return server_url.is_valid() ? server_url : GURL(kDefaultServerUrl);
+}
 
 // Returns the scope from |info| if it is specified. Otherwise, returns the
 // default scope.
@@ -78,6 +86,27 @@ std::string ColorToString(int64_t color) {
   return base::StringPrintf("rgba(%d,%d,%d,%.2f)", r, g, b, a);
 }
 
+// Get Chrome's current ABI. It depends on whether Chrome is running as a 32 bit
+// app or 64 bit, and the device's cpu architecture as well. Note: please keep
+// this function stay in sync with |chromium_android_linker::GetCpuAbi()|.
+std::string getCurrentAbi() {
+#if defined(__arm__) && defined(__ARM_ARCH_7A__)
+  return "armeabi-v7a";
+#elif defined(__arm__)
+  return "armeabi";
+#elif defined(__i386__)
+  return  "x86";
+#elif defined(__mips__)
+  return "mips";
+#elif defined(__x86_64__)
+  return "x86_64";
+#elif defined(__aarch64__)
+  return "arm64-v8a";
+#else
+#error "Unsupported target abi"
+#endif
+}
+
 // Populates webapk::WebApk and returns it.
 // Must be called on a worker thread because it encodes an SkBitmap.
 std::unique_ptr<webapk::WebApk> BuildWebApkProtoInBackground(
@@ -91,6 +120,7 @@ std::unique_ptr<webapk::WebApk> BuildWebApkProtoInBackground(
   webapk->set_requester_application_package(
       base::android::BuildInfo::GetInstance()->package_name());
   webapk->set_requester_application_version(version_info::GetVersionNumber());
+  webapk->set_android_abi(getCurrentAbi());
 
   webapk::WebAppManifest* web_app_manifest = webapk->mutable_manifest();
   web_app_manifest->set_name(base::UTF16ToUTF8(shortcut_info.name));
@@ -123,13 +153,6 @@ scoped_refptr<base::TaskRunner> GetBackgroundTaskRunner() {
   return content::BrowserThread::GetBlockingPool()
       ->GetTaskRunnerWithShutdownBehavior(
           base::SequencedWorkerPool::SKIP_ON_SHUTDOWN);
-}
-
-GURL GetServerUrlForUpdate(const GURL& server_url,
-                           const std::string& webapk_package) {
-  // crbug.com/636552. Simplify the server URL.
-  return GURL(server_url.spec() + webapk_package + "/" +
-              kDefaultWebApkServerUrlResponseType);
 }
 
 // Creates a directory depending on the type of the task, and set permissions.
@@ -170,15 +193,11 @@ WebApkInstaller::WebApkInstaller(const ShortcutInfo& shortcut_info,
                                  const SkBitmap& shortcut_icon)
     : shortcut_info_(shortcut_info),
       shortcut_icon_(shortcut_icon),
+      server_url_(GetServerUrl()),
       webapk_download_url_timeout_ms_(kWebApkDownloadUrlTimeoutMs),
       download_timeout_ms_(kDownloadTimeoutMs),
       task_type_(UNDEFINED),
       weak_ptr_factory_(this) {
-  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  server_url_ =
-      GURL(command_line->HasSwitch(switches::kWebApkServerUrl)
-               ? command_line->GetSwitchValueASCII(switches::kWebApkServerUrl)
-               : kDefaultWebApkServerUrl);
   CreateJavaRef();
 }
 
@@ -353,8 +372,7 @@ void WebApkInstaller::OnGotIconMurmur2Hash(
 
 void WebApkInstaller::SendCreateWebApkRequest(
     std::unique_ptr<webapk::WebApk> webapk) {
-  GURL server_url(server_url_.spec() + kDefaultWebApkServerUrlResponseType);
-  SendRequest(std::move(webapk), net::URLFetcher::POST, server_url);
+  SendRequest(std::move(webapk), server_url_);
 }
 
 void WebApkInstaller::SendUpdateWebApkRequest(
@@ -362,19 +380,18 @@ void WebApkInstaller::SendUpdateWebApkRequest(
   webapk->set_package_name(webapk_package_);
   webapk->set_version(std::to_string(webapk_version_));
 
-  SendRequest(std::move(webapk), net::URLFetcher::PUT,
-              GetServerUrlForUpdate(server_url_, webapk_package_));
+  SendRequest(std::move(webapk), server_url_);
 }
 
 void WebApkInstaller::SendRequest(std::unique_ptr<webapk::WebApk> request_proto,
-                                  net::URLFetcher::RequestType request_type,
                                   const GURL& server_url) {
   timer_.Start(
       FROM_HERE,
       base::TimeDelta::FromMilliseconds(webapk_download_url_timeout_ms_),
       base::Bind(&WebApkInstaller::OnTimeout, weak_ptr_factory_.GetWeakPtr()));
 
-  url_fetcher_ = net::URLFetcher::Create(server_url, request_type, this);
+  url_fetcher_ =
+      net::URLFetcher::Create(server_url, net::URLFetcher::POST, this);
   url_fetcher_->SetRequestContext(request_context_getter_);
   std::string serialized_request;
   request_proto->SerializeToString(&serialized_request);
@@ -402,7 +419,8 @@ void WebApkInstaller::OnCreatedSubDirAndSetPermissions(
     return;
   }
 
-  DownloadWebApk(output_dir.AppendASCII(webapk_package_), download_url, true);
+  DownloadWebApk(output_dir.AppendASCII(webapk_package_ + ".apk"),
+                 download_url, true);
 }
 
 void WebApkInstaller::DownloadWebApk(const base::FilePath& output_path,
@@ -485,14 +503,11 @@ void WebApkInstaller::OnTimeout() {
 }
 
 void WebApkInstaller::OnSuccess() {
-  FinishCallback callback = finish_callback_;
-  std::string webapk_package = webapk_package_;
+  finish_callback_.Run(true, webapk_package_);
   delete this;
-  callback.Run(true, webapk_package);
 }
 
 void WebApkInstaller::OnFailure() {
-  FinishCallback callback = finish_callback_;
+  finish_callback_.Run(false, webapk_package_);
   delete this;
-  callback.Run(false, "");
 }

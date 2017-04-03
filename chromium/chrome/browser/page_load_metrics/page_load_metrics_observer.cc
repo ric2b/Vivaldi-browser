@@ -10,10 +10,9 @@ PageLoadExtraInfo::PageLoadExtraInfo(
     const base::Optional<base::TimeDelta>& first_background_time,
     const base::Optional<base::TimeDelta>& first_foreground_time,
     bool started_in_foreground,
-    bool user_gesture,
+    bool user_initiated,
     const GURL& committed_url,
     const GURL& start_url,
-    const base::Optional<base::TimeDelta>& time_to_commit,
     UserAbortType abort_type,
     bool abort_user_initiated,
     const base::Optional<base::TimeDelta>& time_to_abort,
@@ -23,10 +22,9 @@ PageLoadExtraInfo::PageLoadExtraInfo(
     : first_background_time(first_background_time),
       first_foreground_time(first_foreground_time),
       started_in_foreground(started_in_foreground),
-      user_gesture(user_gesture),
+      user_initiated(user_initiated),
       committed_url(committed_url),
       start_url(start_url),
-      time_to_commit(time_to_commit),
       abort_type(abort_type),
       abort_user_initiated(abort_user_initiated),
       time_to_abort(time_to_abort),
@@ -51,8 +49,23 @@ PageLoadMetricsObserver::ObservePolicy PageLoadMetricsObserver::OnStart(
   return CONTINUE_OBSERVING;
 }
 
+PageLoadMetricsObserver::ObservePolicy PageLoadMetricsObserver::OnRedirect(
+    content::NavigationHandle* navigation_handle) {
+  return CONTINUE_OBSERVING;
+}
+
 PageLoadMetricsObserver::ObservePolicy PageLoadMetricsObserver::OnCommit(
     content::NavigationHandle* navigation_handle) {
+  return CONTINUE_OBSERVING;
+}
+
+PageLoadMetricsObserver::ObservePolicy PageLoadMetricsObserver::OnHidden(
+    const PageLoadTiming& timing,
+    const PageLoadExtraInfo& extra_info) {
+  return CONTINUE_OBSERVING;
+}
+
+PageLoadMetricsObserver::ObservePolicy PageLoadMetricsObserver::OnShown() {
   return CONTINUE_OBSERVING;
 }
 

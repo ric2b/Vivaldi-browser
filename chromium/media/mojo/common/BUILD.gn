@@ -2,11 +2,6 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//testing/test.gni")
-
-# Target naming conventions:
-# - unittests: Unit tests for a particular class/file.
-
 source_set("common") {
   sources = [
     "media_type_converters.cc",
@@ -15,7 +10,6 @@ source_set("common") {
     "mojo_decoder_buffer_converter.h",
     "mojo_shared_buffer_video_frame.cc",
     "mojo_shared_buffer_video_frame.h",
-    "mojo_type_trait.h",
   ]
 
   deps = [

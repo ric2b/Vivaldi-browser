@@ -342,10 +342,8 @@ class PrintPreviewPdfGeneratedBrowserTest : public InProcessBrowserTest {
     std::string pdf_data;
 
     ASSERT_TRUE(base::ReadFileToString(pdf_file_save_path_, &pdf_data));
-    ASSERT_TRUE(chrome_pdf::GetPDFDocInfo(pdf_data.data(),
-                                          pdf_data.size(),
-                                          &num_pages,
-                                          &max_width_in_points));
+    ASSERT_TRUE(chrome_pdf::GetPDFDocInfo(pdf_data.data(), pdf_data.size(),
+                                          &num_pages, &max_width_in_points));
 
     ASSERT_GT(num_pages, 0);
     double max_width_in_pixels =
@@ -353,11 +351,9 @@ class PrintPreviewPdfGeneratedBrowserTest : public InProcessBrowserTest {
 
     for (int i = 0; i < num_pages; ++i) {
       double width_in_points, height_in_points;
-      ASSERT_TRUE(chrome_pdf::GetPDFPageSizeByIndex(pdf_data.data(),
-                                                    pdf_data.size(),
-                                                    i,
-                                                    &width_in_points,
-                                                    &height_in_points));
+      ASSERT_TRUE(chrome_pdf::GetPDFPageSizeByIndex(
+          pdf_data.data(), pdf_data.size(), i, &width_in_points,
+          &height_in_points));
 
       double width_in_pixels = ConvertUnitDouble(
           width_in_points, kPointsPerInch, kDpi);
@@ -377,29 +373,22 @@ class PrintPreviewPdfGeneratedBrowserTest : public InProcessBrowserTest {
       PdfRenderSettings settings(rect, kDpi, true);
 
       int int_max = std::numeric_limits<int>::max();
-      if (settings.area().width() > int_max / kColorChannels ||
-          settings.area().height() > int_max / (kColorChannels *
-              settings.area().width())) {
+      if (settings.area.width() > int_max / kColorChannels ||
+          settings.area.height() >
+              int_max / (kColorChannels * settings.area.width())) {
         FAIL() << "The dimensions of the image are too large."
                << "Decrease the DPI or the dimensions of the image.";
       }
 
-      std::vector<uint8_t> page_bitmap_data(
-          kColorChannels * settings.area().size().GetArea());
+      std::vector<uint8_t> page_bitmap_data(kColorChannels *
+                                            settings.area.size().GetArea());
 
       ASSERT_TRUE(chrome_pdf::RenderPDFPageToBitmap(
-          pdf_data.data(),
-          pdf_data.size(),
-          i,
-          page_bitmap_data.data(),
-          settings.area().size().width(),
-          settings.area().size().height(),
-          settings.dpi(),
-          true));
-      FillPng(&page_bitmap_data,
-              width_in_pixels,
-              max_width_in_pixels,
-              settings.area().size().height());
+          pdf_data.data(), pdf_data.size(), i, page_bitmap_data.data(),
+          settings.area.size().width(), settings.area.size().height(),
+          settings.dpi, settings.autorotate));
+      FillPng(&page_bitmap_data, width_in_pixels, max_width_in_pixels,
+              settings.area.size().height());
       bitmap_data.insert(bitmap_data.end(),
                          page_bitmap_data.begin(),
                          page_bitmap_data.end());

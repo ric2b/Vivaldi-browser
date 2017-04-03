@@ -6,14 +6,18 @@
 
 #include <stddef.h>
 
+#include "base/base_switches.h"
 #include "base/build_time.h"
+#include "base/feature_list.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/rand_util.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/gtest_util.h"
+#include "base/test/mock_entropy_provider.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace base {
@@ -1130,6 +1134,64 @@ TEST(FieldTrialDeathTest, OneTimeRandomizedTrialWithoutFieldTrialList) {
           base::FieldTrialList::kNoExpirationYear, 1, 1,
           base::FieldTrial::ONE_TIME_RANDOMIZED, NULL),
       "");
+}
+
+TEST(FieldTrialListTest, TestCopyFieldTrialStateToFlags) {
+  base::FieldTrialList field_trial_list(
+      base::MakeUnique<base::MockEntropyProvider>());
+  base::FieldTrialList::CreateFieldTrial("Trial1", "Group1");
+  base::FilePath test_file_path = base::FilePath(FILE_PATH_LITERAL("Program"));
+  base::CommandLine cmd_line = base::CommandLine(test_file_path);
+  const char field_trial_handle[] = "test-field-trial-handle";
+
+  base::FieldTrialList::CopyFieldTrialStateToFlags(field_trial_handle,
+                                                   &cmd_line);
+#if defined(OS_WIN)
+  EXPECT_TRUE(cmd_line.HasSwitch(field_trial_handle) ||
+              cmd_line.HasSwitch(switches::kForceFieldTrials));
+#else
+  EXPECT_TRUE(cmd_line.HasSwitch(switches::kForceFieldTrials));
+#endif
+}
+
+TEST(FieldTrialListTest, InstantiateAllocator) {
+  FieldTrialList field_trial_list(nullptr);
+  FieldTrialList::CreateFieldTrial("Trial1", "Group1");
+
+  FieldTrialList::InstantiateFieldTrialAllocatorIfNeeded();
+  void* memory = field_trial_list.field_trial_allocator_->shared_memory();
+  size_t used = field_trial_list.field_trial_allocator_->used();
+
+  // Ensure that the function is idempotent.
+  FieldTrialList::InstantiateFieldTrialAllocatorIfNeeded();
+  void* new_memory = field_trial_list.field_trial_allocator_->shared_memory();
+  size_t new_used = field_trial_list.field_trial_allocator_->used();
+  EXPECT_EQ(memory, new_memory);
+  EXPECT_EQ(used, new_used);
+}
+
+TEST(FieldTrialListTest, AddTrialsToAllocator) {
+  std::string save_string;
+  base::SharedMemoryHandle handle;
+
+  // Scoping the first FieldTrialList, as we need another one to test that it
+  // matches.
+  {
+    FieldTrialList field_trial_list(nullptr);
+    FieldTrialList::CreateFieldTrial("Trial1", "Group1");
+    FieldTrialList::InstantiateFieldTrialAllocatorIfNeeded();
+    FieldTrialList::AllStatesToString(&save_string);
+    handle = base::SharedMemory::DuplicateHandle(
+        field_trial_list.field_trial_allocator_->shared_memory()->handle());
+  }
+
+  FieldTrialList field_trial_list2(nullptr);
+  std::unique_ptr<base::SharedMemory> shm(new SharedMemory(handle, true));
+  shm.get()->Map(4 << 10);  // Hardcoded, equal to kFieldTrialAllocationSize.
+  FieldTrialList::CreateTrialsFromSharedMemory(std::move(shm));
+  std::string check_string;
+  FieldTrialList::AllStatesToString(&check_string);
+  EXPECT_EQ(save_string, check_string);
 }
 
 }  // namespace base

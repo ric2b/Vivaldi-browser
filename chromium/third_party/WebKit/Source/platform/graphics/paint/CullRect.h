@@ -10,23 +10,21 @@
 #include "wtf/Allocator.h"
 #include "wtf/HashMap.h"
 #include "wtf/ListHashSet.h"
+#include "wtf/text/WTFString.h"
 
 #include <limits>
 
 namespace blink {
 
 class FloatRect;
-class LayoutBoxModelObject;
-class LayoutInline;
-class LayoutObject;
 class LayoutRect;
 class LayoutUnit;
-class PaintInvalidationState;
 
 class PLATFORM_EXPORT CullRect {
   DISALLOW_NEW();
 
  public:
+  CullRect() {}
   explicit CullRect(const IntRect& rect) : m_rect(rect) {}
   CullRect(const CullRect&, const IntPoint& offset);
   CullRect(const CullRect&, const IntSize& offset);
@@ -39,8 +37,12 @@ class PLATFORM_EXPORT CullRect {
   bool intersectsHorizontalRange(LayoutUnit lo, LayoutUnit hi) const;
   bool intersectsVerticalRange(LayoutUnit lo, LayoutUnit hi) const;
 
+  String toString() const { return m_rect.toString(); }
+
  private:
   IntRect m_rect;
+
+  friend bool operator==(const CullRect&, const CullRect&);
 
   // TODO(chrishtr): temporary while we implement CullRect everywhere.
   friend class FramePainter;
@@ -53,6 +55,13 @@ class PLATFORM_EXPORT CullRect {
   friend class ThemePainterMac;
   friend class WebPluginContainerImpl;
 };
+
+inline bool operator==(const CullRect& a, const CullRect& b) {
+  return a.m_rect == b.m_rect;
+}
+inline bool operator!=(const CullRect& a, const CullRect& b) {
+  return !(a == b);
+}
 
 }  // namespace blink
 

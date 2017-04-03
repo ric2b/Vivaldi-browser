@@ -10,17 +10,14 @@
 #include <memory>
 #include <set>
 
-#include "ash/public/interfaces/shelf.mojom.h"
 #include "ash/public/interfaces/wallpaper.mojom.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "mash/session/public/interfaces/session.mojom.h"
 #include "mojo/public/cpp/bindings/binding.h"
-#include "mojo/public/cpp/bindings/binding_set.h"
-#include "services/shell/public/cpp/service.h"
+#include "services/service_manager/public/cpp/service.h"
 #include "services/tracing/public/cpp/provider.h"
 #include "services/ui/common/types.h"
-#include "services/ui/public/interfaces/accelerator_registrar.mojom.h"
 
 namespace base {
 class SequencedWorkerPool;
@@ -46,16 +43,13 @@ class WindowTreeClient;
 namespace ash {
 namespace mus {
 
-class AcceleratorRegistrarImpl;
 class NativeWidgetFactoryMus;
+class NetworkConnectDelegateMus;
 class WindowManager;
 
 // Hosts the window manager and the ash system user interface for mash.
 class WindowManagerApplication
-    : public shell::Service,
-      public shell::InterfaceFactory<mojom::ShelfController>,
-      public shell::InterfaceFactory<mojom::WallpaperController>,
-      public shell::InterfaceFactory<ui::mojom::AcceleratorRegistrar>,
+    : public service_manager::Service,
       public mash::session::mojom::ScreenlockStateListener {
  public:
   WindowManagerApplication();
@@ -69,8 +63,6 @@ class WindowManagerApplication
   friend class WmTestBase;
   friend class WmTestHelper;
 
-  void OnAcceleratorRegistrarDestroyed(AcceleratorRegistrarImpl* registrar);
-
   void InitWindowManager(
       std::unique_ptr<ui::WindowTreeClient> window_tree_client,
       const scoped_refptr<base::SequencedWorkerPool>& blocking_pool);
@@ -79,22 +71,10 @@ class WindowManagerApplication
   void InitializeComponents();
   void ShutdownComponents();
 
-  // shell::Service:
-  void OnStart(const shell::Identity& identity) override;
-  bool OnConnect(const shell::Identity& remote_identity,
-                 shell::InterfaceRegistry* registry) override;
-
-  // InterfaceFactory<mojom::ShelfController>:
-  void Create(const shell::Identity& remote_identity,
-              mojom::ShelfControllerRequest request) override;
-
-  // InterfaceFactory<mojom::WallpaperController>:
-  void Create(const shell::Identity& remote_identity,
-              mojom::WallpaperControllerRequest request) override;
-
-  // shell::InterfaceFactory<ui::mojom::AcceleratorRegistrar>:
-  void Create(const shell::Identity& remote_identity,
-              ui::mojom::AcceleratorRegistrarRequest request) override;
+  // service_manager::Service:
+  void OnStart() override;
+  bool OnConnect(const service_manager::ServiceInfo& remote_info,
+                 service_manager::InterfaceRegistry* registry) override;
 
   // session::mojom::ScreenlockStateListener:
   void ScreenlockStateChanged(bool locked) override;
@@ -111,19 +91,13 @@ class WindowManagerApplication
   // A blocking pool used by the WindowManager's shell; not used in tests.
   scoped_refptr<base::SequencedWorkerPool> blocking_pool_;
 
-  mojo::BindingSet<mojom::ShelfController> shelf_controller_bindings_;
-  mojo::BindingSet<mojom::WallpaperController> wallpaper_controller_bindings_;
-
-  std::set<AcceleratorRegistrarImpl*> accelerator_registrars_;
-
   mash::session::mojom::SessionPtr session_;
 
   mojo::Binding<mash::session::mojom::ScreenlockStateListener>
       screenlock_state_listener_binding_;
 
 #if defined(OS_CHROMEOS)
-  class StubNetworkConnectDelegate;
-  std::unique_ptr<StubNetworkConnectDelegate> network_connect_delegate_;
+  std::unique_ptr<NetworkConnectDelegateMus> network_connect_delegate_;
   std::unique_ptr<chromeos::system::ScopedFakeStatisticsProvider>
       statistics_provider_;
 #endif

@@ -46,6 +46,12 @@ namespace chromeos {
 
 DeviceSettingsService::Observer::~Observer() {}
 
+void DeviceSettingsService::Observer::OwnershipStatusChanged() {}
+
+void DeviceSettingsService::Observer::DeviceSettingsUpdated() {}
+
+void DeviceSettingsService::Observer::OnDeviceSettingsServiceShutdown() {}
+
 static DeviceSettingsService* g_device_settings_service = NULL;
 
 // static
@@ -81,7 +87,8 @@ DeviceSettingsService::DeviceSettingsService()
 
 DeviceSettingsService::~DeviceSettingsService() {
   DCHECK(pending_operations_.empty());
-  FOR_EACH_OBSERVER(Observer, observers_, OnDeviceSettingsServiceShutdown());
+  for (auto& observer : observers_)
+    observer.OnDeviceSettingsServiceShutdown();
 }
 
 void DeviceSettingsService::SetSessionManager(
@@ -281,14 +288,16 @@ void DeviceSettingsService::HandleCompletedOperation(
   }
 
   if (new_owner_key) {
-    FOR_EACH_OBSERVER(Observer, observers_, OwnershipStatusChanged());
+    for (auto& observer : observers_)
+      observer.OwnershipStatusChanged();
     content::NotificationService::current()->Notify(
         chrome::NOTIFICATION_OWNERSHIP_STATUS_CHANGED,
         content::Source<DeviceSettingsService>(this),
         content::NotificationService::NoDetails());
   }
 
-  FOR_EACH_OBSERVER(Observer, observers_, DeviceSettingsUpdated());
+  for (auto& observer : observers_)
+    observer.DeviceSettingsUpdated();
 
   std::vector<OwnershipStatusCallback> callbacks;
   callbacks.swap(pending_ownership_status_callbacks_);
@@ -315,7 +324,8 @@ void DeviceSettingsService::HandleError(Status status,
 
   LOG(ERROR) << "Session manager operation failed: " << status;
 
-  FOR_EACH_OBSERVER(Observer, observers_, DeviceSettingsUpdated());
+  for (auto& observer : observers_)
+    observer.DeviceSettingsUpdated();
 
   // The completion callback happens after the notification so clients can
   // filter self-triggered updates.

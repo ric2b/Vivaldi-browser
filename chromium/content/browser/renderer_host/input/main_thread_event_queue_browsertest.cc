@@ -25,7 +25,7 @@
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/public/test/test_utils.h"
 #include "content/shell/browser/shell.h"
-#include "third_party/WebKit/public/web/WebInputEvent.h"
+#include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "ui/events/event_switches.h"
 #include "ui/events/latency_info.h"
 
@@ -123,6 +123,9 @@ class MainThreadEventQueueBrowserTest : public ContentBrowserTest {
 
     // Runs until we get the InputMsgAck callback.
     EXPECT_EQ(INPUT_EVENT_ACK_STATE_CONSUMED, input_msg_watcher->WaitForAck());
+    EXPECT_EQ(InputEventAckSource::MAIN_THREAD,
+              static_cast<InputEventAckSource>(
+                  input_msg_watcher->last_event_ack_source()));
 
     int mouse_move_count = 0;
     while (mouse_move_count <= 0)
@@ -160,6 +163,9 @@ class MainThreadEventQueueBrowserTest : public ContentBrowserTest {
     // Runs until we get the InputMsgAck callback.
     EXPECT_EQ(INPUT_EVENT_ACK_STATE_SET_NON_BLOCKING,
               input_msg_watcher->WaitForAck());
+    EXPECT_EQ(InputEventAckSource::COMPOSITOR_THREAD,
+              static_cast<InputEventAckSource>(
+                  input_msg_watcher->last_event_ack_source()));
 
     int touch_move_count = 0;
     while (touch_move_count <= 0)

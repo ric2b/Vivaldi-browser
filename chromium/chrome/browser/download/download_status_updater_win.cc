@@ -10,11 +10,12 @@
 #include "base/logging.h"
 #include "base/win/scoped_comptr.h"
 #include "base/win/windows_version.h"
-#include "browser/vivaldi_download_status.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "ui/views/win/hwnd_util.h"
+
+#include "browser/vivaldi_download_status.h"
 
 namespace {
 

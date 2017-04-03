@@ -5,6 +5,8 @@
 #include "net/http/http_stream_factory_impl.h"
 
 #include <stdint.h>
+
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -813,12 +815,12 @@ class MockQuicData {
  public:
   MockQuicData() : packet_number_(0) {}
 
-  ~MockQuicData() { base::STLDeleteElements(&packets_); }
+  ~MockQuicData() {}
 
   void AddRead(std::unique_ptr<QuicEncryptedPacket> packet) {
     reads_.push_back(
         MockRead(ASYNC, packet->data(), packet->length(), packet_number_++));
-    packets_.push_back(packet.release());
+    packets_.push_back(std::move(packet));
   }
 
   void AddRead(IoMode mode, int rv) {
@@ -828,7 +830,7 @@ class MockQuicData {
   void AddWrite(std::unique_ptr<QuicEncryptedPacket> packet) {
     writes_.push_back(MockWrite(SYNCHRONOUS, packet->data(), packet->length(),
                                 packet_number_++));
-    packets_.push_back(packet.release());
+    packets_.push_back(std::move(packet));
   }
 
   void AddSocketDataToFactory(MockClientSocketFactory* factory) {
@@ -840,7 +842,7 @@ class MockQuicData {
   }
 
  private:
-  std::vector<QuicEncryptedPacket*> packets_;
+  std::vector<std::unique_ptr<QuicEncryptedPacket>> packets_;
   std::vector<MockWrite> writes_;
   std::vector<MockRead> reads_;
   size_t packet_number_;
@@ -1107,7 +1109,7 @@ TEST_F(HttpStreamFactoryTest, UsePreConnectIfNoZeroRTT) {
 
     // Set up QUIC as alternative_service.
     HttpServerPropertiesImpl http_server_properties;
-    const AlternativeService alternative_service(QUIC, url.host().c_str(),
+    const AlternativeService alternative_service(kProtoQUIC, url.host().c_str(),
                                                  url.IntPort());
     AlternativeServiceInfoVector alternative_service_info_vector;
     base::Time expiration = base::Time::Now() + base::TimeDelta::FromDays(1);
@@ -1162,7 +1164,8 @@ TEST_F(HttpStreamFactoryTest, QuicDisablePreConnectIfZeroRtt) {
 
     // Set up QUIC as alternative_service.
     HttpServerPropertiesImpl http_server_properties;
-    const AlternativeService alternative_service(QUIC, "www.google.com", 443);
+    const AlternativeService alternative_service(kProtoQUIC, "www.google.com",
+                                                 443);
     AlternativeServiceInfoVector alternative_service_info_vector;
     base::Time expiration = base::Time::Now() + base::TimeDelta::FromDays(1);
     alternative_service_info_vector.push_back(
@@ -1792,7 +1795,8 @@ class HttpStreamFactoryBidirectionalQuicTest
   }
 
   void AddQuicAlternativeService() {
-    const AlternativeService alternative_service(QUIC, "www.example.org", 443);
+    const AlternativeService alternative_service(kProtoQUIC, "www.example.org",
+                                                 443);
     AlternativeServiceInfoVector alternative_service_info_vector;
     base::Time expiration = base::Time::Now() + base::TimeDelta::FromDays(1);
     alternative_service_info_vector.push_back(
@@ -1904,7 +1908,7 @@ TEST_P(HttpStreamFactoryBidirectionalQuicTest,
 
   scoped_refptr<IOBuffer> buffer = new net::IOBuffer(1);
   EXPECT_THAT(stream_impl->ReadData(buffer.get(), 1), IsOk());
-  EXPECT_EQ(kProtoQUIC1SPDY3, stream_impl->GetProtocol());
+  EXPECT_EQ(kProtoQUIC, stream_impl->GetProtocol());
   EXPECT_EQ("200", delegate.response_headers().find(":status")->second);
   EXPECT_EQ(0, GetSocketPoolGroupCount(session()->GetTransportSocketPool(
                    HttpNetworkSession::NORMAL_SOCKET_POOL)));
@@ -2028,7 +2032,7 @@ TEST_P(HttpStreamFactoryBidirectionalQuicTest,
   // Make sure the BidirectionalStream negotiated goes through QUIC.
   scoped_refptr<IOBuffer> buffer = new net::IOBuffer(1);
   EXPECT_THAT(stream_impl->ReadData(buffer.get(), 1), IsOk());
-  EXPECT_EQ(kProtoQUIC1SPDY3, stream_impl->GetProtocol());
+  EXPECT_EQ(kProtoQUIC, stream_impl->GetProtocol());
   EXPECT_EQ("200", delegate.response_headers().find(":status")->second);
   // There is no Http2 socket pool.
   EXPECT_EQ(0, GetSocketPoolGroupCount(session()->GetTransportSocketPool(
@@ -2236,7 +2240,7 @@ TEST_F(HttpStreamFactoryTest, DISABLED_OrphanedWebSocketStream) {
   session->http_server_properties()->SetAlternativeService(
       url::SchemeHostPort(request_info.url.scheme(), host_port_pair.host(),
                           host_port_pair.port()),
-      AlternativeService(NPN_HTTP_2, "www.google.com", 9999), expiration);
+      AlternativeService(kProtoHTTP2, "www.google.com", 9999), expiration);
 
   SSLConfig ssl_config;
   StreamRequestWaiter waiter;

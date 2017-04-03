@@ -24,8 +24,8 @@
 #include "content/public/browser/web_contents.h"
 #include "jni/ContextualSearchManager_jni.h"
 #include "net/url_request/url_fetcher_impl.h"
-#include "services/shell/public/cpp/interface_provider.h"
-#include "services/shell/public/cpp/interface_registry.h"
+#include "services/service_manager/public/cpp/interface_provider.h"
+#include "services/service_manager/public/cpp/interface_registry.h"
 
 using base::android::JavaParamRef;
 using base::android::JavaRef;
@@ -146,13 +146,17 @@ void ContextualSearchManager::OnSearchTermResolutionResponse(
   base::android::ScopedJavaLocalRef<jstring> j_caption =
       base::android::ConvertUTF8ToJavaString(
           env, resolved_search_term.caption.c_str());
+  base::android::ScopedJavaLocalRef<jstring> j_quick_action_uri =
+      base::android::ConvertUTF8ToJavaString(
+          env, resolved_search_term.quick_action_uri.c_str());
   Java_ContextualSearchManager_onSearchTermResolutionResponse(
       env, java_manager_, resolved_search_term.is_invalid,
       resolved_search_term.response_code, j_search_term, j_display_text,
       j_alternate_term, j_mid, resolved_search_term.prevent_preload,
       resolved_search_term.selection_start_adjust,
       resolved_search_term.selection_end_adjust, j_context_language,
-      j_thumbnail_url, j_caption);
+      j_thumbnail_url, j_caption, j_quick_action_uri,
+      resolved_search_term.quick_action_category);
 }
 
 void ContextualSearchManager::OnSurroundingTextAvailable(

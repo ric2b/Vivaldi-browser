@@ -17,10 +17,6 @@
 #include "gpu/ipc/common/surface_handle.h"
 #include "ui/android/context_provider_factory.h"
 
-namespace cc {
-class VulkanInProcessContextProvider;
-}
-
 namespace gpu {
 class GpuChannelHost;
 class GpuChannelEstablishFactory;
@@ -64,7 +60,6 @@ class CONTENT_EXPORT ContextProviderFactoryImpl
       scoped_refptr<gpu::GpuChannelHost> gpu_channel_host) override;
   cc::SurfaceManager* GetSurfaceManager() override;
   cc::FrameSinkId AllocateFrameSinkId() override;
-  cc::SharedBitmapManager* GetSharedBitmapManager() override;
   gpu::GpuMemoryBufferManager* GetGpuMemoryBufferManager() override;
 
  private:

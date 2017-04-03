@@ -128,12 +128,14 @@ class OutOfProcessInstance : public pp::Instance,
   void DocumentPaintOccurred() override;
   void DocumentLoadComplete(int page_count) override;
   void DocumentLoadFailed() override;
+  void FontSubstituted() override;
   pp::Instance* GetPluginInstance() override;
   void DocumentHasUnsupportedFeature(const std::string& feature) override;
   void DocumentLoadProgress(uint32_t available, uint32_t doc_size) override;
   void FormTextFieldFocusChange(bool in_focus) override;
   bool IsPrintPreview() override;
   uint32_t GetBackgroundColor() override;
+  void CancelBrowserDownload() override;
   void IsSelectingChanged(bool is_selecting) override;
 
   // PreviewModeClient::Client implementation.
@@ -235,9 +237,29 @@ class OutOfProcessInstance : public pp::Instance,
   // there are 10 pages, the height will be 8000).
   pp::Size document_size_;
 
-  double zoom_;  // Current zoom factor.
+  // Enumeration of pinch states.
+  // This should match PinchPhase enum in
+  // chrome/browser/resources/pdf/viewport.js
+  enum PinchPhase {
+    PINCH_NONE = 0,
+    PINCH_START = 1,
+    PINCH_UPDATE_ZOOM_OUT = 2,
+    PINCH_UPDATE_ZOOM_IN = 3,
+    PINCH_END = 4
+  };
 
-  float device_scale_;  // Current device scale factor.
+  // Current zoom factor.
+  double zoom_;
+  double initial_zoom_ratio_;
+  // True if we request a new bitmap rendering.
+  bool needs_reraster_;
+  // Scroll position at the start of a pinch zoom.
+  pp::FloatPoint starting_scroll_offset_;
+  // True if last bitmap was smaller than screen.
+  bool last_bitmap_smaller_;
+  double last_zoom_when_smaller_;
+  // Current device scale factor.
+  float device_scale_;
   // True if the plugin is full-page.
   bool full_;
 
@@ -309,6 +331,10 @@ class OutOfProcessInstance : public pp::Instance,
   // the stats if a feature shows up many times per document.
   std::set<std::string> unsupported_features_reported_;
 
+  // Keeps track of whether font substitution has been reported, so we avoid
+  // spamming the stats if a document requested multiple substitutes.
+  bool font_substitution_reported_;
+
   // Number of pages in print preview mode, 0 if not in print preview mode.
   int print_preview_page_count_;
   std::vector<int> print_preview_page_numbers_;
@@ -362,6 +388,9 @@ class OutOfProcessInstance : public pp::Instance,
     ACCESSIBILITY_STATE_PENDING,  // Enabled but waiting for doc to load.
     ACCESSIBILITY_STATE_LOADED
   } accessibility_state_;
+
+  // True if the plugin is loaded in print preview, otherwise false.
+  bool is_print_preview_;
 
   DISALLOW_COPY_AND_ASSIGN(OutOfProcessInstance);
 };

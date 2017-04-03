@@ -12,8 +12,9 @@
 #include "base/macros.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
-#include "content/public/common/top_controls_state.h"
+#include "content/public/common/browser_controls_state.h"
 #include "content/public/renderer/render_view_observer.h"
+#include "extensions/features/features.h"
 #include "url/gurl.h"
 
 class ContentSettingsObserver;
@@ -49,13 +50,13 @@ class ChromeRenderViewObserver : public content::RenderViewObserver {
 #if !defined(OS_ANDROID)
   void OnWebUIJavaScript(const base::string16& javascript);
 #endif
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   void OnSetVisuallyDeemphasized(bool deemphasized);
 #endif
 #if defined(OS_ANDROID)
-  void OnUpdateTopControlsState(content::TopControlsState constraints,
-                                content::TopControlsState current,
-                                bool animate);
+  void OnUpdateBrowserControlsState(content::BrowserControlsState constraints,
+                                    content::BrowserControlsState current,
+                                    bool animate);
 #endif
   void OnGetWebApplicationInfo();
   void OnSetWindowFeatures(const blink::WebWindowFeatures& window_features);

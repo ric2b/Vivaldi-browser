@@ -10,8 +10,9 @@
 #include "build/build_config.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/cursor_client.h"
+#include "ui/aura/client/drag_drop_client.h"
 #include "ui/aura/client/focus_client.h"
-#include "ui/aura/client/window_tree_client.h"
+#include "ui/aura/client/window_parenting_client.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_observer.h"
 #include "ui/aura/window_property.h"
@@ -56,7 +57,6 @@
 #include "ui/wm/core/window_animations.h"
 #include "ui/wm/core/window_modality_controller.h"
 #include "ui/wm/public/activation_client.h"
-#include "ui/wm/public/drag_drop_client.h"
 
 #if defined(OS_WIN)
 #include "ui/base/win/shell.h"
@@ -168,19 +168,19 @@ class DesktopNativeWidgetTopLevelHandler : public aura::WindowObserver {
   DISALLOW_COPY_AND_ASSIGN(DesktopNativeWidgetTopLevelHandler);
 };
 
-class DesktopNativeWidgetAuraWindowTreeClient :
-    public aura::client::WindowTreeClient {
+class DesktopNativeWidgetAuraWindowParentingClient
+    : public aura::client::WindowParentingClient {
  public:
-  explicit DesktopNativeWidgetAuraWindowTreeClient(
+  explicit DesktopNativeWidgetAuraWindowParentingClient(
       aura::Window* root_window)
       : root_window_(root_window) {
-    aura::client::SetWindowTreeClient(root_window_, this);
+    aura::client::SetWindowParentingClient(root_window_, this);
   }
-  ~DesktopNativeWidgetAuraWindowTreeClient() override {
-    aura::client::SetWindowTreeClient(root_window_, NULL);
+  ~DesktopNativeWidgetAuraWindowParentingClient() override {
+    aura::client::SetWindowParentingClient(root_window_, NULL);
   }
 
-  // Overridden from client::WindowTreeClient:
+  // Overridden from client::WindowParentingClient:
   aura::Window* GetDefaultParent(aura::Window* context,
                                  aura::Window* window,
                                  const gfx::Rect& bounds) override {
@@ -204,7 +204,7 @@ class DesktopNativeWidgetAuraWindowTreeClient :
  private:
   aura::Window* root_window_;
 
-  DISALLOW_COPY_AND_ASSIGN(DesktopNativeWidgetAuraWindowTreeClient);
+  DISALLOW_COPY_AND_ASSIGN(DesktopNativeWidgetAuraWindowParentingClient);
 };
 
 }  // namespace
@@ -265,6 +265,13 @@ DesktopNativeWidgetAura* DesktopNativeWidgetAura::ForWindow(
   return window->GetProperty(kDesktopNativeWidgetAuraKey);
 }
 
+void DesktopNativeWidgetAura::SetDesktopWindowTreeHost(
+    std::unique_ptr<DesktopWindowTreeHost> desktop_window_tree_host) {
+  DCHECK(!desktop_window_tree_host_);
+  desktop_window_tree_host_ = desktop_window_tree_host.get();
+  host_.reset(desktop_window_tree_host.release()->AsWindowTreeHost());
+}
+
 void DesktopNativeWidgetAura::OnHostClosed() {
   // Don't invoke Widget::OnNativeWidgetDestroying(), its done by
   // DesktopWindowTreeHost.
@@ -292,7 +299,7 @@ void DesktopNativeWidgetAura::OnHostClosed() {
     tooltip_controller_.reset();
   }
 
-  window_tree_client_.reset();  // Uses host_->dispatcher() at destruction.
+  window_parenting_client_.reset();  // Uses host_->dispatcher() at destruction.
 
   capture_client_.reset();  // Uses host_->dispatcher() at destruction.
 
@@ -350,12 +357,19 @@ void DesktopNativeWidgetAura::HandleActivationChanged(bool active) {
       // This function can be called before the focus manager has had a
       // chance to set the focused view. In which case we should get the
       // last focused view.
-      View* view_for_activation =
-          GetWidget()->GetFocusManager()->GetFocusedView() ?
-              GetWidget()->GetFocusManager()->GetFocusedView() :
-                  GetWidget()->GetFocusManager()->GetStoredFocusView();
-      if (!view_for_activation)
+      views::FocusManager* focus_manager = GetWidget()->GetFocusManager();
+      View* view_for_activation = focus_manager->GetFocusedView()
+                                      ? focus_manager->GetFocusedView()
+                                      : focus_manager->GetStoredFocusView();
+      if (!view_for_activation) {
         view_for_activation = GetWidget()->GetRootView();
+      } else if (view_for_activation == focus_manager->GetStoredFocusView()) {
+        focus_manager->RestoreFocusedView();
+        // Set to false if desktop native widget has activated activation
+        // change, so that aura window activation change focus restore operation
+        // can be ignored.
+        restore_focus_on_activate_ = false;
+      }
       activation_client->ActivateWindow(
           view_for_activation->GetWidget()->GetNativeView());
       // Refreshes the focus info to IMF in case that IMF cached the old info
@@ -401,10 +415,13 @@ void DesktopNativeWidgetAura::InitNativeWidget(
   content_window_container_->Show();
   content_window_container_->AddChild(content_window_);
 
-  desktop_window_tree_host_ = params.desktop_window_tree_host ?
-      params.desktop_window_tree_host :
-      DesktopWindowTreeHost::Create(native_widget_delegate_, this);
-  host_.reset(desktop_window_tree_host_->AsWindowTreeHost());
+  if (!desktop_window_tree_host_) {
+    desktop_window_tree_host_ =
+        params.desktop_window_tree_host
+            ? params.desktop_window_tree_host
+            : DesktopWindowTreeHost::Create(native_widget_delegate_, this);
+    host_.reset(desktop_window_tree_host_->AsWindowTreeHost());
+  }
   desktop_window_tree_host_->Init(content_window_, params);
 
   host_->InitHost();
@@ -462,8 +479,9 @@ void DesktopNativeWidgetAura::InitNativeWidget(
 
   drag_drop_client_ = desktop_window_tree_host_->CreateDragDropClient(
       native_cursor_manager_);
-  aura::client::SetDragDropClient(host_->window(),
-                                  drag_drop_client_.get());
+  // Mus returns null from CreateDragDropClient().
+  if (drag_drop_client_)
+    aura::client::SetDragDropClient(host_->window(), drag_drop_client_.get());
 
   static_cast<aura::client::FocusClient*>(focus_client_.get())->
       FocusWindow(content_window_);
@@ -472,8 +490,8 @@ void DesktopNativeWidgetAura::InitNativeWidget(
 
   host_->AddObserver(this);
 
-  window_tree_client_.reset(
-      new DesktopNativeWidgetAuraWindowTreeClient(host_->window()));
+  window_parenting_client_.reset(
+      new DesktopNativeWidgetAuraWindowParentingClient(host_->window()));
   drop_helper_.reset(new DropHelper(GetWidget()->GetRootView()));
   aura::client::SetDragDropDelegate(content_window_, this);
 
@@ -1081,7 +1099,11 @@ void DesktopNativeWidgetAura::OnWindowActivated(
   DCHECK(content_window_ == gained_active || content_window_ == lost_active);
   if (gained_active == content_window_ && restore_focus_on_activate_) {
     restore_focus_on_activate_ = false;
-    GetWidget()->GetFocusManager()->RestoreFocusedView();
+    // For OS_LINUX, desktop native widget may not be activated when child
+    // widgets gets aura activation changes. Only when desktop native widget is
+    // active, we can rely on aura activation to restore focused view.
+    if (GetWidget()->IsActive())
+      GetWidget()->GetFocusManager()->RestoreFocusedView();
   } else if (lost_active == content_window_ && GetWidget()->HasFocusManager()) {
     DCHECK(!restore_focus_on_activate_);
     restore_focus_on_activate_ = true;
@@ -1096,10 +1118,8 @@ void DesktopNativeWidgetAura::OnWindowActivated(
 void DesktopNativeWidgetAura::OnWindowFocused(aura::Window* gained_focus,
                                               aura::Window* lost_focus) {
   if (content_window_ == gained_focus) {
-    desktop_window_tree_host_->OnNativeWidgetFocus();
     native_widget_delegate_->OnNativeFocus();
   } else if (content_window_ == lost_focus) {
-    desktop_window_tree_host_->OnNativeWidgetBlur();
     native_widget_delegate_->OnNativeBlur();
   }
 }

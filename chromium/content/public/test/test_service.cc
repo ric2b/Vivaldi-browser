@@ -8,8 +8,9 @@
 
 #include "base/logging.h"
 #include "base/message_loop/message_loop.h"
-#include "services/shell/public/cpp/connection.h"
-#include "services/shell/public/cpp/connector.h"
+#include "services/service_manager/public/cpp/connection.h"
+#include "services/service_manager/public/cpp/connector.h"
+#include "services/service_manager/public/cpp/interface_registry.h"
 
 namespace content {
 
@@ -21,14 +22,14 @@ TestService::TestService() : service_binding_(this) {
 TestService::~TestService() {
 }
 
-bool TestService::OnConnect(const shell::Identity& remote_identity,
-                            shell::InterfaceRegistry* registry) {
-  requestor_name_ = remote_identity.name();
+bool TestService::OnConnect(const service_manager::ServiceInfo& remote_info,
+                            service_manager::InterfaceRegistry* registry) {
+  requestor_name_ = remote_info.identity.name();
   registry->AddInterface<mojom::TestService>(this);
   return true;
 }
 
-void TestService::Create(const shell::Identity& remote_identity,
+void TestService::Create(const service_manager::Identity& remote_identity,
                          mojom::TestServiceRequest request) {
   DCHECK(!service_binding_.is_bound());
   service_binding_.Bind(std::move(request));

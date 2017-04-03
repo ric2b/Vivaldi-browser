@@ -4,14 +4,25 @@
 
 module bluetooth.mojom;
 
-struct DeviceInfo {
-  string? name;
-  string name_for_display;
-  string id;
+import "device/bluetooth/public/interfaces/device.mojom";
+
+struct AdapterInfo {
   string address;
+  string name;
+  bool initialized;
+  bool present;
+  bool powered;
+  bool discoverable;
+  bool discovering;
 };
 
 interface Adapter {
+  // Gets basic information about the adapter.
+  GetInfo() => (AdapterInfo info);
+
+  // Gets the Device service for the device at the given address.
+  GetDevice(string address) => (Device? device);
+
   // Retrieves the list of the devices known by the adapter including Connected
   // Devices, GATT Connected Devices, Paired Devices and Devices discovered
   // during a classic or low-energy scan.
@@ -27,6 +38,15 @@ interface AdapterClient {
 
   // Called after the device hasn't been seen for 3 minutes.
   DeviceRemoved(DeviceInfo device);
+
+  // Called when one of the following properties of a device changes:
+  //   Address, appearance, Bluetooth class, Inquiry RSSI, Inquiry TX Power,
+  //   Service UUIDs, Connectionable state, Connection state, Pairing state,
+  //   Trustable state.
+  // Generally called for each advertisement packet recevied, but this is not
+  // guaranteed on ChromeOS or Linux. Because the RSSI is always changing,
+  // it's very likely this will be called for each advertising packet.
+  DeviceChanged(DeviceInfo device);
 };
 
 interface AdapterFactory {

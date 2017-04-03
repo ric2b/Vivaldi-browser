@@ -5,6 +5,7 @@
 #include "content/renderer/render_widget_fullscreen.h"
 
 #include "content/common/view_messages.h"
+#include "content/renderer/render_thread_impl.h"
 #include "third_party/WebKit/public/web/WebWidget.h"
 
 using blink::WebWidget;
@@ -24,9 +25,11 @@ void RenderWidgetFullscreen::show(blink::WebNavigationPolicy) {
 }
 
 RenderWidgetFullscreen::RenderWidgetFullscreen(
+    int32_t widget_routing_id,
     CompositorDependencies* compositor_deps,
     const ScreenInfo& screen_info)
-    : RenderWidget(compositor_deps,
+    : RenderWidget(widget_routing_id,
+                   compositor_deps,
                    blink::WebPopupTypeNone,
                    screen_info,
                    false,
@@ -43,16 +46,8 @@ WebWidget* RenderWidgetFullscreen::CreateWebWidget() {
 bool RenderWidgetFullscreen::Init(int32_t opener_id) {
   DCHECK(!GetWebWidget());
 
-  bool success = RenderWidget::DoInit(
-      opener_id, CreateWebWidget(),
-      new ViewHostMsg_CreateFullscreenWidget(opener_id, &routing_id_));
-  if (success) {
-    // TODO(fsamuel): This is a bit ugly. The |create_widget_message| should
-    // probably be factored out of RenderWidget::DoInit.
-    SetRoutingID(routing_id_);
-    return true;
-  }
-  return false;
+  RenderWidget::Init(opener_id, CreateWebWidget());
+  return true;
 }
 
 }  // namespace content

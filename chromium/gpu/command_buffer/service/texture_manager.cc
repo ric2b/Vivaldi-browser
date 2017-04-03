@@ -34,6 +34,9 @@
 #include "ui/gl/gl_version_info.h"
 #include "ui/gl/trace_util.h"
 
+using base::trace_event::MemoryAllocatorDump;
+using base::trace_event::MemoryDumpLevelOfDetail;
+
 namespace gpu {
 namespace gles2 {
 
@@ -134,33 +137,6 @@ class FormatTypeValidator {
         {GL_LUMINANCE_ALPHA, GL_LUMINANCE_ALPHA, GL_UNSIGNED_BYTE},
         {GL_LUMINANCE, GL_LUMINANCE, GL_UNSIGNED_BYTE},
         {GL_ALPHA, GL_ALPHA, GL_UNSIGNED_BYTE},
-        // Exposed by GL_OES_texture_float and GL_OES_texture_half_float
-        {GL_RGB, GL_RGB, GL_FLOAT},
-        {GL_RGBA, GL_RGBA, GL_FLOAT},
-        {GL_LUMINANCE_ALPHA, GL_LUMINANCE_ALPHA, GL_FLOAT},
-        {GL_LUMINANCE, GL_LUMINANCE, GL_FLOAT},
-        {GL_ALPHA, GL_ALPHA, GL_FLOAT},
-        {GL_RGB, GL_RGB, GL_HALF_FLOAT_OES},
-        {GL_RGBA, GL_RGBA, GL_HALF_FLOAT_OES},
-        {GL_LUMINANCE_ALPHA, GL_LUMINANCE_ALPHA, GL_HALF_FLOAT_OES},
-        {GL_LUMINANCE, GL_LUMINANCE, GL_HALF_FLOAT_OES},
-        {GL_ALPHA, GL_ALPHA, GL_HALF_FLOAT_OES},
-        // Exposed by GL_ANGLE_depth_texture
-        {GL_DEPTH_COMPONENT, GL_DEPTH_COMPONENT, GL_UNSIGNED_SHORT},
-        {GL_DEPTH_COMPONENT, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT},
-        {GL_DEPTH_STENCIL, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8},
-        // Exposed by GL_EXT_sRGB
-        {GL_SRGB, GL_SRGB, GL_UNSIGNED_BYTE},
-        {GL_SRGB_ALPHA, GL_SRGB_ALPHA, GL_UNSIGNED_BYTE},
-        // Exposed by GL_EXT_texture_format_BGRA8888
-        {GL_BGRA_EXT, GL_BGRA_EXT, GL_UNSIGNED_BYTE},
-        // Exposed by GL_EXT_texture_rg
-        {GL_RED, GL_RED, GL_UNSIGNED_BYTE},
-        {GL_RG, GL_RG, GL_UNSIGNED_BYTE},
-        {GL_RED, GL_RED, GL_FLOAT},
-        {GL_RG, GL_RG, GL_FLOAT},
-        {GL_RED, GL_RED, GL_HALF_FLOAT_OES},
-        {GL_RG, GL_RG, GL_HALF_FLOAT_OES},
 
         // ES3.
         {GL_R8, GL_RED, GL_UNSIGNED_BYTE},
@@ -231,17 +207,72 @@ class FormatTypeValidator {
         {GL_DEPTH24_STENCIL8, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8},
         {GL_DEPTH32F_STENCIL8, GL_DEPTH_STENCIL,
          GL_FLOAT_32_UNSIGNED_INT_24_8_REV},
+
+        // Exposed by GL_APPLE_texture_format_BGRA8888 for TexStorage*
+        // TODO(kainino): this actually exposes it for (Copy)TexImage* as well,
+        // which is incorrect. crbug.com/663086
+        {GL_BGRA8_EXT, GL_BGRA_EXT, GL_UNSIGNED_BYTE},
+
+        // Exposed by GL_APPLE_texture_format_BGRA8888 and
+        // GL_EXT_texture_format_BGRA8888
+        {GL_BGRA_EXT, GL_BGRA_EXT, GL_UNSIGNED_BYTE},
+    };
+
+    static const FormatType kSupportedFormatTypesES2Only[] = {
+        // Exposed by GL_OES_texture_float and GL_OES_texture_half_float
+        {GL_RGB, GL_RGB, GL_FLOAT},
+        {GL_RGBA, GL_RGBA, GL_FLOAT},
+        {GL_LUMINANCE_ALPHA, GL_LUMINANCE_ALPHA, GL_FLOAT},
+        {GL_LUMINANCE, GL_LUMINANCE, GL_FLOAT},
+        {GL_ALPHA, GL_ALPHA, GL_FLOAT},
+        {GL_RGB, GL_RGB, GL_HALF_FLOAT_OES},
+        {GL_RGBA, GL_RGBA, GL_HALF_FLOAT_OES},
+        {GL_LUMINANCE_ALPHA, GL_LUMINANCE_ALPHA, GL_HALF_FLOAT_OES},
+        {GL_LUMINANCE, GL_LUMINANCE, GL_HALF_FLOAT_OES},
+        {GL_ALPHA, GL_ALPHA, GL_HALF_FLOAT_OES},
+
+        // Exposed by GL_ANGLE_depth_texture
+        {GL_DEPTH_COMPONENT, GL_DEPTH_COMPONENT, GL_UNSIGNED_SHORT},
+        {GL_DEPTH_COMPONENT, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT},
+        {GL_DEPTH_STENCIL, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8},
+
+        // Exposed by GL_EXT_sRGB
+        {GL_SRGB, GL_SRGB, GL_UNSIGNED_BYTE},
+        {GL_SRGB_ALPHA, GL_SRGB_ALPHA, GL_UNSIGNED_BYTE},
+
+        // Exposed by GL_EXT_texture_rg
+        {GL_RED, GL_RED, GL_UNSIGNED_BYTE},
+        {GL_RG, GL_RG, GL_UNSIGNED_BYTE},
+        {GL_RED, GL_RED, GL_FLOAT},
+        {GL_RG, GL_RG, GL_FLOAT},
+        {GL_RED, GL_RED, GL_HALF_FLOAT_OES},
+        {GL_RG, GL_RG, GL_HALF_FLOAT_OES},
     };
 
     for (size_t ii = 0; ii < arraysize(kSupportedFormatTypes); ++ii) {
       supported_combinations_.insert(kSupportedFormatTypes[ii]);
     }
+
+    for (size_t ii = 0; ii < arraysize(kSupportedFormatTypesES2Only); ++ii) {
+      supported_combinations_es2_only_.insert(kSupportedFormatTypesES2Only[ii]);
+    }
   }
 
   // This may be accessed from multiple threads.
-  bool IsValid(GLenum internal_format, GLenum format, GLenum type) const {
+  bool IsValid(ContextType context_type, GLenum internal_format, GLenum format,
+               GLenum type) const {
     FormatType query = { internal_format, format, type };
-    return supported_combinations_.find(query) != supported_combinations_.end();
+    if (supported_combinations_.find(query) != supported_combinations_.end()) {
+      return true;
+    }
+    if (context_type == CONTEXT_TYPE_OPENGLES2 ||
+        context_type == CONTEXT_TYPE_WEBGL1) {
+      if (supported_combinations_es2_only_.find(query) !=
+          supported_combinations_es2_only_.end()) {
+        return true;
+      }
+    }
+    return false;
   }
 
  private:
@@ -266,6 +297,7 @@ class FormatTypeValidator {
   // This class needs to be thread safe, so once supported_combinations_
   // are initialized in the constructor, it should never be modified later.
   std::set<FormatType, FormatTypeCompare> supported_combinations_;
+  std::set<FormatType, FormatTypeCompare> supported_combinations_es2_only_;
 };
 
 static const Texture::CompatibilitySwizzle kSwizzledFormats[] = {
@@ -306,6 +338,31 @@ GLenum GetSwizzleForChannel(GLenum channel,
       NOTREACHED();
       return GL_NONE;
   }
+}
+
+bool SizedFormatAvailable(const FeatureInfo* feature_info,
+                          bool immutable,
+                          GLenum internal_format) {
+  if (immutable)
+    return true;
+
+  if ((feature_info->feature_flags().chromium_image_ycbcr_420v &&
+       internal_format == GL_RGB_YCBCR_420V_CHROMIUM) ||
+      (feature_info->feature_flags().chromium_image_ycbcr_422 &&
+       internal_format == GL_RGB_YCBCR_422_CHROMIUM)) {
+    return true;
+  }
+
+  // TODO(dshwang): check if it's possible to remove
+  // CHROMIUM_color_buffer_float_rgb. crbug.com/329605
+  if ((feature_info->feature_flags().chromium_color_buffer_float_rgb &&
+       internal_format == GL_RGB32F) ||
+      (feature_info->feature_flags().chromium_color_buffer_float_rgba &&
+       internal_format == GL_RGBA32F)) {
+    return true;
+  }
+
+  return feature_info->IsWebGL2OrES3Context();
 }
 
 // A 32-bit and 64-bit compatible way of converting a pointer to a GLuint.
@@ -592,7 +649,7 @@ bool Texture::CanRenderWithSampler(const FeatureInfo* feature_info,
          (GLES2Util::kDepth | GLES2Util::kStencil)) != 0) {
       if (sampler_state.compare_mode == GL_NONE) {
         // In ES2 with OES_depth_texture, such limitation isn't specified.
-        if (feature_info->IsES3Enabled()) {
+        if (feature_info->IsWebGL2OrES3Context()) {
           return false;
         }
       }
@@ -601,15 +658,14 @@ bool Texture::CanRenderWithSampler(const FeatureInfo* feature_info,
       // TODO(zmo): The assumption that compressed textures are all filterable
       // may not be true in the future.
     } else {
-      if (!Texture::TextureFilterable(feature_info,
-                                      first_level.internal_format,
-                                      first_level.type)) {
+      if (!Texture::TextureFilterable(feature_info, first_level.internal_format,
+                                      first_level.type, immutable_)) {
         return false;
       }
     }
   }
 
-  if (!feature_info->IsES3Enabled()) {
+  if (!feature_info->IsWebGL2OrES3Context()) {
     bool is_npot_compatible = !needs_mips &&
         sampler_state.wrap_s == GL_CLAMP_TO_EDGE &&
         sampler_state.wrap_t == GL_CLAMP_TO_EDGE;
@@ -729,9 +785,10 @@ bool Texture::CanGenerateMipmaps(const FeatureInfo* feature_info) const {
     return false;
   }
 
-  if (!Texture::ColorRenderable(feature_info, base.internal_format) ||
-      !Texture::TextureFilterable(
-          feature_info, base.internal_format, base.type)) {
+  if (!Texture::ColorRenderable(feature_info, base.internal_format,
+                                immutable_) ||
+      !Texture::TextureFilterable(feature_info, base.internal_format, base.type,
+                                  immutable_)) {
     return false;
   }
 
@@ -808,19 +865,24 @@ bool Texture::TextureMipComplete(const Texture::LevelInfo& base_level_face,
 
 // static
 bool Texture::ColorRenderable(const FeatureInfo* feature_info,
-                              GLenum internal_format) {
+                              GLenum internal_format,
+                              bool immutable) {
   if (feature_info->validators()->texture_unsized_internal_format.IsValid(
       internal_format)) {
     return true;
   }
-  return feature_info->validators()->
-      texture_sized_color_renderable_internal_format.IsValid(internal_format);
+
+  return SizedFormatAvailable(feature_info, immutable, internal_format) &&
+         feature_info->validators()
+             ->texture_sized_color_renderable_internal_format.IsValid(
+                 internal_format);
 }
 
 // static
 bool Texture::TextureFilterable(const FeatureInfo* feature_info,
                                 GLenum internal_format,
-                                GLenum type) {
+                                GLenum type,
+                                bool immutable) {
   if (feature_info->validators()->texture_unsized_internal_format.IsValid(
       internal_format)) {
     switch (type) {
@@ -833,8 +895,10 @@ bool Texture::TextureFilterable(const FeatureInfo* feature_info,
         return true;
     }
   }
-  return feature_info->validators()->
-      texture_sized_texture_filterable_internal_format.IsValid(internal_format);
+  return SizedFormatAvailable(feature_info, immutable, internal_format) &&
+         feature_info->validators()
+             ->texture_sized_texture_filterable_internal_format.IsValid(
+                 internal_format);
 }
 
 void Texture::SetLevelClearedRect(GLenum target,
@@ -1115,12 +1179,15 @@ bool Texture::ValidForTexture(
     int32_t max_x;
     int32_t max_y;
     int32_t max_z;
-    return SafeAddInt32(xoffset, width, &max_x) &&
-           SafeAddInt32(yoffset, height, &max_y) &&
-           SafeAddInt32(zoffset, depth, &max_z) &&
-           xoffset >= 0 &&
+    return xoffset >= 0 &&
            yoffset >= 0 &&
            zoffset >= 0 &&
+           width >= 0 &&
+           height >= 0 &&
+           depth >= 0 &&
+           SafeAddInt32(xoffset, width, &max_x) &&
+           SafeAddInt32(yoffset, height, &max_y) &&
+           SafeAddInt32(zoffset, depth, &max_z) &&
            max_x <= info.width &&
            max_y <= info.height &&
            max_z <= info.depth;
@@ -1681,12 +1748,10 @@ void Texture::DumpLevelMemory(base::trace_event::ProcessMemoryDump* pmd,
       // texture allocation also as the storage is not provided by the
       // GLImage in that case.
       if (level_infos[level_index].image_state != BOUND) {
-        base::trace_event::MemoryAllocatorDump* dump = pmd->CreateAllocatorDump(
-            base::StringPrintf("%s/face_%d/level_%d", dump_name.c_str(),
-                               face_index, level_index));
+        MemoryAllocatorDump* dump = pmd->CreateAllocatorDump(base::StringPrintf(
+            "%s/face_%d/level_%d", dump_name.c_str(), face_index, level_index));
         dump->AddScalar(
-            base::trace_event::MemoryAllocatorDump::kNameSize,
-            base::trace_event::MemoryAllocatorDump::kUnitsBytes,
+            MemoryAllocatorDump::kNameSize, MemoryAllocatorDump::kUnitsBytes,
             static_cast<uint64_t>(level_infos[level_index].estimated_size));
       }
     }
@@ -1708,15 +1773,15 @@ bool Texture::CanRenderTo(const FeatureInfo* feature_info, GLint level) const {
          level < static_cast<GLint>(face_infos_[0].level_infos.size()));
   GLenum internal_format = face_infos_[0].level_infos[level].internal_format;
   bool color_renderable =
-      ((feature_info->validators()->texture_unsized_internal_format.
-            IsValid(internal_format) &&
-        internal_format != GL_ALPHA &&
-        internal_format != GL_LUMINANCE &&
+      ((feature_info->validators()->texture_unsized_internal_format.IsValid(
+            internal_format) &&
+        internal_format != GL_ALPHA && internal_format != GL_LUMINANCE &&
         internal_format != GL_LUMINANCE_ALPHA &&
         internal_format != GL_SRGB_EXT) ||
-       feature_info->validators()->
-           texture_sized_color_renderable_internal_format.IsValid(
-               internal_format));
+       (SizedFormatAvailable(feature_info, immutable_, internal_format) &&
+        feature_info->validators()
+            ->texture_sized_color_renderable_internal_format.IsValid(
+                internal_format)));
   bool depth_renderable = feature_info->validators()->
       texture_depth_renderable_internal_format.IsValid(internal_format);
   bool stencil_renderable = feature_info->validators()->
@@ -1845,7 +1910,7 @@ bool TextureManager::Initialize() {
   default_textures_[kCubeMap] = CreateDefaultAndBlackTextures(
       GL_TEXTURE_CUBE_MAP, &black_texture_ids_[kCubeMap]);
 
-  if (feature_info_->IsES3Enabled()) {
+  if (feature_info_->IsWebGL2OrES3Context()) {
     default_textures_[kTexture3D] = CreateDefaultAndBlackTextures(
         GL_TEXTURE_3D, &black_texture_ids_[kTexture3D]);
     default_textures_[kTexture2DArray] = CreateDefaultAndBlackTextures(
@@ -2260,21 +2325,24 @@ bool TextureManager::ValidateTextureParameters(
   // So the validation is not necessary for TexSubImage.
   if (tex_image_call &&
       !validators->texture_internal_format.IsValid(internal_format)) {
-    std::string msg = base::StringPrintf("invalid internal_format 0x%x",
-                                         internal_format);
+    std::string msg = std::string("invalid internal_format ") +
+        GLES2Util::GetStringEnum(internal_format);
     ERRORSTATE_SET_GL_ERROR(error_state, GL_INVALID_VALUE, function_name,
                              msg.c_str());
     return false;
   }
-  if (!g_format_type_validator.Get().IsValid(internal_format, format, type)) {
-    std::string msg = base::StringPrintf(
-        "invalid internalformat/format/type combination 0x%x/0x%x/0x%x",
-        internal_format, format, type);
+  if (!g_format_type_validator.Get().IsValid(feature_info_->context_type(),
+                                             internal_format, format, type)) {
+    std::string msg = std::string(
+        "invalid internalformat/format/type combination ") +
+        GLES2Util::GetStringEnum(internal_format) + std::string("/") +
+        GLES2Util::GetStringEnum(format) + std::string("/") +
+        GLES2Util::GetStringEnum(type);
     ERRORSTATE_SET_GL_ERROR(error_state, GL_INVALID_OPERATION, function_name,
                             msg.c_str());
     return false;
   }
-  if (!feature_info_->IsES3Enabled()) {
+  if (!feature_info_->IsWebGL2OrES3Context()) {
     uint32_t channels = GLES2Util::GetChannelsForFormat(format);
     if ((channels & (GLES2Util::kDepth | GLES2Util::kStencil)) != 0 && level) {
       ERRORSTATE_SET_GL_ERROR(
@@ -2372,7 +2440,7 @@ bool TextureManager::ValidateTexImage(
   }
   if ((GLES2Util::GetChannelsForFormat(args.format) &
        (GLES2Util::kDepth | GLES2Util::kStencil)) != 0 && args.pixels
-      && !feature_info_->IsES3Enabled()) {
+      && !feature_info_->IsWebGL2OrES3Context()) {
     ERRORSTATE_SET_GL_ERROR(
         error_state, GL_INVALID_OPERATION,
         function_name, "can not supply data for depth or stencil textures");
@@ -2503,7 +2571,7 @@ void TextureManager::ValidateAndDoTexImage(
   // ValidateTexImage is passed already.
   Texture* texture = texture_ref->texture();
   bool need_cube_map_workaround =
-      !feature_info_->IsES3Enabled() &&
+      !feature_info_->IsWebGL2OrES3Context() &&
       texture->target() == GL_TEXTURE_CUBE_MAP &&
       (texture_state->force_cube_complete ||
        (texture_state->force_cube_map_positive_x_allocation &&
@@ -2536,6 +2604,39 @@ void TextureManager::ValidateAndDoTexImage(
               : DoTexSubImageArguments::kTexSubImage2D};
       DoTexSubImageRowByRowWorkaround(texture_state, state, sub_args,
                                       unpack_params);
+
+      SetLevelCleared(texture_ref, args.target, args.level, true);
+      return;
+    }
+  }
+
+  if (args.command_type == DoTexImageArguments::kTexImage3D &&
+      texture_state->unpack_image_height_workaround_with_unpack_buffer &&
+      buffer) {
+    ContextState::Dimension dimension = ContextState::k3D;
+    const PixelStoreParams unpack_params(state->GetUnpackParams(dimension));
+    if (unpack_params.image_height != 0 &&
+        unpack_params.image_height != args.height) {
+      ReserveTexImageToBeFilled(texture_state, state, framebuffer_state,
+                                function_name, texture_ref, args);
+
+      DoTexSubImageArguments sub_args = {
+          args.target,
+          args.level,
+          0,
+          0,
+          0,
+          args.width,
+          args.height,
+          args.depth,
+          args.format,
+          args.type,
+          args.pixels,
+          args.pixels_size,
+          args.padding,
+          DoTexSubImageArguments::kTexSubImage3D};
+      DoTexSubImageLayerByLayerWorkaround(texture_state, state, sub_args,
+                                          unpack_params);
 
       SetLevelCleared(texture_ref, args.target, args.level, true);
       return;
@@ -2622,7 +2723,7 @@ bool TextureManager::ValidateTexSubImage(ContextState* state,
                                  args.type, internal_format, args.level)) {
     return false;
   }
-  if (args.type != current_type && !feature_info_->IsES3Enabled()) {
+  if (args.type != current_type && !feature_info_->IsWebGL2OrES3Context()) {
     // It isn't explicitly required in the ES2 spec, but some drivers generate
     // an error. It is better to be consistent across drivers.
     ERRORSTATE_SET_GL_ERROR(error_state, GL_INVALID_OPERATION, function_name,
@@ -2638,7 +2739,7 @@ bool TextureManager::ValidateTexSubImage(ContextState* state,
   }
   if ((GLES2Util::GetChannelsForFormat(args.format) &
        (GLES2Util::kDepth | GLES2Util::kStencil)) != 0 &&
-      !feature_info_->IsES3Enabled()) {
+      !feature_info_->IsWebGL2OrES3Context()) {
     ERRORSTATE_SET_GL_ERROR(
         error_state, GL_INVALID_OPERATION, function_name,
         "can not supply data for depth or stencil textures");
@@ -2746,6 +2847,19 @@ void TextureManager::ValidateAndDoTexSubImage(
       // work around driver bug.
       DoTexSubImageRowByRowWorkaround(texture_state, state, args,
                                       unpack_params);
+      return;
+    }
+  }
+
+  if (args.command_type == DoTexSubImageArguments::kTexSubImage3D &&
+      texture_state->unpack_image_height_workaround_with_unpack_buffer &&
+      buffer) {
+    ContextState::Dimension dimension = ContextState::k3D;
+    const PixelStoreParams unpack_params(state->GetUnpackParams(dimension));
+    if (unpack_params.image_height != 0 &&
+        unpack_params.image_height != args.height) {
+      DoTexSubImageLayerByLayerWorkaround(texture_state, state, args,
+                                          unpack_params);
       return;
     }
   }
@@ -2959,6 +3073,51 @@ void TextureManager::DoTexSubImageRowByRowWorkaround(
   glPixelStorei(GL_UNPACK_ROW_LENGTH, unpack_params.row_length);
 }
 
+void TextureManager::DoTexSubImageLayerByLayerWorkaround(
+    DecoderTextureState* texture_state,
+    ContextState* state,
+    const DoTexSubImageArguments& args,
+    const PixelStoreParams& unpack_params) {
+  glPixelStorei(GL_UNPACK_IMAGE_HEIGHT, 0);
+
+  GLenum format = AdjustTexFormat(feature_info_.get(), args.format);
+
+  GLsizei row_length =
+      unpack_params.row_length ? unpack_params.row_length : args.width;
+  GLsizei row_bytes =
+      row_length * GLES2Util::ComputeImageGroupSize(format, args.type);
+  GLsizei alignment_diff = row_bytes % unpack_params.alignment;
+  if (alignment_diff != 0) {
+    row_bytes += unpack_params.alignment - alignment_diff;
+  }
+  DCHECK_EQ(0, row_bytes % unpack_params.alignment);
+
+  // process the texture layer by layer
+  GLsizei image_height = unpack_params.image_height;
+  GLsizei image_bytes = row_bytes * image_height;
+  const GLubyte* image_pixels = reinterpret_cast<const GLubyte*>(args.pixels);
+  for (GLsizei image = 0; image < args.depth - 1; ++image) {
+    glTexSubImage3D(args.target, args.level, args.xoffset, args.yoffset,
+                    image + args.zoffset, args.width, args.height, 1, format,
+                    args.type, image_pixels);
+
+    image_pixels += image_bytes;
+  }
+
+  // Process the last image row by row
+  glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+  const GLubyte* row_pixels = image_pixels;
+  for (GLsizei row = 0; row < args.height; ++row) {
+    glTexSubImage3D(args.target, args.level, args.xoffset, row + args.yoffset,
+                    args.depth - 1 + args.zoffset, args.width, 1, 1, format,
+                    args.type, row_pixels);
+    row_pixels += row_bytes;
+  }
+  // Restore unpack state
+  glPixelStorei(GL_UNPACK_ALIGNMENT, unpack_params.alignment);
+  glPixelStorei(GL_UNPACK_IMAGE_HEIGHT, unpack_params.image_height);
+}
+
 // static
 GLenum TextureManager::AdjustTexInternalFormat(
     const gles2::FeatureInfo* feature_info,
@@ -3131,8 +3290,21 @@ ScopedTextureUploadTimer::~ScopedTextureUploadTimer() {
 
 bool TextureManager::OnMemoryDump(const base::trace_event::MemoryDumpArgs& args,
                                   base::trace_event::ProcessMemoryDump* pmd) {
+  if (args.level_of_detail == MemoryDumpLevelOfDetail::BACKGROUND) {
+    std::string dump_name =
+        base::StringPrintf("gpu/gl/textures/share_group_%" PRIu64 "",
+                           memory_tracker_->ShareGroupTracingGUID());
+    MemoryAllocatorDump* dump = pmd->CreateAllocatorDump(dump_name);
+    dump->AddScalar(MemoryAllocatorDump::kNameSize,
+                    MemoryAllocatorDump::kUnitsBytes, mem_represented());
+
+    // Early out, no need for more detail in a BACKGROUND dump.
+    return true;
+  }
+
   for (const auto& resource : textures_) {
-    // Only dump memory info for textures actually owned by this TextureManager.
+    // Only dump memory info for textures actually owned by this
+    // TextureManager.
     DumpTextureRef(pmd, resource.second.get());
   }
 
@@ -3158,10 +3330,9 @@ void TextureManager::DumpTextureRef(base::trace_event::ProcessMemoryDump* pmd,
       "gpu/gl/textures/share_group_%" PRIu64 "/texture_%d",
       memory_tracker_->ShareGroupTracingGUID(), ref->client_id());
 
-  base::trace_event::MemoryAllocatorDump* dump =
-      pmd->CreateAllocatorDump(dump_name);
-  dump->AddScalar(base::trace_event::MemoryAllocatorDump::kNameSize,
-                  base::trace_event::MemoryAllocatorDump::kUnitsBytes,
+  MemoryAllocatorDump* dump = pmd->CreateAllocatorDump(dump_name);
+  dump->AddScalar(MemoryAllocatorDump::kNameSize,
+                  MemoryAllocatorDump::kUnitsBytes,
                   static_cast<uint64_t>(size));
 
   // Add the |client_guid| which expresses shared ownership with the client

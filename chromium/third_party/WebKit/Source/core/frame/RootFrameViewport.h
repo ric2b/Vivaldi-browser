@@ -47,22 +47,20 @@ class CORE_EXPORT RootFrameViewport final
   LayoutRect rootContentsToLayoutViewportContents(FrameView& rootFrameView,
                                                   const LayoutRect&) const;
 
-  void restoreToAnchor(const DoublePoint&);
+  void restoreToAnchor(const ScrollOffset&);
 
   // Callback whenever the visual viewport changes scroll position or scale.
   void didUpdateVisualViewport();
 
   // ScrollableArea Implementation
   bool isRootFrameViewport() const override { return true; }
-  void setScrollPosition(const DoublePoint&,
-                         ScrollType,
-                         ScrollBehavior = ScrollBehaviorInstant) override;
+  void setScrollOffset(const ScrollOffset&,
+                       ScrollType,
+                       ScrollBehavior = ScrollBehaviorInstant) override;
   LayoutRect scrollIntoView(const LayoutRect& rectInContent,
                             const ScrollAlignment& alignX,
                             const ScrollAlignment& alignY,
                             ScrollType = ProgrammaticScroll) override;
-  DoubleRect visibleContentRectDouble(
-      IncludeScrollbarsInRect = ExcludeScrollbars) const override;
   IntRect visibleContentRect(
       IncludeScrollbarsInRect = ExcludeScrollbars) const override;
   bool shouldUseIntegerScrollOffset() const override;
@@ -74,12 +72,12 @@ class CORE_EXPORT RootFrameViewport final
   int scrollSize(ScrollbarOrientation) const override;
   bool isScrollCornerVisible() const override;
   IntRect scrollCornerRect() const override;
-  void setScrollOffset(const DoublePoint&, ScrollType) override;
-  IntPoint scrollPosition() const override;
-  DoublePoint scrollPositionDouble() const override;
-  IntPoint minimumScrollPosition() const override;
-  IntPoint maximumScrollPosition() const override;
-  DoublePoint maximumScrollPositionDouble() const override;
+  void updateScrollOffset(const ScrollOffset&, ScrollType) override;
+  IntSize scrollOffsetInt() const override;
+  ScrollOffset scrollOffset() const override;
+  IntSize minimumScrollOffsetInt() const override;
+  IntSize maximumScrollOffsetInt() const override;
+  ScrollOffset maximumScrollOffset() const override;
   IntSize contentsSize() const override;
   bool scrollbarsCanBeActive() const override;
   IntRect scrollableAreaBoundingBox() const override;
@@ -91,6 +89,10 @@ class CORE_EXPORT RootFrameViewport final
   GraphicsLayer* layerForHorizontalScrollbar() const override;
   GraphicsLayer* layerForVerticalScrollbar() const override;
   GraphicsLayer* layerForScrollCorner() const override;
+  int horizontalScrollbarHeight(
+      OverlayScrollbarClipBehavior = IgnoreOverlayScrollbarSize) const override;
+  int verticalScrollbarWidth(
+      OverlayScrollbarClipBehavior = IgnoreOverlayScrollbarSize) const override;
   ScrollResult userScroll(ScrollGranularity, const FloatSize&) override;
   bool scrollAnimatorEnabled() const override;
   HostWindow* getHostWindow() const override;
@@ -99,8 +101,11 @@ class CORE_EXPORT RootFrameViewport final
   void cancelProgrammaticScrollAnimation() override;
   ScrollBehavior scrollBehaviorStyle() const override;
   Widget* getWidget() override;
-  void clearScrollAnimators() override;
+  void clearScrollableArea() override;
   LayoutBox* layoutBox() const override;
+  FloatQuad localToVisibleContentQuad(const FloatQuad&,
+                                      const LayoutObject*,
+                                      unsigned = 0) const final;
 
  private:
   RootFrameViewport(ScrollableArea& visualViewport,
@@ -108,9 +113,9 @@ class CORE_EXPORT RootFrameViewport final
 
   enum ViewportToScrollFirst { VisualViewport, LayoutViewport };
 
-  DoublePoint scrollOffsetFromScrollAnimators() const;
+  ScrollOffset scrollOffsetFromScrollAnimators() const;
 
-  void distributeScrollBetweenViewports(const DoublePoint&,
+  void distributeScrollBetweenViewports(const ScrollOffset&,
                                         ScrollType,
                                         ScrollBehavior,
                                         ViewportToScrollFirst);

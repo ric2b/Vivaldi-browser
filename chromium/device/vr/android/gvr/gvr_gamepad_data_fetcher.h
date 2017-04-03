@@ -7,6 +7,7 @@
 
 #include <string>
 
+#include "base/memory/weak_ptr.h"
 #include "device/gamepad/gamepad_data_fetcher.h"
 #include "third_party/gvr-android-sdk/src/ndk/include/vr/gvr/capi/include/gvr_controller.h"
 #include "third_party/gvr-android-sdk/src/ndk/include/vr/gvr/capi/include/gvr_types.h"
@@ -19,13 +20,14 @@ class GvrGamepadDataFetcher : public GamepadDataFetcher {
  public:
   class Factory : public GamepadDataFetcherFactory {
    public:
-    Factory(GvrDelegate* delegate, unsigned int display_id);
+    Factory(const base::WeakPtr<GvrDelegate>& delegate,
+            unsigned int display_id);
     ~Factory() override;
     std::unique_ptr<GamepadDataFetcher> CreateDataFetcher() override;
     GamepadSource source() override;
 
    private:
-    GvrDelegate* delegate_;
+    base::WeakPtr<GvrDelegate> delegate_;
     unsigned int display_id_;
   };
 
@@ -40,8 +42,8 @@ class GvrGamepadDataFetcher : public GamepadDataFetcher {
 
  private:
   std::unique_ptr<gvr::ControllerApi> controller_api_;
-  std::unique_ptr<gvr::UserPrefs> user_prefs_;
   gvr::ControllerState controller_state_;
+  gvr::ControllerHandedness handedness_;
   unsigned int display_id_;
 
   DISALLOW_COPY_AND_ASSIGN(GvrGamepadDataFetcher);

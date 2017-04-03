@@ -56,66 +56,43 @@ struct SearchCandidate {
   float candidateDistance;
 };
 
-FloatRect SVGLayoutSupport::localOverflowRectForPaintInvalidation(
-    const LayoutObject& object) {
-  // This doesn't apply to LayoutSVGRoot. Use
-  // LayoutSVGRoot::localOverflowRectForPaintInvalidation() instead.
-  ASSERT(!object.isSVGRoot());
+FloatRect SVGLayoutSupport::localVisualRect(const LayoutObject& object) {
+  // For LayoutSVGRoot, use LayoutSVGRoot::localVisualRect() instead.
+  DCHECK(!object.isSVGRoot());
 
   // Return early for any cases where we don't actually paint
   if (object.styleRef().visibility() != EVisibility::Visible &&
       !object.enclosingLayer()->hasVisibleContent())
     return FloatRect();
 
-  FloatRect paintInvalidationRect =
-      object.paintInvalidationRectInLocalSVGCoordinates();
+  FloatRect visualRect = object.visualRectInLocalSVGCoordinates();
   if (int outlineOutset = object.styleRef().outlineOutsetExtent())
-    paintInvalidationRect.inflate(outlineOutset);
-  return paintInvalidationRect;
+    visualRect.inflate(outlineOutset);
+  return visualRect;
 }
 
-LayoutRect SVGLayoutSupport::clippedOverflowRectForPaintInvalidation(
+LayoutRect SVGLayoutSupport::visualRectInAncestorSpace(
     const LayoutObject& object,
-    const LayoutBoxModelObject& paintInvalidationContainer) {
+    const LayoutBoxModelObject& ancestor) {
   LayoutRect rect;
-  mapToVisualRectInAncestorSpace(object, &paintInvalidationContainer,
-                                 localOverflowRectForPaintInvalidation(object),
+  mapToVisualRectInAncestorSpace(object, &ancestor, localVisualRect(object),
                                  rect);
   return rect;
 }
 
-LayoutRect SVGLayoutSupport::transformPaintInvalidationRect(
+LayoutRect SVGLayoutSupport::transformVisualRect(
     const LayoutObject& object,
     const AffineTransform& rootTransform,
     const FloatRect& localRect) {
   FloatRect adjustedRect = rootTransform.mapRect(localRect);
 
-  if (object.isSVGShape() && object.styleRef().svgStyle().hasStroke()) {
-    if (float strokeWidthForHairlinePadding =
-            toLayoutSVGShape(object).strokeWidth()) {
-      // For hairline strokes (stroke-width < 1 in device space), Skia
-      // rasterizes up to 0.4(9) off the stroke center. That means
-      // enclosingIntRect is not enough - we must also pad to 0.5.
-      // This is still fragile as it misses out on CC/DSF CTM components.
-      const FloatSize strokeSize = rootTransform.mapSize(FloatSize(
-          strokeWidthForHairlinePadding, strokeWidthForHairlinePadding));
-      if (strokeSize.width() < 1 || strokeSize.height() < 1) {
-        float pad =
-            0.5f - std::min(strokeSize.width(), strokeSize.height()) / 2;
-        DCHECK_GT(pad, 0);
-        // Additionally, square/round caps can potentially introduce an outset
-        // <= 0.5
-        if (object.styleRef().svgStyle().capStyle() != ButtCap)
-          pad += 0.5f;
-        adjustedRect.inflate(pad);
-      }
-    }
-  }
-
   if (adjustedRect.isEmpty())
     return LayoutRect();
 
-  return enclosingLayoutRect(adjustedRect);
+  // Use enclosingIntRect because we cannot properly apply subpixel offset of
+  // the SVGRoot since we don't know the desired subpixel accumulation at this
+  // point.
+  return LayoutRect(enclosingIntRect(adjustedRect));
 }
 
 static const LayoutSVGRoot& computeTransformToSVGRoot(
@@ -135,14 +112,14 @@ static const LayoutSVGRoot& computeTransformToSVGRoot(
 bool SVGLayoutSupport::mapToVisualRectInAncestorSpace(
     const LayoutObject& object,
     const LayoutBoxModelObject* ancestor,
-    const FloatRect& localPaintInvalidationRect,
+    const FloatRect& localVisualRect,
     LayoutRect& resultRect,
     VisualRectFlags visualRectFlags) {
   AffineTransform rootBorderBoxTransform;
   const LayoutSVGRoot& svgRoot =
       computeTransformToSVGRoot(object, rootBorderBoxTransform);
-  resultRect = transformPaintInvalidationRect(object, rootBorderBoxTransform,
-                                              localPaintInvalidationRect);
+  resultRect =
+      transformVisualRect(object, rootBorderBoxTransform, localVisualRect);
 
   // Apply initial viewport clip.
   if (svgRoot.shouldApplyViewportClip()) {
@@ -179,7 +156,8 @@ void SVGLayoutSupport::mapLocalToAncestor(const LayoutObject* object,
 
 void SVGLayoutSupport::mapAncestorToLocal(const LayoutObject& object,
                                           const LayoutBoxModelObject* ancestor,
-                                          TransformState& transformState) {
+                                          TransformState& transformState,
+                                          MapCoordinatesFlags flags) {
   // |object| is either a LayoutSVGModelObject or a LayoutSVGBlock here. In
   // the former case, |object| can never be an ancestor while in the latter
   // the caller is responsible for doing the ancestor check. Because of this,
@@ -192,7 +170,7 @@ void SVGLayoutSupport::mapAncestorToLocal(const LayoutObject& object,
   const LayoutSVGRoot& svgRoot =
       computeTransformToSVGRoot(object, localToSVGRoot);
 
-  MapCoordinatesFlags mode = UseTransforms | ApplyContainerFlip;
+  MapCoordinatesFlags mode = flags | UseTransforms | ApplyContainerFlip;
   svgRoot.mapAncestorToLocal(ancestor, transformState, mode);
 
   transformState.applyTransform(localToSVGRoot);
@@ -249,12 +227,12 @@ void SVGLayoutSupport::computeContainerBoundingBoxes(
     FloatRect& objectBoundingBox,
     bool& objectBoundingBoxValid,
     FloatRect& strokeBoundingBox,
-    FloatRect& paintInvalidationBoundingBox) {
+    FloatRect& localVisualRect) {
   objectBoundingBox = FloatRect();
   objectBoundingBoxValid = false;
   strokeBoundingBox = FloatRect();
 
-  // When computing the strokeBoundingBox, we use the paintInvalidationRects of
+  // When computing the strokeBoundingBox, we use the visualRects of
   // the container's children so that the container's stroke includes the
   // resources applied to the children (such as clips and filters). This allows
   // filters applied to containers to correctly bound the children, and also
@@ -276,11 +254,12 @@ void SVGLayoutSupport::computeContainerBoundingBoxes(
     const AffineTransform& transform = current->localToSVGParentTransform();
     updateObjectBoundingBox(objectBoundingBox, objectBoundingBoxValid, current,
                             transform.mapRect(current->objectBoundingBox()));
-    strokeBoundingBox.unite(transform.mapRect(
-        current->paintInvalidationRectInLocalSVGCoordinates()));
+    strokeBoundingBox.unite(
+        transform.mapRect(current->visualRectInLocalSVGCoordinates()));
   }
 
-  paintInvalidationBoundingBox = strokeBoundingBox;
+  localVisualRect = strokeBoundingBox;
+  adjustVisualRectWithResources(container, localVisualRect);
 }
 
 const LayoutSVGRoot* SVGLayoutSupport::findTreeRootObject(
@@ -399,9 +378,9 @@ bool SVGLayoutSupport::isOverflowHidden(const LayoutObject* object) {
          object->style()->overflowX() == OverflowScroll;
 }
 
-void SVGLayoutSupport::intersectPaintInvalidationRectWithResources(
+void SVGLayoutSupport::adjustVisualRectWithResources(
     const LayoutObject* layoutObject,
-    FloatRect& paintInvalidationRect) {
+    FloatRect& visualRect) {
   ASSERT(layoutObject);
 
   SVGResources* resources =
@@ -410,14 +389,14 @@ void SVGLayoutSupport::intersectPaintInvalidationRectWithResources(
     return;
 
   if (LayoutSVGResourceFilter* filter = resources->filter())
-    paintInvalidationRect = filter->resourceBoundingBox(layoutObject);
+    visualRect = filter->resourceBoundingBox(layoutObject);
 
   if (LayoutSVGResourceClipper* clipper = resources->clipper())
-    paintInvalidationRect.intersect(
+    visualRect.intersect(
         clipper->resourceBoundingBox(layoutObject->objectBoundingBox()));
 
   if (LayoutSVGResourceMasker* masker = resources->masker())
-    paintInvalidationRect.intersect(masker->resourceBoundingBox(layoutObject));
+    visualRect.intersect(masker->resourceBoundingBox(layoutObject));
 }
 
 bool SVGLayoutSupport::hasFilterResource(const LayoutObject& object) {

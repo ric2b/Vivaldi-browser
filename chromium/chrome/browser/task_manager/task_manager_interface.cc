@@ -76,12 +76,11 @@ void TaskManagerInterface::RemoveObserver(TaskManagerObserver* observer) {
   // Recalculate the minimum refresh rate and the enabled resource flags.
   int64_t flags = 0;
   base::TimeDelta min_time = base::TimeDelta::Max();
-  base::ObserverList<TaskManagerObserver>::Iterator itr(&observers_);
-  while (TaskManagerObserver* obs = itr.GetNext()) {
-    if (obs->desired_refresh_time() < min_time)
-      min_time = obs->desired_refresh_time();
+  for (auto& observer : observers_) {
+    if (observer.desired_refresh_time() < min_time)
+      min_time = observer.desired_refresh_time();
 
-    flags |= obs->desired_resources_flags();
+    flags |= observer.desired_resources_flags();
   }
 
   if (min_time == base::TimeDelta::Max()) {
@@ -97,9 +96,8 @@ void TaskManagerInterface::RemoveObserver(TaskManagerObserver* observer) {
 
 void TaskManagerInterface::RecalculateRefreshFlags() {
   int64_t flags = 0;
-  base::ObserverList<TaskManagerObserver>::Iterator itr(&observers_);
-  while (TaskManagerObserver* obs = itr.GetNext())
-    flags |= obs->desired_resources_flags();
+  for (auto& observer : observers_)
+    flags |= observer.desired_resources_flags();
 
   SetEnabledResourceFlags(flags);
 }
@@ -117,29 +115,30 @@ TaskManagerInterface::~TaskManagerInterface() {
 }
 
 void TaskManagerInterface::NotifyObserversOnTaskAdded(TaskId id) {
-  FOR_EACH_OBSERVER(TaskManagerObserver, observers_, OnTaskAdded(id));
+  for (TaskManagerObserver& observer : observers_)
+    observer.OnTaskAdded(id);
 }
 
 void TaskManagerInterface::NotifyObserversOnTaskToBeRemoved(TaskId id) {
-  FOR_EACH_OBSERVER(TaskManagerObserver, observers_, OnTaskToBeRemoved(id));
+  for (TaskManagerObserver& observer : observers_)
+    observer.OnTaskToBeRemoved(id);
 }
 
 void TaskManagerInterface::NotifyObserversOnRefresh(
     const TaskIdList& task_ids) {
-  FOR_EACH_OBSERVER(TaskManagerObserver,
-                    observers_,
-                    OnTasksRefreshed(task_ids));
+  for (TaskManagerObserver& observer : observers_)
+    observer.OnTasksRefreshed(task_ids);
 }
 
 void TaskManagerInterface::NotifyObserversOnRefreshWithBackgroundCalculations(
       const TaskIdList& task_ids) {
-  FOR_EACH_OBSERVER(TaskManagerObserver,
-                    observers_,
-                    OnTasksRefreshedWithBackgroundCalculations(task_ids));
+  for (TaskManagerObserver& observer : observers_)
+    observer.OnTasksRefreshedWithBackgroundCalculations(task_ids);
 }
 
 void TaskManagerInterface::NotifyObserversOnTaskUnresponsive(TaskId id) {
-  FOR_EACH_OBSERVER(TaskManagerObserver, observers_, OnTaskUnresponsive(id));
+  for (TaskManagerObserver& observer : observers_)
+    observer.OnTaskUnresponsive(id);
 }
 
 base::TimeDelta TaskManagerInterface::GetCurrentRefreshTime() const {

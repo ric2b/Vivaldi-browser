@@ -5,6 +5,7 @@
 import("//build/config/chrome_build.gni")
 import("//build/config/features.gni")
 import("//build/config/ui.gni")
+import("//extensions/features/features.gni")
 import("//tools/grit/repack.gni")
 
 # Wraps repack_locales(), setting the source_patterns and deps required for
@@ -70,12 +71,19 @@ template("chrome_repack_locales") {
         "//ui/strings:ui_strings",
       ]
     }
-    if (enable_extensions) {
+    if (is_android) {
       source_patterns += [
-        # TODO(jamescook): When Android stops building extensions code move
-        # this to the OS != 'ios' and OS != 'android' section.
-        "${root_gen_dir}/extensions/strings/extensions_strings_",
+        "${root_gen_dir}/blimp/client/public/resources/blimp_strings_",
+        "${root_gen_dir}/blimp/client/support/resources/blimp_strings_",
       ]
+      deps += [
+        "//blimp/client/public/resources",
+        "//blimp/client/support/resources:strings",
+      ]
+    }
+    if (enable_extensions) {
+      source_patterns +=
+          [ "${root_gen_dir}/extensions/strings/extensions_strings_" ]
       deps += [ "//extensions/strings" ]
     }
 

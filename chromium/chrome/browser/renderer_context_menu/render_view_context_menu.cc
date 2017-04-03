@@ -11,6 +11,7 @@
 #include <utility>
 
 #include "apps/app_load_service.h"
+#include "base/command_line.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/metrics/field_trial.h"
@@ -79,6 +80,7 @@
 #include "components/spellcheck/browser/pref_names.h"
 #include "components/spellcheck/browser/spellcheck_host_metrics.h"
 #include "components/spellcheck/common/spellcheck_common.h"
+#include "components/spellcheck/spellcheck_build_features.h"
 #include "components/translate/core/browser/translate_download_manager.h"
 #include "components/translate/core/browser/translate_manager.h"
 #include "components/translate/core/browser/translate_prefs.h"
@@ -103,7 +105,10 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/menu_item.h"
 #include "content/public/common/url_utils.h"
+#include "extensions/features/features.h"
 #include "net/base/escape.h"
+#include "printing/features/features.h"
+#include "third_party/WebKit/public/public_features.h"
 #include "third_party/WebKit/public/web/WebContextMenuData.h"
 #include "third_party/WebKit/public/web/WebMediaPlayerAction.h"
 #include "third_party/WebKit/public/web/WebPluginAction.h"
@@ -117,11 +122,11 @@
 #include "ui/gfx/path.h"
 #include "ui/gfx/text_elider.h"
 
-#if !defined(USE_BROWSER_SPELLCHECKER)
+#if !BUILDFLAG(USE_BROWSER_SPELLCHECKER)
 #include "chrome/browser/renderer_context_menu/spelling_options_submenu_observer.h"
 #endif
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "chrome/browser/extensions/devtools_util.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "extensions/browser/extension_host.h"
@@ -132,15 +137,15 @@
 #include "extensions/common/extension.h"
 #endif
 
-#if defined(ENABLE_PRINTING)
+#if BUILDFLAG(ENABLE_PRINTING)
 #include "chrome/browser/printing/print_view_manager_common.h"
 #include "components/printing/common/print_messages.h"
 
-#if defined(ENABLE_PRINT_PREVIEW)
+#if BUILDFLAG(ENABLE_PRINT_PREVIEW)
 #include "chrome/browser/printing/print_preview_context_menu_observer.h"
 #include "chrome/browser/printing/print_preview_dialog_controller.h"
-#endif  // defined(ENABLE_PRINT_PREVIEW)
-#endif  // defined(ENABLE_PRINTING)
+#endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
+#endif  // BUILDFLAG(ENABLE_PRINTING)
 
 #if defined(ENABLE_MEDIA_ROUTER)
 #include "chrome/browser/media/router/media_router_dialog_controller.h"
@@ -415,7 +420,7 @@ content::Referrer CreateReferrer(const GURL& url,
 }
 
 content::WebContents* GetWebContentsToUse(content::WebContents* web_contents) {
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   // If we're viewing in a MimeHandlerViewGuest, use its embedder WebContents.
   if (extensions::MimeHandlerViewGuest::FromWebContents(web_contents)) {
     WebContents* top_level_web_contents =
@@ -510,7 +515,7 @@ void OnProfileCreated(const GURL& link_url,
 gfx::Vector2d RenderViewContextMenu::GetOffset(
     RenderFrameHost* render_frame_host) {
   gfx::Vector2d offset;
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   // When --use-cross-process-frames-for-guests is enabled, the position is
   // transformed in the browser process hittesting code.
   WebContents* web_contents =
@@ -528,7 +533,7 @@ gfx::Vector2d RenderViewContextMenu::GetOffset(
       offset = bounds.origin() - top_level_bounds.origin();
     }
   }
-#endif  // defined(ENABLE_EXTENSIONS)
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
   return offset;
 }
 
@@ -541,7 +546,7 @@ bool RenderViewContextMenu::IsDevToolsURL(const GURL& url) {
 bool RenderViewContextMenu::IsInternalResourcesURL(const GURL& url) {
   if (!url.SchemeIs(content::kChromeUIScheme))
     return false;
-  return url.host() == chrome::kChromeUISyncResourcesHost;
+  return url.host_piece() == chrome::kChromeUISyncResourcesHost;
 }
 
 // static
@@ -576,6 +581,7 @@ RenderViewContextMenu::RenderViewContextMenu(
       protocol_handler_submenu_model_(this),
       protocol_handler_registry_(
           ProtocolHandlerRegistryFactory::GetForBrowserContext(GetProfile())),
+      save_as_text_experiement_enabled_(false),
       embedder_web_contents_(GetWebContentsToUse(source_web_contents_)) {
   if (!g_custom_id_ranges_initialized) {
     g_custom_id_ranges_initialized = true;
@@ -584,6 +590,12 @@ RenderViewContextMenu::RenderViewContextMenu(
   }
   set_content_type(ContextMenuContentTypeFactory::Create(
       source_web_contents_, params));
+
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kEnableSaveAsMenuLabelExperiment) ||
+      base::FieldTrialList::FindFullName("SaveAsMenuText") == "download") {
+    save_as_text_experiement_enabled_ = true;
+  }
 }
 
 RenderViewContextMenu::~RenderViewContextMenu() {
@@ -591,7 +603,7 @@ RenderViewContextMenu::~RenderViewContextMenu() {
 
 // Menu construction functions -------------------------------------------------
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 // static
 bool RenderViewContextMenu::ExtensionContextAndPatternMatch(
     const content::ContextMenuParams& params,
@@ -751,7 +763,7 @@ void RenderViewContextMenu::AppendCurrentExtensionItems() {
   extension_items_.AppendExtensionItems(key, PrintableSelectionText(), &index,
                                         false /* is_action_menu */);
 }
-#endif  // defined(ENABLE_EXTENSIONS)
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
 void RenderViewContextMenu::InitMenu() {
   RenderViewContextMenuBase::InitMenu();
@@ -862,6 +874,13 @@ void RenderViewContextMenu::InitMenu() {
           ContextMenuContentType::ITEM_GROUP_PASSWORD)) {
     AppendPasswordItems();
   }
+
+  if (!content_type_->SupportsGroup(
+    ContextMenuContentType::ITEM_GROUP_EDITABLE)) {
+    ::vivaldi::VivaldiAddFullscreenItems(
+        menu_model_, source_web_contents_, params_);
+  }
+
 }
 
 Profile* RenderViewContextMenu::GetProfile() {
@@ -929,7 +948,7 @@ void RenderViewContextMenu::HandleAuthorizeAllPlugins() {
 #endif
 
 void RenderViewContextMenu::AppendPrintPreviewItems() {
-#if defined(ENABLE_PRINT_PREVIEW)
+#if BUILDFLAG(ENABLE_PRINT_PREVIEW)
   if (!print_preview_menu_observer_.get()) {
     print_preview_menu_observer_.reset(
         new PrintPreviewContextMenuObserver(source_web_contents_));
@@ -949,7 +968,7 @@ void RenderViewContextMenu::AppendDeveloperItems() {
   // devtools build.
   bool show_developer_items = !IsDevToolsURL(params_.page_url);
 
-#if defined(DEBUG_DEVTOOLS)
+#if BUILDFLAG(DEBUG_DEVTOOLS)
   show_developer_items = true;
 #endif
 
@@ -970,6 +989,8 @@ void RenderViewContextMenu::AppendDeveloperItems() {
   }
   menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_INSPECTELEMENT,
                                   IDS_CONTENT_CONTEXT_INSPECTELEMENT);
+
+  ::vivaldi::VivaldiAddDeveloperItems(menu_model_, params_);
 }
 
 void RenderViewContextMenu::AppendDevtoolsForUnpackedExtensions() {
@@ -1079,8 +1100,13 @@ void RenderViewContextMenu::AppendLinkItems() {
     }
 #endif  // !defined(OS_CHROMEOS)
     menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
-    menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_SAVELINKAS,
-                                    IDS_CONTENT_CONTEXT_SAVELINKAS);
+    if (save_as_text_experiement_enabled_) {
+      menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_SAVELINKAS,
+                                      IDS_CONTENT_CONTEXT_DOWNLOADLINK);
+    } else {
+      menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_SAVELINKAS,
+                                      IDS_CONTENT_CONTEXT_SAVELINKAS);
+    }
   }
 
   menu_model_.AddItemWithStringId(
@@ -1109,9 +1135,10 @@ void RenderViewContextMenu::AppendOpenWithLinkItems() {
 
 void RenderViewContextMenu::AppendImageItems() {
   std::map<std::string, std::string>::const_iterator it =
-      params_.properties.find(data_reduction_proxy::chrome_proxy_header());
+      params_.properties.find(
+          data_reduction_proxy::chrome_proxy_content_transform_header());
   if (it != params_.properties.end() && it->second ==
-      data_reduction_proxy::chrome_proxy_lo_fi_directive()) {
+      data_reduction_proxy::empty_image_directive()) {
     menu_model_.AddItemWithStringId(
         IDC_CONTENT_CONTEXT_LOAD_ORIGINAL_IMAGE,
         IDS_CONTENT_CONTEXT_LOAD_ORIGINAL_IMAGE);
@@ -1127,8 +1154,13 @@ void RenderViewContextMenu::AppendImageItems() {
     menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_OPENIMAGENEWTAB,
                                     IDS_CONTENT_CONTEXT_OPENIMAGENEWTAB);
   }
-  menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_SAVEIMAGEAS,
-                                  IDS_CONTENT_CONTEXT_SAVEIMAGEAS);
+  if (save_as_text_experiement_enabled_) {
+    menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_SAVEIMAGEAS,
+                                    IDS_CONTENT_CONTEXT_DOWNLOADIMAGE);
+  } else {
+    menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_SAVEIMAGEAS,
+                                    IDS_CONTENT_CONTEXT_SAVEIMAGEAS);
+  }
   menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_COPYIMAGE,
                                   IDS_CONTENT_CONTEXT_COPYIMAGE);
   menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_COPYIMAGELOCATION,
@@ -1161,16 +1193,26 @@ void RenderViewContextMenu::AppendAudioItems() {
   menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
   menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_OPENAVNEWTAB,
                                   IDS_CONTENT_CONTEXT_OPENAUDIONEWTAB);
-  menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_SAVEAVAS,
-                                  IDS_CONTENT_CONTEXT_SAVEAUDIOAS);
+  if (save_as_text_experiement_enabled_) {
+    menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_SAVEAVAS,
+                                    IDS_CONTENT_CONTEXT_DOWNLOADAUDIO);
+  } else {
+    menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_SAVEAVAS,
+                                    IDS_CONTENT_CONTEXT_SAVEAUDIOAS);
+  }
   menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_COPYAVLOCATION,
                                   IDS_CONTENT_CONTEXT_COPYAUDIOLOCATION);
   AppendMediaRouterItem();
 }
 
 void RenderViewContextMenu::AppendCanvasItems() {
-  menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_SAVEIMAGEAS,
-                                  IDS_CONTENT_CONTEXT_SAVEIMAGEAS);
+  if (save_as_text_experiement_enabled_) {
+    menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_SAVEIMAGEAS,
+                                    IDS_CONTENT_CONTEXT_DOWNLOADIMAGE);
+  } else {
+    menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_SAVEIMAGEAS,
+                                    IDS_CONTENT_CONTEXT_SAVEIMAGEAS);
+  }
   menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_COPYIMAGE,
                                   IDS_CONTENT_CONTEXT_COPYIMAGE);
 }
@@ -1180,8 +1222,13 @@ void RenderViewContextMenu::AppendVideoItems() {
   menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
   menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_OPENAVNEWTAB,
                                   IDS_CONTENT_CONTEXT_OPENVIDEONEWTAB);
-  menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_SAVEAVAS,
-                                  IDS_CONTENT_CONTEXT_SAVEVIDEOAS);
+  if (save_as_text_experiement_enabled_) {
+    menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_SAVEAVAS,
+                                    IDS_CONTENT_CONTEXT_DOWNLOADVIDEO);
+  } else {
+    menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_SAVEAVAS,
+                                    IDS_CONTENT_CONTEXT_SAVEVIDEOAS);
+  }
   menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_COPYAVLOCATION,
                                   IDS_CONTENT_CONTEXT_COPYVIDEOLOCATION);
   AppendMediaRouterItem();
@@ -1219,8 +1266,13 @@ void RenderViewContextMenu::AppendPageItems() {
   menu_model_.AddItemWithStringId(IDC_FORWARD, IDS_CONTENT_CONTEXT_FORWARD);
   menu_model_.AddItemWithStringId(IDC_RELOAD, IDS_CONTENT_CONTEXT_RELOAD);
   menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
-  menu_model_.AddItemWithStringId(IDC_SAVE_PAGE,
-                                  IDS_CONTENT_CONTEXT_SAVEPAGEAS);
+  if (save_as_text_experiement_enabled_) {
+    menu_model_.AddItemWithStringId(IDC_SAVE_PAGE,
+                                    IDS_CONTENT_CONTEXT_DOWNLOADPAGE);
+  } else {
+    menu_model_.AddItemWithStringId(IDC_SAVE_PAGE,
+                                    IDS_CONTENT_CONTEXT_SAVEPAGEAS);
+  }
   menu_model_.AddItemWithStringId(IDC_PRINT, IDS_CONTENT_CONTEXT_PRINT);
   AppendMediaRouterItem();
 
@@ -1240,6 +1292,7 @@ void RenderViewContextMenu::AppendPageItems() {
         l10n_util::GetStringFUTF16(IDS_CONTENT_CONTEXT_TRANSLATE, language));
     AddGoogleIconToLastMenuItem(&menu_model_);
   }
+  ::vivaldi::VivaldiAddPageItems(menu_model_, params_);
 }
 
 void RenderViewContextMenu::AppendExitFullscreenItem() {
@@ -1264,6 +1317,7 @@ void RenderViewContextMenu::AppendCopyItem() {
     menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
   menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_COPY,
                                   IDS_CONTENT_CONTEXT_COPY);
+  ::vivaldi::VivaldiAddCopyItems(menu_model_, source_web_contents_, params_);
 }
 
 void RenderViewContextMenu::AppendPrintItem() {
@@ -1388,6 +1442,7 @@ void RenderViewContextMenu::AppendEditableItems() {
                                   IDS_CONTENT_CONTEXT_SELECTALL);
 
   menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
+  ::vivaldi::VivaldiAddCopyItems(menu_model_, source_web_contents_, params_);
   AppendInsertNoteSubMenu();
   menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
 
@@ -1610,7 +1665,8 @@ bool RenderViewContextMenu::IsCommandIdEnabled(int id) const {
       return IsSavePageEnabled();
 
     case IDC_CONTENT_CONTEXT_RELOADFRAME:
-      return params_.frame_url.is_valid();
+      return params_.frame_url.is_valid() &&
+             params_.frame_url.GetOrigin() != chrome::kChromeUIPrintURL;
 
     case IDC_CONTENT_CONTEXT_UNDO:
       return !!(params_.edit_flags & WebContextMenuData::CanUndo);
@@ -1942,8 +1998,10 @@ void RenderViewContextMenu::ExecuteCommand(int id, int event_flags) {
       break;
 
     default:
-      if (::vivaldi::VivaldiExecuteCommand(this, params_, source_web_contents_, id,
-            base::Bind(&RenderViewContextMenu::OpenURL, base::Unretained(this))))
+      if (::vivaldi::VivaldiExecuteCommand(
+            this, params_, source_web_contents_, event_flags, id,
+            base::Bind(&RenderViewContextMenu::OpenURL,
+                base::Unretained(this))))
         break;
       NOTREACHED();
       break;
@@ -2101,7 +2159,7 @@ bool RenderViewContextMenu::IsSaveAsEnabled() const {
   bool can_save =
       (params_.media_flags & WebContextMenuData::MediaCanSave) &&
       url.is_valid() && ProfileIOData::IsHandledProtocol(url.scheme());
-#if defined(ENABLE_PRINT_PREVIEW)
+#if BUILDFLAG(ENABLE_PRINT_PREVIEW)
       // Do not save the preview PDF on the print preview page.
   can_save = can_save &&
       !(printing::PrintPreviewDialogController::IsPrintPreviewURL(url));
@@ -2424,7 +2482,7 @@ void RenderViewContextMenu::ExecRestartPackagedApp() {
 }
 
 void RenderViewContextMenu::ExecPrint() {
-#if defined(ENABLE_PRINTING)
+#if BUILDFLAG(ENABLE_PRINTING)
   if (params_.media_type != WebContextMenuData::MediaTypeNone) {
     RenderFrameHost* render_frame_host = GetRenderFrameHost();
     if (render_frame_host) {
@@ -2438,7 +2496,7 @@ void RenderViewContextMenu::ExecPrint() {
       source_web_contents_,
       GetPrefs(browser_context_)->GetBoolean(prefs::kPrintPreviewDisabled),
       !params_.selection_text.empty());
-#endif  // defined(ENABLE_PRINTING)
+#endif  // BUILDFLAG(ENABLE_PRINTING)
 }
 
 void RenderViewContextMenu::ExecRouteMedia() {

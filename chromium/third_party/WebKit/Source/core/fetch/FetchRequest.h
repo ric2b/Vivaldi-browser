@@ -49,6 +49,10 @@ class CORE_EXPORT FetchRequest {
     RestrictToSameOrigin,
     NoOriginRestriction
   };
+  enum PlaceholderImageRequestType {
+    DisallowPlaceholder = 0,  // The requested image must not be a placeholder.
+    AllowPlaceholder,         // The image is allowed to be a placeholder.
+  };
 
   struct ResourceWidth {
     DISALLOW_NEW();
@@ -121,7 +125,22 @@ class CORE_EXPORT FetchRequest {
     m_options.parserDisposition = parserDisposition;
   }
 
+  void setCacheAwareLoadingEnabled(
+      CacheAwareLoadingEnabled cacheAwareLoadingEnabled) {
+    m_options.cacheAwareLoadingEnabled = cacheAwareLoadingEnabled;
+  }
+
   void makeSynchronous();
+
+  PlaceholderImageRequestType placeholderImageRequestType() const {
+    return m_placeholderImageRequestType;
+  }
+
+  // Configures the request to load an image placeholder if the request is
+  // eligible (e.g. the url's protocol is HTTP, etc.). If this request is
+  // non-eligible, this method doesn't modify the ResourceRequest. Calling this
+  // method sets m_placeholderImageRequestType to the appropriate value.
+  void setAllowImagePlaceholder();
 
  private:
   ResourceRequest m_resourceRequest;
@@ -134,6 +153,7 @@ class CORE_EXPORT FetchRequest {
   OriginRestriction m_originRestriction;
   ResourceWidth m_resourceWidth;
   ClientHintsPreferences m_clientHintPreferences;
+  PlaceholderImageRequestType m_placeholderImageRequestType;
 };
 
 }  // namespace blink

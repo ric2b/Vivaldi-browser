@@ -328,7 +328,6 @@ bool AXLayoutObject::isEditable() const {
   if (getLayoutObject() && getLayoutObject()->isTextControl())
     return true;
 
-  m_layoutObject->document().updateStyleAndLayoutTree();
   if (getNode() && hasEditableStyle(*getNode()))
     return true;
 
@@ -347,7 +346,6 @@ bool AXLayoutObject::isEditable() const {
 // Requires layoutObject to be present because it relies on style
 // user-modify. Don't move this logic to AXNodeObject.
 bool AXLayoutObject::isRichlyEditable() const {
-  m_layoutObject->document().updateStyleAndLayoutTree();
   if (getNode() && hasRichlyEditableStyle(*getNode()))
     return true;
 
@@ -381,7 +379,7 @@ bool AXLayoutObject::isLoaded() const {
 bool AXLayoutObject::isOffScreen() const {
   ASSERT(m_layoutObject);
   IntRect contentRect =
-      pixelSnappedIntRect(m_layoutObject->absoluteClippedOverflowRect());
+      pixelSnappedIntRect(m_layoutObject->absoluteVisualRect());
   FrameView* view = m_layoutObject->frame()->view();
   IntRect viewRect = view->visibleContentRect();
   viewRect.intersect(contentRect);
@@ -500,6 +498,9 @@ bool AXLayoutObject::computeAccessibilityIsIgnored(
   if (decision == IncludeObject)
     return false;
   if (decision == IgnoreObject)
+    return true;
+
+  if (m_layoutObject->isAnonymousBlock())
     return true;
 
   // If this element is within a parent that cannot have children, it should not
@@ -696,52 +697,8 @@ bool AXLayoutObject::computeAccessibilityIsIgnored(
     return true;
   }
 
-  // ignore images seemingly used as spacers
-  if (isImage()) {
-    // If the image can take focus, it should not be ignored, lest the user not
-    // be able to interact with something important.
-    if (canSetFocusAttribute())
-      return false;
-
-    if (node && node->isElementNode()) {
-      Element* elt = toElement(node);
-      const AtomicString& alt = elt->getAttribute(altAttr);
-      // don't ignore an image that has an alt tag
-      if (!alt.getString().containsOnlyWhitespace())
-        return false;
-      // informal standard is to ignore images with zero-length alt strings
-      if (!alt.isNull()) {
-        if (ignoredReasons)
-          ignoredReasons->append(IgnoredReason(AXEmptyAlt));
-        return true;
-      }
-    }
-
-    if (isNativeImage() && m_layoutObject->isImage()) {
-      // check for one-dimensional image
-      LayoutImage* image = toLayoutImage(m_layoutObject);
-      if (image->size().height() <= 1 || image->size().width() <= 1) {
-        if (ignoredReasons)
-          ignoredReasons->append(IgnoredReason(AXProbablyPresentational));
-        return true;
-      }
-
-      // Check whether laid out image was stretched from one-dimensional file
-      // image.
-      if (image->cachedImage()) {
-        LayoutSize imageSize = image->cachedImage()->imageSize(
-            LayoutObject::shouldRespectImageOrientation(m_layoutObject),
-            image->view()->zoomFactor());
-        if (imageSize.height() <= 1 || imageSize.width() <= 1) {
-          if (ignoredReasons)
-            ignoredReasons->append(IgnoredReason(AXProbablyPresentational));
-          return true;
-        }
-        return false;
-      }
-    }
+  if (isImage())
     return false;
-  }
 
   if (isCanvas()) {
     if (canvasHasFallbackContent())
@@ -775,9 +732,6 @@ bool AXLayoutObject::computeAccessibilityIsIgnored(
   // Don't ignore generic focusable elements like <div tabindex=0>
   // unless they're completely empty, with no children.
   if (isGenericFocusableElement() && node->hasChildren())
-    return false;
-
-  if (!ariaAccessibilityDescription().isEmpty())
     return false;
 
   if (isScrollableContainer())
@@ -1792,8 +1746,8 @@ AXObject::AXRange AXLayoutObject::textControlSelection() const {
     return AXRange();
 
   VisibleSelection selection = layout->frame()->selection().selection();
-  HTMLTextFormControlElement* textControl =
-      toLayoutTextControl(layout)->textFormControlElement();
+  TextControlElement* textControl =
+      toLayoutTextControl(layout)->textControlElement();
   ASSERT(textControl);
   int start = textControl->selectionStart();
   int end = textControl->selectionEnd();
@@ -1805,8 +1759,8 @@ AXObject::AXRange AXLayoutObject::textControlSelection() const {
 int AXLayoutObject::indexForVisiblePosition(
     const VisiblePosition& position) const {
   if (getLayoutObject() && getLayoutObject()->isTextControl()) {
-    HTMLTextFormControlElement* textControl =
-        toLayoutTextControl(getLayoutObject())->textFormControlElement();
+    TextControlElement* textControl =
+        toLayoutTextControl(getLayoutObject())->textControlElement();
     return textControl->indexForVisiblePosition(position);
   }
 
@@ -1916,9 +1870,9 @@ void AXLayoutObject::setSelection(const AXRange& selection) {
   // The selection offsets are offsets into the accessible value.
   if (anchorObject == focusObject &&
       anchorObject->getLayoutObject()->isTextControl()) {
-    HTMLTextFormControlElement* textControl =
+    TextControlElement* textControl =
         toLayoutTextControl(anchorObject->getLayoutObject())
-            ->textFormControlElement();
+            ->textControlElement();
     if (selection.anchorOffset <= selection.focusOffset) {
       textControl->setSelectionRange(selection.anchorOffset,
                                      selection.focusOffset,
@@ -1951,7 +1905,10 @@ void AXLayoutObject::setSelection(const AXRange& selection) {
     return;
 
   frame->selection().setSelection(
-      createVisibleSelection(anchorVisiblePosition, focusVisiblePosition));
+      SelectionInDOMTree::Builder()
+          .collapse(anchorVisiblePosition.toPositionWithAffinity())
+          .extend(focusVisiblePosition.deepEquivalent())
+          .build());
 }
 
 bool AXLayoutObject::isValidSelectionBound(const AXObject* boundObject) const {
@@ -2073,7 +2030,7 @@ VisiblePosition AXLayoutObject::visiblePositionForIndex(int index) const {
 
   if (m_layoutObject->isTextControl())
     return toLayoutTextControl(m_layoutObject)
-        ->textFormControlElement()
+        ->textControlElement()
         ->visiblePositionForIndex(index);
 
   Node* node = m_layoutObject->node();

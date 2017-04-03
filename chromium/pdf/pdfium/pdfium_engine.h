@@ -108,18 +108,19 @@ class PDFiumEngine : public PDFEngine,
 #if defined(PDF_ENABLE_XFA)
   void SetScrollPosition(const pp::Point& position) override;
 #endif
-  bool IsProgressiveLoad() override;
   std::string GetMetadata(const std::string& key) override;
 
   // DocumentLoader::Client implementation.
   pp::Instance* GetPluginInstance() override;
-  pp::URLLoader CreateURLLoader() override;
-  void OnPartialDocumentLoaded() override;
+  std::unique_ptr<URLLoaderWrapper> CreateURLLoader() override;
   void OnPendingRequestComplete() override;
   void OnNewDataAvailable() override;
   void OnDocumentComplete() override;
+  void OnDocumentCanceled() override;
+  void CancelBrowserDownload() override;
 
   void UnsupportedFeature(int type);
+  void FontSubstituted();
 
   std::string current_find_text() const { return current_find_text_; }
 
@@ -190,11 +191,11 @@ class PDFiumEngine : public PDFEngine,
   friend class SelectionChangeInvalidator;
 
   struct FileAvail : public FX_FILEAVAIL {
-    DocumentLoader* loader;
+    PDFiumEngine* engine;
   };
 
   struct DownloadHints : public FX_DOWNLOADHINTS {
-    DocumentLoader* loader;
+    PDFiumEngine* engine;
   };
 
   // PDFium interface to get block of data.
@@ -438,6 +439,8 @@ class PDFiumEngine : public PDFEngine,
   // Setting selection status of document.
   void SetSelecting(bool selecting);
 
+  bool PageIndexInBounds(int index) const;
+
   // FPDF_FORMFILLINFO callbacks.
   static void Form_Invalidate(FPDF_FORMFILLINFO* param,
                               FPDF_PAGE page,
@@ -599,7 +602,7 @@ class PDFiumEngine : public PDFEngine,
   double current_zoom_;
   unsigned int current_rotation_;
 
-  DocumentLoader doc_loader_;  // Main document's loader.
+  std::unique_ptr<DocumentLoader> doc_loader_;  // Main document's loader.
   std::string url_;
   std::string headers_;
   pp::CompletionCallbackFactory<PDFiumEngine> find_factory_;
@@ -617,10 +620,8 @@ class PDFiumEngine : public PDFEngine,
   // on the page.
   FPDF_FORMHANDLE form_;
 
-  // The page(s) of the document. Store a vector of pointers so that when the
-  // vector is resized we don't close the pages that are used in pending
-  // paints.
-  std::vector<PDFiumPage*> pages_;
+  // The page(s) of the document.
+  std::vector<std::unique_ptr<PDFiumPage>> pages_;
 
   // The indexes of the pages currently visible.
   std::vector<int> visible_pages_;
@@ -730,6 +731,11 @@ class PDFiumEngine : public PDFEngine,
   // to false after the user finishes getting their password.
   bool getting_password_;
 
+  // While true, the document try to be opened and parsed after download each
+  // part. Else the document will be opened and parsed only on finish of
+  // downloading.
+  bool process_when_pending_request_complete_ = true;
+
   DISALLOW_COPY_AND_ASSIGN(PDFiumEngine);
 };
 
@@ -742,6 +748,21 @@ class ScopedUnsupportedFeature {
 
  private:
   PDFiumEngine* const old_engine_;
+
+  DISALLOW_COPY_AND_ASSIGN(ScopedUnsupportedFeature);
+};
+
+// Create a local variable of this when calling PDFium functions which can call
+// our global callback when a substitute font is mapped.
+class ScopedSubstFont {
+ public:
+  explicit ScopedSubstFont(PDFiumEngine* engine);
+  ~ScopedSubstFont();
+
+ private:
+  PDFiumEngine* const old_engine_;
+
+  DISALLOW_COPY_AND_ASSIGN(ScopedSubstFont);
 };
 
 class PDFiumEngineExports : public PDFEngineExports {

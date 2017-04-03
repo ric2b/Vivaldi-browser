@@ -7,11 +7,9 @@ package org.chromium.content.browser.webcontents;
 import org.chromium.base.ObserverList;
 import org.chromium.base.ObserverList.RewindableIterator;
 import org.chromium.base.ThreadUtils;
-import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.content_public.browser.WebContentsObserver;
-import org.chromium.content_public.common.MediaMetadata;
 
 /**
  * Serves as a compound observer proxy for dispatching WebContentsObserver callbacks,
@@ -59,14 +57,6 @@ class WebContentsObserverProxy extends WebContentsObserver {
      */
     boolean hasObservers() {
         return !mObservers.isEmpty();
-    }
-
-    /**
-     * @return The list of proxied observers.
-     */
-    @VisibleForTesting
-    public ObserverList.RewindableIterator<WebContentsObserver> getObserversForTesting() {
-        return mObservers.rewindableIterator();
     }
 
     @Override
@@ -135,6 +125,22 @@ class WebContentsObserverProxy extends WebContentsObserver {
     public void didFirstVisuallyNonEmptyPaint() {
         for (mObserversIterator.rewind(); mObserversIterator.hasNext();) {
             mObserversIterator.next().didFirstVisuallyNonEmptyPaint();
+        }
+    }
+
+    @Override
+    @CalledByNative
+    public void wasShown() {
+        for (mObserversIterator.rewind(); mObserversIterator.hasNext();) {
+            mObserversIterator.next().wasShown();
+        }
+    }
+
+    @Override
+    @CalledByNative
+    public void wasHidden() {
+        for (mObserversIterator.rewind(); mObserversIterator.hasNext();) {
+            mObserversIterator.next().wasHidden();
         }
     }
 
@@ -227,16 +233,6 @@ class WebContentsObserverProxy extends WebContentsObserver {
     public void didStartNavigationToPendingEntry(String url) {
         for (mObserversIterator.rewind(); mObserversIterator.hasNext();) {
             mObserversIterator.next().didStartNavigationToPendingEntry(url);
-        }
-    }
-
-    @Override
-    @CalledByNative
-    public void mediaSessionStateChanged(
-            boolean isControllable, boolean isSuspended, MediaMetadata metadata) {
-        for (mObserversIterator.rewind(); mObserversIterator.hasNext();) {
-            mObserversIterator.next().mediaSessionStateChanged(
-                    isControllable, isSuspended, metadata);
         }
     }
 

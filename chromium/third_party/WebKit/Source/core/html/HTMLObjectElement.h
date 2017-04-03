@@ -55,6 +55,7 @@ class CORE_EXPORT HTMLObjectElement final : public HTMLPlugInElement,
 
   bool hasFallbackContent() const override;
   bool useFallbackContent() const override;
+  bool canRenderFallbackContent() const override { return true; }
   void renderFallbackContent() override;
 
   bool isFormControlElement() const override { return false; }
@@ -72,6 +73,8 @@ class CORE_EXPORT HTMLObjectElement final : public HTMLPlugInElement,
   bool canContainRangeEndPoint() const override { return useFallbackContent(); }
 
   bool isExposed() const;
+
+  bool willUseFallbackContentAtLayout() const;
 
  private:
   HTMLObjectElement(Document&, HTMLFormElement*, bool createdByParser);
@@ -110,7 +113,7 @@ class CORE_EXPORT HTMLObjectElement final : public HTMLPlugInElement,
                            String& url,
                            String& serviceType);
 
-  bool hasValidClassId();
+  bool hasValidClassId() const;
 
   void reloadPluginOnAttributeChange(const QualifiedName&);
 

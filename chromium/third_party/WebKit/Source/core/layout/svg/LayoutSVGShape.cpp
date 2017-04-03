@@ -45,6 +45,19 @@
 
 namespace blink {
 
+bool LayoutSVGShape::adjustVisualRectForRasterEffects(
+    LayoutRect& visualRect) const {
+  // Account for raster expansions due to SVG stroke hairline raster effects.
+  if (!visualRect.isEmpty() && styleRef().svgStyle().hasVisibleStroke()) {
+    LayoutUnit pad(0.5f);
+    if (styleRef().svgStyle().capStyle() != ButtCap)
+      pad += 0.5f;
+    visualRect.inflate(pad);
+    return true;
+  }
+  return false;
+}
+
 LayoutSVGShape::LayoutSVGShape(SVGGeometryElement* node)
     : LayoutSVGModelObject(node),
       // Default is false, the cached rects are empty from the beginning.
@@ -59,7 +72,7 @@ LayoutSVGShape::~LayoutSVGShape() {}
 
 void LayoutSVGShape::createPath() {
   if (!m_path)
-    m_path = wrapUnique(new Path());
+    m_path = makeUnique<Path>();
   *m_path = toSVGGeometryElement(element())->asPath();
   if (m_rareData.get())
     m_rareData->m_cachedNonScalingStrokePath.clear();
@@ -168,15 +181,17 @@ void LayoutSVGShape::layout() {
 
   bool updateParentBoundaries = false;
   // updateShapeFromElement() also updates the object & stroke bounds - which
-  // feeds into the paint invalidation rect - so we need to call it for both
-  // the shape-update and the bounds-update flag, since .
+  // feeds into the visual rect - so we need to call it for both the
+  // shape-update and the bounds-update flag.
   if (m_needsShapeUpdate || m_needsBoundariesUpdate) {
+    FloatRect oldObjectBoundingBox = objectBoundingBox();
     updateShapeFromElement();
+    if (oldObjectBoundingBox != objectBoundingBox())
+      setShouldDoFullPaintInvalidation();
     m_needsShapeUpdate = false;
 
-    m_paintInvalidationBoundingBox = strokeBoundingBox();
-    SVGLayoutSupport::intersectPaintInvalidationRectWithResources(
-        this, m_paintInvalidationBoundingBox);
+    m_localVisualRect = strokeBoundingBox();
+    SVGLayoutSupport::adjustVisualRectWithResources(this, m_localVisualRect);
     m_needsBoundariesUpdate = false;
 
     updateParentBoundaries = true;
@@ -232,7 +247,7 @@ void LayoutSVGShape::paint(const PaintInfo& paintInfo,
 void LayoutSVGShape::addOutlineRects(Vector<LayoutRect>& rects,
                                      const LayoutPoint&,
                                      IncludeBlockVisualOverflowOrNot) const {
-  rects.append(LayoutRect(paintInvalidationRectInLocalSVGCoordinates()));
+  rects.append(LayoutRect(visualRectInLocalSVGCoordinates()));
 }
 
 bool LayoutSVGShape::nodeAtFloatPoint(HitTestResult& result,
@@ -251,7 +266,7 @@ bool LayoutSVGShape::nodeAtFloatPoint(HitTestResult& result,
                                  result.hitTestRequest(),
                                  style()->pointerEvents());
   if (nodeAtFloatPointInternal(result.hitTestRequest(), localPoint, hitRules)) {
-    const LayoutPoint& localLayoutPoint = roundedLayoutPoint(localPoint);
+    const LayoutPoint& localLayoutPoint = LayoutPoint(localPoint);
     updateHitTestResult(result, localLayoutPoint);
     if (result.addNodeToListBasedTestResult(element(), localLayoutPoint) ==
         StopHitTesting)
@@ -318,7 +333,7 @@ float LayoutSVGShape::strokeWidth() const {
 
 LayoutSVGShapeRareData& LayoutSVGShape::ensureRareData() const {
   if (!m_rareData)
-    m_rareData = wrapUnique(new LayoutSVGShapeRareData());
+    m_rareData = makeUnique<LayoutSVGShapeRareData>();
   return *m_rareData.get();
 }
 

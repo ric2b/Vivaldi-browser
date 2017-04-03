@@ -10,6 +10,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "ui/display/chromeos/test/action_logger.h"
 #include "ui/display/types/display_mode.h"
+#include "ui/display/types/native_display_observer.h"
 
 namespace ui {
 namespace test {
@@ -64,6 +65,10 @@ void TestNativeDisplayDelegate::ForceDPMSOn() {
 
 void TestNativeDisplayDelegate::GetDisplays(
     const GetDisplaysCallback& callback) {
+  // This mimics the behavior of Ozone DRM when new display state arrives.
+  for (NativeDisplayObserver& observer : observers_)
+    observer.OnDisplaySnapshotsInvalidated();
+
   if (run_async_) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE, base::Bind(callback, outputs_));
@@ -147,10 +152,12 @@ bool TestNativeDisplayDelegate::SetColorCorrection(
 }
 
 void TestNativeDisplayDelegate::AddObserver(NativeDisplayObserver* observer) {
+  observers_.AddObserver(observer);
 }
 
 void TestNativeDisplayDelegate::RemoveObserver(
     NativeDisplayObserver* observer) {
+  observers_.RemoveObserver(observer);
 }
 
 display::FakeDisplayController*

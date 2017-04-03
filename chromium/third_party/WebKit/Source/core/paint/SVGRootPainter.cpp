@@ -50,7 +50,7 @@ void SVGRootPainter::paintReplaced(const PaintInfo& paintInfo,
   // An empty viewBox also disables rendering.
   // (http://www.w3.org/TR/SVG/coords.html#ViewBoxAttribute)
   SVGSVGElement* svg = toSVGSVGElement(m_layoutSVGRoot.node());
-  ASSERT(svg);
+  DCHECK(svg);
   if (svg->hasEmptyViewBox())
     return;
 
@@ -74,7 +74,8 @@ void SVGRootPainter::paintReplaced(const PaintInfo& paintInfo,
       !paintContext.applyClipMaskAndFilterIfNecessary())
     return;
 
-  BoxPainter(m_layoutSVGRoot).paint(paintContext.paintInfo(), LayoutPoint());
+  BoxPainter(m_layoutSVGRoot)
+      .paintChildren(paintContext.paintInfo(), LayoutPoint());
 
   PaintTiming& timing =
       PaintTiming::from(m_layoutSVGRoot.node()->document().topDocument());

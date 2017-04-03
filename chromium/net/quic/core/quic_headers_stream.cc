@@ -4,6 +4,8 @@
 
 #include "net/quic/core/quic_headers_stream.h"
 
+#include <algorithm>
+#include <string>
 #include <utility>
 
 #include "base/macros.h"
@@ -123,16 +125,6 @@ class QuicHeadersStream::SpdyFramerVisitor
 
   void OnSynReply(SpdyStreamId stream_id, bool fin) override {
     CloseConnection("SPDY SYN_REPLY frame received.");
-  }
-
-  bool OnControlFrameHeaderData(SpdyStreamId stream_id,
-                                const char* header_data,
-                                size_t len) override {
-    if (!stream_->IsConnected()) {
-      return false;
-    }
-    stream_->OnControlFrameHeaderData(stream_id, header_data, len);
-    return true;
   }
 
   void OnStreamFrameData(SpdyStreamId stream_id,
@@ -314,8 +306,14 @@ class QuicHeadersStream::SpdyFramerVisitor
     }
   }
 
+  void set_max_uncompressed_header_bytes(
+      size_t set_max_uncompressed_header_bytes) {
+    header_list_.set_max_uncompressed_header_bytes(
+        set_max_uncompressed_header_bytes);
+  }
+
  private:
-  void CloseConnection(const string& details) {
+  void CloseConnection(const std::string& details) {
     if (stream_->IsConnected()) {
       stream_->CloseConnectionWithDetails(QUIC_INVALID_HEADERS_STREAM_DATA,
                                           details);
@@ -330,7 +328,7 @@ class QuicHeadersStream::SpdyFramerVisitor
 };
 
 QuicHeadersStream::QuicHeadersStream(QuicSpdySession* session)
-    : ReliableQuicStream(kHeadersStreamId, session),
+    : QuicStream(kHeadersStreamId, session),
       spdy_session_(session),
       stream_id_(kInvalidStreamId),
       promised_stream_id_(kInvalidStreamId),
@@ -387,6 +385,25 @@ size_t QuicHeadersStream::WritePushPromise(QuicStreamId original_stream_id,
   return frame.size();
 }
 
+void QuicHeadersStream::WriteDataFrame(
+    QuicStreamId id,
+    StringPiece data,
+    bool fin,
+    QuicAckListenerInterface* ack_notifier_delegate) {
+  SpdyDataIR spdy_data(id, data);
+  spdy_data.set_fin(fin);
+  SpdySerializedFrame frame(spdy_framer_.SerializeFrame(spdy_data));
+  scoped_refptr<ForceHolAckListener> ack_listener;
+  if (ack_notifier_delegate != nullptr) {
+    ack_listener = new ForceHolAckListener(ack_notifier_delegate,
+                                           frame.size() - data.length());
+  }
+  // Use buffered writes so that coherence of framing is preserved
+  // between streams.
+  WriteOrBufferData(StringPiece(frame.data(), frame.size()), false,
+                    ack_listener.get());
+}
+
 QuicConsumedData QuicHeadersStream::WritevStreamData(
     QuicStreamId id,
     QuicIOVector iov,
@@ -399,48 +416,92 @@ QuicConsumedData QuicHeadersStream::WritevStreamData(
   QuicConsumedData result(0, false);
   size_t total_length = iov.total_length;
 
-  // Encapsulate the data into HTTP/2 DATA frames.  The outer loop
-  // handles each element of the source iov, the inner loop handles
-  // the possibility of fragmenting eacho of those into multiple DATA
-  // frames, as the DATA frames have a max size of 16KB.
-  for (int i = 0; i < iov.iov_count; i++) {
-    size_t offset = 0;
-    const struct iovec* src_iov = &iov.iov[i];
-    do {
-      size_t len =
-          std::min(std::min(src_iov->iov_len - offset, max_len), total_length);
-      char* data = static_cast<char*>(src_iov->iov_base) + offset;
-      SpdyDataIR spdy_data(id, StringPiece(data, len));
-      offset += len;
-      // fin handling, set it only it only very last generated HTTP/2
-      // DATA frame.
-      bool last_iov = i == iov.iov_count - 1;
-      bool last_fragment_within_iov = offset >= src_iov->iov_len;
-      bool frame_fin = (last_iov && last_fragment_within_iov) ? fin : false;
-      spdy_data.set_fin(frame_fin);
-      if (frame_fin) {
-        result.fin_consumed = true;
-      }
-      SpdySerializedFrame frame(spdy_framer_.SerializeFrame(spdy_data));
-      DVLOG(1) << "Encapsulating in DATA frame for stream " << id << " len "
-               << len << " fin " << spdy_data.fin() << " remaining "
-               << src_iov->iov_len - offset;
+  if (!FLAGS_quic_bugfix_fhol_writev_fin_only_v2) {
+    // Encapsulate the data into HTTP/2 DATA frames.  The outer loop
+    // handles each element of the source iov, the inner loop handles
+    // the possibility of fragmenting eacho of those into multiple DATA
+    // frames, as the DATA frames have a max size of 16KB.
+    for (int i = 0; i < iov.iov_count; i++) {
+      size_t offset = 0;
+      const struct iovec* src_iov = &iov.iov[i];
+      do {
+        size_t len = std::min(std::min(src_iov->iov_len - offset, max_len),
+                              total_length);
+        char* data = static_cast<char*>(src_iov->iov_base) + offset;
+        SpdyDataIR spdy_data(id, StringPiece(data, len));
+        offset += len;
+        // fin handling, only set it for the final HTTP/2 DATA frame.
+        bool last_iov = i == iov.iov_count - 1;
+        bool last_fragment_within_iov = offset >= src_iov->iov_len;
+        bool frame_fin = (last_iov && last_fragment_within_iov) ? fin : false;
+        spdy_data.set_fin(frame_fin);
+        if (frame_fin) {
+          result.fin_consumed = true;
+        }
+        SpdySerializedFrame frame(spdy_framer_.SerializeFrame(spdy_data));
+        DVLOG(1) << "Encapsulating in DATA frame for stream " << id << " len "
+                 << len << " fin " << spdy_data.fin() << " remaining "
+                 << src_iov->iov_len - offset;
 
-      scoped_refptr<ForceHolAckListener> ack_listener;
-      if (ack_notifier_delegate != nullptr) {
-        ack_listener =
-            new ForceHolAckListener(ack_notifier_delegate, frame.size() - len);
-      }
+        scoped_refptr<ForceHolAckListener> ack_listener;
+        if (ack_notifier_delegate != nullptr) {
+          ack_listener = new ForceHolAckListener(ack_notifier_delegate,
+                                                 frame.size() - len);
+        }
 
-      WriteOrBufferData(StringPiece(frame.data(), frame.size()), false,
-                        ack_listener.get());
-      result.bytes_consumed += len;
-      total_length -= len;
-      if (total_length <= 0) {
-        return result;
-      }
-    } while (offset < src_iov->iov_len);
+        WriteOrBufferData(StringPiece(frame.data(), frame.size()), false,
+                          ack_listener.get());
+        result.bytes_consumed += len;
+        total_length -= len;
+        if (total_length <= 0) {
+          return result;
+        }
+      } while (offset < src_iov->iov_len);
+    }
+  } else {
+    if (total_length == 0 && fin) {
+      WriteDataFrame(id, StringPiece(), true, ack_notifier_delegate);
+      result.fin_consumed = true;
+      return result;
+    }
+
+    // Encapsulate the data into HTTP/2 DATA frames.  The outer loop
+    // handles each element of the source iov, the inner loop handles
+    // the possibility of fragmenting each of those into multiple DATA
+    // frames, as the DATA frames have a max size of 16KB.
+    for (int i = 0; i < iov.iov_count; i++) {
+      size_t src_iov_offset = 0;
+      const struct iovec* src_iov = &iov.iov[i];
+      do {
+        if (queued_data_bytes() > 0) {
+          // Limit the amount of buffering to the minimum needed to
+          // preserve framing.
+          return result;
+        }
+        size_t len = std::min(
+            std::min(src_iov->iov_len - src_iov_offset, max_len), total_length);
+        char* data = static_cast<char*>(src_iov->iov_base) + src_iov_offset;
+        src_iov_offset += len;
+        offset += len;
+        // fin handling, only set it for the final HTTP/2 DATA frame.
+        bool last_iov = i == iov.iov_count - 1;
+        bool last_fragment_within_iov = src_iov_offset >= src_iov->iov_len;
+        bool frame_fin = (last_iov && last_fragment_within_iov) ? fin : false;
+        WriteDataFrame(id, StringPiece(data, len), frame_fin,
+                       ack_notifier_delegate);
+        result.bytes_consumed += len;
+        if (frame_fin) {
+          result.fin_consumed = true;
+        }
+        DCHECK_GE(total_length, len);
+        total_length -= len;
+        if (total_length <= 0) {
+          return result;
+        }
+      } while (src_iov_offset < src_iov->iov_len);
+    }
   }
+
   return result;
 }
 
@@ -463,7 +524,14 @@ void QuicHeadersStream::OnDataAvailable() {
       return;
     }
     sequencer()->MarkConsumed(iov.iov_len);
+    MaybeReleaseSequencerBuffer();
   }
+}
+
+void QuicHeadersStream::set_max_uncompressed_header_bytes(
+    size_t set_max_uncompressed_header_bytes) {
+  spdy_framer_visitor_->set_max_uncompressed_header_bytes(
+      set_max_uncompressed_header_bytes);
 }
 
 void QuicHeadersStream::OnHeaders(SpdyStreamId stream_id,
@@ -497,55 +565,6 @@ void QuicHeadersStream::OnPushPromise(SpdyStreamId stream_id,
   DCHECK_EQ(kInvalidStreamId, promised_stream_id_);
   stream_id_ = stream_id;
   promised_stream_id_ = promised_stream_id;
-}
-
-void QuicHeadersStream::OnControlFrameHeaderData(SpdyStreamId stream_id,
-                                                 const char* header_data,
-                                                 size_t len) {
-  DCHECK_EQ(stream_id_, stream_id);
-  if (len == 0) {
-    DCHECK_NE(0u, stream_id_);
-    DCHECK_NE(0u, frame_len_);
-    if (prev_max_timestamp_ > cur_max_timestamp_) {
-      // prev_max_timestamp_ > cur_max_timestamp_ implies that
-      // headers from lower numbered streams actually came off the
-      // wire after headers for the current stream, hence there was
-      // HOL blocking.
-      QuicTime::Delta delta = prev_max_timestamp_ - cur_max_timestamp_;
-      DVLOG(1) << "stream " << stream_id
-               << ": Net.QuicSession.HeadersHOLBlockedTime "
-               << delta.ToMilliseconds();
-      spdy_session_->OnHeadersHeadOfLineBlocking(delta);
-    }
-    prev_max_timestamp_ = std::max(prev_max_timestamp_, cur_max_timestamp_);
-    cur_max_timestamp_ = QuicTime::Zero();
-    if (promised_stream_id_ == kInvalidStreamId) {
-      spdy_session_->OnStreamHeadersComplete(stream_id_, fin_, frame_len_);
-    } else {
-      spdy_session_->OnPromiseHeadersComplete(stream_id_, promised_stream_id_,
-                                              frame_len_);
-    }
-    if (uncompressed_frame_len_ != 0) {
-      int compression_pct = 100 - (100 * frame_len_) / uncompressed_frame_len_;
-      DVLOG(1) << "Net.QuicHpackDecompressionPercentage: " << compression_pct;
-      UMA_HISTOGRAM_PERCENTAGE("Net.QuicHpackDecompressionPercentage",
-                               compression_pct);
-    }
-    // Reset state for the next frame.
-    promised_stream_id_ = kInvalidStreamId;
-    stream_id_ = kInvalidStreamId;
-    fin_ = false;
-    frame_len_ = 0;
-    uncompressed_frame_len_ = 0;
-  } else {
-    uncompressed_frame_len_ += len;
-    if (promised_stream_id_ == kInvalidStreamId) {
-      spdy_session_->OnStreamHeaders(stream_id_, StringPiece(header_data, len));
-    } else {
-      spdy_session_->OnPromiseHeaders(stream_id_,
-                                      StringPiece(header_data, len));
-    }
-  }
 }
 
 void QuicHeadersStream::OnHeaderList(const QuicHeaderList& header_list) {
@@ -612,6 +631,13 @@ void QuicHeadersStream::UpdateHeaderEncoderTableSize(uint32_t value) {
 
 void QuicHeadersStream::UpdateEnableServerPush(bool value) {
   spdy_session_->set_server_push_enabled(value);
+}
+
+void QuicHeadersStream::MaybeReleaseSequencerBuffer() {
+  if (FLAGS_quic_headers_stream_release_sequencer_buffer &&
+      spdy_session_->ShouldReleaseHeadersStreamSequencerBuffer()) {
+    sequencer()->ReleaseBufferIfEmpty();
+  }
 }
 
 bool QuicHeadersStream::OnDataFrameHeader(QuicStreamId stream_id,

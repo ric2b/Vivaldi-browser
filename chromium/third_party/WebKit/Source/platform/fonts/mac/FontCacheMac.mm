@@ -32,13 +32,13 @@
 #import <AppKit/AppKit.h>
 #include "platform/LayoutTestSupport.h"
 #include "platform/RuntimeEnabledFeatures.h"
+#include "platform/WebTaskRunner.h"
 #include "platform/fonts/FontDescription.h"
 #include "platform/fonts/FontFaceCreationParams.h"
 #include "platform/fonts/FontPlatformData.h"
 #include "platform/fonts/SimpleFontData.h"
 #include "platform/fonts/mac/FontFamilyMatcherMac.h"
 #include "public/platform/Platform.h"
-#include "public/platform/WebTaskRunner.h"
 #include "public/platform/WebTraceLocation.h"
 #include "wtf/Functional.h"
 #include "wtf/PtrUtil.h"
@@ -60,6 +60,13 @@
 namespace blink {
 
 const char* kColorEmojiFontMac = "Apple Color Emoji";
+
+// static
+const AtomicString& FontCache::legacySystemFontFamily() {
+  DEFINE_STATIC_LOCAL(AtomicString, legacySystemFontFamily,
+                      ("BlinkMacSystemFont"));
+  return legacySystemFontFamily;
+}
 
 static void invalidateFontCache() {
   if (!isMainThread()) {

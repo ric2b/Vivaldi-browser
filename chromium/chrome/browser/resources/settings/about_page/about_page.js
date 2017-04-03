@@ -13,7 +13,10 @@ Polymer({
 
   properties: {
     /** @private {?UpdateStatusChangedEvent} */
-    currentUpdateStatusEvent_: Object,
+    currentUpdateStatusEvent_: {
+      type: Object,
+      value: {message: '', progress: 0, status: UpdateStatus.DISABLED},
+    },
 
 <if expr="chromeos">
     /** @private */
@@ -170,7 +173,15 @@ Polymer({
               progressPercent);
         }
 </if>
-        return this.i18n('aboutUpgradeUpdating', progressPercent);
+        if (this.currentUpdateStatusEvent_.progress > 0) {
+          // NOTE(dbeam): some platforms (i.e. Mac) always send 0% while
+          // updating (they don't support incremental upgrade progress). Though
+          // it's certainly quite possible to validly end up here with 0% on
+          // platforms that support incremental progress, nobody really likes
+          // seeing that they're 0% done with something.
+          return this.i18n('aboutUpgradeUpdatingPercent', progressPercent);
+        }
+        return this.i18n('aboutUpgradeUpdating');
       default:
         var message = this.currentUpdateStatusEvent_.message;
         return message ?

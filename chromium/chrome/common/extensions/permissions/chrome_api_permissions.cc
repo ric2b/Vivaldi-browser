@@ -18,8 +18,6 @@ namespace extensions {
 
 namespace {
 
-const char kWindowsPermission[] = "windows";
-
 template <typename T>
 APIPermission* CreateAPIPermission(const APIPermissionInfo* permission) {
   return new T(permission);
@@ -138,8 +136,6 @@ ChromeAPIPermissions::GetAllPermissions() const {
       {APIPermission::kMediaPlayerPrivate, "mediaPlayerPrivate",
        APIPermissionInfo::kFlagCannotBeOptional},
       {APIPermission::kMediaRouterPrivate, "mediaRouterPrivate",
-       APIPermissionInfo::kFlagCannotBeOptional},
-      {APIPermission::kMetricsPrivate, "metricsPrivate",
        APIPermissionInfo::kFlagCannotBeOptional},
       {APIPermission::kMusicManagerPrivate, "musicManagerPrivate",
        APIPermissionInfo::kFlagCannotBeOptional},
@@ -262,14 +258,6 @@ ChromeAPIPermissions::GetAllPermissions() const {
     permissions.push_back(
         base::WrapUnique(new APIPermissionInfo(permissions_to_register[i])));
   return permissions;
-}
-
-std::vector<PermissionsProvider::AliasInfo>
-ChromeAPIPermissions::GetAllAliases() const {
-  // Register aliases.
-  std::vector<PermissionsProvider::AliasInfo> aliases;
-  aliases.push_back(PermissionsProvider::AliasInfo("tabs", kWindowsPermission));
-  return aliases;
 }
 
 }  // namespace extensions

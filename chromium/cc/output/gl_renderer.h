@@ -24,8 +24,6 @@
 #include "ui/events/latency_info.h"
 #include "ui/gfx/geometry/quad_f.h"
 
-class SkBitmap;
-
 namespace gpu {
 namespace gles2 {
 class GLES2Interface;
@@ -35,7 +33,6 @@ class GLES2Interface;
 namespace cc {
 class GLRendererShaderTest;
 class OutputSurface;
-class PictureDrawQuad;
 class Resource;
 class ResourcePool;
 class ScopedResource;
@@ -44,7 +41,6 @@ class TextureDrawQuad;
 class TextureMailboxDeleter;
 class StaticGeometryBinding;
 class DynamicGeometryBinding;
-class ScopedEnsureFramebufferAllocation;
 struct DrawRenderPassDrawQuadParams;
 
 // Class that handles drawing of composited render layers using GL.
@@ -171,6 +167,7 @@ class CC_EXPORT GLRenderer : public DirectRenderer {
       bool use_aa,
       gfx::Rect* unclipped_rect);
   std::unique_ptr<ScopedResource> GetBackdropTexture(
+      DrawingFrame* frame,
       const gfx::Rect& bounding_rect);
 
   static bool ShouldApplyBackgroundFilters(const RenderPassDrawQuad* quad);
@@ -218,9 +215,6 @@ class CC_EXPORT GLRenderer : public DirectRenderer {
   void DrawYUVVideoQuad(const DrawingFrame* frame,
                         const YUVVideoDrawQuad* quad,
                         const gfx::QuadF* clip_region);
-  void DrawPictureQuad(const DrawingFrame* frame,
-                       const PictureDrawQuad* quad,
-                       const gfx::QuadF* clip_region);
 
   void SetShaderOpacity(float opacity, int alpha_location);
   void SetShaderQuadF(const gfx::QuadF& quad, int quad_location);

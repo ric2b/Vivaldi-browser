@@ -5,33 +5,80 @@
 #include "components/offline_pages/background/request_queue.h"
 
 #include <memory>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/test/test_simple_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "components/offline_pages/background/device_conditions.h"
+#include "components/offline_pages/background/offliner_policy.h"
+#include "components/offline_pages/background/request_coordinator.h"
+#include "components/offline_pages/background/request_coordinator_event_logger.h"
+#include "components/offline_pages/background/request_notifier.h"
 #include "components/offline_pages/background/request_queue_in_memory_store.h"
 #include "components/offline_pages/background/save_page_request.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace offline_pages {
 
-using AddRequestResult = RequestQueue::AddRequestResult;
-using GetRequestsResult = RequestQueue::GetRequestsResult;
-using UpdateRequestResult = RequestQueue::UpdateRequestResult;
+using AddRequestResult = AddRequestResult;
+using GetRequestsResult = GetRequestsResult;
+using UpdateRequestResult = UpdateRequestResult;
 
 namespace {
 // Data for request 1.
 const int64_t kRequestId = 42;
 const GURL kUrl("http://example.com");
 const ClientId kClientId("bookmark", "1234");
-const int64_t kRetryCount = 2;
 // Data for request 2.
 const int64_t kRequestId2 = 77;
 const GURL kUrl2("http://test.com");
 const ClientId kClientId2("bookmark", "567");
 const bool kUserRequested = true;
 const int64_t kRequestId3 = 99;
+const int kOneWeekInSeconds = 7 * 24 * 60 * 60;
+
+// Default request
+const SavePageRequest kEmptyRequest(0UL,
+                                    GURL(""),
+                                    ClientId("", ""),
+                                    base::Time(),
+                                    true);
+
 }  // namespace
+
+// Helper class needed by the PickRequestTask
+class RequestNotifierStub : public RequestNotifier {
+ public:
+  RequestNotifierStub()
+      : last_expired_request_(kEmptyRequest), total_expired_requests_(0) {}
+
+  void NotifyAdded(const SavePageRequest& request) override {}
+  void NotifyChanged(const SavePageRequest& request) override {}
+
+  void NotifyCompleted(const SavePageRequest& request,
+                       BackgroundSavePageResult status) override {
+    last_expired_request_ = request;
+    last_request_expiration_status_ = status;
+    total_expired_requests_++;
+  }
+
+  const SavePageRequest& last_expired_request() {
+    return last_expired_request_;
+  }
+
+  RequestCoordinator::BackgroundSavePageResult
+  last_request_expiration_status() {
+    return last_request_expiration_status_;
+  }
+
+  int32_t total_expired_requests() { return total_expired_requests_; }
+
+ private:
+  BackgroundSavePageResult last_request_expiration_status_;
+  SavePageRequest last_expired_request_;
+  int32_t total_expired_requests_;
+};
 
 // TODO(fgorski): Add tests for store failures in add/remove/get.
 class RequestQueueTest : public testing::Test {
@@ -53,6 +100,8 @@ class RequestQueueTest : public testing::Test {
   void UpdateRequestDone(UpdateRequestResult result);
   void UpdateRequestsDone(std::unique_ptr<UpdateRequestsResult> result);
 
+  void ClearResults();
+
   RequestQueue* queue() { return queue_.get(); }
 
   AddRequestResult last_add_result() const { return last_add_result_; }
@@ -73,6 +122,10 @@ class RequestQueueTest : public testing::Test {
   UpdateRequestsResult* update_requests_result() const {
     return update_requests_result_.get();
   }
+
+  void RequestPickedCallback(const SavePageRequest& request) {}
+  void RequestNotPickedCallback(bool non_user_requested_tasks_remain) {}
+  void RequestCountCallback(size_t total_count, size_t available_count) {}
 
  private:
   AddRequestResult last_add_result_;
@@ -127,6 +180,15 @@ void RequestQueueTest::UpdateRequestDone(UpdateRequestResult result) {
 void RequestQueueTest::UpdateRequestsDone(
     std::unique_ptr<UpdateRequestsResult> result) {
   update_requests_result_ = std::move(result);
+}
+
+void RequestQueueTest::ClearResults() {
+  last_add_result_ = AddRequestResult::STORE_FAILURE;
+  last_update_result_ = UpdateRequestResult::STORE_FAILURE;
+  last_get_requests_result_ = GetRequestsResult::STORE_FAILURE;
+  last_added_request_.reset(nullptr);
+  update_requests_result_.reset(nullptr);
+  last_requests_.clear();
 }
 
 TEST_F(RequestQueueTest, GetRequestsEmpty) {
@@ -339,49 +401,189 @@ TEST_F(RequestQueueTest, MultipleRequestsAddGetRemove) {
   ASSERT_EQ(request2.request_id(), last_requests().at(0)->request_id());
 }
 
-TEST_F(RequestQueueTest, UpdateRequest) {
+TEST_F(RequestQueueTest, MarkAttemptStarted) {
   // First add a request.  Retry count will be set to 0.
   base::Time creation_time = base::Time::Now();
-  SavePageRequest request(
-      kRequestId, kUrl, kClientId, creation_time, kUserRequested);
+  SavePageRequest request(kRequestId, kUrl, kClientId, creation_time,
+                          kUserRequested);
   queue()->AddRequest(request, base::Bind(&RequestQueueTest::AddRequestDone,
                                           base::Unretained(this)));
   PumpLoop();
 
+  base::Time before_time = base::Time::Now();
   // Update the request, ensure it succeeded.
-  request.set_completed_attempt_count(kRetryCount);
-  queue()->UpdateRequest(
-      request,
-      base::Bind(&RequestQueueTest::UpdateRequestDone, base::Unretained(this)));
+  queue()->MarkAttemptStarted(kRequestId,
+                              base::Bind(&RequestQueueTest::UpdateRequestsDone,
+                                         base::Unretained(this)));
   PumpLoop();
-  ASSERT_EQ(UpdateRequestResult::SUCCESS, last_update_result());
+  ASSERT_EQ(1ul, update_requests_result()->item_statuses.size());
+  EXPECT_EQ(kRequestId, update_requests_result()->item_statuses.at(0).first);
+  EXPECT_EQ(ItemActionStatus::SUCCESS,
+            update_requests_result()->item_statuses.at(0).second);
+  EXPECT_EQ(1UL, update_requests_result()->updated_items.size());
+  EXPECT_LE(before_time,
+            update_requests_result()->updated_items.at(0).last_attempt_time());
+  EXPECT_GE(base::Time::Now(),
+            update_requests_result()->updated_items.at(0).last_attempt_time());
+  EXPECT_EQ(
+      1, update_requests_result()->updated_items.at(0).started_attempt_count());
+  EXPECT_EQ(SavePageRequest::RequestState::OFFLINING,
+            update_requests_result()->updated_items.at(0).request_state());
 
-  // Get the request, and verify the update took effect.
   queue()->GetRequests(
       base::Bind(&RequestQueueTest::GetRequestsDone, base::Unretained(this)));
   PumpLoop();
-  ASSERT_EQ(GetRequestsResult::SUCCESS, last_get_requests_result());
+  EXPECT_EQ(GetRequestsResult::SUCCESS, last_get_requests_result());
   ASSERT_EQ(1ul, last_requests().size());
-  ASSERT_EQ(kRetryCount, last_requests().at(0)->completed_attempt_count());
+  EXPECT_EQ(update_requests_result()->updated_items.at(0),
+            *last_requests().at(0));
 }
 
-TEST_F(RequestQueueTest, UpdateRequestNotPresent) {
+TEST_F(RequestQueueTest, MarkAttempStartedRequestNotPresent) {
   // First add a request.  Retry count will be set to 0.
   base::Time creation_time = base::Time::Now();
-  SavePageRequest request1(
-      kRequestId, kUrl, kClientId, creation_time, kUserRequested);
-  SavePageRequest request2(
-      kRequestId2, kUrl2, kClientId2, creation_time, kUserRequested);
-  queue()->AddRequest(request2, base::Bind(&RequestQueueTest::AddRequestDone,
-                                           base::Unretained(this)));
+  // This request is never put into the queue.
+  SavePageRequest request1(kRequestId, kUrl, kClientId, creation_time,
+                           kUserRequested);
+
+  queue()->MarkAttemptStarted(kRequestId,
+                              base::Bind(&RequestQueueTest::UpdateRequestsDone,
+                                         base::Unretained(this)));
+  PumpLoop();
+  ASSERT_EQ(1ul, update_requests_result()->item_statuses.size());
+  EXPECT_EQ(kRequestId, update_requests_result()->item_statuses.at(0).first);
+  EXPECT_EQ(ItemActionStatus::NOT_FOUND,
+            update_requests_result()->item_statuses.at(0).second);
+  EXPECT_EQ(0ul, update_requests_result()->updated_items.size());
+}
+
+TEST_F(RequestQueueTest, MarkAttemptAborted) {
+  base::Time creation_time = base::Time::Now();
+  SavePageRequest request(kRequestId, kUrl, kClientId, creation_time,
+                          kUserRequested);
+  queue()->AddRequest(request, base::Bind(&RequestQueueTest::AddRequestDone,
+                                          base::Unretained(this)));
   PumpLoop();
 
-  // Try to update request1 when only request2 is in the queue.
-  queue()->UpdateRequest(
-      request1,
-      base::Bind(&RequestQueueTest::UpdateRequestDone, base::Unretained(this)));
+  // Start request.
+  queue()->MarkAttemptStarted(kRequestId,
+                              base::Bind(&RequestQueueTest::UpdateRequestsDone,
+                                         base::Unretained(this)));
   PumpLoop();
-  ASSERT_EQ(UpdateRequestResult::REQUEST_DOES_NOT_EXIST, last_update_result());
+  ClearResults();
+
+  queue()->MarkAttemptAborted(kRequestId,
+                              base::Bind(&RequestQueueTest::UpdateRequestsDone,
+                                         base::Unretained(this)));
+  PumpLoop();
+
+  ASSERT_TRUE(update_requests_result());
+  EXPECT_EQ(1UL, update_requests_result()->item_statuses.size());
+  EXPECT_EQ(kRequestId, update_requests_result()->item_statuses.at(0).first);
+  EXPECT_EQ(ItemActionStatus::SUCCESS,
+            update_requests_result()->item_statuses.at(0).second);
+  EXPECT_EQ(1UL, update_requests_result()->updated_items.size());
+  EXPECT_EQ(SavePageRequest::RequestState::AVAILABLE,
+            update_requests_result()->updated_items.at(0).request_state());
+}
+
+TEST_F(RequestQueueTest, MarkAttemptAbortedRequestNotPresent) {
+  // First add a request.  Retry count will be set to 0.
+  base::Time creation_time = base::Time::Now();
+  // This request is never put into the queue.
+  SavePageRequest request1(kRequestId, kUrl, kClientId, creation_time,
+                           kUserRequested);
+
+  queue()->MarkAttemptAborted(kRequestId,
+                              base::Bind(&RequestQueueTest::UpdateRequestsDone,
+                                         base::Unretained(this)));
+  PumpLoop();
+  ASSERT_EQ(1ul, update_requests_result()->item_statuses.size());
+  EXPECT_EQ(kRequestId, update_requests_result()->item_statuses.at(0).first);
+  EXPECT_EQ(ItemActionStatus::NOT_FOUND,
+            update_requests_result()->item_statuses.at(0).second);
+  EXPECT_EQ(0ul, update_requests_result()->updated_items.size());
+}
+
+TEST_F(RequestQueueTest, MarkAttemptCompleted) {
+  base::Time creation_time = base::Time::Now();
+  SavePageRequest request(kRequestId, kUrl, kClientId, creation_time,
+                          kUserRequested);
+  queue()->AddRequest(request, base::Bind(&RequestQueueTest::AddRequestDone,
+                                          base::Unretained(this)));
+  PumpLoop();
+
+  // Start request.
+  queue()->MarkAttemptStarted(kRequestId,
+                              base::Bind(&RequestQueueTest::UpdateRequestsDone,
+                                         base::Unretained(this)));
+  PumpLoop();
+  ClearResults();
+
+  queue()->MarkAttemptCompleted(
+      kRequestId, base::Bind(&RequestQueueTest::UpdateRequestsDone,
+                             base::Unretained(this)));
+  PumpLoop();
+
+  ASSERT_TRUE(update_requests_result());
+  EXPECT_EQ(1UL, update_requests_result()->item_statuses.size());
+  EXPECT_EQ(kRequestId, update_requests_result()->item_statuses.at(0).first);
+  EXPECT_EQ(ItemActionStatus::SUCCESS,
+            update_requests_result()->item_statuses.at(0).second);
+  EXPECT_EQ(1UL, update_requests_result()->updated_items.size());
+  EXPECT_EQ(SavePageRequest::RequestState::AVAILABLE,
+            update_requests_result()->updated_items.at(0).request_state());
+}
+
+// Request expiration is detected during the call to pick a request, which
+// is why this test calls PickNextRequest().
+TEST_F(RequestQueueTest, CleanStaleRequests) {
+  // Create a request that is already expired.
+  base::Time creation_time =
+      base::Time::Now() - base::TimeDelta::FromSeconds(2 * kOneWeekInSeconds);
+
+  SavePageRequest original_request(kRequestId, kUrl, kClientId, creation_time,
+                                   kUserRequested);
+  queue()->AddRequest(
+      original_request,
+      base::Bind(&RequestQueueTest::AddRequestDone, base::Unretained(this)));
+  this->PumpLoop();
+  this->ClearResults();
+
+  // Set up a picker factory pointing to our fake notifier.
+  OfflinerPolicy policy;
+  RequestNotifierStub notifier;
+  RequestCoordinatorEventLogger event_logger;
+  std::unique_ptr<PickRequestTaskFactory> picker_factory(
+      new PickRequestTaskFactory(&policy, &notifier, &event_logger));
+  queue()->SetPickerFactory(std::move(picker_factory));
+
+  // Do a pick and clean operation, which will remove stale entries.
+  DeviceConditions conditions;
+  std::set<int64_t> disabled_list;
+  queue()->PickNextRequest(
+      base::Bind(&RequestQueueTest::RequestPickedCallback,
+                 base::Unretained(this)),
+      base::Bind(&RequestQueueTest::RequestNotPickedCallback,
+                 base::Unretained(this)),
+      base::Bind(&RequestQueueTest::RequestCountCallback,
+                 base::Unretained(this)),
+      conditions, disabled_list);
+
+  this->PumpLoop();
+
+  // Notifier should have been notified that the request was removed.
+  ASSERT_EQ(notifier.last_expired_request().request_id(), kRequestId);
+  ASSERT_EQ(notifier.last_request_expiration_status(),
+            RequestNotifier::BackgroundSavePageResult::EXPIRED);
+
+  // Doing a get should show no entries left in the queue since the expired
+  // request has been removed.
+  queue()->GetRequests(
+      base::Bind(&RequestQueueTest::GetRequestsDone, base::Unretained(this)));
+  this->PumpLoop();
+  ASSERT_EQ(GetRequestsResult::SUCCESS, this->last_get_requests_result());
+  ASSERT_TRUE(this->last_requests().empty());
 }
 
 }  // namespace offline_pages

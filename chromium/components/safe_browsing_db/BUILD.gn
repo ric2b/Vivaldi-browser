@@ -31,6 +31,7 @@ group("safe_browsing_db_shared") {
     ":database_manager",
     ":hit_report",
     ":prefix_set",
+    ":safe_browsing_prefs",
     ":safebrowsing_proto",
     ":util",
   ]
@@ -78,6 +79,7 @@ static_library("hit_report") {
     "hit_report.h",
   ]
   deps = [
+    ":safe_browsing_prefs",
     ":util",
     "//components/metrics",
     "//url",
@@ -133,6 +135,17 @@ static_library("safe_browsing_api_handler_util") {
     ":metadata_proto",
     ":util",
     "//base",
+  ]
+}
+
+static_library("safe_browsing_prefs") {
+  sources = [
+    "safe_browsing_prefs.cc",
+    "safe_browsing_prefs.h",
+  ]
+  deps = [
+    "//base:base",
+    "//components/prefs",
   ]
 }
 
@@ -276,6 +289,18 @@ source_set("v4_store") {
   ]
 }
 
+static_library("v4_test_util") {
+  testonly = true
+  sources = [
+    "v4_test_util.cc",
+    "v4_test_util.h",
+  ]
+  deps = [
+    ":util",
+    ":v4_protocol_manager_util",
+  ]
+}
+
 static_library("v4_update_protocol_manager") {
   sources = [
     "v4_update_protocol_manager.cc",
@@ -318,6 +343,7 @@ source_set("v4_get_hash_protocol_manager_unittest") {
     ":v4_database",
     ":v4_get_hash_protocol_manager",
     ":v4_local_database_manager",
+    ":v4_test_util",
     "//base",
     "//base/test:test_support",
     "//content/test:test_support",
@@ -335,9 +361,28 @@ source_set("v4_local_database_manager_unittest") {
   deps = [
     ":v4_database",
     ":v4_local_database_manager",
+    ":v4_test_util",
     "//base",
     "//base/test:test_support",
     "//content/test:test_support",
+    "//net",
+    "//net:test_support",
+    "//testing/gtest",
+  ]
+}
+
+source_set("v4_update_protocol_manager_unittest") {
+  testonly = true
+  sources = [
+    "v4_update_protocol_manager_unittest.cc",
+  ]
+  deps = [
+    ":safebrowsing_proto",
+    ":util",
+    ":v4_test_util",
+    ":v4_update_protocol_manager",
+    "//base",
+    "//base/test:test_support",
     "//net",
     "//net:test_support",
     "//testing/gtest",
@@ -349,6 +394,7 @@ source_set("unit_tests") {
   sources = [
     "database_manager_unittest.cc",
     "prefix_set_unittest.cc",
+    "safe_browsing_prefs_unittest.cc",
     "util_unittest.cc",
     "v4_database_unittest.cc",
     "v4_get_hash_protocol_manager_unittest.cc",
@@ -361,6 +407,7 @@ source_set("unit_tests") {
   deps = [
     ":database_manager",
     ":prefix_set",
+    ":safe_browsing_prefs",
     ":safebrowsing_proto",
     ":test_database_manager",
     ":util",
@@ -371,8 +418,10 @@ source_set("unit_tests") {
     ":v4_rice",
     ":v4_store",
     ":v4_store_proto",
+    ":v4_test_util",
     ":v4_update_protocol_manager",
     "//base",
+    "//components/prefs:test_support",
     "//content/test:test_support",
     "//crypto",
     "//net",
@@ -398,6 +447,7 @@ source_set("unit_tests_mobile") {
     ":safe_browsing_api_handler",
     ":safe_browsing_api_handler_util",
     ":util",
+    ":v4_test_util",
     "//base",
     "//components/variations",
     "//testing/gtest",

@@ -261,7 +261,7 @@ TEST_F(HttpStreamFactoryImplJobControllerTest, CancelJobsBeforeBinding) {
   request_info.url = GURL("https://www.google.com");
 
   url::SchemeHostPort server(request_info.url);
-  AlternativeService alternative_service(QUIC, server.host(), 443);
+  AlternativeService alternative_service(kProtoQUIC, server.host(), 443);
   SetAlternativeService(request_info, alternative_service);
 
   request_.reset(
@@ -295,7 +295,7 @@ TEST_F(HttpStreamFactoryImplJobControllerTest, OnStreamFailedForBothJobs) {
   request_info.url = GURL("https://www.google.com");
 
   url::SchemeHostPort server(request_info.url);
-  AlternativeService alternative_service(QUIC, server.host(), 443);
+  AlternativeService alternative_service(kProtoQUIC, server.host(), 443);
   SetAlternativeService(request_info, alternative_service);
 
   request_.reset(
@@ -339,7 +339,7 @@ TEST_F(HttpStreamFactoryImplJobControllerTest,
   request_info.url = GURL("https://www.google.com");
 
   url::SchemeHostPort server(request_info.url);
-  AlternativeService alternative_service(QUIC, server.host(), 443);
+  AlternativeService alternative_service(kProtoQUIC, server.host(), 443);
   SetAlternativeService(request_info, alternative_service);
 
   request_.reset(
@@ -373,6 +373,126 @@ TEST_F(HttpStreamFactoryImplJobControllerTest,
   EXPECT_TRUE(HttpStreamFactoryImplPeer::IsJobControllerDeleted(factory_));
 }
 
+// Tests that if alt job succeeds and main job is blocked, |request_| completion
+// will clean up JobController. Regression test for crbug.com/678768.
+TEST_F(HttpStreamFactoryImplJobControllerTest,
+       AltJobSucceedsMainJobBlockedControllerDestroyed) {
+  ProxyConfig proxy_config;
+  proxy_config.set_auto_detect(true);
+  MockAsyncProxyResolverFactory* proxy_resolver_factory =
+      new MockAsyncProxyResolverFactory(false);
+  session_deps_.proxy_service.reset(
+      new ProxyService(base::MakeUnique<ProxyConfigServiceFixed>(proxy_config),
+                       base::WrapUnique(proxy_resolver_factory), nullptr));
+  Initialize(false);
+
+  HttpRequestInfo request_info;
+  request_info.method = "GET";
+  request_info.url = GURL("https://www.google.com");
+
+  url::SchemeHostPort server(request_info.url);
+  AlternativeService alternative_service(kProtoQUIC, server.host(), 443);
+  SetAlternativeService(request_info, alternative_service);
+  request_.reset(
+      job_controller_->Start(request_info, &request_delegate_, nullptr,
+                             NetLogWithSource(), HttpStreamRequest::HTTP_STREAM,
+                             DEFAULT_PRIORITY, SSLConfig(), SSLConfig()));
+  EXPECT_TRUE(job_controller_->main_job());
+  EXPECT_TRUE(job_controller_->alternative_job());
+  EXPECT_TRUE(JobControllerPeer::main_job_is_blocked(job_controller_));
+
+  // |alternative_job| succeeds and should report status to Request.
+  HttpStream* http_stream =
+      new HttpBasicStream(base::MakeUnique<ClientSocketHandle>(), false, false);
+  job_factory_.alternative_job()->SetStream(http_stream);
+  EXPECT_CALL(request_delegate_, OnStreamReady(_, _, http_stream))
+      .WillOnce(Invoke(DeleteHttpStreamPointer));
+  job_controller_->OnStreamReady(job_factory_.alternative_job(), SSLConfig(),
+                                 ProxyInfo());
+
+  EXPECT_TRUE(job_controller_->main_job());
+  EXPECT_TRUE(job_controller_->alternative_job());
+  EXPECT_TRUE(JobControllerPeer::main_job_is_blocked(job_controller_));
+
+  // Invoke OnRequestComplete() which should delete |job_controller_| from
+  // |factory_|.
+  request_.reset();
+  VerifyBrokenAlternateProtocolMapping(request_info, false);
+  // This fails without the fix for crbug.com/678768.
+  EXPECT_TRUE(HttpStreamFactoryImplPeer::IsJobControllerDeleted(factory_));
+}
+
+// Tests that if an orphaned job completes after |request_| is gone,
+// JobController will be cleaned up.
+TEST_F(HttpStreamFactoryImplJobControllerTest,
+       OrphanedJobCompletesControllerDestroyed) {
+  ProxyConfig proxy_config;
+  proxy_config.set_auto_detect(true);
+  MockAsyncProxyResolverFactory* proxy_resolver_factory =
+      new MockAsyncProxyResolverFactory(false);
+  session_deps_.proxy_service.reset(
+      new ProxyService(base::MakeUnique<ProxyConfigServiceFixed>(proxy_config),
+                       base::WrapUnique(proxy_resolver_factory), nullptr));
+  Initialize(false);
+
+  HttpRequestInfo request_info;
+  request_info.method = "GET";
+  request_info.url = GURL("https://www.google.com");
+
+  url::SchemeHostPort server(request_info.url);
+  AlternativeService alternative_service(kProtoQUIC, server.host(), 443);
+  SetAlternativeService(request_info, alternative_service);
+  // Hack to use different URL for the main job to help differentiate the proxy
+  // requests.
+  job_factory_.UseDifferentURLForMainJob(GURL("http://www.google.com"));
+  request_.reset(
+      job_controller_->Start(request_info, &request_delegate_, nullptr,
+                             NetLogWithSource(), HttpStreamRequest::HTTP_STREAM,
+                             DEFAULT_PRIORITY, SSLConfig(), SSLConfig()));
+  EXPECT_TRUE(job_controller_->main_job());
+  EXPECT_TRUE(job_controller_->alternative_job());
+  EXPECT_TRUE(JobControllerPeer::main_job_is_blocked(job_controller_));
+
+  // Complete main job now.
+  MockAsyncProxyResolver resolver;
+  proxy_resolver_factory->pending_requests()[0]->CompleteNowWithForwarder(
+      net::OK, &resolver);
+  int main_job_request_id =
+      resolver.pending_jobs()[0]->url().SchemeIs("http") ? 0 : 1;
+
+  resolver.pending_jobs()[main_job_request_id]->results()->UseNamedProxy(
+      "result1:80");
+  resolver.pending_jobs()[main_job_request_id]->CompleteNow(net::OK);
+
+  HttpStream* http_stream =
+      new HttpBasicStream(base::MakeUnique<ClientSocketHandle>(), false, false);
+  job_factory_.main_job()->SetStream(http_stream);
+
+  EXPECT_CALL(request_delegate_, OnStreamReady(_, _, http_stream))
+      .WillOnce(Invoke(DeleteHttpStreamPointer));
+  job_controller_->OnStreamReady(job_factory_.main_job(), SSLConfig(),
+                                 ProxyInfo());
+
+  // Invoke OnRequestComplete() which should not delete |job_controller_| from
+  // |factory_| because alt job is yet to finish.
+  request_.reset();
+  ASSERT_FALSE(HttpStreamFactoryImplPeer::IsJobControllerDeleted(factory_));
+  EXPECT_FALSE(job_controller_->main_job());
+  EXPECT_TRUE(job_controller_->alternative_job());
+
+  // Make |alternative_job| succeed.
+  resolver.pending_jobs()[0]->results()->UseNamedProxy("result1:80");
+  resolver.pending_jobs()[0]->CompleteNow(net::OK);
+  HttpStream* http_stream2 =
+      new HttpBasicStream(base::MakeUnique<ClientSocketHandle>(), false, false);
+  job_factory_.alternative_job()->SetStream(http_stream2);
+  // This should not call request_delegate_::OnStreamReady.
+  job_controller_->OnStreamReady(job_factory_.alternative_job(), SSLConfig(),
+                                 ProxyInfo());
+  // Make sure that controller does not leak.
+  EXPECT_TRUE(HttpStreamFactoryImplPeer::IsJobControllerDeleted(factory_));
+}
+
 TEST_F(HttpStreamFactoryImplJobControllerTest,
        AltJobSucceedsAfterMainJobFailed) {
   ProxyConfig proxy_config;
@@ -390,7 +510,7 @@ TEST_F(HttpStreamFactoryImplJobControllerTest,
   request_info.url = GURL("https://www.google.com");
 
   url::SchemeHostPort server(request_info.url);
-  AlternativeService alternative_service(QUIC, server.host(), 443);
+  AlternativeService alternative_service(kProtoQUIC, server.host(), 443);
   SetAlternativeService(request_info, alternative_service);
 
   request_.reset(
@@ -435,7 +555,7 @@ TEST_F(HttpStreamFactoryImplJobControllerTest,
   request_info.url = GURL("https://www.google.com");
 
   url::SchemeHostPort server(request_info.url);
-  AlternativeService alternative_service(QUIC, server.host(), 443);
+  AlternativeService alternative_service(kProtoQUIC, server.host(), 443);
   SetAlternativeService(request_info, alternative_service);
 
   request_.reset(
@@ -482,7 +602,7 @@ TEST_F(HttpStreamFactoryImplJobControllerTest, GetLoadStateAfterMainJobFailed) {
   request_info.url = GURL("https://www.google.com");
 
   url::SchemeHostPort server(request_info.url);
-  AlternativeService alternative_service(QUIC, server.host(), 443);
+  AlternativeService alternative_service(kProtoQUIC, server.host(), 443);
   SetAlternativeService(request_info, alternative_service);
 
   request_.reset(
@@ -531,7 +651,7 @@ TEST_F(HttpStreamFactoryImplJobControllerTest, DoNotResumeMainJobBeforeWait) {
   request_info.url = GURL("https://www.google.com");
 
   url::SchemeHostPort server(request_info.url);
-  AlternativeService alternative_service(QUIC, server.host(), 443);
+  AlternativeService alternative_service(kProtoQUIC, server.host(), 443);
   SetAlternativeService(request_info, alternative_service);
 
   request_.reset(
@@ -556,7 +676,7 @@ TEST_F(HttpStreamFactoryImplJobControllerTest, InvalidPortForQuic) {
   request_info.url = GURL("https://www.google.com");
 
   url::SchemeHostPort server(request_info.url);
-  AlternativeService alternative_service(QUIC, server.host(), 101);
+  AlternativeService alternative_service(kProtoQUIC, server.host(), 101);
   SetAlternativeService(request_info, alternative_service);
 
   request_.reset(
@@ -598,7 +718,7 @@ TEST_F(HttpStreamFactoryImplJobControllerTest,
 
   // Set a SPDY alternative service for the server.
   url::SchemeHostPort server(request_info.url);
-  AlternativeService alternative_service(QUIC, server.host(), 443);
+  AlternativeService alternative_service(kProtoQUIC, server.host(), 443);
   SetAlternativeService(request_info, alternative_service);
   // Hack to use different URL for the main job to help differentiate the proxy
   // requests.
@@ -619,18 +739,18 @@ TEST_F(HttpStreamFactoryImplJobControllerTest,
   // Resolve proxy for the main job which then proceed to wait for the
   // alternative job which is IO_PENDING.
   int main_job_request_id =
-      resolver.pending_requests()[0]->url().SchemeIs("http") ? 0 : 1;
+      resolver.pending_jobs()[0]->url().SchemeIs("http") ? 0 : 1;
 
-  resolver.pending_requests()[main_job_request_id]->results()->UseNamedProxy(
+  resolver.pending_jobs()[main_job_request_id]->results()->UseNamedProxy(
       "result1:80");
-  resolver.pending_requests()[main_job_request_id]->CompleteNow(net::OK);
+  resolver.pending_jobs()[main_job_request_id]->CompleteNow(net::OK);
   EXPECT_TRUE(job_controller_->main_job()->is_waiting());
 
   // Resolve proxy for the alternative job to proceed to create a connection.
   // Use hanging HostResolver to fail creation of a SPDY session for the
   // alternative job. The alternative job will be IO_PENDING thus should resume
   // the main job.
-  resolver.pending_requests()[0]->CompleteNow(net::OK);
+  resolver.pending_jobs()[0]->CompleteNow(net::OK);
   EXPECT_CALL(request_delegate_, OnStreamFailed(_, _)).Times(0);
   EXPECT_CALL(*job_factory_.main_job(), Resume()).Times(1);
 
@@ -660,7 +780,7 @@ TEST_F(HttpStreamFactoryImplJobControllerTest,
   request_info.url = GURL("https://www.google.com");
 
   url::SchemeHostPort server(request_info.url);
-  AlternativeService alternative_service(QUIC, server.host(), 443);
+  AlternativeService alternative_service(kProtoQUIC, server.host(), 443);
   SetAlternativeService(request_info, alternative_service);
   // Hack to use different URL for the main job to help differentiate the proxy
   // requests.
@@ -680,18 +800,18 @@ TEST_F(HttpStreamFactoryImplJobControllerTest,
   // Resolve proxy for the main job which then proceed to wait for the
   // alternative job which is IO_PENDING.
   int main_job_request_id =
-      resolver.pending_requests()[0]->url().SchemeIs("http") ? 0 : 1;
+      resolver.pending_jobs()[0]->url().SchemeIs("http") ? 0 : 1;
 
-  resolver.pending_requests()[main_job_request_id]->results()->UseNamedProxy(
+  resolver.pending_jobs()[main_job_request_id]->results()->UseNamedProxy(
       "result1:80");
-  resolver.pending_requests()[main_job_request_id]->CompleteNow(net::OK);
+  resolver.pending_jobs()[main_job_request_id]->CompleteNow(net::OK);
   EXPECT_TRUE(job_controller_->main_job()->is_waiting());
 
   // Resolve proxy for the alternative job to proceed to create a connection.
   // Use failing HostResolver to fail creation of a QUIC session for the
   // alternative job. The alternative job will thus resume the main job.
-  resolver.pending_requests()[0]->results()->UseNamedProxy("result1:80");
-  resolver.pending_requests()[0]->CompleteNow(net::OK);
+  resolver.pending_jobs()[0]->results()->UseNamedProxy("result1:80");
+  resolver.pending_jobs()[0]->CompleteNow(net::OK);
 
   // Wait until OnStreamFailedCallback is executed on the alternative job.
   // Request shouldn't be notified as the main job is still pending status.
@@ -722,7 +842,7 @@ TEST_F(HttpStreamFactoryImplJobControllerTest, DelayedTCP) {
 
   // Set a SPDY alternative service for the server.
   url::SchemeHostPort server(request_info.url);
-  AlternativeService alternative_service(QUIC, server.host(), 443);
+  AlternativeService alternative_service(kProtoQUIC, server.host(), 443);
   SetAlternativeService(request_info, alternative_service);
 
   request_.reset(

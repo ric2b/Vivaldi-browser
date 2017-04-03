@@ -49,7 +49,6 @@
 namespace blink {
 
 class ConsoleMessage;
-class ConsoleMessageStorage;
 class ExceptionState;
 class V8AbstractEventListener;
 class WorkerClients;
@@ -83,7 +82,12 @@ class CORE_EXPORT WorkerGlobalScope : public EventTargetWithInlineData,
   }
 
   KURL completeURL(const String&) const;
+
+  // WorkerOrWorkletGlobalScope
+  bool isClosing() const final { return m_closing; }
   virtual void dispose();
+  WorkerThread* thread() const final { return m_thread; }
+
   void exceptionUnhandled(int exceptionId);
 
   void registerEventListener(V8AbstractEventListener*);
@@ -141,10 +145,6 @@ class CORE_EXPORT WorkerGlobalScope : public EventTargetWithInlineData,
     return const_cast<WorkerGlobalScope*>(this);
   }
 
-  bool isClosing() const final { return m_closing; }
-
-  const KURL& url() const { return m_url; }
-  WorkerThread* thread() const { return m_thread; }
   double timeOrigin() const { return m_timeOrigin; }
   WorkerSettings* workerSettings() const { return m_workerSettings.get(); }
 

@@ -39,7 +39,7 @@ EditCommand::EditCommand(Document& document)
   DCHECK(m_document);
   DCHECK(m_document->frame());
   setStartingSelection(m_document->frame()->selection().selection());
-  setEndingSelection(m_startingSelection);
+  setEndingVisibleSelection(m_startingSelection);
 }
 
 EditCommand::~EditCommand() {}
@@ -71,7 +71,20 @@ void EditCommand::setStartingSelection(const VisibleSelection& selection) {
   }
 }
 
-void EditCommand::setEndingSelection(const VisibleSelection& selection) {
+// TODO(yosin): We will make |SelectionInDOMTree| version of
+// |setEndingSelection()| as primary function instead of wrapper, once
+// |EditCommand| holds other than |VisibleSelection|.
+void EditCommand::setEndingSelection(const SelectionInDOMTree& selection) {
+  // TODO(editing-dev): The use of
+  // updateStyleAndLayoutIgnorePendingStylesheets
+  // needs to be audited.  See http://crbug.com/590369 for more details.
+  document().updateStyleAndLayoutIgnorePendingStylesheets();
+  setEndingVisibleSelection(createVisibleSelection(selection));
+}
+
+// TODO(yosin): We will make |SelectionInDOMTree| version of
+// |setEndingSelection()| as primary function instead of wrapper.
+void EditCommand::setEndingVisibleSelection(const VisibleSelection& selection) {
   for (EditCommand* command = this; command; command = command->m_parent) {
     if (EditCommandComposition* composition = compositionIfPossible(command)) {
       DCHECK(command->isTopLevelCommand());
@@ -79,10 +92,6 @@ void EditCommand::setEndingSelection(const VisibleSelection& selection) {
     }
     command->m_endingSelection = selection;
   }
-}
-
-void EditCommand::setEndingSelection(const VisiblePosition& position) {
-  setEndingSelection(createVisibleSelectionDeprecated(position));
 }
 
 bool EditCommand::isRenderedCharacter(const Position& position) {

@@ -78,7 +78,8 @@ LayoutTheme::LayoutTheme(Theme* platformTheme)
 void LayoutTheme::adjustStyle(ComputedStyle& style, Element* e) {
   ASSERT(style.hasAppearance());
 
-  // Force inline and table display styles to be inline-block (except for table- which is block)
+  // Force inline and table display styles to be inline-block (except for table-
+  // which is block)
   ControlPart part = style.appearance();
   if (style.display() == EDisplay::Inline ||
       style.display() == EDisplay::InlineTable ||
@@ -168,7 +169,8 @@ void LayoutTheme::adjustStyle(ComputedStyle& style, Element* e) {
 
         // Width / Height
         // The width and height here are affected by the zoom.
-        // FIXME: Check is flawed, since it doesn't take min-width/max-width into account.
+        // FIXME: Check is flawed, since it doesn't take min-width/max-width
+        // into account.
         LengthSize controlSize = m_platformTheme->controlSize(
             part, style.font().getFontDescription(),
             LengthSize(style.width(), style.height()), style.effectiveZoom());
@@ -207,7 +209,8 @@ void LayoutTheme::adjustStyle(ComputedStyle& style, Element* e) {
   }
 
   if (!m_platformTheme) {
-    // Call the appropriate style adjustment method based off the appearance value.
+    // Call the appropriate style adjustment method based off the appearance
+    // value.
     switch (style.appearance()) {
       case CheckboxPart:
         return adjustCheckboxStyle(style);
@@ -224,7 +227,8 @@ void LayoutTheme::adjustStyle(ComputedStyle& style, Element* e) {
     }
   }
 
-  // Call the appropriate style adjustment method based off the appearance value.
+  // Call the appropriate style adjustment method based off the appearance
+  // value.
   switch (style.appearance()) {
     case MenulistPart:
       return adjustMenuListStyle(style, e);
@@ -264,28 +268,12 @@ static String formatChromiumMediaControlsTime(float time,
     duration = 0;
   int seconds = static_cast<int>(fabsf(time));
   int minutes = seconds / 60;
-  int hours = seconds / (60 * 60);
 
   seconds %= 60;
 
   // duration defines the format of how the time is rendered
   int durationSecs = static_cast<int>(fabsf(duration));
   int durationMins = durationSecs / 60;
-
-  if (!RuntimeEnabledFeatures::newMediaPlaybackUiEnabled()) {
-    int durationHours = durationSecs / (60 * 60);
-    durationMins %= 60;
-    minutes %= 60;
-    if (durationHours || hours)
-      return String::format("%s%01d:%02d:%02d", (time < 0 ? "-" : ""), hours,
-                            minutes, seconds);
-    if (durationMins > 9)
-      return String::format("%s%02d:%02d", (time < 0 ? "-" : ""), minutes,
-                            seconds);
-
-    return String::format("%s%01d:%02d", (time < 0 ? "-" : ""), minutes,
-                          seconds);
-  }
 
   // New UI includes a leading "/ " before duration.
   const char* separator = includeSeparator ? "/ " : "";
@@ -397,8 +385,8 @@ int LayoutTheme::baselinePosition(const LayoutObject* o) const {
 }
 
 bool LayoutTheme::isControlContainer(ControlPart appearance) const {
-  // There are more leaves than this, but we'll patch this function as we add support for
-  // more controls.
+  // There are more leaves than this, but we'll patch this function as we add
+  // support for more controls.
   return appearance != CheckboxPart && appearance != RadioPart;
 }
 
@@ -451,7 +439,8 @@ bool LayoutTheme::controlStateChanged(LayoutObject& o,
   if (!o.styleRef().hasAppearance())
     return false;
 
-  // Default implementation assumes the controls don't respond to changes in :hover state
+  // Default implementation assumes the controls don't respond to changes in
+  // :hover state
   if (state == HoverControlState && !supportsHover(o.styleRef()))
     return false;
 
@@ -580,29 +569,33 @@ bool LayoutTheme::isSpinUpButtonPartHovered(const LayoutObject& o) {
 
 void LayoutTheme::adjustCheckboxStyle(ComputedStyle& style) const {
   // A summary of the rules for checkbox designed to match WinIE:
-  // width/height - honored (WinIE actually scales its control for small widths, but lets it overflow for small heights.)
-  // font-size - not honored (control has no text), but we use it to decide which control size to use.
+  // width/height - honored (WinIE actually scales its control for small widths,
+  // but lets it overflow for small heights.)
+  // font-size - not honored (control has no text), but we use it to decide
+  // which control size to use.
   setCheckboxSize(style);
 
   // padding - not honored by WinIE, needs to be removed.
   style.resetPadding();
 
-  // border - honored by WinIE, but looks terrible (just paints in the control box and turns off the Windows XP theme)
-  // for now, we will not honor it.
+  // border - honored by WinIE, but looks terrible (just paints in the control
+  // box and turns off the Windows XP theme) for now, we will not honor it.
   style.resetBorder();
 }
 
 void LayoutTheme::adjustRadioStyle(ComputedStyle& style) const {
   // A summary of the rules for checkbox designed to match WinIE:
-  // width/height - honored (WinIE actually scales its control for small widths, but lets it overflow for small heights.)
-  // font-size - not honored (control has no text), but we use it to decide which control size to use.
+  // width/height - honored (WinIE actually scales its control for small widths,
+  // but lets it overflow for small heights.)
+  // font-size - not honored (control has no text), but we use it to decide
+  // which control size to use.
   setRadioSize(style);
 
   // padding - not honored by WinIE, needs to be removed.
   style.resetPadding();
 
-  // border - honored by WinIE, but looks terrible (just paints in the control box and turns off the Windows XP theme)
-  // for now, we will not honor it.
+  // border - honored by WinIE, but looks terrible (just paints in the control
+  // box and turns off the Windows XP theme) for now, we will not honor it.
   style.resetBorder();
 }
 
@@ -894,7 +887,8 @@ void LayoutTheme::adjustCheckboxStyleUsingFallbackTheme(
   // padding - not honored by WinIE, needs to be removed.
   style.resetPadding();
 
-  // border - honored by WinIE, but looks terrible (just paints in the control box and turns off the Windows XP theme)
+  // border - honored by WinIE, but looks terrible (just paints in the control
+  // box and turns off the Windows XP theme)
   // for now, we will not honor it.
   style.resetBorder();
 }
@@ -915,7 +909,8 @@ void LayoutTheme::adjustRadioStyleUsingFallbackTheme(
   // padding - not honored by WinIE, needs to be removed.
   style.resetPadding();
 
-  // border - honored by WinIE, but looks terrible (just paints in the control box and turns off the Windows XP theme)
+  // border - honored by WinIE, but looks terrible (just paints in the control
+  // box and turns off the Windows XP theme)
   // for now, we will not honor it.
   style.resetBorder();
 }

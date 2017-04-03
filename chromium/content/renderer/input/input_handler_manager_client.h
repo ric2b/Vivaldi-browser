@@ -10,7 +10,7 @@
 #include "base/macros.h"
 #include "content/common/content_export.h"
 #include "content/common/input/input_event_ack_state.h"
-#include "third_party/WebKit/public/web/WebInputEvent.h"
+#include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "ui/events/blink/scoped_web_input_event.h"
 #include "ui/gfx/geometry/vector2d_f.h"
 
@@ -47,7 +47,6 @@ class CONTENT_EXPORT InputHandlerManagerClient {
   // Otherwise |DidOverscroll| will be fired.
   virtual void DidOverscroll(int routing_id,
                              const ui::DidOverscrollParams& params) = 0;
-  virtual void DidStartFlinging(int routing_id) = 0;
   virtual void DidStopFlinging(int routing_id) = 0;
   virtual void DispatchNonBlockingEventToMainThread(
       int routing_id,

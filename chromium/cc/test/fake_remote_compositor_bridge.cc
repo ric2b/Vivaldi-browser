@@ -6,6 +6,7 @@
 
 #include "base/bind.h"
 #include "base/logging.h"
+#include "base/single_thread_task_runner.h"
 #include "cc/blimp/remote_compositor_bridge_client.h"
 
 namespace cc {
@@ -25,12 +26,18 @@ void FakeRemoteCompositorBridge::BindToClient(
 }
 
 void FakeRemoteCompositorBridge::ScheduleMainFrame() {
+  DCHECK(!has_pending_update_);
+  has_pending_update_ = true;
+
   compositor_main_task_runner_->PostTask(
       FROM_HERE, base::Bind(&FakeRemoteCompositorBridge::BeginMainFrame,
                             weak_factory_.GetWeakPtr()));
 }
 
 void FakeRemoteCompositorBridge::BeginMainFrame() {
+  DCHECK(has_pending_update_);
+  has_pending_update_ = false;
+
   client_->BeginMainFrame();
 }
 

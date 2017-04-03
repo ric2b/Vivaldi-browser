@@ -55,7 +55,7 @@
 #include "content/public/common/sandbox_type.h"
 #include "content/public/common/sandboxed_process_launcher_delegate.h"
 #include "content/public/common/service_manager_connection.h"
-#include "content/public/common/service_names.h"
+#include "content/public/common/service_names.mojom.h"
 #include "gpu/command_buffer/service/gpu_preferences.h"
 #include "gpu/command_buffer/service/gpu_switches.h"
 #include "gpu/ipc/service/switches.h"
@@ -63,9 +63,9 @@
 #include "ipc/message_filter.h"
 #include "media/base/media_switches.h"
 #include "mojo/edk/embedder/embedder.h"
-#include "services/shell/public/cpp/connection.h"
-#include "services/shell/public/cpp/interface_provider.h"
-#include "services/shell/runner/common/client_util.h"
+#include "services/service_manager/public/cpp/connection.h"
+#include "services/service_manager/public/cpp/interface_provider.h"
+#include "services/service_manager/runner/common/client_util.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/events/latency_info.h"
 #include "ui/gl/gl_switches.h"
@@ -93,7 +93,7 @@
 #endif
 
 #if defined(OS_MACOSX) || defined(OS_ANDROID)
-#include "content/browser/gpu/gpu_surface_tracker.h"
+#include "gpu/ipc/common/gpu_surface_tracker.h"
 #endif
 
 #include "base/vivaldi_switches.h"
@@ -114,6 +114,7 @@ static const char* const kSwitchNames[] = {
     switches::kCreateDefaultGLContext,
     switches::kDisableAcceleratedVideoDecode,
     switches::kDisableBreakpad,
+    switches::kDisableES3GLContext,
     switches::kDisableGpuSandbox,
     switches::kDisableGpuWatchdog,
     switches::kDisableGLExtensions,
@@ -150,6 +151,7 @@ static const char* const kSwitchNames[] = {
     switches::kVModule,
     switches::kDebugVivaldi,
 #if defined(OS_MACOSX)
+    switches::kDisableAVFoundationOverlays,
     switches::kDisableRemoteCoreAnimation,
     switches::kEnableSandboxLogging,
     switches::kShowMacOverlayBorders,
@@ -204,13 +206,12 @@ void SendGpuProcessMessageByHostId(int host_id, IPC::Message* message) {
 class GpuSandboxedProcessLauncherDelegate
     : public SandboxedProcessLauncherDelegate {
  public:
-  GpuSandboxedProcessLauncherDelegate(base::CommandLine* cmd_line,
-                                      ChildProcessHost* host)
+  explicit GpuSandboxedProcessLauncherDelegate(base::CommandLine* cmd_line)
 #if defined(OS_WIN)
-      : cmd_line_(cmd_line) {}
-#elif defined(OS_POSIX)
-      : ipc_fd_(host->TakeClientFileDescriptor()) {}
+      : cmd_line_(cmd_line)
 #endif
+  {
+  }
 
   ~GpuSandboxedProcessLauncherDelegate() override {}
 
@@ -291,9 +292,6 @@ class GpuSandboxedProcessLauncherDelegate
 
     return true;
   }
-#elif defined(OS_POSIX)
-
-  base::ScopedFD TakeIpcFd() override { return std::move(ipc_fd_); }
 #endif  // OS_WIN
 
   SandboxType GetSandboxType() override {
@@ -303,10 +301,16 @@ class GpuSandboxedProcessLauncherDelegate
  private:
 #if defined(OS_WIN)
   base::CommandLine* cmd_line_;
-#elif defined(OS_POSIX)
-  base::ScopedFD ipc_fd_;
 #endif  // OS_WIN
 };
+
+void HostLoadedShader(int host_id,
+                      const std::string& key,
+                      const std::string& data) {
+  GpuProcessHost* host = GpuProcessHost::FromID(host_id);
+  if (host)
+    host->LoadedShader(key, data);
+}
 
 }  // anonymous namespace
 
@@ -316,10 +320,10 @@ class GpuProcessHost::ConnectionFilterImpl : public ConnectionFilter {
 
  private:
   // ConnectionFilter:
-  bool OnConnect(const shell::Identity& remote_identity,
-                 shell::InterfaceRegistry* registry,
-                 shell::Connector* connector) override {
-    if (remote_identity.name() != kGpuServiceName)
+  bool OnConnect(const service_manager::Identity& remote_identity,
+                 service_manager::InterfaceRegistry* registry,
+                 service_manager::Connector* connector) override {
+    if (remote_identity.name() != mojom::kGpuServiceName)
       return false;
 
     GetContentClient()->browser()->ExposeInterfacesToGpuProcess(registry,
@@ -353,7 +357,7 @@ bool GpuProcessHost::ValidateHost(GpuProcessHost* host) {
 // static
 GpuProcessHost* GpuProcessHost::Get(GpuProcessKind kind, bool force_create,
     CauseForGpuLaunch cause) {
-  DCHECK(!shell::ShellIsRemote());
+  DCHECK(!service_manager::ServiceManagerIsRemote());
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
   // Don't grant further access to GPU if it is not allowed.
@@ -434,7 +438,7 @@ void GpuProcessHost::RegisterGpuMainThreadFactory(
   g_gpu_main_thread_factory = create;
 }
 
-shell::InterfaceProvider* GpuProcessHost::GetRemoteInterfaces() {
+service_manager::InterfaceProvider* GpuProcessHost::GetRemoteInterfaces() {
   return process_->child_connection()->GetRemoteInterfaces();
 }
 
@@ -483,7 +487,7 @@ GpuProcessHost::GpuProcessHost(int host_id, GpuProcessKind kind)
       base::Bind(base::IgnoreResult(&GpuProcessHostUIShim::Create), host_id));
 
   process_.reset(new BrowserChildProcessHostImpl(
-      PROCESS_TYPE_GPU, this, kGpuServiceName));
+      PROCESS_TYPE_GPU, this, mojom::kGpuServiceName));
 }
 
 GpuProcessHost::~GpuProcessHost() {
@@ -504,7 +508,7 @@ GpuProcessHost::~GpuProcessHost() {
 
 #if defined(OS_MACOSX) || defined(OS_ANDROID)
   UMA_HISTOGRAM_COUNTS_100("GPU.AtExitSurfaceCount",
-                           GpuSurfaceTracker::Get()->GetSurfaceCount());
+                           gpu::GpuSurfaceTracker::Get()->GetSurfaceCount());
 #endif
 
   std::string message;
@@ -883,7 +887,7 @@ void GpuProcessHost::OnChannelEstablished(
 
   // Currently if any of the GPU features are blacklisted, we don't establish a
   // GPU channel.
-  if (!request.ignore_disallowed_gpu && !channel_handle.name.empty() &&
+  if (!request.ignore_disallowed_gpu && channel_handle.is_mojo_channel_handle() &&
       !GpuDataManagerImpl::GetInstance()->GpuAccessAllowed(NULL)) {
     Send(new GpuMsg_CloseChannel(request.client_id));
     request.callback.Run(IPC::ChannelHandle(), gpu::GPUInfo());
@@ -1036,7 +1040,9 @@ bool GpuProcessHost::LaunchGpuProcess(gpu::GpuPreferences* gpu_preferences) {
 
   base::CommandLine* cmd_line = new base::CommandLine(exe_path);
 #endif
+
   cmd_line->AppendSwitchASCII(switches::kProcessType, switches::kGpuProcess);
+
   BrowserChildProcessHostImpl::CopyFeatureAndFieldTrialFlags(cmd_line);
 
 #if defined(OS_WIN)
@@ -1080,11 +1086,8 @@ bool GpuProcessHost::LaunchGpuProcess(gpu::GpuPreferences* gpu_preferences) {
   if (!gpu_launcher.empty())
     cmd_line->PrependWrapper(gpu_launcher);
 
-  process_->Launch(
-      new GpuSandboxedProcessLauncherDelegate(cmd_line,
-                                              process_->GetHost()),
-      cmd_line,
-      true);
+  process_->Launch(new GpuSandboxedProcessLauncherDelegate(cmd_line), cmd_line,
+                   true);
   process_launched_ = true;
 
   UMA_HISTOGRAM_ENUMERATION("GPU.GPUProcessLifetimeEvents",
@@ -1214,7 +1217,7 @@ void GpuProcessHost::CreateChannelCache(int32_t client_id) {
   if (!cache.get())
     return;
 
-  cache->set_host_id(host_id_);
+  cache->set_shader_loaded_callback(base::Bind(&HostLoadedShader, host_id_));
 
   client_id_to_shader_cache_[client_id] = cache;
 }

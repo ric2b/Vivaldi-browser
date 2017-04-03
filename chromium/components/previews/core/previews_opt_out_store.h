@@ -15,21 +15,17 @@
 #include "base/callback.h"
 #include "base/time/time.h"
 #include "components/previews/core/previews_black_list_item.h"
+#include "components/previews/core/previews_experiments.h"
 
 class GURL;
 
 namespace previews {
 
-enum class PreviewsType {
-  NONE = 0,
-  OFFLINE = 1,
-  LAST = 2,
-};
-
 typedef std::unordered_map<std::string, std::unique_ptr<PreviewsBlackListItem>>
     BlackListItemMap;
 
-typedef base::Callback<void(std::unique_ptr<BlackListItemMap>)>
+typedef base::Callback<void(std::unique_ptr<BlackListItemMap>,
+                            std::unique_ptr<PreviewsBlackListItem>)>
     LoadBlackListCallback;
 
 // PreviewsOptOutStore keeps opt out information for the previews.

@@ -34,8 +34,6 @@ EventConverterEvdev::EventConverterEvdev(int fd,
 EventConverterEvdev::~EventConverterEvdev() {
   DCHECK(!enabled_);
   DCHECK(!watching_);
-  if (fd_ >= 0)
-    close(fd_);
 }
 
 void EventConverterEvdev::Start() {
@@ -154,7 +152,10 @@ void EventConverterEvdev::SetPalmSuppressionCallback(
 
 base::TimeTicks EventConverterEvdev::TimeTicksFromInputEvent(
     const input_event& event) {
-  return ui::EventTimeStampFromSeconds(event.time.tv_sec) +
+  base::TimeTicks timestamp =
+      ui::EventTimeStampFromSeconds(event.time.tv_sec) +
       base::TimeDelta::FromMicroseconds(event.time.tv_usec);
+  ValidateEventTimeClock(&timestamp);
+  return timestamp;
 }
 }  // namespace ui

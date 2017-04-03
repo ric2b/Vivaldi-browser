@@ -13,10 +13,6 @@ import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.device.mojom.ReportingMode;
 
-import java.nio.BufferOverflowException;
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
-
 import java.util.List;
 
 /**
@@ -26,7 +22,8 @@ import java.util.List;
 @JNINamespace("device")
 public class PlatformSensor implements SensorEventListener {
     private static final double MICROSECONDS_IN_SECOND = 1000000;
-    private static final double MILLISECONDS_IN_NANOSECOND = 0.000001d;
+    private static final double SECONDS_IN_MICROSECOND = 0.000001d;
+    private static final double SECONDS_IN_NANOSECOND = 0.000000001d;
 
     /**
      * The SENSOR_FREQUENCY_NORMAL is defined as 5Hz which corresponds to a polling delay
@@ -39,16 +36,6 @@ public class PlatformSensor implements SensorEventListener {
      * Identifier of device::PlatformSensorAndroid instance.
      */
     private long mNativePlatformSensorAndroid;
-
-    /**
-     * Shared buffer that is used to return data to the client.
-     */
-    private ByteBuffer mBuffer;
-
-    /**
-     * Buffer that is filled with sensor reading data and swapped into mBuffer.
-     */
-    private ByteBuffer mSensorReadingData;
 
     /**
      * Used for fetching sensor reading values and obtaining information about the sensor.
@@ -107,25 +94,9 @@ public class PlatformSensor implements SensorEventListener {
      * @param buffer shared buffer that is used to return data to the client.
      */
     @CalledByNative
-    protected void initPlatformSensorAndroid(long nativePlatformSensorAndroid, ByteBuffer buffer) {
+    protected void initPlatformSensorAndroid(long nativePlatformSensorAndroid) {
         assert nativePlatformSensorAndroid != 0;
-        assert buffer != null;
         mNativePlatformSensorAndroid = nativePlatformSensorAndroid;
-        mBuffer = buffer;
-        mSensorReadingData = ByteBuffer.allocate(mBuffer.capacity());
-        mSensorReadingData.order(ByteOrder.nativeOrder());
-    }
-
-    /**
-     * Fills shared buffer with sensor reading data, throws exception if number of received values
-     * is less than the number required for the PlatformSensor.
-     */
-    private void fillSensorReadingData(SensorEvent event, ByteBuffer buffer)
-            throws IllegalStateException {
-        if (event.values.length < mReadingCount) throw new IllegalStateException();
-        for (int i = 0; i < mReadingCount; ++i) {
-            buffer.putDouble(event.values[i]);
-        }
     }
 
     /**
@@ -151,6 +122,17 @@ public class PlatformSensor implements SensorEventListener {
     @CalledByNative
     protected double getDefaultConfiguration() {
         return SENSOR_FREQUENCY_NORMAL;
+    }
+
+    /**
+     * Returns maximum sampling frequency supported by the sensor.
+     *
+     * @return double frequency in Hz.
+     */
+    @CalledByNative
+    protected double getMaximumSupportedFrequency() {
+        if (mMinDelayUsec == 0) return getDefaultConfiguration();
+        return 1 / (mMinDelayUsec * SECONDS_IN_MICROSECOND);
     }
 
     /**
@@ -213,17 +195,19 @@ public class PlatformSensor implements SensorEventListener {
     }
 
     /**
-     * Notifies native device::PlatformSensorAndroid when reading is changed.
-     */
-    protected void sensorReadingChanged() {
-        nativeNotifyPlatformSensorReadingChanged(mNativePlatformSensorAndroid);
-    }
-
-    /**
      * Notifies native device::PlatformSensorAndroid when there is an error.
      */
     protected void sensorError() {
         nativeNotifyPlatformSensorError(mNativePlatformSensorAndroid);
+    }
+
+    /**
+     * Updates reading at native device::PlatformSensorAndroid.
+     */
+    protected void updateSensorReading(
+            double timestamp, double value1, double value2, double value3) {
+        nativeUpdatePlatformSensorReading(
+                mNativePlatformSensorAndroid, timestamp, value1, value2, value3);
     }
 
     @Override
@@ -231,28 +215,26 @@ public class PlatformSensor implements SensorEventListener {
 
     @Override
     public void onSensorChanged(SensorEvent event) {
-        try {
-            mSensorReadingData.mark();
-            // Convert timestamp from nanoseconds to milliseconds.
-            mSensorReadingData.putDouble(event.timestamp * MILLISECONDS_IN_NANOSECOND);
-            fillSensorReadingData(event, mSensorReadingData);
-
-            mSensorReadingData.reset();
-
-            mBuffer.mark();
-            mBuffer.put(mSensorReadingData);
-            mSensorReadingData.reset();
-            mBuffer.reset();
-
-            if (getReportingMode() == ReportingMode.ON_CHANGE) {
-                sensorReadingChanged();
-            }
-        } catch (BufferOverflowException | IllegalStateException e) {
+        if (event.values.length < mReadingCount) {
             sensorError();
             stopSensor();
+            return;
+        }
+
+        double timestamp = event.timestamp * SECONDS_IN_NANOSECOND;
+        switch (event.values.length) {
+            case 1:
+                updateSensorReading(timestamp, event.values[0], 0.0, 0.0);
+                break;
+            case 2:
+                updateSensorReading(timestamp, event.values[0], event.values[1], 0.0);
+                break;
+            default:
+                updateSensorReading(timestamp, event.values[0], event.values[1], event.values[2]);
         }
     }
 
-    private native void nativeNotifyPlatformSensorReadingChanged(long nativePlatformSensorAndroid);
     private native void nativeNotifyPlatformSensorError(long nativePlatformSensorAndroid);
+    private native void nativeUpdatePlatformSensorReading(long nativePlatformSensorAndroid,
+            double timestamp, double value1, double value2, double value3);
 }

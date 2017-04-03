@@ -37,6 +37,7 @@ class WebGraphicsContext3DProviderSoftwareRenderingForTests
   void setLostContextCallback(const base::Closure&) {}
   void setErrorMessageCallback(
       const base::Callback<void(const char*, int32_t id)>&) {}
+  void signalQuery(uint32_t, const base::Closure&) override {}
 
  private:
   std::unique_ptr<gpu::gles2::GLES2Interface> m_gl;
@@ -53,7 +54,7 @@ class DrawingBufferSoftwareRenderingTest : public Test {
             new WebGraphicsContext3DProviderSoftwareRenderingForTests(
                 std::move(gl)));
     m_drawingBuffer = DrawingBufferForTests::create(
-        std::move(provider), initialSize, DrawingBuffer::Preserve);
+        std::move(provider), nullptr, initialSize, DrawingBuffer::Preserve);
     CHECK(m_drawingBuffer);
   }
 
@@ -69,7 +70,7 @@ TEST_F(DrawingBufferSoftwareRenderingTest, bitmapRecycling) {
   IntSize initialSize(InitialWidth, InitialHeight);
   IntSize alternateSize(InitialWidth, AlternateHeight);
 
-  m_drawingBuffer->reset(initialSize);
+  m_drawingBuffer->resize(initialSize);
   m_drawingBuffer->markContentsChanged();
   m_drawingBuffer->PrepareTextureMailbox(
       &textureMailbox, &releaseCallback1);  // create a bitmap.
@@ -86,7 +87,7 @@ TEST_F(DrawingBufferSoftwareRenderingTest, bitmapRecycling) {
       gpu::SyncToken(),
       false /* lostResource */);  // release bitmap to the recycling queue
   EXPECT_EQ(1, m_drawingBuffer->recycledBitmapCount());
-  m_drawingBuffer->reset(alternateSize);
+  m_drawingBuffer->resize(alternateSize);
   m_drawingBuffer->markContentsChanged();
   // Regression test for crbug.com/647896 - Next line must not crash
   m_drawingBuffer->PrepareTextureMailbox(

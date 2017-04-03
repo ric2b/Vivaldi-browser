@@ -8,7 +8,6 @@
 
 #include "ash/common/session/session_state_delegate.h"
 #include "ash/common/shelf/shelf_model.h"
-#include "ash/common/shelf/shelf_widget.h"
 #include "ash/common/shelf/wm_shelf.h"
 #include "ash/common/strings/grit/ash_strings.h"
 #include "ash/common/wallpaper/wallpaper_delegate.h"
@@ -17,6 +16,7 @@
 #include "chrome/browser/fullscreen.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
+#include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
 #include "chrome/browser/ui/ash/launcher/arc_launcher_context_menu.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller_impl.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller_util.h"
@@ -26,6 +26,10 @@
 #include "chrome/grit/generated_resources.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/common/context_menu_params.h"
+
+#if defined(OS_CHROMEOS)
+#include "chrome/browser/chromeos/login/users/wallpaper/wallpaper_manager.h"
+#endif  // defined(OS_CHROMEOS)
 
 namespace {
 
@@ -50,8 +54,7 @@ LauncherContextMenu* LauncherContextMenu::Create(
 
   // Create ArcLauncherContextMenu if the item is an Arc app.
   const std::string& app_id = controller->GetAppIDForShelfID(item->id);
-  ArcAppListPrefs* arc_prefs = ArcAppListPrefs::Get(controller->GetProfile());
-  if (arc_prefs && arc_prefs->IsRegistered(app_id))
+  if (arc::IsArcItem(controller->profile(), app_id))
     return new ArcLauncherContextMenu(controller, item, wm_shelf);
 
   // Create ExtensionLauncherContextMenu for the item.
@@ -96,11 +99,15 @@ bool LauncherContextMenu::IsCommandIdEnabled(int command_id) const {
     case MENU_PIN:
       return controller_->IsPinnable(item_.id);
     case MENU_CHANGE_WALLPAPER:
+#if defined(OS_CHROMEOS)
       return ash::WmShell::Get()
           ->wallpaper_delegate()
           ->CanOpenSetWallpaperPage();
+#else
+      return false;
+#endif  // defined(OS_CHROMEOS)
     case MENU_AUTO_HIDE:
-      return CanUserModifyShelfAutoHideBehavior(controller_->GetProfile());
+      return CanUserModifyShelfAutoHideBehavior(controller_->profile());
     default:
       DCHECK(command_id < MENU_ITEM_COUNT);
       return true;
@@ -138,7 +145,9 @@ void LauncherContextMenu::ExecuteCommand(int command_id, int event_flags) {
     case MENU_ALIGNMENT_MENU:
       break;
     case MENU_CHANGE_WALLPAPER:
-      ash::WmShell::Get()->wallpaper_delegate()->OpenSetWallpaperPage();
+#if defined(OS_CHROMEOS)
+      chromeos::WallpaperManager::Get()->Open();
+#endif  // defined(OS_CHROMEOS)
       break;
     default:
       NOTREACHED();
@@ -150,7 +159,7 @@ void LauncherContextMenu::AddPinMenu() {
   DCHECK(item_.id);
   int menu_pin_string_id;
   const std::string app_id = controller_->GetAppIDForShelfID(item_.id);
-  switch (GetPinnableForAppID(app_id, controller_->GetProfile())) {
+  switch (GetPinnableForAppID(app_id, controller_->profile())) {
     case AppListControllerDelegate::PIN_EDITABLE:
       menu_pin_string_id = controller_->IsPinned(item_.id)
                                ? IDS_LAUNCHER_CONTEXT_MENU_UNPIN
@@ -174,17 +183,17 @@ void LauncherContextMenu::AddShelfOptionsMenu() {
   // while in fullscreen because it is confusing when the preference appears
   // not to apply.
   if (!IsFullScreenMode() &&
-      CanUserModifyShelfAutoHideBehavior(controller_->GetProfile())) {
+      CanUserModifyShelfAutoHideBehavior(controller_->profile())) {
     AddCheckItemWithStringId(MENU_AUTO_HIDE,
                              IDS_ASH_SHELF_CONTEXT_MENU_AUTO_HIDE);
   }
-  if (ash::ShelfWidget::ShelfAlignmentAllowed() &&
+  if (ash::WmShelf::CanChangeShelfAlignment() &&
       !ash::WmShell::Get()->GetSessionStateDelegate()->IsScreenLocked()) {
     AddSubMenuWithStringId(MENU_ALIGNMENT_MENU,
                            IDS_ASH_SHELF_CONTEXT_MENU_POSITION,
                            &shelf_alignment_menu_);
   }
-  if (!controller_->GetProfile()->IsGuestSession())
+  if (!controller_->profile()->IsGuestSession())
     AddItemWithStringId(MENU_CHANGE_WALLPAPER, IDS_AURA_SET_DESKTOP_WALLPAPER);
 }
 

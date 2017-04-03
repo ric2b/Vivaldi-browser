@@ -35,11 +35,9 @@ namespace blink {
 
 class ComputedStyle;
 class LayoutBox;
-class LayoutBoxModelObject;
 class LayoutScrollbarPart;
 class LocalFrame;
 class Node;
-class PaintInvalidationState;
 
 class LayoutScrollbar final : public Scrollbar {
  public:
@@ -92,10 +90,12 @@ class LayoutScrollbar final : public Scrollbar {
   PassRefPtr<ComputedStyle> getScrollbarPseudoStyle(ScrollbarPart, PseudoId);
   void updateScrollbarPart(ScrollbarPart, bool destroy = false);
 
-  // This Scrollbar(Widget) may outlive the DOM which created it (during tear down),
-  // so we keep a reference to the Node which caused this custom scrollbar creation.
-  // This will not create a reference cycle as the Widget tree is owned by our containing
-  // FrameView which this Node pointer can in no way keep alive. See webkit bug 80610.
+  // This Scrollbar(Widget) may outlive the DOM which created it (during tear
+  // down), so we keep a reference to the Node which caused this custom
+  // scrollbar creation.
+  // This will not create a reference cycle as the Widget tree is owned by our
+  // containing FrameView which this Node pointer can in no way keep alive.
+  // See webkit bug 80610.
   Member<Node> m_owner;
 
   Member<LocalFrame> m_owningFrame;

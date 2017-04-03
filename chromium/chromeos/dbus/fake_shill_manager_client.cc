@@ -457,7 +457,7 @@ void FakeShillManagerClient::AddGeoNetwork(
     list_value = new base::ListValue;
     stub_geo_networks_.SetWithoutPathExpansion(technology, list_value);
   }
-  list_value->Append(network.DeepCopy());
+  list_value->Append(network.CreateDeepCopy());
 }
 
 void FakeShillManagerClient::AddProfile(const std::string& profile_path) {
@@ -585,6 +585,13 @@ void FakeShillManagerClient::SetBestServiceToConnect(
     const std::string& service_path) {
   best_service_ = service_path;
 }
+
+void FakeShillManagerClient::SetNetworkThrottlingStatus(
+    bool enabled,
+    uint32_t upload_rate_kbits,
+    uint32_t download_rate_kbits,
+    const base::Closure& callback,
+    const ErrorCallback& error_callback) {}
 
 void FakeShillManagerClient::SetupDefaultEnvironment() {
   // Bail out from setup if there is no message loop. This will be the common
@@ -867,8 +874,8 @@ void FakeShillManagerClient::SetupDefaultEnvironment() {
     services->SetServiceProperty(kCellularServicePath,
                                  shill::kCellularLastGoodApnProperty, apn);
     base::ListValue apn_list;
-    apn_list.Append(apn.DeepCopy());
-    apn_list.Append(apn2.DeepCopy());
+    apn_list.Append(apn.CreateDeepCopy());
+    apn_list.Append(apn2.CreateDeepCopy());
     devices->SetDeviceProperty("/device/cellular1",
                                shill::kCellularApnListProperty, apn_list);
 
@@ -966,14 +973,12 @@ void FakeShillManagerClient::NotifyObserversPropertyChanged(
   }
   if (property == shill::kServiceCompleteListProperty) {
     std::unique_ptr<base::ListValue> services(GetEnabledServiceList(property));
-    FOR_EACH_OBSERVER(ShillPropertyChangedObserver,
-                      observer_list_,
-                      OnPropertyChanged(property, *(services.get())));
+    for (auto& observer : observer_list_)
+      observer.OnPropertyChanged(property, *(services.get()));
     return;
   }
-  FOR_EACH_OBSERVER(ShillPropertyChangedObserver,
-                    observer_list_,
-                    OnPropertyChanged(property, *value));
+  for (auto& observer : observer_list_)
+    observer.OnPropertyChanged(property, *value);
 }
 
 base::ListValue* FakeShillManagerClient::GetListProperty(
@@ -1041,7 +1046,7 @@ base::ListValue* FakeShillManagerClient::GetEnabledServiceList(
       std::string type;
       properties->GetString(shill::kTypeProperty, &type);
       if (TechnologyEnabled(type))
-        new_service_list->Append((*iter)->DeepCopy());
+        new_service_list->Append((*iter)->CreateDeepCopy());
     }
   }
   return new_service_list;

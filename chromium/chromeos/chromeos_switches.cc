@@ -61,10 +61,6 @@ const char kAppOemManifestFile[] = "app-mode-oem-manifest";
 // Signals the availability of the ARC instance on this device.
 const char kArcAvailable[] = "arc-available";
 
-// Specifies ARC authorization endpoint to enable automatic sign-in in OptIn
-// flow.
-const char kArcUseAuthEndpoint[] = "arc-use-auth-endpoint";
-
 // Screenshot testing: specifies the directoru where artifacts will be stored.
 const char kArtifactsDir[] = "artifacts-dir";
 
@@ -196,16 +192,9 @@ const char kDisablePhysicalKeyboardAutocorrect[] =
 // Disables rollback option on reset screen.
 const char kDisableRollbackOption[] = "disable-rollback-option";
 
-// Disables experimental storage manager to manage local storage.
-const char kDisableStorageManager[] = "disable-storage-manager";
-
 // Disables SystemTimezoneAutomaticDetection policy.
 const char kDisableSystemTimezoneAutomaticDetectionPolicy[] =
     "disable-system-timezone-automatic-detection";
-
-// Disables automatic timezone update.
-const char kDisableTimeZoneTrackingOption[] =
-    "disable-timezone-tracking-option";
 
 // Disables volume adjust sound.
 const char kDisableVolumeAdjustSound[] = "disable-volume-adjust-sound";
@@ -219,8 +208,17 @@ const char kEafePath[] = "eafe-path";
 // EAFE URL to use for Easy bootstrapping.
 const char kEafeUrl[] = "eafe-url";
 
+// Enables AD functionality.
+const char kEnableAd[] = "enable-ad";
+
 // Enables starting the ARC instance upon session start.
 const char kEnableArc[] = "enable-arc";
+
+// Enables ARC OptIn flow in OOBE.
+const char kEnableArcOOBEOptIn[] = "enable-arc-oobe-optin";
+
+// Enables consume kiosk mode.
+const char kEnableConsumerKiosk[] = "enable-consumer-kiosk";
 
 // Enables Data Saver prompt on cellular networks.
 const char kEnableDataSaverPrompt[] = "enable-datasaver-prompt";
@@ -266,9 +264,6 @@ const char kEnableRequestTabletSite[] = "enable-request-tablet-site";
 // Enables using screenshots in tests and seets mode.
 const char kEnableScreenshotTestingWithMode[] =
     "enable-screenshot-testing-with-mode";
-
-// Enables experimental storage manager to manage local storage.
-const char kEnableStorageManager[] = "enable-storage-manager";
 
 // Enables touchpad three-finger-click as middle button.
 const char kEnableTouchpadThreeFingerClick[] =
@@ -421,6 +416,9 @@ const char kSystemDevMode[] = "system-developer-mode";
 
 // Enables testing for auto update UI.
 const char kTestAutoUpdateUI[] = "test-auto-update-ui";
+
+// Determines which Google Privacy CA to use for attestation.
+const char kAttestationServer[] = "attestation-server";
 
 // Enables wake on wifi packet feature, which wakes the device on the receipt
 // of network packets from whitelisted sources.

@@ -10,19 +10,18 @@
 
 #include "ash/common/ash_switches.h"
 #include "ash/common/system/tray/system_tray_delegate.h"
-#include "ash/common/test/test_volume_control_delegate.h"
+#include "ash/common/test/test_system_tray_delegate.h"
 #include "ash/common/wm/overview/window_selector_controller.h"
 #include "ash/common/wm_shell.h"
-#include "ash/display/display_manager.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
-#include "ash/test/display_manager_test_api.h"
-#include "ash/test/test_system_tray_delegate.h"
 #include "base/command_line.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "base/test/user_action_tester.h"
 #include "chromeos/accelerometer/accelerometer_reader.h"
 #include "chromeos/accelerometer/accelerometer_types.h"
+#include "ui/display/manager/display_manager.h"
+#include "ui/display/test/display_manager_test_api.h"
 #include "ui/events/event_handler.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/gfx/geometry/vector3d_f.h"
@@ -82,7 +81,8 @@ class MaximizeModeControllerTest : public test::AshTestBase {
 
     // Set the first display to be the internal display for the accelerometer
     // screen rotation tests.
-    test::DisplayManagerTestApi(Shell::GetInstance()->display_manager())
+    display::test::DisplayManagerTestApi(
+        Shell::GetInstance()->display_manager())
         .SetFirstDisplayAsInternalDisplay();
   }
 
@@ -477,7 +477,7 @@ TEST_F(MaximizeModeControllerTest, DisplayDisconnectionDuringOverview) {
   ASSERT_NE(w1->GetRootWindow(), w2->GetRootWindow());
 
   maximize_mode_controller()->EnableMaximizeModeWindowManager(true);
-  WmShell::Get()->window_selector_controller()->ToggleOverview();
+  EXPECT_TRUE(WmShell::Get()->window_selector_controller()->ToggleOverview());
 
   UpdateDisplay("800x600");
   EXPECT_FALSE(WmShell::Get()->window_selector_controller()->IsSelecting());
@@ -487,10 +487,9 @@ TEST_F(MaximizeModeControllerTest, DisplayDisconnectionDuringOverview) {
 // Test that the disabling of the internal display exits maximize mode, and that
 // while disabled we do not re-enter maximize mode.
 TEST_F(MaximizeModeControllerTest, NoMaximizeModeWithDisabledInternalDisplay) {
-  DisplayManager* display_manager = Shell::GetInstance()->display_manager();
   UpdateDisplay("200x200, 200x200");
   const int64_t internal_display_id =
-      test::DisplayManagerTestApi(Shell::GetInstance()->display_manager())
+      display::test::DisplayManagerTestApi(display_manager())
           .SetFirstDisplayAsInternalDisplay();
   ASSERT_FALSE(IsMaximizeModeStarted());
 
@@ -500,10 +499,10 @@ TEST_F(MaximizeModeControllerTest, NoMaximizeModeWithDisabledInternalDisplay) {
 
   // Deactivate internal display to simulate Docked Mode.
   std::vector<display::ManagedDisplayInfo> secondary_only;
-  secondary_only.push_back(
-      display_manager->GetDisplayInfo(display_manager->GetDisplayAt(1).id()));
-  display_manager->OnNativeDisplaysChanged(secondary_only);
-  ASSERT_FALSE(display_manager->IsActiveDisplayId(internal_display_id));
+  secondary_only.push_back(display_manager()->GetDisplayInfo(
+      display_manager()->GetDisplayAt(1).id()));
+  display_manager()->OnNativeDisplaysChanged(secondary_only);
+  ASSERT_FALSE(display_manager()->IsActiveDisplayId(internal_display_id));
   EXPECT_FALSE(IsMaximizeModeStarted());
   EXPECT_FALSE(AreEventsBlocked());
 

@@ -13,7 +13,6 @@
 
 #include "base/i18n/case_conversion.h"
 #include "base/logging.h"
-#include "base/memory/scoped_vector.h"
 #include "base/stl_util.h"
 #include "base/strings/utf_offset_string_conversions.h"
 #include "build/build_config.h"
@@ -139,8 +138,8 @@ void BookmarkIndex::GetBookmarksMatching(
   // efficient way to go about this, but by the time we get here we know what
   // matches and so this shouldn't be performance critical.
   query_parser::QueryParser parser;
-  ScopedVector<query_parser::QueryNode> query_nodes;
-  parser.ParseQueryNodes(query, matching_algorithm, &query_nodes.get());
+  query_parser::QueryNodeVector query_nodes;
+  parser.ParseQueryNodes(query, matching_algorithm, &query_nodes);
 
   // The highest typed counts should be at the beginning of the results vector
   // so that the best matches will always be included in the results. The loop
@@ -150,7 +149,7 @@ void BookmarkIndex::GetBookmarksMatching(
   for (Nodes::const_iterator i = sorted_nodes.begin();
        i != sorted_nodes.end() && results->size() < max_count;
        ++i)
-    AddMatchToResults(*i, &parser, query_nodes.get(), results);
+    AddMatchToResults(*i, &parser, query_nodes, results);
 }
 
 void BookmarkIndex::SortMatches(const NodeSet& matches,
@@ -174,7 +173,7 @@ void BookmarkIndex::SortMatches(const NodeSet& matches,
 void BookmarkIndex::AddMatchToResults(
     const BookmarkNode* node,
     query_parser::QueryParser* parser,
-    const query_parser::QueryNodeStarVector& query_nodes,
+    const query_parser::QueryNodeVector& query_nodes,
     std::vector<BookmarkMatch>* results) {
   // Check that the result matches the query.  The previous search
   // was a simple per-word search, while the more complex matching
@@ -198,15 +197,12 @@ void BookmarkIndex::AddMatchToResults(
       &url_words);
   query_parser::Snippet::MatchPositions title_matches, url_matches,
                                         nick_matches, desc_matches;
-  for (size_t i = 0; i < query_nodes.size(); ++i) {
+  for (const auto& node : query_nodes) {
     const bool has_title_matches =
-        query_nodes[i]->HasMatchIn(title_words, &title_matches);
-    const bool has_nick_matches =
-        query_nodes[i]->HasMatchIn(nick_words, &nick_matches);
-    const bool has_desc_matches =
-        query_nodes[i]->HasMatchIn(desc_words, &desc_matches);
-    const bool has_url_matches =
-        query_nodes[i]->HasMatchIn(url_words, &url_matches);
+        node->HasMatchIn(title_words, &title_matches);
+    const bool has_nick_matches = node->HasMatchIn(nick_words, &nick_matches);
+    const bool has_desc_matches = node->HasMatchIn(desc_words, &desc_matches);
+    const bool has_url_matches = node->HasMatchIn(url_words, &url_matches);
     if (!has_title_matches && !has_url_matches &&
         !has_nick_matches && !has_desc_matches)
       return;

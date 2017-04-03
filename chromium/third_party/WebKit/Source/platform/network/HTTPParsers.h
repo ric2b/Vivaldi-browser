@@ -32,15 +32,19 @@
 #define HTTPParsers_h
 
 #include "platform/PlatformExport.h"
+#include "platform/json/JSONValues.h"
 #include "wtf/Allocator.h"
 #include "wtf/Forward.h"
 #include "wtf/HashSet.h"
 #include "wtf/Vector.h"
 #include "wtf/text/StringHash.h"
 
+#include <memory>
+
 namespace blink {
 
 class Suborigin;
+class ResourceResponse;
 
 typedef enum {
   ContentDispositionNone,
@@ -148,6 +152,19 @@ PLATFORM_EXPORT bool parseSuboriginHeader(const String& header,
 
 PLATFORM_EXPORT ContentTypeOptionsDisposition
 parseContentTypeOptionsHeader(const String& header);
+
+// Returns true and stores the position of the end of the headers to |*end|
+// if the headers part ends in |bytes[0..size]|. Returns false otherwise.
+PLATFORM_EXPORT bool parseMultipartHeadersFromBody(const char* bytes,
+                                                   size_t,
+                                                   ResourceResponse*,
+                                                   size_t* end);
+
+// Parses a header value containing JSON data, according to
+// https://tools.ietf.org/html/draft-ietf-httpbis-jfv-01
+// Returns an empty unique_ptr if the header cannot be parsed as JSON.
+PLATFORM_EXPORT std::unique_ptr<JSONArray> parseJSONHeader(
+    const String& header);
 
 }  // namespace blink
 

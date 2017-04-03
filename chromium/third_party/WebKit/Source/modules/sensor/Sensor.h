@@ -32,7 +32,7 @@ class Sensor : public EventTargetWithInlineData,
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  enum class SensorState { IDLE, ACTIVATING, ACTIVE, ERRORED };
+  enum class SensorState { Idle, Activating, Active, Errored };
 
   ~Sensor() override;
 
@@ -54,7 +54,7 @@ class Sensor : public EventTargetWithInlineData,
 
   DEFINE_ATTRIBUTE_EVENT_LISTENER(error);
   DEFINE_ATTRIBUTE_EVENT_LISTENER(change);
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(statechange);
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(activate);
 
   // ActiveScriptWrappable overrides.
   bool hasPendingActivity() const override;
@@ -66,13 +66,16 @@ class Sensor : public EventTargetWithInlineData,
          const SensorOptions&,
          ExceptionState&,
          device::mojom::blink::SensorType);
-  virtual SensorReading* createSensorReading(SensorProxy*) = 0;
+  virtual std::unique_ptr<SensorReadingFactory>
+  createSensorReadingFactory() = 0;
 
   using SensorConfigurationPtr = device::mojom::blink::SensorConfigurationPtr;
   using SensorConfiguration = device::mojom::blink::SensorConfiguration;
-  virtual SensorConfigurationPtr createSensorConfig(
-      const SensorOptions&,
-      const SensorConfiguration& defaultConfiguration) = 0;
+
+  // The default implementation will init frequency configuration parameter,
+  // concrete sensor implementations can override this method to handle other
+  // parameters if needed.
+  virtual SensorConfigurationPtr createSensorConfig();
 
  private:
   void initSensorProxyIfNeeded();
@@ -107,17 +110,16 @@ class Sensor : public EventTargetWithInlineData,
   void updatePollingStatus();
 
   void notifySensorReadingChanged();
-  void notifyStateChanged();
+  void notifyOnActivate();
   void notifyError(DOMException* error);
 
  private:
-  Member<SensorReading> m_sensorReading;
   SensorOptions m_sensorOptions;
   device::mojom::blink::SensorType m_type;
   SensorState m_state;
   Member<SensorProxy> m_sensorProxy;
   std::unique_ptr<SensorPollingStrategy> m_polling;
-  SensorProxy::Reading m_storedData;
+  device::SensorReading m_storedData;
   SensorConfigurationPtr m_configuration;
 };
 

@@ -8,14 +8,15 @@
 
 #include "base/bind.h"
 #include "base/json/json_reader.h"
+#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/stl_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/plugins/plugin_metadata.h"
+#include "chrome/common/features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/browser_resources.h"
 #include "components/prefs/pref_registry_simple.h"
@@ -25,7 +26,7 @@
 #include "ui/base/resource/resource_bundle.h"
 #include "url/gurl.h"
 
-#if defined(ENABLE_PLUGIN_INSTALLATION)
+#if BUILDFLAG(ENABLE_PLUGIN_INSTALLATION)
 #include "chrome/browser/plugins/plugin_installer.h"
 #endif
 
@@ -94,7 +95,7 @@ void LoadMimeTypes(bool matching_mime_types,
   }
 }
 
-PluginMetadata* CreatePluginMetadata(
+std::unique_ptr<PluginMetadata> CreatePluginMetadata(
     const std::string& identifier,
     const base::DictionaryValue* plugin_dict) {
   std::string url;
@@ -112,13 +113,9 @@ PluginMetadata* CreatePluginMetadata(
   std::string language_str;
   plugin_dict->GetString("lang", &language_str);
 
-  PluginMetadata* plugin = new PluginMetadata(identifier,
-                                              name,
-                                              display_url,
-                                              GURL(url),
-                                              GURL(help_url),
-                                              group_name_matcher,
-                                              language_str);
+  std::unique_ptr<PluginMetadata> plugin = base::MakeUnique<PluginMetadata>(
+      identifier, name, display_url, GURL(url), GURL(help_url),
+      group_name_matcher, language_str);
   const base::ListValue* versions = NULL;
   if (plugin_dict->GetList("versions", &versions)) {
     for (base::ListValue::const_iterator it = versions->begin();
@@ -142,8 +139,8 @@ PluginMetadata* CreatePluginMetadata(
     }
   }
 
-  LoadMimeTypes(false, plugin_dict, plugin);
-  LoadMimeTypes(true, plugin_dict, plugin);
+  LoadMimeTypes(false, plugin_dict, plugin.get());
+  LoadMimeTypes(true, plugin_dict, plugin.get());
   return plugin;
 }
 
@@ -246,13 +243,9 @@ base::DictionaryValue* PluginFinder::LoadBuiltInPluginList() {
 }
 
 PluginFinder::~PluginFinder() {
-#if defined(ENABLE_PLUGIN_INSTALLATION)
-  base::STLDeleteValues(&installers_);
-#endif
-  base::STLDeleteValues(&identifier_plugin_);
 }
 
-#if defined(ENABLE_PLUGIN_INSTALLATION)
+#if BUILDFLAG(ENABLE_PLUGIN_INSTALLATION)
 bool PluginFinder::FindPlugin(
     const std::string& mime_type,
     const std::string& language,
@@ -262,16 +255,15 @@ bool PluginFinder::FindPlugin(
     return false;
 
   base::AutoLock lock(mutex_);
-  PluginMap::const_iterator metadata_it = identifier_plugin_.begin();
+  auto metadata_it = identifier_plugin_.begin();
   for (; metadata_it != identifier_plugin_.end(); ++metadata_it) {
     if (language == metadata_it->second->language() &&
         metadata_it->second->HasMimeType(mime_type)) {
       *plugin_metadata = metadata_it->second->Clone();
 
-      std::map<std::string, PluginInstaller*>::const_iterator installer_it =
-          installers_.find(metadata_it->second->identifier());
+      auto installer_it = installers_.find(metadata_it->second->identifier());
       DCHECK(installer_it != installers_.end());
-      *installer = installer_it->second;
+      *installer = installer_it->second.get();
       return true;
     }
   }
@@ -283,17 +275,16 @@ bool PluginFinder::FindPluginWithIdentifier(
     PluginInstaller** installer,
     std::unique_ptr<PluginMetadata>* plugin_metadata) {
   base::AutoLock lock(mutex_);
-  PluginMap::const_iterator metadata_it = identifier_plugin_.find(identifier);
+  auto metadata_it = identifier_plugin_.find(identifier);
   if (metadata_it == identifier_plugin_.end())
     return false;
   *plugin_metadata = metadata_it->second->Clone();
 
   if (installer) {
-    std::map<std::string, PluginInstaller*>::const_iterator installer_it =
-        installers_.find(identifier);
+    auto installer_it = installers_.find(identifier);
     if (installer_it == installers_.end())
       return false;
-    *installer = installer_it->second;
+    *installer = installer_it->second.get();
   }
   return true;
 }
@@ -310,7 +301,7 @@ void PluginFinder::ReinitializePlugins(
 
   version_ = version;
 
-  base::STLDeleteValues(&identifier_plugin_);
+  identifier_plugin_.clear();
 
   for (base::DictionaryValue::Iterator plugin_it(*plugin_list);
       !plugin_it.IsAtEnd(); plugin_it.Advance()) {
@@ -320,9 +311,9 @@ void PluginFinder::ReinitializePlugins(
       DCHECK(!identifier_plugin_[identifier]);
       identifier_plugin_[identifier] = CreatePluginMetadata(identifier, plugin);
 
-#if defined(ENABLE_PLUGIN_INSTALLATION)
+#if BUILDFLAG(ENABLE_PLUGIN_INSTALLATION)
       if (installers_.find(identifier) == installers_.end())
-        installers_[identifier] = new PluginInstaller();
+        installers_[identifier] = base::MakeUnique<PluginInstaller>();
 #endif
     }
   }
@@ -331,24 +322,19 @@ void PluginFinder::ReinitializePlugins(
 std::unique_ptr<PluginMetadata> PluginFinder::GetPluginMetadata(
     const content::WebPluginInfo& plugin) {
   base::AutoLock lock(mutex_);
-  for (PluginMap::const_iterator it = identifier_plugin_.begin();
-       it != identifier_plugin_.end(); ++it) {
-    if (!it->second->MatchesPlugin(plugin))
+  for (const auto& plugin_pair : identifier_plugin_) {
+    if (!plugin_pair.second->MatchesPlugin(plugin))
       continue;
 
-    return it->second->Clone();
+    return plugin_pair.second->Clone();
   }
 
   // The plugin metadata was not found, create a dummy one holding
   // the name, identifier and group name only.
   std::string identifier = GetIdentifier(plugin);
-  PluginMetadata* metadata = new PluginMetadata(identifier,
-                                                GetGroupName(plugin),
-                                                false,
-                                                GURL(),
-                                                GURL(),
-                                                plugin.name,
-                                                std::string());
+  std::unique_ptr<PluginMetadata> metadata = base::MakeUnique<PluginMetadata>(
+      identifier, GetGroupName(plugin), false, GURL(), GURL(), plugin.name,
+      std::string());
   for (size_t i = 0; i < plugin.mime_types.size(); ++i)
     metadata->AddMatchingMimeType(plugin.mime_types[i].mime_type);
 
@@ -357,6 +343,6 @@ std::unique_ptr<PluginMetadata> PluginFinder::GetPluginMetadata(
     identifier = GetLongIdentifier(plugin);
 
   DCHECK(identifier_plugin_.find(identifier) == identifier_plugin_.end());
-  identifier_plugin_[identifier] = metadata;
-  return metadata->Clone();
+  identifier_plugin_[identifier] = std::move(metadata);
+  return identifier_plugin_[identifier]->Clone();
 }

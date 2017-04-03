@@ -1,16 +1,24 @@
 // Copyright (c) 2015 Vivaldi Technologies
 
-#ifndef VIVALDI_BROWSER_PREFS_BROWSER_PREFS_H_
-#define VIVALDI_BROWSER_PREFS_BROWSER_PREFS_H_
+#ifndef PREFS_VIVALDI_BROWSER_PREFS_H_
+#define PREFS_VIVALDI_BROWSER_PREFS_H_
 
 #include "chrome/browser/prefs/browser_prefs.h"
-#include "components/pref_registry/pref_registry_syncable.h"
+
+class PrefRegistrySimple;
+
+namespace user_prefs {
+class PrefRegistrySyncable;
+}
 
 namespace vivaldi {
 
-  // Vivaldi: Register platform specific preferences
-  void RegisterPlatformPrefs(user_prefs::PrefRegistrySyncable* registry);
+// Vivaldi: Register platform specific preferences
+void RegisterPlatformPrefs(user_prefs::PrefRegistrySyncable* registry);
+
+// Vivaldi: Register preferences to the local state
+void RegisterLocalState(PrefRegistrySimple* registry);
 
 }  // namespace vivaldi
 
-#endif  // VIVALDI_BROWSER_PREFS_BROWSER_PREFS_H_
+#endif  // PREFS_VIVALDI_BROWSER_PREFS_H_

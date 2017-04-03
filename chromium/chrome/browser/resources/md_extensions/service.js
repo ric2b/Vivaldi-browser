@@ -10,6 +10,7 @@ cr.define('extensions', function() {
    * @implements {extensions.ItemDelegate}
    * @implements {extensions.SidebarDelegate}
    * @implements {extensions.PackDialogDelegate}
+   * @implements {extensions.ErrorPageDelegate}
    */
   function Service() {}
 
@@ -24,6 +25,7 @@ cr.define('extensions', function() {
       this.manager_.sidebar.setDelegate(this);
       this.manager_.set('itemDelegate', this);
       this.manager_.packDialog.set('delegate', this);
+      this.manager_.errorPage.delegate = this;
       var keyboardShortcuts = this.manager_.keyboardShortcuts;
       keyboardShortcuts.addEventListener(
           'shortcut-updated',
@@ -269,6 +271,24 @@ cr.define('extensions', function() {
     /** @override */
     updateAllExtensions: function() {
       chrome.developerPrivate.autoUpdate();
+    },
+
+    /** @override */
+    deleteErrors: function(extensionId, errorIds, type) {
+      chrome.developerPrivate.deleteExtensionErrors({
+        extensionId: extensionId,
+        errorIds: errorIds,
+        type: type,
+      });
+    },
+
+    /** @override */
+    requestFileSource: function(args) {
+      return new Promise(function(resolve, reject) {
+        chrome.developerPrivate.requestFileSource(args, function(code) {
+          resolve(code);
+        });
+      });
     },
   };
 

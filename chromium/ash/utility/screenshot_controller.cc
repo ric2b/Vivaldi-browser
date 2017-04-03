@@ -6,8 +6,8 @@
 
 #include <cmath>
 
-#include "ash/common/shell_window_ids.h"
 #include "ash/display/mouse_cursor_event_filter.h"
+#include "ash/public/cpp/shell_window_ids.h"
 #include "ash/screenshot_delegate.h"
 #include "ash/shell.h"
 #include "ash/wm/window_util.h"
@@ -145,10 +145,6 @@ class ScreenshotController::ScreenshotLayer : public ui::LayerOwner,
 
   void OnDeviceScaleFactorChanged(float device_scale_factor) override {}
 
-  base::Closure PrepareForLayerBoundsChange() override {
-    return base::Closure();
-  }
-
   // Mouse cursor may move sub DIP, so paint pseudo cursor instead of
   // using platform cursor so that it's aliend with the region.
   void DrawPseudoCursor(gfx::Canvas* canvas) {
@@ -169,7 +165,7 @@ class ScreenshotController::ScreenshotLayer : public ui::LayerOwner,
     paint.setAntiAlias(false);
     paint.setStrokeWidth(1);
     paint.setColor(SK_ColorWHITE);
-    paint.setXfermodeMode(SkXfermode::kSrc_Mode);
+    paint.setBlendMode(SkBlendMode::kSrc);
     gfx::Vector2d width(kCursorSize / 2, 0);
     gfx::Vector2d height(0, kCursorSize / 2);
     gfx::Vector2d white_x_offset(1, -1);
@@ -299,6 +295,14 @@ void ScreenshotController::StartPartialScreenshotSession(
 }
 
 void ScreenshotController::CancelScreenshotSession() {
+  for (aura::Window* root : Shell::GetAllRootWindows()) {
+    // Having pre-handled all mouse events, widgets that had mouse capture may
+    // now misbehave, so break any existing captures. Do this after the
+    // screenshot session is over so that it's still possible to screenshot
+    // things like menus.
+    aura::client::GetCaptureClient(root)->SetCapture(nullptr);
+  }
+
   mode_ = NONE;
   pen_events_only_ = false;
   root_window_ = nullptr;

@@ -15,7 +15,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/utility_process_host.h"
 #include "content/public/browser/utility_process_host_client.h"
-#include "services/shell/public/cpp/interface_provider.h"
+#include "services/service_manager/public/cpp/interface_provider.h"
 #include "ui/base/l10n/l10n_util.h"
 
 namespace {
@@ -67,7 +67,7 @@ void UtilityProcessMojoProxyResolverFactory::CreateProcessAndConnect() {
 
 std::unique_ptr<base::ScopedClosureRunner>
 UtilityProcessMojoProxyResolverFactory::CreateResolver(
-    const mojo::String& pac_script,
+    const std::string& pac_script,
     mojo::InterfaceRequest<net::interfaces::ProxyResolver> req,
     net::interfaces::ProxyResolverFactoryRequestClientPtr client) {
   DCHECK(thread_checker_.CalledOnValidThread());

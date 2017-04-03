@@ -38,7 +38,7 @@ static FloatPoint contentsOffset(LocalFrame* frame) {
   if (!frameView)
     return FloatPoint();
   float scale = 1.0f / frame->pageZoomFactor();
-  return FloatPoint(frameView->scrollPosition()).scaledBy(scale);
+  return FloatPoint(frameView->scrollOffset()).scaledBy(scale);
 }
 
 Touch::Touch(LocalFrame* frame,
@@ -60,7 +60,7 @@ Touch::Touch(LocalFrame* frame,
       m_force(force),
       m_region(region) {
   float scaleFactor = frame ? frame->pageZoomFactor() : 1.0f;
-  m_absoluteLocation = roundedLayoutPoint(pagePos.scaledBy(scaleFactor));
+  m_absoluteLocation = LayoutPoint(pagePos.scaledBy(scaleFactor));
 }
 
 Touch::Touch(EventTarget* target,
@@ -95,7 +95,7 @@ Touch::Touch(LocalFrame* frame, const TouchInit& initializer)
       m_force(initializer.force()),
       m_region(initializer.region()) {
   float scaleFactor = frame ? frame->pageZoomFactor() : 1.0f;
-  m_absoluteLocation = roundedLayoutPoint(m_pagePos.scaledBy(scaleFactor));
+  m_absoluteLocation = LayoutPoint(m_pagePos.scaledBy(scaleFactor));
 }
 
 Touch* Touch::cloneWithNewTarget(EventTarget* eventTarget) const {

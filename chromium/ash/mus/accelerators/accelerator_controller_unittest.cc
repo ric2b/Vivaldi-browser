@@ -9,12 +9,10 @@
 #include "ash/common/accessibility_types.h"
 #include "ash/common/ime_control_delegate.h"
 #include "ash/common/session/session_state_delegate.h"
-#include "ash/common/shell_window_ids.h"
 #include "ash/common/system/brightness_control_delegate.h"
 #include "ash/common/system/keyboard_brightness_control_delegate.h"
 #include "ash/common/system/tray/system_tray_delegate.h"
-#include "ash/common/system/volume_control_delegate.h"
-#include "ash/common/test/test_volume_control_delegate.h"
+#include "ash/common/test/ash_test.h"
 #include "ash/common/wm/panels/panel_layout_manager.h"
 #include "ash/common/wm/window_positioning_utils.h"
 #include "ash/common/wm/window_state.h"
@@ -27,6 +25,8 @@
 #include "ash/mus/bridge/wm_window_mus.h"
 #include "ash/mus/property_util.h"
 #include "ash/mus/test/wm_test_base.h"
+#include "ash/public/cpp/shell_window_ids.h"
+#include "base/test/user_action_tester.cc"
 #include "ui/events/event.h"
 #include "ui/events/event_processor.h"
 #include "ui/events/test/event_generator.h"
@@ -550,20 +550,24 @@ TEST_F(AcceleratorControllerTest, WindowSnapLeftDockLeftSnapRight) {
 }
 
 TEST_F(AcceleratorControllerTest, WindowDockLeftMinimizeWindowWithRestore) {
-  mus::WmWindowMus::Get(CreateTestWindow(gfx::Rect(5, 5, 20, 20)));
-  WmWindow* window1 =
-      mus::WmWindowMus::Get(CreateTestWindow(gfx::Rect(5, 5, 20, 20)));
+  WindowOwner window_owner(
+      mus::WmWindowMus::Get(CreateTestWindow(gfx::Rect(5, 5, 20, 20))));
+  WindowOwner window1_owner(
+      mus::WmWindowMus::Get(CreateTestWindow(gfx::Rect(5, 5, 20, 20))));
+  WmWindow* window1 = window1_owner.window();
 
   wm::WindowState* window1_state = window1->GetWindowState();
   window1_state->Activate();
 
-  WmWindow* window2 =
-      mus::WmWindowMus::Get(CreateTestWindow(gfx::Rect(5, 5, 20, 20)));
+  WindowOwner window2_owner(
+      mus::WmWindowMus::Get(CreateTestWindow(gfx::Rect(5, 5, 20, 20))));
+  WmWindow* window2 = window2_owner.window();
 
   wm::WindowState* window2_state = window2->GetWindowState();
 
-  WmWindow* window3 =
-      mus::WmWindowMus::Get(CreateTestWindow(gfx::Rect(5, 5, 20, 20)));
+  WindowOwner window3_owner(
+      mus::WmWindowMus::Get(CreateTestWindow(gfx::Rect(5, 5, 20, 20))));
+  WmWindow* window3 = window3_owner.window();
 
   wm::WindowState* window3_state = window3->GetWindowState();
   window3_state->Activate();
@@ -626,8 +630,9 @@ TEST_F(AcceleratorControllerTest, WindowPanelDockLeftDockRightRestore) {
 */
 
 TEST_F(AcceleratorControllerTest, CenterWindowAccelerator) {
-  WmWindow* window =
-      mus::WmWindowMus::Get(CreateTestWindow(gfx::Rect(5, 5, 20, 20)));
+  WindowOwner window_owner(
+      mus::WmWindowMus::Get(CreateTestWindow(gfx::Rect(5, 5, 20, 20))));
+  WmWindow* window = window_owner.window();
   wm::WindowState* window_state = window->GetWindowState();
   window_state->Activate();
 
@@ -803,21 +808,23 @@ TEST_F(AcceleratorControllerTest, GlobalAccelerators) {
   const ui::Accelerator volume_down(ui::VKEY_VOLUME_DOWN, ui::EF_NONE);
   const ui::Accelerator volume_up(ui::VKEY_VOLUME_UP, ui::EF_NONE);
   {
-    TestVolumeControlDelegate* delegate = new TestVolumeControlDelegate;
-    WmShell::Get()->system_tray_delegate()->SetVolumeControlDelegate(
-        std::unique_ptr<VolumeControlDelegate>(delegate));
-    EXPECT_EQ(0, delegate->handle_volume_mute_count());
+    base::UserActionTester user_action_tester;
+    ui::AcceleratorHistory* history = GetController()->accelerator_history();
+
+    EXPECT_EQ(0, user_action_tester.GetActionCount("Accel_VolumeMute_F8"));
     EXPECT_TRUE(ProcessInController(volume_mute));
-    EXPECT_EQ(1, delegate->handle_volume_mute_count());
-    EXPECT_EQ(volume_mute, delegate->last_accelerator());
-    EXPECT_EQ(0, delegate->handle_volume_down_count());
+    EXPECT_EQ(1, user_action_tester.GetActionCount("Accel_VolumeMute_F8"));
+    EXPECT_EQ(volume_mute, history->current_accelerator());
+
+    EXPECT_EQ(0, user_action_tester.GetActionCount("Accel_VolumeDown_F9"));
     EXPECT_TRUE(ProcessInController(volume_down));
-    EXPECT_EQ(1, delegate->handle_volume_down_count());
-    EXPECT_EQ(volume_down, delegate->last_accelerator());
-    EXPECT_EQ(0, delegate->handle_volume_up_count());
+    EXPECT_EQ(1, user_action_tester.GetActionCount("Accel_VolumeDown_F9"));
+    EXPECT_EQ(volume_down, history->current_accelerator());
+
+    EXPECT_EQ(0, user_action_tester.GetActionCount("Accel_VolumeUp_F10"));
     EXPECT_TRUE(ProcessInController(volume_up));
-    EXPECT_EQ(1, delegate->handle_volume_up_count());
-    EXPECT_EQ(volume_up, delegate->last_accelerator());
+    EXPECT_EQ(volume_up, history->current_accelerator());
+    EXPECT_EQ(1, user_action_tester.GetActionCount("Accel_VolumeUp_F10"));
   }
   // Brightness
   // ui::VKEY_BRIGHTNESS_DOWN/UP are not defined on Windows.
@@ -909,8 +916,8 @@ TEST_F(AcceleratorControllerTest, GlobalAccelerators) {
   // NOTE: Accelerators that do not work on the lock screen need to be
   // tested before the sequence below is invoked because it causes a side
   // effect of locking the screen.
-  EXPECT_TRUE(ProcessInController(
-      ui::Accelerator(ui::VKEY_L, ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN)));
+  EXPECT_TRUE(
+      ProcessInController(ui::Accelerator(ui::VKEY_L, ui::EF_COMMAND_DOWN)));
 #endif
 }
 
@@ -1233,24 +1240,23 @@ TEST_F(AcceleratorControllerTest, DisallowedAtModalWindow) {
   const ui::Accelerator volume_down(ui::VKEY_VOLUME_DOWN, ui::EF_NONE);
   const ui::Accelerator volume_up(ui::VKEY_VOLUME_UP, ui::EF_NONE);
   {
+    base::UserActionTester user_action_tester;
+    ui::AcceleratorHistory* history = GetController()->accelerator_history();
+
+    EXPECT_EQ(0, user_action_tester.GetActionCount("Accel_VolumeMute_F8"));
     EXPECT_TRUE(ProcessInController(volume_mute));
+    EXPECT_EQ(1, user_action_tester.GetActionCount("Accel_VolumeMute_F8"));
+    EXPECT_EQ(volume_mute, history->current_accelerator());
+
+    EXPECT_EQ(0, user_action_tester.GetActionCount("Accel_VolumeDown_F9"));
     EXPECT_TRUE(ProcessInController(volume_down));
+    EXPECT_EQ(1, user_action_tester.GetActionCount("Accel_VolumeDown_F9"));
+    EXPECT_EQ(volume_down, history->current_accelerator());
+
+    EXPECT_EQ(0, user_action_tester.GetActionCount("Accel_VolumeUp_F10"));
     EXPECT_TRUE(ProcessInController(volume_up));
-    TestVolumeControlDelegate* delegate = new TestVolumeControlDelegate;
-    WmShell::Get()->system_tray_delegate()->SetVolumeControlDelegate(
-        std::unique_ptr<VolumeControlDelegate>(delegate));
-    EXPECT_EQ(0, delegate->handle_volume_mute_count());
-    EXPECT_TRUE(ProcessInController(volume_mute));
-    EXPECT_EQ(1, delegate->handle_volume_mute_count());
-    EXPECT_EQ(volume_mute, delegate->last_accelerator());
-    EXPECT_EQ(0, delegate->handle_volume_down_count());
-    EXPECT_TRUE(ProcessInController(volume_down));
-    EXPECT_EQ(1, delegate->handle_volume_down_count());
-    EXPECT_EQ(volume_down, delegate->last_accelerator());
-    EXPECT_EQ(0, delegate->handle_volume_up_count());
-    EXPECT_TRUE(ProcessInController(volume_up));
-    EXPECT_EQ(1, delegate->handle_volume_up_count());
-    EXPECT_EQ(volume_up, delegate->last_accelerator());
+    EXPECT_EQ(volume_up, history->current_accelerator());
+    EXPECT_EQ(1, user_action_tester.GetActionCount("Accel_VolumeUp_F10"));
   }
 }
 #endif

@@ -79,10 +79,11 @@ void InsertTextCommand::setEndingSelectionWithoutValidation(
   // We could have inserted a part of composed character sequence,
   // so we are basically treating ending selection as a range to avoid
   // validation. <http://bugs.webkit.org/show_bug.cgi?id=15781>
-  VisibleSelection forcedEndingSelection;
-  forcedEndingSelection.setWithoutValidation(startPosition, endPosition);
-  forcedEndingSelection.setIsDirectional(endingSelection().isDirectional());
-  setEndingSelection(forcedEndingSelection);
+  setEndingSelection(SelectionInDOMTree::Builder()
+                         .collapse(startPosition)
+                         .extend(endPosition)
+                         .setIsDirectional(endingSelection().isDirectional())
+                         .build());
 }
 
 // This avoids the expense of a full fledged delete operation, and avoids a
@@ -101,11 +102,12 @@ bool InsertTextCommand::performTrivialReplace(const String& text,
     return false;
 
   setEndingSelectionWithoutValidation(start, endPosition);
-  if (!selectInsertedText)
-    setEndingSelection(createVisibleSelectionDeprecated(
-        endingSelection().visibleEndDeprecated(),
-        endingSelection().isDirectional()));
-
+  if (selectInsertedText)
+    return true;
+  setEndingSelection(SelectionInDOMTree::Builder()
+                         .collapse(endingSelection().end())
+                         .setIsDirectional(endingSelection().isDirectional())
+                         .build());
   return true;
 }
 
@@ -129,11 +131,12 @@ bool InsertTextCommand::performOverwrite(const String& text,
   Position endPosition =
       Position(textNode, start.offsetInContainerNode() + text.length());
   setEndingSelectionWithoutValidation(start, endPosition);
-  if (!selectInsertedText)
-    setEndingSelection(createVisibleSelectionDeprecated(
-        endingSelection().visibleEndDeprecated(),
-        endingSelection().isDirectional()));
-
+  if (selectInsertedText || endingSelection().isNone())
+    return true;
+  setEndingSelection(SelectionInDOMTree::Builder()
+                         .collapse(endingSelection().end())
+                         .setIsDirectional(endingSelection().isDirectional())
+                         .build());
   return true;
 }
 
@@ -148,8 +151,9 @@ void InsertTextCommand::doApply(EditingState* editingState) {
   if (endingSelection().isRange()) {
     if (performTrivialReplace(m_text, m_selectInsertedText))
       return;
+    document().updateStyleAndLayoutIgnorePendingStylesheets();
     bool endOfSelectionWasAtStartOfBlock =
-        isStartOfBlock(endingSelection().visibleEndDeprecated());
+        isStartOfBlock(endingSelection().visibleEnd());
     deleteSelection(editingState, false, true, false, false);
     if (editingState->isAborted())
       return;
@@ -170,6 +174,8 @@ void InsertTextCommand::doApply(EditingState* editingState) {
       return;
   }
 
+  document().updateStyleAndLayoutIgnorePendingStylesheets();
+
   Position startPosition(endingSelection().start());
 
   Position placeholder;
@@ -182,8 +188,8 @@ void InsertTextCommand::doApply(EditingState* editingState) {
   Position downstream(mostForwardCaretPosition(startPosition));
   if (lineBreakExistsAtPosition(downstream)) {
     // FIXME: This doesn't handle placeholders at the end of anonymous blocks.
-    VisiblePosition caret = createVisiblePositionDeprecated(startPosition);
-    if (isEndOfBlock(caret) && isStartOfParagraphDeprecated(caret))
+    VisiblePosition caret = createVisiblePosition(startPosition);
+    if (isEndOfBlock(caret) && isStartOfParagraph(caret))
       placeholder = downstream;
     // Don't remove the placeholder yet, otherwise the block we're inserting
     // into would collapse before we get a chance to insert into it.  We check
@@ -270,15 +276,21 @@ void InsertTextCommand::doApply(EditingState* editingState) {
     }
   }
 
-  if (!m_selectInsertedText)
-    setEndingSelection(createVisibleSelectionDeprecated(
-        endingSelection().end(), endingSelection().affinity(),
-        endingSelection().isDirectional()));
+  if (!m_selectInsertedText) {
+    SelectionInDOMTree::Builder builder;
+    builder.setAffinity(endingSelection().affinity());
+    builder.setIsDirectional(endingSelection().isDirectional());
+    if (endingSelection().end().isNotNull())
+      builder.collapse(endingSelection().end());
+    setEndingSelection(builder.build());
+  }
 }
 
 Position InsertTextCommand::insertTab(const Position& pos,
                                       EditingState* editingState) {
-  Position insertPos = createVisiblePositionDeprecated(pos).deepEquivalent();
+  document().updateStyleAndLayoutIgnorePendingStylesheets();
+
+  Position insertPos = createVisiblePosition(pos).deepEquivalent();
   if (insertPos.isNull())
     return pos;
 

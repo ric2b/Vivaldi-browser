@@ -23,16 +23,19 @@
 #include "blimp/client/core/geolocation/geolocation_feature.h"
 #include "blimp/client/core/render_widget/render_widget_feature.h"
 #include "blimp/client/core/session/cross_thread_network_event_observer.h"
+#include "blimp/client/core/settings/settings.h"
 #include "blimp/client/core/settings/settings_feature.h"
 #include "blimp/client/core/switches/blimp_client_switches.h"
 #include "blimp/client/public/blimp_client_context_delegate.h"
 #include "blimp/client/public/compositor/compositor_dependencies.h"
+#include "components/prefs/pref_service.h"
 #include "device/geolocation/geolocation_delegate.h"
 #include "device/geolocation/location_arbitrator.h"
 #include "ui/gfx/native_widget_types.h"
 
 #if defined(OS_ANDROID)
 #include "blimp/client/core/context/android/blimp_client_context_impl_android.h"
+#include "blimp/client/core/settings/android/settings_android.h"
 #endif  // OS_ANDROID
 
 namespace blimp {
@@ -57,28 +60,51 @@ void DropConnectionOnIOThread(ClientNetworkComponents* net_components) {
 BlimpClientContext* BlimpClientContext::Create(
     scoped_refptr<base::SingleThreadTaskRunner> io_thread_task_runner,
     scoped_refptr<base::SingleThreadTaskRunner> file_thread_task_runner,
-    std::unique_ptr<CompositorDependencies> compositor_dependencies) {
+    std::unique_ptr<CompositorDependencies> compositor_dependencies,
+    PrefService* local_state) {
 #if defined(OS_ANDROID)
-  return new BlimpClientContextImplAndroid(io_thread_task_runner,
-                                           file_thread_task_runner,
-                                           std::move(compositor_dependencies));
+  auto settings = base::MakeUnique<SettingsAndroid>(local_state);
+  return new BlimpClientContextImplAndroid(
+      io_thread_task_runner, file_thread_task_runner,
+      std::move(compositor_dependencies), std::move(settings));
 #else
-  return new BlimpClientContextImpl(io_thread_task_runner,
-                                    file_thread_task_runner,
-                                    std::move(compositor_dependencies));
+  auto settings = base::MakeUnique<Settings>(local_state);
+  return new BlimpClientContextImpl(
+      io_thread_task_runner, file_thread_task_runner,
+      std::move(compositor_dependencies), std::move(settings));
 #endif  // defined(OS_ANDROID)
+}
+
+// This function is declared in //blimp/client/public/blimp_client_context.h
+// and either this function or the one in
+// //blimp/client/core/dummy_blimp_client_context.cc should be linked in to
+// any binary using BlimpClientContext::RegisterPrefs.
+// static
+void BlimpClientContext::RegisterPrefs(PrefRegistrySimple* registry) {
+  Settings::RegisterPrefs(registry);
+}
+
+// This function is declared in //blimp/client/public/blimp_client_context.h
+// and either this function or the one in
+// //blimp/client/core/dummy_blimp_client_context.cc should be linked in to
+// any binary using BlimpClientContext::ApplyBlimpSwitches.
+// static
+void BlimpClientContext::ApplyBlimpSwitches(CommandLinePrefStore* store) {
+  Settings::ApplyBlimpSwitches(store);
 }
 
 BlimpClientContextImpl::BlimpClientContextImpl(
     scoped_refptr<base::SingleThreadTaskRunner> io_thread_task_runner,
     scoped_refptr<base::SingleThreadTaskRunner> file_thread_task_runner,
-    std::unique_ptr<CompositorDependencies> compositor_dependencies)
+    std::unique_ptr<CompositorDependencies> compositor_dependencies,
+    std::unique_ptr<Settings> settings)
     : BlimpClientContext(),
       io_thread_task_runner_(io_thread_task_runner),
       file_thread_task_runner_(file_thread_task_runner),
       blimp_compositor_dependencies_(
           base::MakeUnique<BlimpCompositorDependencies>(
               std::move(compositor_dependencies))),
+      settings_(std::move(settings)),
       blob_channel_feature_(new BlobChannelFeature(this)),
       geolocation_feature_(base::MakeUnique<GeolocationFeature>(
           base::MakeUnique<device::LocationArbitrator>(
@@ -86,7 +112,7 @@ BlimpClientContextImpl::BlimpClientContextImpl(
       ime_feature_(new ImeFeature),
       navigation_feature_(new NavigationFeature),
       render_widget_feature_(new RenderWidgetFeature),
-      settings_feature_(new SettingsFeature),
+      settings_feature_(base::MakeUnique<SettingsFeature>(settings_.get())),
       tab_control_feature_(new TabControlFeature),
       blimp_contents_manager_(
           new BlimpContentsManager(blimp_compositor_dependencies_.get(),
@@ -106,7 +132,9 @@ BlimpClientContextImpl::BlimpClientContextImpl(
       io_thread_task_runner_, net_components_->GetBrowserConnectionHandler());
 
   RegisterFeatures();
-  InitializeSettings();
+  settings_feature_->PushSettings();
+
+  connection_status_.AddObserver(this);
 
   // Initialize must only be posted after the features have been
   // registered.
@@ -119,10 +147,24 @@ BlimpClientContextImpl::BlimpClientContextImpl(
 
 BlimpClientContextImpl::~BlimpClientContextImpl() {
   io_thread_task_runner_->DeleteSoon(FROM_HERE, net_components_.release());
+  connection_status_.RemoveObserver(this);
 }
 
 void BlimpClientContextImpl::SetDelegate(BlimpClientContextDelegate* delegate) {
+  DCHECK(!delegate_ || !delegate);
   delegate_ = delegate;
+
+  // TODO(xingliu): Pass the IdentityProvider needed by |assignment_fetcher_|
+  // in the constructor, see crbug/661848.
+  if (delegate_) {
+    assignment_fetcher_ = base::MakeUnique<AssignmentFetcher>(
+        io_thread_task_runner_, file_thread_task_runner_,
+        delegate_->CreateIdentityProvider(), GetAssignerURL(),
+        base::Bind(&BlimpClientContextImpl::OnAssignmentReceived,
+                   weak_factory_.GetWeakPtr()),
+        base::Bind(&BlimpClientContextDelegate::OnAuthenticationError,
+                   base::Unretained(delegate_)));
+  }
 }
 
 std::unique_ptr<BlimpContents> BlimpClientContextImpl::CreateBlimpContents(
@@ -135,9 +177,9 @@ std::unique_ptr<BlimpContents> BlimpClientContextImpl::CreateBlimpContents(
 }
 
 void BlimpClientContextImpl::Connect() {
-  // Start Blimp authentication flow. The OAuth2 token will be used in
-  // assignment source.
-  GetIdentitySource()->Connect();
+  DCHECK(delegate_);
+  DCHECK(assignment_fetcher_);
+  assignment_fetcher_->Fetch();
 }
 
 void BlimpClientContextImpl::ConnectWithAssignment(
@@ -150,36 +192,24 @@ void BlimpClientContextImpl::ConnectWithAssignment(
 
 std::unordered_map<std::string, std::string>
 BlimpClientContextImpl::CreateFeedbackData() {
-  return CreateBlimpFeedbackData(blimp_contents_manager_.get());
-}
-
-void BlimpClientContextImpl::OnAuthTokenReceived(
-    const std::string& client_auth_token) {
-  if (!assignment_source_) {
-    assignment_source_.reset(new AssignmentSource(
-        GetAssignerURL(), io_thread_task_runner_, file_thread_task_runner_));
-  }
-
-  VLOG(1) << "Trying to get assignment.";
-  assignment_source_->GetAssignment(
-      client_auth_token,
-      base::Bind(&BlimpClientContextImpl::OnAssignmentReceived,
-                 weak_factory_.GetWeakPtr()));
-}
-
-GURL BlimpClientContextImpl::GetAssignerURL() {
-  return GURL(kDefaultAssignerUrl);
+  IdentitySource* identity_source = GetIdentitySource();
+  DCHECK(identity_source);
+  return CreateBlimpFeedbackData(blimp_contents_manager_.get(),
+                                 identity_source->GetActiveUsername());
 }
 
 IdentitySource* BlimpClientContextImpl::GetIdentitySource() {
-  if (!identity_source_) {
-    CreateIdentitySource();
-  }
-  return identity_source_.get();
+  DCHECK(delegate_);
+  DCHECK(assignment_fetcher_);
+  return assignment_fetcher_->GetIdentitySource();
 }
 
 ConnectionStatus* BlimpClientContextImpl::GetConnectionStatus() {
   return &connection_status_;
+}
+
+GURL BlimpClientContextImpl::GetAssignerURL() {
+  return GURL(kDefaultAssignerUrl);
 }
 
 void BlimpClientContextImpl::OnAssignmentReceived(
@@ -232,26 +262,30 @@ void BlimpClientContextImpl::RegisterFeatures() {
                                             tab_control_feature_.get()));
 }
 
-void BlimpClientContextImpl::InitializeSettings() {
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kDownloadWholeDocument))
-    settings_feature_->SetRecordWholeDocument(true);
-}
-
 void BlimpClientContextImpl::DropConnection() {
   io_thread_task_runner_->PostTask(
       FROM_HERE, base::Bind(&DropConnectionOnIOThread, net_components_.get()));
 }
 
-void BlimpClientContextImpl::CreateIdentitySource() {
-  identity_source_ = base::MakeUnique<IdentitySource>(
-      delegate_, base::Bind(&BlimpClientContextImpl::OnAuthTokenReceived,
-                            base::Unretained(this)));
-}
-
 void BlimpClientContextImpl::OnImageDecodeError() {
   // Currently we just drop the connection on image decoding error.
   DropConnection();
+}
+
+void BlimpClientContextImpl::OnConnected() {
+  if (delegate_) {
+    delegate_->OnConnected();
+  }
+}
+
+void BlimpClientContextImpl::OnDisconnected(int result) {
+  if (delegate_) {
+    if (result >= 0) {
+      delegate_->OnEngineDisconnected(result);
+    } else {
+      delegate_->OnNetworkDisconnected(result);
+    }
+  }
 }
 
 }  // namespace client

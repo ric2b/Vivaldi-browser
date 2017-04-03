@@ -68,8 +68,10 @@ class CORE_EXPORT EditCommand : public GarbageCollectedFinalized<EditCommand> {
   Document& document() const { return *m_document.get(); }
   CompositeEditCommand* parent() const { return m_parent; }
   void setStartingSelection(const VisibleSelection&);
-  void setEndingSelection(const VisibleSelection&);
-  void setEndingSelection(const VisiblePosition&);
+  void setEndingSelection(const SelectionInDOMTree&);
+  // TODO(yosin): |setEndingVisibleSelection()| will take |SelectionInUndoStep|
+  // You should not use this function other than copying existing selection.
+  void setEndingVisibleSelection(const VisibleSelection&);
 
   // TODO(yosin) |isRenderedCharacter()| should be removed, and we should use
   // |VisiblePosition::characterAfter()| and

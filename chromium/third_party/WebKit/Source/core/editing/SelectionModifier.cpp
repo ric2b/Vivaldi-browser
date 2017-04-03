@@ -585,10 +585,7 @@ static void setSelectionStart(VisibleSelection* selection,
 bool SelectionModifier::modify(EAlteration alter,
                                SelectionDirection direction,
                                TextGranularity granularity) {
-  // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
-  // needs to be audited.  See http://crbug.com/590369 for more details.
-  frame()->document()->updateStyleAndLayoutIgnorePendingStylesheets();
-
+  DCHECK(!frame()->document()->needsLayoutTreeUpdate());
   DocumentLifecycle::DisallowTransitionScope disallowTransition(
       frame()->document()->lifecycle());
 
@@ -644,8 +641,11 @@ bool SelectionModifier::modify(EAlteration alter,
 
   switch (alter) {
     case FrameSelection::AlterationMove:
-      m_selection =
-          createVisibleSelection(position, m_selection.isDirectional());
+      m_selection = createVisibleSelection(
+          SelectionInDOMTree::Builder()
+              .collapse(position.toPositionWithAffinity())
+              .setIsDirectional(m_selection.isDirectional())
+              .build());
       break;
     case FrameSelection::AlterationExtend:
 
@@ -775,7 +775,11 @@ bool SelectionModifier::modifyWithPageGranularity(EAlteration alter,
 
   switch (alter) {
     case FrameSelection::AlterationMove:
-      m_selection = createVisibleSelection(result, m_selection.isDirectional());
+      m_selection = createVisibleSelection(
+          SelectionInDOMTree::Builder()
+              .collapse(result.toPositionWithAffinity())
+              .setIsDirectional(m_selection.isDirectional())
+              .build());
       break;
     case FrameSelection::AlterationExtend:
       m_selection.setExtent(result);

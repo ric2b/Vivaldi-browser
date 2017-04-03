@@ -9,6 +9,7 @@
 
 #include "base/command_line.h"
 #include "base/debug/leak_annotations.h"
+#include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/lock.h"
@@ -39,6 +40,9 @@ static bool use_mock_keychain = false;
 // the cypher text with this string so that future data migration can detect
 // this and migrate to different encryption without data loss.
 const char kEncryptionVersionPrefix[] = "v10";
+
+// This lock is used to make the GetEncrytionKey method thread-safe.
+base::LazyInstance<base::Lock>::Leaky g_lock = LAZY_INSTANCE_INITIALIZER;
 
 static bool import_key_is_cached = false;
 
@@ -86,8 +90,7 @@ crypto::SymmetricKey* GetEncryptionKey(const std::string& service_name,
 crypto::SymmetricKey* GetEncryptionKey() {
   static crypto::SymmetricKey* cached_encryption_key = NULL;
   static bool key_is_cached = false;
-  static base::Lock lock;
-  base::AutoLock auto_lock(lock);
+  base::AutoLock auto_lock(g_lock.Get());
 
   if (key_is_cached)
     return cached_encryption_key;

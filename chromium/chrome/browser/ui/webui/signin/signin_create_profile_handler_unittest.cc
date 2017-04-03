@@ -14,24 +14,25 @@
 #include "chrome/browser/signin/signin_error_controller_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/browser/ui/webui/signin/signin_utils.h"
+#include "chrome/common/features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/browser_with_test_window_test.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile_manager.h"
 #include "components/signin/core/browser/fake_auth_status_provider.h"
-#include "components/sync/api/fake_sync_change_processor.h"
-#include "components/sync/api/sync_data.h"
-#include "components/sync/api/sync_error_factory_mock.h"
-#include "components/sync/core/attachments/attachment_service_proxy_for_test.h"
+#include "components/sync/model/attachments/attachment_service_proxy_for_test.h"
+#include "components/sync/model/fake_sync_change_processor.h"
+#include "components/sync/model/sync_data.h"
+#include "components/sync/model/sync_error_factory_mock.h"
 #include "components/sync/protocol/sync.pb.h"
-#include "components/syncable_prefs/testing_pref_service_syncable.h"
+#include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "content/public/test/test_web_ui.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/l10n/l10n_util.h"
 
-#if defined(ENABLE_SUPERVISED_USERS)
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
 #include "chrome/browser/supervised_user/legacy/supervised_user_sync_service.h"
 #include "chrome/browser/supervised_user/legacy/supervised_user_sync_service_factory.h"
 #endif
@@ -52,7 +53,7 @@ const char kTestEmail2[] = "foo2@bar.com";
 
 const char kTestWebUIResponse[] = "cr.webUIListenerCallback";
 
-#if defined(ENABLE_SUPERVISED_USERS)
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
 const char kSupervisedUserId1[] = "test-supervised-id-1";
 const char kSupervisedUserId2[] = "test-supervised-id-2";
 
@@ -110,11 +111,8 @@ class TestSigninCreateProfileHandler : public SigninCreateProfileHandler {
     // Create the profile synchronously.
     Profile* profile = profile_manager_->CreateTestingProfile(
         kTestProfileName,
-        std::unique_ptr<syncable_prefs::TestingPrefServiceSyncable>(),
-        name,
-        0,
-        supervised_user_id,
-        TestingProfile::TestingFactories());
+        std::unique_ptr<sync_preferences::TestingPrefServiceSyncable>(), name,
+        0, supervised_user_id, TestingProfile::TestingFactories());
 
     // Set the flag used to track the state of the creation flow.
     profile_path_being_created_ = profile->GetPath();
@@ -145,7 +143,7 @@ class TestSigninCreateProfileHandler : public SigninCreateProfileHandler {
                     Profile* custodian_profile,
                     Profile* new_profile));
 
-#if defined(ENABLE_SUPERVISED_USERS)
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
   // Calls the callback method to resume profile creation flow.
   void RealRegisterSupervisedUser(bool create_shortcut,
                                   const std::string& supervised_user_id,
@@ -185,11 +183,8 @@ class SigninCreateProfileHandlerTest : public BrowserWithTestWindowTest {
                                        BuildFakeSigninManagerBase));
     custodian_ = profile_manager_.get()->CreateTestingProfile(
         "custodian-profile",
-        std::unique_ptr<syncable_prefs::TestingPrefServiceSyncable>(),
-        base::UTF8ToUTF16("custodian-profile"),
-        0,
-        std::string(),
-        factories);
+        std::unique_ptr<sync_preferences::TestingPrefServiceSyncable>(),
+        base::UTF8ToUTF16("custodian-profile"), 0, std::string(), factories);
 
     // Authenticate the custodian profile.
     fake_signin_manager_ = static_cast<FakeSigninManagerForTesting*>(
@@ -197,7 +192,7 @@ class SigninCreateProfileHandlerTest : public BrowserWithTestWindowTest {
     fake_signin_manager_->SetAuthenticatedAccountInfo(kTestGaiaId1,
                                                       kTestEmail1);
 
-#if defined(ENABLE_SUPERVISED_USERS)
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
     // Add supervised users to the custodian profile.
     SupervisedUserSyncService* sync_service_ =
         SupervisedUserSyncServiceFactory::GetForProfile(custodian_);
@@ -221,9 +216,8 @@ class SigninCreateProfileHandlerTest : public BrowserWithTestWindowTest {
     // The second supervised user exists on the device.
     profile_manager()->CreateTestingProfile(
         kSupervisedUsername2,
-        std::unique_ptr<syncable_prefs::PrefServiceSyncable>(),
-        base::UTF8ToUTF16(kSupervisedUsername2),
-        0,
+        std::unique_ptr<sync_preferences::PrefServiceSyncable>(),
+        base::UTF8ToUTF16(kSupervisedUsername2), 0,
         kSupervisedUserId2,  // supervised_user_id
         TestingProfile::TestingFactories());
 
@@ -430,7 +424,7 @@ TEST_F(SigninCreateProfileHandlerTest, CreateProfileWithForceSignin) {
   ASSERT_FALSE(show_confirmation);
 }
 
-#if defined(ENABLE_SUPERVISED_USERS)
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
 
 TEST_F(SigninCreateProfileHandlerTest, CreateSupervisedUser) {
   // Expect the call to create the profile.

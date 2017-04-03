@@ -107,10 +107,6 @@ bool IsYoutubeDomainUrl(const GURL& url,
                         SubdomainPermission subdomain_permission,
                         PortPermission port_permission);
 
-bool IsWhatsappDomainUrl(const GURL& url,
-                         SubdomainPermission subdomain_permission,
-                         PortPermission port_permission);
-
 // True if |host| is "[www.]<domain_in_lower_case>.<TLD>" with a valid TLD. If
 // |subdomain_permission| is ALLOW_SUBDOMAIN, we check against host
 // "*.<domain_in_lower_case>.<TLD>" instead.

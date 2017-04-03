@@ -21,7 +21,6 @@
 #include "chrome/browser/extensions/api/file_handlers/mime_util.h"
 #include "chrome/browser/extensions/api/file_system/file_system_api.h"
 #include "chrome/browser/profiles/profile.h"
-#include "components/url_formatter/url_fixer.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
@@ -43,6 +42,7 @@
 #include "url/gurl.h"
 
 #include "app/vivaldi_apptools.h"
+#include "components/url_formatter/url_fixer.h"
 
 #if defined(OS_CHROMEOS)
 #include "components/user_manager/user_manager.h"

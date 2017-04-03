@@ -32,7 +32,7 @@
 #include "content/public/common/url_constants.h"
 #include "third_party/skia/include/effects/SkGradientShader.h"
 #include "third_party/skia/include/pathops/SkPathOps.h"
-#include "ui/accessibility/ax_view_state.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/models/list_selection_model.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -557,7 +557,7 @@ Tab::Tab(TabController* controller, gfx::AnimationContainer* container)
 
   set_id(VIEW_ID_TAB);
 
-  SetBorder(views::Border::CreateEmptyBorder(GetLayoutInsets(TAB)));
+  SetBorder(views::CreateEmptyBorder(GetLayoutInsets(TAB)));
 
   title_->SetHorizontalAlignment(gfx::ALIGN_TO_HEAD);
   title_->SetElideBehavior(gfx::FADE_TAIL);
@@ -886,7 +886,7 @@ void Tab::Layout() {
     // for touch events.
     // TODO(pkasting): The padding should maybe be removed, see comments in
     // TabCloseButton::TargetForRect().
-    close_button_->SetBorder(views::Border::NullBorder());
+    close_button_->SetBorder(views::NullBorder());
     const gfx::Size close_button_size(close_button_->GetPreferredSize());
     const int top = lb.y() + (lb.height() - close_button_size.height() + 1) / 2;
     const int left = kAfterTitleSpacing;
@@ -896,7 +896,7 @@ void Tab::Layout() {
     const int bottom = height() - close_button_size.height() - top;
     const int right = width() - close_button_end;
     close_button_->SetBorder(
-        views::Border::CreateEmptyBorder(top, left, bottom, right));
+        views::CreateEmptyBorder(top, left, bottom, right));
     close_button_->SizeToPreferredSize();
   }
   close_button_->SetVisible(showing_close_button_);
@@ -1098,14 +1098,14 @@ void Tab::OnGestureEvent(ui::GestureEvent* event) {
   event->SetHandled();
 }
 
-void Tab::GetAccessibleState(ui::AXViewState* state) {
-  state->role = ui::AX_ROLE_TAB;
-  state->name = data_.title;
-  state->AddStateFlag(ui::AX_STATE_MULTISELECTABLE);
-  state->AddStateFlag(ui::AX_STATE_SELECTABLE);
-  controller_->UpdateTabAccessibilityState(this, state);
+void Tab::GetAccessibleNodeData(ui::AXNodeData* node_data) {
+  node_data->role = ui::AX_ROLE_TAB;
+  node_data->SetName(data_.title);
+  node_data->AddStateFlag(ui::AX_STATE_MULTISELECTABLE);
+  node_data->AddStateFlag(ui::AX_STATE_SELECTABLE);
+  controller_->UpdateTabAccessibilityState(this, node_data);
   if (IsSelected())
-    state->AddStateFlag(ui::AX_STATE_SELECTED);
+    node_data->AddStateFlag(ui::AX_STATE_SELECTED);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1143,13 +1143,13 @@ void Tab::DataChanged(const TabRendererData& old) {
 }
 
 void Tab::PaintTab(gfx::Canvas* canvas, const gfx::Path& clip) {
-  const int kActiveTabFillId = IDR_THEME_TOOLBAR;
-  const bool has_custom_image =
-      GetThemeProvider()->HasCustomImage(kActiveTabFillId);
+  const int kActiveTabFillId =
+      GetThemeProvider()->HasCustomImage(IDR_THEME_TOOLBAR) ? IDR_THEME_TOOLBAR
+                                                            : 0;
   const int y_offset = -GetLayoutInsets(TAB).top();
   if (IsActive()) {
     PaintTabBackgroundUsingFillId(canvas, canvas, true, kActiveTabFillId,
-                                  has_custom_image, y_offset);
+                                  y_offset);
   } else {
     PaintInactiveTabBackground(canvas, clip);
 
@@ -1158,7 +1158,7 @@ void Tab::PaintTab(gfx::Canvas* canvas, const gfx::Path& clip) {
       canvas->SaveLayerAlpha(gfx::ToRoundedInt(throb_value * 0xff),
                              GetLocalBounds());
       PaintTabBackgroundUsingFillId(canvas, canvas, true, kActiveTabFillId,
-                                    has_custom_image, y_offset);
+                                    y_offset);
       canvas->Restore();
     }
   }
@@ -1215,20 +1215,23 @@ void Tab::PaintInactiveTabBackground(gfx::Canvas* canvas,
                                      const gfx::Path& clip) {
   bool has_custom_image;
   int fill_id = controller_->GetBackgroundResourceId(&has_custom_image);
-
-  // If the theme is providing a custom background image, then its top edge
-  // should be at the top of the tab. Otherwise, we assume that the background
-  // image is a composited foreground + frame image.  Note that if the theme is
-  // only providing a custom frame image, |has_custom_image| will be true, but
-  // we should use the |background_offset_| here.
   const ui::ThemeProvider* tp = GetThemeProvider();
-  const int y_offset = tp->HasCustomImage(fill_id) ? 0 : background_offset_.y();
 
   // We only cache the image when it's the default image and we're not hovered,
   // to avoid caching a background image that isn't the same for all tabs.
-  if (has_custom_image || hover_controller_.ShouldDraw()) {
-    PaintTabBackgroundUsingFillId(canvas, canvas, false, fill_id,
-                                  has_custom_image, y_offset);
+  if (has_custom_image) {
+    // If the theme is providing a custom background image, then its top edge
+    // should be at the top of the tab. Otherwise, we assume that the background
+    // image is a composited foreground + frame image.  Note that if the theme
+    // is only providing a custom frame image, |has_custom_image| will be true,
+    // but we should use the |background_offset_| here.
+    const int y_offset =
+        tp->HasCustomImage(fill_id) ? 0 : background_offset_.y();
+    PaintTabBackgroundUsingFillId(canvas, canvas, false, fill_id, y_offset);
+    return;
+  }
+  if (hover_controller_.ShouldDraw()) {
+    PaintTabBackgroundUsingFillId(canvas, canvas, false, 0, 0);
     return;
   }
 
@@ -1249,14 +1252,12 @@ void Tab::PaintInactiveTabBackground(gfx::Canvas* canvas,
     gfx::Canvas tmp_canvas(size(), canvas->image_scale(), false);
     if (use_fill_and_stroke_images) {
       gfx::Canvas tmp_fill_canvas(size(), canvas->image_scale(), false);
-      PaintTabBackgroundUsingFillId(&tmp_fill_canvas, &tmp_canvas, false,
-                                    fill_id, false, y_offset);
+      PaintTabBackgroundUsingFillId(&tmp_fill_canvas, &tmp_canvas, false, 0, 0);
       g_image_cache->emplace_front(
           metadata, gfx::ImageSkia(tmp_fill_canvas.ExtractImageRep()),
           gfx::ImageSkia(tmp_canvas.ExtractImageRep()));
     } else {
-      PaintTabBackgroundUsingFillId(&tmp_canvas, &tmp_canvas, false, fill_id,
-                                    false, y_offset);
+      PaintTabBackgroundUsingFillId(&tmp_canvas, &tmp_canvas, false, 0, 0);
       g_image_cache->emplace_front(
           metadata, gfx::ImageSkia(),
           gfx::ImageSkia(tmp_canvas.ExtractImageRep()));
@@ -1279,7 +1280,6 @@ void Tab::PaintTabBackgroundUsingFillId(gfx::Canvas* fill_canvas,
                                         gfx::Canvas* stroke_canvas,
                                         bool is_active,
                                         int fill_id,
-                                        bool has_custom_image,
                                         int y_offset) {
   gfx::Path fill;
   SkPaint paint;
@@ -1296,7 +1296,7 @@ void Tab::PaintTabBackgroundUsingFillId(gfx::Canvas* fill_canvas,
     {
       gfx::ScopedCanvas clip_scoper(fill_canvas);
       fill_canvas->ClipPath(fill, true);
-      if (has_custom_image) {
+      if (fill_id) {
         gfx::ScopedCanvas scale_scoper(fill_canvas);
         fill_canvas->sk_canvas()->scale(scale, scale);
         fill_canvas->TileImageInt(*tp->GetImageSkiaNamed(fill_id),
@@ -1356,7 +1356,7 @@ void Tab::PaintPinnedTabTitleChangedIndicatorAndIcon(
     icon_canvas.DrawImageInt(favicon_, 0, 0);
     SkPaint clear_paint;
     clear_paint.setAntiAlias(true);
-    clear_paint.setXfermodeMode(SkXfermode::kClear_Mode);
+    clear_paint.setBlendMode(SkBlendMode::kClear);
     const int circle_x = base::i18n::IsRTL() ? 0 : gfx::kFaviconSize;
     icon_canvas.DrawCircle(gfx::PointF(circle_x, gfx::kFaviconSize),
                            kIndicatorCropRadius, clear_paint);

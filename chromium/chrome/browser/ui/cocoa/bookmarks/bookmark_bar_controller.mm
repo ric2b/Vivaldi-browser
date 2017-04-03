@@ -165,6 +165,9 @@ void RecordAppLaunch(Profile* profile, GURL url) {
 
 @interface BookmarkBarController ()
 
+// Updates the sizes and positions of the subviews.
+- (void)layoutSubviews;
+
 // Moves to the given next state (from the current state), possibly animating.
 // If |animate| is NO, it will stop any running animation and jump to the given
 // state. If YES, it may either (depending on implementation) jump to the end of
@@ -343,7 +346,7 @@ void RecordAppLaunch(Profile* profile, GURL url) {
     if (node->parent() == bookmarkModel_->bookmark_bar_node()) {
       for (BookmarkButton* button in [self buttons]) {
         if ([button bookmarkNode] == node) {
-          [button setIsContinuousPulsing:YES];
+          [button setPulseIsStuckOn:YES];
           return button;
         }
       }
@@ -362,7 +365,7 @@ void RecordAppLaunch(Profile* profile, GURL url) {
   if (!pulsingButton_)
     return;
 
-  [pulsingButton_ setIsContinuousPulsing:YES];
+  [pulsingButton_ setPulseIsStuckOn:YES];
   pulsingBookmarkObserver_.reset(
       new BookmarkModelObserverForCocoa(bookmarkModel_, ^() {
         // Stop pulsing if anything happened to the node.
@@ -375,7 +378,7 @@ void RecordAppLaunch(Profile* profile, GURL url) {
   if (!pulsingButton_)
     return;
 
-  [pulsingButton_ setIsContinuousPulsing:NO];
+  [pulsingButton_ setPulseIsStuckOn:NO];
   pulsingButton_ = nil;
   pulsingBookmarkObserver_.reset();
 }
@@ -556,6 +559,14 @@ void RecordAppLaunch(Profile* profile, GURL url) {
 // NSNotificationCenter callback.
 - (void)parentWindowDidResignMain:(NSNotification*)notification {
   [self closeFolderAndStopTrackingMenus];
+}
+
+- (void)layoutToFrame:(NSRect)frame {
+  // The view should be pinned to the top of the window with a flexible width.
+  DCHECK_EQ(NSViewWidthSizable | NSViewMinYMargin,
+            [[self view] autoresizingMask]);
+  [[self view] setFrame:frame];
+  [self layoutSubviews];
 }
 
 // Change the layout of the bookmark bar's subviews in response to a visibility
@@ -2798,7 +2809,7 @@ static BOOL ValueInRangeInclusive(CGFloat low, CGFloat value, CGFloat high) {
       ![self isAnimatingToState:BookmarkBar::DETACHED]) {
     BrowserWindowController* browserController =
         [BrowserWindowController browserWindowControllerForView:[self view]];
-    [browserController lockBarVisibilityForOwner:child withAnimation:NO];
+    [browserController lockToolbarVisibilityForOwner:child withAnimation:NO];
   }
 }
 
@@ -2807,7 +2818,7 @@ static BOOL ValueInRangeInclusive(CGFloat low, CGFloat value, CGFloat high) {
   // mode.
   BrowserWindowController* browserController =
       [BrowserWindowController browserWindowControllerForView:[self view]];
-  [browserController releaseBarVisibilityForOwner:child withAnimation:NO];
+  [browserController releaseToolbarVisibilityForOwner:child withAnimation:NO];
 }
 
 // Add a new folder controller as triggered by the given folder button.
@@ -2818,8 +2829,8 @@ static BOOL ValueInRangeInclusive(CGFloat low, CGFloat value, CGFloat high) {
   BrowserWindowController* browserController =
       [BrowserWindowController browserWindowControllerForView:[self view]];
   // Confirm we're not re-locking with ourself as an owner before locking.
-  DCHECK([browserController isBarVisibilityLockedForOwner:self] == NO);
-  [browserController lockBarVisibilityForOwner:self withAnimation:NO];
+  DCHECK([browserController isToolbarVisibilityLockedForOwner:self] == NO);
+  [browserController lockToolbarVisibilityForOwner:self withAnimation:NO];
 
   if (folderController_)
     [self closeAllBookmarkFolders];
@@ -2838,7 +2849,7 @@ static BOOL ValueInRangeInclusive(CGFloat low, CGFloat value, CGFloat high) {
   [self watchForExitEvent:YES];
 
   // No longer need to hold the lock; the folderController_ now owns it.
-  [browserController releaseBarVisibilityForOwner:self withAnimation:NO];
+  [browserController releaseToolbarVisibilityForOwner:self withAnimation:NO];
 }
 
 - (void)openAll:(const BookmarkNode*)node

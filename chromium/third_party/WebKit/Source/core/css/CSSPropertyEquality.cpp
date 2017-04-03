@@ -195,6 +195,7 @@ bool CSSPropertyEquality::propertiesEqual(CSSPropertyID prop,
       return a.offsetDistance() == b.offsetDistance();
     case CSSPropertyOffsetPosition:
       return a.offsetPosition() == b.offsetPosition();
+    case CSSPropertyOffsetRotate:
     case CSSPropertyOffsetRotation:
       return a.offsetRotation() == b.offsetRotation();
     case CSSPropertyOpacity:
@@ -254,6 +255,8 @@ bool CSSPropertyEquality::propertiesEqual(CSSPropertyID prop,
       return a.textDecorationColor() == b.textDecorationColor() &&
              a.visitedLinkTextDecorationColor() ==
                  b.visitedLinkTextDecorationColor();
+    case CSSPropertyTextDecorationSkip:
+      return a.getTextDecorationSkip() == b.getTextDecorationSkip();
     case CSSPropertyTextIndent:
       return a.textIndent() == b.textIndent();
     case CSSPropertyTextShadow:

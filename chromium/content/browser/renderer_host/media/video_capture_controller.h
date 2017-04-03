@@ -51,8 +51,8 @@
 #include "content/browser/renderer_host/media/video_capture_controller_event_handler.h"
 #include "content/common/content_export.h"
 #include "content/common/media/video_capture.h"
-#include "media/base/video_capture_types.h"
 #include "media/capture/video/video_frame_receiver.h"
+#include "media/capture/video_capture_types.h"
 
 namespace media {
 class VideoCaptureBufferPool;
@@ -81,7 +81,6 @@ class CONTENT_EXPORT VideoCaptureController : public media::VideoFrameReceiver {
   // to receive frames from the device until RemoveClient() is called.
   void AddClient(VideoCaptureControllerID id,
                  VideoCaptureControllerEventHandler* event_handler,
-                 base::ProcessHandle render_process,
                  media::VideoCaptureSessionId session_id,
                  const media::VideoCaptureParams& params);
 
@@ -131,7 +130,7 @@ class CONTENT_EXPORT VideoCaptureController : public media::VideoFrameReceiver {
   // Implementation of media::VideoFrameReceiver interface:
   void OnIncomingCapturedVideoFrame(
       std::unique_ptr<media::VideoCaptureDevice::Client::Buffer> buffer,
-      const scoped_refptr<media::VideoFrame>& frame) override;
+      scoped_refptr<media::VideoFrame> frame) override;
   void OnError() override;
   void OnLog(const std::string& message) override;
   void OnBufferDestroyed(int buffer_id_to_drop) override;

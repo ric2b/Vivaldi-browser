@@ -6,9 +6,11 @@
 
 #include <memory>
 
+#include "base/memory/ptr_util.h"
+#include "base/message_loop/message_loop.h"
 #include "base/rand_util.h"
 #include "components/sync/base/unique_position.h"
-#include "components/sync/core/test/test_entry_factory.h"
+#include "components/sync/engine_impl/test_entry_factory.h"
 #include "components/sync/protocol/sync.pb.h"
 #include "components/sync/syncable/syncable_write_transaction.h"
 #include "components/sync/test/engine/test_directory_setter_upper.h"
@@ -20,7 +22,7 @@ class GetUpdatePositionTest : public ::testing::Test {
  public:
   void SetUp() override {
     dir_maker_.SetUp();
-    entry_factory_.reset(new TestEntryFactory(directory()));
+    entry_factory_ = base::MakeUnique<TestEntryFactory>(directory());
   }
 
   void TearDown() override { dir_maker_.TearDown(); }

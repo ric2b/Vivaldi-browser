@@ -10,8 +10,8 @@
 #include "base/android/jni_android.h"
 #include "base/bind.h"
 #include "base/memory/singleton.h"
+#include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
-#include "content/public/browser/browser_thread.h"
 #include "jni/DeviceSensors_jni.h"
 
 using base::android::AttachCurrentThread;
@@ -58,6 +58,7 @@ SensorManagerAndroid::SensorManagerAndroid()
       motion_buffer_initialized_(false),
       orientation_buffer_initialized_(false),
       is_shutdown_(false) {
+  DCHECK(thread_checker_.CalledOnValidThread());
   memset(received_motion_data_, 0, sizeof(received_motion_data_));
   device_sensors_.Reset(Java_DeviceSensors_getInstance(
       AttachCurrentThread(), base::android::GetApplicationContext()));
@@ -71,6 +72,7 @@ bool SensorManagerAndroid::Register(JNIEnv* env) {
 }
 
 SensorManagerAndroid* SensorManagerAndroid::GetInstance() {
+  DCHECK(base::MessageLoopForUI::IsCurrent());
   return base::Singleton<
       SensorManagerAndroid,
       base::LeakySingletonTraits<SensorManagerAndroid>>::get();
@@ -207,6 +209,7 @@ void SensorManagerAndroid::GotLight(JNIEnv*,
 }
 
 bool SensorManagerAndroid::Start(ConsumerType consumer_type) {
+  DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(!device_sensors_.is_null());
   int rate_in_microseconds = (consumer_type == CONSUMER_TYPE_LIGHT)
                                  ? kLightSensorIntervalMicroseconds
@@ -217,12 +220,14 @@ bool SensorManagerAndroid::Start(ConsumerType consumer_type) {
 }
 
 void SensorManagerAndroid::Stop(ConsumerType consumer_type) {
+  DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(!device_sensors_.is_null());
   Java_DeviceSensors_stop(AttachCurrentThread(), device_sensors_,
                           static_cast<jint>(consumer_type));
 }
 
 int SensorManagerAndroid::GetNumberActiveDeviceMotionSensors() {
+  DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(!device_sensors_.is_null());
   return Java_DeviceSensors_getNumberActiveDeviceMotionSensors(
       AttachCurrentThread(), device_sensors_);
@@ -230,6 +235,7 @@ int SensorManagerAndroid::GetNumberActiveDeviceMotionSensors() {
 
 SensorManagerAndroid::OrientationSensorType
 SensorManagerAndroid::GetOrientationSensorTypeUsed() {
+  DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(!device_sensors_.is_null());
   return static_cast<SensorManagerAndroid::OrientationSensorType>(
       Java_DeviceSensors_getOrientationSensorTypeUsed(AttachCurrentThread(),
@@ -242,20 +248,7 @@ SensorManagerAndroid::GetOrientationSensorTypeUsed() {
 
 void SensorManagerAndroid::StartFetchingDeviceLightData(
     DeviceLightHardwareBuffer* buffer) {
-  if (BrowserThread::CurrentlyOn(BrowserThread::UI)) {
-    StartFetchingLightDataOnUI(buffer);
-  } else {
-    BrowserThread::PostTask(
-        BrowserThread::UI, FROM_HERE,
-        base::Bind(&SensorManagerAndroid::StartFetchingLightDataOnUI,
-                   base::Unretained(this),
-                   buffer));
-  }
-}
-
-void SensorManagerAndroid::StartFetchingLightDataOnUI(
-    DeviceLightHardwareBuffer* buffer) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(buffer);
   if (is_shutdown_)
     return;
@@ -273,19 +266,7 @@ void SensorManagerAndroid::StartFetchingLightDataOnUI(
 }
 
 void SensorManagerAndroid::StopFetchingDeviceLightData() {
-  if (BrowserThread::CurrentlyOn(BrowserThread::UI)) {
-    StopFetchingLightDataOnUI();
-    return;
-  }
-
-  BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE,
-      base::Bind(&SensorManagerAndroid::StopFetchingLightDataOnUI,
-                 base::Unretained(this)));
-}
-
-void SensorManagerAndroid::StopFetchingLightDataOnUI() {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  DCHECK(thread_checker_.CalledOnValidThread());
   if (is_shutdown_)
     return;
 
@@ -309,20 +290,7 @@ void SensorManagerAndroid::SetLightBufferValue(double lux) {
 
 void SensorManagerAndroid::StartFetchingDeviceMotionData(
     DeviceMotionHardwareBuffer* buffer) {
-  if (BrowserThread::CurrentlyOn(BrowserThread::UI)) {
-    StartFetchingMotionDataOnUI(buffer);
-  } else {
-    BrowserThread::PostTask(
-        BrowserThread::UI, FROM_HERE,
-        base::Bind(&SensorManagerAndroid::StartFetchingMotionDataOnUI,
-                   base::Unretained(this),
-                   buffer));
-  }
-}
-
-void SensorManagerAndroid::StartFetchingMotionDataOnUI(
-    DeviceMotionHardwareBuffer* buffer) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(buffer);
   if (is_shutdown_)
     return;
@@ -345,19 +313,7 @@ void SensorManagerAndroid::StartFetchingMotionDataOnUI(
 }
 
 void SensorManagerAndroid::StopFetchingDeviceMotionData() {
-  if (BrowserThread::CurrentlyOn(BrowserThread::UI)) {
-    StopFetchingMotionDataOnUI();
-    return;
-  }
-
-  BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE,
-      base::Bind(&SensorManagerAndroid::StopFetchingMotionDataOnUI,
-                 base::Unretained(this)));
-}
-
-void SensorManagerAndroid::StopFetchingMotionDataOnUI() {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  DCHECK(thread_checker_.CalledOnValidThread());
   if (is_shutdown_)
     return;
 
@@ -410,20 +366,7 @@ void SensorManagerAndroid::ClearInternalMotionBuffers() {
 
 void SensorManagerAndroid::StartFetchingDeviceOrientationData(
     DeviceOrientationHardwareBuffer* buffer) {
-  if (BrowserThread::CurrentlyOn(BrowserThread::UI)) {
-    StartFetchingOrientationDataOnUI(buffer);
-  } else {
-    BrowserThread::PostTask(
-        BrowserThread::UI, FROM_HERE,
-        base::Bind(&SensorManagerAndroid::StartFetchingOrientationDataOnUI,
-                   base::Unretained(this),
-                   buffer));
-  }
-}
-
-void SensorManagerAndroid::StartFetchingOrientationDataOnUI(
-    DeviceOrientationHardwareBuffer* buffer) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(buffer);
   if (is_shutdown_)
     return;
@@ -448,19 +391,7 @@ void SensorManagerAndroid::StartFetchingOrientationDataOnUI(
 }
 
 void SensorManagerAndroid::StopFetchingDeviceOrientationData() {
-  if (BrowserThread::CurrentlyOn(BrowserThread::UI)) {
-    StopFetchingOrientationDataOnUI();
-    return;
-  }
-
-  BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE,
-      base::Bind(&SensorManagerAndroid::StopFetchingOrientationDataOnUI,
-                 base::Unretained(this)));
-}
-
-void SensorManagerAndroid::StopFetchingOrientationDataOnUI() {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  DCHECK(thread_checker_.CalledOnValidThread());
   if (is_shutdown_)
     return;
 
@@ -477,33 +408,7 @@ void SensorManagerAndroid::StopFetchingOrientationDataOnUI() {
 
 void SensorManagerAndroid::StartFetchingDeviceOrientationAbsoluteData(
     DeviceOrientationHardwareBuffer* buffer) {
-  if (BrowserThread::CurrentlyOn(BrowserThread::UI)) {
-    StartFetchingOrientationAbsoluteDataOnUI(buffer);
-  } else {
-    BrowserThread::PostTask(
-        BrowserThread::UI, FROM_HERE,
-        base::Bind(
-            &SensorManagerAndroid::StartFetchingOrientationAbsoluteDataOnUI,
-            base::Unretained(this),
-            buffer));
-  }
-}
-
-void SensorManagerAndroid::StopFetchingDeviceOrientationAbsoluteData() {
-  if (BrowserThread::CurrentlyOn(BrowserThread::UI)) {
-    StopFetchingOrientationAbsoluteDataOnUI();
-    return;
-  }
-
-  BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE,
-      base::Bind(&SensorManagerAndroid::StopFetchingOrientationAbsoluteDataOnUI,
-                 base::Unretained(this)));
-}
-
-void SensorManagerAndroid::StartFetchingOrientationAbsoluteDataOnUI(
-    DeviceOrientationHardwareBuffer* buffer) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(buffer);
   if (is_shutdown_)
     return;
@@ -524,8 +429,8 @@ void SensorManagerAndroid::StartFetchingOrientationAbsoluteDataOnUI(
   }
 }
 
-void SensorManagerAndroid::StopFetchingOrientationAbsoluteDataOnUI() {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+void SensorManagerAndroid::StopFetchingDeviceOrientationAbsoluteData() {
+  DCHECK(thread_checker_.CalledOnValidThread());
   if (is_shutdown_)
     return;
 
@@ -542,7 +447,7 @@ void SensorManagerAndroid::StopFetchingOrientationAbsoluteDataOnUI() {
 }
 
 void SensorManagerAndroid::Shutdown() {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  DCHECK(thread_checker_.CalledOnValidThread());
   is_shutdown_ = true;
 }
 

@@ -72,8 +72,7 @@ class AndroidGranularityMovementBrowserTest : public ContentBrowserTest {
     AccessibilityNotificationWaiter waiter(
         shell()->web_contents(), AccessibilityModeComplete,
         ui::AX_EVENT_TREE_CHANGED);
-    node->manager()->delegate()->AccessibilitySetAccessibilityFocus(
-        node->GetId());
+    node->manager()->SetAccessibilityFocus(*node);
     waiter.WaitForNotification();
 
     int start_index = -1;
@@ -150,7 +149,9 @@ IN_PROC_BROWSER_TEST_F(AndroidGranularityMovementBrowserTest,
   GURL url("data:text/html,"
            "<body>"
            "<p>One, two, three!</p>"
+           "<p>"
            "<button aria-label='Seven, eight, nine!'>Four, five, six!</button>"
+           "</p>"
            "</body></html>");
   BrowserAccessibility* root = LoadUrlAndGetAccessibilityRoot(url);
   ASSERT_EQ(2U, root->PlatformChildCount());
@@ -176,7 +177,9 @@ IN_PROC_BROWSER_TEST_F(AndroidGranularityMovementBrowserTest,
   GURL url("data:text/html,"
            "<body>"
            "<p>One, two, three!</p>"
+           "<p>"
            "<button aria-label='Seven, eight, nine!'>Four, five, six!</button>"
+           "</p>"
            "</body></html>");
   BrowserAccessibility* root = LoadUrlAndGetAccessibilityRoot(url);
   ASSERT_EQ(2U, root->PlatformChildCount());

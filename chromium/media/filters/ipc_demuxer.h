@@ -11,14 +11,11 @@
 
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/single_thread_task_runner.h"
 #include "media/base/demuxer.h"
 #include "media/base/media_export.h"
 
 class GURL;
-
-namespace base {
-class SingleThreadTaskRunner;
-}
 
 namespace media {
 

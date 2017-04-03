@@ -124,12 +124,20 @@ FrameTreeNode::FrameTreeNode(FrameTree* frame_tree,
 FrameTreeNode::~FrameTreeNode() {
   std::vector<std::unique_ptr<FrameTreeNode>>().swap(children_);
   frame_tree_->FrameRemoved(this);
-  FOR_EACH_OBSERVER(Observer, observers_, OnFrameTreeNodeDestroyed(this));
+  for (auto& observer : observers_)
+    observer.OnFrameTreeNodeDestroyed(this);
 
   if (opener_)
     opener_->RemoveObserver(opener_observer_.get());
 
   g_frame_tree_node_id_map.Get().erase(frame_tree_node_id_);
+
+  if (navigation_request_) {
+    // PlzNavigate: if a frame with a pending navigation is detached, make sure
+    // the WebContents (and its observers) update their loading state.
+    navigation_request_.reset();
+    DidStopLoading();
+  }
 }
 
 void FrameTreeNode::AddObserver(Observer* observer) {
@@ -156,7 +164,7 @@ FrameTreeNode* FrameTreeNode::AddChild(std::unique_ptr<FrameTreeNode> child,
   child->render_manager()->Init(
       render_manager_.current_host()->GetSiteInstance(),
       render_manager_.current_host()->GetRoutingID(), frame_routing_id,
-      MSG_ROUTING_NONE);
+      MSG_ROUTING_NONE, false);
 
   // Other renderer processes in this BrowsingInstance may need to find out
   // about the new frame.  Create a proxy for the child frame in all
@@ -208,7 +216,7 @@ void FrameTreeNode::SetOpener(FrameTreeNode* opener) {
 }
 
 void FrameTreeNode::SetCurrentURL(const GURL& url) {
-  if (!has_committed_real_load_ && url != GURL(url::kAboutBlankURL))
+  if (!has_committed_real_load_ && url != url::kAboutBlankURL)
     has_committed_real_load_ = true;
   current_frame_host()->set_last_committed_url(url);
   blame_context_.TakeSnapshot();
@@ -471,7 +479,8 @@ bool FrameTreeNode::StopLoading() {
 
 void FrameTreeNode::DidFocus() {
   last_focus_time_ = base::TimeTicks::Now();
-  FOR_EACH_OBSERVER(Observer, observers_, OnFrameTreeNodeFocused(this));
+  for (auto& observer : observers_)
+    observer.OnFrameTreeNodeFocused(this);
 }
 
 void FrameTreeNode::BeforeUnloadCanceled() {

@@ -188,12 +188,16 @@ blink::WebColorChooser* WebFrameTestClient::createColorChooser(
 }
 
 void WebFrameTestClient::runModalAlertDialog(const blink::WebString& message) {
+  if (!test_runner()->ShouldDumpJavaScriptDialogs())
+    return;
   delegate_->PrintMessage(std::string("ALERT: ") + message.utf8().data() +
                           "\n");
 }
 
 bool WebFrameTestClient::runModalConfirmDialog(
     const blink::WebString& message) {
+  if (!test_runner()->ShouldDumpJavaScriptDialogs())
+    return true;
   delegate_->PrintMessage(std::string("CONFIRM: ") + message.utf8().data() +
                           "\n");
   return true;
@@ -203,6 +207,8 @@ bool WebFrameTestClient::runModalPromptDialog(
     const blink::WebString& message,
     const blink::WebString& default_value,
     blink::WebString* actual_value) {
+  if (!test_runner()->ShouldDumpJavaScriptDialogs())
+    return true;
   delegate_->PrintMessage(std::string("PROMPT: ") + message.utf8().data() +
                           ", default text: " + default_value.utf8().data() +
                           "\n");
@@ -210,7 +216,8 @@ bool WebFrameTestClient::runModalPromptDialog(
 }
 
 bool WebFrameTestClient::runModalBeforeUnloadDialog(bool is_reload) {
-  delegate_->PrintMessage(std::string("CONFIRM NAVIGATION\n"));
+  if (test_runner()->ShouldDumpJavaScriptDialogs())
+    delegate_->PrintMessage(std::string("CONFIRM NAVIGATION\n"));
   return !test_runner()->shouldStayOnPageAfterHandlingBeforeUnload();
 }
 
@@ -397,8 +404,7 @@ void WebFrameTestClient::loadURLExternally(
   }
 }
 
-void WebFrameTestClient::didStartProvisionalLoad(blink::WebLocalFrame* frame,
-                                                 double trigering_event_time) {
+void WebFrameTestClient::didStartProvisionalLoad(blink::WebLocalFrame* frame) {
   test_runner()->tryToSetTopLoadingFrame(frame);
 
   if (test_runner()->shouldDumpFrameLoadCallbacks()) {

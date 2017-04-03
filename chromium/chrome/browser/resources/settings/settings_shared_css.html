@@ -5,26 +5,32 @@
 <dom-module id="settings-shared">
   <template>
     <style include="cr-shared-style">
-      button[is='paper-icon-button-light'] {
-        --paper-icon-button-light-ripple: {
-          /* Center the ripple on the icon button. */
-          height: 36px;
-          left: -8px;
-          top: -8px;
-          width: 36px;
-        };
-        -webkit-margin-start: 16px;
-        background-size: cover;
-        flex-shrink: 0;
-        height: 20px;
-        width: 20px;
+      /* Included here so we don't have to include "iron-positioning" in every
+       * stylesheet. See crbug.com/498405. */
+      [hidden] {
+        display: none !important;
       }
 
-      [actionable] button[is="paper-icon-button-light"].icon-arrow-right {
+      button[is='paper-icon-button-light'] {
+        -webkit-margin-end: -8px;  /* Allow ripple to overlap the end. */
+        -webkit-margin-start: 16px;
+        background-position: center;
+        background-repeat: no-repeat;
+        background-size: var(--settings-icon-size);
+        flex-shrink: 0;
+        height: var(--settings-icon-ripple-size);
+        width: var(--settings-icon-ripple-size);
+      }
+
+      :host-context([dir=rtl]) button[is='paper-icon-button-light'] {
+        transform: scaleX(-1);  /* Flip on the X axis (aka mirror). */
+      }
+
+      [actionable] button[is='paper-icon-button-light'].subpage-arrow {
         background-image: url(images/arrow_right.svg);
       }
 
-      [actionable] button[is="paper-icon-button-light"].icon-external {
+      [actionable] button[is='paper-icon-button-light'].icon-external {
         background-image: url(images/open_in_new.svg);
       }
 
@@ -163,8 +169,9 @@
       .secondary-button {
         --paper-button: {
           color: var(--paper-grey-600);
-          text-decoration: none;
           font-weight: 500;
+          min-width: 1em;  /* A tighter fit than 5.14em for short buttons. */
+          text-decoration: none;
         };
         --paper-button-flat-keyboard-focus: {
           background: rgba(0, 0, 0, .12);
@@ -229,11 +236,6 @@
         display: block;
       }
 
-      .list-frame .secondary,
-      .list-item .secondary {
-        @apply(--settings-secondary);
-      }
-
       /* A list-item is intended to be contained within a list-frame. The list
        * frame will setup the initial start margin. */
       .list-item {
@@ -250,10 +252,6 @@
 
       .list-item.selected {
         font-weight: 500;
-      }
-
-      .list-item select {
-        -webkit-margin-start: 4px;
       }
 
       /* The middle part (horizontally) of a list item. */
@@ -283,14 +281,24 @@
         font-weight: 500;
       }
 
+      /* A row with two lines of text. Often the lower line will be .secondary.
+       */
+      .two-line {
+        min-height: var(--settings-row-two-line-min-height);
+      }
+
       /* A settings-box is a horizontal row of text or controls within a
        * setting section (page or subpage). */
       .settings-box {
         align-items: center;
         border-top: var(--settings-separator-line);
         display: flex;
-        min-height: var(--settings-row-min-height);
+        min-height: var(--settings-box-min-height);
         padding: 0 var(--settings-box-row-padding);
+      }
+
+      .settings-box.two-line {
+        min-height: var(--settings-box-two-line-min-height);
       }
 
       /* We use an explicit tag to remove the top border, rather than a
@@ -305,25 +313,30 @@
         display: block;
       }
 
-      /* A row with two lines of text. Often the lower line will be .secondary.
-       */
-      .settings-box.two-line {
-        min-height: var(--settings-row-two-line-min-height);
-      }
-
-      /*
-       * A settings box with a single start-aligned column, generally but not
-       * necessarily used in combination with two-line.
-       */
-      .settings-box.single-column {
+      /* A start-aligned column. */
+      .single-column {
         align-items: flex-start;
         flex-direction: column;
         justify-content: center;
       }
 
-      /* The lower line of text in a .settings-box.two-line. */
-      .settings-box .secondary {
+      /* A settings-box with no height other than the separator line. */
+      .settings-box.line-only {
+        min-height: 0;
+      }
+
+      /* The lower line of text in a two-line row. */
+      .secondary {
         @apply(--settings-secondary);
+      }
+
+      /* The |:empty| CSS selector only works when there is no whitespace.
+       * E.g. <div>[[foo]]</div> will be |:empty| when foo == ""; and
+       * <div> [[foo]] </div> will not be |:empty| when foo == "". Ensure there
+       * is no extra whitespace when the contents of .secondary may be "".
+       */
+      .secondary:empty {
+        margin: 0;
       }
 
       /* The middle part (horizontally) of a row. */
@@ -333,20 +346,15 @@
         flex: auto;
       }
 
-      .settings-box .middle.two-line {
+      .settings-box .middle.two-line,
+      .settings-box .start.two-line {
         display: flex;
-        min-height: var(--settings-row-two-line-min-height);
       }
 
       /* The start (left in LTR) part (horizontally) of a row. */
       .settings-box .start {
         align-items: center;
         flex: auto;
-      }
-
-      .settings-box .start.two-line {
-        display: flex;
-        min-height: var(--settings-row-two-line-min-height);
       }
 
       /* The secondary-action wraps a clickable sub-area of a .settings-box.
@@ -423,6 +431,7 @@
         position: absolute;
         top: -5px;
         width: 10px;
+        z-index: -1;
       }
 
       /* Turns the arrow direction downwards, when the bubble is placed above

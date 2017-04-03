@@ -10,7 +10,6 @@
 #include "base/files/scoped_file.h"
 #include "build/build_config.h"
 #include "content/common/content_export.h"
-#include "ipc/attachment_broker_privileged.h"
 #include "ipc/ipc_channel_proxy.h"
 
 namespace base {
@@ -21,7 +20,7 @@ namespace IPC {
 class MessageFilter;
 }
 
-namespace shell {
+namespace service_manager {
 class InterfaceProvider;
 }
 
@@ -89,7 +88,7 @@ class CONTENT_EXPORT ChildProcessHost : public IPC::Sender {
   virtual std::string CreateChannelMojo(const std::string& child_token) = 0;
 
   // Creates the IPC channel over a Mojo message pipe. The pipe connection is
-  // brokered through the shell like any other service connection.
+  // brokered through the Service Manager like any other service connection.
   virtual void CreateChannelMojo() = 0;
 
   // Returns true iff the IPC channel is currently being opened;
@@ -98,14 +97,10 @@ class CONTENT_EXPORT ChildProcessHost : public IPC::Sender {
   // Adds an IPC message filter.  A reference will be kept to the filter.
   virtual void AddFilter(IPC::MessageFilter* filter) = 0;
 
-  // Returns the shell::InterfaceProvider the process host can use to bind
+  // Returns the service_manager::InterfaceProvider the process host can use to
+  // bind
   // interfaces exposed to it from the child.
-  virtual shell::InterfaceProvider* GetRemoteInterfaces() = 0;
-
-#if defined(OS_POSIX)
-  // See IPC::Channel::TakeClientFileDescriptor.
-  virtual base::ScopedFD TakeClientFileDescriptor() = 0;
-#endif
+  virtual service_manager::InterfaceProvider* GetRemoteInterfaces() = 0;
 };
 
 };  // namespace content

@@ -9,8 +9,9 @@ if (is_android) {
 
 source_set("session") {
   visibility = [
-    "//blimp/client/*",
-    "//blimp/engine:browser_tests",
+    "//blimp/client/app:*",  # TODO(nyquist): Remove this. See crbug/651964.
+    "//blimp/client/core/*",
+    "//blimp/engine:browser_tests",  # TODO(nyquist): Remove this. See crbug/653789.
   ]
 
   sources = [
@@ -63,23 +64,19 @@ source_set("unit_tests") {
 
   data = []
 
-  # TODO(dtrainor): Fix the test harness to allow this to run on Android.
-  # See crbug.com/588240.
-  if (is_linux) {
-    sources += [ "assignment_source_unittest.cc" ]
+  sources += [ "assignment_source_unittest.cc" ]
 
-    deps += [
-      "//blimp/client/core/switches",
-      "//blimp/common",
-      "//blimp/common:test_support",
-      "//components/safe_json:test_support",
-      "//net:test_support",
-      "//url",
-    ]
+  deps += [
+    "//blimp/client/core/switches",
+    "//blimp/common",
+    "//blimp/common:test_support",
+    "//components/safe_json:test_support",
+    "//net:test_support",
+    "//url",
+  ]
 
-    data += [
-      "test_selfsigned_cert.pem",
-      "//blimp/test/data/test_client_token",
-    ]
-  }
+  data += [
+    "test_selfsigned_cert.pem",
+    "//blimp/test/data/test_client_token",
+  ]
 }

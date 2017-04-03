@@ -10,8 +10,8 @@
 #include "base/macros.h"
 #include "content/public/test/test_service.mojom.h"
 #include "mojo/public/cpp/bindings/binding.h"
-#include "services/shell/public/cpp/interface_factory.h"
-#include "services/shell/public/cpp/service.h"
+#include "services/service_manager/public/cpp/interface_factory.h"
+#include "services/service_manager/public/cpp/service.h"
 
 namespace content {
 
@@ -19,20 +19,21 @@ extern const char kTestServiceUrl[];
 
 // Simple Service which provides a mojom::TestService impl. The service
 // terminates itself after its TestService fulfills a single DoSomething call.
-class TestService : public shell::Service,
-                    public shell::InterfaceFactory<mojom::TestService>,
-                    public mojom::TestService {
+class TestService
+    : public service_manager::Service,
+      public service_manager::InterfaceFactory<mojom::TestService>,
+      public mojom::TestService {
  public:
   TestService();
   ~TestService() override;
 
  private:
-  // shell::Service:
-  bool OnConnect(const shell::Identity& remote_identity,
-                 shell::InterfaceRegistry* registry) override;
+  // service_manager::Service:
+  bool OnConnect(const service_manager::ServiceInfo& remote_info,
+                 service_manager::InterfaceRegistry* registry) override;
 
-  // shell::InterfaceFactory<mojom::TestService>:
-  void Create(const shell::Identity& remote_identity,
+  // service_manager::InterfaceFactory<mojom::TestService>:
+  void Create(const service_manager::Identity& remote_identity,
               mojom::TestServiceRequest request) override;
 
   // TestService:

@@ -99,28 +99,42 @@ bool IndentOutdentCommand::tryIndentingAsListItem(const Position& start,
   // However, in case the current selection does not encompass all its children,
   // we need to explicitally handle the same. The original list item too would
   // require proper deletion in that case.
-  if (end.anchorNode() == selectedListItem ||
-      end.anchorNode()->isDescendantOf(selectedListItem->lastChild())) {
-    moveParagraphWithClones(createVisiblePosition(start),
-                            createVisiblePosition(end), newList,
-                            selectedListItem, editingState);
-  } else {
-    moveParagraphWithClones(
-        createVisiblePosition(start),
-        VisiblePosition::afterNode(selectedListItem->lastChild()), newList,
-        selectedListItem, editingState);
-    if (editingState->isAborted())
-      return false;
-    removeNode(selectedListItem, editingState);
+  const bool shouldKeepSelectedList =
+      end.anchorNode() == selectedListItem ||
+      end.anchorNode()->isDescendantOf(selectedListItem->lastChild());
+
+  const VisiblePosition& startOfParagraphToMove = createVisiblePosition(start);
+  const VisiblePosition& endOfParagraphToMove =
+      shouldKeepSelectedList
+          ? createVisiblePosition(end)
+          : VisiblePosition::afterNode(selectedListItem->lastChild());
+
+  // The insertion of |newList| may change the computed style of other
+  // elements, resulting in failure in visible canonicalization.
+  if (startOfParagraphToMove.isNull() || endOfParagraphToMove.isNull()) {
+    editingState->abort();
+    return false;
   }
+
+  moveParagraphWithClones(startOfParagraphToMove, endOfParagraphToMove, newList,
+                          selectedListItem, editingState);
   if (editingState->isAborted())
     return false;
 
+  if (!shouldKeepSelectedList) {
+    removeNode(selectedListItem, editingState);
+    if (editingState->isAborted())
+      return false;
+  }
+
+  document().updateStyleAndLayoutIgnorePendingStylesheets();
   if (canMergeLists(previousList, newList)) {
     mergeIdenticalElements(previousList, newList, editingState);
     if (editingState->isAborted())
       return false;
   }
+
+  document().updateStyleAndLayoutIgnorePendingStylesheets();
   if (canMergeLists(newList, nextList)) {
     mergeIdenticalElements(newList, nextList, editingState);
     if (editingState->isAborted())
@@ -295,6 +309,8 @@ void IndentOutdentCommand::outdentParagraph(EditingState* editingState) {
         createVisiblePosition(visibleEndOfParagraph.toPositionWithAffinity());
   }
 
+  // TODO(xiaochengh): We should not store a VisiblePosition and later inspect
+  // its properties when it is already invalidated.
   VisiblePosition startOfParagraphToMove =
       startOfParagraph(visibleStartOfParagraph);
   VisiblePosition endOfParagraphToMove = endOfParagraph(visibleEndOfParagraph);
@@ -306,6 +322,10 @@ void IndentOutdentCommand::outdentParagraph(EditingState* editingState) {
     return;
 
   document().updateStyleAndLayoutIgnorePendingStylesheets();
+  startOfParagraphToMove =
+      createVisiblePosition(startOfParagraphToMove.toPositionWithAffinity());
+  endOfParagraphToMove =
+      createVisiblePosition(endOfParagraphToMove.toPositionWithAffinity());
   moveParagraph(startOfParagraphToMove, endOfParagraphToMove,
                 VisiblePosition::beforeNode(placeholder), editingState,
                 PreserveSelection);
@@ -336,10 +356,14 @@ void IndentOutdentCommand::outdentRegion(
             .toPositionWithAffinity();
     if (endOfCurrentParagraph.deepEquivalent() ==
         endOfLastParagraph.deepEquivalent()) {
-      setEndingSelection(createVisibleSelection(originalSelectionEnd,
-                                                TextAffinity::Downstream));
+      SelectionInDOMTree::Builder builder;
+      if (originalSelectionEnd.isNotNull())
+        builder.collapse(originalSelectionEnd);
+      setEndingSelection(builder.build());
     } else {
-      setEndingSelection(endOfCurrentParagraph);
+      setEndingSelection(SelectionInDOMTree::Builder()
+                             .collapse(endOfCurrentParagraph.deepEquivalent())
+                             .build());
     }
 
     outdentParagraph(editingState);
@@ -353,8 +377,7 @@ void IndentOutdentCommand::outdentRegion(
       break;
 
     document().updateStyleAndLayoutIgnorePendingStylesheets();
-    if (endOfNextParagraph.isNotNull() &&
-        !endOfNextParagraph.position().isConnected()) {
+    if (endOfNextParagraph.isNotNull() && !endOfNextParagraph.isConnected()) {
       endOfCurrentParagraph = createVisiblePosition(endingSelection().end());
       endOfNextParagraph = endOfParagraph(nextPositionOf(endOfCurrentParagraph))
                                .toPositionWithAffinity();
@@ -390,8 +413,8 @@ void IndentOutdentCommand::formatRange(const Position& start,
 }
 
 InputEvent::InputType IndentOutdentCommand::inputType() const {
-  return m_typeOfAction == Indent ? InputEvent::InputType::Indent
-                                  : InputEvent::InputType::Outdent;
+  return m_typeOfAction == Indent ? InputEvent::InputType::FormatIndent
+                                  : InputEvent::InputType::FormatOutdent;
 }
 
 }  // namespace blink

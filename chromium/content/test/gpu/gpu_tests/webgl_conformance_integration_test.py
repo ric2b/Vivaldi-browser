@@ -174,12 +174,12 @@ class WebGLConformanceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
     else:
       return [
         'EXT_color_buffer_float',
-        'EXT_disjoint_timer_query',
+        'EXT_disjoint_timer_query_webgl2',
         'EXT_texture_filter_anisotropic',
         'OES_texture_float_linear',
         'WEBGL_compressed_texture_astc',
         'WEBGL_compressed_texture_atc',
-        'WEBGL_compressed_texture_es3_0',
+        'WEBGL_compressed_texture_etc',
         'WEBGL_compressed_texture_etc1',
         'WEBGL_compressed_texture_pvrtc',
         'WEBGL_compressed_texture_s3tc',
@@ -252,11 +252,15 @@ class WebGLConformanceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
         '--disable-gpu-process-crash-limit',
         '--js-flags=--expose-gc',
         '--test-type=gpu',
-        '--enable-experimental-canvas-features'
+        '--enable-experimental-canvas-features',
+        # Try disabling the GPU watchdog to see if this affects the
+        # intermittent GPU process hangs that have been seen on the
+        # waterfall. crbug.com/596622 crbug.com/609252
+        '--disable-gpu-watchdog'
     ])
     if cls._webgl_version == 2:
       browser_options.AppendExtraBrowserArgs([
-        '--enable-unsafe-es3-apis',
+        '--enable-es3-apis',
       ])
     browser = browser_finder.FindBrowser(browser_options.finder_options)
     if (browser.target_os.startswith('android') and

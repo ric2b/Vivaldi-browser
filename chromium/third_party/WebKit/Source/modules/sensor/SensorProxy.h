@@ -6,6 +6,7 @@
 #define SensorProxy_h
 
 #include "core/dom/ExceptionCode.h"
+#include "device/generic_sensor/public/cpp/sensor_reading.h"
 #include "device/generic_sensor/public/interfaces/sensor.mojom-blink.h"
 #include "device/generic_sensor/public/interfaces/sensor_provider.mojom-blink.h"
 #include "mojo/public/cpp/bindings/binding.h"
@@ -15,6 +16,8 @@
 namespace blink {
 
 class SensorProviderProxy;
+class SensorReading;
+class SensorReadingFactory;
 
 // This class wraps 'Sensor' mojo interface and used by multiple
 // JS sensor instances of the same type (within a single frame).
@@ -60,38 +63,40 @@ class SensorProxy final : public GarbageCollectedFinalized<SensorProxy>,
   device::mojom::blink::SensorType type() const { return m_type; }
   device::mojom::blink::ReportingMode reportingMode() const { return m_mode; }
 
-  struct Reading {
-    double timestamp;
-    double reading[3];
-  };
-  static_assert(sizeof(Reading) ==
-                    device::mojom::blink::SensorInitParams::kReadBufferSize,
-                "Check reading size");
-
-  const Reading& reading() const { return m_reading; }
+  // The |SensorReading| instance which is shared between sensor instances
+  // of the same type.
+  // Note: the returned value is reset after updateSensorReading() call.
+  SensorReading* sensorReading() const { return m_reading; }
 
   const device::mojom::blink::SensorConfiguration* defaultConfig() const;
 
-  // Updates internal reading from shared buffer.
-  void updateInternalReading();
+  double maximumFrequency() const { return m_maximumFrequency; }
+
+  // Updates sensor reading from shared buffer.
+  void updateSensorReading();
 
   DECLARE_VIRTUAL_TRACE();
 
  private:
   friend class SensorProviderProxy;
-  SensorProxy(device::mojom::blink::SensorType, SensorProviderProxy*);
+  SensorProxy(device::mojom::blink::SensorType,
+              SensorProviderProxy*,
+              std::unique_ptr<SensorReadingFactory>);
 
   // device::mojom::blink::SensorClient overrides.
   void RaiseError() override;
   void SensorReadingChanged() override;
 
   // Generic handler for a fatal error.
+  // String parameters are intentionally copied.
   void handleSensorError(ExceptionCode = UnknownError,
-                         const String& sanitizedMessage = String(),
-                         const String& unsanitizedMessage = String());
+                         String sanitizedMessage = String(),
+                         String unsanitizedMessage = String());
 
   void onSensorCreated(device::mojom::blink::SensorInitParamsPtr,
                        device::mojom::blink::SensorClientRequest);
+
+  bool tryReadFromBuffer(device::SensorReading& result);
 
   device::mojom::blink::SensorType m_type;
   device::mojom::blink::ReportingMode m_mode;
@@ -107,8 +112,16 @@ class SensorProxy final : public GarbageCollectedFinalized<SensorProxy>,
   State m_state;
   mojo::ScopedSharedBufferHandle m_sharedBufferHandle;
   mojo::ScopedSharedBufferMapping m_sharedBuffer;
-  Reading m_reading;
   bool m_suspended;
+  Member<SensorReading> m_reading;
+  std::unique_ptr<SensorReadingFactory> m_readingFactory;
+  double m_maximumFrequency;
+
+  using ReadingBuffer = device::SensorReadingSharedBuffer;
+  static_assert(
+      sizeof(ReadingBuffer) ==
+          device::mojom::blink::SensorInitParams::kReadBufferSizeForTests,
+      "Check reading buffer size for tests");
 };
 
 }  // namespace blink

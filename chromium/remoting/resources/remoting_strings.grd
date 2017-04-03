@@ -278,7 +278,7 @@
         <message desc="Message displayed to the user if there are no hosts registered to their account, informing them how to set up a host on another computer." name="IDS_HOST_LIST_EMPTY_HOSTING_UNSUPPORTED">
           You have no computers registered. To enable remote connections to a computer, install Chrome Remote Desktop there and click “<ph name="BUTTON_NAME">$1<ex>Enable remote connections</ex></ph>”.
         </message>
-        <message desc="Message displayed to the user if there are no hosts registered to her account.  If the user has previously signed-in to the v1 app with an account other than her profile, she will lose access to all her hosts once they upgrade to the v2 app.  This message informs her to sign in to the chrome with that account and re-install Chromoting." name="IDS_HOST_LIST_EMPTY_V2_MIGRATION">
+        <message desc="Message displayed to the user if there are no hosts registered to their account.  If the user has previously signed-in to the v1 app with an account other than their profile, they will lose access to all their hosts once they upgrade to the v2 app.  This message informs them to sign in to the chrome with that account and re-install Chromoting." name="IDS_HOST_LIST_EMPTY_V2_MIGRATION">
           You have previously signed in as <ph name="USER_NAME">$1<ex>John Doe</ex></ph> (<ph name="USER_EMAIL">$2<ex>john.doe@gmail.com</ex></ph>).  To access your computers in that account, <ph name="LINK_BEGIN">$3<ex>&lt;a href="https://support.google.com/chrome/answer/2364824?hl=en"&gt;</ex></ph>sign in to Google Chrome<ph name="LINK_END">$4<ex>&lt;/a&gt;</ex></ph> with that account and re-install Chrome Remote Desktop.
         </message>
         <message desc="Message displayed next to the checkbox that the user can select to allow crash dump collection and reporting." name="IDS_HOST_SETUP_CRASH_REPORTING_MESSAGE">
@@ -380,7 +380,7 @@
         <message desc="Message displayed to the user if there are no hosts registered to their account, informing them how to set up a host on another computer." name="IDS_HOST_LIST_EMPTY_HOSTING_UNSUPPORTED">
           You have no computers registered. To enable remote connections to a computer, install Chromoting there and click “<ph name="BUTTON_NAME">$1<ex>Enable remote connections</ex></ph>”.
         </message>
-        <message desc="Message displayed to the user if there are no hosts registered to her account.  If the user has previously signed-in to the v1 app with an account other than her profile, she will lose access to all her hosts once they upgrade to the v2 app.  This message informs her to sign in to the chrome with that account and re-install Chromoting." name="IDS_HOST_LIST_EMPTY_V2_MIGRATION">
+        <message desc="Message displayed to the user if there are no hosts registered to their account.  If the user has previously signed-in to the v1 app with an account other than their profile, they will lose access to all their hosts once they upgrade to the v2 app.  This message informs them to sign in to the chrome with that account and re-install Chromoting." name="IDS_HOST_LIST_EMPTY_V2_MIGRATION">
           You have previously signed in as <ph name="USER_NAME">$1<ex>John Doe</ex></ph> (<ph name="USER_EMAIL">$2<ex>john.doe@gmail.com</ex></ph>).  To access your computers in that account, <ph name="LINK_BEGIN">$3<ex>&lt;a href="https://support.google.com/chrome/answer/2364824?hl=en"&gt;</ex></ph>sign in to Chromium<ph name="LINK_END">$4<ex>&lt;/a&gt;</ex></ph> with that account and re-install Chromoting.
         </message>
         <message desc="Message displayed next to the checkbox that the user can select to allow crash dump collection and reporting." name="IDS_HOST_SETUP_CRASH_REPORTING_MESSAGE">
@@ -616,12 +616,6 @@
         <message desc="Title for Cast button in Android application menu." name="IDS_CAST_BUTTON_TITLE" formatter_data="android_java">
           Cast
         </message>
-        <message desc="Text for the Android action-bar button which opens the sliding navigation drawer when touched." name="IDS_OPEN_NAVIGATION_DRAWER" formatter_data="android_java">
-          Open navigation drawer
-        </message>
-        <message desc="Text for the Android action-bar button which closes the sliding navigation drawer when touched." name="IDS_CLOSE_NAVIGATION_DRAWER" formatter_data="android_java">
-          Close navigation drawer
-        </message>
 
 <!-- Play Store listings text. These Android-specific strings are not marked
      with formatter_data="android_java" since they are used only for the Play
@@ -652,10 +646,9 @@ Remote computers with non US-English keyboards may receive incorrect text input.
 For information about privacy, please see the Google Privacy Policy (http://goo.gl/SyrVzj) and the Chrome Privacy Policy (http://goo.gl/0uXE5d).
         </message>
         <message name="IDS_PLAY_STORE_CHANGES" desc="List of what's changed in this release of Chrome Remote Desktop for Android. [CHAR-LIMIT=500] [NAME=play_store_changes]">
-• Listen to audio from Windows or Linux computers.
-• Remove unwanted connections by long-pressing on the computer name.
-• Smoother pinch-to-zoom and two-finger scrolling.
-• New Help &amp; Feedback screen.
+• Improved desktop image quality, responsiveness, and battery consumption.
+• Improved responsiveness of click-drag operations.
+• Improved several UI animation effects.
         </message>
       </if>  <!-- is_android or is_ios -->
 
@@ -877,7 +870,10 @@ For information about privacy, please see the Google Privacy Policy (http://goo.
         To begin sharing your desktop, give the access code below to the person who will be assisting you.
       </message>
       <message desc="Instructions shown below the access code when it is ready to be conveyed to the client." name="IDS_INSTRUCTIONS_SHARE_BELOW">
-        Once they enter the code your sharing session will begin.
+        Once they enter the code, you will be prompted to accept the connection and begin the sharing session.
+      </message>
+      <message desc="Instructions shown when the local user must accept or reject the incoming connection request."  name="IDS_INSTRUCTIONS_SHARE_PROMPT">
+        Please select '<ph name="SHARE">$1<ex>Share</ex></ph>' on the connection dialog box to complete the process.
       </message>
       <message desc="An error message displayed if the user enters an invalid PIN while setting up a host." name="IDS_INVALID_PIN">
         Please enter a PIN consisting of six or more digits.
@@ -1154,8 +1150,14 @@ For information about privacy, please see the Google Privacy Policy (http://goo.
       <message desc="Menu option to open a new window." name="IDS_NEW_WINDOW">
         New window…
       </message>
+      <message desc="Message that is spoken (for accessibility) whenever the user selects an account from a list displayed in the application." name="IDS_LOG_IN_ACCOUNT_DESCRIPTION" formatter_data="android_java">
+        Signed in as <ph name="EMAIL_ADDRESS">%1$s<ex>test@gmail.com</ex></ph>.
+      </message>
       <message desc="Label for the Feedback button displayed in the Android Help screen. Pressing this button causes the Feedback screen to be shown." name="IDS_ACTIONBAR_FEEDBACK" formatter_data="android_java">
         Feedback
+      </message>
+      <message desc="Label for the menu button displayed on the Android toolbar. Pressing this button will open a drawer with a list of menu options." name="IDS_ACTIONBAR_MENU" formatter_data="android_java">
+        Menu
       </message>
       <message desc="Label for button to accept remote assistance.  This button appears in the Hangouts confirm dialog." name="IDS_HANGOUTS_CONFIRM_DIALOG_ACCEPT" >
         Accept

@@ -9,6 +9,7 @@
 #include "bindings/core/v8/ScriptPromiseResolver.h"
 #include "core/dom/ActiveDOMObject.h"
 #include "core/events/EventTarget.h"
+#include "modules/serviceworkers/NavigationPreloadManager.h"
 #include "modules/serviceworkers/ServiceWorker.h"
 #include "modules/serviceworkers/ServiceWorkerRegistration.h"
 #include "platform/Supplementable.h"
@@ -21,7 +22,6 @@ namespace blink {
 
 class ScriptPromise;
 class ScriptState;
-class WebServiceWorkerProvider;
 
 // The implementation of a service worker registration object in Blink. Actual
 // registration representation is in the embedder and this class accesses it
@@ -61,6 +61,7 @@ class ServiceWorkerRegistration final
   ServiceWorker* installing() { return m_installing; }
   ServiceWorker* waiting() { return m_waiting; }
   ServiceWorker* active() { return m_active; }
+  NavigationPreloadManager* navigationPreload();
 
   String scope() const;
 
@@ -92,6 +93,7 @@ class ServiceWorkerRegistration final
   Member<ServiceWorker> m_installing;
   Member<ServiceWorker> m_waiting;
   Member<ServiceWorker> m_active;
+  Member<NavigationPreloadManager> m_navigationPreload;
 
   bool m_stopped;
 };

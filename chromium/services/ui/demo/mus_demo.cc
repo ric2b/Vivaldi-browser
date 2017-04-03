@@ -6,7 +6,8 @@
 
 #include "base/memory/ptr_util.h"
 #include "base/time/time.h"
-#include "services/shell/public/cpp/connector.h"
+#include "services/service_manager/public/cpp/connector.h"
+#include "services/service_manager/public/cpp/service_context.h"
 #include "services/ui/demo/bitmap_uploader.h"
 #include "services/ui/public/cpp/gpu_service.h"
 #include "services/ui/public/cpp/window.h"
@@ -61,16 +62,20 @@ void DrawSquare(const gfx::Rect& bounds, double angle, SkCanvas* canvas) {
 
 MusDemo::MusDemo() {}
 
-MusDemo::~MusDemo() {}
-
-void MusDemo::OnStart(const shell::Identity& identity) {
-  gpu_service_ = GpuService::Create(connector());
-  window_tree_client_ = base::MakeUnique<WindowTreeClient>(this, this);
-  window_tree_client_->ConnectAsWindowManager(connector());
+MusDemo::~MusDemo() {
+  display::Screen::SetScreenInstance(nullptr);
 }
 
-bool MusDemo::OnConnect(const shell::Identity& remote_identity,
-                        shell::InterfaceRegistry* registry) {
+void MusDemo::OnStart() {
+  screen_ = base::MakeUnique<display::ScreenBase>();
+  display::Screen::SetScreenInstance(screen_.get());
+  gpu_service_ = GpuService::Create(context()->connector());
+  window_tree_client_ = base::MakeUnique<WindowTreeClient>(this, this);
+  window_tree_client_->ConnectAsWindowManager(context()->connector());
+}
+
+bool MusDemo::OnConnect(const service_manager::ServiceInfo& remote_info,
+                        service_manager::InterfaceRegistry* registry) {
   return true;
 }
 
@@ -134,6 +139,8 @@ void MusDemo::OnWmDisplayRemoved(ui::Window* window) {
   window->Destroy();
 }
 
+void MusDemo::OnWmDisplayModified(const display::Display& display) {}
+
 void MusDemo::OnWmPerformMoveLoop(Window* window,
                                   mojom::MoveLoopSource source,
                                   const gfx::Point& cursor_location,
@@ -154,6 +161,12 @@ void MusDemo::AllocBitmap() {
 }
 
 void MusDemo::DrawFrame() {
+  base::TimeTicks now = base::TimeTicks::Now();
+
+  VLOG(1) << (now - last_draw_frame_time_).InMilliseconds()
+          << "ms since the last frame was drawn.";
+  last_draw_frame_time_ = now;
+
   angle_ += 2.0;
   if (angle_ >= 360.0)
     angle_ = 0.0;
@@ -184,9 +197,16 @@ void MusDemo::DrawFrame() {
       new std::vector<unsigned char>(addr, addr + bytes));
   bitmap_.unlockPixels();
 
+#if defined(OS_ANDROID)
+  // TODO(jcivelli): find a way to not have an ifdef here.
+  BitmapUploader::Format bitmap_format = BitmapUploader::RGBA;
+#else
+  BitmapUploader::Format bitmap_format = BitmapUploader::BGRA;
+#endif
+
   // Send frame to MUS via BitmapUploader.
   uploader_->SetBitmap(bounds.width(), bounds.height(), std::move(data),
-                       BitmapUploader::BGRA);
+                       bitmap_format);
 }
 
 }  // namespace demo

@@ -19,13 +19,6 @@
 #include "ui/base/window_open_disposition.h"
 
 class GURL;
-class SkBitmap;
-struct FrameHostMsg_DidCommitProvisionalLoad_Params;
-
-namespace base {
-class ListValue;
-class TimeTicks;
-}
 
 namespace IPC {
 class Message;
@@ -39,7 +32,6 @@ class Size;
 namespace content {
 
 class BrowserContext;
-class CrossSiteTransferringRequest;
 class FrameTree;
 class PageState;
 class RenderViewHost;
@@ -47,13 +39,7 @@ class RenderViewHostDelegateView;
 class SessionStorageNamespace;
 class SiteInstance;
 class WebContents;
-class WebContentsImpl;
-struct FileChooserParams;
-struct GlobalRequestID;
-struct NativeWebKeyboardEvent;
-struct Referrer;
 struct RendererPreferences;
-struct WebPreferences;
 
 namespace mojom {
 class CreateNewWindowParams;
@@ -105,7 +91,6 @@ class CONTENT_EXPORT RenderViewHostDelegate {
 
   // The state for the page changed and should be updated.
   virtual void UpdateState(RenderViewHost* render_view_host,
-                           int32_t page_id,
                            const PageState& state) {}
 
   // The destination URL has changed should be updated.
@@ -239,6 +224,19 @@ class CONTENT_EXPORT RenderViewHostDelegate {
   // Whether the user agent is overridden using the Chrome for Android "Request
   // Desktop Site" feature.
   virtual bool IsOverridingUserAgent();
+
+  virtual bool IsJavaScriptDialogShowing() const;
+
+  // Whether download UI should be hidden.
+  virtual bool HideDownloadUI() const;
+
+  // Whether the focused element on the page is editable. This returns true iff
+  // the focused frame has a focused editable element.
+  virtual bool IsFocusedElementEditable();
+
+  // Asks the delegate to clear the focused element. This will lead to an IPC to
+  // the focused RenderWidget.
+  virtual void ClearFocusedElement() {}
 
  protected:
   virtual ~RenderViewHostDelegate() {}

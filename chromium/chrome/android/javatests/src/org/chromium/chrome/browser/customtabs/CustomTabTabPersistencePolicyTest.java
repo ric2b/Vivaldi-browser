@@ -21,6 +21,7 @@ import org.chromium.base.ContextUtils;
 import org.chromium.base.StreamUtil;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.AdvancedMockContext;
+import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.TabState;
@@ -32,7 +33,6 @@ import org.chromium.chrome.browser.tabmodel.TabPersistencePolicy;
 import org.chromium.chrome.browser.tabmodel.TabPersistentStore;
 import org.chromium.chrome.browser.tabmodel.TestTabModelDirectory;
 import org.chromium.chrome.test.util.browser.tabmodel.MockTabModel;
-import org.chromium.content.browser.test.util.CallbackHelper;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -363,6 +363,11 @@ public class CustomTabTabPersistencePolicyTest extends InstrumentationTestCase {
             }
 
             @Override
+            public boolean shouldMergeOnStartup() {
+                return false;
+            }
+
+            @Override
             public boolean isMergeInProgress() {
                 return false;
             }
@@ -382,6 +387,10 @@ public class CustomTabTabPersistencePolicyTest extends InstrumentationTestCase {
             public File getOrCreateStateDirectory() {
                 return new File(
                         TabPersistentStore.getOrCreateBaseStateDirectory(), "cct_tests_zor");
+            }
+
+            @Override
+            public void notifyStateLoaded(int tabCountAtStartup) {
             }
 
             @Override
@@ -424,7 +433,7 @@ public class CustomTabTabPersistencePolicyTest extends InstrumentationTestCase {
         CustomTabActivity activity = new CustomTabActivity();
         ApplicationStatus.onStateChangeForTesting(activity, ActivityState.CREATED);
         TabModelSelectorImpl selector = new TabModelSelectorImpl(
-                activity, buildTestPersistencePolicy(), null, false);
+                activity, activity, buildTestPersistencePolicy(), false, false);
         selector.initializeForTesting(normalTabModel, incognitoTabModel);
         ApplicationStatus.onStateChangeForTesting(activity, ActivityState.DESTROYED);
         return selector;

@@ -3,7 +3,10 @@
 # found in the LICENSE file.
 
 source_set("render_widget") {
-  visibility = [ "//blimp/client/*" ]
+  visibility = [
+    "//blimp/client/app:session",  # TODO(nyquist): Remove this. See crbug/651964.
+    "//blimp/client/core/*",
+  ]
 
   sources = [
     "blimp_document.cc",
@@ -23,11 +26,19 @@ source_set("render_widget") {
   public_deps = [
     "//base",
     "//blimp/client/core/compositor",
+    "//blimp/client/core/input",
+    "//blimp/client/core/switches",
     "//blimp/net",
   ]
 }
 
 source_set("test_support") {
+  visibility = [
+    "//blimp/client/core/render_widget:unit_tests",
+    "//blimp/client/core/compositor:unit_tests",
+    "//blimp/engine:browser_tests",  # # TODO(nyquist): Remove this. See crbug/653789.
+  ]
+
   testonly = true
 
   sources = [

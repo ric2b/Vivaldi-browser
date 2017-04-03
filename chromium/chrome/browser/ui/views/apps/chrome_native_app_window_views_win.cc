@@ -82,12 +82,16 @@ void ChromeNativeAppWindowViewsWin::InitializeDefaultWindow(
 
 views::NonClientFrameView*
 ChromeNativeAppWindowViewsWin::CreateStandardDesktopAppFrame() {
+#if defined(VIVALDI_BUILD)
+  return ChromeNativeAppWindowViewsAura::CreateStandardDesktopAppFrame();
+#else
   glass_frame_view_ = NULL;
   if (ui::win::IsAeroGlassEnabled()) {
     glass_frame_view_ = new GlassAppWindowFrameViewWin(widget());
     return glass_frame_view_;
   }
   return ChromeNativeAppWindowViewsAura::CreateStandardDesktopAppFrame();
+#endif
 }
 
 bool ChromeNativeAppWindowViewsWin::CanMinimize() const {

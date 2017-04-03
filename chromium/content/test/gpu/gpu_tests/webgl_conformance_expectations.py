@@ -117,10 +117,6 @@ class WebGLConformanceExpectations(GpuTestExpectations):
     self.Fail('conformance/textures/misc/tex-sub-image-2d-bad-args.html',
         bug=570453)
 
-    # OpenGL / NVIDIA failures
-    self.Fail('conformance/attribs/gl-disabled-vertex-attrib.html',
-        ['win', 'linux', 'nvidia', 'opengl'], bug=1007) # angle bug ID
-
     # Win failures
     # Note that the following test seems to pass, but it may still be flaky.
     self.Fail('conformance/glsl/constructors/' +
@@ -151,7 +147,8 @@ class WebGLConformanceExpectations(GpuTestExpectations):
     # Win AMD failures
     # This test is probably flaky on all AMD, but only visible on the
     # new AMD (the whole test suite is flaky on the old config).
-    self.Flaky('conformance/extensions/oes-texture-half-float.html',
+    # Mark as Fail since it often flakes in all 3 retries
+    self.Fail('conformance/extensions/oes-texture-half-float.html',
               ['win', ('amd', 0x6613)], bug=653533)
 
     # Win / AMD D3D9 failures
@@ -186,7 +183,7 @@ class WebGLConformanceExpectations(GpuTestExpectations):
 
     # Win / OpenGL / AMD failures
     self.Skip('conformance/attribs/gl-bindAttribLocation-aliasing.html',
-        ['win', ('amd', 0x6779), 'opengl'], bug=649824)
+        ['win', 'amd', 'opengl'], bug=649824)
     self.Flaky('conformance/attribs/gl-bindAttribLocation-matrix.html',
         ['win', ('amd', 0x6779), 'opengl'], bug=649824)
     self.Flaky('conformance/attribs/gl-bindAttribLocation-repeated.html',
@@ -261,8 +258,6 @@ class WebGLConformanceExpectations(GpuTestExpectations):
                ['linux'], bug=627525)
 
     # NVIDIA
-    self.Fail('conformance/extensions/angle-instanced-arrays.html',
-              ['linux', 'nvidia'], bug=544989) # Too flaky to retry
     self.Flaky('conformance/extensions/oes-element-index-uint.html',
                ['linux', 'nvidia'], bug=524144)
     self.Flaky('conformance/textures/image/' +
@@ -276,7 +271,7 @@ class WebGLConformanceExpectations(GpuTestExpectations):
 
     # AMD Radeon 6450 and/or R7 240
     self.Fail('conformance/extensions/angle-instanced-arrays.html',
-        ['linux', 'amd'], bug=479260)
+        ['linux', 'amd', 'no_angle'], bug=479260)
     self.Flaky('conformance/extensions/ext-texture-filter-anisotropic.html',
         ['linux', ('amd', 0x6779)], bug=436212)
     self.Flaky('conformance/glsl/misc/shader-struct-scope.html',
@@ -305,26 +300,6 @@ class WebGLConformanceExpectations(GpuTestExpectations):
     # See https://bugs.freedesktop.org/show_bug.cgi?id=94477
     self.Skip('conformance/glsl/bugs/temp-expressions-should-not-crash.html',
         ['linux', 'intel'], bug=540543)  # GPU timeout
-    self.Fail('conformance/glsl/bugs/qualcomm-loop-with-continue-crash.html',
-        ['linux', 'intel'], bug=540543)  # ANGLE bug 1277
-    self.Fail('conformance/glsl/misc/empty_main.vert.html',
-        ['linux', 'intel'], bug=540543)  # ANGLE bug 1277
-    self.Fail('conformance/glsl/misc/gl_position_unset.vert.html',
-        ['linux', 'intel'], bug=540543)  # ANGLE bug 1277
-    self.Fail('conformance/glsl/misc/shaders-with-invariance.html',
-        ['linux', 'intel'], bug=540543)  # ANGLE bug 1276
-    self.Fail('conformance/glsl/misc/shaders-with-varyings.html',
-        ['linux', 'intel'], bug=540543)
-    self.Fail('conformance/extensions/ext-disjoint-timer-query.html',
-        ['linux', 'intel', 'opengl'], bug=1312)  # ANGLE bug id
-    self.Fail('deqp/data/gles2/shaders/linkage.html',
-        ['linux', 'intel'], bug=540543)
-    # The Mesa Intel driver has a scoping bug, see
-    # https://bugs.freedesktop.org/show_bug.cgi?id=95184
-    self.Fail('deqp/data/gles2/shaders/scoping.html',
-        ['linux', 'intel'], bug=610800)
-    self.Fail('conformance/glsl/bugs/sampler-array-using-loop-index.html',
-        ['linux', 'intel', 'opengl'], bug=598924)
     self.Skip('conformance/uniforms/gl-uniform-arrays.html',
         ['linux', 'debug', ('intel', 0x412)], bug=604140)
     # Fixed on Mesa 12.0
@@ -444,6 +419,8 @@ class WebGLConformanceExpectations(GpuTestExpectations):
     # This test is skipped because it is crashing the GPU process.
     self.Skip('conformance/glsl/misc/shader-with-non-reserved-words.html',
               ['android', ('qualcomm', 'Adreno (TM) 418')], bug=609883)
+    self.Flaky('conformance/misc/bad-arguments-test.html',
+              ['android', ('qualcomm', 'Adreno (TM) 418')], bug=663066)
     self.Fail('conformance/textures/misc/' +
               'tex-image-and-sub-image-2d-with-array-buffer-view.html',
               ['android', ('qualcomm', 'Adreno (TM) 418')], bug=610951)
@@ -604,6 +581,8 @@ class WebGLConformanceExpectations(GpuTestExpectations):
               ['android', ('qualcomm', 'Adreno (TM) 420')], bug=499555)
     self.Fail('conformance/textures/webgl_canvas/*',
               ['android', ('qualcomm', 'Adreno (TM) 430')], bug=611945)
+    self.Flaky('conformance/uniforms/uniform-samplers-test.html',
+              ['android', ('qualcomm', 'Adreno (TM) 430')], bug=663071)
 
     # Nexus 9
     self.Fail('deqp/data/gles2/shaders/functions.html',

@@ -20,6 +20,7 @@
 #include "components/update_client/crx_update_item.h"
 #include "components/update_client/test_configurator.h"
 #include "components/update_client/update_client.h"
+#include "components/update_client/update_client_errors.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -49,11 +50,11 @@ class MockUpdateClient : public UpdateClient {
   MOCK_METHOD3(Install,
                void(const std::string& id,
                     const CrxDataCallback& crx_data_callback,
-                    const CompletionCallback& completion_callback));
+                    const Callback& callback));
   MOCK_METHOD3(Update,
                void(const std::vector<std::string>& ids,
                     const CrxDataCallback& crx_data_callback,
-                    const CompletionCallback& completion_callback));
+                    const Callback& callback));
   MOCK_CONST_METHOD2(GetCrxUpdateState,
                      bool(const std::string& id, CrxUpdateItem* update_item));
   MOCK_CONST_METHOD1(IsUpdating, bool(const std::string& id));
@@ -81,9 +82,10 @@ class FakeInstallerTraits : public ComponentInstallerTraits {
 
   bool RequiresNetworkEncryption() const override { return true; }
 
-  bool OnCustomInstall(const base::DictionaryValue& manifest,
-                       const base::FilePath& install_dir) override {
-    return true;
+  update_client::CrxInstaller::Result OnCustomInstall(
+      const base::DictionaryValue& manifest,
+      const base::FilePath& install_dir) override {
+    return update_client::CrxInstaller::Result(0);
   }
 
   void ComponentReady(
@@ -182,8 +184,8 @@ TEST_F(DefaultComponentInstallerTest, RegisterComponent) {
 
     void OnUpdate(const std::vector<std::string>& ids,
                   const UpdateClient::CrxDataCallback& crx_data_callback,
-                  const UpdateClient::CompletionCallback& completion_callback) {
-      completion_callback.Run(0);
+                  const Callback& callback) {
+      callback.Run(update_client::Error::NONE);
       static int cnt = 0;
       ++cnt;
       if (cnt >= max_cnt_)

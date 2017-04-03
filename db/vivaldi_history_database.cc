@@ -43,8 +43,8 @@ UrlVisitCount::TopUrlsPerDayList VivaldiHistoryDatabase::TopUrlsPerDay(size_t nu
   return hosts;
 }
 
-Visit::VisitsList VivaldiHistoryDatabase::VisitSearch(const std::string& text_query,
-                                               const QueryOptions& options) {
+Visit::VisitsList VivaldiHistoryDatabase::VisitSearch(
+	const QueryOptions& options) {
   base::Time begin_time = options.begin_time;
   base::Time end_time = options.end_time;
 
@@ -54,25 +54,16 @@ Visit::VisitsList VivaldiHistoryDatabase::VisitSearch(const std::string& text_qu
                                  "  v.visit_time, "
                                  "  u.url, "
                                  "  u.title, "
-                                 "  CASE v.transition "
-                                 "    WHEN '805306368' THEN 'link' "
-                                 "    WHEN '805306376' THEN 'typed' "
-                                 "    WHEN '805306369' THEN 'reload' "
-                                 "    ELSE 'other' "
-                                 "  END as transition "
+                                 " v.transition "
                                  "  FROM urls u "
                                  "    JOIN visits v on (u.id = v.url) "
                                  " WHERE v.visit_time >= ? "
                                  "  AND v.visit_time < ? "
-                                 " AND u.url LIKE ? OR u.title LIKE ? "
                                  "      ORDER BY v.visit_time DESC"));
-
-  const std::string search_text = "%" + text_query + "%";
+  int64_t begin = begin_time.ToInternalValue();
   int64_t end = end_time.ToInternalValue();
-  url_sql.BindInt64(0, begin_time.ToInternalValue());
-  url_sql.BindInt64(1, end ? end : std::numeric_limits<int64_t>::max());
-  url_sql.BindString(2, search_text);
-  url_sql.BindString(3, search_text);
+  url_sql.BindInt64(0, begin ? begin : std::numeric_limits<int64_t>::min());
+  url_sql.BindInt64(1, end ? end: std::numeric_limits<int64_t>::max());
 
   Visit::VisitsList hosts;
   while (url_sql.Step()) {
@@ -83,8 +74,9 @@ Visit::VisitsList VivaldiHistoryDatabase::VisitSearch(const std::string& text_qu
 
     GURL url(url_sql.ColumnString(2));
     base::string16 title = url_sql.ColumnString16(3);
-    std::string transition = url_sql.ColumnString(4);
-    hosts.push_back(Visit(id, visit_time, url, title, transition));
+    ui::PageTransition transitionType =
+      ui::PageTransitionFromInt(url_sql.ColumnInt(4));
+    hosts.push_back(Visit(id, visit_time, url, title, transitionType));
   }
   return hosts;
 }

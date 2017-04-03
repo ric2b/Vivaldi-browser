@@ -12,6 +12,8 @@
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
 #include "ipc/ipc_listener.h"
+#include "mojo/edk/embedder/named_platform_handle.h"
+#include "mojo/edk/embedder/scoped_platform_handle.h"
 
 namespace IPC {
 class Channel;
@@ -32,18 +34,21 @@ class SecurityKeyIpcClient : public IPC::Listener {
   typedef base::Callback<void(const std::string& response_data)>
       ResponseCallback;
 
+  // Used to indicate whether the channel can be used for request forwarding.
+  typedef base::Callback<void(bool connection_usable)> ConnectedCallback;
+
   // Returns true if there is an active remoting session which supports
   // security key request forwarding.
-  virtual bool WaitForSecurityKeyIpcServerChannel();
+  virtual bool CheckForSecurityKeyIpcServerChannel();
 
   // Begins the process of connecting to the IPC channel which will be used for
   // exchanging security key messages.
-  // |connection_ready_callback| is called when a channel has been established
-  // and security key requests can be sent.
+  // |connected_callback| is called when a channel has been established and
+  // indicates whether security key requests can be sent using it.
   // |connection_error_callback| is stored and will be called back for any
   // unexpected errors that occur while establishing, or during, the session.
   virtual void EstablishIpcConnection(
-      const base::Closure& connection_ready_callback,
+      const ConnectedCallback& connected_callback,
       const base::Closure& connection_error_callback);
 
   // Sends a security key request message to the network process to be forwarded
@@ -55,10 +60,9 @@ class SecurityKeyIpcClient : public IPC::Listener {
   // Closes the IPC channel if connected.
   virtual void CloseIpcConnection();
 
-  // Allows tests to override the initial IPC channel used to retrieve IPC
-  // connection details.
-  void SetInitialIpcChannelNameForTest(
-      const std::string& initial_ipc_channel_name);
+  // Allows tests to override the IPC channel.
+  void SetIpcChannelHandleForTest(
+      const mojo::edk::NamedPlatformHandle& channel_handle);
 
   // Allows tests to override the expected session ID.
   void SetExpectedIpcServerSessionIdForTest(uint32_t expected_session_id);
@@ -69,27 +73,30 @@ class SecurityKeyIpcClient : public IPC::Listener {
   void OnChannelConnected(int32_t peer_pid) override;
   void OnChannelError() override;
 
-  // Handles the ConnectionDetails IPC message.
-  void OnConnectionDetails(const std::string& request_data);
+  // Handles the ConnectionReady IPC message.
+  void OnConnectionReady();
+
+  // Handles the InvalidSession IPC message.
+  void OnInvalidSession();
 
   // Handles security key response IPC messages.
   void OnSecurityKeyResponse(const std::string& request_data);
 
   // Establishes a connection to the specified IPC Server channel.
-  void ConnectToIpcChannel(const std::string& channel_name);
+  void ConnectToIpcChannel();
 
   // Used to validate the IPC Server process is running in the correct session.
   // '0' (default) corresponds to the session the network process runs in.
   uint32_t expected_ipc_server_session_id_ = 0;
 
-  // Name for the IPC channel used for exchanging security key messages.
-  std::string ipc_channel_name_;
-
   // Name of the initial IPC channel used to retrieve connection info.
-  std::string initial_ipc_channel_name_;
+  mojo::edk::NamedPlatformHandle named_channel_handle_;
+
+  // A handle for the IPC channel used for exchanging security key messages.
+  mojo::edk::ScopedPlatformHandle channel_handle_;
 
   // Signaled when the IPC connection is ready for security key requests.
-  base::Closure connection_ready_callback_;
+  ConnectedCallback connected_callback_;
 
   // Signaled when an error occurs in either the IPC channel or communication.
   base::Closure connection_error_callback_;

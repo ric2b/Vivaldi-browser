@@ -327,7 +327,7 @@ void WallpaperManagerBase::EnsureLoggedInUserWallpaperLoaded() {
       return;
   }
   SetUserWallpaperNow(
-      user_manager::UserManager::Get()->GetLoggedInUser()->GetAccountId());
+      user_manager::UserManager::Get()->GetActiveUser()->GetAccountId());
 }
 
 void WallpaperManagerBase::ClearDisposableWallpaperCache() {
@@ -368,8 +368,7 @@ bool WallpaperManagerBase::GetLoggedInUserWallpaperInfo(WallpaperInfo* info) {
   }
 
   return GetUserWallpaperInfo(
-      user_manager::UserManager::Get()->GetLoggedInUser()->GetAccountId(),
-      info);
+      user_manager::UserManager::Get()->GetActiveUser()->GetAccountId(), info);
 }
 
 // static
@@ -630,7 +629,8 @@ void WallpaperManagerBase::SetUserWallpaperNow(const AccountId& account_id) {
 }
 
 void WallpaperManagerBase::UpdateWallpaper(bool clear_cache) {
-  FOR_EACH_OBSERVER(Observer, observers_, OnUpdateWallpaperForTesting());
+  for (auto& observer : observers_)
+    observer.OnUpdateWallpaperForTesting();
   if (clear_cache)
     wallpaper_cache_.clear();
   SetUserWallpaperNow(last_selected_user_);
@@ -647,8 +647,8 @@ void WallpaperManagerBase::RemoveObserver(
 }
 
 void WallpaperManagerBase::NotifyAnimationFinished() {
-  FOR_EACH_OBSERVER(Observer, observers_,
-                    OnWallpaperAnimationFinished(last_selected_user_));
+  for (auto& observer : observers_)
+    observer.OnWallpaperAnimationFinished(last_selected_user_);
 }
 
 // WallpaperManager, protected: -----------------------------------------------
@@ -871,7 +871,7 @@ void WallpaperManagerBase::MoveCustomWallpapersSuccess(
 void WallpaperManagerBase::MoveLoggedInUserCustomWallpaper() {
   DCHECK(thread_checker_.CalledOnValidThread());
   const user_manager::User* logged_in_user =
-      user_manager::UserManager::Get()->GetLoggedInUser();
+      user_manager::UserManager::Get()->GetActiveUser();
   if (logged_in_user) {
     task_runner_->PostTask(
         FROM_HERE,

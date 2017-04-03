@@ -34,11 +34,13 @@
 #include "platform/graphics/GraphicsLayer.h"
 #include "platform/heap/SelfKeepAlive.h"
 #include "platform/scroll/ScrollTypes.h"
+#include "public/platform/WebInputEvent.h"
 #include "public/platform/WebPoint.h"
 #include "public/platform/WebSize.h"
-#include "public/web/WebInputEvent.h"
+#include "public/web/WebInputMethodController.h"
 #include "web/PageWidgetDelegate.h"
 #include "web/WebFrameWidgetBase.h"
+#include "web/WebInputMethodControllerImpl.h"
 #include "web/WebLocalFrameImpl.h"
 #include "web/WebViewImpl.h"
 #include "wtf/Assertions.h"
@@ -47,6 +49,7 @@
 namespace blink {
 class Frame;
 class Element;
+class InspectorOverlay;
 class LocalFrame;
 class Page;
 class PaintLayerCompositor;
@@ -93,16 +96,9 @@ class WebFrameWidgetImpl final
                            const WebFloatSize& mainFrameDelta,
                            const WebFloatSize& elasticOverscrollDelta,
                            float pageScaleDelta,
-                           float topControlsDelta) override;
+                           float browserControlsDelta) override;
   void mouseCaptureLost() override;
   void setFocus(bool enable) override;
-  bool setComposition(const WebString& text,
-                      const WebVector<WebCompositionUnderline>& underlines,
-                      int selectionStart,
-                      int selectionEnd) override;
-  bool commitText(const WebString& text, int relativeCaretPosition) override;
-  bool finishComposingText(
-      ConfirmCompositionBehavior selectionBehavior) override;
   WebRange compositionRange() override;
   WebTextInputInfo textInputInfo() override;
   WebTextInputType textInputType() override;
@@ -115,7 +111,6 @@ class WebFrameWidgetImpl final
   void setTextDirection(WebTextDirection) override;
   bool isAcceleratedCompositingActive() const override;
   void willCloseLayerTreeView() override;
-  void didChangeWindowResizerRect() override;
   void didAcquirePointerLock() override;
   void didNotAcquirePointerLock() override;
   void didLosePointerLock() override;
@@ -123,11 +118,13 @@ class WebFrameWidgetImpl final
   void applyReplacementRange(const WebRange&) override;
 
   // WebFrameWidget implementation.
-  WebLocalFrameImpl* localRoot() override { return m_localRoot; }
+  WebLocalFrameImpl* localRoot() const override { return m_localRoot; }
   void setVisibilityState(WebPageVisibilityState) override;
   bool isTransparent() const override;
   void setIsTransparent(bool) override;
   void setBaseBackgroundColor(WebColor) override;
+  WebInputMethodControllerImpl* getActiveWebInputMethodController()
+      const override;
 
   Frame* focusedCoreFrame() const;
 
@@ -154,19 +151,11 @@ class WebFrameWidgetImpl final
 
   void setIgnoreInputEvents(bool newValue);
 
-  // Returns the page object associated with this widget. This may be null when
-  // the page is shutting down, but will be valid at all other times.
-  Page* page() const { return view()->page(); }
-
   // Event related methods:
   void mouseContextMenu(const WebMouseEvent&);
 
   WebLayerTreeView* layerTreeView() const { return m_layerTreeView; }
-
-  // Returns true if the event leads to scrolling.
-  static bool mapKeyCodeForScroll(int keyCode,
-                                  ScrollDirection*,
-                                  ScrollGranularity*);
+  GraphicsLayer* rootGraphicsLayer() const { return m_rootGraphicsLayer; };
 
   Color baseBackgroundColor() const { return m_baseBackgroundColor; }
 
@@ -179,12 +168,6 @@ class WebFrameWidgetImpl final
 
   // Perform a hit test for a point relative to the root frame of the page.
   HitTestResult hitTestResultForRootFramePos(const IntPoint& posInRootFrame);
-
-  // Returns true if the event was actually processed.
-  WebInputEventResult keyEventDefault(const WebKeyboardEvent&);
-
-  // Returns true if the view was scrolled.
-  WebInputEventResult scrollViewWithKeyboard(int keyCode, int modifiers);
 
   void initializeLayerTreeView();
 
@@ -203,7 +186,7 @@ class WebFrameWidgetImpl final
   WebInputEventResult handleKeyEvent(const WebKeyboardEvent&) override;
   WebInputEventResult handleCharEvent(const WebKeyboardEvent&) override;
 
-  WebViewImpl* view() const { return m_localRoot->viewImpl(); }
+  InspectorOverlay* inspectorOverlay();
 
   // This method returns the focused frame belonging to this WebWidget, that
   // is, a focused frame with the same local root as the one corresponding
@@ -212,10 +195,6 @@ class WebFrameWidgetImpl final
   LocalFrame* focusedLocalFrameInWidget() const;
 
   WebPlugin* focusedPluginIfInputMethodSupported(LocalFrame*) const;
-
-  WebString inputModeOfFocusedElement() const;
-
-  int textInputFlags() const;
 
   LocalFrame* focusedLocalFrameAvailableForIme() const;
 

@@ -508,10 +508,6 @@ def main(args):
   # Always do nothing on bots.
   if is_on_bot():
     return 0
-    
-  if not os.access(GCLIENT_CONFIG, os.F_OK):
-  	# No .gclient file; igore rest of scan
-  	return 0
 
   # Read current config, verify gclient solution looks correct.
   config = scan_configuration()

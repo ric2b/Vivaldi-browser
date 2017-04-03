@@ -6,8 +6,6 @@ import("//build/config/ui.gni")
 
 source_set("surfaces") {
   sources = [
-    "compositor_frame_sink.cc",
-    "compositor_frame_sink.h",
     "direct_output_surface.cc",
     "direct_output_surface.h",
     "display_compositor.cc",
@@ -20,6 +18,7 @@ source_set("surfaces") {
   deps = [
     "//base",
     "//cc",
+    "//cc/ipc:internal_interfaces",
     "//cc/surfaces",
     "//cc/surfaces:surface_id",
     "//components/display_compositor",
@@ -28,7 +27,7 @@ source_set("surfaces") {
     "//gpu/command_buffer/client:gles2_implementation",
     "//gpu/command_buffer/client:gles2_interface",
     "//gpu/ipc/client",
-    "//services/shell/public/cpp",
+    "//services/service_manager/public/cpp",
     "//services/tracing/public/cpp",
     "//services/ui/common:mus_common",
     "//services/ui/public/interfaces",

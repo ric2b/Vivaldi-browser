@@ -1,81 +1,79 @@
 // Copyright 2014 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
-
 /**
- * @constructor
- * @param {!WebInspector.JavaScriptSourceFrame} sourceFrame
+ * @unrestricted
  */
-WebInspector.JavaScriptCompiler = function(sourceFrame)
-{
+Sources.JavaScriptCompiler = class {
+  /**
+   * @param {!Sources.JavaScriptSourceFrame} sourceFrame
+   */
+  constructor(sourceFrame) {
     this._sourceFrame = sourceFrame;
     this._compiling = false;
-}
+  }
 
-WebInspector.JavaScriptCompiler.CompileDelay = 1000;
+  scheduleCompile() {
+    if (this._compiling) {
+      this._recompileScheduled = true;
+      return;
+    }
+    if (this._timeout)
+      clearTimeout(this._timeout);
+    this._timeout = setTimeout(this._compile.bind(this), Sources.JavaScriptCompiler.CompileDelay);
+  }
 
-WebInspector.JavaScriptCompiler.prototype = {
-    scheduleCompile: function()
-    {
-        if (this._compiling) {
-            this._recompileScheduled = true;
-            return;
-        }
-        if (this._timeout)
-            clearTimeout(this._timeout);
-        this._timeout = setTimeout(this._compile.bind(this), WebInspector.JavaScriptCompiler.CompileDelay);
-    },
+  /**
+   * @return {?SDK.Target}
+   */
+  _findTarget() {
+    var targets = SDK.targetManager.targets();
+    var sourceCode = this._sourceFrame.uiSourceCode();
+    for (var i = 0; i < targets.length; ++i) {
+      var scriptFile = Bindings.debuggerWorkspaceBinding.scriptFile(sourceCode, targets[i]);
+      if (scriptFile)
+        return targets[i];
+    }
+    return SDK.targetManager.mainTarget();
+  }
+
+  _compile() {
+    var target = this._findTarget();
+    if (!target)
+      return;
+    var runtimeModel = target.runtimeModel;
+    var currentExecutionContext = UI.context.flavor(SDK.ExecutionContext);
+    if (!currentExecutionContext)
+      return;
+
+    this._compiling = true;
+    var code = this._sourceFrame.textEditor.text();
+    runtimeModel.compileScript(code, '', false, currentExecutionContext.id, compileCallback.bind(this, target));
 
     /**
-     * @return {?WebInspector.Target}
+     * @param {!SDK.Target} target
+     * @param {!Protocol.Runtime.ScriptId=} scriptId
+     * @param {?Protocol.Runtime.ExceptionDetails=} exceptionDetails
+     * @this {Sources.JavaScriptCompiler}
      */
-    _findTarget: function()
-    {
-        var targets = WebInspector.targetManager.targets();
-        var sourceCode = this._sourceFrame.uiSourceCode();
-        for (var i = 0; i < targets.length; ++i) {
-            var scriptFile = WebInspector.debuggerWorkspaceBinding.scriptFile(sourceCode, targets[i]);
-            if (scriptFile)
-                return targets[i];
-        }
-        return WebInspector.targetManager.mainTarget();
-    },
+    function compileCallback(target, scriptId, exceptionDetails) {
+      this._compiling = false;
+      if (this._recompileScheduled) {
+        delete this._recompileScheduled;
+        this.scheduleCompile();
+        return;
+      }
+      if (!exceptionDetails)
+        return;
+      var text = SDK.ConsoleMessage.simpleTextFromException(exceptionDetails);
+      this._sourceFrame.uiSourceCode().addLineMessage(
+          Workspace.UISourceCode.Message.Level.Error, text, exceptionDetails.lineNumber, exceptionDetails.columnNumber);
+      this._compilationFinishedForTest();
+    }
+  }
 
-    _compile: function()
-    {
-        var target = this._findTarget();
-        if (!target)
-            return;
-        var runtimeModel = target.runtimeModel;
-        var currentExecutionContext = WebInspector.context.flavor(WebInspector.ExecutionContext);
-        if (!currentExecutionContext)
-            return;
+  _compilationFinishedForTest() {
+  }
+};
 
-        this._compiling = true;
-        var code = this._sourceFrame.textEditor.text();
-        runtimeModel.compileScript(code, "", false, currentExecutionContext.id, compileCallback.bind(this, target));
-
-        /**
-         * @param {!WebInspector.Target} target
-         * @param {!RuntimeAgent.ScriptId=} scriptId
-         * @param {?RuntimeAgent.ExceptionDetails=} exceptionDetails
-         * @this {WebInspector.JavaScriptCompiler}
-         */
-        function compileCallback(target, scriptId, exceptionDetails)
-        {
-            this._compiling = false;
-            if (this._recompileScheduled) {
-                delete this._recompileScheduled;
-                this.scheduleCompile();
-                return;
-            }
-            if (!exceptionDetails)
-                return;
-            var text = WebInspector.ConsoleMessage.simpleTextFromException(exceptionDetails);
-            this._sourceFrame.uiSourceCode().addLineMessage(WebInspector.UISourceCode.Message.Level.Error, text, exceptionDetails.lineNumber, exceptionDetails.columnNumber);
-            this._compilationFinishedForTest();
-        }
-    },
-
-    _compilationFinishedForTest: function() {}
-}
+Sources.JavaScriptCompiler.CompileDelay = 1000;

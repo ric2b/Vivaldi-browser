@@ -32,7 +32,8 @@
 
       h1 {
         color: var(--settings-nav-grey);
-        font-size: 107.6923%; /* go to 14px from 13px */
+        flex: 1;  /* Push other items to the end. */
+        font-size: 107.6923%;  /* Go to 14px from 13px */
         font-weight: 500;
       }
 
@@ -41,7 +42,8 @@
       }
     </style>
     <div class="settings-box first">
-      <paper-icon-button icon="settings:arrow-back" on-tap="onTapBack_">
+      <paper-icon-button icon="settings:arrow-back" on-tap="onTapBack_"
+          aria-label="$i18n{back}">
       </paper-icon-button>
       <h1>[[pageTitle]]</h1>
       <template is="dom-if" if="[[searchLabel]]">
@@ -49,6 +51,7 @@
             on-search-changed="onSearchChanged_">
         </settings-subpage-search>
       </template>
+      <content select=".subpage-title-extra"></content>
     </div>
     <content></content>
   </template>

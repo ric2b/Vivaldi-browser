@@ -4,8 +4,6 @@
 
 #include "ui/gl/init/gl_factory.h"
 
-#include "base/command_line.h"
-#include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/trace_event/trace_event.h"
@@ -19,11 +17,6 @@
 #include "ui/gl/gl_surface_osmesa.h"
 #include "ui/gl/gl_surface_stub.h"
 #include "ui/gl/gl_switches.h"
-
-namespace features {
-const base::Feature kDesktopCoreProfileGLOnMac{
-    "DesktopCoreProfileGLOnMac", base::FEATURE_ENABLED_BY_DEFAULT};
-}
 
 namespace gl {
 namespace init {
@@ -64,11 +57,7 @@ class NoOpGLSurface : public GLSurface {
 
 std::vector<GLImplementation> GetAllowedGLImplementations() {
   std::vector<GLImplementation> impls;
-  if (base::FeatureList::IsEnabled(features::kDesktopCoreProfileGLOnMac) ||
-      base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnableUnsafeES3APIs)) {
-    impls.push_back(kGLImplementationDesktopGLCoreProfile);
-  }
+  impls.push_back(kGLImplementationDesktopGLCoreProfile);
   impls.push_back(kGLImplementationDesktopGL);
   impls.push_back(kGLImplementationAppleGL);
   impls.push_back(kGLImplementationOSMesaGL);
@@ -81,7 +70,7 @@ bool GetGLWindowSystemBindingInfo(GLWindowSystemBindingInfo* info) {
 
 scoped_refptr<GLContext> CreateGLContext(GLShareGroup* share_group,
                                          GLSurface* compatible_surface,
-                                         GpuPreference gpu_preference) {
+                                         const GLContextAttribs& attribs) {
   TRACE_EVENT0("gpu", "gl::init::CreateGLContext");
   switch (GetGLImplementation()) {
     case kGLImplementationDesktopGL:
@@ -92,10 +81,10 @@ scoped_refptr<GLContext> CreateGLContext(GLShareGroup* share_group,
       // always be creating the context with an offscreen surface first.
       DCHECK(compatible_surface->IsOffscreen());
       return InitializeGLContext(new GLContextCGL(share_group),
-                                 compatible_surface, gpu_preference);
+                                 compatible_surface, attribs);
     case kGLImplementationOSMesaGL:
       return InitializeGLContext(new GLContextOSMesa(share_group),
-                                 compatible_surface, gpu_preference);
+                                 compatible_surface, attribs);
     case kGLImplementationMockGL:
       return new GLContextStub(share_group);
     default:

@@ -45,9 +45,9 @@ class RapporService;
 //     ContentSettingRPHBubbleModel                - protocol handlers
 //     ContentSettingMidiSysExBubbleModel          - midi sysex
 //     ContentSettingDomainListBubbleModel         - domain list (geolocation)
+//     ContentSettingPluginBubbleModel             - plugins
 //     ContentSettingSingleRadioGroup              - radio group
 //       ContentSettingCookiesBubbleModel            - cookies
-//       ContentSettingPluginBubbleModel             - plugins
 //       ContentSettingPopupBubbleModel              - popups
 //   ContentSettingSubresourceFilterBubbleModel  - filtered subresources
 
@@ -227,12 +227,6 @@ class ContentSettingBubbleModel : public content::NotificationObserver {
   void set_selected_device(const content::MediaStreamDevice& device) {
     bubble_content_.media_menus[device.type].selected_device = device;
   }
-  bool setting_is_managed() {
-    return setting_is_managed_;
-  }
-  void set_setting_is_managed(bool managed) {
-    setting_is_managed_ = managed;
-  }
   rappor::RapporService* rappor_service() const { return rappor_service_; }
 
  private:
@@ -245,9 +239,6 @@ class ContentSettingBubbleModel : public content::NotificationObserver {
   BubbleContent bubble_content_;
   // A registrar for listening for WEB_CONTENTS_DESTROYED notifications.
   content::NotificationRegistrar registrar_;
-  // A flag that indicates if the content setting managed i.e. can't be
-  // controlled by the user.
-  bool setting_is_managed_;
   // The service used to record Rappor metrics. Can be set for testing.
   rappor::RapporService* rappor_service_;
 

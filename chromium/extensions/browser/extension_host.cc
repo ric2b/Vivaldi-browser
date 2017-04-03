@@ -148,11 +148,10 @@ ExtensionHost::~ExtensionHost() {
       extensions::NOTIFICATION_EXTENSION_HOST_DESTROYED,
       content::Source<BrowserContext>(browser_context_),
       content::Details<ExtensionHost>(this));
-  FOR_EACH_OBSERVER(ExtensionHostObserver, observer_list_,
-                    OnExtensionHostDestroyed(this));
-  FOR_EACH_OBSERVER(DeferredStartRenderHostObserver,
-                    deferred_start_render_host_observer_list_,
-                    OnDeferredStartRenderHostDestroyed(this));
+  for (auto& observer : observer_list_)
+    observer.OnExtensionHostDestroyed(this);
+  for (auto& observer : deferred_start_render_host_observer_list_)
+    observer.OnDeferredStartRenderHostDestroyed(this);
 
   // Remove ourselves from the queue as late as possible (before effectively
   // destroying self, but after everything else) so that queues that are
@@ -271,18 +270,18 @@ void ExtensionHost::OnBackgroundEventDispatched(const std::string& event_name,
                                                 int event_id) {
   CHECK(IsBackgroundPage());
   unacked_messages_.insert(event_id);
-  FOR_EACH_OBSERVER(ExtensionHostObserver, observer_list_,
-                    OnBackgroundEventDispatched(this, event_name, event_id));
+  for (auto& observer : observer_list_)
+    observer.OnBackgroundEventDispatched(this, event_name, event_id);
 }
 
 void ExtensionHost::OnNetworkRequestStarted(uint64_t request_id) {
-  FOR_EACH_OBSERVER(ExtensionHostObserver, observer_list_,
-                    OnNetworkRequestStarted(this, request_id));
+  for (auto& observer : observer_list_)
+    observer.OnNetworkRequestStarted(this, request_id);
 }
 
 void ExtensionHost::OnNetworkRequestDone(uint64_t request_id) {
-  FOR_EACH_OBSERVER(ExtensionHostObserver, observer_list_,
-                    OnNetworkRequestDone(this, request_id));
+  for (auto& observer : observer_list_)
+    observer.OnNetworkRequestDone(this, request_id);
 }
 
 const GURL& ExtensionHost::GetURL() const {
@@ -347,9 +346,8 @@ void ExtensionHost::RenderProcessGone(base::TerminationStatus status) {
 
 void ExtensionHost::DidStartLoading() {
   if (!has_loaded_once_) {
-    FOR_EACH_OBSERVER(DeferredStartRenderHostObserver,
-                      deferred_start_render_host_observer_list_,
-                      OnDeferredStartRenderHostDidStartFirstLoad(this));
+    for (auto& observer : deferred_start_render_host_observer_list_)
+      observer.OnDeferredStartRenderHostDidStartFirstLoad(this);
   }
 }
 
@@ -368,9 +366,8 @@ void ExtensionHost::DidStopLoading() {
         extensions::NOTIFICATION_EXTENSION_HOST_DID_STOP_FIRST_LOAD,
         content::Source<BrowserContext>(browser_context_),
         content::Details<ExtensionHost>(this));
-    FOR_EACH_OBSERVER(DeferredStartRenderHostObserver,
-                      deferred_start_render_host_observer_list_,
-                      OnDeferredStartRenderHostDidStopFirstLoad(this));
+    for (auto& observer : deferred_start_render_host_observer_list_)
+      observer.OnDeferredStartRenderHostDidStopFirstLoad(this);
   }
 }
 
@@ -438,8 +435,8 @@ void ExtensionHost::OnEventAck(int event_id) {
   // sent by the renderer is one that this ExtensionHost expects to receive.
   // This way if a renderer _is_ compromised, it can really only affect itself.
   if (unacked_messages_.erase(event_id) > 0) {
-    FOR_EACH_OBSERVER(ExtensionHostObserver, observer_list_,
-                      OnBackgroundEventAcked(this, event_id));
+    for (auto& observer : observer_list_)
+      observer.OnBackgroundEventAcked(this, event_id);
   } else {
     // We have received an unexpected event id from the renderer.  It might be
     // compromised or it might have some other issue.  Kill it just to be safe.

@@ -13,6 +13,7 @@
 #include "base/task_runner_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/default_clock.h"
+#include "components/data_use_measurement/core/data_use_user_data.h"
 #include "components/search_provider_logos/switches.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_status_code.h"
@@ -157,7 +158,8 @@ void LogoTracker::ReturnToIdle(int outcome) {
   is_cached_logo_valid_ = false;
 
   // Clear obsevers.
-  FOR_EACH_OBSERVER(LogoObserver, logo_observers_, OnObserverRemoved());
+  for (auto& observer : logo_observers_)
+    observer.OnObserverRemoved();
   logo_observers_.Clear();
 }
 
@@ -186,7 +188,8 @@ void LogoTracker::OnCachedLogoAvailable(const LogoMetadata& metadata,
   }
   is_cached_logo_valid_ = true;
   Logo* logo = cached_logo_.get();
-  FOR_EACH_OBSERVER(LogoObserver, logo_observers_, OnLogoAvailable(logo, true));
+  for (auto& observer : logo_observers_)
+    observer.OnLogoAvailable(logo, true);
   FetchLogo();
 }
 
@@ -225,6 +228,9 @@ void LogoTracker::FetchLogo() {
 
   fetcher_ = net::URLFetcher::Create(url, net::URLFetcher::GET, this);
   fetcher_->SetRequestContext(request_context_getter_.get());
+  data_use_measurement::DataUseUserData::AttachToFetcher(
+      fetcher_.get(),
+      data_use_measurement::DataUseUserData::SEARCH_PROVIDER_LOGOS);
   fetcher_->Start();
   logo_download_start_time_ = base::TimeTicks::Now();
 }
@@ -294,9 +300,8 @@ void LogoTracker::OnFreshLogoAvailable(
     // Notify observers if a new logo was fetched, or if the new logo is NULL
     // but the cached logo was non-NULL.
     if (logo || cached_logo_) {
-      FOR_EACH_OBSERVER(LogoObserver,
-                        logo_observers_,
-                        OnLogoAvailable(logo.get(), false));
+      for (auto& observer : logo_observers_)
+        observer.OnLogoAvailable(logo.get(), false);
       SetCachedLogo(std::move(encoded_logo));
     }
   }

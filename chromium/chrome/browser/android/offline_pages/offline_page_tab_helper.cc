@@ -22,14 +22,15 @@ DEFINE_WEB_CONTENTS_USER_DATA_KEY(offline_pages::OfflinePageTabHelper);
 
 namespace offline_pages {
 
-OfflinePageTabHelper::LoadedOfflinePageInfo::LoadedOfflinePageInfo() {}
+OfflinePageTabHelper::LoadedOfflinePageInfo::LoadedOfflinePageInfo()
+    : is_showing_offline_preview(false) {}
 
 OfflinePageTabHelper::LoadedOfflinePageInfo::~LoadedOfflinePageInfo() {}
 
 void OfflinePageTabHelper::LoadedOfflinePageInfo::Clear() {
   offline_page.reset();
   offline_header.Clear();
-  is_offline_preview = false;
+  is_showing_offline_preview = false;
 }
 
 OfflinePageTabHelper::OfflinePageTabHelper(content::WebContents* web_contents)
@@ -55,16 +56,8 @@ void OfflinePageTabHelper::DidStartNavigation(
   provisional_offline_info_.Clear();
 
   // If not a fragment navigation, clear the cached offline info.
-  if (offline_info_.offline_page.get()) {
-    GURL::Replacements remove_params;
-    remove_params.ClearRef();
-    GURL offline_url =
-        offline_info_.offline_page->url.ReplaceComponents(remove_params);
-    GURL navigated_url =
-        navigation_handle->GetURL().ReplaceComponents(remove_params);
-
-    if (offline_url != navigated_url)
-      offline_info_.Clear();
+  if (offline_info_.offline_page.get() && !navigation_handle->IsSamePage()) {
+    offline_info_.Clear();
   }
 }
 
@@ -87,14 +80,21 @@ void OfflinePageTabHelper::DidFinishNavigation(
     // The provisional offline info can now be committed if the navigation is
     // done without error.
     DCHECK(!provisional_offline_info_.offline_page ||
-      navigated_url == provisional_offline_info_.offline_page->url);
+           OfflinePageUtils::EqualsIgnoringFragment(
+               navigated_url,
+               provisional_offline_info_.offline_page->url));
     offline_info_.offline_page =
         std::move(provisional_offline_info_.offline_page);
     offline_info_.offline_header = provisional_offline_info_.offline_header;
-    offline_info_.is_offline_preview =
-        provisional_offline_info_.is_offline_preview;
+    offline_info_.is_showing_offline_preview =
+        provisional_offline_info_.is_showing_offline_preview;
   }
   provisional_offline_info_.Clear();
+
+  // If the offline page has been loaded successfully, nothing more to do.
+  net::Error error_code = navigation_handle->GetNetErrorCode();
+  if (error_code == net::OK)
+    return;
 
   // We might be reloading the URL in order to fetch the offline page.
   // * If successful, nothing to do.
@@ -109,7 +109,6 @@ void OfflinePageTabHelper::DidFinishNavigation(
   // eventually fail. To handle this, we will reload the page to force the
   // offline interception if the error code matches the following list.
   // Otherwise, the error page will be shown.
-  net::Error error_code = navigation_handle->GetNetErrorCode();
   if (error_code != net::ERR_INTERNET_DISCONNECTED &&
       error_code != net::ERR_NAME_NOT_RESOLVED &&
       error_code != net::ERR_ADDRESS_UNREACHABLE &&
@@ -132,15 +131,16 @@ void OfflinePageTabHelper::DidFinishNavigation(
     return;
   }
 
-  OfflinePageUtils::SelectPageForOnlineURL(
+  OfflinePageUtils::SelectPageForURL(
       web_contents()->GetBrowserContext(),
       navigated_url,
+      OfflinePageModel::URLSearchMode::SEARCH_BY_ALL_URLS,
       tab_id,
-      base::Bind(&OfflinePageTabHelper::SelectPageForOnlineURLDone,
+      base::Bind(&OfflinePageTabHelper::SelectPageForURLDone,
                  weak_ptr_factory_.GetWeakPtr()));
 }
 
-void OfflinePageTabHelper::SelectPageForOnlineURLDone(
+void OfflinePageTabHelper::SelectPageForURLDone(
     const OfflinePageItem* offline_page) {
   // Bails out if no offline page is found.
   if (!offline_page) {
@@ -170,11 +170,18 @@ void OfflinePageTabHelper::SetOfflinePage(
   provisional_offline_info_.offline_page =
       base::MakeUnique<OfflinePageItem>(offline_page);
   provisional_offline_info_.offline_header = offline_header;
-  provisional_offline_info_.is_offline_preview = is_offline_preview;
+  provisional_offline_info_.is_showing_offline_preview = is_offline_preview;
 }
 
 const OfflinePageItem* OfflinePageTabHelper::GetOfflinePageForTest() const {
   return provisional_offline_info_.offline_page.get();
+}
+
+bool OfflinePageTabHelper::IsShowingOfflinePreview() const {
+  // TODO(ryansturm): Change this once offline pages infrastructure uses
+  // NavigationHandle instead of a back channel. crbug.com/658899
+  return provisional_offline_info_.is_showing_offline_preview ||
+         offline_info_.is_showing_offline_preview;
 }
 
 }  // namespace offline_pages

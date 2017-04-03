@@ -615,7 +615,7 @@ TEST_F(HTMLPreloadScannerTest, testReferrerPolicy) {
        "bla.gif", "http://example.test/", Resource::Image, 0,
        ReferrerPolicyDefault},
       {"http://example.test",
-       "<img referrerpolicy='origin' referrerpolicy='origin-when-crossorigin' "
+       "<img referrerpolicy='origin' referrerpolicy='origin-when-cross-origin' "
        "src='bla.gif'/>",
        "bla.gif", "http://example.test/", Resource::Image, 0,
        ReferrerPolicyOrigin},
@@ -627,8 +627,23 @@ TEST_F(HTMLPreloadScannerTest, testReferrerPolicy) {
        "referrerpolicy='origin' src='bla.gif'/>",
        "bla.gif", "http://example.test/", Resource::Image, 0,
        ReferrerPolicyOrigin},
+      {"http://example.test",
+       "<link rel=preload as=image referrerpolicy='origin-when-cross-origin' "
+       "href='bla.gif'/>",
+       "bla.gif", "http://example.test/", Resource::Image, 0,
+       ReferrerPolicyOriginWhenCrossOrigin},
+      {"http://example.test",
+       "<link rel=preload as=image referrerpolicy='origin' "
+       "referrerpolicy='origin-when-cross-origin' href='bla.gif'/>",
+       "bla.gif", "http://example.test/", Resource::Image, 0,
+       ReferrerPolicyOrigin},
       // The scanner's state is not reset between test cases, so all subsequent
       // test cases have a document referrer policy of no-referrer.
+      {"http://example.test",
+       "<link rel=preload as=image referrerpolicy='not-a-valid-policy' "
+       "href='bla.gif'/>",
+       "bla.gif", "http://example.test/", Resource::Image, 0,
+       ReferrerPolicyNever},
       {"http://example.test",
        "<img referrerpolicy='not-a-valid-policy' src='bla.gif'/>", "bla.gif",
        "http://example.test/", Resource::Image, 0, ReferrerPolicyNever},
@@ -719,6 +734,69 @@ TEST_F(HTMLPreloadScannerTest, testLinkRelPreload) {
       {"http://example.test",
        "<link rel=preload href=bla as=image media=\"(max-width: 400px)\">",
        nullptr, "http://example.test/", Resource::Image, 0},
+  };
+
+  for (const auto& testCase : testCases)
+    test(testCase);
+}
+
+TEST_F(HTMLPreloadScannerTest, testNoDataUrls) {
+  TestCase testCases[] = {
+      {"http://example.test",
+       "<link rel=preload href='data:text/html,<p>data</data>'>", nullptr,
+       "http://example.test/", Resource::Raw, 0},
+      {"http://example.test", "<img src='data:text/html,<p>data</data>'>",
+       nullptr, "http://example.test/", Resource::Image, 0},
+      {"data:text/html,<a>anchor</a>", "<img src='#anchor'>", nullptr,
+       "http://example.test/", Resource::Image, 0},
+  };
+
+  for (const auto& testCase : testCases)
+    test(testCase);
+}
+
+// The preload scanner should follow the same policy that the ScriptLoader does
+// with regard to the type and language attribute.
+TEST_F(HTMLPreloadScannerTest, testScriptTypeAndLanguage) {
+  TestCase testCases[] = {
+      // Allow empty src and language attributes.
+      {"http://example.test", "<script src='test.js'></script>", "test.js",
+       "http://example.test/", Resource::Script, 0},
+      {"http://example.test",
+       "<script type='' language='' src='test.js'></script>", "test.js",
+       "http://example.test/", Resource::Script, 0},
+      // Allow standard language and type attributes.
+      {"http://example.test",
+       "<script type='text/javascript' src='test.js'></script>", "test.js",
+       "http://example.test/", Resource::Script, 0},
+      {"http://example.test",
+       "<script type='text/javascript' language='javascript' "
+       "src='test.js'></script>",
+       "test.js", "http://example.test/", Resource::Script, 0},
+      // Allow legacy languages in the "language" attribute with an empty
+      // type.
+      {"http://example.test",
+       "<script language='javascript1.1' src='test.js'></script>", "test.js",
+       "http://example.test/", Resource::Script, 0},
+      // Allow legacy languages in the "type" attribute.
+      {"http://example.test",
+       "<script type='javascript' src='test.js'></script>", "test.js",
+       "http://example.test/", Resource::Script, 0},
+      {"http://example.test",
+       "<script type='javascript1.7' src='test.js'></script>", "test.js",
+       "http://example.test/", Resource::Script, 0},
+      // Do not allow invalid types in the "type" attribute.
+      {"http://example.test", "<script type='invalid' src='test.js'></script>",
+       nullptr, "http://example.test/", Resource::Script, 0},
+      {"http://example.test", "<script type='asdf' src='test.js'></script>",
+       nullptr, "http://example.test/", Resource::Script, 0},
+      // Do not allow invalid languages.
+      {"http://example.test",
+       "<script language='french' src='test.js'></script>", nullptr,
+       "http://example.test/", Resource::Script, 0},
+      {"http://example.test",
+       "<script language='python' src='test.js'></script>", nullptr,
+       "http://example.test/", Resource::Script, 0},
   };
 
   for (const auto& testCase : testCases)

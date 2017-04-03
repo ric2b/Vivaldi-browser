@@ -5,6 +5,14 @@
 import("//third_party/WebKit/Source/core/core.gni")
 
 blink_core_sources("svg") {
+  # Split into multiple static libraries on Windows official builds, where we
+  # run into a 2GB max size limit.
+  if (is_win && is_official_build) {
+    split_count = 5
+  } else {
+    split_count = 1
+  }
+
   sources = [
     "ColorDistance.cpp",
     "ColorDistance.h",
@@ -57,6 +65,9 @@ blink_core_sources("svg") {
     "SVGDiscardElement.h",
     "SVGDocumentExtensions.cpp",
     "SVGElement.cpp",
+    "SVGElement.h",
+    "SVGElementProxy.cpp",
+    "SVGElementProxy.h",
     "SVGElementRareData.cpp",
     "SVGElementRareData.h",
     "SVGEllipseElement.cpp",
@@ -217,7 +228,6 @@ blink_core_sources("svg") {
     "SVGRectElement.h",
     "SVGRectTearOff.cpp",
     "SVGRectTearOff.h",
-    "SVGResourceClient.cpp",
     "SVGResourceClient.h",
     "SVGSVGElement.cpp",
     "SVGSVGElement.h",

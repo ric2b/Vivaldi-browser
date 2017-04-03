@@ -293,6 +293,8 @@ message AndroidKioskAppInfoProto {
   // In the event this is the only field that is specified, runtime may use
   // PackageManager.getLaunchIntentForPackage() to start the app. See
   // https://developer.android.com/reference/android/content/pm/PackageManager.html
+  // Example of the package name: "com.android.camera". Do not include "app:"
+  // prefix in the package name.
   optional string package_name = 1;
 
   // Class name (optional). If present, class name is to be combined with
@@ -662,7 +664,7 @@ message LoginScreenDomainAutoCompleteProto {
   // no autocomplete option during user sign-in flow will be shown.
   // If this policy is set to a string representing a domain name, an
   // autocomplete option during user sign-in will be shown allowing the user
-  // to type in only his user name without the domain name extension. The user
+  // to type in only their user name without the domain name extension. The user
   // will be able to overwrite this domain name extension.
   optional string login_screen_domain_auto_complete = 1;
 }
@@ -741,6 +743,12 @@ message LoginVideoCaptureAllowedUrlsProto {
   repeated string urls = 1;
 }
 
+message NetworkThrottlingEnabledProto {
+  optional bool enabled = 1 [default = false];
+  optional int32 upload_rate_kbits = 2 [default = 0];
+  optional int32 download_rate_kbits = 3 [default = 0];
+}
+
 // A list of app-ids to install from the webstore on the login page.
 message LoginAppsProto {
   repeated string login_apps = 1;
@@ -799,4 +807,5 @@ message ChromeDeviceSettingsProto {
   optional LoginVideoCaptureAllowedUrlsProto login_video_capture_allowed_urls =
       45;
   optional LoginAppsProto login_apps = 46;
+  optional NetworkThrottlingEnabledProto network_throttling = 47;
 }

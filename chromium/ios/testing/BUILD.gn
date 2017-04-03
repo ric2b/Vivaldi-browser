@@ -5,6 +5,19 @@
 import("//ios/build/config.gni")
 import("//testing/test.gni")
 
+source_set("ios_test_support") {
+  testonly = true
+
+  deps = [
+    "//base/test:test_support",
+  ]
+
+  sources = [
+    "wait_util.h",
+    "wait_util.mm",
+  ]
+}
+
 source_set("ocmock_support") {
   testonly = true
 
@@ -31,6 +44,10 @@ test("ocmock_support_unittest") {
     "//testing/gmock",
     "//testing/gtest",
     "//third_party/ocmock",
+  ]
+
+  sources = [
+    "ocmock_complex_type_helper_unittest.mm",
   ]
 
   assert_no_deps = ios_assert_no_deps

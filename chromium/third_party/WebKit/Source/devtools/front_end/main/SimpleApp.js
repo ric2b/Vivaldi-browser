@@ -1,44 +1,32 @@
 // Copyright 2014 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
-
 /**
- * @constructor
- * @implements {WebInspector.App}
+ * @implements {Common.App}
+ * @unrestricted
  */
-WebInspector.SimpleApp = function()
-{
-};
-
-WebInspector.SimpleApp.prototype = {
-    /**
-     * @override
-     * @param {!Document} document
-     */
-    presentUI: function(document)
-    {
-        var rootView = new WebInspector.RootView();
-        WebInspector.inspectorView.show(rootView.element);
-        WebInspector.inspectorView.showInitialPanel();
-        rootView.attachToDocument(document);
-    }
+Main.SimpleApp = class {
+  /**
+   * @override
+   * @param {!Document} document
+   */
+  presentUI(document) {
+    var rootView = new UI.RootView();
+    UI.inspectorView.show(rootView.element);
+    rootView.attachToDocument(document);
+  }
 };
 
 /**
- * @constructor
- * @implements {WebInspector.AppProvider}
+ * @implements {Common.AppProvider}
+ * @unrestricted
  */
-WebInspector.SimpleAppProvider = function()
-{
-};
-
-WebInspector.SimpleAppProvider.prototype = {
-    /**
-     * @override
-     * @return {!WebInspector.App}
-     */
-    createApp: function()
-    {
-        return new WebInspector.SimpleApp();
-    }
+Main.SimpleAppProvider = class {
+  /**
+   * @override
+   * @return {!Common.App}
+   */
+  createApp() {
+    return new Main.SimpleApp();
+  }
 };

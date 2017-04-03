@@ -4,10 +4,10 @@
 
 #include "ash/wm/video_detector.h"
 
-#include "ash/common/shell_window_ids.h"
 #include "ash/common/wm/window_state.h"
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
+#include "ash/public/cpp/shell_window_ids.h"
 #include "ash/shell.h"
 #include "ash/wm/window_state_aura.h"
 #include "ui/aura/env.h"
@@ -119,7 +119,7 @@ void VideoDetector::OnDelegatedFrameDamage(
     const gfx::Rect& damage_rect_in_dip) {
   if (is_shutting_down_)
     return;
-  linked_ptr<WindowInfo>& info = window_infos_[window];
+  std::unique_ptr<WindowInfo>& info = window_infos_[window];
   if (!info.get())
     info.reset(new WindowInfo);
 
@@ -191,7 +191,8 @@ void VideoDetector::UpdateState() {
 
   if (state_ != new_state) {
     state_ = new_state;
-    FOR_EACH_OBSERVER(Observer, observers_, OnVideoStateChanged(state_));
+    for (auto& observer : observers_)
+      observer.OnVideoStateChanged(state_);
   }
 }
 

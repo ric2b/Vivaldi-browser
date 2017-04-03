@@ -902,8 +902,6 @@ TEST_F(ToolbarActionsModelUnitTest, ActionsToolbarSizeAfterPrefChange) {
 // Test that, in the absence of the extension-action-redesign switch, the
 // model only contains extensions with browser actions and component actions.
 TEST_F(ToolbarActionsModelUnitTest, TestToolbarExtensionTypesDisabledSwitch) {
-  extensions::FeatureSwitch::ScopedOverride enable_media_router(
-      extensions::FeatureSwitch::media_router(), false);
   extensions::FeatureSwitch::ScopedOverride enable_redesign(
       extensions::FeatureSwitch::extension_action_redesign(), false);
   Init();
@@ -972,8 +970,6 @@ TEST_F(ToolbarActionsModelUnitTest, TestToolbarExtensionTypesEnabledSwitch) {
 // Test that hiding actions on the toolbar results in their removal from the
 // model when the redesign switch is not enabled.
 TEST_F(ToolbarActionsModelUnitTest, ActionsToolbarActionsVisibilityNoSwitch) {
-  extensions::FeatureSwitch::ScopedOverride enable_media_router(
-      extensions::FeatureSwitch::media_router(), false);
   extensions::FeatureSwitch::ScopedOverride enable_redesign(
       extensions::FeatureSwitch::extension_action_redesign(), false);
   Init();
@@ -1432,6 +1428,32 @@ TEST_F(ToolbarActionsModelUnitTest,
   EXPECT_EQ(2u, num_toolbar_items());
   EXPECT_EQ(component_action_id(), GetActionIdAtIndex(0u));
   EXPECT_EQ(browser_action_c()->id(), GetActionIdAtIndex(1u));
+}
+
+TEST_F(ToolbarActionsModelUnitTest, AddAndRemoveComponentActionWithOVerflow) {
+  Init();
+  // Add three extension actions: A, B, C.
+  ASSERT_TRUE(AddBrowserActionExtensions());
+  EXPECT_EQ(3u, num_toolbar_items());
+
+  // Hide the last icon: A, B, [C].
+  toolbar_model()->SetVisibleIconCount(2);
+  EXPECT_EQ(2u, toolbar_model()->visible_icon_count());
+  EXPECT_EQ(browser_action_c()->id(), GetActionIdAtIndex(2u));
+
+  // Add a component action, CA. Now the icons should be: A, B, CA, [C].
+  toolbar_model()->AddComponentAction(component_action_id());
+  EXPECT_EQ(4u, num_toolbar_items());
+  EXPECT_EQ(3u, toolbar_model()->visible_icon_count());
+  EXPECT_EQ(component_action_id(), GetActionIdAtIndex(2u));
+  EXPECT_EQ(browser_action_c()->id(), GetActionIdAtIndex(3u));
+
+  // Remove the component action. Extension C should stay in the overflow.
+  // The icons should be: A, B, [C].
+  toolbar_model()->RemoveComponentAction(component_action_id());
+  EXPECT_EQ(3u, num_toolbar_items());
+  EXPECT_EQ(2u, toolbar_model()->visible_icon_count());
+  EXPECT_EQ(browser_action_c()->id(), GetActionIdAtIndex(2u));
 }
 
 TEST_F(ToolbarActionsModelUnitTest,

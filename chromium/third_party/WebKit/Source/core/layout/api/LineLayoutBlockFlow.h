@@ -14,7 +14,6 @@ namespace blink {
 
 class LayoutBlockFlow;
 class FloatingObject;
-class LineInfo;
 class LineWidth;
 
 class LineLayoutBlockFlow : public LineLayoutBox {
@@ -24,7 +23,7 @@ class LineLayoutBlockFlow : public LineLayoutBox {
 
   explicit LineLayoutBlockFlow(const LineLayoutItem& item)
       : LineLayoutBox(item) {
-    ASSERT_WITH_SECURITY_IMPLICATION(!item || item.isLayoutBlockFlow());
+    SECURITY_DCHECK(!item || item.isLayoutBlockFlow());
   }
 
   explicit LineLayoutBlockFlow(std::nullptr_t) : LineLayoutBox(nullptr) {}
@@ -119,8 +118,8 @@ class LineLayoutBlockFlow : public LineLayoutBox {
         *toLayoutBox(box.layoutObject()));
   }
 
-  bool positionNewFloats(LineWidth* width) {
-    return toBlockFlow()->positionNewFloats(width);
+  bool placeNewFloats(LayoutUnit logicalTopMarginEdge, LineWidth* width) {
+    return toBlockFlow()->placeNewFloats(logicalTopMarginEdge, width);
   }
 
   LayoutUnit nextFloatLogicalBottomBelow(LayoutUnit logicalHeight) const {

@@ -48,20 +48,6 @@ namespace password_manager {
 
 namespace {
 
-// Returns true if user-typed username and password field values match with one
-// of the password form within |credentials| map; otherwise false.
-bool DoesUsenameAndPasswordMatchCredentials(
-    const base::string16& typed_username,
-    const base::string16& typed_password,
-    const std::map<base::string16, const PasswordForm*>& credentials) {
-  for (const auto& match : credentials) {
-    if (match.second->username_value == typed_username &&
-        match.second->password_value == typed_password)
-      return true;
-  }
-  return false;
-}
-
 std::vector<std::string> SplitPathToSegments(const std::string& path) {
   return base::SplitString(path, "/", base::TRIM_WHITESPACE,
                            base::SPLIT_WANT_ALL);
@@ -174,7 +160,6 @@ PasswordFormManager::PasswordFormManager(
       generation_available_(false),
       password_manager_(password_manager),
       preferred_match_(nullptr),
-      is_ignorable_change_password_form_(false),
       is_possible_change_password_form_without_username_(
           observed_form.IsPossibleChangePasswordFormWithoutUsername()),
       client_(client),
@@ -195,8 +180,8 @@ PasswordFormManager::PasswordFormManager(
 }
 
 PasswordFormManager::~PasswordFormManager() {
-  UMA_HISTOGRAM_ENUMERATION(
-      "PasswordManager.ActionsTakenV3", GetActionsTaken(), kMaxNumActionsTaken);
+  UMA_HISTOGRAM_ENUMERATION("PasswordManager.ActionsTakenV3", GetActionsTaken(),
+                            kMaxNumActionsTaken);
   if (submit_result_ == kSubmitResultNotSubmitted) {
     if (has_generated_password_)
       metrics_util::LogPasswordGenerationSubmissionEvent(
@@ -251,10 +236,10 @@ PasswordFormManager::MatchResultMask PasswordFormManager::DoesManage(
   // redirects to HTTPS (as in http://example.org -> https://example.org/auth).
   if (!origins_match && !observed_form_.origin.SchemeIsCryptographic() &&
       form.origin.SchemeIsCryptographic()) {
-    const std::string& old_path = observed_form_.origin.path();
-    const std::string& new_path = form.origin.path();
+    const base::StringPiece& old_path = observed_form_.origin.path_piece();
+    const base::StringPiece& new_path = form.origin.path_piece();
     origins_match =
-        observed_form_.origin.host() == form.origin.host() &&
+        observed_form_.origin.host_piece() == form.origin.host_piece() &&
         observed_form_.origin.port() == form.origin.port() &&
         base::StartsWith(new_path, old_path, base::CompareCase::SENSITIVE);
   }
@@ -432,22 +417,12 @@ bool PasswordFormManager::HasCompletedMatching() const {
 void PasswordFormManager::SetSubmittedForm(const autofill::PasswordForm& form) {
   bool is_change_password_form =
       !form.new_password_value.empty() && !form.password_value.empty();
-  is_ignorable_change_password_form_ =
-      is_change_password_form && !form.username_marked_by_site &&
-      !DoesUsenameAndPasswordMatchCredentials(
-          form.username_value, form.password_value, best_matches_) &&
-      !client_->IsUpdatePasswordUIEnabled();
   bool is_signup_form =
       !form.new_password_value.empty() && form.password_value.empty();
   bool no_username = form.username_element.empty();
 
   if (form.layout == PasswordForm::Layout::LAYOUT_LOGIN_AND_SIGNUP) {
     form_type_ = kFormTypeLoginAndSignup;
-  } else if (is_ignorable_change_password_form_) {
-    if (no_username)
-      form_type_ = kFormTypeChangePasswordNoUsername;
-    else
-      form_type_ = kFormTypeChangePasswordDisabled;
   } else if (is_change_password_form) {
     form_type_ = kFormTypeChangePasswordEnabled;
   } else if (is_signup_form) {
@@ -701,9 +676,8 @@ bool PasswordFormManager::UpdatePendingCredentialsIfOtherPossibleUsername(
   return false;
 }
 
-void PasswordFormManager::SendAutofillVotes(
-    const PasswordForm& observed,
-    PasswordForm* pending) {
+void PasswordFormManager::SendAutofillVotes(const PasswordForm& observed,
+                                            PasswordForm* pending) {
   if (pending->form_data.fields.empty())
     return;
 
@@ -803,6 +777,11 @@ bool PasswordFormManager::UploadPasswordForm(
   // sure to receive them.
   form_structure.set_upload_required(UPLOAD_REQUIRED);
 
+  if (password_manager_util::IsLoggingActive(client_)) {
+    BrowserSavePasswordProgressLogger logger(client_->GetLogManager());
+    logger.LogFormStructure(Logger::STRING_FORM_VOTES, form_structure);
+  }
+
   bool success = autofill_manager->download_manager()->StartUploadRequest(
       form_structure, false /* was_autofilled */, available_field_types,
       login_form_signature, true /* observed_submission */);
@@ -885,6 +864,11 @@ bool PasswordFormManager::UploadChangePasswordForm(
   // sure to receive them. It also makes testing easier if these requests
   // always pass.
   form_structure.set_upload_required(UPLOAD_REQUIRED);
+
+  if (password_manager_util::IsLoggingActive(client_)) {
+    BrowserSavePasswordProgressLogger logger(client_->GetLogManager());
+    logger.LogFormStructure(Logger::STRING_FORM_VOTES, form_structure);
+  }
 
   return autofill_manager->download_manager()->StartUploadRequest(
       form_structure, false /* was_autofilled */, available_field_types,
@@ -1030,7 +1014,7 @@ void PasswordFormManager::CreatePendingCredentials() {
     // credential.
     selected_username_ = provisionally_saved_form_->username_value;
     is_new_login_ = false;
-  } else if (client_->IsUpdatePasswordUIEnabled() && !best_matches_.empty() &&
+  } else if (!best_matches_.empty() &&
              provisionally_saved_form_->type !=
                  autofill::PasswordForm::TYPE_API &&
              (provisionally_saved_form_
@@ -1102,8 +1086,7 @@ void PasswordFormManager::CreatePendingCredentials() {
   // |provisionally_saved_form_| in order to be able to determine which field is
   // password and which is a new password during sending a vote in other cases
   // we can reset |provisionally_saved_form_|.
-  if (!client_->IsUpdatePasswordUIEnabled() ||
-      !provisionally_saved_form_->IsPossibleChangePasswordForm())
+  if (!provisionally_saved_form_->IsPossibleChangePasswordForm())
     provisionally_saved_form_.reset();
 }
 
@@ -1188,7 +1171,8 @@ bool PasswordFormManager::IsBlacklistMatch(
   }
 
   if (observed_form_.scheme == PasswordForm::SCHEME_HTML) {
-    return (blacklisted_form.origin.path() == observed_form_.origin.path()) ||
+    return (blacklisted_form.origin.path_piece() ==
+            observed_form_.origin.path_piece()) ||
            (AreStringsEqualOrEmpty(blacklisted_form.submit_element,
                                    observed_form_.submit_element) &&
             AreStringsEqualOrEmpty(blacklisted_form.password_element,

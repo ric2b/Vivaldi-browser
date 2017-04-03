@@ -35,7 +35,6 @@ class ProfileUpdateObserver;
   // as AvatarButtonErrorController.
   std::unique_ptr<ProfileUpdateObserver> profileObserver_;
 
- @private
   // The menu controller, if the menu is open.
   BaseBubbleController* menuController_;
 }
@@ -52,12 +51,13 @@ class ProfileUpdateObserver;
                    withServiceType:(signin::GAIAServiceType)serviceType
                    fromAccessPoint:(signin_metrics::AccessPoint)accessPoint;
 
+// Called when the avatar bubble will close.
+- (void)bubbleWillClose:(NSNotification*)notif;
+
 @end
 
 @interface AvatarBaseController (ExposedForTesting)
 - (BaseBubbleController*)menuController;
-
-- (BOOL)isCtrlPressed;
 @end
 
 class ProfileUpdateObserver : public ProfileAttributesStorage::Observer,

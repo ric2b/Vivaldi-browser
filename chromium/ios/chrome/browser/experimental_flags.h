@@ -40,9 +40,6 @@ bool IsAllBookmarksEnabled();
 // Whether the Physical Web feature is enabled.
 bool IsPhysicalWebEnabled();
 
-// Whether the update password UI is enabled.
-bool IsUpdatePasswordUIEnabled();
-
 // Whether the QR Code Reader is enabled.
 bool IsQRCodeReaderEnabled();
 
@@ -57,6 +54,9 @@ bool IsSpotlightActionsEnabled();
 
 // Whether the iOS MDM integration is enabled.
 bool IsMDMIntegrationEnabled();
+
+// Whether the back-forward navigation uses pending index.
+bool IsPendingIndexNavigationEnabled();
 
 }  // namespace experimental_flags
 

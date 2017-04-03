@@ -14,9 +14,9 @@
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "components/sync/base/model_type.h"
-#include "components/sync/core/connection_status.h"
 #include "components/sync/driver/data_type_encryption_handler.h"
 #include "components/sync/driver/sync_service_observer.h"
+#include "components/sync/engine/connection_status.h"
 #include "google_apis/gaia/google_service_auth_error.h"
 
 class GoogleServiceAuthError;
@@ -205,8 +205,8 @@ class SyncService : public DataTypeEncryptionHandler {
   // (such as deciding when to prompt for an encryption passphrase).
   virtual bool IsBackendInitialized() const = 0;
 
-  // Return the active OpenTabsUIDelegate. If sessions is not enabled or not
-  // currently syncing, returns nullptr.
+  // Return the active OpenTabsUIDelegate. If open/proxy tabs is not enabled or
+  // not currently syncing, returns nullptr.
   virtual sync_sessions::OpenTabsUIDelegate* GetOpenTabsUIDelegate() = 0;
 
   // Returns true if OnPassphraseRequired has been called for decryption and
@@ -299,7 +299,7 @@ class SyncService : public DataTypeEncryptionHandler {
   // This function is used by about_sync_util.cc to help populate the about:sync
   // page.  It returns a ListValue rather than a DictionaryValue in part to make
   // it easier to iterate over its elements when constructing that page.
-  virtual base::Value* GetTypeStatusMap() const = 0;
+  virtual base::Value* GetTypeStatusMap() = 0;
 
   virtual const GURL& sync_service_url() const = 0;
 

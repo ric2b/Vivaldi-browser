@@ -1,149 +1,139 @@
 // Copyright 2016 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
-
 /**
- * @constructor
- * @implements {WebInspector.TargetManager.Observer}
+ * @implements {SDK.TargetManager.Observer}
+ * @unrestricted
  */
-WebInspector.MultitargetTouchModel = function()
-{
+Emulation.MultitargetTouchModel = class {
+  constructor() {
     this._touchEnabled = false;
     this._touchMobile = false;
     this._customTouchEnabled = false;
 
-    WebInspector.targetManager.observeTargets(this, WebInspector.Target.Capability.Browser);
-}
+    SDK.targetManager.observeTargets(this, SDK.Target.Capability.Browser);
+  }
 
-WebInspector.MultitargetTouchModel._symbol = Symbol("MultitargetTouchModel.symbol");
+  /**
+   * @return {!Emulation.MultitargetTouchModel}
+   */
+  static instance() {
+    if (!Emulation.MultitargetTouchModel._instance)
+      Emulation.MultitargetTouchModel._instance = new Emulation.MultitargetTouchModel();
+    return /** @type {!Emulation.MultitargetTouchModel} */ (Emulation.MultitargetTouchModel._instance);
+  }
 
-WebInspector.MultitargetTouchModel.prototype = {
+  /**
+   * @param {boolean} enabled
+   * @param {boolean} mobile
+   */
+  setTouchEnabled(enabled, mobile) {
+    this._touchEnabled = enabled;
+    this._touchMobile = mobile;
+    this._updateAllTargets();
+  }
+
+  /**
+   * @param {boolean} enabled
+   */
+  setCustomTouchEnabled(enabled) {
+    this._customTouchEnabled = enabled;
+    this._updateAllTargets();
+  }
+
+  _updateAllTargets() {
+    for (var target of SDK.targetManager.targets(SDK.Target.Capability.Browser))
+      this._applyToTarget(target);
+  }
+
+  /**
+   * @param {!SDK.Target} target
+   */
+  _applyToTarget(target) {
+    var current = {enabled: this._touchEnabled, configuration: this._touchMobile ? 'mobile' : 'desktop'};
+    if (this._customTouchEnabled)
+      current = {enabled: true, configuration: 'mobile'};
+
+    var domModel = SDK.DOMModel.fromTarget(target);
+    var inspectModeEnabled = domModel ? domModel.inspectModeEnabled() : false;
+    if (inspectModeEnabled)
+      current = {enabled: false, configuration: 'mobile'};
+
     /**
-     * @param {boolean} enabled
-     * @param {boolean} mobile
+     * @suppressGlobalPropertiesCheck
      */
-    setTouchEnabled: function(enabled, mobile)
-    {
-        this._touchEnabled = enabled;
-        this._touchMobile = mobile;
-        this._updateAllTargets();
-    },
-
-    /**
-     * @param {boolean} enabled
-     */
-    setCustomTouchEnabled: function(enabled)
-    {
-        this._customTouchEnabled = enabled;
-        this._updateAllTargets();
-    },
-
-    _updateAllTargets: function()
-    {
-        for (var target of WebInspector.targetManager.targets(WebInspector.Target.Capability.Browser))
-            this._applyToTarget(target);
-    },
-
-    /**
-     * @param {!WebInspector.Target} target
-     */
-    _applyToTarget: function(target)
-    {
-        var current = {enabled: this._touchEnabled, configuration : this._touchMobile ? "mobile" : "desktop"};
-        if (this._customTouchEnabled)
-            current = {enabled: true, configuration: "mobile"};
-
-        var domModel = WebInspector.DOMModel.fromTarget(target);
-        var inspectModeEnabled = domModel ? domModel.inspectModeEnabled() : false;
-        if (inspectModeEnabled)
-            current = {enabled: false, configuration: "mobile"};
-
-        /**
-         * @suppressGlobalPropertiesCheck
-         */
-        const injectedFunction = function() {
-            const touchEvents = ["ontouchstart", "ontouchend", "ontouchmove", "ontouchcancel"];
-            var recepients = [window.__proto__, document.__proto__];
-            for (var i = 0; i < touchEvents.length; ++i) {
-                for (var j = 0; j < recepients.length; ++j) {
-                    if (!(touchEvents[i] in recepients[j]))
-                        Object.defineProperty(recepients[j], touchEvents[i], { value: null, writable: true, configurable: true, enumerable: true });
-                }
-            }
-        };
-
-        var symbol = WebInspector.MultitargetTouchModel._symbol;
-        var previous = target[symbol] || {enabled: false, configuration: "mobile", scriptId: ""};
-
-        if (previous.enabled === current.enabled && (!current.enabled || previous.configuration === current.configuration))
-            return;
-
-        if (previous.scriptId) {
-            target.pageAgent().removeScriptToEvaluateOnLoad(previous.scriptId);
-            target[symbol].scriptId = "";
+    const injectedFunction = function() {
+      const touchEvents = ['ontouchstart', 'ontouchend', 'ontouchmove', 'ontouchcancel'];
+      var recepients = [window.__proto__, document.__proto__];
+      for (var i = 0; i < touchEvents.length; ++i) {
+        for (var j = 0; j < recepients.length; ++j) {
+          if (!(touchEvents[i] in recepients[j])) {
+            Object.defineProperty(
+                recepients[j], touchEvents[i], {value: null, writable: true, configurable: true, enumerable: true});
+          }
         }
+      }
+    };
 
-        target[symbol] = current;
-        target[symbol].scriptId = "";
+    var symbol = Emulation.MultitargetTouchModel._symbol;
+    var previous = target[symbol] || {enabled: false, configuration: 'mobile', scriptId: ''};
 
-        if (current.enabled)
-            target.pageAgent().addScriptToEvaluateOnLoad("(" + injectedFunction.toString() + ")()", scriptAddedCallback);
+    if (previous.enabled === current.enabled && (!current.enabled || previous.configuration === current.configuration))
+      return;
 
-        /**
-         * @param {?Protocol.Error} error
-         * @param {string} scriptId
-         */
-        function scriptAddedCallback(error, scriptId)
-        {
-            (target[symbol] || {}).scriptId = error ? "" : scriptId;
-        }
-
-        target.emulationAgent().setTouchEmulationEnabled(current.enabled, current.configuration);
-    },
-
-    /**
-     * @param {!WebInspector.Event} event
-     */
-    _inspectModeToggled: function(event)
-    {
-        var domModel = /** @type {!WebInspector.DOMModel} */ (event.target);
-        this._applyToTarget(domModel.target());
-    },
-
-    /**
-     * @override
-     * @param {!WebInspector.Target} target
-     */
-    targetAdded: function(target)
-    {
-        var domModel = WebInspector.DOMModel.fromTarget(target);
-        if (domModel)
-            domModel.addEventListener(WebInspector.DOMModel.Events.InspectModeWillBeToggled, this._inspectModeToggled, this);
-        this._applyToTarget(target);
-    },
-
-    /**
-     * @override
-     * @param {!WebInspector.Target} target
-     */
-    targetRemoved: function(target)
-    {
-        var domModel = WebInspector.DOMModel.fromTarget(target);
-        if (domModel)
-            domModel.removeEventListener(WebInspector.DOMModel.Events.InspectModeWillBeToggled, this._inspectModeToggled, this);
+    if (previous.scriptId) {
+      target.pageAgent().removeScriptToEvaluateOnLoad(previous.scriptId);
+      target[symbol].scriptId = '';
     }
-}
 
+    target[symbol] = current;
+    target[symbol].scriptId = '';
 
-/** @type {?WebInspector.MultitargetTouchModel} */
-WebInspector.MultitargetTouchModel._instance = null;
+    if (current.enabled)
+      target.pageAgent().addScriptToEvaluateOnLoad('(' + injectedFunction.toString() + ')()', scriptAddedCallback);
 
-/**
- * @return {!WebInspector.MultitargetTouchModel}
- */
-WebInspector.MultitargetTouchModel.instance = function()
-{
-    if (!WebInspector.MultitargetTouchModel._instance)
-        WebInspector.MultitargetTouchModel._instance = new WebInspector.MultitargetTouchModel();
-    return /** @type {!WebInspector.MultitargetTouchModel} */ (WebInspector.MultitargetTouchModel._instance);
-}
+    /**
+     * @param {?Protocol.Error} error
+     * @param {string} scriptId
+     */
+    function scriptAddedCallback(error, scriptId) {
+      (target[symbol] || {}).scriptId = error ? '' : scriptId;
+    }
+
+    target.emulationAgent().setTouchEmulationEnabled(current.enabled, current.configuration);
+  }
+
+  /**
+   * @param {!Common.Event} event
+   */
+  _inspectModeToggled(event) {
+    var domModel = /** @type {!SDK.DOMModel} */ (event.target);
+    this._applyToTarget(domModel.target());
+  }
+
+  /**
+   * @override
+   * @param {!SDK.Target} target
+   */
+  targetAdded(target) {
+    var domModel = SDK.DOMModel.fromTarget(target);
+    if (domModel)
+      domModel.addEventListener(SDK.DOMModel.Events.InspectModeWillBeToggled, this._inspectModeToggled, this);
+    this._applyToTarget(target);
+  }
+
+  /**
+   * @override
+   * @param {!SDK.Target} target
+   */
+  targetRemoved(target) {
+    var domModel = SDK.DOMModel.fromTarget(target);
+    if (domModel)
+      domModel.removeEventListener(SDK.DOMModel.Events.InspectModeWillBeToggled, this._inspectModeToggled, this);
+  }
+};
+
+Emulation.MultitargetTouchModel._symbol = Symbol('MultitargetTouchModel.symbol');
+
+/** @type {?Emulation.MultitargetTouchModel} */
+Emulation.MultitargetTouchModel._instance = null;

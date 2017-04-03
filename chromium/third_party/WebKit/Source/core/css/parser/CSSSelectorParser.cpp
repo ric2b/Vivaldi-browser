@@ -533,7 +533,7 @@ std::unique_ptr<CSSParserSelector> CSSSelectorParser::consumePseudo(
       DisallowPseudoElementsScope scope(this);
 
       std::unique_ptr<CSSSelectorList> selectorList =
-          wrapUnique(new CSSSelectorList());
+          makeUnique<CSSSelectorList>();
       *selectorList = consumeCompoundSelectorList(block);
       if (!selectorList->isValid() || !block.atEnd())
         return nullptr;
@@ -606,13 +606,32 @@ CSSSelector::RelationType CSSSelectorParser::consumeCombinator(
 
   UChar delimiter = range.peek().delimiter();
 
-  if (delimiter == '+' || delimiter == '~' || delimiter == '>') {
+  if (delimiter == '+' || delimiter == '~') {
     range.consumeIncludingWhitespace();
     if (delimiter == '+')
       return CSSSelector::DirectAdjacent;
-    if (delimiter == '~')
-      return CSSSelector::IndirectAdjacent;
-    return CSSSelector::Child;
+    return CSSSelector::IndirectAdjacent;
+  }
+
+  if (delimiter == '>') {
+    if (!RuntimeEnabledFeatures::shadowPiercingDescendantCombinatorEnabled() ||
+        m_context.isDynamicProfile() ||
+        range.peek(1).type() != DelimiterToken ||
+        range.peek(1).delimiter() != '>') {
+      range.consumeIncludingWhitespace();
+      return CSSSelector::Child;
+    }
+    range.consume();
+
+    // Check the 3rd '>'.
+    if (range.peek(1).type() != DelimiterToken ||
+        range.peek(1).delimiter() != '>') {
+      // TODO: Treat '>>' as a CSSSelector::Descendant here.
+      return CSSSelector::Child;
+    }
+    range.consume();
+    range.consumeIncludingWhitespace();
+    return CSSSelector::ShadowPiercingDescendant;
   }
 
   // Match /deep/

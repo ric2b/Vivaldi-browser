@@ -35,7 +35,6 @@
 #include "core/dom/ExecutionContextTask.h"
 #include "core/events/MessageEvent.h"
 #include "core/frame/LocalDOMWindow.h"
-#include "core/inspector/ConsoleMessage.h"
 #include "core/workers/WorkerGlobalScope.h"
 #include "public/platform/WebString.h"
 #include "wtf/Functional.h"
@@ -59,8 +58,6 @@ MessagePort::MessagePort(ExecutionContext& executionContext)
 
 MessagePort::~MessagePort() {
   DCHECK(!m_started || !isEntangled());
-  if (m_scriptStateForConversion)
-    m_scriptStateForConversion->disposePerContextData();
 }
 
 void MessagePort::postMessage(ExecutionContext* context,
@@ -85,12 +82,6 @@ void MessagePort::postMessage(ExecutionContext* context,
       MessagePort::disentanglePorts(context, ports, exceptionState);
   if (exceptionState.hadException())
     return;
-
-  if (message->containsTransferableArrayBuffer())
-    getExecutionContext()->addConsoleMessage(ConsoleMessage::create(
-        JSMessageSource, WarningMessageLevel,
-        "MessagePort cannot send an ArrayBuffer as a transferable object yet. "
-        "See http://crbug.com/334408"));
 
   WebString messageString = message->toWireString();
   std::unique_ptr<WebMessagePortChannelArray> webChannels =
@@ -199,11 +190,6 @@ bool MessagePort::tryGetMessage(
 }
 
 void MessagePort::dispatchMessages() {
-  // Because close() doesn't cancel any in flight calls to dispatchMessages() we
-  // need to check if the port is still open before dispatch.
-  if (m_closed)
-    return;
-
   // Messages for contexts that are not fully active get dispatched too, but
   // JSAbstractEventListener::handleEvent() doesn't call handlers for these.
   // The HTML5 spec specifies that any messages sent to a document that is not
@@ -211,14 +197,24 @@ void MessagePort::dispatchMessages() {
   if (!started())
     return;
 
-  RefPtr<SerializedScriptValue> message;
-  std::unique_ptr<MessagePortChannelArray> channels;
-  while (tryGetMessage(message, channels)) {
-    // close() in Worker onmessage handler should prevent next message from
-    // dispatching.
+  while (true) {
+    // Because close() doesn't cancel any in flight calls to dispatchMessages(),
+    // and can be triggered by the onmessage event handler, we need to check if
+    // the port is still open before each dispatch.
+    if (m_closed)
+      break;
+
+    // WorkerGlobalScope::close() in Worker onmessage handler should prevent
+    // the next message from dispatching.
     if (getExecutionContext()->isWorkerGlobalScope() &&
-        toWorkerGlobalScope(getExecutionContext())->isClosing())
-      return;
+        toWorkerGlobalScope(getExecutionContext())->isClosing()) {
+      break;
+    }
+
+    RefPtr<SerializedScriptValue> message;
+    std::unique_ptr<MessagePortChannelArray> channels;
+    if (!tryGetMessage(message, channels))
+      break;
 
     MessagePortArray* ports =
         MessagePort::entanglePorts(*getExecutionContext(), std::move(channels));

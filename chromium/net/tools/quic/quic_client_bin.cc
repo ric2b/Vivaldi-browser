@@ -63,7 +63,6 @@
 #include "net/spdy/spdy_header_block.h"
 #include "net/tools/epoll_server/epoll_server.h"
 #include "net/tools/quic/quic_client.h"
-#include "net/tools/quic/spdy_balsa_utils.h"
 #include "net/tools/quic/synchronous_host_resolver.h"
 #include "url/gurl.h"
 
@@ -72,12 +71,13 @@ using net::CertVerifier;
 using net::CTPolicyEnforcer;
 using net::CTVerifier;
 using net::MultiLogCTVerifier;
+using net::ProofVerifier;
 using net::ProofVerifierChromium;
+using net::SpdyHeaderBlock;
 using net::TransportSecurityState;
 using std::cout;
 using std::cerr;
 using std::string;
-using std::vector;
 using std::endl;
 
 // The IP or hostname the quic client will connect to.
@@ -105,19 +105,33 @@ bool FLAGS_redirect_is_success = true;
 // Initial MTU of the connection.
 int32_t FLAGS_initial_mtu = 0;
 
-class FakeCertVerifier : public net::CertVerifier {
+class FakeProofVerifier : public ProofVerifier {
  public:
-  int Verify(const RequestParams& params,
-             net::CRLSet* crl_set,
-             net::CertVerifyResult* verify_result,
-             const net::CompletionCallback& callback,
-             std::unique_ptr<Request>* out_req,
-             const net::NetLogWithSource& net_log) override {
-    return net::OK;
+  net::QuicAsyncStatus VerifyProof(
+      const string& hostname,
+      const uint16_t port,
+      const string& server_config,
+      net::QuicVersion quic_version,
+      StringPiece chlo_hash,
+      const std::vector<string>& certs,
+      const string& cert_sct,
+      const string& signature,
+      const net::ProofVerifyContext* context,
+      string* error_details,
+      std::unique_ptr<net::ProofVerifyDetails>* details,
+      std::unique_ptr<net::ProofVerifierCallback> callback) override {
+    return net::QUIC_SUCCESS;
   }
 
-  // Returns true if this CertVerifier supports stapled OCSP responses.
-  bool SupportsOCSPStapling() override { return false; }
+  net::QuicAsyncStatus VerifyCertChain(
+      const std::string& hostname,
+      const std::vector<std::string>& certs,
+      const net::ProofVerifyContext* verify_context,
+      std::string* error_details,
+      std::unique_ptr<net::ProofVerifyDetails>* verify_details,
+      std::unique_ptr<net::ProofVerifierCallback> callback) override {
+    return net::QUIC_SUCCESS;
+  }
 };
 
 int main(int argc, char* argv[]) {
@@ -245,18 +259,19 @@ int main(int argc, char* argv[]) {
   }
   // For secure QUIC we need to verify the cert chain.
   std::unique_ptr<CertVerifier> cert_verifier(CertVerifier::CreateDefault());
-  if (line->HasSwitch("disable-certificate-verification")) {
-    cert_verifier.reset(new FakeCertVerifier());
-  }
   std::unique_ptr<TransportSecurityState> transport_security_state(
       new TransportSecurityState);
   transport_security_state.reset(new TransportSecurityState);
   std::unique_ptr<CTVerifier> ct_verifier(new MultiLogCTVerifier());
   std::unique_ptr<CTPolicyEnforcer> ct_policy_enforcer(new CTPolicyEnforcer());
-  std::unique_ptr<net::ProofVerifierChromium> proof_verifier(
-      new ProofVerifierChromium(cert_verifier.get(), ct_policy_enforcer.get(),
-                                transport_security_state.get(),
-                                ct_verifier.get()));
+  std::unique_ptr<ProofVerifier> proof_verifier;
+  if (line->HasSwitch("disable-certificate-verification")) {
+    proof_verifier.reset(new FakeProofVerifier());
+  } else {
+    proof_verifier.reset(new ProofVerifierChromium(
+        cert_verifier.get(), ct_policy_enforcer.get(),
+        transport_security_state.get(), ct_verifier.get()));
+  }
   net::QuicClient client(net::IPEndPoint(ip_addr, port), server_id, versions,
                          &epoll_server, std::move(proof_verifier));
   client.set_initial_max_packet_length(
@@ -287,9 +302,11 @@ int main(int argc, char* argv[]) {
   }
 
   // Construct a GET or POST request for supplied URL.
-  net::BalsaHeaders headers;
-  headers.SetRequestFirstlineFromStringPieces(body.empty() ? "GET" : "POST",
-                                              url.spec(), "HTTP/1.1");
+  SpdyHeaderBlock header_block;
+  header_block[":method"] = body.empty() ? "GET" : "POST";
+  header_block[":scheme"] = url.scheme();
+  header_block[":authority"] = url.host();
+  header_block[":path"] = url.path();
 
   // Append any additional headers supplied on the command line.
   for (const std::string& header :
@@ -300,21 +317,19 @@ int main(int argc, char* argv[]) {
     if (sp.empty()) {
       continue;
     }
-    vector<string> kv =
+    std::vector<string> kv =
         base::SplitString(sp, ":", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
     CHECK_EQ(2u, kv.size());
     string key;
     base::TrimWhitespaceASCII(kv[0], base::TRIM_ALL, &key);
     string value;
     base::TrimWhitespaceASCII(kv[1], base::TRIM_ALL, &value);
-    headers.AppendHeader(key, value);
+    header_block[kv[0]] = kv[1];
   }
 
   // Make sure to store the response, for later output.
   client.set_store_response(true);
   // Send the request.
-  net::SpdyHeaderBlock header_block =
-      net::SpdyBalsaUtils::RequestHeadersToSpdyHeaders(headers);
   client.SendRequestAndWaitForResponse(header_block, body, /*fin=*/true);
 
   // Print request and response details.

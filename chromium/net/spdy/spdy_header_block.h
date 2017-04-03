@@ -24,13 +24,10 @@ class Value;
 
 namespace net {
 
-// Allows arg-dependent lookup to work for logging's operator<<.
-using ::operator<<;
-
 class NetLogCaptureMode;
 
 namespace test {
-class StringPieceProxyPeer;
+class ValueProxyPeer;
 }
 
 // This class provides a key-value map that can be used to store SPDY header
@@ -38,7 +35,7 @@ class StringPieceProxyPeer;
 //
 // Under the hood, this data structure uses large, contiguous blocks of memory
 // to store names and values. Lookups may be performed with StringPiece keys,
-// and values are returned as StringPieces (via StringPieceProxy, below).
+// and values are returned as StringPieces (via ValueProxy, below).
 // Value StringPieces are valid as long as the SpdyHeaderBlock exists; allocated
 // memory is never freed until SpdyHeaderBlock's destruction.
 //
@@ -57,7 +54,7 @@ class NET_EXPORT SpdyHeaderBlock {
   using value_type = MapType::value_type;
   using reverse_iterator = MapType::reverse_iterator;
 
-  class StringPieceProxy;
+  class ValueProxy;
 
   SpdyHeaderBlock();
   SpdyHeaderBlock(const SpdyHeaderBlock& other) = delete;
@@ -96,11 +93,6 @@ class NET_EXPORT SpdyHeaderBlock {
   // adds a new header to the end of the block.
   void insert(const MapType::value_type& value);
 
-  // If key already exists in the block, replaces the value of that key. Else
-  // adds a new header to the end of the block.
-  void ReplaceOrAppendHeader(const base::StringPiece key,
-                             const base::StringPiece value);
-
   // If a header with the key is already present, then append the value to the
   // existing header value, NUL ("\0") separated unless the key is cookie, in
   // which case the separator is "; ".
@@ -109,47 +101,36 @@ class NET_EXPORT SpdyHeaderBlock {
                               const base::StringPiece value);
 
   // Allows either lookup or mutation of the value associated with a key.
-  StringPieceProxy operator[](const base::StringPiece key);
-
-  // Non-mutating lookup of header value. Returns empty StringPiece if key not
-  // present. To distinguish between absence of header and empty header value,
-  // use find().
-  base::StringPiece GetHeader(const base::StringPiece key) const;
+  ValueProxy operator[](const base::StringPiece key);
 
   // This object provides automatic conversions that allow SpdyHeaderBlock to be
   // nearly a drop-in replacement for linked_hash_map<string, string>. It reads
   // data from or writes data to a SpdyHeaderBlock::Storage.
-  class NET_EXPORT StringPieceProxy {
+  class NET_EXPORT ValueProxy {
    public:
-    ~StringPieceProxy();
+    ~ValueProxy();
 
     // Moves are allowed.
-    StringPieceProxy(StringPieceProxy&& other);
-    StringPieceProxy& operator=(StringPieceProxy&& other);
+    ValueProxy(ValueProxy&& other);
+    ValueProxy& operator=(ValueProxy&& other);
 
     // Copies are not.
-    StringPieceProxy(const StringPieceProxy& other) = delete;
-    StringPieceProxy& operator=(const StringPieceProxy& other) = delete;
+    ValueProxy(const ValueProxy& other) = delete;
+    ValueProxy& operator=(const ValueProxy& other) = delete;
 
     // Assignment modifies the underlying SpdyHeaderBlock.
-    StringPieceProxy& operator=(const base::StringPiece other);
+    ValueProxy& operator=(const base::StringPiece other);
 
-    // Allows a StringPieceProxy to be automatically converted to a StringPiece.
-    // This makes SpdyHeaderBlock::operator[] easy to use with StringPieces.
-    operator base::StringPiece() const;
-
-    std::string as_string() const {
-      return static_cast<base::StringPiece>(*this).as_string();
-    }
+    std::string as_string() const;
 
    private:
     friend class SpdyHeaderBlock;
-    friend class test::StringPieceProxyPeer;
+    friend class test::ValueProxyPeer;
 
-    StringPieceProxy(SpdyHeaderBlock::MapType* block,
-                     SpdyHeaderBlock::Storage* storage,
-                     SpdyHeaderBlock::MapType::iterator lookup_result,
-                     const base::StringPiece key);
+    ValueProxy(SpdyHeaderBlock::MapType* block,
+               SpdyHeaderBlock::Storage* storage,
+               SpdyHeaderBlock::MapType::iterator lookup_result,
+               const base::StringPiece key);
 
     SpdyHeaderBlock::MapType* block_;
     SpdyHeaderBlock::Storage* storage_;
@@ -159,7 +140,6 @@ class NET_EXPORT SpdyHeaderBlock {
   };
 
  private:
-  void Write(const base::StringPiece s);
   void AppendHeader(const base::StringPiece key, const base::StringPiece value);
   Storage* GetStorage();
 

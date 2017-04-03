@@ -17,7 +17,7 @@ WebGLVertexArrayObjectBase::WebGLVertexArrayObjectBase(
       m_type(type),
       m_hasEverBeenBound(false),
       m_destructionInProgress(false),
-      m_boundElementArrayBuffer(nullptr),
+      m_boundElementArrayBuffer(this, nullptr),
       m_isAllEnabledAttribBufferBound(true) {
   m_arrayBufferList.resize(ctx->maxVertexAttribs());
   m_attribEnabled.resize(ctx->maxVertexAttribs());
@@ -94,7 +94,7 @@ void WebGLVertexArrayObjectBase::setArrayBufferForAttrib(GLuint index,
   if (m_arrayBufferList[index])
     m_arrayBufferList[index]->onDetached(context()->contextGL());
 
-  m_arrayBufferList[index] = buffer;
+  m_arrayBufferList[index] = TraceWrapperMember<WebGLBuffer>(this, buffer);
   updateAttribBufferBoundStatus();
 }
 
@@ -149,6 +149,14 @@ DEFINE_TRACE(WebGLVertexArrayObjectBase) {
   visitor->trace(m_boundElementArrayBuffer);
   visitor->trace(m_arrayBufferList);
   WebGLContextObject::trace(visitor);
+}
+
+DEFINE_TRACE_WRAPPERS(WebGLVertexArrayObjectBase) {
+  visitor->traceWrappers(m_boundElementArrayBuffer);
+  for (size_t i = 0; i < m_arrayBufferList.size(); ++i) {
+    visitor->traceWrappers(m_arrayBufferList[i]);
+  }
+  WebGLContextObject::traceWrappers(visitor);
 }
 
 }  // namespace blink

@@ -78,6 +78,10 @@ component("ash") {
     "common/cast_config_delegate.h",
     "common/default_accessibility_delegate.cc",
     "common/default_accessibility_delegate.h",
+    "common/devtools/ash_devtools_css_agent.cc",
+    "common/devtools/ash_devtools_css_agent.h",
+    "common/devtools/ash_devtools_dom_agent.cc",
+    "common/devtools/ash_devtools_dom_agent.h",
     "common/drag_drop/drag_image_view.cc",
     "common/drag_drop/drag_image_view.h",
     "common/focus_cycler.cc",
@@ -120,6 +124,8 @@ component("ash") {
     "common/mojo_interface_factory.h",
     "common/multi_profile_uma.cc",
     "common/multi_profile_uma.h",
+    "common/new_window_client_proxy.cc",
+    "common/new_window_client_proxy.h",
     "common/palette_delegate.h",
     "common/popup_message.cc",
     "common/popup_message.h",
@@ -152,6 +158,8 @@ component("ash") {
     "common/shelf/shelf_button_pressed_metric_tracker.h",
     "common/shelf/shelf_constants.cc",
     "common/shelf/shelf_constants.h",
+    "common/shelf/shelf_controller.cc",
+    "common/shelf/shelf_controller.h",
     "common/shelf/shelf_delegate.h",
     "common/shelf/shelf_item_delegate.h",
     "common/shelf/shelf_item_types.cc",
@@ -181,24 +189,19 @@ component("ash") {
     "common/shelf/wm_shelf_util.cc",
     "common/shelf/wm_shelf_util.h",
     "common/shell_delegate.h",
-    "common/shell_window_ids.cc",
-    "common/shell_window_ids.h",
+    "common/shutdown_controller.cc",
+    "common/shutdown_controller.h",
     "common/system/accessibility_observer.h",
-    "common/system/audio/audio_observer.h",
-    "common/system/audio/tray_audio.cc",
-    "common/system/audio/tray_audio.h",
-    "common/system/audio/tray_audio_delegate.h",
-    "common/system/audio/volume_view.cc",
-    "common/system/audio/volume_view.h",
     "common/system/brightness_control_delegate.h",
-    "common/system/cast/tray_cast.cc",
-    "common/system/cast/tray_cast.h",
     "common/system/chromeos/audio/audio_detailed_view.cc",
     "common/system/chromeos/audio/audio_detailed_view.h",
-    "common/system/chromeos/audio/tray_audio_chromeos.cc",
-    "common/system/chromeos/audio/tray_audio_chromeos.h",
+    "common/system/chromeos/audio/tray_audio.cc",
+    "common/system/chromeos/audio/tray_audio.h",
+    "common/system/chromeos/audio/tray_audio_delegate.h",
     "common/system/chromeos/audio/tray_audio_delegate_chromeos.cc",
     "common/system/chromeos/audio/tray_audio_delegate_chromeos.h",
+    "common/system/chromeos/audio/volume_view.cc",
+    "common/system/chromeos/audio/volume_view.h",
     "common/system/chromeos/bluetooth/bluetooth_notification_controller.cc",
     "common/system/chromeos/bluetooth/bluetooth_notification_controller.h",
     "common/system/chromeos/bluetooth/bluetooth_observer.h",
@@ -208,6 +211,8 @@ component("ash") {
     "common/system/chromeos/brightness/brightness_controller_chromeos.h",
     "common/system/chromeos/brightness/tray_brightness.cc",
     "common/system/chromeos/brightness/tray_brightness.h",
+    "common/system/chromeos/cast/tray_cast.cc",
+    "common/system/chromeos/cast/tray_cast.h",
     "common/system/chromeos/devicetype_utils.cc",
     "common/system/chromeos/devicetype_utils.h",
     "common/system/chromeos/enterprise/enterprise_domain_observer.h",
@@ -223,6 +228,20 @@ component("ash") {
     "common/system/chromeos/media_security/multi_profile_media_tray_item.cc",
     "common/system/chromeos/media_security/multi_profile_media_tray_item.h",
     "common/system/chromeos/network/network_detailed_view.h",
+    "common/system/chromeos/network/network_icon.cc",
+    "common/system/chromeos/network/network_icon.h",
+    "common/system/chromeos/network/network_icon_animation.cc",
+    "common/system/chromeos/network/network_icon_animation.h",
+    "common/system/chromeos/network/network_icon_animation_observer.h",
+    "common/system/chromeos/network/network_info.cc",
+    "common/system/chromeos/network/network_info.h",
+    "common/system/chromeos/network/network_list.cc",
+    "common/system/chromeos/network/network_list.h",
+    "common/system/chromeos/network/network_list_delegate.h",
+    "common/system/chromeos/network/network_list_md.cc",
+    "common/system/chromeos/network/network_list_md.h",
+    "common/system/chromeos/network/network_list_view_base.cc",
+    "common/system/chromeos/network/network_list_view_base.h",
     "common/system/chromeos/network/network_observer.h",
     "common/system/chromeos/network/network_portal_detector_observer.h",
     "common/system/chromeos/network/network_state_list_detailed_view.cc",
@@ -292,7 +311,6 @@ component("ash") {
     "common/system/chromeos/session/tray_session_length_limit.h",
     "common/system/chromeos/settings/tray_settings.cc",
     "common/system/chromeos/settings/tray_settings.h",
-    "common/system/chromeos/shutdown_policy_observer.h",
     "common/system/chromeos/supervised/custodian_info_tray_observer.h",
     "common/system/chromeos/supervised/tray_supervised_user.cc",
     "common/system/chromeos/supervised/tray_supervised_user.h",
@@ -310,15 +328,18 @@ component("ash") {
     "common/system/date/date_default_view.h",
     "common/system/date/date_view.cc",
     "common/system/date/date_view.h",
+    "common/system/date/system_info_default_view.cc",
+    "common/system/date/system_info_default_view.h",
     "common/system/date/tray_date.cc",
     "common/system/date/tray_date.h",
+    "common/system/date/tray_system_info.cc",
+    "common/system/date/tray_system_info.h",
     "common/system/ime/ime_observer.h",
     "common/system/ime/tray_ime_chromeos.cc",
     "common/system/ime/tray_ime_chromeos.h",
     "common/system/keyboard_brightness_control_delegate.h",
     "common/system/locale/locale_notification_controller.cc",
     "common/system/locale/locale_notification_controller.h",
-    "common/system/locale/locale_observer.h",
     "common/system/networking_config_delegate.cc",
     "common/system/networking_config_delegate.h",
     "common/system/overview/overview_button_tray.cc",
@@ -355,6 +376,8 @@ component("ash") {
     "common/system/tray/ime_info.h",
     "common/system/tray/label_tray_view.cc",
     "common/system/tray/label_tray_view.h",
+    "common/system/tray/size_range_layout.cc",
+    "common/system/tray/size_range_layout.h",
     "common/system/tray/special_popup_row.cc",
     "common/system/tray/special_popup_row.h",
     "common/system/tray/system_menu_button.cc",
@@ -393,6 +416,7 @@ component("ash") {
     "common/system/tray/tray_notification_view.h",
     "common/system/tray/tray_popup_header_button.cc",
     "common/system/tray/tray_popup_header_button.h",
+    "common/system/tray/tray_popup_ink_drop_style.h",
     "common/system/tray/tray_popup_item_container.cc",
     "common/system/tray/tray_popup_item_container.h",
     "common/system/tray/tray_popup_item_style.cc",
@@ -401,8 +425,12 @@ component("ash") {
     "common/system/tray/tray_popup_label_button.h",
     "common/system/tray/tray_popup_label_button_border.cc",
     "common/system/tray/tray_popup_label_button_border.h",
+    "common/system/tray/tray_popup_utils.cc",
+    "common/system/tray/tray_popup_utils.h",
     "common/system/tray/tray_utils.cc",
     "common/system/tray/tray_utils.h",
+    "common/system/tray/tri_view.cc",
+    "common/system/tray/tri_view.h",
     "common/system/tray/view_click_listener.h",
     "common/system/tray_accessibility.cc",
     "common/system/tray_accessibility.h",
@@ -424,7 +452,6 @@ component("ash") {
     "common/system/user/user_observer.h",
     "common/system/user/user_view.cc",
     "common/system/user/user_view.h",
-    "common/system/volume_control_delegate.h",
     "common/system/web_notification/ash_popup_alignment_delegate.cc",
     "common/system/web_notification/ash_popup_alignment_delegate.h",
     "common/system/web_notification/web_notification_tray.cc",
@@ -494,6 +521,8 @@ component("ash") {
     "common/wm/overview/window_selector_controller.h",
     "common/wm/overview/window_selector_item.cc",
     "common/wm/overview/window_selector_item.h",
+    "common/wm/panels/panel_frame_view.cc",
+    "common/wm/panels/panel_frame_view.h",
     "common/wm/panels/panel_layout_manager.cc",
     "common/wm/panels/panel_layout_manager.h",
     "common/wm/panels/panel_window_resizer.cc",
@@ -593,8 +622,6 @@ component("ash") {
     "display/display_configuration_controller.h",
     "display/display_error_observer_chromeos.cc",
     "display/display_error_observer_chromeos.h",
-    "display/display_manager.cc",
-    "display/display_manager.h",
     "display/display_pref_util.h",
     "display/display_util.cc",
     "display/display_util.h",
@@ -711,6 +738,8 @@ component("ash") {
     "sticky_keys/sticky_keys_state.h",
     "system/chromeos/power/power_event_observer.cc",
     "system/chromeos/power/power_event_observer.h",
+    "system/chromeos/power/tablet_power_button_controller.cc",
+    "system/chromeos/power/tablet_power_button_controller.h",
     "system/chromeos/power/video_activity_notifier.cc",
     "system/chromeos/power/video_activity_notifier.h",
     "system/chromeos/rotation/tray_rotation_lock.cc",
@@ -771,8 +800,6 @@ component("ash") {
     "wm/overview/scoped_overview_animation_settings_factory_aura.h",
     "wm/panels/attached_panel_window_targeter.cc",
     "wm/panels/attached_panel_window_targeter.h",
-    "wm/panels/panel_frame_view.cc",
-    "wm/panels/panel_frame_view.h",
     "wm/panels/panel_window_event_handler.cc",
     "wm/panels/panel_window_event_handler.h",
     "wm/power_button_controller.cc",
@@ -838,12 +865,14 @@ component("ash") {
     "//cc",
     "//components/device_event_log",
     "//components/onc",
+    "//components/session_manager:base",
     "//components/signin/core/account_id",
+    "//components/ui_devtools",
     "//components/user_manager",
     "//components/wallpaper",
     "//media",
     "//net",
-    "//services/shell/public/cpp",
+    "//services/service_manager/public/cpp",
     "//skia",
     "//third_party/icu",
     "//ui/accessibility",
@@ -1011,228 +1040,6 @@ component("ash_with_content") {
   ]
 }
 
-# Used to test ash with an aura backend.
-source_set("ash_with_aura_test_support") {
-  testonly = true
-  sources = [
-    "test/ash_test_impl_aura.cc",
-    "test/ash_test_impl_aura.h",
-  ]
-  deps = [
-    ":ash",
-    ":test_support_common",
-    "//base",
-    "//skia",
-    "//ui/aura:test_support",
-    "//ui/display",
-    "//ui/wm",
-  ]
-}
-
-# Internal target consumed by |test_support_with_content| and
-# |test_support_without_content|. This target contains all the test support
-# files, with the exception of an implementation of AshTestEnvironment.
-# Consumers of ash should use one of |test_support_with_content| or
-# |test_support_without_content|.
-static_library("test_support_common") {
-  testonly = true
-  visibility = [ ":*" ]
-  sources = [
-    "common/test/ash_test.cc",
-    "common/test/ash_test.h",
-    "common/test/ash_test_impl.h",
-    "common/test/material_design_controller_test_api.cc",
-    "common/test/material_design_controller_test_api.h",
-    "common/test/test_palette_delegate.cc",
-    "common/test/test_palette_delegate.h",
-    "common/test/test_volume_control_delegate.cc",
-    "common/test/test_volume_control_delegate.h",
-    "shell/toplevel_window.cc",
-    "shell/toplevel_window.h",
-    "test/ash_md_test_base.cc",
-    "test/ash_md_test_base.h",
-    "test/ash_test_base.cc",
-    "test/ash_test_base.h",
-    "test/ash_test_environment.h",
-    "test/ash_test_helper.cc",
-    "test/ash_test_helper.h",
-    "test/ash_test_views_delegate.cc",
-    "test/ash_test_views_delegate.h",
-    "test/child_modal_window.cc",
-    "test/child_modal_window.h",
-    "test/cursor_manager_test_api.cc",
-    "test/cursor_manager_test_api.h",
-    "test/display_manager_test_api.cc",
-    "test/display_manager_test_api.h",
-    "test/immersive_fullscreen_controller_test_api.cc",
-    "test/immersive_fullscreen_controller_test_api.h",
-    "test/mirror_window_test_api.cc",
-    "test/mirror_window_test_api.h",
-    "test/overflow_bubble_view_test_api.cc",
-    "test/overflow_bubble_view_test_api.h",
-    "test/shelf_button_pressed_metric_tracker_test_api.cc",
-    "test/shelf_button_pressed_metric_tracker_test_api.h",
-    "test/shelf_view_test_api.cc",
-    "test/shelf_view_test_api.h",
-    "test/shell_test_api.cc",
-    "test/shell_test_api.h",
-    "test/status_area_widget_test_helper.cc",
-    "test/status_area_widget_test_helper.h",
-    "test/task_switch_time_tracker_test_api.cc",
-    "test/task_switch_time_tracker_test_api.h",
-    "test/test_activation_delegate.cc",
-    "test/test_activation_delegate.h",
-    "test/test_keyboard_ui.cc",
-    "test/test_keyboard_ui.h",
-    "test/test_lock_state_controller_delegate.cc",
-    "test/test_lock_state_controller_delegate.h",
-    "test/test_overlay_delegate.cc",
-    "test/test_overlay_delegate.h",
-    "test/test_screenshot_delegate.cc",
-    "test/test_screenshot_delegate.h",
-    "test/test_session_state_animator.cc",
-    "test/test_session_state_animator.h",
-    "test/test_session_state_delegate.cc",
-    "test/test_session_state_delegate.h",
-    "test/test_shelf_delegate.cc",
-    "test/test_shelf_delegate.h",
-    "test/test_shelf_item_delegate.cc",
-    "test/test_shelf_item_delegate.h",
-    "test/test_shell_delegate.cc",
-    "test/test_shell_delegate.h",
-    "test/test_suite.cc",
-    "test/test_suite.h",
-    "test/test_suite_init.h",
-    "test/test_suite_init.mm",
-    "test/test_system_tray_delegate.cc",
-    "test/test_system_tray_delegate.h",
-    "test/test_system_tray_item.cc",
-    "test/test_system_tray_item.h",
-    "test/test_wallpaper_delegate.cc",
-    "test/test_wallpaper_delegate.h",
-    "test/tray_cast_test_api.cc",
-    "test/tray_cast_test_api.h",
-    "test/ui_controls_factory_ash.cc",
-    "test/ui_controls_factory_ash.h",
-    "test/user_metrics_recorder_test_api.cc",
-    "test/user_metrics_recorder_test_api.h",
-  ]
-  configs += [ "//build/config:precompiled_headers" ]
-
-  public_deps = [
-    ":ash",
-  ]
-  deps = [
-    "//ash/resources",
-    "//base:i18n",
-    "//base/test:test_support",
-    "//components/signin/core/account_id",
-    "//components/user_manager:user_manager",
-    "//device/bluetooth",
-    "//skia",
-    "//testing/gtest",
-    "//ui/accessibility",
-    "//ui/app_list:test_support",
-    "//ui/app_list/presenter",
-    "//ui/aura",
-    "//ui/aura:test_support",
-    "//ui/base:test_support",
-    "//ui/compositor:test_support",
-    "//ui/display/types",
-    "//ui/events:events_base",
-    "//ui/events:test_support",
-    "//ui/events/devices",
-    "//ui/gl",
-    "//ui/gl:test_support",
-    "//ui/keyboard",
-    "//ui/message_center",
-    "//ui/views",
-    "//ui/views:test_support",
-    "//ui/wm",
-  ]
-
-  if (is_win) {
-    deps += [ "//ui/platform_window/win" ]
-  }
-
-  if (use_x11) {
-    deps += [ "//ui/gfx/x" ]
-  }
-
-  if (is_chromeos) {
-    deps += [
-      "//chromeos",
-      "//ui/display",
-    ]
-
-    sources += [
-      "laser/laser_pointer_controller_test_api.cc",
-      "laser/laser_pointer_controller_test_api.h",
-      "laser/laser_pointer_points_test_api.cc",
-      "laser/laser_pointer_points_test_api.h",
-    ]
-  }
-}
-
-static_library("test_support_without_content") {
-  testonly = true
-  sources = [
-    "test/ash_test_environment_default.cc",
-  ]
-
-  public_deps = [
-    ":test_support_common",
-  ]
-
-  deps = [
-    "//base",
-    "//base/test:test_support",
-    "//skia",
-  ]
-}
-
-static_library("test_support_with_content") {
-  testonly = true
-  sources = [
-    "test/ash_test_environment_content.cc",
-    "test/ash_test_environment_content.h",
-    "test/content/test_shell_content_state.cc",
-    "test/content/test_shell_content_state.h",
-  ]
-  configs += [ "//build/config:precompiled_headers" ]
-
-  public_deps = [
-    ":ash_with_content",
-    ":test_support_common",
-    "//content/public/browser",
-    "//content/test:test_support",
-    "//skia",
-  ]
-}
-
-static_library("interactive_ui_test_support") {
-  testonly = true
-  configs += [ "//build/config:precompiled_headers" ]
-  public_deps = [
-    ":ash",
-    ":test_support_without_content",
-  ]
-  sources = [
-    "test/ash_interactive_ui_test_base.cc",
-    "test/ash_interactive_ui_test_base.h",
-  ]
-  deps = [
-    ":ash",
-    ":test_support_with_content",
-    "//base",
-    "//skia",
-    "//testing/gtest",
-    "//ui/aura",
-    "//ui/base",
-    "//ui/gl:test_support",
-  ]
-}
-
 static_library("ash_shell_lib") {
   testonly = true
   sources = [
@@ -1250,45 +1057,32 @@ static_library("ash_shell_lib") {
     "shell/toplevel_window.cc",
     "shell/toplevel_window.h",
     "shell/widgets.cc",
-    "shell/window_type_launcher.cc",
-    "shell/window_type_launcher.h",
     "shell/window_watcher.cc",
     "shell/window_watcher.h",
     "shell/window_watcher_shelf_item_delegate.cc",
     "shell/window_watcher_shelf_item_delegate.h",
   ]
 
+  # Usage of content should be in ash_shell_lib_with_content.
+  assert_no_deps = [ "//content/*" ]
+
   deps = [
     ":ash",
-    ":ash_with_content",
-    ":test_support_without_content",
-    "//ash/common/strings",
+    "//ash/common/test:test_support",
     "//ash/public/cpp",
-    "//ash/resources",
+    "//ash/test:test_support_without_content",
     "//base",
     "//base:i18n",
     "//components/user_manager",
-    "//net",
     "//skia",
-    "//third_party/icu",
     "//ui/app_list/presenter",
     "//ui/aura",
     "//ui/base",
-    "//ui/base/ime",
-    "//ui/compositor",
-    "//ui/events",
-    "//ui/events:events_base",
     "//ui/gfx",
     "//ui/gfx/geometry",
-    "//ui/keyboard",
-    "//ui/keyboard:keyboard_with_content",
-    "//ui/message_center",
-    "//ui/resources",
     "//ui/views",
     "//ui/views:test_support",
     "//ui/views/examples:views_examples_lib",
-    "//ui/views/examples:views_examples_with_content_lib",
-    "//ui/wm",
   ]
 }
 
@@ -1303,11 +1097,15 @@ static_library("ash_shell_lib_with_content") {
     "shell/content/client/shell_main_delegate.h",
     "shell/content/shell_content_state_impl.cc",
     "shell/content/shell_content_state_impl.h",
+    "shell/window_type_launcher.cc",
+    "shell/window_type_launcher.h",
   ]
 
   deps = [
     ":ash_shell_lib",
     ":ash_with_content",
+    "//ash/public/cpp",
+    "//ash/test:test_support_without_content",
     "//base:i18n",
     "//chrome:packed_resources",
     "//content",
@@ -1317,11 +1115,13 @@ static_library("ash_shell_lib_with_content") {
     "//skia",
     "//ui/aura",
     "//ui/base",
+    "//ui/base/ime",
     "//ui/compositor",
     "//ui/display",
     "//ui/events/devices",
     "//ui/message_center",
     "//ui/views:test_support",
+    "//ui/views/examples:views_examples_with_content_lib",
     "//ui/wm",
   ]
 
@@ -1346,10 +1146,11 @@ test("ash_content_unittests") {
 
   deps = [
     ":ash",
-    ":ash_with_aura_test_support",
     ":ash_with_content",
-    ":test_support_with_content",
+    "//ash/common/test:test_support",
     "//ash/public/cpp",
+    "//ash/test:ash_with_aura_test_support",
+    "//ash/test:test_support_with_content",
     "//base",
     "//base/test:test_support",
     "//components/signin/core/account_id",
@@ -1386,7 +1187,6 @@ test("ash_content_unittests") {
       "//ui/chromeos",
       "//ui/display",
       "//ui/display:test_support",
-      "//ui/display:test_util",
     ]
   }
 }
@@ -1402,20 +1202,31 @@ test("ash_unittests") {
     "ash_touch_exploration_manager_chromeos_unittest.cc",
     "aura/pointer_watcher_adapter_unittest.cc",
     "autoclick/autoclick_unittest.cc",
-    "common/accelerators/accelerator_table_unittest.cc",
+    "common/devtools/ash_devtools_unittest.cc",
+
+    # TODO: convert to use AshTest http://crbug.com/654489.
     "common/frame/caption_buttons/frame_caption_button_container_view_unittest.cc",
     "common/frame/custom_frame_view_ash_unittest.cc",
     "common/frame/default_header_painter_unittest.cc",
+
+    # TODO: convert to use AshTest http://crbug.com/654491.
     "common/material_design/material_design_controller_unittest.cc",
+
+    # TODO: convert to use AshTest http://crbug.com/654492.
     "common/metrics/pointer_metrics_recorder_unittest.cc",
+
+    # TODO: convert to use AshTest http://crbug.com/654493.
     "common/popup_message_unittest.cc",
+
+    # TODO: convert to use AshTest http://crbug.com/654494.
     "common/shelf/shelf_background_animator_unittest.cc",
     "common/shelf/shelf_button_pressed_metric_tracker_unittest.cc",
     "common/shelf/shelf_locking_manager_unittest.cc",
     "common/shelf/shelf_model_unittest.cc",
     "common/shelf/shelf_tooltip_manager_unittest.cc",
     "common/shelf/shelf_window_watcher_unittest.cc",
-    "common/system/chromeos/brightness/tray_brightness_unittest.cc",
+
+    # TODO: convert to use AshTest http://crbug.com/654495.
     "common/system/chromeos/ime_menu/ime_menu_tray_unittest.cc",
     "common/system/chromeos/media_security/multi_profile_media_tray_item_unittest.cc",
     "common/system/chromeos/palette/mock_palette_tool_delegate.cc",
@@ -1426,24 +1237,22 @@ test("ash_unittests") {
     "common/system/chromeos/power/power_status_unittest.cc",
     "common/system/chromeos/power/power_status_view_unittest.cc",
     "common/system/chromeos/power/tray_power_unittest.cc",
-    "common/system/chromeos/screen_security/screen_tray_item_unittest.cc",
     "common/system/chromeos/session/logout_confirmation_controller_unittest.cc",
     "common/system/chromeos/session/tray_session_length_limit_unittest.cc",
-    "common/system/chromeos/supervised/tray_supervised_user_unittest.cc",
-    "common/system/date/date_view_unittest.cc",
+    "common/system/date/system_info_default_view_unittest.cc",
     "common/system/ime/tray_ime_chromeos_unittest.cc",
     "common/system/tiles/tray_tiles_unittest.cc",
+    "common/system/tray/size_range_layout_unittest.cc",
     "common/system/tray/system_tray_unittest.cc",
     "common/system/tray/tray_details_view_unittest.cc",
-    "common/system/update/tray_update_unittest.cc",
+    "common/system/tray/tri_view_unittest.cc",
     "common/system/user/tray_user_unittest.cc",
+
+    # TODO: convert to use AshTest http://crbug.com/654517.
     "common/wallpaper/wallpaper_controller_unittest.cc",
-    "common/wm/container_finder_unittest.cc",
+
+    # TODO: convert to use AshTest http://crbug.com/654524.
     "common/wm/overview/cleanup_animation_observer_unittest.cc",
-    "common/wm/workspace/workspace_event_handler_test_helper.cc",
-    "common/wm/workspace/workspace_event_handler_test_helper.h",
-    "common/wm_window_unittest.cc",
-    "common/wm_window_user_data_unittest.cc",
     "dip_unittest.cc",
     "display/cursor_window_controller_unittest.cc",
     "display/display_change_observer_chromeos_unittest.cc",
@@ -1484,6 +1293,7 @@ test("ash_unittests") {
     "sticky_keys/sticky_keys_overlay_unittest.cc",
     "sticky_keys/sticky_keys_unittest.cc",
     "system/chromeos/power/power_event_observer_unittest.cc",
+    "system/chromeos/power/tablet_power_button_controller_unittest.cc",
     "system/chromeos/power/video_activity_notifier_unittest.cc",
     "system/chromeos/rotation/tray_rotation_lock_unittest.cc",
     "system/chromeos/screen_layout_observer_unittest.cc",
@@ -1513,7 +1323,6 @@ test("ash_unittests") {
     "wm/maximize_mode/accelerometer_test_data_literals.cc",
     "wm/maximize_mode/maximize_mode_controller_unittest.cc",
     "wm/maximize_mode/maximize_mode_window_manager_unittest.cc",
-    "wm/mru_window_tracker_unittest.cc",
     "wm/overlay_event_filter_unittest.cc",
     "wm/overview/window_selector_unittest.cc",
     "wm/panels/panel_layout_manager_unittest.cc",
@@ -1538,7 +1347,7 @@ test("ash_unittests") {
     "wm/workspace/magnetism_matcher_unittest.cc",
     "wm/workspace/multi_window_resize_controller_unittest.cc",
     "wm/workspace/workspace_event_handler_unittest.cc",
-    "wm/workspace/workspace_layout_manager_unittest.cc",
+    "wm/workspace/workspace_layout_manager_keyboard_unittest.cc",
     "wm/workspace/workspace_window_resizer_unittest.cc",
     "wm/workspace_controller_test_helper.cc",
     "wm/workspace_controller_test_helper.h",
@@ -1551,12 +1360,14 @@ test("ash_unittests") {
 
   deps = [
     ":ash",
-    ":ash_with_aura_test_support",
-    ":test_support_without_content",
     "//ash/autoclick/common:autoclick",
+    "//ash/common:unittests",
     "//ash/common/strings",
+    "//ash/common/test:test_support",
     "//ash/public/cpp",
     "//ash/resources",
+    "//ash/test:ash_with_aura_test_support",
+    "//ash/test:test_support_without_content",
     "//ash/touch_hud",
     "//base",
     "//base/test:test_support",
@@ -1621,7 +1432,6 @@ test("ash_unittests") {
       "//ui/chromeos",
       "//ui/display",
       "//ui/display:test_support",
-      "//ui/display:test_util",
     ]
   } else {
     sources -= [

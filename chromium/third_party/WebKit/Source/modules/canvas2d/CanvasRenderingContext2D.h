@@ -31,6 +31,7 @@
 #include "core/html/canvas/CanvasContextCreationAttributes.h"
 #include "core/html/canvas/CanvasRenderingContext.h"
 #include "core/html/canvas/CanvasRenderingContextFactory.h"
+#include "core/style/FilterOperations.h"
 #include "core/svg/SVGResourceClient.h"
 #include "modules/ModulesExport.h"
 #include "modules/canvas2d/BaseRenderingContext2D.h"
@@ -51,8 +52,6 @@ namespace blink {
 class CanvasImageSource;
 class Element;
 class ExceptionState;
-class FloatRect;
-class FloatSize;
 class Font;
 class FontMetrics;
 class HitRegion;
@@ -60,7 +59,6 @@ class HitRegionOptions;
 class HitRegionManager;
 class HitTestCanvasResult;
 class Path2D;
-class SVGMatrixTearOff;
 class TextMetrics;
 
 typedef CSSImageValueOrHTMLImageElementOrHTMLVideoElementOrHTMLCanvasElementOrImageBitmapOrOffscreenCanvas
@@ -154,7 +152,12 @@ class MODULES_EXPORT CanvasRenderingContext2D final
   String getIdFromControl(const Element*) override;
 
   // SVGResourceClient implementation
-  void filterNeedsInvalidation() override;
+  TreeScope* treeScope() override;
+  void resourceContentChanged() override;
+  void resourceElementChanged() override;
+
+  void updateFilterReferences(const FilterOperations&);
+  void clearFilterReferences();
 
   // BaseRenderingContext2D implementation
   bool originClean() const final;
@@ -179,7 +182,7 @@ class MODULES_EXPORT CanvasRenderingContext2D final
   void didDraw(const SkIRect& dirtyRect) final;
 
   bool stateHasFilter() final;
-  SkImageFilter* stateGetFilter() final;
+  sk_sp<SkImageFilter> stateGetFilter() final;
   void snapshotStateForFilter() final;
 
   void validateStateStack() const final;
@@ -207,8 +210,6 @@ class MODULES_EXPORT CanvasRenderingContext2D final
   void dispatchContextRestoredEvent(TimerBase*);
   void tryRestoreContextEvent(TimerBase*);
 
-  void unwindStateStack();
-
   void pruneLocalFontCache(size_t targetSize);
   void schedulePruneLocalFontCacheIfNeeded();
 
@@ -221,7 +222,7 @@ class MODULES_EXPORT CanvasRenderingContext2D final
                         double* maxWidth = nullptr);
 
   const Font& accessFont();
-  int getFontBaseline(const FontMetrics&) const;
+  float getFontBaseline(const FontMetrics&) const;
 
   void drawFocusIfNeededInternal(const Path&, Element*);
   bool focusRingCallIsValid(const Path&, Element*);
@@ -250,6 +251,7 @@ class MODULES_EXPORT CanvasRenderingContext2D final
   Timer<CanvasRenderingContext2D> m_dispatchContextRestoredEventTimer;
   Timer<CanvasRenderingContext2D> m_tryRestoreContextEventTimer;
 
+  FilterOperations m_filterOperations;
   HashMap<String, Font> m_fontsResolvedUsingCurrentStyle;
   bool m_pruneLocalFontCacheScheduled;
   ListHashSet<String> m_fontLRUList;

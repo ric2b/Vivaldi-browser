@@ -16,7 +16,6 @@
 namespace views {
 
 class Border;
-class FocusableBorder;
 class Label;
 class LabelButton;
 class ScrollBar;
@@ -41,12 +40,15 @@ class VIEWS_EXPORT PlatformStyle {
   // Whether the default button for a dialog can be the Cancel button.
   static const bool kDialogDefaultButtonCanBeCancel;
 
-  // Whether dragging vertically above or below a textfield's bounds selects to
+  // Whether dragging vertically above or below a text view's bounds selects to
   // the left or right end of the text from the cursor, respectively.
-  static const bool kTextfieldDragVerticallyDragsToEnd;
+  static const bool kTextDragVerticallyDragsToEnd;
 
   // The menu button's action to show the menu.
   static const CustomButton::NotifyAction kMenuNotifyActivationAction;
+
+  // Whether TreeViews get a focus ring on the entire TreeView when focused.
+  static const bool kTreeViewHasFocusRing;
 
   // Whether selecting a row in a TreeView selects the entire row or only the
   // label for that row.
@@ -61,13 +63,6 @@ class VIEWS_EXPORT PlatformStyle {
   // style of the combobox the arrow is being drawn for.
   static gfx::ImageSkia CreateComboboxArrow(bool is_enabled,
                                             Combobox::Style style);
-
-  // Creates the appropriate border for a focusable Combobox.
-  static std::unique_ptr<FocusableBorder> CreateComboboxBorder();
-
-  // Creates the appropriate background for a Combobox.
-  static std::unique_ptr<Background> CreateComboboxBackground(
-      int shoulder_width);
 
   // Creates the default scrollbar for the given orientation.
   static std::unique_ptr<ScrollBar> CreateScrollBar(bool is_horizontal);
@@ -86,9 +81,9 @@ class VIEWS_EXPORT PlatformStyle {
   static std::unique_ptr<Border> CreateThemedLabelButtonBorder(
       LabelButton* button);
 
-  // Called whenever a textfield keypress is unhandled for any reason. Gives
-  // visual/audio feedback about the unhandled key if platform-appropriate.
-  static void OnTextfieldKeypressUnhandled();
+  // Called whenever a textfield edit fails. Gives visual/audio feedback about
+  // the failed edit if platform-appropriate.
+  static void OnTextfieldEditFailed();
 
  private:
   DISALLOW_IMPLICIT_CONSTRUCTORS(PlatformStyle);

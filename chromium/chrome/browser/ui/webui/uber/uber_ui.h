@@ -54,20 +54,17 @@ class UberUI : public content::WebUIController {
                                   const base::ListValue& args) override;
 
   // We forward these to |sub_uis_|.
-  void RenderViewCreated(content::RenderViewHost* render_view_host) override;
+  void RenderFrameCreated(content::RenderFrameHost* render_frame_host) override;
 
  private:
-  // A map from URL origin to WebUI instance.
-  typedef std::map<std::string, content::WebUI*> SubpageMap;
-
   // Creates and stores a WebUI for the given URL.
   void RegisterSubpage(const std::string& page_url,
                        const std::string& page_host);
 
-  SubframeLogger subframe_logger_;
+  std::unique_ptr<SubframeLogger> subframe_logger_;
 
-  // The WebUI*s in this map are owned.
-  SubpageMap sub_uis_;
+  // Map from URL origin to WebUI instance.
+  std::map<std::string, std::unique_ptr<content::WebUI>> sub_uis_;
 
   DISALLOW_COPY_AND_ASSIGN(UberUI);
 };

@@ -25,9 +25,13 @@
 
 #include "core/layout/LayoutMedia.h"
 
+#include "core/frame/FrameHost.h"
+#include "core/frame/FrameView.h"
+#include "core/frame/VisualViewport.h"
 #include "core/html/HTMLMediaElement.h"
 #include "core/html/shadow/MediaControls.h"
 #include "core/layout/LayoutView.h"
+#include "core/page/Page.h"
 
 namespace blink {
 
@@ -48,7 +52,9 @@ void LayoutMedia::layout() {
 
   LayoutRect newRect = contentBoxRect();
 
-  LayoutState state(*this, locationOffset());
+  LayoutState state(*this);
+
+  Optional<LayoutUnit> newPanelWidth;
 
 // Iterate the children in reverse order so that the media controls are laid
 // out before the text track container. This is to ensure that the text
@@ -68,15 +74,25 @@ void LayoutMedia::layout() {
       ASSERT_NOT_REACHED();
 #endif
 
+    // TODO(mlamouri): we miss some layouts because needsLayout returns false in
+    // some cases where we want to change the width of the controls because the
+    // visible viewport has changed for example.
     if (newRect.size() == oldSize && !child->needsLayout())
       continue;
+
+    LayoutUnit width = newRect.width();
+    if (child->node()->isMediaControls()) {
+      width = computePanelWidth(newRect);
+      newPanelWidth = width;
+    }
 
     LayoutBox* layoutBox = toLayoutBox(child);
     layoutBox->setLocation(newRect.location());
     // TODO(foolip): Remove the mutableStyleRef() and depend on CSS
     // width/height: inherit to match the media element size.
     layoutBox->mutableStyleRef().setHeight(Length(newRect.height(), Fixed));
-    layoutBox->mutableStyleRef().setWidth(Length(newRect.width(), Fixed));
+    layoutBox->mutableStyleRef().setWidth(Length(width, Fixed));
+
     layoutBox->forceLayout();
   }
 
@@ -84,8 +100,15 @@ void LayoutMedia::layout() {
 
   // Notify our MediaControls that a layout has happened.
   if (mediaElement() && mediaElement()->mediaControls() &&
-      newRect.width() != oldSize.width())
-    mediaElement()->mediaControls()->notifyPanelWidthChanged(newRect.width());
+      newPanelWidth.has_value()) {
+    if (!m_lastReportedPanelWidth.has_value() ||
+        m_lastReportedPanelWidth.value() != newPanelWidth.value()) {
+      mediaElement()->mediaControls()->notifyPanelWidthChanged(
+          newPanelWidth.value());
+      // Store the last value we reported, so we know if it has changed.
+      m_lastReportedPanelWidth = newPanelWidth.value();
+    }
+  }
 }
 
 bool LayoutMedia::isChildAllowed(LayoutObject* child,
@@ -137,6 +160,42 @@ void LayoutMedia::setRequestPositionUpdates(bool want) {
     view()->registerMediaForPositionChangeNotification(*this);
   else
     view()->unregisterMediaForPositionChangeNotification(*this);
+}
+
+LayoutUnit LayoutMedia::computePanelWidth(const LayoutRect& mediaRect) const {
+  // TODO(mlamouri): we don't know if the main frame has an horizontal scrollbar
+  // if it is out of process. See https://crbug.com/662480
+  if (document().page()->mainFrame()->isRemoteFrame())
+    return mediaRect.width();
+
+  // TODO(foolip): when going fullscreen, the animation sometimes does not clear
+  // up properly and the last `absoluteXOffset` received is incorrect. This is
+  // a shortcut that we could ideally avoid. See https://crbug.com/663680
+  if (mediaElement() && mediaElement()->isFullscreen())
+    return mediaRect.width();
+
+  FrameHost* frameHost = document().frameHost();
+  LocalFrame* mainFrame = document().page()->deprecatedLocalMainFrame();
+  FrameView* pageView = mainFrame ? mainFrame->view() : nullptr;
+  if (!frameHost || !mainFrame || !pageView)
+    return mediaRect.width();
+
+  if (pageView->horizontalScrollbarMode() != ScrollbarAlwaysOff)
+    return mediaRect.width();
+
+  // On desktop, this will include scrollbars when they stay visible.
+  const LayoutUnit visibleWidth(frameHost->visualViewport().visibleWidth());
+  const LayoutUnit absoluteXOffset(
+      localToAbsolute(
+          FloatPoint(mediaRect.location()),
+          UseTransforms | ApplyContainerFlip | TraverseDocumentBoundaries)
+          .x());
+  const LayoutUnit newWidth = visibleWidth - absoluteXOffset;
+
+  if (newWidth < 0)
+    return mediaRect.width();
+
+  return std::min(mediaRect.width(), visibleWidth - absoluteXOffset);
 }
 
 }  // namespace blink

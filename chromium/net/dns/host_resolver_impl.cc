@@ -62,7 +62,7 @@
 #include "net/log/net_log_source_type.h"
 #include "net/log/net_log_with_source.h"
 #include "net/socket/client_socket_factory.h"
-#include "net/udp/datagram_client_socket.h"
+#include "net/socket/datagram_client_socket.h"
 #include "url/url_canon_ip.h"
 
 #if defined(OS_WIN)
@@ -254,7 +254,7 @@ bool IsGloballyReachable(const IPAddress& dest,
       case LOW: DNS_HISTOGRAM(basename "_LOW", time); break; \
       case LOWEST: DNS_HISTOGRAM(basename "_LOWEST", time); break; \
       case IDLE: DNS_HISTOGRAM(basename "_IDLE", time); break; \
-      default: NOTREACHED(); break; \
+      case THROTTLED: DNS_HISTOGRAM(basename "_THROTTLED", time); break; \
     } \
     DNS_HISTOGRAM(basename, time); \
   } while (0)

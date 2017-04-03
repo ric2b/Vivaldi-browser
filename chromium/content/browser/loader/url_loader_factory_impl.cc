@@ -13,6 +13,26 @@
 
 namespace content {
 
+namespace {
+
+void DispatchSyncLoadResult(
+    const URLLoaderFactoryImpl::SyncLoadCallback& callback,
+    const SyncLoadResult* result) {
+  // |result| can be null when a loading task is aborted unexpectedly. Reply
+  // with a failure result on that case.
+  // TODO(tzik): Test null-result case.
+  if (!result) {
+    SyncLoadResult failure;
+    failure.error_code = net::ERR_FAILED;
+    callback.Run(failure);
+    return;
+  }
+
+  callback.Run(*result);
+}
+
+} // namespace
+
 URLLoaderFactoryImpl::URLLoaderFactoryImpl(
     scoped_refptr<ResourceMessageFilter> resource_message_filter)
     : resource_message_filter_(std::move(resource_message_filter)) {
@@ -25,17 +45,53 @@ URLLoaderFactoryImpl::~URLLoaderFactoryImpl() {
 }
 
 void URLLoaderFactoryImpl::CreateLoaderAndStart(
-    mojom::URLLoaderRequest request,
+    mojom::URLLoaderAssociatedRequest request,
     int32_t routing_id,
     int32_t request_id,
     const ResourceRequest& url_request,
-    mojom::URLLoaderClientPtr client) {
+    mojom::URLLoaderClientAssociatedPtrInfo client_ptr_info) {
+  CreateLoaderAndStart(std::move(request), routing_id, request_id, url_request,
+                       std::move(client_ptr_info),
+                       resource_message_filter_.get());
+}
+
+void URLLoaderFactoryImpl::SyncLoad(int32_t routing_id,
+                                    int32_t request_id,
+                                    const ResourceRequest& url_request,
+                                    const SyncLoadCallback& callback) {
+  SyncLoad(routing_id, request_id, url_request, callback,
+           resource_message_filter_.get());
+}
+
+// static
+void URLLoaderFactoryImpl::CreateLoaderAndStart(
+    mojom::URLLoaderAssociatedRequest request,
+    int32_t routing_id,
+    int32_t request_id,
+    const ResourceRequest& url_request,
+    mojom::URLLoaderClientAssociatedPtrInfo client_ptr_info,
+    ResourceMessageFilter* filter) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
+
+  mojom::URLLoaderClientAssociatedPtr client;
+  client.Bind(std::move(client_ptr_info));
 
   ResourceDispatcherHostImpl* rdh = ResourceDispatcherHostImpl::Get();
   rdh->OnRequestResourceWithMojo(routing_id, request_id, url_request,
-                                 std::move(request), std::move(client),
-                                 resource_message_filter_.get());
+                                 std::move(request), std::move(client), filter);
+}
+
+// static
+void URLLoaderFactoryImpl::SyncLoad(int32_t routing_id,
+                                    int32_t request_id,
+                                    const ResourceRequest& url_request,
+                                    const SyncLoadCallback& callback,
+                                    ResourceMessageFilter* filter) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+
+  ResourceDispatcherHostImpl* rdh = ResourceDispatcherHostImpl::Get();
+  rdh->OnSyncLoadWithMojo(routing_id, request_id, url_request, filter,
+                          base::Bind(&DispatchSyncLoadResult, callback));
 }
 
 void URLLoaderFactoryImpl::Create(

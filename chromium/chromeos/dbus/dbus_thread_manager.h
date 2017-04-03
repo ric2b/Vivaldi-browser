@@ -26,6 +26,7 @@ namespace chromeos {
 
 // Style Note: Clients are sorted by names.
 class ArcObbMounterClient;
+class AuthPolicyClient;
 class CrasAudioClient;
 class CrosDisksClient;
 class CryptohomeClient;
@@ -36,6 +37,7 @@ class DebugDaemonClient;
 class EasyUnlockClient;
 class GsmSMSClient;
 class ImageBurnerClient;
+class ImageLoaderClient;
 class LorgnetteManagerClient;
 class ModemMessagingClient;
 class PermissionBrokerClient;
@@ -50,6 +52,7 @@ class ShillServiceClient;
 class ShillThirdPartyVpnDriverClient;
 class SystemClockClient;
 class UpdateEngineClient;
+class UpstartClient;
 
 // DBusThreadManager manages the D-Bus thread, the thread dedicated to
 // handling asynchronous D-Bus operations.
@@ -117,6 +120,7 @@ class CHROMEOS_EXPORT DBusThreadManager {
   // TODO(jamescook): Replace this with calls to FooClient::Get().
   // http://crbug.com/647367
   ArcObbMounterClient* GetArcObbMounterClient();
+  AuthPolicyClient* GetAuthPolicyClient();
   CrasAudioClient* GetCrasAudioClient();
   CrosDisksClient* GetCrosDisksClient();
   CryptohomeClient* GetCryptohomeClient();
@@ -124,6 +128,7 @@ class CHROMEOS_EXPORT DBusThreadManager {
   EasyUnlockClient* GetEasyUnlockClient();
   GsmSMSClient* GetGsmSMSClient();
   ImageBurnerClient* GetImageBurnerClient();
+  ImageLoaderClient* GetImageLoaderClient();
   LorgnetteManagerClient* GetLorgnetteManagerClient();
   ModemMessagingClient* GetModemMessagingClient();
   PermissionBrokerClient* GetPermissionBrokerClient();
@@ -138,6 +143,7 @@ class CHROMEOS_EXPORT DBusThreadManager {
   SMSClient* GetSMSClient();
   SystemClockClient* GetSystemClockClient();
   UpdateEngineClient* GetUpdateEngineClient();
+  UpstartClient* GetUpstartClient();
 
  private:
   friend class DBusThreadManagerSetter;
@@ -183,6 +189,7 @@ class CHROMEOS_EXPORT DBusThreadManagerSetter {
   void SetShillThirdPartyVpnDriverClient(
       std::unique_ptr<ShillThirdPartyVpnDriverClient> client);
   void SetImageBurnerClient(std::unique_ptr<ImageBurnerClient> client);
+  void SetImageLoaderClient(std::unique_ptr<ImageLoaderClient> client);
   void SetPermissionBrokerClient(
       std::unique_ptr<PermissionBrokerClient> client);
   void SetPowerManagerClient(std::unique_ptr<PowerManagerClient> client);

@@ -15,7 +15,6 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "chrome/browser/extensions/api/bookmark_manager_private/bookmark_manager_private_api.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/profiles/profile.h"
@@ -331,40 +330,6 @@ void ForEachOverrideList(
 
 const char ExtensionWebUI::kExtensionURLOverrides[] =
     "extensions.chrome_url_overrides";
-
-ExtensionWebUI::ExtensionWebUI(content::WebUI* web_ui, const GURL& url)
-    : WebUIController(web_ui),
-      url_(url) {
-  Profile* profile = Profile::FromWebUI(web_ui);
-  const Extension* extension = extensions::ExtensionRegistry::Get(
-      profile)->enabled_extensions().GetExtensionOrAppByURL(url);
-  DCHECK(extension);
-
-  // The base class defaults to enabling WebUI bindings, but we don't need
-  // those (this is also reflected in ChromeWebUIControllerFactory::
-  // UseWebUIBindingsForURL).
-  int bindings = 0;
-  web_ui->SetBindings(bindings);
-
-  // Hack: A few things we specialize just for the bookmark manager.
-  if (extension->id() == extension_misc::kBookmarkManagerId) {
-    bookmark_manager_private_drag_event_router_.reset(
-        new extensions::BookmarkManagerPrivateDragEventRouter(
-            profile, web_ui->GetWebContents()));
-
-    web_ui->SetLinkTransitionType(ui::PAGE_TRANSITION_AUTO_BOOKMARK);
-  }
-}
-
-ExtensionWebUI::~ExtensionWebUI() {}
-
-extensions::BookmarkManagerPrivateDragEventRouter*
-ExtensionWebUI::bookmark_manager_private_drag_event_router() {
-  return bookmark_manager_private_drag_event_router_.get();
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// chrome:// URL overrides
 
 // static
 void ExtensionWebUI::RegisterProfilePrefs(

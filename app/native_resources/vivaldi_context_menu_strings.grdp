@@ -28,4 +28,31 @@
     <message name="IDS_VIV_OPEN_LINK_NEW_PRIVATE_WINDOW" desc="Where to open a link">
         Open Link in Private Window
     </message>
+    <message name="IDS_VIV_COPY_TO_NOTE" desc="Save selected text as a new note">
+        Copy to Note
+    </message>
+    <message name="IDS_VIV_BOOKMARK_PAGE" desc="Save current page as a bookmark">
+        Bookmark Page
+    </message>
+    <message name="IDS_VIV_BOOKMARK_LINK" desc="Save current link as a bookmark">
+        Bookmark Link
+    </message>
+     <message name="IDS_VIV_COPY_PAGE_ADDRESS" desc="Copy current page address to clipboard">
+        Copy Page Address
+    </message>
+    <message name="IDS_VIV_ADD_PAGE_TO_WEBPANEL" desc="Save current page as web panel">
+        Add Page to Web Panel
+    </message>
+    <message name="IDS_VIV_ADD_LINK_TO_WEBPANEL" desc="Save current link as web panel">
+        Add Link to Web Panel
+    </message>
+    <message name="IDS_VIV_USE_IMAGE_AS_BACKGROUND" desc="Use current image as start page background">
+        Use Image as Start Page Background
+    </message>
+    <message name="IDS_VIV_FULLSCREEN" desc="Enter/leave fullscreen mode">
+        Fullscreen
+    </message>
+    <message name="IDS_VIV_VALIDATE_PAGE" desc="Validate active page">
+        Validate
+    </message>
 </grit-part>

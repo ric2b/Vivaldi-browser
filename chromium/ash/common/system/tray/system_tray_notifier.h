@@ -9,7 +9,6 @@
 
 #include "ash/ash_export.h"
 #include "ash/common/accessibility_types.h"
-#include "ash/common/system/locale/locale_observer.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
 
@@ -21,7 +20,6 @@
 namespace ash {
 
 class AccessibilityObserver;
-class AudioObserver;
 class ClockObserver;
 class IMEObserver;
 struct UpdateInfo;
@@ -55,15 +53,6 @@ class ASH_EXPORT SystemTrayNotifier {
   void NotifyAccessibilityModeChanged(
       AccessibilityNotificationVisibility notify);
 
-  // Audio.
-  void AddAudioObserver(AudioObserver* observer);
-  void RemoveAudioObserver(AudioObserver* observer);
-  void NotifyAudioOutputVolumeChanged(uint64_t node_id, double volume);
-  void NotifyAudioOutputMuteChanged(bool mute_on, bool system_adjust);
-  void NotifyAudioNodesChanged();
-  void NotifyAudioActiveOutputNodeChanged();
-  void NotifyAudioActiveInputNodeChanged();
-
   // Date and time.
   void AddClockObserver(ClockObserver* observer);
   void RemoveClockObserver(ClockObserver* observer);
@@ -77,14 +66,6 @@ class ASH_EXPORT SystemTrayNotifier {
   void RemoveIMEObserver(IMEObserver* observer);
   void NotifyRefreshIME();
   void NotifyRefreshIMEMenu(bool is_active);
-
-  // Locale.
-  void AddLocaleObserver(LocaleObserver* observer);
-  void RemoveLocaleObserver(LocaleObserver* observer);
-  void NotifyLocaleChanged(LocaleObserver::Delegate* delegate,
-                           const std::string& cur_locale,
-                           const std::string& from_locale,
-                           const std::string& to_locale);
 
   // OS updates.
   void AddUpdateObserver(UpdateObserver* observer);
@@ -170,10 +151,8 @@ class ASH_EXPORT SystemTrayNotifier {
 
  private:
   base::ObserverList<AccessibilityObserver> accessibility_observers_;
-  base::ObserverList<AudioObserver> audio_observers_;
   base::ObserverList<ClockObserver> clock_observers_;
   base::ObserverList<IMEObserver> ime_observers_;
-  base::ObserverList<LocaleObserver> locale_observers_;
   base::ObserverList<UpdateObserver> update_observers_;
   base::ObserverList<UserObserver> user_observers_;
 

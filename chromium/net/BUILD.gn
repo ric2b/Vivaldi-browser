@@ -40,20 +40,15 @@ posix_avoid_mmap = is_android && current_cpu != "x86"
 use_v8_in_net = !is_ios
 enable_built_in_dns = !is_ios
 
-config("net_config") {
-  defines = []
-  if (posix_avoid_mmap) {
-    defines += [ "POSIX_AVOID_MMAP" ]
-  }
-  if (disable_file_support) {
-    defines += [ "DISABLE_FILE_SUPPORT" ]
-  }
-  if (disable_ftp_support) {
-    defines += [ "DISABLE_FTP_SUPPORT=1" ]
-  }
-  if (enable_websockets) {
-    defines += [ "ENABLE_WEBSOCKETS" ]
-  }
+buildflag_header("features") {
+  header = "net_features.h"
+  flags = [
+    "POSIX_AVOID_MMAP=$posix_avoid_mmap",
+    "DISABLE_FILE_SUPPORT=$disable_file_support",
+    "DISABLE_FTP_SUPPORT=$disable_ftp_support",
+    "ENABLE_MDNS=$enable_mdns",
+    "ENABLE_WEBSOCKETS=$enable_websockets",
+  ]
 }
 
 config("net_internal_config") {
@@ -311,9 +306,11 @@ component("net") {
 
   cflags = []
   configs += net_configs
-  public_configs = [ ":net_config" ]
 
-  public_deps += [ "//url" ]
+  public_deps += [
+    ":features",
+    "//url",
+  ]
 
   if (is_mac) {
     libs = [
@@ -389,11 +386,9 @@ component("net") {
 
     # Brotli support.
     if (!disable_brotli_filter) {
-      sources += [ "filter/brotli_filter.cc" ]
       sources += [ "filter/brotli_source_stream.cc" ]
-      deps += [ "//third_party/brotli" ]
+      deps += [ "//third_party/brotli:dec" ]
     } else {
-      sources += [ "filter/brotli_filter_disabled.cc" ]
       sources += [ "filter/brotli_source_stream_disabled.cc" ]
     }
   }
@@ -521,6 +516,8 @@ static_library("test_support") {
     "dns/mock_host_resolver.h",
     "dns/mock_mdns_socket_factory.cc",
     "dns/mock_mdns_socket_factory.h",
+    "filter/mock_source_stream.cc",
+    "filter/mock_source_stream.h",
     "http/http_stream_factory_test_util.cc",
     "http/http_stream_factory_test_util.h",
     "http/http_transaction_test_util.cc",
@@ -531,6 +528,8 @@ static_library("test_support") {
     "log/test_net_log_entry.h",
     "log/test_net_log_util.cc",
     "log/test_net_log_util.h",
+    "nqe/network_quality_estimator_test_util.cc",
+    "nqe/network_quality_estimator_test_util.h",
     "proxy/mock_proxy_resolver.cc",
     "proxy/mock_proxy_resolver.h",
     "proxy/mock_proxy_script_fetcher.cc",
@@ -664,32 +663,6 @@ static_library("test_support") {
   }
 }
 
-source_set("balsa") {
-  sources = [
-    "tools/balsa/balsa_enums.h",
-    "tools/balsa/balsa_frame.cc",
-    "tools/balsa/balsa_frame.h",
-    "tools/balsa/balsa_headers.cc",
-    "tools/balsa/balsa_headers.h",
-    "tools/balsa/balsa_headers_token_utils.cc",
-    "tools/balsa/balsa_headers_token_utils.h",
-    "tools/balsa/balsa_visitor_interface.h",
-    "tools/balsa/http_message_constants.cc",
-    "tools/balsa/http_message_constants.h",
-    "tools/balsa/noop_balsa_visitor.h",
-    "tools/balsa/simple_buffer.cc",
-    "tools/balsa/simple_buffer.h",
-    "tools/balsa/string_piece_utils.h",
-    "tools/quic/spdy_balsa_utils.cc",
-    "tools/quic/spdy_balsa_utils.h",
-  ]
-  deps = [
-    ":net",
-    "//base",
-    "//url",
-  ]
-}
-
 if (use_v8_in_net) {
   component("net_with_v8") {
     sources = [
@@ -738,10 +711,8 @@ if (use_v8_in_net && !is_android) {
     ]
 
     public_deps = [
-      ":mojo_type_converters",
       ":net_with_v8",
       "//base",
-      "//mojo/common",
       "//mojo/public/cpp/bindings",
       "//net/interfaces",
 
@@ -750,22 +721,6 @@ if (use_v8_in_net && !is_android) {
       # the utility process side Mojo services in the browser process.
       # Ultimately, this will go away when we only support out-of-process.
       ":net_utility_services",
-    ]
-  }
-
-  source_set("mojo_type_converters") {
-    sources = [
-      "dns/mojo_host_type_converters.cc",
-      "dns/mojo_host_type_converters.h",
-      "proxy/mojo_proxy_type_converters.cc",
-      "proxy/mojo_proxy_type_converters.h",
-    ]
-
-    public_deps = [
-      ":net",
-      "//base",
-      "//mojo/public/cpp/bindings",
-      "//net/interfaces",
     ]
   }
 
@@ -786,9 +741,7 @@ if (use_v8_in_net && !is_android) {
     ]
 
     public_deps = [
-      ":mojo_type_converters",
       ":net",
-      "//mojo/common",
       "//mojo/public/cpp/bindings",
       "//net/interfaces",
     ]
@@ -1029,9 +982,9 @@ if (is_linux || is_mac) {
   executable("content_decoder_tool") {
     testonly = true
     sources = [
-      "filter/mock_filter_context.cc",
-      "filter/mock_filter_context.h",
       "tools/content_decoder_tool/content_decoder_tool.cc",
+      "tools/content_decoder_tool/content_decoder_tool.h",
+      "tools/content_decoder_tool/content_decoder_tool_bin.cc",
     ]
     deps = [
       ":net",
@@ -1076,7 +1029,6 @@ if (is_linux) {
       "tools/quic/quic_socket_utils.h",
     ]
     deps = [
-      ":balsa",
       ":epoll_server",
       ":net",
       ":simple_quic_tools",
@@ -1093,7 +1045,6 @@ if (is_linux) {
       "tools/quic/quic_client_bin.cc",
     ]
     deps = [
-      ":balsa",
       ":epoll_quic_tools",
       ":epoll_server",
       ":net",
@@ -1109,7 +1060,6 @@ if (is_linux) {
       "tools/quic/quic_server_bin.cc",
     ]
     deps = [
-      ":balsa",
       ":epoll_quic_tools",
       ":epoll_server",
       ":net",
@@ -1205,40 +1155,11 @@ source_set("simple_quic_tools") {
     "tools/quic/synchronous_host_resolver.h",
   ]
   deps = [
-    ":balsa",
     ":net",
     "//base",
     "//base/third_party/dynamic_annotations",
     "//url",
   ]
-}
-
-action_foreach("stale_while_revalidate_experiment_domains_dafsa") {
-  script = "//net/tools/dafsa/make_dafsa.py"
-  sources = [
-    "base/stale_while_revalidate_experiment_domains.gperf",
-  ]
-  outputs = [
-    "${target_gen_dir}/base/{{source_name_part}}-inc.cc",
-  ]
-  args = [
-    "{{source}}",
-    rebase_path("${target_gen_dir}/base/{{source_name_part}}-inc.cc",
-                root_build_dir),
-  ]
-}
-
-source_set("stale_while_revalidate_experiment_domains") {
-  sources = [
-    "base/stale_while_revalidate_experiment_domains.cc",
-    "base/stale_while_revalidate_experiment_domains.h",
-  ]
-  deps = [
-    ":net",
-    ":stale_while_revalidate_experiment_domains_dafsa",
-    "//base",
-  ]
-  configs += net_configs
 }
 
 if (!is_ios) {
@@ -1331,11 +1252,9 @@ test("net_unittests") {
   defines = []
 
   deps = [
-    ":balsa",
     ":extras",
     ":net",
     ":simple_quic_tools",
-    ":stale_while_revalidate_experiment_domains",
     ":test_support",
     "//base",
     "//base:i18n",
@@ -1525,7 +1444,6 @@ test("net_unittests") {
       "disk_cache/blockfile/block_files_unittest.cc",
 
       # Need to read input data files.
-      "filter/gzip_filter_unittest.cc",
       "socket/ssl_server_socket_unittest.cc",
       "spdy/fuzzing/hpack_fuzz_util_test.cc",
 
@@ -1582,9 +1500,7 @@ test("net_unittests") {
   }
 
   # Exclude brotli test if the support for brotli is disabled.
-  # Also, exclude the test from iOS for now (needs to read input data files).
-  if (disable_brotli_filter || is_ios) {
-    sources -= [ "filter/brotli_filter_unittest.cc" ]
+  if (disable_brotli_filter) {
     sources -= [ "filter/brotli_source_stream_unittest.cc" ]
   }
 
@@ -1637,7 +1553,7 @@ if (!is_ios) {
       "disk_cache/disk_cache_perftest.cc",
       "extras/sqlite/sqlite_persistent_cookie_store_perftest.cc",
       "proxy/proxy_resolver_perftest.cc",
-      "udp/udp_socket_perftest.cc",
+      "socket/udp_socket_perftest.cc",
     ]
 
     # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
@@ -1676,12 +1592,14 @@ source_set("net_fuzzer_test_support") {
 
   sources = [
     "base/fuzzer_test_support.cc",
+    "filter/fuzzed_source_stream.cc",
+    "filter/fuzzed_source_stream.h",
+    "socket/fuzzed_datagram_client_socket.cc",
+    "socket/fuzzed_datagram_client_socket.h",
     "socket/fuzzed_socket.cc",
     "socket/fuzzed_socket.h",
     "socket/fuzzed_socket_factory.cc",
     "socket/fuzzed_socket_factory.h",
-    "udp/fuzzed_datagram_client_socket.cc",
-    "udp/fuzzed_datagram_client_socket.h",
   ]
   public_deps = [
     "//base/test:test_support",
@@ -1896,6 +1814,32 @@ fuzzer_test("net_http_stream_parser_fuzzer") {
   dict = "data/fuzzer_dictionaries/net_http_stream_parser_fuzzer.dict"
 }
 
+if (!disable_brotli_filter) {
+  fuzzer_test("net_brotli_source_stream_fuzzer") {
+    sources = [
+      "filter/brotli_source_stream_fuzzer.cc",
+    ]
+    deps = [
+      ":net_fuzzer_test_support",
+      ":test_support",
+      "//base",
+      "//net",
+    ]
+  }
+}
+
+fuzzer_test("net_gzip_source_stream_fuzzer") {
+  sources = [
+    "filter/gzip_source_stream_fuzzer.cc",
+  ]
+  deps = [
+    ":net_fuzzer_test_support",
+    ":test_support",
+    "//base",
+    "//net",
+  ]
+}
+
 fuzzer_test("net_ftp_ctrl_response_fuzzer") {
   sources = [
     "ftp/ftp_ctrl_response_fuzzer.cc",
@@ -2061,4 +2005,41 @@ fuzzer_test("net_auth_challenge_tokenizer_fuzzer") {
     "//base",
     "//net",
   ]
+}
+
+fuzzer_test("net_http_security_headers_hsts_fuzzer") {
+  sources = [
+    "http/http_security_headers_hsts_fuzzer.cc",
+  ]
+  deps = [
+    "//base",
+    "//net",
+  ]
+  dict = "data/fuzzer_dictionaries/net_http_security_headers_fuzzer.dict"
+}
+
+fuzzer_test("net_http_security_headers_hpkp_fuzzer") {
+  sources = [
+    "http/http_security_headers_hpkp_fuzzer.cc",
+  ]
+  deps = [
+    ":net_fuzzer_test_support",
+    "//base",
+    "//net",
+    "//url",
+  ]
+  dict = "data/fuzzer_dictionaries/net_http_security_headers_fuzzer.dict"
+}
+
+fuzzer_test("net_http_security_headers_hpkp_report_only_fuzzer") {
+  sources = [
+    "http/http_security_headers_hpkp_report_only_fuzzer.cc",
+  ]
+  deps = [
+    ":net_fuzzer_test_support",
+    "//base",
+    "//net",
+    "//url",
+  ]
+  dict = "data/fuzzer_dictionaries/net_http_security_headers_fuzzer.dict"
 }

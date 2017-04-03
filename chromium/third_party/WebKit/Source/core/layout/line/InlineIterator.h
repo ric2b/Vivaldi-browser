@@ -120,6 +120,8 @@ class InlineIterator {
   UChar characterAt(unsigned) const;
   UChar current() const;
   UChar previousInSameNode() const;
+  UChar32 codepointAt(unsigned) const;
+  UChar32 currentCodepoint() const;
   ALWAYS_INLINE WTF::Unicode::CharDirection direction() const;
 
  private:
@@ -494,8 +496,18 @@ inline UChar InlineIterator::previousInSameNode() const {
   return characterAt(m_pos - 1);
 }
 
+inline UChar32 InlineIterator::codepointAt(unsigned index) const {
+  if (!m_lineLayoutItem || !m_lineLayoutItem.isText())
+    return 0;
+  return LineLayoutText(m_lineLayoutItem).codepointAt(index);
+}
+
+inline UChar32 InlineIterator::currentCodepoint() const {
+  return codepointAt(m_pos);
+}
+
 ALWAYS_INLINE WTF::Unicode::CharDirection InlineIterator::direction() const {
-  if (UChar c = current())
+  if (UChar32 c = currentCodepoint())
     return WTF::Unicode::direction(c);
 
   if (m_lineLayoutItem && m_lineLayoutItem.isListMarker())
@@ -576,8 +588,10 @@ inline BidiRun* InlineBidiResolver::addTrailingRun(
     BidiRun* run,
     BidiContext* context,
     TextDirection direction) const {
-  BidiRun* newTrailingRun = new BidiRun(start, stop, run->m_lineLayoutItem,
-                                        context, WTF::Unicode::OtherNeutral);
+  DCHECK(context);
+  BidiRun* newTrailingRun = new BidiRun(
+      context->override(), context->level(), start, stop, run->m_lineLayoutItem,
+      WTF::Unicode::OtherNeutral, context->dir());
   if (direction == LTR)
     runs.addRun(newTrailingRun);
   else
@@ -638,7 +652,8 @@ static inline BidiRun* addPlaceholderRunForIsolatedInline(
     LineLayoutItem root) {
   ASSERT(obj);
   BidiRun* isolatedRun =
-      new BidiRun(pos, pos, obj, resolver.context(), resolver.dir());
+      new BidiRun(resolver.context()->override(), resolver.context()->level(),
+                  pos, pos, obj, resolver.dir(), resolver.context()->dir());
   resolver.runs().addRun(isolatedRun);
   // FIXME: isolatedRuns() could be a hash of object->run and then we could
   // cheaply ASSERT here that we didn't create multiple objects for the same
@@ -652,7 +667,9 @@ static inline BidiRun* createRun(int start,
                                  int end,
                                  LineLayoutItem obj,
                                  InlineBidiResolver& resolver) {
-  return new BidiRun(start, end, obj, resolver.context(), resolver.dir());
+  return new BidiRun(resolver.context()->override(),
+                     resolver.context()->level(), start, end, obj,
+                     resolver.dir(), resolver.context()->dir());
 }
 
 enum AppendRunBehavior { AppendingFakeRun, AppendingRunsForObject };

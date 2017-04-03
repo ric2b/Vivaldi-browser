@@ -33,7 +33,6 @@ class CORE_EXPORT ScriptCustomElementDefinition final
       CustomElementRegistry*,
       const CustomElementDescriptor&,
       const v8::Local<v8::Object>& constructor,
-      const v8::Local<v8::Object>& prototype,
       const v8::Local<v8::Function>& connectedCallback,
       const v8::Local<v8::Function>& disconnectedCallback,
       const v8::Local<v8::Function>& adoptedCallback,
@@ -43,12 +42,8 @@ class CORE_EXPORT ScriptCustomElementDefinition final
   virtual ~ScriptCustomElementDefinition() = default;
 
   v8::Local<v8::Object> constructor() const;
-  v8::Local<v8::Object> prototype() const;
 
   HTMLElement* createElementSync(Document&, const QualifiedName&) override;
-  HTMLElement* createElementSync(Document&,
-                                 const QualifiedName&,
-                                 ExceptionState&) override;
 
   bool hasConnectedCallback() const override;
   bool hasDisconnectedCallback() const override;
@@ -69,7 +64,6 @@ class CORE_EXPORT ScriptCustomElementDefinition final
       ScriptState*,
       const CustomElementDescriptor&,
       const v8::Local<v8::Object>& constructor,
-      const v8::Local<v8::Object>& prototype,
       const v8::Local<v8::Function>& connectedCallback,
       const v8::Local<v8::Function>& disconnectedCallback,
       const v8::Local<v8::Function>& adoptedCallback,
@@ -86,9 +80,13 @@ class CORE_EXPORT ScriptCustomElementDefinition final
                    int argc = 0,
                    v8::Local<v8::Value> argv[] = nullptr);
 
+  HTMLElement* handleCreateElementSyncException(Document&,
+                                                const QualifiedName& tagName,
+                                                v8::Isolate*,
+                                                ExceptionState&);
+
   RefPtr<ScriptState> m_scriptState;
   ScopedPersistent<v8::Object> m_constructor;
-  ScopedPersistent<v8::Object> m_prototype;
   ScopedPersistent<v8::Function> m_connectedCallback;
   ScopedPersistent<v8::Function> m_disconnectedCallback;
   ScopedPersistent<v8::Function> m_adoptedCallback;

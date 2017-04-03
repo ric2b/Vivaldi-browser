@@ -40,6 +40,7 @@
 
 namespace blink {
 
+class BrowserControls;
 class ChromeClient;
 class ConsoleMessageStorage;
 class Deprecation;
@@ -49,10 +50,8 @@ class Page;
 struct PageScaleConstraints;
 class PageScaleConstraintsSet;
 class Settings;
-class TopControls;
 class TopDocumentRootScrollerController;
 class UseCounter;
-class Visitor;
 class VisualViewport;
 
 // FrameHost is the set of global data shared between multiple frames
@@ -100,8 +99,8 @@ class CORE_EXPORT FrameHost final
   //    ChromeClient::screenInfo() instead.
   float deviceScaleFactorDeprecated() const;
 
-  TopControls& topControls();
-  const TopControls& topControls() const;
+  BrowserControls& browserControls();
+  const BrowserControls& browserControls() const;
 
   OverscrollController& overscrollController();
   const OverscrollController& overscrollController() const;
@@ -142,7 +141,7 @@ class CORE_EXPORT FrameHost final
   explicit FrameHost(Page&);
 
   const Member<Page> m_page;
-  const Member<TopControls> m_topControls;
+  const Member<BrowserControls> m_browserControls;
   const std::unique_ptr<PageScaleConstraintsSet> m_pageScaleConstraintsSet;
   const Member<VisualViewport> m_visualViewport;
   const Member<OverscrollController> m_overscrollController;

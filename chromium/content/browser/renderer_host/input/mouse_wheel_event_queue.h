@@ -6,13 +6,14 @@
 #define CONTENT_BROWSER_RENDERER_HOST_INPUT_MOUSE_WHEEL_EVENT_QUEUE_H_
 
 #include <deque>
+#include <memory>
 
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "content/browser/renderer_host/event_with_latency_info.h"
 #include "content/common/content_export.h"
 #include "content/common/input/input_event_ack_state.h"
-#include "third_party/WebKit/public/web/WebInputEvent.h"
+#include "third_party/WebKit/public/platform/WebInputEvent.h"
 
 namespace content {
 
@@ -86,8 +87,7 @@ class CONTENT_EXPORT MouseWheelEventQueue {
   MouseWheelEventQueueClient* client_;
   base::OneShotTimer scroll_end_timer_;
 
-  typedef std::deque<QueuedWebMouseWheelEvent*> WheelEventQueue;
-  WheelEventQueue wheel_queue_;
+  std::deque<std::unique_ptr<QueuedWebMouseWheelEvent>> wheel_queue_;
   std::unique_ptr<QueuedWebMouseWheelEvent> event_sent_for_gesture_ack_;
 
   // True if a non-synthetic GSB needs to be sent before a GSU is sent.

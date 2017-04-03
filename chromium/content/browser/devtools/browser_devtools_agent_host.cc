@@ -7,6 +7,7 @@
 #include "base/bind.h"
 #include "base/guid.h"
 #include "content/browser/devtools/devtools_protocol_handler.h"
+#include "content/browser/devtools/devtools_session.h"
 #include "content/browser/devtools/protocol/io_handler.h"
 #include "content/browser/devtools/protocol/memory_handler.h"
 #include "content/browser/devtools/protocol/system_info_handler.h"
@@ -43,6 +44,7 @@ BrowserDevToolsAgentHost::BrowserDevToolsAgentHost(
   dispatcher->SetSystemInfoHandler(system_info_handler_.get());
   dispatcher->SetTetheringHandler(tethering_handler_.get());
   dispatcher->SetTracingHandler(tracing_handler_.get());
+  NotifyCreated();
 }
 
 BrowserDevToolsAgentHost::~BrowserDevToolsAgentHost() {
@@ -79,7 +81,8 @@ void BrowserDevToolsAgentHost::Reload() {
 
 bool BrowserDevToolsAgentHost::DispatchProtocolMessage(
     const std::string& message) {
-  protocol_handler_->HandleMessage(session_id(), message);
+  protocol_handler_->HandleMessage(session() ? session()->session_id() : 0,
+                                   message);
   return true;
 }
 

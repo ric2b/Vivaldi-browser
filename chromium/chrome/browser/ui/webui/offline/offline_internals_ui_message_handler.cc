@@ -145,16 +145,17 @@ void OfflineInternalsUIMessageHandler::HandleStoredPagesCallback(
     offline_page->SetDouble("lastAccessTime", page.last_access_time.ToJsTime());
     offline_page->SetInteger("accessCount", page.access_count);
     offline_page->SetString("isExpired", page.IsExpired() ? "Yes" : "No");
+    offline_page->SetString("originalUrl", page.original_url.spec());
   }
   ResolveJavascriptCallback(base::StringValue(callback_id), results);
 }
 
 void OfflineInternalsUIMessageHandler::HandleRequestQueueCallback(
     std::string callback_id,
-    offline_pages::RequestQueue::GetRequestsResult result,
+    offline_pages::GetRequestsResult result,
     std::vector<std::unique_ptr<offline_pages::SavePageRequest>> requests) {
   base::ListValue save_page_requests;
-  if (result == offline_pages::RequestQueue::GetRequestsResult::SUCCESS) {
+  if (result == offline_pages::GetRequestsResult::SUCCESS) {
     for (const auto& request : requests) {
       base::DictionaryValue* save_page_request = new base::DictionaryValue();
       save_page_requests.Append(save_page_request);

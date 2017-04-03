@@ -36,12 +36,9 @@
 
 namespace blink {
 
-class CullRect;
 class DisplayItemClient;
-class LocalFrame;
 class GraphicsContext;
 class LayoutBlock;
-class LayoutViewItem;
 
 class CORE_EXPORT CaretBase : public GarbageCollectedFinalized<CaretBase>,
                               public DisplayItemClient {
@@ -60,7 +57,6 @@ class CORE_EXPORT CaretBase : public GarbageCollectedFinalized<CaretBase>,
   void updateCaretRect(const VisiblePosition& caretPosition);
   IntRect absoluteBoundsForLocalRect(Node*, const LayoutRect&) const;
   bool shouldRepaintCaret(Node&) const;
-  bool shouldRepaintCaret(const LayoutViewItem) const;
   void paintCaret(Node*,
                   GraphicsContext&,
                   const LayoutPoint&,

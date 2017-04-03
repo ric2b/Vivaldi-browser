@@ -40,8 +40,6 @@
 #include "chrome/browser/ui/webui/history_login_handler.h"
 #endif
 
-#include "extensions/tools/vivaldi_tools.h"
-
 static const char kStringsJsFile[] = "strings.js";
 static const char kHistoryJsFile[] = "history.js";
 static const char kOtherDevicesJsFile[] = "other_devices.js";

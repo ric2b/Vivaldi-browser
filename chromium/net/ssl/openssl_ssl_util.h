@@ -7,11 +7,10 @@
 
 #include <stdint.h>
 
-#include <openssl/ssl.h>
-
+#include "net/base/net_export.h"
 #include "net/cert/x509_certificate.h"
 #include "net/log/net_log_parameters_callback.h"
-#include "net/ssl/scoped_openssl_types.h"
+#include "third_party/boringssl/src/include/openssl/x509.h"
 
 namespace crypto {
 class OpenSSLErrStackTracer;
@@ -43,7 +42,9 @@ struct SslSetClearMask {
 // Note that |tracer| is not currently used in the implementation, but is passed
 // in anyway as this ensures the caller will clear any residual codes left on
 // the error stack.
-int MapOpenSSLError(int err, const crypto::OpenSSLErrStackTracer& tracer);
+NET_EXPORT_PRIVATE int MapOpenSSLError(
+    int err,
+    const crypto::OpenSSLErrStackTracer& tracer);
 
 // Helper struct to store information about an OpenSSL error stack entry.
 struct OpenSSLErrorInfo {
@@ -77,9 +78,10 @@ NetLogParametersCallback CreateNetLogOpenSSLErrorCallback(
 // this SSL connection.
 int GetNetSSLVersion(SSL* ssl);
 
-ScopedX509 OSCertHandleToOpenSSL(X509Certificate::OSCertHandle os_handle);
+bssl::UniquePtr<X509> OSCertHandleToOpenSSL(
+    X509Certificate::OSCertHandle os_handle);
 
-ScopedX509Stack OSCertHandlesToOpenSSL(
+bssl::UniquePtr<STACK_OF(X509)> OSCertHandlesToOpenSSL(
     const X509Certificate::OSCertHandles& os_handles);
 
 }  // namespace net

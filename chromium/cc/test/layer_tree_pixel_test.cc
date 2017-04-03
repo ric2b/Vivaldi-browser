@@ -23,8 +23,8 @@
 #include "cc/test/test_compositor_frame_sink.h"
 #include "cc/test/test_in_process_context_provider.h"
 #include "cc/trees/layer_tree_impl.h"
-#include "gpu/command_buffer/client/gl_in_process_context.h"
 #include "gpu/command_buffer/client/gles2_implementation.h"
+#include "gpu/ipc/gl_in_process_context.h"
 
 using gpu::gles2::GLES2Interface;
 
@@ -56,7 +56,6 @@ std::unique_ptr<TestCompositorFrameSink>
   bool force_disable_reclaim_resources = false;
   auto delegating_output_surface = base::MakeUnique<TestCompositorFrameSink>(
       compositor_context_provider, std::move(worker_context_provider),
-      CreateDisplayOutputSurface(compositor_context_provider),
       shared_bitmap_manager(), gpu_memory_buffer_manager(), RendererSettings(),
       ImplThreadTaskRunner(), synchronous_composite,
       force_disable_reclaim_resources);
@@ -65,17 +64,21 @@ std::unique_ptr<TestCompositorFrameSink>
   return delegating_output_surface;
 }
 
-std::unique_ptr<OutputSurface> LayerTreePixelTest::CreateDisplayOutputSurface(
+std::unique_ptr<OutputSurface>
+LayerTreePixelTest::CreateDisplayOutputSurfaceOnThread(
     scoped_refptr<ContextProvider> compositor_context_provider) {
   std::unique_ptr<PixelTestOutputSurface> display_output_surface;
   if (test_type_ == PIXEL_TEST_GL) {
+    // Pixel tests use a separate context for the Display to more closely
+    // mimic texture transport from the renderer process to the Display
+    // compositor.
+    auto display_context_provider =
+        make_scoped_refptr(new TestInProcessContextProvider(nullptr));
+    display_context_provider->BindToCurrentThread();
+
     bool flipped_output_surface = false;
     display_output_surface = base::MakeUnique<PixelTestOutputSurface>(
-        // Pixel tests use a separate context for the Display to more closely
-        // mimic texture transport from the renderer process to the Display
-        // compositor.
-        make_scoped_refptr(new TestInProcessContextProvider(nullptr)),
-        flipped_output_surface);
+        std::move(display_context_provider), flipped_output_surface);
   } else {
     display_output_surface = base::MakeUnique<PixelTestOutputSurface>(
         base::MakeUnique<SoftwareOutputDevice>());

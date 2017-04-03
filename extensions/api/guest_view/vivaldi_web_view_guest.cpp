@@ -4,6 +4,7 @@
 
 #include "app/vivaldi_apptools.h"
 #include "chrome/common/render_messages.h"
+#include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/extensions/api/web_navigation/web_navigation_api.h"
 #include "chrome/browser/tab_contents/tab_util.h"
 #include "chrome/browser/ui/browser_commands.h"
@@ -13,8 +14,12 @@
 #include "chrome/browser/ui/webui/site_settings_helper.h"
 #include "components/guest_view/browser/guest_view_event.h"
 #include "components/guest_view/browser/guest_view_manager.h"
+#include "components/security_state/content/content_utils.h"
+#include "components/security_state/core/security_state.h"
 #include "components/web_cache/browser/web_cache_manager.h"
+#include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/origin_util.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "extensions/browser/guest_view/web_view/web_view_constants.h"
 #include "extensions/browser/view_type_utils.h"
@@ -22,7 +27,6 @@
 #include "net/cert/x509_certificate.h"
 #include "ui/base/l10n/l10n_util.h"
 
-#include "chrome/browser/ssl/chrome_security_state_model_client.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
@@ -48,7 +52,7 @@
 using content::WebContents;
 using guest_view::GuestViewEvent;
 using guest_view::GuestViewManager;
-using security_state::SecurityStateModel;
+using namespace security_state;
 using vivaldi::IsVivaldiApp;
 using vivaldi::IsVivaldiRunning;
 
@@ -70,33 +74,36 @@ ExtensionHostForWebContents::~ExtensionHostForWebContents() {
 
 namespace {
 
-static std::string SSLStateToString(SecurityStateModel::SecurityLevel status) {
+static std::string SSLStateToString(SecurityLevel status) {
   switch (status) {
-  case SecurityStateModel::NONE:
+  case NONE:
     // HTTP/no URL/user is editing
     return "none";
-  case SecurityStateModel::EV_SECURE:
+  case HTTP_SHOW_WARNING:
+    // HTTP, show a visible warning about the page's lack of security
+    return "http_show_warning";
+  case EV_SECURE:
     // HTTPS with valid EV cert
     return "secure_with_ev";
-  case SecurityStateModel::SECURE:
+  case SECURE:
     // HTTPS (non-EV)
     return "secure_no_ev";
-  case SecurityStateModel::SECURITY_WARNING:
+  case SECURITY_WARNING:
     // HTTPS, but unable to check certificate revocation status or with insecure
     // content on the page
     return "security_warning";
-  case SecurityStateModel::SECURE_WITH_POLICY_INSTALLED_CERT:
+  case SECURE_WITH_POLICY_INSTALLED_CERT:
     // HTTPS, but the certificate verification chain is anchored on a certificate
     // that was installed by the system administrator
     return "security_policy_warning";
-  case SecurityStateModel::DANGEROUS:
+  case DANGEROUS:
     // Attempted HTTPS and failed, page not authenticated
     return "security_error";
   default:
-    //fallthrough
+    // fallthrough
     break;
   }
-  NOTREACHED() << "Unknown SecurityStateModel::SecurityLevel";
+  NOTREACHED() << "Unknown SecurityLevel";
   return "unknown";
 }
 
@@ -354,15 +361,16 @@ void WebViewGuest::ShowPageInfo(gfx::Point pos) {
   }
 
   const GURL url = controller.GetActiveEntry()->GetURL();
-
-  const ChromeSecurityStateModelClient *security_info =
-      ChromeSecurityStateModelClient::FromWebContents(web_contents());
+  auto security_info = security_state::GetVisibleSecurityState(web_contents());
   DCHECK(security_info);
   Browser* browser = chrome::FindBrowserWithWebContents(web_contents());
 
   if (browser->window()) {
-    security_state::SecurityStateModel::SecurityInfo security_state;
-    security_info->GetSecurityInfo(&security_state);
+    security_state::SecurityInfo security_state;
+    security_state::GetSecurityInfo(std::move(security_info),
+        false,
+        base::Bind(&content::IsOriginSecure),
+        &security_state);
     browser->window()->VivaldiShowWebsiteSettingsAt(
       Profile::FromBrowserContext(web_contents()->GetBrowserContext()),
       web_contents(), url, security_state, pos);
@@ -407,16 +415,16 @@ void WebViewGuest::SetIsFullscreen(bool is_fullscreen) {
   is_fullscreen_ = is_fullscreen;
 }
 
-void WebViewGuest::VisibleSSLStateChanged(const WebContents* source) {
+void WebViewGuest::VisibleSecurityStateChanged(WebContents* source) {
   std::unique_ptr<base::DictionaryValue> args(new base::DictionaryValue());
-  const ChromeSecurityStateModelClient *security_model =
-      ChromeSecurityStateModelClient::FromWebContents(source);
-  if (!security_model)
-    return;
+  auto security_info = security_state::GetVisibleSecurityState(web_contents());
 
-  security_state::SecurityStateModel::SecurityInfo security_state;
-  security_model->GetSecurityInfo(&security_state);
-  SecurityStateModel::SecurityLevel current_level =
+  security_state::SecurityInfo security_state;
+  security_state::GetSecurityInfo(std::move(security_info),
+    false,
+    base::Bind(&content::IsOriginSecure),
+    &security_state);
+  SecurityLevel current_level =
       security_state.security_level;
   args->SetString("SSLState", SSLStateToString(current_level));
 
@@ -513,101 +521,60 @@ bool WebViewGuest::OnMouseEvent(const blink::WebMouseEvent& mouse_event) {
     return false;
   }
 
-  if (IsVivaldiRunning() &&
-      mouse_event.type == blink::WebInputEvent::MouseMove &&
-      mouse_event.type != blink::WebInputEvent::MouseDown &&
-      gesture_state_ == GestureStateRecording) {
-    // recording a gesture when the mouse is not down does not make sense
-    gesture_state_ = GestureStateNone;
-  }
-
   // Record the gesture
   if (mouse_event.type == blink::WebInputEvent::MouseDown &&
     mouse_event.button == blink::WebMouseEvent::Button::Right &&
     !(mouse_event.modifiers & blink::WebInputEvent::LeftButtonDown) &&
-    gesture_state_ == GestureStateNone) {
-    gesture_state_ = GestureStateRecording;
-    gesture_direction_candidate_x_ = x_ = mouse_event.x;
-    gesture_direction_candidate_y_ = y_ = mouse_event.y;
-    gesture_direction_ = GestureDirectionNONE;
-    gesture_data_ = 0;
+    !gesture_recording_) {
+    gesture_recording_ = true;
+    mousedown_x_ = mouse_event.x;
+    mousedown_y_ = mouse_event.y;
+    fire_context_menu_ = true;
     return true;
-  } else if (gesture_state_ == GestureStateRecording) {
-    if (mouse_event.type == blink::WebInputEvent::MouseMove ||
-      mouse_event.type == blink::WebInputEvent::MouseUp) {
-      int dx = mouse_event.x - gesture_direction_candidate_x_;
-      int dy = mouse_event.y - gesture_direction_candidate_y_;
-      GestureDirection candidate_direction;
-      // Find current direction from last candidate location.
-      if (abs(dx) > abs(dy))
-        candidate_direction =
-            dx > 0 ? GestureDirectionRight : GestureDirectionLeft;
-      else // abs(dx) <= abs(dy)
-        candidate_direction =
-            dy > 0 ? GestureDirectionDown : GestureDirectionUp;
+  } else if (gesture_recording_ &&
+      (mouse_event.type == blink::WebInputEvent::MouseMove ||
+      mouse_event.type == blink::WebInputEvent::MouseUp)) {
 
-      if (candidate_direction == gesture_direction_) {
-        // The mouse is still moving in an overall direction of the last gesture
-        // direction, update the candidate location.
-        gesture_direction_candidate_x_ = mouse_event.x;
-        gesture_direction_candidate_y_ = mouse_event.y;
-      } else if (abs(dx) >= 5 || abs(dy) >= 5) {
-        gesture_data_ = 0x1; // no more info needed since mouse gestures are
-                             // handled by javascript
-      }
+    int dx = mouse_event.x - mousedown_x_;
+    int dy = mouse_event.y - mousedown_y_;
+
+    // If we went over the 5px threshold to cancel the context menu,
+    // the flag is set. It persists if we go under the threshold by
+    // moving you mouse into the original coords, which is expected.
+    if (abs(dx) >= 5 || abs(dy) >= 5) {
+      fire_context_menu_ = false;
     }
 
-    // Map a gesture to an action
+    // Copy event and fire
     if (mouse_event.type == blink::WebInputEvent::MouseUp &&
       mouse_event.button == blink::WebMouseEvent::Button::Right) {
       blink::WebMouseEvent event_copy(mouse_event);
       content::RenderViewHost *render_view_host =
           web_contents()->GetRenderViewHost();
-      // At this point we may be sending events that could look like new
-      // gestures, don't consume them.
-      gesture_state_ = GestureStateBlocked;
-      switch (gesture_data_) {
-      case 0: // No sufficient movement
+
+      if (fire_context_menu_) {
         // Send the originally-culled right mouse down at original coords
         event_copy.type = blink::WebInputEvent::MouseDown;
-        event_copy.windowX -= (mouse_event.x - x_);
-        event_copy.windowY -= (mouse_event.y - y_);
-        event_copy.x = x_;
-        event_copy.y = y_;
+        event_copy.windowX -= (mouse_event.x - mousedown_x_);
+        event_copy.windowY -= (mouse_event.y - mousedown_y_);
+        event_copy.x = mousedown_x_;
+        event_copy.y = mousedown_y_;
         render_view_host->GetWidget()->ForwardMouseEvent(event_copy);
-        break;
-      default:
-        //Unknown gesture, don't do anything.
-        break;
       }
-      gesture_state_ = GestureStateNone;
-      return gesture_data_ != 0;
+
+      gesture_recording_ = false;
+      return fire_context_menu_;
     }
     else if (mouse_event.type == blink::WebInputEvent::MouseDown &&
       mouse_event.button == blink::WebMouseEvent::Button::Left) {
-      gesture_state_ = GestureStateNone;
+      fire_context_menu_ = true;
+      gesture_recording_ = false;
+    }
+
+    if ((mouse_event.modifiers & blink::WebInputEvent::RightButtonDown) == 0) {
+      gesture_recording_ = false;
     }
   }
-  /*if (mouse_event.type == blink::WebInputEvent::MouseDown &&
-    mouse_event.button == blink::WebMouseEvent::ButtonLeft &&
-    (mouse_event.modifiers & blink::WebInputEvent::RightButtonDown)) {
-    if (mouse_event.modifiers & blink::WebInputEvent::ShiftKey)
-      // Rewind
-      ;
-    else
-      Go(-1);
-    return true;
-  }
-  if (mouse_event.type == blink::WebInputEvent::MouseDown &&
-    mouse_event.button == blink::WebMouseEvent::ButtonRight &&
-    (mouse_event.modifiers & blink::WebInputEvent::LeftButtonDown)) {
-    if (mouse_event.modifiers & blink::WebInputEvent::ShiftKey)
-      // Fast-forward
-      ;
-    else
-      Go(1);
-    return true;
-  }*/
 #endif // MOUSE_GESTURES
   return false;
 }
@@ -641,17 +608,64 @@ void WebViewGuest::CreateSearch(const base::ListValue & search) {
 
 void WebViewGuest::PasteAndGo(const base::ListValue & search) {
   std::string clipBoardText;
+  std::string pasteTarget;
+  std::string modifiers;
 
   if (!search.GetString(0, &clipBoardText)) {
+    NOTREACHED();
+    return;
+  }
+  if (!search.GetString(1, &pasteTarget)) {
+    NOTREACHED();
+    return;
+  }
+  if (!search.GetString(2, &modifiers)) {
     NOTREACHED();
     return;
   }
 
   std::unique_ptr<base::DictionaryValue> args(new base::DictionaryValue());
   args->SetString(webview::kClipBoardText, clipBoardText);
+  args->SetString(webview::kPasteTarget, pasteTarget);
+  args->SetString(webview::kModifiers, modifiers);
   DispatchEventToView(base::WrapUnique(
       new GuestViewEvent(webview::kEventPasteAndGo, std::move(args))));
 }
+
+void WebViewGuest::SimpleAction(const base::ListValue & list) {
+  std::string command;
+  std::string text;
+  std::string url;
+  std::string modifiers;
+
+  if (!list.GetString(0, &command)) {
+    NOTREACHED();
+    return;
+  }
+  if (!list.GetString(1, &text)) {
+    NOTREACHED();
+    return;
+  }
+  if (!list.GetString(2, &url)) {
+    NOTREACHED();
+    return;
+  }
+  if (!list.GetString(3, &modifiers)) {
+    NOTREACHED();
+    return;
+  }
+
+  std::unique_ptr<base::DictionaryValue> args(new base::DictionaryValue());
+  args->SetString(webview::kGenCommand, command);
+  args->SetString(webview::kGenText, text);
+  args->SetString(webview::kGenUrl, url);
+  args->SetString(webview::kModifiers, modifiers);
+  DispatchEventToView(base::WrapUnique(
+      new GuestViewEvent(webview::kEventSimpleAction, std::move(args))));
+}
+
+
+
 
 void WebViewGuest::ParseNewWindowUserInput(const std::string& user_input,
                                            int& window_id,
@@ -784,24 +798,26 @@ void WebViewGuest::CreateExtensionHost(const std::string& extension_id) {
 void WebViewGuest::SetExtensionHost(const std::string& extensionhost) {
 }
 
-content::SecurityStyle WebViewGuest::GetSecurityStyle(
+blink::WebSecurityStyle WebViewGuest::GetSecurityStyle(
     WebContents* contents,
     content::SecurityStyleExplanations* security_style_explanations) {
   Browser* browser = chrome::FindBrowserWithWebContents(contents);
   if (browser) {
     return browser->GetSecurityStyle(contents, security_style_explanations);
   } else {
-    return content::SECURITY_STYLE_UNKNOWN;
+    return blink::WebSecurityStyleUnknown;
   }
 }
 
 void WebViewGuest::ShowCertificateViewerInDevTools(
     content::WebContents *web_contents,
     scoped_refptr<net::X509Certificate> certificate) {
-  Browser *browser = chrome::FindBrowserWithWebContents(web_contents);
-  if (browser) {
-    browser->ShowCertificateViewerInDevTools(web_contents, certificate);
-  }
+  scoped_refptr<content::DevToolsAgentHost> agent(
+      content::DevToolsAgentHost::GetOrCreateFor(web_contents));
+
+  DevToolsWindow* window = DevToolsWindow::FindDevToolsWindow(agent.get());
+  if (window)
+    window->ShowCertificateViewer(certificate);
 }
 
 void WebViewGuest::OnContentBlocked(ContentSettingsType settings_type,

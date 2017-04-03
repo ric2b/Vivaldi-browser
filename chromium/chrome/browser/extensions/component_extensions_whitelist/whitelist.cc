@@ -10,10 +10,12 @@
 #include "base/macros.h"
 #include "build/build_config.h"
 #include "chrome/common/extensions/extension_constants.h"
+#include "chrome/common/features.h"
 #include "chrome/grit/browser_resources.h"
 #include "extensions/common/constants.h"
+#include "printing/features/features.h"
 
-#if defined(ENABLE_APP_LIST) && defined(OS_CHROMEOS)
+#if BUILDFLAG(ENABLE_APP_LIST) && defined(OS_CHROMEOS)
 #include "chrome/browser/ui/app_list/google_now_extension.h"
 #endif
 
@@ -49,7 +51,7 @@ bool IsComponentExtensionWhitelisted(const std::string& extension_id) {
       return true;
   }
 
-#if defined(ENABLE_APP_LIST) && defined(OS_CHROMEOS)
+#if BUILDFLAG(ENABLE_APP_LIST) && defined(OS_CHROMEOS)
   std::string google_now_extension_id;
   if (GetGoogleNowExtensionId(&google_now_extension_id) &&
       google_now_extension_id == extension_id) {
@@ -73,17 +75,19 @@ bool IsComponentExtensionWhitelisted(int manifest_resource_id) {
   switch (manifest_resource_id) {
     // Please keep the list in alphabetical order.
     case IDR_BOOKMARKS_MANIFEST:
-#if defined(ENABLE_APP_LIST)
+#if BUILDFLAG(ENABLE_APP_LIST)
     case IDR_CHROME_APP_MANIFEST:
 #endif
+#if BUILDFLAG(ENABLE_PRINTING)
     case IDR_CLOUDPRINT_MANIFEST:
+#endif
     case IDR_CRYPTOTOKEN_MANIFEST:
     case IDR_FEEDBACK_MANIFEST:
     case IDR_GAIA_AUTH_MANIFEST:
 #if defined(ENABLE_GOOGLE_NOW)
     case IDR_GOOGLE_NOW_MANIFEST:
 #endif
-#if defined(GOOGLE_CHROME_BUILD) || defined(ENABLE_HANGOUT_SERVICES_EXTENSION)
+#if BUILDFLAG(ENABLE_HANGOUT_SERVICES_EXTENSION)
     case IDR_HANGOUT_SERVICES_MANIFEST:
 #endif
 #if defined(ENABLE_HOTWORDING)
@@ -91,7 +95,7 @@ bool IsComponentExtensionWhitelisted(int manifest_resource_id) {
     case IDR_HOTWORD_MANIFEST:
 #endif
     case IDR_IDENTITY_API_SCOPE_APPROVAL_MANIFEST:
-#if defined(IMAGE_LOADER_EXTENSION)
+#if defined(OS_CHROMEOS)
     case IDR_IMAGE_LOADER_MANIFEST:
 #endif
     case IDR_NETWORK_SPEECH_SYNTHESIS_MANIFEST:

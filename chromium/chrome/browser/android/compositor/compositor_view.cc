@@ -99,7 +99,7 @@ CompositorView::~CompositorView() {
 
   // Explicitly reset these scoped_ptrs here because otherwise we callbacks will
   // try to access member variables during destruction.
-  compositor_.reset(NULL);
+  compositor_.reset();
 }
 
 void CompositorView::Destroy(JNIEnv* env, const JavaParamRef<jobject>& object) {
@@ -107,9 +107,7 @@ void CompositorView::Destroy(JNIEnv* env, const JavaParamRef<jobject>& object) {
 }
 
 ui::ResourceManager* CompositorView::GetResourceManager() {
-  if (!compositor_)
-    return NULL;
-  return &compositor_->GetResourceManager();
+  return compositor_ ? &compositor_->GetResourceManager() : nullptr;
 }
 
 base::android::ScopedJavaLocalRef<jobject> CompositorView::GetResourceManager(
@@ -130,9 +128,7 @@ void CompositorView::OnSwapBuffersCompleted(int pending_swap_buffers) {
 }
 
 ui::UIResourceProvider* CompositorView::GetUIResourceProvider() {
-  if (!compositor_)
-    return NULL;
-  return &compositor_->GetUIResourceProvider();
+  return compositor_ ? &compositor_->GetUIResourceProvider() : nullptr;
 }
 
 void CompositorView::SurfaceCreated(JNIEnv* env,
@@ -143,7 +139,7 @@ void CompositorView::SurfaceCreated(JNIEnv* env,
 
 void CompositorView::SurfaceDestroyed(JNIEnv* env,
                                       const JavaParamRef<jobject>& object) {
-  compositor_->SetSurface(NULL);
+  compositor_->SetSurface(nullptr);
   current_surface_format_ = 0;
   tab_content_manager_->OnUIResourcesWereEvicted();
 }
@@ -166,16 +162,8 @@ void CompositorView::SurfaceChanged(JNIEnv* env,
   root_layer_->SetBounds(gfx::Size(content_width_, content_height_));
 }
 
-void CompositorView::SetLayoutViewport(JNIEnv* env,
-                                       const JavaParamRef<jobject>& object,
-                                       jfloat x,
-                                       jfloat y,
-                                       jfloat width,
-                                       jfloat height,
-                                       jfloat visible_x_offset,
-                                       jfloat visible_y_offset,
-                                       jfloat dp_to_pixel) {
-  compositor_->setDeviceScaleFactor(dp_to_pixel);
+void CompositorView::SetLayoutBounds(JNIEnv* env,
+                                     const JavaParamRef<jobject>& object) {
   root_layer_->SetBounds(gfx::Size(content_width_, content_height_));
 }
 
@@ -204,14 +192,14 @@ void CompositorView::SetSceneLayer(JNIEnv* env,
   if (scene_layer_ != scene_layer) {
     // The old tree should be detached only if it is not the cached layer or
     // the cached layer is not somewhere in the new root.
-    if (scene_layer_ != nullptr
-        && !scene_layer_->layer()->HasAncestor(scene_layer->layer().get())) {
+    if (scene_layer_ &&
+        !scene_layer_->layer()->HasAncestor(scene_layer->layer().get())) {
       scene_layer_->OnDetach();
     }
 
     scene_layer_ = scene_layer;
 
-    if (scene_layer == nullptr) {
+    if (!scene_layer) {
       scene_layer_layer_ = nullptr;
       return;
     }
@@ -235,7 +223,9 @@ void CompositorView::SetSceneLayer(JNIEnv* env,
 
 void CompositorView::FinalizeLayers(JNIEnv* env,
                                     const JavaParamRef<jobject>& jobj) {
-  UNSHIPPED_TRACE_EVENT0("compositor", "CompositorView::FinalizeLayers");
+#if !defined(OFFICIAL_BUILD)
+  TRACE_EVENT0("compositor", "CompositorView::FinalizeLayers");
+#endif
 }
 
 void CompositorView::SetNeedsComposite(JNIEnv* env,

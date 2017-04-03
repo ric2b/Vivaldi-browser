@@ -9,20 +9,21 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/compiler_specific.h"
+#include "base/memory/ptr_util.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/threading/thread.h"
-#include "components/sync/api/attachments/attachment_id.h"
-#include "components/sync/api/attachments/attachment_store.h"
-#include "components/sync/api/data_type_error_handler_mock.h"
-#include "components/sync/api/fake_syncable_service.h"
 #include "components/sync/base/model_type.h"
-#include "components/sync/core/attachments/attachment_service_impl.h"
-#include "components/sync/core/test/test_user_share.h"
 #include "components/sync/device_info/local_device_info_provider.h"
 #include "components/sync/driver/fake_sync_client.h"
 #include "components/sync/driver/generic_change_processor.h"
 #include "components/sync/driver/generic_change_processor_factory.h"
 #include "components/sync/driver/sync_api_component_factory.h"
+#include "components/sync/model/attachments/attachment_id.h"
+#include "components/sync/model/attachments/attachment_service.h"
+#include "components/sync/model/attachments/attachment_store.h"
+#include "components/sync/model/data_type_error_handler_mock.h"
+#include "components/sync/model/fake_syncable_service.h"
+#include "components/sync/syncable/test_user_share.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -72,7 +73,7 @@ class TestSyncApiComponentFactory : public SyncApiComponentFactory {
       const std::string& store_birthday,
       ModelType model_type,
       AttachmentService::Delegate* delegate) override {
-    return AttachmentServiceImpl::CreateForTest();
+    return AttachmentService::CreateForTest();
   }
 };
 
@@ -117,7 +118,7 @@ class SyncSharedChangeProcessorTest : public testing::Test,
     //
     // TODO(akalin): Write deterministic tests for the destruction of
     // |shared_change_processor_| on the UI and DB threads.
-    shared_change_processor_ = NULL;
+    shared_change_processor_ = nullptr;
     backend_thread_.Stop();
 
     // Note: Stop() joins the threads, and that barrier prevents this read
@@ -160,7 +161,7 @@ class SyncSharedChangeProcessorTest : public testing::Test,
   void SetUpDBSyncableService() {
     DCHECK(backend_thread_.task_runner()->BelongsToCurrentThread());
     DCHECK(!db_syncable_service_.get());
-    db_syncable_service_.reset(new FakeSyncableService());
+    db_syncable_service_ = base::MakeUnique<FakeSyncableService>();
   }
 
   // Used by TearDown().

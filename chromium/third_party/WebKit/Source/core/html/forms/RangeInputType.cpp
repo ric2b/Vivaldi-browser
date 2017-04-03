@@ -88,6 +88,10 @@ InputTypeView* RangeInputType::createView() {
   return this;
 }
 
+InputType::ValueMode RangeInputType::valueMode() const {
+  return ValueMode::kValue;
+}
+
 void RangeInputType::countUsage() {
   countUsageIfVisible(UseCounter::InputTypeRange);
   if (const ComputedStyle* style = element().computedStyle()) {
@@ -163,7 +167,7 @@ void RangeInputType::handleMouseDownEvent(MouseEvent* event) {
   SliderThumbElement* thumb = sliderThumbElement();
   if (targetNode == thumb)
     return;
-  thumb->dragFrom(event->absoluteLocation());
+  thumb->dragFrom(LayoutPoint(event->absoluteLocation()));
 }
 
 void RangeInputType::handleKeydownEvent(KeyboardEvent* event) {
@@ -269,30 +273,26 @@ void RangeInputType::accessKeyAction(bool sendMouseEvents) {
 void RangeInputType::sanitizeValueInResponseToMinOrMaxAttributeChange() {
   if (element().hasDirtyValue())
     element().setValue(element().value());
+  else
+    element().setNonDirtyValue(element().value());
   element().updateView();
 }
 
 void RangeInputType::stepAttributeChanged() {
   if (element().hasDirtyValue())
     element().setValue(element().value());
+  else
+    element().setNonDirtyValue(element().value());
   element().updateView();
 }
 
-void RangeInputType::setValue(const String& value,
-                              bool valueChanged,
-                              TextFieldEventBehavior eventBehavior) {
-  InputType::setValue(value, valueChanged, eventBehavior);
-
+void RangeInputType::didSetValue(const String&, bool valueChanged) {
   if (valueChanged)
     element().updateView();
 }
 
 void RangeInputType::updateView() {
   sliderThumbElement()->setPositionFromValue();
-}
-
-String RangeInputType::fallbackValue() const {
-  return serializeForNumberType(createStepRange(RejectAny).defaultValue());
 }
 
 String RangeInputType::sanitizeValue(const String& proposedValue) const {
@@ -322,8 +322,9 @@ bool RangeInputType::shouldRespectListAttribute() {
 }
 
 inline SliderThumbElement* RangeInputType::sliderThumbElement() const {
-  return toSliderThumbElement(element().userAgentShadowRoot()->getElementById(
-      ShadowElementNames::sliderThumb()));
+  return toSliderThumbElementOrDie(
+      element().userAgentShadowRoot()->getElementById(
+          ShadowElementNames::sliderThumb()));
 }
 
 inline Element* RangeInputType::sliderTrackElement() const {

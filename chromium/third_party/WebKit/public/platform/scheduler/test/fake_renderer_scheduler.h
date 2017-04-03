@@ -23,9 +23,12 @@ class FakeRendererScheduler : public RendererScheduler {
   scoped_refptr<TaskQueue> LoadingTaskRunner() override;
   scoped_refptr<SingleThreadIdleTaskRunner> IdleTaskRunner() override;
   scoped_refptr<TaskQueue> TimerTaskRunner() override;
-  scoped_refptr<TaskQueue> NewLoadingTaskRunner(const char* name) override;
-  scoped_refptr<TaskQueue> NewTimerTaskRunner(const char* name) override;
-  scoped_refptr<TaskQueue> NewUnthrottledTaskRunner(const char* name) override;
+  scoped_refptr<TaskQueue> NewLoadingTaskRunner(
+      TaskQueue::QueueType queue_type) override;
+  scoped_refptr<TaskQueue> NewTimerTaskRunner(
+      TaskQueue::QueueType queue_type) override;
+  scoped_refptr<TaskQueue> NewUnthrottledTaskRunner(
+      TaskQueue::QueueType queue_type) override;
   std::unique_ptr<RenderWidgetSchedulingState> NewRenderWidgetSchedulingState()
       override;
   void WillBeginFrame(const cc::BeginFrameArgs& args) override;
@@ -40,6 +43,7 @@ class FakeRendererScheduler : public RendererScheduler {
   void OnRendererBackgrounded() override;
   void OnRendererForegrounded() override;
   void SuspendRenderer() override;
+  void ResumeRenderer() override;
   void AddPendingNavigation(WebScheduler::NavigatingFrameType type) override;
   void RemovePendingNavigation(WebScheduler::NavigatingFrameType type) override;
   void OnNavigationStarted() override;

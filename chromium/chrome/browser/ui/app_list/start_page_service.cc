@@ -10,6 +10,7 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/json/json_reader.h"
 #include "base/json/json_string_value_serializer.h"
 #include "base/macros.h"
 #include "base/memory/singleton.h"
@@ -485,15 +486,13 @@ void StartPageService::OnSpeechResult(
     speech_result_obtained_ = true;
     RecordAction(UserMetricsAction("AppList_SearchedBySpeech"));
   }
-  FOR_EACH_OBSERVER(StartPageObserver,
-                    observers_,
-                    OnSpeechResult(query, is_final));
+  for (auto& observer : observers_)
+    observer.OnSpeechResult(query, is_final);
 }
 
 void StartPageService::OnSpeechSoundLevelChanged(int16_t level) {
-  FOR_EACH_OBSERVER(StartPageObserver,
-                    observers_,
-                    OnSpeechSoundLevelChanged(level));
+  for (auto& observer : observers_)
+    observer.OnSpeechSoundLevelChanged(level);
 }
 
 void StartPageService::OnSpeechRecognitionStateChanged(
@@ -532,9 +531,8 @@ void StartPageService::OnSpeechRecognitionStateChanged(
   speech_button_toggled_manually_ = false;
   speech_result_obtained_ = false;
   state_ = new_state;
-  FOR_EACH_OBSERVER(StartPageObserver,
-                    observers_,
-                    OnSpeechRecognitionStateChanged(new_state));
+  for (auto& observer : observers_)
+    observer.OnSpeechRecognitionStateChanged(new_state);
 }
 
 void StartPageService::GetSpeechAuthParameters(std::string* auth_scope,
@@ -659,8 +657,8 @@ void StartPageService::OnURLFetchComplete(const net::URLFetcher* source) {
   if (json_start_index != std::string::npos)
     json_data_substr.remove_prefix(json_start_index);
 
-  JSONStringValueDeserializer deserializer(json_data_substr);
-  deserializer.set_allow_trailing_comma(true);
+  JSONStringValueDeserializer deserializer(json_data_substr,
+                                           base::JSON_ALLOW_TRAILING_COMMAS);
   int error_code = 0;
   std::unique_ptr<base::Value> doodle_json =
       deserializer.Deserialize(&error_code, nullptr);

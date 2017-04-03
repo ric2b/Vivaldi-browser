@@ -25,6 +25,7 @@ namespace Search = vivaldi::history_private::Search;
 namespace OnVisitModified = vivaldi::history_private::OnVisitModified;
 
 using vivaldi::history_private::TopUrlItem;
+using vivaldi::history_private::TransitionType;
 
 typedef std::vector<vivaldi::history_private::HistoryPrivateItem>
     HistoryItemList;
@@ -336,13 +337,55 @@ std::unique_ptr<HistoryPrivateItem> GetVisitsItem(
     BookmarkModel* bookmark_model) {
   std::unique_ptr<HistoryPrivateItem> history_item(new HistoryPrivateItem());
 
-  history_item->id = visit.id();
-  history_item->url.reset(new std::string(visit.url().spec()));
-  history_item->title.reset(new std::string(base::UTF16ToUTF8(visit.title())));
+  history_item->id = visit.id;
+  history_item->url.reset(new std::string(visit.url.spec()));
+  history_item->protocol.reset(new std::string(visit.url.scheme()));
+  history_item->address.reset(new std::string(visit.url.host()));
+  history_item->title.reset(new std::string(base::UTF16ToUTF8(visit.title)));
   history_item->visit_time.reset(
-      new double(MilliSecondsFromTime(visit.visit_time())));
-  history_item->is_bookmarked = bookmark_model->IsBookmarked(visit.url());
-  history_item->transition_type.reset(new std::string(visit.transition()));
+      new double(MilliSecondsFromTime(visit.visit_time)));
+  history_item->is_bookmarked = bookmark_model->IsBookmarked(visit.url);
+
+  TransitionType transition = vivaldi::history_private::TRANSITION_TYPE_LINK;
+  switch (visit.transition & ui::PAGE_TRANSITION_CORE_MASK) {
+    case ui::PAGE_TRANSITION_LINK:
+      transition = vivaldi::history_private::TRANSITION_TYPE_LINK;
+      break;
+    case ui::PAGE_TRANSITION_TYPED:
+      transition = vivaldi::history_private::TRANSITION_TYPE_TYPED;
+      break;
+    case ui::PAGE_TRANSITION_AUTO_BOOKMARK:
+      transition = vivaldi::history_private::TRANSITION_TYPE_AUTO_BOOKMARK;
+      break;
+    case ui::PAGE_TRANSITION_AUTO_SUBFRAME:
+      transition = vivaldi::history_private::TRANSITION_TYPE_AUTO_SUBFRAME;
+      break;
+    case ui::PAGE_TRANSITION_MANUAL_SUBFRAME:
+      transition = vivaldi::history_private::TRANSITION_TYPE_MANUAL_SUBFRAME;
+      break;
+    case ui::PAGE_TRANSITION_GENERATED:
+      transition = vivaldi::history_private::TRANSITION_TYPE_GENERATED;
+      break;
+    case ui::PAGE_TRANSITION_AUTO_TOPLEVEL:
+      transition = vivaldi::history_private::TRANSITION_TYPE_AUTO_TOPLEVEL;
+      break;
+    case ui::PAGE_TRANSITION_FORM_SUBMIT:
+      transition = vivaldi::history_private::TRANSITION_TYPE_FORM_SUBMIT;
+      break;
+    case ui::PAGE_TRANSITION_RELOAD:
+      transition = vivaldi::history_private::TRANSITION_TYPE_RELOAD;
+      break;
+    case ui::PAGE_TRANSITION_KEYWORD:
+      transition = vivaldi::history_private::TRANSITION_TYPE_KEYWORD;
+      break;
+    case ui::PAGE_TRANSITION_KEYWORD_GENERATED:
+      transition = vivaldi::history_private::TRANSITION_TYPE_KEYWORD_GENERATED;
+      break;
+    default:
+      DCHECK(false);
+  }
+
+  history_item->transition_type = transition;
   return history_item;
 }
 
@@ -351,7 +394,6 @@ bool HistoryPrivateVisitSearchFunction::RunAsyncImpl() {
     VisitSearch::Params::Create(*args_));
     EXTENSION_FUNCTION_VALIDATE(params.get());
 
-    std::string search_text = params->query.text;
     history::QueryOptions options;
 
     if (params->query.start_time.get())
@@ -362,7 +404,7 @@ bool HistoryPrivateVisitSearchFunction::RunAsyncImpl() {
   history::HistoryService* hs = HistoryServiceFactory::GetForProfile(
       GetProfile(), ServiceAccessType::EXPLICIT_ACCESS);
 
-  hs->VisitSearch(search_text, options,
+  hs->VisitSearch(options,
             base::Bind(&HistoryPrivateVisitSearchFunction::VisitsComplete,
                         base::Unretained(this)));
   return true;

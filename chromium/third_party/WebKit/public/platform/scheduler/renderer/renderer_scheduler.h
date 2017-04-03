@@ -64,14 +64,16 @@ class BLINK_PLATFORM_EXPORT RendererScheduler : public ChildScheduler {
 
   // Returns a new loading task runner. This queue is intended for tasks related
   // to resource dispatch, foreground HTML parsing, etc...
-  virtual scoped_refptr<TaskQueue> NewLoadingTaskRunner(const char* name) = 0;
+  virtual scoped_refptr<TaskQueue> NewLoadingTaskRunner(
+      TaskQueue::QueueType queue_type) = 0;
 
   // Returns a new timer task runner. This queue is intended for DOM Timers.
-  virtual scoped_refptr<TaskQueue> NewTimerTaskRunner(const char* name) = 0;
+  virtual scoped_refptr<TaskQueue> NewTimerTaskRunner(
+      TaskQueue::QueueType queue_type) = 0;
 
   // Returns a task runner for tasks which should never get throttled.
   virtual scoped_refptr<TaskQueue> NewUnthrottledTaskRunner(
-      const char* name) = 0;
+      TaskQueue::QueueType queue_type) = 0;
 
   // Returns a new RenderWidgetSchedulingState.  The signals from this will be
   // used to make scheduling decisions.
@@ -131,6 +133,12 @@ class BLINK_PLATFORM_EXPORT RendererScheduler : public ChildScheduler {
   // only be done when the renderer is backgrounded. The renderer will be
   // automatically resumed when foregrounded.
   virtual void SuspendRenderer() = 0;
+
+  // Tells the scheduler that the render process should be resumed. This can
+  // only be done when the renderer is suspended. TabManager (in the future,
+  // MemoryCoordinator) will suspend the renderer again if continuously
+  // backgrounded.
+  virtual void ResumeRenderer() = 0;
 
   // Tells the scheduler that a navigation task is pending. While any main-frame
   // navigation tasks are pending, the scheduler will ensure that loading tasks

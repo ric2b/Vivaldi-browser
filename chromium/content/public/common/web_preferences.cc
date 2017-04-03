@@ -94,7 +94,6 @@ WebPreferences::WebPreferences()
       databases_enabled(false),
       application_cache_enabled(false),
       tabs_to_links(true),
-      caret_browsing_enabled(false),
       history_entry_requires_user_gesture(false),
       hyperlink_auditing_enabled(true),
       allow_universal_access_from_file_urls(false),
@@ -172,7 +171,6 @@ WebPreferences::WebPreferences()
       smart_insert_delete_enabled(false),
 #endif
       spatial_navigation_enabled(false),
-      pinch_overlay_scrollbar_thickness(0),
       use_solid_color_scrollbars(false),
       navigate_on_drag_drop(true),
       v8_cache_options(V8_CACHE_OPTIONS_DEFAULT),
@@ -184,6 +182,10 @@ WebPreferences::WebPreferences()
       animation_policy(IMAGE_ANIMATION_POLICY_ALLOWED),
       user_gesture_required_for_presentation(true),
       text_track_margin_percentage(0.0f),
+      expensive_background_throttling_cpu_budget(-1.0f),
+      expensive_background_throttling_initial_budget(-1.0f),
+      expensive_background_throttling_max_budget(-1.0f),
+      expensive_background_throttling_max_delay(-1.0f),
 #if defined(OS_ANDROID)
       text_autosizing_enabled(true),
       font_scale_factor(1.0f),
@@ -205,21 +207,20 @@ WebPreferences::WebPreferences()
       ignore_main_frame_overflow_hidden_quirk(false),
       report_screen_size_in_physical_pixels_quirk(false),
       resue_global_for_unowned_main_frame(false),
-      autoplay_muted_videos_enabled(false),
       progress_bar_completion(ProgressBarCompletion::LOAD_EVENT),
       spellcheck_enabled_by_default(true),
 #endif
 #if defined(OS_ANDROID)
       default_minimum_page_scale_factor(0.25f),
-      default_maximum_page_scale_factor(5.f)
+      default_maximum_page_scale_factor(5.f),
 #elif defined(OS_MACOSX)
       default_minimum_page_scale_factor(1.f),
-      default_maximum_page_scale_factor(3.f)
+      default_maximum_page_scale_factor(3.f),
 #else
       default_minimum_page_scale_factor(1.f),
-      default_maximum_page_scale_factor(4.f)
+      default_maximum_page_scale_factor(4.f),
 #endif
-{
+      hide_download_ui(false) {
   standard_font_family_map[kCommonScript] =
       base::ASCIIToUTF16("Times New Roman");
   fixed_font_family_map[kCommonScript] = base::ASCIIToUTF16("Courier New");

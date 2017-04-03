@@ -5,11 +5,11 @@
 #include "ash/common/system/toast/toast_overlay.h"
 
 #include "ash/common/shelf/wm_shelf.h"
-#include "ash/common/shell_window_ids.h"
 #include "ash/common/wm_lookup.h"
 #include "ash/common/wm_root_window_controller.h"
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
+#include "ash/public/cpp/shell_window_ids.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -86,9 +86,8 @@ ToastOverlayLabel::ToastOverlayLabel(const base::string16& label) {
 
   int verticalSpacing =
       kToastVerticalSpacing - (GetPreferredSize().height() - GetBaseline());
-  SetBorder(views::Border::CreateEmptyBorder(
-      verticalSpacing, kToastHorizontalSpacing, verticalSpacing,
-      kToastHorizontalSpacing));
+  SetBorder(views::CreateEmptyBorder(verticalSpacing, kToastHorizontalSpacing,
+                                     verticalSpacing, kToastHorizontalSpacing));
 }
 
 ToastOverlayLabel::~ToastOverlayLabel() {}
@@ -122,19 +121,18 @@ ToastOverlayButton::ToastOverlayButton(views::ButtonListener* listener,
   // Treat the space below the baseline as a margin.
   int verticalSpacing = kToastVerticalSpacing -
                         (GetPreferredSize().height() - label()->GetBaseline());
-  SetBorder(views::Border::CreateEmptyBorder(
-      verticalSpacing, kToastHorizontalSpacing, verticalSpacing,
-      kToastHorizontalSpacing));
+  SetBorder(views::CreateEmptyBorder(verticalSpacing, kToastHorizontalSpacing,
+                                     verticalSpacing, kToastHorizontalSpacing));
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 //  ToastOverlayView
 class ToastOverlayView : public views::View, public views::ButtonListener {
  public:
-  // This object is not owned by the views hiearchy or by the widget.
+  // This object is not owned by the views hierarchy or by the widget.
   ToastOverlayView(ToastOverlay* overlay,
                    const base::string16& text,
-                   const base::string16& dismiss_text);
+                   const base::Optional<base::string16>& dismiss_text);
   ~ToastOverlayView() override;
 
   // views::View overrides:
@@ -143,38 +141,44 @@ class ToastOverlayView : public views::View, public views::ButtonListener {
   ToastOverlayButton* button() { return button_; }
 
  private:
-  ToastOverlay* overlay_;       // weak
-  ToastOverlayButton* button_;  // weak
-
+  // views::View overrides:
   gfx::Size GetMaximumSize() const override;
   gfx::Size GetMinimumSize() const override;
 
+  // views::ButtonListener overrides:
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;
+
+  ToastOverlay* overlay_ = nullptr;       // weak
+  ToastOverlayButton* button_ = nullptr;  // weak
 
   DISALLOW_COPY_AND_ASSIGN(ToastOverlayView);
 };
 
-ToastOverlayView::ToastOverlayView(ToastOverlay* overlay,
-                                   const base::string16& text,
-                                   const base::string16& dismiss_text)
-    : overlay_(overlay),
-      button_(new ToastOverlayButton(
-          this,
-          dismiss_text.empty()
-              ? l10n_util::GetStringUTF16(IDS_ASH_TOAST_DISMISS_BUTTON)
-              : dismiss_text)) {
-  ToastOverlayLabel* label = new ToastOverlayLabel(text);
-  label->SetMaximumWidth(
-      GetMaximumSize().width() - button_->GetPreferredSize().width() -
-      kToastHorizontalSpacing * 2 - kToastHorizontalSpacing * 2);
-  AddChildView(label);
-
-  AddChildView(button_);
-
+ToastOverlayView::ToastOverlayView(
+    ToastOverlay* overlay,
+    const base::string16& text,
+    const base::Optional<base::string16>& dismiss_text)
+    : overlay_(overlay) {
   auto* layout = new views::BoxLayout(views::BoxLayout::kHorizontal, 0, 0, 0);
   SetLayoutManager(layout);
+
+  if (dismiss_text.has_value()) {
+    button_ = new ToastOverlayButton(
+        this, dismiss_text.value().empty()
+                  ? l10n_util::GetStringUTF16(IDS_ASH_TOAST_DISMISS_BUTTON)
+                  : dismiss_text.value());
+  }
+
+  ToastOverlayLabel* label = new ToastOverlayLabel(text);
+  AddChildView(label);
   layout->SetFlexForView(label, 1);
-  layout->SetFlexForView(button_, 0);
+
+  if (button_) {
+    label->SetMaximumWidth(
+        GetMaximumSize().width() - button_->GetPreferredSize().width() -
+        kToastHorizontalSpacing * 2 - kToastHorizontalSpacing * 2);
+    AddChildView(button_);
+  }
 }
 
 ToastOverlayView::~ToastOverlayView() {}
@@ -198,6 +202,7 @@ gfx::Size ToastOverlayView::GetMaximumSize() const {
 
 void ToastOverlayView::ButtonPressed(views::Button* sender,
                                      const ui::Event& event) {
+  DCHECK_EQ(button_, sender);
   overlay_->Show(false);
 }
 
@@ -205,7 +210,7 @@ void ToastOverlayView::ButtonPressed(views::Button* sender,
 //  ToastOverlay
 ToastOverlay::ToastOverlay(Delegate* delegate,
                            const base::string16& text,
-                           const base::string16& dismiss_text)
+                           base::Optional<base::string16> dismiss_text)
     : delegate_(delegate),
       text_(text),
       dismiss_text_(dismiss_text),
@@ -295,7 +300,12 @@ views::Widget* ToastOverlay::widget_for_testing() {
   return overlay_widget_.get();
 }
 
+ToastOverlayButton* ToastOverlay::dismiss_button_for_testing() {
+  return overlay_view_->button();
+}
+
 void ToastOverlay::ClickDismissButtonForTesting(const ui::Event& event) {
+  DCHECK(overlay_view_->button());
   overlay_view_->button()->NotifyClick(event);
 }
 

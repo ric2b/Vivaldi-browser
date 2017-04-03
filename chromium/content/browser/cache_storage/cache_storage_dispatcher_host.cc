@@ -61,7 +61,7 @@ blink::WebServiceWorkerCacheError ToWebServiceWorkerCacheError(
 }
 
 bool OriginCanAccessCacheStorage(const url::Origin& origin) {
-  return !origin.unique() && IsOriginSecure(GURL(origin.Serialize()));
+  return !origin.unique() && IsOriginSecure(origin.GetURL());
 }
 
 void StopPreservingCache(
@@ -132,7 +132,7 @@ void CacheStorageDispatcherHost::OnCacheStorageHas(
     return;
   }
   context_->cache_manager()->HasCache(
-      GURL(origin.Serialize()), base::UTF16ToUTF8(cache_name),
+      origin.GetURL(), base::UTF16ToUTF8(cache_name),
       base::Bind(&CacheStorageDispatcherHost::OnCacheStorageHasCallback, this,
                  thread_id, request_id));
 }
@@ -149,7 +149,7 @@ void CacheStorageDispatcherHost::OnCacheStorageOpen(
     return;
   }
   context_->cache_manager()->OpenCache(
-      GURL(origin.Serialize()), base::UTF16ToUTF8(cache_name),
+      origin.GetURL(), base::UTF16ToUTF8(cache_name),
       base::Bind(&CacheStorageDispatcherHost::OnCacheStorageOpenCallback, this,
                  thread_id, request_id));
 }
@@ -166,7 +166,7 @@ void CacheStorageDispatcherHost::OnCacheStorageDelete(
     return;
   }
   context_->cache_manager()->DeleteCache(
-      GURL(origin.Serialize()), base::UTF16ToUTF8(cache_name),
+      origin.GetURL(), base::UTF16ToUTF8(cache_name),
       base::Bind(&CacheStorageDispatcherHost::OnCacheStorageDeleteCallback,
                  this, thread_id, request_id));
 }
@@ -181,7 +181,7 @@ void CacheStorageDispatcherHost::OnCacheStorageKeys(int thread_id,
     return;
   }
   context_->cache_manager()->EnumerateCaches(
-      GURL(origin.Serialize()),
+      origin.GetURL(),
       base::Bind(&CacheStorageDispatcherHost::OnCacheStorageKeysCallback, this,
                  thread_id, request_id));
 }
@@ -205,14 +205,13 @@ void CacheStorageDispatcherHost::OnCacheStorageMatch(
 
   if (match_params.cache_name.is_null()) {
     context_->cache_manager()->MatchAllCaches(
-        GURL(origin.Serialize()), std::move(scoped_request), match_params,
+        origin.GetURL(), std::move(scoped_request), match_params,
         base::Bind(&CacheStorageDispatcherHost::OnCacheStorageMatchCallback,
                    this, thread_id, request_id));
     return;
   }
   context_->cache_manager()->MatchCache(
-      GURL(origin.Serialize()),
-      base::UTF16ToUTF8(match_params.cache_name.string()),
+      origin.GetURL(), base::UTF16ToUTF8(match_params.cache_name.string()),
       std::move(scoped_request), match_params,
       base::Bind(&CacheStorageDispatcherHost::OnCacheStorageMatchCallback, this,
                  thread_id, request_id));
@@ -390,18 +389,10 @@ void CacheStorageDispatcherHost::OnCacheStorageDeleteCallback(
 void CacheStorageDispatcherHost::OnCacheStorageKeysCallback(
     int thread_id,
     int request_id,
-    const std::vector<std::string>& strings,
-    CacheStorageError error) {
-  if (error != CACHE_STORAGE_OK) {
-    Send(new CacheStorageMsg_CacheStorageKeysError(
-        thread_id, request_id, ToWebServiceWorkerCacheError(error)));
-    return;
-  }
-
+    const std::vector<std::string>& strings) {
   std::vector<base::string16> string16s;
-  for (size_t i = 0, max = strings.size(); i < max; ++i) {
+  for (size_t i = 0, max = strings.size(); i < max; ++i)
     string16s.push_back(base::UTF8ToUTF16(strings[i]));
-  }
   Send(new CacheStorageMsg_CacheStorageKeysSuccess(thread_id, request_id,
                                                    string16s));
 }

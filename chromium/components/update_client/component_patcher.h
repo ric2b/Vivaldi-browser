@@ -44,6 +44,7 @@ namespace update_client {
 class CrxInstaller;
 class DeltaUpdateOp;
 class OutOfProcessPatcher;
+enum class UnpackerError;
 
 // The type of a patch file.
 enum PatchType {
@@ -55,6 +56,8 @@ enum PatchType {
 // Encapsulates a task for applying a differential update to a component.
 class ComponentPatcher : public base::RefCountedThreadSafe<ComponentPatcher> {
  public:
+  using Callback = base::Callback<void(UnpackerError, int)>;
+
   // Takes an unpacked differential CRX (|input_dir|) and a component installer,
   // and sets up the class to create a new (non-differential) unpacked CRX.
   // If |in_process| is true, patching will be done completely within the
@@ -70,7 +73,7 @@ class ComponentPatcher : public base::RefCountedThreadSafe<ComponentPatcher> {
   // posting a task to do the patching. When patching has been completed,
   // |callback| will be called with the error codes if any error codes were
   // encountered.
-  void Start(const ComponentUnpacker::Callback& callback);
+  void Start(const Callback& callback);
 
  private:
   friend class base::RefCountedThreadSafe<ComponentPatcher>;
@@ -81,15 +84,15 @@ class ComponentPatcher : public base::RefCountedThreadSafe<ComponentPatcher> {
 
   void PatchNextFile();
 
-  void DonePatchingFile(ComponentUnpacker::Error error, int extended_error);
+  void DonePatchingFile(UnpackerError error, int extended_error);
 
-  void DonePatching(ComponentUnpacker::Error error, int extended_error);
+  void DonePatching(UnpackerError error, int extended_error);
 
   const base::FilePath input_dir_;
   const base::FilePath unpack_dir_;
   scoped_refptr<CrxInstaller> installer_;
   scoped_refptr<OutOfProcessPatcher> out_of_process_patcher_;
-  ComponentUnpacker::Callback callback_;
+  Callback callback_;
   std::unique_ptr<base::ListValue> commands_;
   base::ListValue::const_iterator next_command_;
   scoped_refptr<DeltaUpdateOp> current_operation_;

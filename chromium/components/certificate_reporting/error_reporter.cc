@@ -11,8 +11,6 @@
 
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
-#include "base/metrics/histogram_macros.h"
-#include "base/metrics/sparse_histogram.h"
 #include "components/certificate_reporting/encrypted_cert_logger.pb.h"
 #include "crypto/aead.h"
 #include "crypto/curve25519.h"
@@ -100,26 +98,17 @@ bool EncryptSerializedReport(const uint8_t* server_public_key,
   return true;
 }
 
-// Records an UMA histogram of the net errors when certificate reports
-// fail to send.
-void RecordUMAOnFailure(const GURL& report_uri, int net_error) {
-  UMA_HISTOGRAM_SPARSE_SLOWLY("SSL.CertificateErrorReportFailure", -net_error);
-}
-
 }  // namespace
 
 ErrorReporter::ErrorReporter(
     net::URLRequestContext* request_context,
     const GURL& upload_url,
     net::ReportSender::CookiesPreference cookies_preference)
-    : ErrorReporter(
-          upload_url,
-          kServerPublicKey,
-          kServerPublicKeyVersion,
-          base::MakeUnique<net::ReportSender>(request_context,
-                                              cookies_preference,
-                                              base::Bind(RecordUMAOnFailure))) {
-}
+    : ErrorReporter(upload_url,
+                    kServerPublicKey,
+                    kServerPublicKeyVersion,
+                    base::MakeUnique<net::ReportSender>(request_context,
+                                                        cookies_preference)) {}
 
 ErrorReporter::ErrorReporter(
     const GURL& upload_url,
@@ -137,22 +126,26 @@ ErrorReporter::ErrorReporter(
 ErrorReporter::~ErrorReporter() {}
 
 void ErrorReporter::SendExtendedReportingReport(
-    const std::string& serialized_report) {
+    const std::string& serialized_report,
+    const base::Callback<void()>& success_callback,
+    const base::Callback<void(const GURL&, int)>& error_callback) {
   if (upload_url_.SchemeIsCryptographic()) {
     certificate_report_sender_->Send(upload_url_, "application/octet-stream",
-                                     serialized_report);
-  } else {
-    EncryptedCertLoggerRequest encrypted_report;
-    if (!EncryptSerializedReport(server_public_key_, server_public_key_version_,
-                                 serialized_report, &encrypted_report)) {
-      LOG(ERROR) << "Failed to encrypt serialized report.";
-      return;
-    }
-    std::string serialized_encrypted_report;
-    encrypted_report.SerializeToString(&serialized_encrypted_report);
-    certificate_report_sender_->Send(upload_url_, "application/octet-stream",
-                                     serialized_encrypted_report);
+                                     serialized_report, success_callback,
+                                     error_callback);
+    return;
   }
+  EncryptedCertLoggerRequest encrypted_report;
+  if (!EncryptSerializedReport(server_public_key_, server_public_key_version_,
+                               serialized_report, &encrypted_report)) {
+    LOG(ERROR) << "Failed to encrypt serialized report.";
+    return;
+  }
+  std::string serialized_encrypted_report;
+  encrypted_report.SerializeToString(&serialized_encrypted_report);
+  certificate_report_sender_->Send(upload_url_, "application/octet-stream",
+                                   serialized_encrypted_report,
+                                   success_callback, error_callback);
 }
 
 // Used only by tests.

@@ -10,6 +10,7 @@ import android.content.Intent;
 import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
 import android.content.pm.ServiceInfo;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.DeadObjectException;
 import android.os.IBinder;
@@ -120,10 +121,7 @@ public class ChildProcessConnectionImpl implements ChildProcessConnection {
             return intent;
         }
 
-        public ChildServiceConnection(int bindFlags, boolean needsExtraBindFlags) {
-            if (needsExtraBindFlags && mCreationParams != null) {
-                bindFlags = mCreationParams.addExtraBindFlags(bindFlags);
-            }
+        public ChildServiceConnection(int bindFlags) {
             mBindFlags = bindFlags;
         }
 
@@ -132,9 +130,9 @@ public class ChildProcessConnectionImpl implements ChildProcessConnection {
                 try {
                     TraceEvent.begin("ChildProcessConnectionImpl.ChildServiceConnection.bind");
                     final Intent intent = createServiceBindIntent();
-                    if (commandLine != null) {
-                        intent.putExtra(ChildProcessConstants.EXTRA_COMMAND_LINE, commandLine);
-                    }
+                    // Note, the intent may be saved and re-used by Android for re-launching the
+                    // child service. Do not pass data that is different for each child; command
+                    // line arguments for example.
                     if (mLinkerParams != null) {
                         mLinkerParams.addIntentExtras(intent);
                     }
@@ -226,16 +224,18 @@ public class ChildProcessConnectionImpl implements ChildProcessConnection {
         mCreationParams = creationParams;
         int initialFlags = Context.BIND_AUTO_CREATE;
         if (mAlwaysInForeground) initialFlags |= Context.BIND_IMPORTANT;
-        // "external service" attribute is approximated by "exported" attribute.
-        // TODO(mnaganov): Update after the release of the next Android SDK.
-        final boolean needsExtraBindFlags = isExportedService(inSandbox, mContext, mServiceName);
-        mInitialBinding = new ChildServiceConnection(initialFlags, needsExtraBindFlags);
+        int extraBindFlags = 0;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && mCreationParams != null
+                && mCreationParams.getIsExternalService()
+                && isExportedService(inSandbox, mContext, mServiceName)) {
+            extraBindFlags = Context.BIND_EXTERNAL_SERVICE;
+        }
+        mInitialBinding = new ChildServiceConnection(initialFlags | extraBindFlags);
         mStrongBinding = new ChildServiceConnection(
-                Context.BIND_AUTO_CREATE | Context.BIND_IMPORTANT, needsExtraBindFlags);
+                Context.BIND_AUTO_CREATE | Context.BIND_IMPORTANT | extraBindFlags);
         mWaivedBinding = new ChildServiceConnection(
-                Context.BIND_AUTO_CREATE | Context.BIND_WAIVE_PRIORITY, needsExtraBindFlags);
-        mModerateBinding = new ChildServiceConnection(
-                Context.BIND_AUTO_CREATE, needsExtraBindFlags);
+                Context.BIND_AUTO_CREATE | Context.BIND_WAIVE_PRIORITY | extraBindFlags);
+        mModerateBinding = new ChildServiceConnection(Context.BIND_AUTO_CREATE | extraBindFlags);
     }
 
     private static boolean isExportedService(boolean inSandbox, Context context,

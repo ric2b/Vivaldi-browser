@@ -24,9 +24,12 @@ class MockRendererScheduler : public RendererScheduler {
   MOCK_METHOD0(IdleTaskRunner,
                scoped_refptr<blink::scheduler::SingleThreadIdleTaskRunner>());
   MOCK_METHOD0(TimerTaskRunner, scoped_refptr<TaskQueue>());
-  MOCK_METHOD1(NewLoadingTaskRunner, scoped_refptr<TaskQueue>(const char*));
-  MOCK_METHOD1(NewTimerTaskRunner, scoped_refptr<TaskQueue>(const char*));
-  MOCK_METHOD1(NewUnthrottledTaskRunner, scoped_refptr<TaskQueue>(const char*));
+  MOCK_METHOD1(NewLoadingTaskRunner,
+               scoped_refptr<TaskQueue>(TaskQueue::QueueType));
+  MOCK_METHOD1(NewTimerTaskRunner,
+               scoped_refptr<TaskQueue>(TaskQueue::QueueType));
+  MOCK_METHOD1(NewUnthrottledTaskRunner,
+               scoped_refptr<TaskQueue>(TaskQueue::QueueType));
   MOCK_METHOD0(NewRenderWidgetSchedulingState,
                std::unique_ptr<RenderWidgetSchedulingState>());
   MOCK_METHOD1(WillBeginFrame, void(const cc::BeginFrameArgs&));
@@ -39,6 +42,7 @@ class MockRendererScheduler : public RendererScheduler {
   MOCK_METHOD0(OnRendererBackgrounded, void());
   MOCK_METHOD0(OnRendererForegrounded, void());
   MOCK_METHOD0(SuspendRenderer, void());
+  MOCK_METHOD0(ResumeRenderer, void());
   MOCK_METHOD1(AddPendingNavigation, void(WebScheduler::NavigatingFrameType));
   MOCK_METHOD1(RemovePendingNavigation,
                void(WebScheduler::NavigatingFrameType));

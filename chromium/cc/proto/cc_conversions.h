@@ -8,6 +8,7 @@
 #include "cc/base/cc_export.h"
 #include "cc/input/scrollbar.h"
 #include "cc/proto/layer.pb.h"
+#include "cc/trees/clip_node.h"
 
 namespace cc {
 class Region;

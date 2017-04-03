@@ -37,6 +37,8 @@
 
 namespace blink {
 
+class FlexItem;
+
 class CORE_EXPORT LayoutFlexibleBox : public LayoutBlock {
  public:
   LayoutFlexibleBox(Element*);
@@ -107,13 +109,7 @@ class CORE_EXPORT LayoutFlexibleBox : public LayoutBlock {
 
   enum class SizeDefiniteness { Definite, Indefinite, Unknown };
 
-  struct FlexItem;
   struct LineContext;
-
-  typedef Vector<FlexItem> OrderedFlexItemList;
-  // Use an inline capacity of 8, since flexbox containers usually have less
-  // than 8 children.
-  typedef Vector<LayoutRect, 8> ChildFrameRects;
 
   bool hasOrthogonalFlow(const LayoutBox& child) const;
   bool isColumnFlow() const;
@@ -164,7 +160,6 @@ class CORE_EXPORT LayoutFlexibleBox : public LayoutBlock {
                                 const Length& flexBasis) const;
   bool crossAxisLengthIsDefinite(const LayoutBox& child,
                                  const Length& flexBasis) const;
-  bool childFlexBaseSizeRequiresLayout(const LayoutBox& child) const;
   bool needToStretchChildLogicalHeight(const LayoutBox& child) const;
   bool childHasIntrinsicMainAxisSize(const LayoutBox& child) const;
   EOverflow mainAxisOverflowForChild(const LayoutBox& child) const;
@@ -172,7 +167,7 @@ class CORE_EXPORT LayoutFlexibleBox : public LayoutBlock {
   void cacheChildMainSize(const LayoutBox& child);
 
   void layoutFlexItems(bool relayoutChildren, SubtreeLayoutScope&);
-  LayoutUnit autoMarginOffsetInMainAxis(const OrderedFlexItemList&,
+  LayoutUnit autoMarginOffsetInMainAxis(const Vector<FlexItem>&,
                                         LayoutUnit& availableFreeSpace);
   void updateAutoMarginsInMainAxis(LayoutBox& child,
                                    LayoutUnit autoMarginOffset);
@@ -197,24 +192,15 @@ class CORE_EXPORT LayoutFlexibleBox : public LayoutBlock {
       const LayoutBox& child,
       LayoutUnit childSize);
   FlexItem constructFlexItem(LayoutBox& child, ChildLayoutType);
-  // The hypothetical main size of an item is the flex base size clamped
-  // according to its min and max main size properties
-  bool computeNextFlexLine(OrderedFlexItemList& orderedChildren,
-                           LayoutUnit& sumFlexBaseSize,
-                           double& totalFlexGrow,
-                           double& totalFlexShrink,
-                           double& totalWeightedFlexShrink,
-                           LayoutUnit& sumHypotheticalMainSize,
-                           bool relayoutChildren);
 
   void freezeInflexibleItems(FlexSign,
-                             OrderedFlexItemList& children,
+                             Vector<FlexItem>& children,
                              LayoutUnit& remainingFreeSpace,
                              double& totalFlexGrow,
                              double& totalFlexShrink,
                              double& totalWeightedFlexShrink);
   bool resolveFlexibleLengths(FlexSign,
-                              OrderedFlexItemList&,
+                              Vector<FlexItem>&,
                               LayoutUnit initialFreeSpace,
                               LayoutUnit& remainingFreeSpace,
                               double& totalFlexGrow,
@@ -230,21 +216,20 @@ class CORE_EXPORT LayoutFlexibleBox : public LayoutBlock {
   void setOverrideMainAxisContentSizeForChild(LayoutBox& child,
                                               LayoutUnit childPreferredSize);
   void prepareChildForPositionedLayout(LayoutBox& child);
-  size_t numberOfInFlowPositionedChildren(const OrderedFlexItemList&) const;
   void layoutAndPlaceChildren(LayoutUnit& crossAxisOffset,
-                              const OrderedFlexItemList&,
+                              Vector<FlexItem>&,
                               LayoutUnit availableFreeSpace,
                               bool relayoutChildren,
                               SubtreeLayoutScope&,
                               Vector<LineContext>&);
-  void layoutColumnReverse(const OrderedFlexItemList&,
+  void layoutColumnReverse(const Vector<FlexItem>&,
                            LayoutUnit crossAxisOffset,
                            LayoutUnit availableFreeSpace);
   void alignFlexLines(Vector<LineContext>&);
   void alignChildren(const Vector<LineContext>&);
   void applyStretchAlignmentToChild(LayoutBox& child,
                                     LayoutUnit lineCrossAxisExtent);
-  void flipForRightToLeftColumn();
+  void flipForRightToLeftColumn(const Vector<LineContext>& lineContexts);
   void flipForWrapReverse(const Vector<LineContext>&,
                           LayoutUnit crossAxisStartEdge);
 
@@ -269,6 +254,7 @@ class CORE_EXPORT LayoutFlexibleBox : public LayoutBlock {
 
   // This is SizeIsUnknown outside of layoutBlock()
   mutable SizeDefiniteness m_hasDefiniteHeight;
+  bool m_inLayout;
 };
 
 DEFINE_LAYOUT_OBJECT_TYPE_CASTS(LayoutFlexibleBox, isFlexibleBox());

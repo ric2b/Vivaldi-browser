@@ -25,10 +25,6 @@
 #include "third_party/WebKit/public/platform/modules/indexeddb/WebIDBFactory.h"
 #include "third_party/WebKit/public/platform/modules/screen_orientation/WebScreenOrientationType.h"
 
-namespace cc {
-class ContextProvider;
-}
-
 namespace IPC {
 class SyncMessageFilter;
 }
@@ -36,7 +32,6 @@ class SyncMessageFilter;
 namespace blink {
 namespace scheduler {
 class RendererScheduler;
-class WebThreadImplForRendererScheduler;
 }
 class WebCanvasCaptureHandler;
 class WebDeviceMotionData;
@@ -49,7 +44,7 @@ class WebSecurityOrigin;
 class WebServiceWorkerCacheStorage;
 }
 
-namespace shell {
+namespace service_manager {
 class InterfaceProvider;
 }
 
@@ -59,17 +54,15 @@ class LocalStorageCachedAreas;
 class PlatformEventObserverBase;
 class QuotaMessageFilter;
 class RendererClipboardDelegate;
-class RenderView;
 class ThreadSafeSender;
 class WebClipboardImpl;
 class WebDatabaseObserverImpl;
-class WebFileSystemImpl;
 
 class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
  public:
   RendererBlinkPlatformImpl(
       blink::scheduler::RendererScheduler* renderer_scheduler,
-      base::WeakPtr<shell::InterfaceProvider> remote_interfaces);
+      base::WeakPtr<service_manager::InterfaceProvider> remote_interfaces);
   ~RendererBlinkPlatformImpl() override;
 
   // Shutdown must be called just prior to shutting down blink.
@@ -80,7 +73,6 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
   }
   // Platform methods:
   blink::WebClipboard* clipboard() override;
-  blink::WebMimeRegistry* mimeRegistry() override;
   blink::WebFileUtilities* fileUtilities() override;
   blink::WebSandboxSupport* sandboxSupport() override;
   blink::WebCookieJar* cookieJar() override;
@@ -264,9 +256,6 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
   class FileUtilities;
   std::unique_ptr<FileUtilities> file_utilities_;
 
-  class MimeRegistry;
-  std::unique_ptr<MimeRegistry> mime_registry_;
-
 #if !defined(OS_ANDROID) && !defined(OS_WIN)
   class SandboxSupport;
   std::unique_ptr<SandboxSupport> sandbox_support_;
@@ -311,7 +300,7 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
 
   std::unique_ptr<BlinkInterfaceProviderImpl> blink_interface_provider_;
 
-  mojom::URLLoaderFactoryPtr url_loader_factory_;
+  mojom::URLLoaderFactoryAssociatedPtr url_loader_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(RendererBlinkPlatformImpl);
 };

@@ -18,6 +18,7 @@
 <include src="oobe_screen_user_image.js">
 
 <include src="screen_app_launch_splash.js">
+<include src="screen_arc_terms_of_service.js">
 <include src="screen_error_message.js">
 <include src="screen_gaia_signin.js">
 <include src="screen_password_changed.js">
@@ -42,8 +43,6 @@
 
   document.addEventListener('DOMContentLoaded', function() {
     // Immediately load async assets.
-    // TODO(dconnelly): remove this at some point and only load as needed.
-    // See crbug.com/236426
     cr.ui.login.ResourceLoader.loadAssets(SCREEN_OOBE_ENROLLMENT, function() {
       // This screen is async-loaded so we manually trigger i18n processing.
       i18nTemplate.process($('oauth-enrollment'), loadTimeData);

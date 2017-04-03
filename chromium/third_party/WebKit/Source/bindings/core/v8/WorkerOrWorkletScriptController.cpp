@@ -45,6 +45,7 @@
 #include "core/inspector/WorkerThreadDebugger.h"
 #include "core/workers/WorkerGlobalScope.h"
 #include "core/workers/WorkerOrWorkletGlobalScope.h"
+#include "core/workers/WorkerThread.h"
 #include "platform/heap/ThreadState.h"
 #include "public/platform/Platform.h"
 #include <memory>
@@ -126,12 +127,12 @@ void WorkerOrWorkletScriptController::disposeContextIfNeeded() {
   if (!isContextInitialized())
     return;
 
-  if (m_globalScope->isWorkerGlobalScope()) {
+  if (m_globalScope->isWorkerGlobalScope() ||
+      m_globalScope->isThreadedWorkletGlobalScope()) {
+    ScriptState::Scope scope(m_scriptState.get());
     WorkerThreadDebugger* debugger = WorkerThreadDebugger::from(m_isolate);
-    if (debugger) {
-      ScriptState::Scope scope(m_scriptState.get());
-      debugger->contextWillBeDestroyed(m_scriptState->context());
-    }
+    debugger->contextWillBeDestroyed(m_globalScope->thread(),
+                                     m_scriptState->context());
   }
   m_scriptState->disposePerContextData();
 }
@@ -179,17 +180,11 @@ bool WorkerOrWorkletScriptController::initializeContextIfNeeded() {
 
   ScriptState::Scope scope(m_scriptState.get());
 
-  // Name new context for debugging. For main thread worklet global scopes
-  // this is done once the context is initialized.
-  if (m_globalScope->isWorkerGlobalScope() ||
-      m_globalScope->isThreadedWorkletGlobalScope()) {
-    WorkerThreadDebugger* debugger = WorkerThreadDebugger::from(m_isolate);
-    if (debugger)
-      debugger->contextCreated(context);
-  }
-
   // The global proxy object.  Note this is not the global object.
   v8::Local<v8::Object> globalProxy = context->Global();
+  V8DOMWrapper::setNativeInfo(m_isolate, globalProxy, wrapperTypeInfo,
+                              scriptWrappable);
+
   // The global object, aka worker/worklet wrapper object.
   v8::Local<v8::Object> globalObject =
       globalProxy->GetPrototype().As<v8::Object>();
@@ -199,6 +194,14 @@ bool WorkerOrWorkletScriptController::initializeContextIfNeeded() {
   // All interfaces must be registered to V8PerContextData.
   // So we explicitly call constructorForType for the global object.
   V8PerContextData::from(context)->constructorForType(wrapperTypeInfo);
+
+  // Name new context for debugging. For main thread worklet global scopes
+  // this is done once the context is initialized.
+  if (m_globalScope->isWorkerGlobalScope() ||
+      m_globalScope->isThreadedWorkletGlobalScope()) {
+    WorkerThreadDebugger* debugger = WorkerThreadDebugger::from(m_isolate);
+    debugger->contextCreated(m_globalScope->thread(), context);
+  }
 
   return true;
 }

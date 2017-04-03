@@ -33,6 +33,38 @@ namespace base {
 // implementation using each platform's crypto library.  See
 // http://crbug.com/47218
 
+class SecureHashAlgorithm {
+ public:
+  SecureHashAlgorithm() { Init(); }
+
+  static const int kDigestSizeBytes;
+
+  void Init();
+  void Update(const void* data, size_t nbytes);
+  void Final();
+
+  // 20 bytes of message digest.
+  const unsigned char* Digest() const {
+    return reinterpret_cast<const unsigned char*>(H);
+  }
+
+ private:
+  void Pad();
+  void Process();
+
+  uint32_t A, B, C, D, E;
+
+  uint32_t H[5];
+
+  union {
+    uint32_t W[80];
+    uint8_t M[64];
+  };
+
+  uint32_t cursor;
+  uint64_t l;
+};
+
 static inline uint32_t f(uint32_t t, uint32_t B, uint32_t C, uint32_t D) {
   if (t < 20) {
     return (B & C) | ((~B) & D);
@@ -62,11 +94,6 @@ static inline uint32_t K(uint32_t t) {
 }
 
 const int SecureHashAlgorithm::kDigestSizeBytes = 20;
-
-SecureHashAlgorithm::SecureHashAlgorithm()
-{
-  Init();
-}
 
 void SecureHashAlgorithm::Init() {
   A = 0;

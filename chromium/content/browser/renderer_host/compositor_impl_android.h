@@ -29,18 +29,15 @@
 #include "ui/android/resources/ui_resource_provider.h"
 #include "ui/android/window_android_compositor.h"
 
-class SkBitmap;
 struct ANativeWindow;
 
 namespace cc {
+class AnimationHost;
 class Display;
 class Layer;
 class LayerTreeHost;
 class OutputSurface;
-class SurfaceIdAllocator;
-class SurfaceManager;
 class VulkanContextProvider;
-class VulkanInProcessContextProvider;
 }
 
 namespace content {
@@ -66,8 +63,6 @@ class CONTENT_EXPORT CompositorImpl
   ~CompositorImpl() override;
 
   static bool IsInitialized();
-
-  void PopulateGpuCapabilities(gpu::Capabilities gpu_capabilities);
 
   void AddObserver(VSyncObserver* observer);
   void RemoveObserver(VSyncObserver* observer);
@@ -106,12 +101,12 @@ class CONTENT_EXPORT CompositorImpl
   void WillCommit() override {}
   void DidCommit() override;
   void DidCommitAndDrawFrame() override {}
-  void DidCompleteSwapBuffers() override;
+  void DidReceiveCompositorFrameAck() override;
   void DidCompletePageScaleAnimation() override {}
 
   // LayerTreeHostSingleThreadClient implementation.
-  void DidPostSwapBuffers() override;
-  void DidAbortSwapBuffers() override;
+  void DidSubmitCompositorFrame() override;
+  void DidLoseCompositorFrameSink() override;
 
   // WindowAndroidCompositor implementation.
   void AttachLayerForReadback(scoped_refptr<cc::Layer> layer) override;
@@ -152,6 +147,7 @@ class CONTENT_EXPORT CompositorImpl
 
   // Destruction order matters here:
   base::ObserverList<VSyncObserver, true> observer_list_;
+  std::unique_ptr<cc::AnimationHost> animation_host_;
   std::unique_ptr<cc::LayerTreeHost> host_;
   ui::ResourceManagerImpl resource_manager_;
 

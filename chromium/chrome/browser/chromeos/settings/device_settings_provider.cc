@@ -23,7 +23,6 @@
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/chromeos/settings/device_settings_cache.h"
 #include "chrome/browser/metrics/metrics_reporting_state.h"
-#include "chrome/installer/util/google_update_settings.h"
 #include "chromeos/chromeos_switches.h"
 #include "chromeos/dbus/cryptohome_client.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
@@ -201,6 +200,21 @@ void DecodeLoginPolicies(
         entry_dict->SetStringWithoutPathExpansion(
             kAccountsPrefDeviceLocalAccountsKeyKioskAppUpdateURL,
             entry->kiosk_app().update_url());
+      }
+      if (entry->android_kiosk_app().has_package_name()) {
+        entry_dict->SetStringWithoutPathExpansion(
+            chromeos::kAccountsPrefDeviceLocalAccountsKeyArcKioskPackage,
+            entry->android_kiosk_app().package_name());
+      }
+      if (entry->android_kiosk_app().has_class_name()) {
+        entry_dict->SetStringWithoutPathExpansion(
+            chromeos::kAccountsPrefDeviceLocalAccountsKeyArcKioskClass,
+            entry->android_kiosk_app().class_name());
+      }
+      if (entry->android_kiosk_app().has_action()) {
+        entry_dict->SetStringWithoutPathExpansion(
+            chromeos::kAccountsPrefDeviceLocalAccountsKeyArcKioskAction,
+            entry->android_kiosk_app().action());
       }
     } else if (entry->has_deprecated_public_session_id()) {
       // Deprecated public session specification.

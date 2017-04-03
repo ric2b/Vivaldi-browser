@@ -16,10 +16,10 @@
 #include "content/public/browser/reload_type.h"
 #include "content/public/common/frame_navigate_params.h"
 #include "content/public/common/resource_type.h"
-#include "content/public/common/security_style.h"
 #include "ipc/ipc_listener.h"
 #include "ipc/ipc_sender.h"
-#include "third_party/WebKit/public/web/WebInputEvent.h"
+#include "third_party/WebKit/public/platform/WebInputEvent.h"
+#include "third_party/WebKit/public/platform/WebSecurityStyle.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/base/window_open_disposition.h"
@@ -38,7 +38,6 @@ struct AXLocationChangeNotificationDetails;
 struct FaviconURL;
 struct FrameNavigateParams;
 struct LoadCommittedDetails;
-struct MediaMetadata;
 struct Referrer;
 struct ResourceRedirectDetails;
 struct ResourceRequestDetails;
@@ -156,13 +155,13 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener,
   // Called when a navigation encountered a server redirect.
   virtual void DidRedirectNavigation(NavigationHandle* navigation_handle) {}
 
-  // PlzNavigate
   // Called when the navigation is ready to be committed in a renderer. Most
   // observers should use DidFinishNavigation instead, which happens right
   // after the navigation commits. This method is for observers that want to
   // initialize renderer-side state just before the RenderFrame commits the
   // navigation.
   //
+  // PlzNavigate
   // This is the first point in time where a RenderFrameHost is associated with
   // the navigation.
   virtual void ReadyToCommitNavigation(NavigationHandle* navigation_handle) {}
@@ -297,7 +296,7 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener,
   // contains human-readable strings explaining why the SecurityStyle of the
   // page has been downgraded.
   virtual void SecurityStyleChanged(
-      SecurityStyle security_style,
+      blink::WebSecurityStyle security_style,
       const SecurityStyleExplanations& security_style_explanations) {}
 
   // This method is invoked when content was loaded from an in-memory cache.
@@ -356,7 +355,7 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener,
   // 1) any mouse down event (blink::WebInputEvent::MouseDown);
   // 2) the start of a scroll (blink::WebInputEvent::GestureScrollBegin);
   // 3) any raw key down event (blink::WebInputEvent::RawKeyDown);
-  // 4) any gesture tap event (blink::WebInputEvent::GestureTapDown); and
+  // 4) any touch event (inc. scrolls) (blink::WebInputEvent::TouchStart); and
   // 5) a browser navigation or reload (blink::WebInputEvent::Undefined).
   virtual void DidGetUserInteraction(const blink::WebInputEvent::Type type) {}
 
@@ -467,15 +466,15 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener,
   // and subsequently within a WebContents.  MediaStartedPlaying() will always
   // be followed by MediaStoppedPlaying() after player teardown.  Observers must
   // release all stored copies of |id| when MediaStoppedPlaying() is received.
+  struct MediaPlayerInfo {
+    explicit MediaPlayerInfo(bool in_has_video) : has_video(in_has_video) {}
+    bool has_video;
+  };
   using MediaPlayerId = std::pair<RenderFrameHost*, int>;
-  virtual void MediaStartedPlaying(const MediaPlayerId& id) {}
-  virtual void MediaStoppedPlaying(const MediaPlayerId& id) {}
-
-  // Invoked when media session has changed its state.
-  virtual void MediaSessionStateChanged(
-      bool is_controllable,
-      bool is_suspended,
-      const base::Optional<MediaMetadata>& metadata) {}
+  virtual void MediaStartedPlaying(const MediaPlayerInfo& video_type,
+                                   const MediaPlayerId& id) {}
+  virtual void MediaStoppedPlaying(const MediaPlayerInfo& video_type,
+                                   const MediaPlayerId& id) {}
 
   // Invoked when the renderer process changes the page scale factor.
   virtual void OnPageScaleFactorChanged(float page_scale_factor) {}

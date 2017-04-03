@@ -27,13 +27,15 @@ US英語以外のキーボードを使用しているリモートパソコンで
 <translation id="1654128982815600832">このパソコンのリモート接続を有効にしています...</translation>
 <translation id="170207782578677537">このパソコンを登録できませんでした。</translation>
 <translation id="1704090719919187045">Chromoting ホスト設定</translation>
+<translation id="1730409684442507495">• デスクトップ画像の品質、処理速度、バッテリー消費量が改善されました。
+• クリックしてドラッグするときの応答性が高まりました。
+• いくつかの UI アニメーション効果がスムーズになりました。</translation>
 <translation id="174018511426417793">パソコンが登録されていません。パソコンへのリモート接続を有効にするには、対象となるパソコンに Chrome リモート デスクトップをインストールし、[<ph name="BUTTON_NAME" />] をクリックしてください。</translation>
 <translation id="1742469581923031760">接続しています...</translation>
 <translation id="1770394049404108959">アプリケーションを開けない。</translation>
 <translation id="177096447311351977">クライアントのチャンネル IP: <ph name="CLIENT_GAIA_IDENTIFIER" /> ip='<ph name="CLIENT_IP_ADDRESS_AND_PORT" />' host_ip='<ph name="HOST_IP_ADDRESS_AND_PORT" />' channel='<ph name="CHANNEL_TYPE" />' connection='<ph name="CONNECTION_TYPE" />'</translation>
 <translation id="1779766957982586368">ウィンドウを閉じる</translation>
 <translation id="1841799852846221389">このパソコンのリモート接続を無効にしています...</translation>
-<translation id="189172778771606813">操作パネルを閉じる</translation>
 <translation id="1897488610212723051">削除</translation>
 <translation id="195619862187186579">キーボード配列</translation>
 <translation id="1996161829609978754">Chromoting ホスト インストーラをダウンロードしています。ダウンロードが完了したら、続行する前にインストーラを実行してください。</translation>
@@ -74,7 +76,6 @@ US英語以外のキーボードを使用しているリモートパソコンで
 <translation id="2699970397166997657">Chromoting</translation>
 <translation id="2747641796667576127">通常、ソフトウェアの更新は自動的に行われますが、まれに失敗することがあります。ソフトウェアの更新にかかる時間は数分以内です。パソコンにリモート接続している場合も更新は可能です。</translation>
 <translation id="2841013758207633010">時間</translation>
-<translation id="2851674870054673688">共有するユーザーがこのコードを入力すると、共有セッションが開始されます。</translation>
 <translation id="2851754573186462851">Chromium App Streaming</translation>
 <translation id="2855866366045322178">オフライン</translation>
 <translation id="2888969873284818612">ネットワーク エラーが発生しました。デバイスが再度オンラインになったときにアプリを再開します。</translation>
@@ -114,6 +115,7 @@ US英語以外のキーボードを使用しているリモートパソコンで
 ホスト</translation>
 <translation id="3870154837782082782">Google Inc.</translation>
 <translation id="3884839335308961732">Chrome リモート デスクトップによるアクセスを許可するには、下記でアカウントと PIN の確認を行ってください。</translation>
+<translation id="3897092660631435901">メニュー</translation>
 <translation id="3905196214175737742">ホストの所有者ドメインが無効です。</translation>
 <translation id="3908017899227008678">ウィンドウに合わせて縮小</translation>
 <translation id="3931191050278863510">ホストが停止しました。</translation>
@@ -126,6 +128,7 @@ US英語以外のキーボードを使用しているリモートパソコンで
 <translation id="409800995205263688">注: ポリシー設定に基づき、接続が許可されるのはこのネットワーク内のパソコン間のみとなります。</translation>
 <translation id="4155497795971509630">必要なコンポーネントが見つかりません。インストールしているソフトウェアのバージョンが最新であることを確認し、もう一度お試しください。</translation>
 <translation id="4156740505453712750">このパソコンへのアクセスを保護するには、<ph name="BOLD_START" />6 桁以上<ph name="BOLD_END" />の PIN を選択してください。この PIN は別の場所から接続するときに必要となります。</translation>
+<translation id="4156741816461781891"><ph name="EMAIL_ADDRESS" /> としてログインしています。</translation>
 <translation id="4176825807642096119">アクセス コード</translation>
 <translation id="4207623512727273241">続行する前にインストーラを実行してください。</translation>
 <translation id="4227991223508142681">ユーティリティ プロビジョニングをホストします</translation>
@@ -166,7 +169,6 @@ US英語以外のキーボードを使用しているリモートパソコンで
 <translation id="5070121137485264635">リモート ホストで、サードパーティ ウェブサイトへの認証が求められています。続行するには、次のアドレスにアクセスできるように Chrome リモート デスクトップに追加の権限を与える必要があります:</translation>
 <translation id="507204348399810022"><ph name="HOSTNAME" /> へのリモート接続を無効にしてもよろしいですか？</translation>
 <translation id="5156271271724754543">両方のボックスに同じ PIN を入力してください。</translation>
-<translation id="5168917394043976756">操作パネルを開く</translation>
 <translation id="5170982930780719864">ホスト ID が無効です。</translation>
 <translation id="518094545883702183">この情報は、報告していただいた問題を診断する目的にのみ使用され、調査担当者のみに利用可能となります。この情報が 30 日間を過ぎて保持されることはありません。</translation>
 <translation id="5222676887888702881">ログアウト</translation>
@@ -209,10 +211,6 @@ US英語以外のキーボードを使用しているリモートパソコンで
 <translation id="6304318647555713317">クライアント</translation>
 <translation id="6381670701864002291">その他の問題。</translation>
 <translation id="6398765197997659313">全画面表示を終了</translation>
-<translation id="6408143143164565232">• Windows や Linux パソコンからの音声を聞き取る。
-• パソコン名を押し続けて不要な接続を削除。
-• ピンチしてズーム、2 本指スクロールの滑らかさが向上。
-• ヘルプとフィードバック画面の更新。</translation>
 <translation id="6441316101718669559">このプラットフォームでデスクトップの統合はサポートされていません。アプリケーションは引き続き使用できますが、ユーザー エクスペリエンスは低下します。</translation>
 <translation id="652218476070540101">このパソコン用の PIN を更新しています...</translation>
 <translation id="6527303717912515753">共有</translation>
@@ -225,6 +223,7 @@ US英語以外のキーボードを使用しているリモートパソコンで
 <translation id="6640610550128933069">前回のインターネット接続日: <ph name="DATE" /></translation>
 <translation id="6668065415969892472">PIN を更新しました。</translation>
 <translation id="6681800064886881394">Copyright 2013 Google Inc. All Rights Reserved.</translation>
+<translation id="6705482892455291412">クライアントがコードを入力すると、接続を許可してセッションの共有を開始するかどうかを確認するメッセージが表示されます。</translation>
 <translation id="6746493157771801606">履歴をクリア</translation>
 <translation id="6748108480210050150">From</translation>
 <translation id="677755392401385740">次のユーザーのホストを開始しました: <ph name="HOST_USERNAME" />。</translation>
@@ -301,6 +300,7 @@ US英語以外のキーボードを使用しているリモートパソコンで
 <translation id="9188433529406846933">承認</translation>
 <translation id="9213184081240281106">ホストの設定が無効です。</translation>
 <translation id="951991426597076286">同意しない</translation>
+<translation id="962733587145768554">処理を完了するには、接続ダイアログ ボックスで「<ph name="SHARE" />」を選択してください。</translation>
 <translation id="979100198331752041"><ph name="HOSTNAME" /> の Chrome リモート デスクトップは最新ではないため、更新する必要があります。</translation>
 <translation id="985602178874221306">Chromium 開発者</translation>
 <translation id="992215271654996353"><ph name="HOSTNAME" />（前回のオンライン接続: <ph name="DATE_OR_TIME" />）</translation>

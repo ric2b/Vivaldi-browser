@@ -6,6 +6,7 @@
 #define ASH_COMMON_SYSTEM_CHROMEOS_IME_MENU_IME_MENU_TRAY_H_
 
 #include "ash/ash_export.h"
+#include "ash/common/system/chromeos/virtual_keyboard/virtual_keyboard_observer.h"
 #include "ash/common/system/ime/ime_observer.h"
 #include "ash/common/system/tray/ime_info.h"
 #include "ash/common/system/tray/tray_background_view.h"
@@ -28,7 +29,8 @@ class WmWindow;
 class ASH_EXPORT ImeMenuTray : public TrayBackgroundView,
                                public IMEObserver,
                                public views::TrayBubbleView::Delegate,
-                               public keyboard::KeyboardControllerObserver {
+                               public keyboard::KeyboardControllerObserver,
+                               public VirtualKeyboardObserver {
  public:
   explicit ImeMenuTray(WmShelf* wm_shelf);
   ~ImeMenuTray() override;
@@ -46,6 +48,18 @@ class ASH_EXPORT ImeMenuTray : public TrayBackgroundView,
   // voice.
   void ShowKeyboardWithKeyset(const std::string& keyset);
 
+  // Returns true if it should block the auto hide behavior of the shelf.
+  bool ShouldBlockShelfAutoHide() const;
+
+  // Returns true if the menu should show emoji, handwriting and voice buttons
+  // on the bottom. Otherwise, the menu will show a 'Customize...' bottom row
+  // for non-MD UI, and a Settings button in the title row for MD.
+  bool ShouldShowEmojiHandwritingVoiceButtons() const;
+
+  // Returns whether the virtual keyboard toggle should be shown in shown in the
+  // opt-in IME menu.
+  bool ShouldShowKeyboardToggle() const;
+
   // TrayBackgroundView:
   void SetShelfAlignment(ShelfAlignment alignment) override;
   base::string16 GetAccessibleNameForTray() override;
@@ -62,9 +76,6 @@ class ASH_EXPORT ImeMenuTray : public TrayBackgroundView,
   void OnMouseEnteredView() override;
   void OnMouseExitedView() override;
   base::string16 GetAccessibleNameForBubble() override;
-  gfx::Rect GetAnchorRect(views::Widget* anchor_widget,
-                          AnchorType anchor_type,
-                          AnchorAlignment anchor_alignment) const override;
   void OnBeforeBubbleWidgetInit(
       views::Widget* anchor_widget,
       views::Widget* bubble_widget,
@@ -75,6 +86,9 @@ class ASH_EXPORT ImeMenuTray : public TrayBackgroundView,
   void OnKeyboardBoundsChanging(const gfx::Rect& new_bounds) override;
   void OnKeyboardClosed() override;
   void OnKeyboardHidden() override;
+
+  // VirtualKeyboardObserver:
+  void OnKeyboardSuppressionChanged(bool suppressed) override;
 
  private:
   // To allow the test class to access |label_|.
@@ -91,6 +105,8 @@ class ASH_EXPORT ImeMenuTray : public TrayBackgroundView,
   IMEInfo current_ime_;
   bool show_keyboard_;
   bool force_show_keyboard_;
+  bool should_block_shelf_auto_hide_;
+  bool keyboard_suppressed_;
 
   DISALLOW_COPY_AND_ASSIGN(ImeMenuTray);
 };

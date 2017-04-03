@@ -40,6 +40,8 @@ WebGLProgram::WebGLProgram(WebGLRenderingContextBase* ctx)
       m_linkStatus(false),
       m_linkCount(0),
       m_activeTransformFeedbackCount(0),
+      m_vertexShader(this, nullptr),
+      m_fragmentShader(this, nullptr),
       m_infoValid(true) {
   setObject(ctx->contextGL()->CreateProgram());
 }
@@ -160,6 +162,12 @@ DEFINE_TRACE(WebGLProgram) {
   visitor->trace(m_vertexShader);
   visitor->trace(m_fragmentShader);
   WebGLSharedPlatform3DObject::trace(visitor);
+}
+
+DEFINE_TRACE_WRAPPERS(WebGLProgram) {
+  visitor->traceWrappers(m_vertexShader);
+  visitor->traceWrappers(m_fragmentShader);
+  WebGLSharedPlatform3DObject::traceWrappers(visitor);
 }
 
 }  // namespace blink

@@ -17,8 +17,9 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "ipc/ipc_listener.h"
-#include "ipc/ipc_platform_file.h"
+#include "mojo/public/cpp/system/message_pipe.h"
 #include "remoting/host/client_session_control.h"
+#include "remoting/host/desktop_environment_options.h"
 #include "remoting/protocol/clipboard_stub.h"
 #include "third_party/webrtc/modules/desktop_capture/desktop_capturer.h"
 #include "third_party/webrtc/modules/desktop_capture/desktop_geometry.h"
@@ -70,7 +71,8 @@ class DesktopSessionAgent
       scoped_refptr<AutoThreadTaskRunner> audio_capture_task_runner,
       scoped_refptr<AutoThreadTaskRunner> caller_task_runner,
       scoped_refptr<AutoThreadTaskRunner> input_task_runner,
-      scoped_refptr<AutoThreadTaskRunner> io_task_runner);
+      scoped_refptr<AutoThreadTaskRunner> io_task_runner,
+      const DesktopEnvironmentOptions& options);
 
   // IPC::Listener implementation.
   bool OnMessageReceived(const IPC::Message& message) override;
@@ -94,10 +96,8 @@ class DesktopSessionAgent
   void ProcessAudioPacket(std::unique_ptr<AudioPacket> packet);
 
   // Creates desktop integration components and a connected IPC channel to be
-  // used to access them. The client end of the channel is returned in
-  // the variable pointed by |desktop_pipe_out|.
-  bool Start(const base::WeakPtr<Delegate>& delegate,
-             IPC::PlatformFileForTransit* desktop_pipe_out);
+  // used to access them. The client end of the channel is returned.
+  mojo::ScopedMessagePipeHandle Start(const base::WeakPtr<Delegate>& delegate);
 
   // Stops the agent asynchronously.
   void Stop();
@@ -179,10 +179,6 @@ class DesktopSessionAgent
   // IPC channel connecting the desktop process with the network process.
   std::unique_ptr<IPC::ChannelProxy> network_channel_;
 
-  // The client end of the network-to-desktop pipe. It is kept alive until
-  // the network process connects to the pipe.
-  base::File desktop_pipe_;
-
   // True if the desktop session agent has been started.
   bool started_ = false;
 
@@ -195,6 +191,8 @@ class DesktopSessionAgent
   // Keep reference to the last frame sent to make sure shared buffer is alive
   // before it's received.
   std::unique_ptr<webrtc::DesktopFrame> last_frame_;
+
+  DesktopEnvironmentOptions desktop_environment_options_;
 
   // Used to disable callbacks to |this|.
   base::WeakPtrFactory<DesktopSessionAgent> weak_factory_;

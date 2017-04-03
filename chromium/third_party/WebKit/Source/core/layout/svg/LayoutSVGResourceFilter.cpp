@@ -136,7 +136,7 @@ void LayoutSVGResourceFilter::primitiveAttributeChanged(
     // Issue paint invalidations for the image on the screen.
     markClientForInvalidation(filter.key, PaintInvalidation);
   }
-  markAllResourceClientsForInvalidation();
+  notifyContentChanged();
 }
 
 }  // namespace blink

@@ -1,10 +1,10 @@
-// Copyright 2015 Vivaldi Technologies AS. All rights reserved.
+// Copyright 2015-2016 Vivaldi Technologies AS. All rights reserved.
 
 #ifndef EXTENSIONS_API_EXTENSION_ACTION_EXTENSION_ACTION_UTILS_API_H_
 #define EXTENSIONS_API_EXTENSION_ACTION_EXTENSION_ACTION_UTILS_API_H_
 
-#include <string>
 #include <map>
+#include <string>
 
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observer.h"
@@ -16,9 +16,9 @@
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "chrome/browser/ui/toolbar/toolbar_action_view_delegate.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
+#include "extensions/browser/extension_icon_image.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_registry_observer.h"
-#include "extensions/browser/extension_icon_image.h"
 #include "extensions/schema/browser_action_utilities.h"
 
 namespace extensions {
@@ -45,7 +45,6 @@ class ExtensionActionUtilFactory : public BrowserContextKeyedServiceFactory {
   content::BrowserContext* GetBrowserContextToUse(
       content::BrowserContext* context) const override;
 };
-
 
 // A class observing being an observer on ExtensionActionAPI
 
@@ -79,7 +78,6 @@ class ExtensionActionUtil
   content::WebContents* current_webcontents_ = nullptr;
 
  public:
-
   static void BroadcastEvent(const std::string& eventname,
                              std::unique_ptr<base::ListValue> args,
                              content::BrowserContext* context);
@@ -91,9 +89,8 @@ class ExtensionActionUtil
       content::BrowserContext* browser_context) override;
 
   // Called when there is a change to the extension action's visibility.
-  void OnExtensionActionVisibilityChanged(
-      const std::string& extension_id,
-      bool is_now_visible) override;
+  void OnExtensionActionVisibilityChanged(const std::string& extension_id,
+                                          bool is_now_visible) override;
 
   // Called when the page actions have been refreshed do to a possible change
   // in count or visibility.
@@ -108,7 +105,7 @@ class ExtensionActionUtil
                               const extensions::Extension* extension,
                               extensions::UninstallReason reason) override;
   void OnExtensionLoaded(content::BrowserContext* browser_context,
-                          const extensions::Extension* extension) override;
+                         const extensions::Extension* extension) override;
   void OnExtensionUnloaded(
       content::BrowserContext* browser_context,
       const extensions::Extension* extension,
@@ -150,11 +147,16 @@ class ExtensionActionUtil
       Profile* profile);
 
   static bool FillInfoFromComponentExtension(
-      const std::string *action_id,
-      vivaldi::extension_action_utils::ExtensionInfo &info, Profile* profile);
+      const std::string* action_id,
+      vivaldi::extension_action_utils::ExtensionInfo& info,
+      Profile* profile);
+
+  static void FillInfoFromManifest(
+      vivaldi::extension_action_utils::ExtensionInfo& info,
+      const Extension* extension);
 
   static bool GetWindowIdFromExtData(const std::string& extdata,
-                              std::string& windowId);
+                                     std::string& windowId);
 
   // Encodes the passed bitmap as a PNG represented as a dataurl.
   static std::string* EncodeBitmapToPng(const SkBitmap* bitmap);
@@ -163,7 +165,7 @@ class ExtensionActionUtil
     return component_extension_actions_;
   }
 
-  void set_current_webcontents(content::WebContents *contents) {
+  void set_current_webcontents(content::WebContents* contents) {
     current_webcontents_ = contents;
   }
 
@@ -187,6 +189,7 @@ class ExtensionActionUtilsGetToolbarExtensionsFunction
 
   // ExtensionFunction:
   bool RunAsync() override;
+  DISALLOW_COPY_AND_ASSIGN(ExtensionActionUtilsGetToolbarExtensionsFunction);
 };
 
 class ExtensionActionUtilsExecuteExtensionActionFunction
@@ -201,6 +204,8 @@ class ExtensionActionUtilsExecuteExtensionActionFunction
 
   // ExtensionFunction:
   bool RunAsync() override;
+
+  DISALLOW_COPY_AND_ASSIGN(ExtensionActionUtilsExecuteExtensionActionFunction);
 };
 
 class ExtensionActionUtilsToggleBrowserActionVisibilityFunction
@@ -216,6 +221,25 @@ class ExtensionActionUtilsToggleBrowserActionVisibilityFunction
 
   // ExtensionFunction:
   bool RunAsync() override;
+
+  DISALLOW_COPY_AND_ASSIGN(
+      ExtensionActionUtilsToggleBrowserActionVisibilityFunction);
+};
+
+class ExtensionActionUtilsRemoveExtensionFunction
+    : public ChromeAsyncExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("extensionActionUtils.removeExtension",
+                             GETTOOLBAR_EXTENSIONS)
+  ExtensionActionUtilsRemoveExtensionFunction();
+
+ protected:
+  ~ExtensionActionUtilsRemoveExtensionFunction() override;
+
+  // ExtensionFunction:
+  bool RunAsync() override;
+
+  DISALLOW_COPY_AND_ASSIGN(ExtensionActionUtilsRemoveExtensionFunction);
 };
 
 }  // namespace extensions

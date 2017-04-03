@@ -13,10 +13,12 @@
 #include "base/callback.h"
 #include "base/macros.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
-#include "services/shell/public/cpp/connection.h"
-#include "services/shell/public/cpp/interface_factory.h"
+#include "services/service_manager/public/cpp/connection.h"
+#include "services/service_manager/public/cpp/interface_factory.h"
 #include "services/ui/display/platform_screen.h"
+#include "services/ui/display/viewport_metrics.h"
 #include "services/ui/public/interfaces/display/display_controller.mojom.h"
+#include "services/ui/public/interfaces/display/test_display_controller.mojom.h"
 #include "ui/display/chromeos/display_configurator.h"
 #include "ui/display/display.h"
 #include "ui/display/types/fake_display_controller.h"
@@ -28,32 +30,51 @@ namespace display {
 class PlatformScreenOzone
     : public PlatformScreen,
       public ui::DisplayConfigurator::Observer,
-      public shell::InterfaceFactory<mojom::DisplayController>,
-      public mojom::DisplayController {
+      public ui::DisplayConfigurator::StateController,
+      public service_manager::InterfaceFactory<mojom::DisplayController>,
+      public service_manager::InterfaceFactory<mojom::TestDisplayController>,
+      public mojom::DisplayController,
+      public mojom::TestDisplayController {
  public:
   PlatformScreenOzone();
   ~PlatformScreenOzone() override;
 
   // PlatformScreen:
-  void AddInterfaces(shell::InterfaceRegistry* registry) override;
+  void AddInterfaces(service_manager::InterfaceRegistry* registry) override;
   void Init(PlatformScreenDelegate* delegate) override;
   void RequestCloseDisplay(int64_t display_id) override;
   int64_t GetPrimaryDisplayId() const override;
 
+  // mojom::TestDisplayController:
+  void ToggleAddRemoveDisplay() override;
+  void ToggleDisplayResolution() override;
+
   // mojom::DisplayController:
-  void ToggleVirtualDisplay() override;
+  void SwapPrimaryDisplay() override;
+  void SetDisplayWorkArea(int64_t display_id,
+                          const gfx::Size& size,
+                          const gfx::Insets& insets) override;
 
  private:
+  friend class PlatformScreenOzoneTest;
+
   // TODO(kylechar): This struct is just temporary until we migrate
   // DisplayManager code out of ash so it can be used here.
   struct DisplayInfo {
+    DisplayInfo();
+    DisplayInfo(const DisplayInfo& other);
+    ~DisplayInfo();
+
     int64_t id = Display::kInvalidDisplayID;
-    // The display bounds in DIP.
-    gfx::Rect bounds;
-    // Display size in DDP.
-    gfx::Size pixel_size;
-    // The display device pixel scale factor, either 1 or 2.
-    float device_scale_factor = 1.0f;
+    // Information about display viewport.
+    ViewportMetrics metrics;
+    // Last insets received from WM.
+    gfx::Insets last_work_area_insets;
+
+    // Temporary hack to allow changing display resolution.
+    std::vector<gfx::Size> supported_sizes;
+    gfx::Size requested_size;
+
     // The display bounds have been modified and delegate should be updated.
     bool modified = false;
     // The display has been removed and delegate should be updated.
@@ -91,8 +112,9 @@ class PlatformScreenOzone
   // iterator if there is no display with that id.
   CachedDisplayIterator GetCachedDisplayIterator(int64_t display_id);
 
-  // Converts |snapshot| into a DisplayInfo.
-  DisplayInfo DisplayInfoFromSnapshot(const ui::DisplaySnapshot& snapshot);
+  // Converts |snapshot| into ViewportMetrics.
+  ViewportMetrics MetricsFromSnapshot(const ui::DisplaySnapshot& snapshot,
+                                      const gfx::Point& origin);
 
   // ui::DisplayConfigurator::Observer:
   void OnDisplayModeChanged(
@@ -101,9 +123,20 @@ class PlatformScreenOzone
       const ui::DisplayConfigurator::DisplayStateList& displays,
       ui::MultipleDisplayState failed_new_state) override;
 
+  // ui::DisplayConfigurator::StateController:
+  ui::MultipleDisplayState GetStateForDisplayIds(
+      const ui::DisplayConfigurator::DisplayStateList& display_states)
+      const override;
+  bool GetResolutionForDisplayId(int64_t display_id,
+                                 gfx::Size* size) const override;
+
   // mojo::InterfaceFactory<mojom::DisplayController>:
-  void Create(const shell::Identity& remote_identity,
+  void Create(const service_manager::Identity& remote_identity,
               mojom::DisplayControllerRequest request) override;
+
+  // mojo::InterfaceFactory<mojom::TestDisplayController>:
+  void Create(const service_manager::Identity& remote_identity,
+              mojom::TestDisplayControllerRequest request) override;
 
   ui::DisplayConfigurator display_configurator_;
   PlatformScreenDelegate* delegate_ = nullptr;
@@ -121,7 +154,8 @@ class PlatformScreenOzone
   std::vector<DisplayInfo> cached_displays_;
   gfx::Point next_display_origin_;
 
-  mojo::BindingSet<mojom::DisplayController> bindings_;
+  mojo::BindingSet<mojom::DisplayController> controller_bindings_;
+  mojo::BindingSet<mojom::TestDisplayController> test_bindings_;
 
   DISALLOW_COPY_AND_ASSIGN(PlatformScreenOzone);
 };

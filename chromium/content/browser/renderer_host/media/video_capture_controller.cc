@@ -95,11 +95,11 @@ class VideoFrameReceiverOnIOThread : public media::VideoFrameReceiver {
 
   void OnIncomingCapturedVideoFrame(
       std::unique_ptr<media::VideoCaptureDevice::Client::Buffer> buffer,
-      const scoped_refptr<media::VideoFrame>& frame) override {
+      scoped_refptr<media::VideoFrame> frame) override {
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
         base::Bind(&VideoFrameReceiver::OnIncomingCapturedVideoFrame, receiver_,
-                   base::Passed(&buffer), frame));
+                   base::Passed(&buffer), std::move(frame)));
   }
 
   void OnError() override {
@@ -129,12 +129,10 @@ class VideoFrameReceiverOnIOThread : public media::VideoFrameReceiver {
 struct VideoCaptureController::ControllerClient {
   ControllerClient(VideoCaptureControllerID id,
                    VideoCaptureControllerEventHandler* handler,
-                   base::ProcessHandle render_process,
                    media::VideoCaptureSessionId session_id,
                    const media::VideoCaptureParams& params)
       : controller_id(id),
         event_handler(handler),
-        render_process_handle(render_process),
         session_id(session_id),
         parameters(params),
         session_closed(false),
@@ -146,8 +144,6 @@ struct VideoCaptureController::ControllerClient {
   const VideoCaptureControllerID controller_id;
   VideoCaptureControllerEventHandler* const event_handler;
 
-  // Handle to the render process that will receive the capture buffers.
-  const base::ProcessHandle render_process_handle;
   const media::VideoCaptureSessionId session_id;
   const media::VideoCaptureParams parameters;
 
@@ -206,7 +202,6 @@ VideoCaptureController::NewDeviceClient() {
 void VideoCaptureController::AddClient(
     VideoCaptureControllerID id,
     VideoCaptureControllerEventHandler* event_handler,
-    base::ProcessHandle render_process,
     media::VideoCaptureSessionId session_id,
     const media::VideoCaptureParams& params) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
@@ -218,10 +213,9 @@ void VideoCaptureController::AddClient(
   // Check that requested VideoCaptureParams are valid and supported.  If not,
   // report an error immediately and punt.
   if (!params.IsValid() ||
-      params.requested_format.pixel_format != media::PIXEL_FORMAT_I420 ||
-      (params.requested_format.pixel_storage != media::PIXEL_STORAGE_CPU &&
-       params.requested_format.pixel_storage !=
-           media::PIXEL_STORAGE_GPUMEMORYBUFFER)) {
+      !(params.requested_format.pixel_format == media::PIXEL_FORMAT_I420 ||
+        params.requested_format.pixel_format == media::PIXEL_FORMAT_Y16) ||
+      params.requested_format.pixel_storage != media::PIXEL_STORAGE_CPU) {
     // Crash in debug builds since the renderer should not have asked for
     // invalid or unsupported parameters.
     LOG(DFATAL) << "Invalid or unsupported video capture parameters requested: "
@@ -244,8 +238,8 @@ void VideoCaptureController::AddClient(
   if (FindClient(id, event_handler, controller_clients_))
     return;
 
-  std::unique_ptr<ControllerClient> client = base::MakeUnique<ControllerClient>(
-      id, event_handler, render_process, session_id, params);
+  std::unique_ptr<ControllerClient> client =
+      base::MakeUnique<ControllerClient>(id, event_handler, session_id, params);
   // If we already have gotten frame_info from the device, repeat it to the new
   // client.
   if (state_ == VIDEO_CAPTURE_STATE_STARTED) {
@@ -408,7 +402,7 @@ VideoCaptureController::~VideoCaptureController() {
 
 void VideoCaptureController::OnIncomingCapturedVideoFrame(
     std::unique_ptr<media::VideoCaptureDevice::Client::Buffer> buffer,
-    const scoped_refptr<VideoFrame>& frame) {
+    scoped_refptr<VideoFrame> frame) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   const int buffer_id = buffer->id();
   DCHECK_NE(buffer_id, media::VideoCaptureBufferPool::kInvalidId);
@@ -423,15 +417,14 @@ void VideoCaptureController::OnIncomingCapturedVideoFrame(
         new base::DictionaryValue());
     frame->metadata()->MergeInternalValuesInto(metadata.get());
 
-    // Only I420 pixel format is currently supported.
-    DCHECK_EQ(frame->format(), media::PIXEL_FORMAT_I420)
+    // Only I420 and Y16 pixel formats are currently supported.
+    DCHECK(frame->format() == media::PIXEL_FORMAT_I420 ||
+           frame->format() == media::PIXEL_FORMAT_Y16)
         << "Unsupported pixel format: "
         << media::VideoPixelFormatToString(frame->format());
 
     // Sanity-checks to confirm |frame| is actually being backed by |buffer|.
-    DCHECK(frame->storage_type() == media::VideoFrame::STORAGE_SHMEM ||
-           (frame->storage_type() ==
-                media::VideoFrame::STORAGE_GPU_MEMORY_BUFFERS));
+    DCHECK(frame->storage_type() == media::VideoFrame::STORAGE_SHMEM);
     DCHECK(frame->data(media::VideoFrame::kYPlane) >= buffer->data(0) &&
            (frame->data(media::VideoFrame::kYPlane) <
             (reinterpret_cast<const uint8_t*>(buffer->data(0)) +
@@ -512,35 +505,14 @@ void VideoCaptureController::DoNewBufferOnIOThread(
     media::VideoCaptureDevice::Client::Buffer* buffer,
     const scoped_refptr<media::VideoFrame>& frame) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  const int buffer_id = buffer->id();
+  DCHECK_EQ(media::VideoFrame::STORAGE_SHMEM, frame->storage_type());
 
-  switch (frame->storage_type()) {
-    case media::VideoFrame::STORAGE_GPU_MEMORY_BUFFERS: {
-      std::vector<gfx::GpuMemoryBufferHandle> handles;
-      const size_t num_planes = media::VideoFrame::NumPlanes(frame->format());
-      for (size_t i = 0; i < num_planes; ++i) {
-        gfx::GpuMemoryBufferHandle remote_handle;
-        buffer_pool_->ShareToProcess2(
-            buffer_id, i, client->render_process_handle, &remote_handle);
-        handles.push_back(remote_handle);
-      }
-      client->event_handler->OnBufferCreated2(client->controller_id, handles,
-                                              buffer->dimensions(), buffer_id);
-      break;
-    }
-    case media::VideoFrame::STORAGE_SHMEM: {
-      base::SharedMemoryHandle remote_handle;
-      buffer_pool_->ShareToProcess(buffer_id, client->render_process_handle,
-                                   &remote_handle);
-      client->event_handler->OnBufferCreated(
-          client->controller_id, remote_handle, buffer->mapped_size(),
-          buffer_id);
-      break;
-    }
-    default:
-      NOTREACHED();
-      break;
-  }
+  const int buffer_id = buffer->id();
+  mojo::ScopedSharedBufferHandle handle =
+      buffer_pool_->GetHandleForTransit(buffer_id);
+  client->event_handler->OnBufferCreated(client->controller_id,
+                                         std::move(handle),
+                                         buffer->mapped_size(), buffer_id);
 }
 
 VideoCaptureController::ControllerClient* VideoCaptureController::FindClient(

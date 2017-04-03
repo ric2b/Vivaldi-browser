@@ -32,6 +32,10 @@
 #include "extensions/test/extension_test_message_listener.h"
 #include "ppapi/shared_impl/test_utils.h"
 
+#if defined(OS_MACOSX)
+#include "base/mac/mac_util.h"
+#endif
+
 using content::RenderViewHost;
 
 // This macro finesses macro expansion to do what we want.
@@ -78,7 +82,7 @@ using content::RenderViewHost;
 #else
 
 #define MAYBE_PPAPI_NACL(test_name) test_name
-#if defined (OS_WIN)
+#if defined (OS_WIN) || defined(ADDRESS_SANITIZER)
 // http://crbug.com/633067
 #define MAYBE_PPAPI_PNACL(test_name) DISABLED_##test_name
 #else
@@ -1295,6 +1299,10 @@ class NonSfiPackagedAppTest : public PackagedAppTest {
 // back.
 IN_PROC_BROWSER_TEST_F(NewlibPackagedAppTest,
                        MAYBE_PPAPI_NACL(SuccessfulLoad)) {
+#if defined(OS_MACOSX)
+  if (base::mac::IsOS10_10() || base::mac::IsOS10_11())
+    return;  // Fails when swarmed. http://crbug.com/660582
+#endif
   RunTests("packaged_app");
 }
 

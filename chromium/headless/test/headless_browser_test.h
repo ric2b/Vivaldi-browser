@@ -9,8 +9,8 @@
 #include <string>
 
 #include "content/public/test/browser_test_base.h"
-#include "headless/public/domains/network.h"
-#include "headless/public/domains/page.h"
+#include "headless/public/devtools/domains/network.h"
+#include "headless/public/devtools/domains/page.h"
 #include "headless/public/headless_browser.h"
 #include "headless/public/headless_web_contents.h"
 
@@ -79,6 +79,10 @@ class HeadlessBrowserTest : public content::BrowserTestBase {
  protected:
   // Returns the browser for the test.
   HeadlessBrowser* browser() const;
+
+  // Returns the options used by the browser. Modify with caution, since some
+  // options only take effect if they were set before browser creation.
+  HeadlessBrowser::Options* options() const;
 
  private:
   std::unique_ptr<base::RunLoop> run_loop_;

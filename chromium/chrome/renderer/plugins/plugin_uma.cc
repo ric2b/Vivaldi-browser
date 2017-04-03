@@ -8,7 +8,7 @@
 #include <cstring>
 
 #include "base/macros.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
 #include "content/public/common/content_constants.h"
 #include "third_party/widevine/cdm/widevine_cdm_common.h"
@@ -179,7 +179,7 @@ PluginUMAReporter::PluginType PluginUMAReporter::MimeTypeToPluginType(
     return SHOCKWAVE_FLASH;
   }
 
-#if defined(ENABLE_PEPPER_CDMS)
+#if BUILDFLAG(ENABLE_PEPPER_CDMS)
   if (mime_type == kWidevineCdmPluginMimeType)
     return WIDEVINE_CDM;
 #endif

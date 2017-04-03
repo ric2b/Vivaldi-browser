@@ -9,18 +9,19 @@
 
 #include <map>
 #include <memory>
+#include <set>
 #include <string>
 #include <vector>
 
 #include "base/macros.h"
-#include "services/shell/public/cpp/identity.h"
+#include "services/service_manager/public/cpp/identity.h"
 #include "services/ui/public/cpp/window_tree_client_delegate.h"
 #include "ui/base/dragdrop/os_exchange_data_provider_factory.h"
 #include "ui/views/mus/mus_export.h"
 #include "ui/views/mus/screen_mus_delegate.h"
 #include "ui/views/widget/widget.h"
 
-namespace shell {
+namespace service_manager {
 class Connector;
 }
 
@@ -29,14 +30,16 @@ class GpuService;
 }
 
 namespace views {
-class ClipboardMus;
 class NativeWidget;
-class PointerWatcher;
 class PointerWatcherEventRouter;
 class ScreenMus;
 class SurfaceContextFactory;
 namespace internal {
 class NativeWidgetDelegate;
+}
+
+namespace test {
+class WindowManagerConnectionTestApi;
 }
 
 // Provides configuration to mus in views. This consists of the following:
@@ -58,8 +61,8 @@ class VIEWS_MUS_EXPORT WindowManagerConnection
   // |io_task_runner| is used by the gpu service. If no task runner is provided,
   // then a new thread is created and used by ui::GpuService.
   static std::unique_ptr<WindowManagerConnection> Create(
-      shell::Connector* connector,
-      const shell::Identity& identity,
+      service_manager::Connector* connector,
+      const service_manager::Identity& identity,
       scoped_refptr<base::SingleThreadTaskRunner> io_task_runner = nullptr);
   static WindowManagerConnection* Get();
   static bool Exists();
@@ -67,11 +70,11 @@ class VIEWS_MUS_EXPORT WindowManagerConnection
   PointerWatcherEventRouter* pointer_watcher_event_router() {
     return pointer_watcher_event_router_.get();
   }
-  shell::Connector* connector() { return connector_; }
+  service_manager::Connector* connector() { return connector_; }
   ui::GpuService* gpu_service() { return gpu_service_.get(); }
   ui::WindowTreeClient* client() { return client_.get(); }
 
-  ui::Window* NewWindow(
+  ui::Window* NewTopLevelWindow(
       const std::map<std::string, std::vector<uint8_t>>& properties);
 
   NativeWidget* CreateNativeWidgetMus(
@@ -82,10 +85,15 @@ class VIEWS_MUS_EXPORT WindowManagerConnection
   const std::set<ui::Window*>& GetRoots() const;
 
  private:
+  friend class test::WindowManagerConnectionTestApi;
+
   WindowManagerConnection(
-      shell::Connector* connector,
-      const shell::Identity& identity,
+      service_manager::Connector* connector,
+      const service_manager::Identity& identity,
       scoped_refptr<base::SingleThreadTaskRunner> task_runner);
+
+  // Exposed for tests.
+  ui::Window* GetUiWindowAtScreenPoint(const gfx::Point& point);
 
   // ui::WindowTreeClientDelegate:
   void OnEmbed(ui::Window* root) override;
@@ -97,12 +105,13 @@ class VIEWS_MUS_EXPORT WindowManagerConnection
   // ScreenMusDelegate:
   void OnWindowManagerFrameValuesChanged() override;
   gfx::Point GetCursorScreenPoint() override;
+  aura::Window* GetWindowAtScreenPoint(const gfx::Point& point) override;
 
   // ui:OSExchangeDataProviderFactory::Factory:
   std::unique_ptr<OSExchangeData::Provider> BuildProvider() override;
 
-  shell::Connector* connector_;
-  shell::Identity identity_;
+  service_manager::Connector* connector_;
+  service_manager::Identity identity_;
   std::unique_ptr<ScreenMus> screen_;
   std::unique_ptr<ui::WindowTreeClient> client_;
   std::unique_ptr<ui::GpuService> gpu_service_;

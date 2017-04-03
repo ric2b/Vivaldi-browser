@@ -30,10 +30,6 @@ std::string GetLastChange() {
   return LAST_CHANGE;
 }
 
-std::string VivaldiLastChange() {
-  return LAST_CHANGE_VIVALDI;
-}
-
 bool IsOfficialBuild() {
   return IS_OFFICIAL_BUILD;
 }

@@ -243,7 +243,9 @@ void DownloadController::OnDownloadStarted(
 
   ChromeDownloadDelegate* delegate =
       ChromeDownloadDelegate::FromWebContents(web_contents);
-  if (delegate) {
+  // For dangerous item, we need to show the dangerous infobar before the
+  // download can start.
+  if (!download_item->IsDangerous() && delegate) {
     delegate->OnDownloadStarted(
         download_item->GetTargetFilePath().BaseName().value());
   }
@@ -270,8 +272,10 @@ void DownloadController::OnDownloadUpdated(DownloadItem* item) {
       ConvertUTF8ToJavaString(env, item->GetTargetFilePath().value());
   ScopedJavaLocalRef<jstring> jfilename = ConvertUTF8ToJavaString(
       env, item->GetTargetFilePath().BaseName().value());
+  std::string original_url = item->GetOriginalUrl().SchemeIs(url::kDataScheme)
+        ? std::string() : item->GetOriginalUrl().spec();
   ScopedJavaLocalRef<jstring> joriginal_url =
-      ConvertUTF8ToJavaString(env, item->GetOriginalUrl().spec());
+      ConvertUTF8ToJavaString(env, original_url);
   ScopedJavaLocalRef<jstring> jreferrer_url =
       ConvertUTF8ToJavaString(env, item->GetReferrerUrl().spec());
 

@@ -36,6 +36,7 @@
 #include "WebDOMMessageEvent.h"
 #include "WebDataSource.h"
 #include "WebFileChooserParams.h"
+#include "WebFormElement.h"
 #include "WebFrame.h"
 #include "WebFrameOwnerProperties.h"
 #include "WebHistoryCommitType.h"
@@ -67,9 +68,9 @@ namespace blink {
 
 enum class WebTreeScopeType;
 class InterfaceProvider;
+class InterfaceRegistry;
 class WebApplicationCacheHost;
 class WebApplicationCacheHostClient;
-class WebAppBannerClient;
 class WebBluetooth;
 class WebColorChooser;
 class WebColorChooserClient;
@@ -81,7 +82,6 @@ class WebEncryptedMediaClient;
 class WebExternalPopupMenu;
 class WebExternalPopupMenuClient;
 class WebFileChooserCompletion;
-class WebFormElement;
 class WebInstalledAppClient;
 class WebLocalFrame;
 class WebMediaPlayer;
@@ -289,6 +289,7 @@ class BLINK_EXPORT WebFrameClient {
     bool replacesCurrentHistoryItem;
     bool isHistoryNavigationInNewChildFrame;
     bool isClientRedirect;
+    WebFormElement form;
 
     NavigationPolicyInfo(WebURLRequest& urlRequest)
         : extraData(nullptr),
@@ -337,8 +338,7 @@ class BLINK_EXPORT WebFrameClient {
   virtual void didCreateDataSource(WebLocalFrame*, WebDataSource*) {}
 
   // A new provisional load has been started.
-  virtual void didStartProvisionalLoad(WebLocalFrame* localFrame,
-                                       double triggeringEventTime) {}
+  virtual void didStartProvisionalLoad(WebLocalFrame* localFrame) {}
 
   // The provisional load was redirected via a HTTP 3xx response.
   virtual void didReceiveServerRedirectForProvisionalLoad(WebLocalFrame*) {}
@@ -704,9 +704,6 @@ class BLINK_EXPORT WebFrameClient {
                                                 SuddenTerminationDisablerType) {
   }
 
-  // App Banners ---------------------------------------------------------
-  virtual WebAppBannerClient* appBannerClient() { return 0; }
-
   // Navigator Content Utils  --------------------------------------------
 
   // Registers a new URL handler for the given protocol.
@@ -745,6 +742,7 @@ class BLINK_EXPORT WebFrameClient {
 
   // Mojo ----------------------------------------------------------------
   virtual InterfaceProvider* interfaceProvider() { return nullptr; }
+  virtual InterfaceRegistry* interfaceRegistry() { return nullptr; }
 
   // Visibility ----------------------------------------------------------
 

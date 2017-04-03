@@ -49,11 +49,9 @@
 #include "core/css/PseudoStyleRequest.h"
 #include "core/dom/Document.h"
 #include "core/dom/shadow/ShadowRoot.h"
-#include "core/frame/DeprecatedScheduleStyleRecalcDuringLayout.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
-#include "core/html/HTMLFrameElement.h"
 #include "core/layout/FragmentainerIterator.h"
 #include "core/layout/HitTestRequest.h"
 #include "core/layout/HitTestResult.h"
@@ -82,11 +80,8 @@
 #include "platform/geometry/TransformState.h"
 #include "platform/graphics/CompositorFilterOperations.h"
 #include "platform/graphics/filters/Filter.h"
-#include "platform/graphics/filters/SkiaImageFilterBuilder.h"
 #include "platform/tracing/TraceEvent.h"
-#include "platform/transforms/ScaleTransformOperation.h"
 #include "platform/transforms/TransformationMatrix.h"
-#include "platform/transforms/TranslateTransformOperation.h"
 #include "wtf/PtrUtil.h"
 #include "wtf/StdLibExtras.h"
 #include "wtf/allocator/Partitions.h"
@@ -101,14 +96,10 @@ static CompositingQueryMode gCompositingQueryMode =
 
 struct SameSizeAsPaintLayer : DisplayItemClient {
   int bitFields;
-  void* pointers[10];
+  void* pointers[11];
   LayoutUnit layoutUnits[4];
   IntSize size;
   Persistent<PaintLayerScrollableArea> scrollableArea;
-  struct {
-    IntRect rect;
-    void* pointers[2];
-  } ancestorCompositingInputs;
   struct {
     IntSize size;
     void* pointer;
@@ -118,6 +109,10 @@ struct SameSizeAsPaintLayer : DisplayItemClient {
 
 static_assert(sizeof(PaintLayer) == sizeof(SameSizeAsPaintLayer),
               "PaintLayer should stay small");
+
+bool isReferenceClipPath(const ClipPathOperation* clipOperation) {
+  return clipOperation && clipOperation->type() == ClipPathOperation::REFERENCE;
+}
 
 }  // namespace
 
@@ -140,7 +135,7 @@ PaintLayer::PaintLayer(LayoutBoxModelObject* layoutObject)
       m_hasVisibleContent(false),
       m_isVisibleDescendantDirty(false),
       m_hasVisibleDescendant(false),
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
       m_needsPositionUpdate(true),
 #endif
       m_is3DTransformedDescendantDirty(true),
@@ -154,7 +149,7 @@ PaintLayer::PaintLayer(LayoutBoxModelObject* layoutObject)
       m_shouldIsolateCompositedDescendants(false),
       m_lostGroupedMapping(false),
       m_needsRepaint(false),
-      m_previousPaintResult(PaintLayerPainter::FullyPainted),
+      m_previousPaintResult(FullyPainted),
       m_needsPaintPhaseDescendantOutlines(false),
       m_previousPaintPhaseDescendantOutlinesWasEmpty(false),
       m_needsPaintPhaseFloat(false),
@@ -188,8 +183,16 @@ PaintLayer::PaintLayer(LayoutBoxModelObject* layoutObject)
 }
 
 PaintLayer::~PaintLayer() {
-  if (m_rareData && m_rareData->filterInfo)
-    m_rareData->filterInfo->clearLayer();
+  if (m_rareData && m_rareData->resourceInfo) {
+    const ComputedStyle& style = layoutObject()->styleRef();
+    if (style.hasFilter())
+      style.filter().removeClient(m_rareData->resourceInfo);
+    if (isReferenceClipPath(style.clipPath())) {
+      toReferenceClipPathOperation(style.clipPath())
+          ->removeClient(m_rareData->resourceInfo);
+    }
+    m_rareData->resourceInfo->clearLayer();
+  }
   if (layoutObject()->frame() && layoutObject()->frame()->page()) {
     if (ScrollingCoordinator* scrollingCoordinator =
             layoutObject()->frame()->page()->scrollingCoordinator())
@@ -318,7 +321,7 @@ void PaintLayer::updateLayerPositionRecursive() {
 }
 
 void PaintLayer::updateHasSelfPaintingLayerDescendant() const {
-  ASSERT(m_hasSelfPaintingLayerDescendantDirty);
+  DCHECK(m_hasSelfPaintingLayerDescendantDirty);
 
   m_hasSelfPaintingLayerDescendant = false;
 
@@ -340,7 +343,7 @@ void PaintLayer::dirtyAncestorChainHasSelfPaintingLayerDescendantStatus() {
     // a self-painting descendant in this case, there is no need to dirty our
     // ancestors further.
     if (layer->isSelfPaintingLayer()) {
-      ASSERT(!parent() || parent()->m_hasSelfPaintingLayerDescendantDirty ||
+      DCHECK(!parent() || parent()->m_hasSelfPaintingLayerDescendantDirty ||
              parent()->m_hasSelfPaintingLayerDescendant);
       break;
     }
@@ -395,7 +398,7 @@ void PaintLayer::updateLayerPositionsAfterScrollRecursive(
 void PaintLayer::updateTransformationMatrix() {
   if (TransformationMatrix* transform = this->transform()) {
     LayoutBox* box = layoutBox();
-    ASSERT(box);
+    DCHECK(box);
     transform->makeIdentity();
     box->style()->applyTransform(
         *transform, box->size(), ComputedStyle::IncludeTransformOrigin,
@@ -506,7 +509,7 @@ void PaintLayer::convertFromFlowThreadToVisualBoundingBoxInAncestor(
     const PaintLayer* ancestorLayer,
     LayoutRect& rect) const {
   PaintLayer* paginationLayer = enclosingPaginationLayer();
-  ASSERT(paginationLayer);
+  DCHECK(paginationLayer);
   LayoutFlowThread* flowThread =
       toLayoutFlowThread(paginationLayer->layoutObject());
 
@@ -622,11 +625,11 @@ void PaintLayer::mapRectToPaintInvalidationBacking(
     return;
   }
 
-  // This code adjusts the paint invalidation rectangle to be in the space of
-  // the transformed ancestor of the grouped (i.e. squashed) layer. This is
-  // because all layers that squash together need to issue paint invalidations
-  // w.r.t. a single container that is an ancestor of all of them, in order to
-  // properly take into account any local transforms etc.
+  // This code adjusts the visual rect to be in the space of the transformed
+  // ancestor of the grouped (i.e. squashed) layer. This is because all layers
+  // that squash together need to issue paint invalidations w.r.t. a single
+  // container that is an ancestor of all of them, in order to properly take
+  // into account any local transforms etc.
   // FIXME: remove this special-case code that works around the paint
   // invalidation code structure.
   layoutObject.mapToVisualRectInAncestorSpace(&paintInvalidationContainer,
@@ -800,12 +803,15 @@ bool PaintLayer::update3DTransformedDescendantStatus() {
 void PaintLayer::updateLayerPosition() {
   LayoutPoint localPoint;
 
+  bool didResize = false;
   if (layoutObject()->isInline() && layoutObject()->isLayoutInline()) {
     LayoutInline* inlineFlow = toLayoutInline(layoutObject());
     IntRect lineBox = enclosingIntRect(inlineFlow->linesBoundingBox());
     m_size = lineBox.size();
   } else if (LayoutBox* box = layoutBox()) {
-    m_size = pixelSnappedIntSize(box->size(), box->location());
+    IntSize newSize = pixelSnappedIntSize(box->size(), box->location());
+    didResize = newSize != m_size;
+    m_size = newSize;
     localPoint.moveBy(box->topLeftLocation());
   }
 
@@ -861,12 +867,12 @@ void PaintLayer::updateLayerPosition() {
     m_rareData->offsetForInFlowPosition = LayoutSize();
   }
 
-  if (m_location != localPoint) {
-    setNeedsRepaint();
-  }
   m_location = localPoint;
 
-#if ENABLE(ASSERT)
+  if (m_scrollableArea && didResize)
+    m_scrollableArea->visibleSizeChanged();
+
+#if DCHECK_IS_ON()
   m_needsPositionUpdate = false;
 #endif
 }
@@ -902,7 +908,7 @@ PaintLayer* PaintLayer::containingLayerForOutOfFlowPositioned(
     bool* skippedAncestor) const {
   // If we have specified an ancestor, surely the caller needs to know whether
   // we skipped it.
-  ASSERT(!ancestor || skippedAncestor);
+  DCHECK(!ancestor || skippedAncestor);
   if (skippedAncestor)
     *skippedAncestor = false;
   if (layoutObject()->style()->position() == FixedPosition) {
@@ -963,7 +969,7 @@ bool PaintLayer::isPaintInvalidationContainer() const {
 // parented to the compositing ancestor of the squashed layer.
 PaintLayer* PaintLayer::enclosingLayerWithCompositedLayerMapping(
     IncludeSelfOrNot includeSelf) const {
-  ASSERT(isAllowedToQueryCompositingState());
+  DCHECK(isAllowedToQueryCompositingState());
 
   if ((includeSelf == IncludeSelf) && compositingState() != NotComposited &&
       compositingState() != PaintsIntoGroupedBacking)
@@ -988,7 +994,7 @@ PaintLayer::enclosingLayerForPaintInvalidationCrossingFrameBoundaries() const {
   while (!compositedLayer) {
     compositedLayer = layer->enclosingLayerForPaintInvalidation();
     if (!compositedLayer) {
-      RELEASE_ASSERT(layer->layoutObject()->frame());
+      CHECK(layer->layoutObject()->frame());
       LayoutItem owner = layer->layoutObject()->frame()->ownerLayoutItem();
       if (owner.isNull())
         break;
@@ -999,7 +1005,7 @@ PaintLayer::enclosingLayerForPaintInvalidationCrossingFrameBoundaries() const {
 }
 
 PaintLayer* PaintLayer::enclosingLayerForPaintInvalidation() const {
-  ASSERT(isAllowedToQueryCompositingState());
+  DCHECK(isAllowedToQueryCompositingState());
 
   if (isPaintInvalidationContainer())
     return const_cast<PaintLayer*>(this);
@@ -1028,14 +1034,9 @@ void PaintLayer::setNeedsCompositingInputsUpdate() {
 
 void PaintLayer::updateAncestorDependentCompositingInputs(
     const AncestorDependentCompositingInputs& compositingInputs,
-    const RareAncestorDependentCompositingInputs& rareCompositingInputs,
     bool hasAncestorWithClipPath) {
-  m_ancestorDependentCompositingInputs = compositingInputs;
-  if (rareCompositingInputs.isDefault())
-    m_rareAncestorDependentCompositingInputs.reset();
-  else
-    m_rareAncestorDependentCompositingInputs = wrapUnique(
-        new RareAncestorDependentCompositingInputs(rareCompositingInputs));
+  m_ancestorDependentCompositingInputs =
+      makeUnique<AncestorDependentCompositingInputs>(compositingInputs);
   m_hasAncestorWithClipPath = hasAncestorWithClipPath;
   m_needsAncestorDependentCompositingInputsUpdate = false;
 }
@@ -1052,14 +1053,14 @@ void PaintLayer::updateDescendantDependentCompositingInputs(
 }
 
 void PaintLayer::didUpdateCompositingInputs() {
-  ASSERT(!needsCompositingInputsUpdate());
+  DCHECK(!needsCompositingInputsUpdate());
   m_childNeedsCompositingInputsUpdate = false;
   if (m_scrollableArea)
     m_scrollableArea->updateNeedsCompositedScrolling();
 }
 
 bool PaintLayer::hasNonIsolatedDescendantWithBlendMode() const {
-  ASSERT(!m_needsDescendantDependentCompositingInputsUpdate);
+  DCHECK(!m_needsDescendantDependentCompositingInputsUpdate);
   if (m_hasNonIsolatedDescendantWithBlendMode)
     return true;
   if (layoutObject()->isSVGRoot())
@@ -1122,7 +1123,7 @@ bool PaintLayer::hasAncestorWithFilterThatMovesPixels() const {
   return false;
 }
 
-static void expandClipRectForDescendantsAndReflection(
+static void expandClipRectForDescendants(
     LayoutRect& clipRect,
     const PaintLayer* layer,
     const PaintLayer* rootLayer,
@@ -1141,19 +1142,6 @@ static void expandClipRectForDescendantsAndReflection(
           curr, rootLayer, transparencyBehavior,
           PaintLayer::DescendantsOfTransparencyClipBox, subPixelAccumulation,
           globalPaintFlags));
-  }
-
-  // If we have a reflection, then we need to account for that when we push the
-  // clip.  Reflect our entire current transparencyClipBox to catch all child
-  // layers.
-  // FIXME: Accelerated compositing will eventually want to do something smart
-  // here to avoid incorporating this size into the parent layer.
-  if (layer->layoutObject()->hasReflection()) {
-    LayoutPoint delta;
-    layer->convertToLayerCoords(rootLayer, delta);
-    clipRect.move(-delta.x(), -delta.y());
-    clipRect.unite(layer->layoutBox()->reflectedRect(clipRect));
-    clipRect.moveBy(delta);
   }
 }
 
@@ -1195,9 +1183,8 @@ LayoutRect PaintLayer::transparencyClipBox(
     // We don't use fragment boxes when collecting a transformed layer's
     // bounding box, since it always paints unfragmented.
     LayoutRect clipRect = layer->physicalBoundingBox(LayoutPoint());
-    expandClipRectForDescendantsAndReflection(
-        clipRect, layer, layer, transparencyBehavior, subPixelAccumulation,
-        globalPaintFlags);
+    expandClipRectForDescendants(clipRect, layer, layer, transparencyBehavior,
+                                 subPixelAccumulation, globalPaintFlags);
     LayoutRect result = enclosingLayoutRect(
         transform.mapRect(layer->mapRectForFilter(FloatRect(clipRect))));
     if (!paginationLayer)
@@ -1219,10 +1206,17 @@ LayoutRect PaintLayer::transparencyClipBox(
   LayoutRect clipRect = layer->shouldFragmentCompositedBounds(rootLayer)
                             ? layer->fragmentsBoundingBox(rootLayer)
                             : layer->physicalBoundingBox(rootLayer);
-  expandClipRectForDescendantsAndReflection(
-      clipRect, layer, rootLayer, transparencyBehavior, subPixelAccumulation,
-      globalPaintFlags);
+  expandClipRectForDescendants(clipRect, layer, rootLayer, transparencyBehavior,
+                               subPixelAccumulation, globalPaintFlags);
+
+  // Convert clipRect into local coordinates for mapLayerRectForFilter(), and
+  // convert back after.
+  LayoutPoint delta;
+  layer->convertToLayerCoords(rootLayer, delta);
+  clipRect.moveBy(-delta);
   clipRect = layer->mapLayoutRectForFilter(clipRect);
+  clipRect.moveBy(delta);
+
   clipRect.move(subPixelAccumulation);
   return clipRect;
 }
@@ -1250,7 +1244,7 @@ void PaintLayer::addChild(PaintLayer* child, PaintLayer* beforeChild) {
   if (prevSibling) {
     child->setPreviousSibling(prevSibling);
     prevSibling->setNextSibling(child);
-    ASSERT(prevSibling != child);
+    DCHECK(prevSibling != child);
   } else {
     setFirstChild(child);
   }
@@ -1258,7 +1252,7 @@ void PaintLayer::addChild(PaintLayer* child, PaintLayer* beforeChild) {
   if (beforeChild) {
     beforeChild->setPreviousSibling(child);
     child->setNextSibling(beforeChild);
-    ASSERT(beforeChild != child);
+    DCHECK(beforeChild != child);
   } else {
     setLastChild(child);
   }
@@ -1267,7 +1261,7 @@ void PaintLayer::addChild(PaintLayer* child, PaintLayer* beforeChild) {
 
   // The ancestor overflow layer is calculated during compositing inputs update
   // and should not be set yet.
-  ASSERT(!child->ancestorOverflowLayer());
+  DCHECK(!child->ancestorOverflowLayer());
 
   setNeedsCompositingInputsUpdate();
 
@@ -1398,7 +1392,7 @@ void PaintLayer::insertOnlyThisLayerAfterStyleChange() {
     // We need to connect ourselves when our layoutObject() has a parent.
     // Find our enclosingLayer and add ourselves.
     PaintLayer* parentLayer = layoutObject()->parent()->enclosingLayer();
-    ASSERT(parentLayer);
+    DCHECK(parentLayer);
     PaintLayer* beforeChild =
         layoutObject()->parent()->findNextLayer(parentLayer, layoutObject());
     parentLayer->addChild(this, beforeChild);
@@ -1444,7 +1438,7 @@ static inline const PaintLayer* accumulateOffsetTowardsAncestor(
     const PaintLayer* layer,
     const PaintLayer* ancestorLayer,
     LayoutPoint& location) {
-  ASSERT(ancestorLayer != layer);
+  DCHECK(ancestorLayer != layer);
 
   const LayoutBoxModelObject* layoutObject = layer->layoutObject();
   EPosition position = layoutObject->style()->position();
@@ -1479,9 +1473,9 @@ static inline const PaintLayer* accumulateOffsetTowardsAncestor(
     }
   } else if (layoutObject->isColumnSpanAll()) {
     LayoutBlock* multicolContainer = layoutObject->containingBlock();
-    ASSERT(toLayoutBlockFlow(multicolContainer)->multiColumnFlowThread());
+    DCHECK(toLayoutBlockFlow(multicolContainer)->multiColumnFlowThread());
     parentLayer = multicolContainer->layer();
-    ASSERT(parentLayer);
+    DCHECK(parentLayer);
   } else {
     parentLayer = layer->parent();
   }
@@ -1555,15 +1549,15 @@ void PaintLayer::didUpdateNeedsCompositedScrolling() {
 }
 
 void PaintLayer::updateStackingNode() {
-  ASSERT(!m_stackingNode);
+  DCHECK(!m_stackingNode);
   if (requiresStackingNode())
-    m_stackingNode = wrapUnique(new PaintLayerStackingNode(this));
+    m_stackingNode = makeUnique<PaintLayerStackingNode>(this);
   else
     m_stackingNode = nullptr;
 }
 
 void PaintLayer::updateScrollableArea() {
-  ASSERT(!m_scrollableArea);
+  DCHECK(!m_scrollableArea);
   if (requiresScrollableArea())
     m_scrollableArea = PaintLayerScrollableArea::create(*this);
 }
@@ -1751,11 +1745,11 @@ static inline LayoutRect frameVisibleRect(LayoutObject* layoutObject) {
 }
 
 bool PaintLayer::hitTest(HitTestResult& result) {
-  ASSERT(isSelfPaintingLayer() || hasSelfPaintingLayerDescendant());
+  DCHECK(isSelfPaintingLayer() || hasSelfPaintingLayerDescendant());
 
   // LayoutView should make sure to update layout before entering hit testing
-  ASSERT(!layoutObject()->frame()->view()->layoutPending());
-  ASSERT(!layoutObject()->document().layoutViewItem().needsLayout());
+  DCHECK(!layoutObject()->frame()->view()->layoutPending());
+  DCHECK(!layoutObject()->document().layoutViewItem().needsLayout());
 
   const HitTestRequest& request = result.hitTestRequest();
   const HitTestLocation& hitTestLocation = result.hitTestLocation();
@@ -1896,7 +1890,7 @@ static bool isHitCandidate(const PaintLayer* hitLayer,
 
   // We need to look at z-depth to decide if this layer was hit.
   if (zOffset) {
-    ASSERT(transformState);
+    DCHECK(transformState);
     // This is actually computing our z, but that's OK because the hitLayer is
     // coplanar with us.
     double childZOffset = computeZOffset(*transformState);
@@ -1977,7 +1971,7 @@ PaintLayer* PaintLayer::hitTestLayer(
   if (appliedTransform) {
     // We computed the correct state in the caller (above code), so just
     // reference it.
-    ASSERT(transformState);
+    DCHECK(transformState);
     localTransformState = const_cast<HitTestingTransformState*>(transformState);
   } else if (transformState || m_has3DTransformedDescendant || preserves3D()) {
     // We need transform state for the first time, or to offset the container
@@ -2262,7 +2256,7 @@ bool PaintLayer::hitTestContents(HitTestResult& result,
                                  const LayoutRect& layerBounds,
                                  const HitTestLocation& hitTestLocation,
                                  HitTestFilter hitTestFilter) const {
-  ASSERT(isSelfPaintingLayer() || hasSelfPaintingLayerDescendant());
+  DCHECK(isSelfPaintingLayer() || hasSelfPaintingLayerDescendant());
 
   if (!layoutObject()->hitTest(
           result, hitTestLocation,
@@ -2270,7 +2264,7 @@ bool PaintLayer::hitTestContents(HitTestResult& result,
           hitTestFilter)) {
     // It's wrong to set innerNode, but then claim that you didn't hit anything,
     // unless it is a rect-based test.
-    ASSERT(!result.innerNode() || (result.hitTestRequest().listBased() &&
+    DCHECK(!result.innerNode() || (result.hitTestRequest().listBased() &&
                                    result.listBasedTestResult().size()));
     return false;
   }
@@ -2328,7 +2322,7 @@ PaintLayer* PaintLayer::hitTestChildren(
 
     // If it is a list-based test, we can safely append the temporary result
     // since it might had hit nodes but not necesserily had hitLayer set.
-    ASSERT(!result.isRectBasedTest() || result.hitTestRequest().listBased());
+    DCHECK(!result.isRectBasedTest() || result.hitTestRequest().listBased());
     if (result.hitTestRequest().listBased())
       result.append(tempResult);
 
@@ -2390,10 +2384,13 @@ bool PaintLayer::hitTestClippedOutByClipPath(
     return !clipPath->path(FloatRect(referenceBox)).contains(point);
   }
   DCHECK_EQ(clipPathOperation->type(), ClipPathOperation::REFERENCE);
-  ReferenceClipPathOperation* referenceClipPathOperation =
-      toReferenceClipPathOperation(clipPathOperation);
-  Element* element = layoutObject()->document().getElementById(
-      referenceClipPathOperation->fragment());
+  Node* targetNode = layoutObject()->node();
+  if (!targetNode)
+    return false;
+  const ReferenceClipPathOperation& referenceClipPathOperation =
+      toReferenceClipPathOperation(*clipPathOperation);
+  SVGElement* element =
+      referenceClipPathOperation.findElement(targetNode->treeScope());
   if (!isSVGClipPathElement(element) || !element->layoutObject())
     return false;
   LayoutSVGResourceClipper* clipper = toLayoutSVGResourceClipper(
@@ -2418,7 +2415,7 @@ bool PaintLayer::intersectsDamageRect(const LayoutRect& layerBounds,
   // If we aren't an inline flow, and our layer bounds do intersect the damage
   // rect, then we can go ahead and return true.
   LayoutView* view = layoutObject()->view();
-  ASSERT(view);
+  DCHECK(view);
   if (view && !layoutObject()->isLayoutInline()) {
     if (layerBounds.intersects(damageRect))
       return true;
@@ -2430,7 +2427,14 @@ bool PaintLayer::intersectsDamageRect(const LayoutRect& layerBounds,
 }
 
 LayoutRect PaintLayer::logicalBoundingBox() const {
-  return layoutObject()->visualOverflowRect();
+  LayoutRect rect = layoutObject()->visualOverflowRect();
+
+  if (isRootLayer()) {
+    rect.unite(
+        LayoutRect(rect.location(), layoutObject()->view()->viewRect().size()));
+  }
+
+  return rect;
 }
 
 static inline LayoutRect flippedLogicalBoundingBox(
@@ -2491,10 +2495,10 @@ static void expandRectForStackingChildren(
     const PaintLayer* ancestorLayer,
     LayoutRect& result,
     PaintLayer::CalculateBoundsOptions options) {
-  ASSERT(ancestorLayer->stackingNode()->isStackingContext() ||
+  DCHECK(ancestorLayer->stackingNode()->isStackingContext() ||
          !ancestorLayer->stackingNode()->hasPositiveZOrderList());
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   LayerListMutationDetector mutationChecker(
       const_cast<PaintLayer*>(ancestorLayer)->stackingNode());
 #endif
@@ -2544,8 +2548,15 @@ LayoutRect PaintLayer::boundingBoxForCompositing(
     return LayoutRect();
 
   // Without composited scrolling, the root layer is the size of the document.
-  if (isRootLayer() && !needsCompositedScrolling())
-    return LayoutRect(m_layoutObject->view()->documentRect());
+  if (isRootLayer() && !needsCompositedScrolling()) {
+    IntRect documentRect = layoutObject()->view()->documentRect();
+
+    if (FrameView* frameView = layoutObject()->document().view()) {
+      documentRect.unite(IntRect(IntPoint(), frameView->visibleContentSize()));
+    }
+
+    return LayoutRect(documentRect);
+  }
 
   // The layer created for the LayoutFlowThread is just a helper for painting
   // and hit-testing, and should not contribute to the bounding box. The
@@ -2590,13 +2601,13 @@ LayoutRect PaintLayer::boundingBoxForCompositing(
 }
 
 CompositingState PaintLayer::compositingState() const {
-  ASSERT(isAllowedToQueryCompositingState());
+  DCHECK(isAllowedToQueryCompositingState());
 
   // This is computed procedurally so there is no redundant state variable that
   // can get out of sync from the real actual compositing state.
 
   if (groupedMapping()) {
-    ASSERT(!compositedLayerMapping());
+    DCHECK(!compositedLayerMapping());
     return PaintsIntoGroupedBacking;
   }
 
@@ -2615,7 +2626,7 @@ bool PaintLayer::isAllowedToQueryCompositingState() const {
 }
 
 CompositedLayerMapping* PaintLayer::compositedLayerMapping() const {
-  ASSERT(isAllowedToQueryCompositingState());
+  DCHECK(isAllowedToQueryCompositingState());
   return m_rareData ? m_rareData->compositedLayerMapping.get() : nullptr;
 }
 
@@ -2661,7 +2672,8 @@ void PaintLayer::ensureCompositedLayerMapping() {
   m_rareData->compositedLayerMapping->setNeedsGraphicsLayerUpdate(
       GraphicsLayerUpdateSubtree);
 
-  updateOrRemoveFilterEffect();
+  if (PaintLayerResourceInfo* resourceInfo = this->resourceInfo())
+    resourceInfo->invalidateFilterChain();
 }
 
 void PaintLayer::clearCompositedLayerMapping(bool layerBeingDestroyed) {
@@ -2679,8 +2691,11 @@ void PaintLayer::clearCompositedLayerMapping(bool layerBeingDestroyed) {
   if (m_rareData)
     m_rareData->compositedLayerMapping.reset();
 
-  if (!layerBeingDestroyed)
-    updateOrRemoveFilterEffect();
+  if (layerBeingDestroyed)
+    return;
+
+  if (PaintLayerResourceInfo* resourceInfo = this->resourceInfo())
+    resourceInfo->invalidateFilterChain();
 }
 
 void PaintLayer::setGroupedMapping(CompositedLayerMapping* groupedMapping,
@@ -2695,7 +2710,9 @@ void PaintLayer::setGroupedMapping(CompositedLayerMapping* groupedMapping,
   }
   if (m_rareData || groupedMapping)
     ensureRareData().groupedMapping = groupedMapping;
-  ASSERT(!groupedMapping || groupedMapping->verifyLayerInSquashingVector(this));
+#if DCHECK_IS_ON()
+  DCHECK(!groupedMapping || groupedMapping->verifyLayerInSquashingVector(this));
+#endif
   if (options == InvalidateLayerAndRemoveFromMapping && groupedMapping)
     groupedMapping->setNeedsGraphicsLayerUpdate(GraphicsLayerUpdateSubtree);
 }
@@ -2715,6 +2732,14 @@ bool PaintLayer::paintsWithTransform(GlobalPaintFlags globalPaintFlags) const {
           layoutObject()->style()->position() == FixedPosition) &&
          ((globalPaintFlags & GlobalPaintFlattenCompositingLayers) ||
           compositingState() != PaintsIntoOwnBacking);
+}
+
+bool PaintLayer::compositesWithTransform() const {
+  return transformAncestor() || transform();
+}
+
+bool PaintLayer::compositesWithOpacity() const {
+  return opacityAncestor() || layoutObject()->style()->hasOpacity();
 }
 
 bool PaintLayer::backgroundIsKnownToBeOpaqueInRect(
@@ -2873,9 +2898,31 @@ void PaintLayer::updateFilters(const ComputedStyle* oldStyle,
   if (!newStyle.hasFilterInducingProperty() &&
       (!oldStyle || !oldStyle->hasFilterInducingProperty()))
     return;
+  const bool hadResourceInfo = resourceInfo();
+  if (newStyle.hasFilterInducingProperty())
+    newStyle.filter().addClient(&ensureResourceInfo());
+  if (hadResourceInfo && oldStyle)
+    oldStyle->filter().removeClient(resourceInfo());
+  if (PaintLayerResourceInfo* resourceInfo = this->resourceInfo())
+    resourceInfo->invalidateFilterChain();
+}
 
-  updateOrRemoveFilterClients();
-  updateOrRemoveFilterEffect();
+void PaintLayer::updateClipPath(const ComputedStyle* oldStyle,
+                                const ComputedStyle& newStyle) {
+  ClipPathOperation* newClipOperation = newStyle.clipPath();
+  ClipPathOperation* oldClipOperation =
+      oldStyle ? oldStyle->clipPath() : nullptr;
+  if (!newClipOperation && !oldClipOperation)
+    return;
+  const bool hadResourceInfo = resourceInfo();
+  if (isReferenceClipPath(newClipOperation)) {
+    toReferenceClipPathOperation(newClipOperation)
+        ->addClient(&ensureResourceInfo());
+  }
+  if (hadResourceInfo && isReferenceClipPath(oldClipOperation)) {
+    toReferenceClipPathOperation(oldClipOperation)
+        ->removeClient(resourceInfo());
+  }
 }
 
 bool PaintLayer::attemptDirectCompositingUpdate(StyleDifference diff,
@@ -2898,14 +2945,6 @@ bool PaintLayer::attemptDirectCompositingUpdate(StyleDifference diff,
   // a corresponding StyleDifference if an animation started or ended.
   if (potentialCompositingReasonsFromStyle() !=
       oldPotentialCompositingReasonsFromStyle)
-    return false;
-  // If we're unwinding a scheduleSVGFilterLayerUpdateHack(), then we can't
-  // perform a direct compositing update because the filters code is going
-  // to produce different output this time around. We can remove this code
-  // once we fix the chicken/egg bugs in the filters code and delete the
-  // scheduleSVGFilterLayerUpdateHack().
-  if (layoutObject()->node() &&
-      layoutObject()->node()->svgFilterNeedsLayerUpdate())
     return false;
   if (!m_rareData || !m_rareData->compositedLayerMapping)
     return false;
@@ -2969,6 +3008,7 @@ void PaintLayer::styleDidChange(StyleDifference diff,
 
   updateTransform(oldStyle, layoutObject()->styleRef());
   updateFilters(oldStyle, layoutObject()->styleRef());
+  updateClipPath(oldStyle, layoutObject()->styleRef());
 
   setNeedsCompositingInputsUpdate();
 }
@@ -3013,11 +3053,11 @@ PaintLayer::createCompositorFilterOperationsForBackdropFilter(
   return builder.buildFilterOperations(style.backdropFilter());
 }
 
-PaintLayerFilterInfo& PaintLayer::ensureFilterInfo() {
+PaintLayerResourceInfo& PaintLayer::ensureResourceInfo() {
   PaintLayerRareData& rareData = ensureRareData();
-  if (!rareData.filterInfo)
-    rareData.filterInfo = new PaintLayerFilterInfo(this);
-  return *rareData.filterInfo;
+  if (!rareData.resourceInfo)
+    rareData.resourceInfo = new PaintLayerResourceInfo(this);
+  return *rareData.resourceInfo;
 }
 
 void PaintLayer::removeAncestorOverflowLayer(const PaintLayer* removedLayer) {
@@ -3042,31 +3082,15 @@ void PaintLayer::removeAncestorOverflowLayer(const PaintLayer* removedLayer) {
   }
 }
 
-void PaintLayer::updateOrRemoveFilterClients() {
-  const auto& filter = layoutObject()->style()->filter();
-  if (filter.isEmpty() && m_rareData && m_rareData->filterInfo) {
-    m_rareData->filterInfo->clearLayer();
-    m_rareData->filterInfo = nullptr;
-  } else if (filter.hasReferenceFilter()) {
-    ensureFilterInfo().updateReferenceFilterClients(filter);
-  } else if (filterInfo()) {
-    filterInfo()->clearFilterReferences();
-  }
-}
-
-FilterEffect* PaintLayer::updateFilterEffect() const {
+FilterEffect* PaintLayer::lastFilterEffect() const {
   // TODO(chrishtr): ensure (and assert) that compositing is clean here.
-
   if (!paintsWithFilters())
     return nullptr;
+  PaintLayerResourceInfo* resourceInfo = this->resourceInfo();
+  DCHECK(resourceInfo);
 
-  PaintLayerFilterInfo* filterInfo = this->filterInfo();
-
-  // Should have been added by updateOrRemoveFilterEffect().
-  ASSERT(filterInfo);
-
-  if (filterInfo->lastEffect())
-    return filterInfo->lastEffect();
+  if (resourceInfo->lastEffect())
+    return resourceInfo->lastEffect();
 
   const ComputedStyle& style = layoutObject()->styleRef();
   FloatRect zoomedReferenceBox;
@@ -3074,13 +3098,9 @@ FilterEffect* PaintLayer::updateFilterEffect() const {
     zoomedReferenceBox = boxForFilter();
   FilterEffectBuilder builder(enclosingNode(), zoomedReferenceBox,
                               style.effectiveZoom());
-  filterInfo->setLastEffect(
+  resourceInfo->setLastEffect(
       builder.buildFilterEffect(addReflectionToFilterOperations(style)));
-  return filterInfo->lastEffect();
-}
-
-FilterEffect* PaintLayer::lastFilterEffect() const {
-  return updateFilterEffect();
+  return resourceInfo->lastEffect();
 }
 
 FloatRect PaintLayer::mapRectForFilter(const FloatRect& rect) const {
@@ -3088,7 +3108,8 @@ FloatRect PaintLayer::mapRectForFilter(const FloatRect& rect) const {
     return rect;
 
   // Ensure the filter-chain is refreshed wrt reference filters.
-  updateFilterEffect();
+  // TODO(fs): Avoid having this side-effect inducing call.
+  lastFilterEffect();
 
   FilterOperations filterOperations =
       addReflectionToFilterOperations(layoutObject()->styleRef());
@@ -3110,37 +3131,6 @@ bool PaintLayer::hasFilterThatMovesPixels() const {
   if (style.hasBoxReflect())
     return true;
   return false;
-}
-
-void PaintLayer::updateOrRemoveFilterEffect() {
-  // FilterEffectBuilder is only used to render the filters in software mode,
-  // so we always need to run updateOrRemoveFilterEffect after the composited
-  // mode might have changed for this layer.
-  if (!paintsWithFilters()) {
-    if (PaintLayerFilterInfo* filterInfo = this->filterInfo())
-      filterInfo->setLastEffect(nullptr);
-    return;
-  }
-
-  ensureFilterInfo().setLastEffect(nullptr);
-}
-
-void PaintLayer::filterNeedsPaintInvalidation() {
-  {
-    DeprecatedScheduleStyleRecalcDuringLayout marker(
-        layoutObject()->document().lifecycle());
-    // It's possible for scheduleSVGFilterLayerUpdateHack to schedule a style
-    // recalc, which is a problem because this function can be called right
-    // before performing layout but after style recalc.
-    //
-    // See LayoutView::layout() and the call to
-    // invalidateSVGRootsWithRelativeLengthDescendents(). This violation is
-    // worked around in FrameView::updateStyleAndLayoutIfNeededRecursive() by
-    // doing an extra style recalc and layout in case it's needed.
-    toElement(layoutObject()->node())->scheduleSVGFilterLayerUpdateHack();
-  }
-
-  layoutObject()->setShouldDoFullPaintInvalidation();
 }
 
 void PaintLayer::addLayerHitTestRects(LayerHitTestRects& rects) const {
@@ -3255,7 +3245,7 @@ DisableCompositingQueryAsserts::DisableCompositingQueryAsserts()
 // FIXME: Rename?
 void showLayerTree(const blink::PaintLayer* layer) {
   if (!layer) {
-    fprintf(stderr, "Cannot showLayerTree. Root is (nil)\n");
+    LOG(INFO) << "Cannot showLayerTree. Root is (nil)";
     return;
   }
 
@@ -3269,13 +3259,13 @@ void showLayerTree(const blink::PaintLayer* layer) {
             blink::LayoutAsTextDontUpdateLayout |
             blink::LayoutAsTextShowLayoutState,
         layer);
-    fprintf(stderr, "%s\n", output.utf8().data());
+    LOG(INFO) << output.utf8().data();
   }
 }
 
 void showLayerTree(const blink::LayoutObject* layoutObject) {
   if (!layoutObject) {
-    fprintf(stderr, "Cannot showLayerTree. Root is (nil)\n");
+    LOG(INFO) << "Cannot showLayerTree. Root is (nil)";
     return;
   }
   showLayerTree(layoutObject->enclosingLayer());

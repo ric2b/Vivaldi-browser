@@ -39,14 +39,15 @@ namespace ash {
 
 OverviewButtonTray::OverviewButtonTray(WmShelf* wm_shelf)
     : TrayBackgroundView(wm_shelf), icon_(nullptr) {
-  SetContentsBackground();
-
   icon_ = new views::ImageView();
   if (MaterialDesignController::IsShelfMaterial()) {
+    SetInkDropMode(InkDropMode::ON);
+    SetContentsBackground(false);
     gfx::ImageSkia image_md =
         CreateVectorIcon(gfx::VectorIconId::SHELF_OVERVIEW, kShelfIconColor);
     icon_->SetImage(image_md);
   } else {
+    SetContentsBackground(true);
     gfx::ImageSkia* image_non_md =
         ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
             IDR_AURA_UBER_TRAY_OVERVIEW_MODE);
@@ -71,14 +72,14 @@ void OverviewButtonTray::UpdateAfterLoginStatusChange(LoginStatus status) {
 bool OverviewButtonTray::PerformAction(const ui::Event& event) {
   WindowSelectorController* controller =
       WmShell::Get()->window_selector_controller();
-  controller->ToggleOverview();
-  SetDrawBackgroundAsActive(controller->IsSelecting());
+  // Toggling overview mode will fail if there is no window to show.
+  bool performed = controller->ToggleOverview();
   WmShell::Get()->RecordUserMetricsAction(UMA_TRAY_OVERVIEW);
-  return true;
+  return performed;
 }
 
 void OverviewButtonTray::SessionStateChanged(
-    SessionStateDelegate::SessionState state) {
+    session_manager::SessionState state) {
   UpdateIconVisibility();
 }
 
@@ -90,8 +91,12 @@ void OverviewButtonTray::OnMaximizeModeEnded() {
   UpdateIconVisibility();
 }
 
+void OverviewButtonTray::OnOverviewModeStarting() {
+  SetIsActive(true);
+}
+
 void OverviewButtonTray::OnOverviewModeEnded() {
-  SetDrawBackgroundAsActive(false);
+  SetIsActive(false);
 }
 
 void OverviewButtonTray::ClickedOutsideBubble() {}
@@ -128,7 +133,7 @@ void OverviewButtonTray::SetIconBorderForShelfAlignment() {
                  : gfx::Insets(kVerticalShelfVerticalPadding,
                                kVerticalShelfHorizontalPadding);
   }
-  icon_->SetBorder(views::Border::CreateEmptyBorder(insets));
+  icon_->SetBorder(views::CreateEmptyBorder(insets));
 }
 
 void OverviewButtonTray::UpdateIconVisibility() {
@@ -145,9 +150,11 @@ void OverviewButtonTray::UpdateIconVisibility() {
       session_state_delegate->IsActiveUserSessionStarted() &&
       !session_state_delegate->IsScreenLocked() &&
       session_state_delegate->GetSessionState() ==
-          SessionStateDelegate::SESSION_STATE_ACTIVE &&
+          session_manager::SessionState::ACTIVE &&
       shell->system_tray_delegate()->GetUserLoginStatus() !=
-          LoginStatus::KIOSK_APP);
+          LoginStatus::KIOSK_APP &&
+      shell->system_tray_delegate()->GetUserLoginStatus() !=
+          LoginStatus::ARC_KIOSK_APP);
 }
 
 }  // namespace ash

@@ -27,7 +27,6 @@ namespace installer {
 // This is the default name for the master preferences file used to pre-set
 // values in the user profile at first run.
 const char kDefaultMasterPrefs[] = "master_preferences";
-const wchar_t kDefaultLocalBookmarks[] = L"bookmarks_"; // default prefix name of localized preinstalled bookmarks file(s), i.e. bookmarks_en-us, bookmarks_fr etc.
 #endif
 
 // The master preferences is a JSON file with the same entries as the

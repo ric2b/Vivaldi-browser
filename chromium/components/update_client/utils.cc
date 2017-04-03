@@ -10,8 +10,10 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <map>
 #include <vector>
 
+#include "base/callback.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/memory_mapped_file.h"
@@ -24,10 +26,13 @@
 #include "base/win/windows_version.h"
 #include "build/build_config.h"
 #include "components/crx_file/id_util.h"
+#include "components/data_use_measurement/core/data_use_user_data.h"
 #include "components/update_client/configurator.h"
 #include "components/update_client/crx_update_item.h"
 #include "components/update_client/update_client.h"
+#include "components/update_client/update_client_errors.h"
 #include "components/update_client/update_query_params.h"
+#include "components/update_client/updater_state.h"
 #include "crypto/secure_hash.h"
 #include "crypto/sha2.h"
 #include "net/base/load_flags.h"
@@ -68,11 +73,9 @@ std::string HexStringToID(const std::string& hexstr) {
 
 std::string GetOSVersion() {
 #if defined(OS_WIN)
-  int32_t major = 0;
-  int32_t minor = 0;
-  int32_t bugfix = 0;
-  base::SysInfo::OperatingSystemVersionNumbers(&major, &minor, &bugfix);
-  return base::StringPrintf("%d.%d.%d", major, minor, bugfix);
+  const auto ver = base::win::OSInfo::GetInstance()->version_number();
+  return base::StringPrintf("%d.%d.%d.%d", ver.major, ver.minor, ver.build,
+                            ver.patch);
 #else
   return base::SysInfo().OperatingSystemVersion();
 #endif
@@ -88,14 +91,16 @@ std::string GetServicePack() {
 
 }  // namespace
 
-std::string BuildProtocolRequest(const std::string& prod_id,
-                                 const std::string& browser_version,
-                                 const std::string& channel,
-                                 const std::string& lang,
-                                 const std::string& os_long_name,
-                                 const std::string& download_preference,
-                                 const std::string& request_body,
-                                 const std::string& additional_attributes) {
+std::string BuildProtocolRequest(
+    const std::string& prod_id,
+    const std::string& browser_version,
+    const std::string& channel,
+    const std::string& lang,
+    const std::string& os_long_name,
+    const std::string& download_preference,
+    const std::string& request_body,
+    const std::string& additional_attributes,
+    const std::unique_ptr<UpdaterState::Attributes>& updater_state_attributes) {
   std::string request(
       "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
       "<request protocol=\"3.0\" ");
@@ -113,7 +118,7 @@ std::string BuildProtocolRequest(const std::string& prod_id,
       browser_version.c_str(),
       browser_version.c_str(),            // "prodversion"
       base::GenerateGUID().c_str(),       // "requestid"
-      lang.c_str(),                       // "lang",
+      lang.c_str(),                       // "lang"
       channel.c_str(),                    // "updaterchannel"
       channel.c_str(),                    // "prodchannel"
       UpdateQueryParams::GetOS(),         // "os"
@@ -128,6 +133,13 @@ std::string BuildProtocolRequest(const std::string& prod_id,
   if (!download_preference.empty())
     base::StringAppendF(&request, " dlpref=\"%s\"",
                         download_preference.c_str());
+  if (updater_state_attributes &&
+      updater_state_attributes->count(UpdaterState::kDomainJoined)) {
+    base::StringAppendF(
+        &request, " %s=\"%s\"",  // domainjoined
+        UpdaterState::kDomainJoined,
+        (*updater_state_attributes)[UpdaterState::kDomainJoined].c_str());
+  }
   base::StringAppendF(&request, ">");
 
   // HW platform information.
@@ -137,7 +149,6 @@ std::string BuildProtocolRequest(const std::string& prod_id,
   // OS version and platform information.
   const std::string os_version = GetOSVersion();
   const std::string os_sp = GetServicePack();
-
   base::StringAppendF(
       &request, "<os platform=\"%s\" arch=\"%s\"",
       os_long_name.c_str(),                                    // "platform"
@@ -147,6 +158,20 @@ std::string BuildProtocolRequest(const std::string& prod_id,
   if (!os_sp.empty())
     base::StringAppendF(&request, " sp=\"%s\"", os_sp.c_str());
   base::StringAppendF(&request, "/>");
+
+#if defined(GOOGLE_CHROME_BUILD)
+  // Updater state.
+  if (updater_state_attributes) {
+    base::StringAppendF(&request, "<updater");
+    for (const auto& attr : *updater_state_attributes) {
+      if (attr.first != UpdaterState::kDomainJoined) {
+        base::StringAppendF(&request, " %s=\"%s\"", attr.first.c_str(),
+                          attr.second.c_str());
+      }
+    }
+    base::StringAppendF(&request, "/>");
+  }
+#endif  // GOOGLE_CHROME_BUILD
 
   // The actual payload of the request.
   base::StringAppendF(&request, "%s</request>", request_body.c_str());
@@ -164,6 +189,8 @@ std::unique_ptr<net::URLFetcher> SendProtocolRequest(
   if (!url_fetcher.get())
     return url_fetcher;
 
+  data_use_measurement::DataUseUserData::AttachToFetcher(
+      url_fetcher.get(), data_use_measurement::DataUseUserData::UPDATE_CLIENT);
   url_fetcher->SetUploadData("application/xml", protocol_request);
   url_fetcher->SetRequestContext(url_request_context_getter);
   url_fetcher->SetLoadFlags(net::LOAD_DO_NOT_SEND_COOKIES |
@@ -308,6 +335,11 @@ void RemoveUnsecureUrls(std::vector<GURL>* urls) {
                   urls->begin(), urls->end(),
                   [](const GURL& url) { return !url.SchemeIsCryptographic(); }),
               urls->end());
+}
+
+CrxInstaller::Result InstallFunctionWrapper(base::Callback<bool()> callback) {
+  return CrxInstaller::Result(callback.Run() ? InstallError::NONE
+                                             : InstallError::GENERIC_ERROR);
 }
 
 }  // namespace update_client

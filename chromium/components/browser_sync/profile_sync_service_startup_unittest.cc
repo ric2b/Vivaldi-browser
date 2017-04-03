@@ -5,6 +5,7 @@
 #include "components/browser_sync/profile_sync_service.h"
 
 #include "base/files/file_util.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/browser_sync/profile_sync_test_util.h"
@@ -14,13 +15,13 @@
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/signin/core/common/signin_pref_names.h"
+#include "components/sync/base/pref_names.h"
 #include "components/sync/driver/data_type_manager_mock.h"
 #include "components/sync/driver/fake_data_type_controller.h"
 #include "components/sync/driver/glue/sync_backend_host_mock.h"
-#include "components/sync/driver/pref_names.h"
 #include "components/sync/driver/sync_api_component_factory_mock.h"
 #include "components/sync/driver/sync_service_observer.h"
-#include "components/syncable_prefs/pref_service_syncable.h"
+#include "components/sync_preferences/pref_service_syncable.h"
 #include "google_apis/gaia/gaia_auth_consumer.h"
 #include "google_apis/gaia/gaia_constants.h"
 #include "net/url_request/url_request_test_util.h"
@@ -90,7 +91,8 @@ class ProfileSyncServiceStartupTest : public testing::Test {
         profile_sync_service_bundle_.CreateBasicInitParams(start_behavior,
                                                            builder.Build());
 
-    sync_service_.reset(new ProfileSyncService(std::move(init_params)));
+    sync_service_ =
+        base::MakeUnique<ProfileSyncService>(std::move(init_params));
     sync_service_->RegisterDataTypeController(
         base::MakeUnique<syncer::FakeDataTypeController>(syncer::BOOKMARKS));
     sync_service_->AddObserver(&observer_);

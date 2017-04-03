@@ -6,6 +6,7 @@
 
 #include <vector>
 
+#include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
 #include "net/base/ip_endpoint.h"
 #include "net/quic/core/crypto/aes_128_gcm_12_encrypter.h"
@@ -65,14 +66,15 @@ class TestQuicClientSession : public QuicClientSession {
                           crypto_config,
                           push_promise_index) {}
 
-  QuicSpdyClientStream* CreateClientStream() override {
-    return new MockQuicSpdyClientStream(GetNextOutgoingStreamId(), this);
+  std::unique_ptr<QuicSpdyClientStream> CreateClientStream() override {
+    return base::MakeUnique<MockQuicSpdyClientStream>(GetNextOutgoingStreamId(),
+                                                      this);
   }
 
   MockQuicSpdyClientStream* CreateIncomingDynamicStream(
       QuicStreamId id) override {
     MockQuicSpdyClientStream* stream = new MockQuicSpdyClientStream(id, this);
-    ActivateStream(stream);
+    ActivateStream(base::WrapUnique(stream));
     return stream;
   }
 };
@@ -233,9 +235,8 @@ TEST_P(QuicClientSessionTest, MaxNumStreamsWithRst) {
 
   // Close the stream and receive an RST frame to remove the unfinished stream
   session_->CloseStream(stream->id());
-  session_->OnRstStream(QuicRstStreamFrame(
-      stream->id(), AdjustErrorForVersion(QUIC_RST_ACKNOWLEDGEMENT, GetParam()),
-      0));
+  session_->OnRstStream(
+      QuicRstStreamFrame(stream->id(), QUIC_RST_ACKNOWLEDGEMENT, 0));
   // Check that a new one can be created.
   EXPECT_EQ(0u, session_->GetNumOpenOutgoingStreams());
   stream = session_->CreateOutgoingDynamicStream(kDefaultPriority);
@@ -324,9 +325,9 @@ TEST_P(QuicClientSessionTest, PushPromiseOnPromiseHeaders) {
   MockQuicSpdyClientStream* stream = static_cast<MockQuicSpdyClientStream*>(
       session_->CreateOutgoingDynamicStream(kDefaultPriority));
 
-  EXPECT_CALL(*stream, OnPromiseHeaders(_));
-  StringPiece headers_data;
-  session_->OnPromiseHeaders(associated_stream_id_, headers_data);
+  EXPECT_CALL(*stream, OnPromiseHeaderList(_, _, _));
+  session_->OnPromiseHeaderList(associated_stream_id_, promised_stream_id_, 0,
+                                QuicHeaderList());
 }
 
 TEST_P(QuicClientSessionTest, PushPromiseOnPromiseHeadersAlreadyClosed) {
@@ -339,21 +340,8 @@ TEST_P(QuicClientSessionTest, PushPromiseOnPromiseHeadersAlreadyClosed) {
               SendRstStream(associated_stream_id_, QUIC_REFUSED_STREAM, 0));
   session_->ResetPromised(associated_stream_id_, QUIC_REFUSED_STREAM);
 
-  StringPiece headers_data;
-  session_->OnPromiseHeaders(associated_stream_id_, headers_data);
-}
-
-TEST_P(QuicClientSessionTest, PushPromiseOnHeadersCompleteAlreadyClosed) {
-  // Initialize crypto before the client session will create a stream.
-  CompleteCryptoHandshake();
-
-  session_->CreateOutgoingDynamicStream(kDefaultPriority);
-  EXPECT_CALL(*connection_,
-              SendRstStream(associated_stream_id_, QUIC_REFUSED_STREAM, 0));
-  session_->ResetPromised(associated_stream_id_, QUIC_REFUSED_STREAM);
-
-  session_->OnPromiseHeadersComplete(associated_stream_id_, promised_stream_id_,
-                                     0);
+  session_->OnPromiseHeaderList(associated_stream_id_, promised_stream_id_, 0,
+                                QuicHeaderList());
 }
 
 TEST_P(QuicClientSessionTest, PushPromiseOutOfOrder) {
@@ -363,17 +351,17 @@ TEST_P(QuicClientSessionTest, PushPromiseOutOfOrder) {
   MockQuicSpdyClientStream* stream = static_cast<MockQuicSpdyClientStream*>(
       session_->CreateOutgoingDynamicStream(kDefaultPriority));
 
-  EXPECT_CALL(*stream, OnPromiseHeadersComplete(promised_stream_id_, _));
-  session_->OnPromiseHeadersComplete(associated_stream_id_, promised_stream_id_,
-                                     0);
+  EXPECT_CALL(*stream, OnPromiseHeaderList(promised_stream_id_, _, _));
+  session_->OnPromiseHeaderList(associated_stream_id_, promised_stream_id_, 0,
+                                QuicHeaderList());
   associated_stream_id_ += 2;
   EXPECT_CALL(*connection_,
               CloseConnection(QUIC_INVALID_STREAM_ID,
                               "Received push stream id lesser or equal to the"
                               " last accepted before",
                               _));
-  session_->OnPromiseHeadersComplete(associated_stream_id_, promised_stream_id_,
-                                     0);
+  session_->OnPromiseHeaderList(associated_stream_id_, promised_stream_id_, 0,
+                                QuicHeaderList());
 }
 
 TEST_P(QuicClientSessionTest, PushPromiseHandlePromise) {

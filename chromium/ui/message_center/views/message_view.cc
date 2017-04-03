@@ -5,7 +5,7 @@
 #include "ui/message_center/views/message_view.h"
 
 #include "base/strings/utf_string_conversions.h"
-#include "ui/accessibility/ax_view_state.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/models/simple_menu_model.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
@@ -128,9 +128,9 @@ bool MessageView::IsPinned() {
   return !close_button_;
 }
 
-void MessageView::GetAccessibleState(ui::AXViewState* state) {
-  state->role = ui::AX_ROLE_BUTTON;
-  state->name = accessible_name_;
+void MessageView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
+  node_data->role = ui::AX_ROLE_BUTTON;
+  node_data->SetName(accessible_name_);
 }
 
 bool MessageView::OnMousePressed(const ui::MouseEvent& event) {
@@ -277,6 +277,8 @@ void MessageView::CreateOrUpdateCloseButtonView(
     close->set_animate_on_state_change(false);
     close->SetAccessibleName(l10n_util::GetStringUTF16(
         IDS_MESSAGE_CENTER_CLOSE_NOTIFICATION_BUTTON_ACCESSIBLE_NAME));
+    close->SetTooltipText(l10n_util::GetStringUTF16(
+        IDS_MESSAGE_CENTER_CLOSE_NOTIFICATION_BUTTON_TOOLTIP));
     close->set_owned_by_client();
     AddChildView(close);
     close_button_.reset(close);

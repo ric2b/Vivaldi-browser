@@ -17,12 +17,15 @@ class Bus;
 namespace chromeos {
 
 class ArcObbMounterClient;
+class AuthPolicyClient;
 class CrosDisksClient;
 class CryptohomeClient;
 class DebugDaemonClient;
 class EasyUnlockClient;
 class ImageBurnerClient;
+class ImageLoaderClient;
 class LorgnetteManagerClient;
+class UpstartClient;
 
 // D-Bus clients used only in the browser process.
 // TODO(jamescook): Move this under //chrome/browser. http://crbug.com/647367
@@ -40,11 +43,14 @@ class CHROMEOS_EXPORT DBusClientsBrowser {
   friend class DBusThreadManagerSetter;
 
   std::unique_ptr<ArcObbMounterClient> arc_obb_mounter_client_;
+  std::unique_ptr<AuthPolicyClient> auth_policy_client_;
   std::unique_ptr<CrosDisksClient> cros_disks_client_;
   std::unique_ptr<DebugDaemonClient> debug_daemon_client_;
   std::unique_ptr<EasyUnlockClient> easy_unlock_client_;
   std::unique_ptr<ImageBurnerClient> image_burner_client_;
+  std::unique_ptr<ImageLoaderClient> image_loader_client_;
   std::unique_ptr<LorgnetteManagerClient> lorgnette_manager_client_;
+  std::unique_ptr<UpstartClient> upstart_client_;
 
   DISALLOW_COPY_AND_ASSIGN(DBusClientsBrowser);
 };

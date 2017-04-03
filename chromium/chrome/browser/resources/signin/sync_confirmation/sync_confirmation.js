@@ -21,9 +21,18 @@ cr.define('sync.confirmation', function() {
     document.addEventListener('keydown', onKeyDown);
     $('confirmButton').addEventListener('click', onConfirm);
     $('undoButton').addEventListener('click', onUndo);
-    $('settingsLink').addEventListener('click', onGoToSettings);
-    $('profile-picture').addEventListener('load', onPictureLoaded);
-    chrome.send('initializedWithSize', [document.body.scrollHeight]);
+    if (loadTimeData.getBoolean('isSyncAllowed')) {
+      $('settingsLink').addEventListener('click', onGoToSettings);
+      $('profile-picture').addEventListener('load', onPictureLoaded);
+      $('syncDisabledDetails').hidden = true;
+    } else {
+      $('syncConfirmationDetails').hidden = true;
+    }
+
+    // Prefer using |document.body.offsetHeight| instead of
+    // |document.body.scrollHeight| as it returns the correct height of the
+    // even when the page zoom in Chrome is different than 100%.
+    chrome.send('initializedWithSize', [document.body.offsetHeight]);
   }
 
   function clearFocus() {
@@ -31,11 +40,15 @@ cr.define('sync.confirmation', function() {
   }
 
   function setUserImageURL(url) {
-    $('profile-picture').src = url;
+    if (loadTimeData.getBoolean('isSyncAllowed')) {
+      $('profile-picture').src = url;
+    }
   }
 
   function onPictureLoaded(e) {
-    $('picture-container').classList.add('loaded');
+    if (loadTimeData.getBoolean('isSyncAllowed')) {
+      $('picture-container').classList.add('loaded');
+    }
   }
 
   function onKeyDown(e) {

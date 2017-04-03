@@ -31,18 +31,29 @@ Polymer({
       type: Boolean,
       value: cr.isChromeOS ? loadTimeData.getBoolean('allowPowerwash') : false
     },
+
+    /** @private */
+    showResetProfileDialog_: {
+      type: Boolean,
+      value: false,
+    },
   },
 
-  /** @protected */
-  currentRouteChanged: function() {
-    if (settings.getCurrentRoute() == settings.Route.RESET_DIALOG) {
-      this.$.resetProfileDialog.get().open();
-    }
+  /**
+   * settings.RouteObserverBehavior
+   * @param {!settings.Route} route
+   * @protected
+   */
+  currentRouteChanged: function(route) {
+    this.showResetProfileDialog_ =
+        route == settings.Route.TRIGGERED_RESET_DIALOG ||
+        route == settings.Route.RESET_DIALOG;
   },
 
   /** @private */
   onShowResetProfileDialog_: function() {
-    settings.navigateTo(settings.Route.RESET_DIALOG);
+    settings.navigateTo(settings.Route.RESET_DIALOG,
+                        new URLSearchParams('origin=userclick'));
   },
 
   /** @private */

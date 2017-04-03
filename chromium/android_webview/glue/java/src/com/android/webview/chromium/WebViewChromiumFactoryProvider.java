@@ -45,7 +45,6 @@ import org.chromium.android_webview.AwQuotaManagerBridge;
 import org.chromium.android_webview.AwResource;
 import org.chromium.android_webview.AwSettings;
 import org.chromium.android_webview.HttpAuthDatabase;
-import org.chromium.android_webview.R;
 import org.chromium.android_webview.ResourcesContextWrapperFactory;
 import org.chromium.base.BuildConfig;
 import org.chromium.base.CommandLine;
@@ -59,10 +58,10 @@ import org.chromium.base.TraceEvent;
 import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.library_loader.LibraryProcessType;
+import org.chromium.base.library_loader.NativeLibraries;
 import org.chromium.base.library_loader.ProcessInitException;
 import org.chromium.content.browser.ContentViewStatics;
 import org.chromium.net.NetworkChangeNotifier;
-import org.chromium.ui.base.ResourceBundle;
 
 import java.io.File;
 import java.util.Queue;
@@ -309,6 +308,13 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
         }
     }
 
+    public static boolean preloadInZygote() {
+        for (String library : NativeLibraries.LIBRARIES) {
+            System.loadLibrary(library);
+        }
+        return true;
+    }
+
     private void initPlatSupportLibrary() {
         DrawGLFunctor.setChromiumAwDrawGLFunction(AwContents.getAwDrawGLFunction());
         AwContents.setAwDrawSWFunctionTable(GraphicsUtils.getDrawSWFunctionTable());
@@ -392,11 +398,10 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
         final String webViewPackageName = WebViewFactory.getLoadedPackageInfo().packageName;
         Context context = ContextUtils.getApplicationContext();
         setUpResources(webViewPackageName, context);
-        ResourceBundle.initializeLocalePaks(context, R.array.locale_paks);
         initPlatSupportLibrary();
         initNetworkChangeNotifier(context);
-        final int extraBindFlags = Context.BIND_EXTERNAL_SERVICE;
-        AwBrowserProcess.configureChildProcessLauncher(webViewPackageName, extraBindFlags);
+        final boolean isExternalService = true;
+        AwBrowserProcess.configureChildProcessLauncher(webViewPackageName, isExternalService);
         AwBrowserProcess.start();
 
         if (isBuildDebuggable()) {

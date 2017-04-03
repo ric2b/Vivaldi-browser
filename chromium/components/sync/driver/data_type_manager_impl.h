@@ -99,6 +99,10 @@ class DataTypeManagerImpl : public DataTypeManager,
   // high priority to low priority.
   TypeSetPriorityList PrioritizeTypes(const ModelTypeSet& types);
 
+  // Update unready state of types in data_type_status_table_ to match value of
+  // DataTypeController::ReadyForStart().
+  void UpdateUnreadyTypeErrors(const ModelTypeSet& desired_types);
+
   // Post a task to reconfigure when no downloading or association are running.
   void ProcessReconfigure();
 
@@ -112,10 +116,6 @@ class DataTypeManagerImpl : public DataTypeManager,
   void OnDownloadRetry();
   void NotifyStart();
   void NotifyDone(const ConfigureResult& result);
-
-  // Add to |configure_time_delta_| the time since we last called
-  // Restart().
-  void AddToConfigureTime();
 
   void ConfigureImpl(ModelTypeSet desired_types, ConfigureReason reason);
 
@@ -162,10 +162,6 @@ class DataTypeManagerImpl : public DataTypeManager,
 
   // The last time Restart() was called.
   base::Time last_restart_time_;
-
-  // The accumulated time spent between calls to Restart() and going
-  // to the DONE state.
-  base::TimeDelta configure_time_delta_;
 
   // Sync's datatype debug info listener, which we pass model association
   // statistics to.

@@ -39,19 +39,17 @@ class CSSDefaultStyleSheets : public GarbageCollected<CSSDefaultStyleSheets> {
  public:
   static CSSDefaultStyleSheets& instance();
 
-  void ensureDefaultStyleSheetsForElement(const Element&,
-                                          bool& changedDefaultStyle);
+  bool ensureDefaultStyleSheetsForElement(const Element&);
   void ensureDefaultStyleSheetForFullscreen();
 
   RuleSet* defaultStyle() { return m_defaultStyle.get(); }
   RuleSet* defaultQuirksStyle() { return m_defaultQuirksStyle.get(); }
   RuleSet* defaultPrintStyle() { return m_defaultPrintStyle.get(); }
   RuleSet* defaultViewSourceStyle();
-  RuleSet* defaultMobileViewportStyle();
-  RuleSet* defaultTelevisionViewportStyle();
 
-  // FIXME: Remove WAP support.
-  RuleSet* defaultXHTMLMobileProfileStyle();
+  StyleSheetContents* ensureMobileViewportStyleSheet();
+  StyleSheetContents* ensureTelevisionViewportStyleSheet();
+  StyleSheetContents* ensureXHTMLMobileProfileStyleSheet();
 
   StyleSheetContents* defaultStyleSheet() { return m_defaultStyleSheet.get(); }
   StyleSheetContents* quirksStyleSheet() { return m_quirksStyleSheet.get(); }
@@ -70,16 +68,14 @@ class CSSDefaultStyleSheets : public GarbageCollected<CSSDefaultStyleSheets> {
   CSSDefaultStyleSheets();
 
   Member<RuleSet> m_defaultStyle;
-  Member<RuleSet> m_defaultMobileViewportStyle;
-  Member<RuleSet> m_defaultTelevisionViewportStyle;
   Member<RuleSet> m_defaultQuirksStyle;
   Member<RuleSet> m_defaultPrintStyle;
   Member<RuleSet> m_defaultViewSourceStyle;
-  Member<RuleSet> m_defaultXHTMLMobileProfileStyle;
 
   Member<StyleSheetContents> m_defaultStyleSheet;
   Member<StyleSheetContents> m_mobileViewportStyleSheet;
   Member<StyleSheetContents> m_televisionViewportStyleSheet;
+  Member<StyleSheetContents> m_xhtmlMobileProfileStyleSheet;
   Member<StyleSheetContents> m_quirksStyleSheet;
   Member<StyleSheetContents> m_svgStyleSheet;
   Member<StyleSheetContents> m_mathmlStyleSheet;

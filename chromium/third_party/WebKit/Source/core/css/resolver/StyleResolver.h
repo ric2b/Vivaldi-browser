@@ -34,7 +34,6 @@
 #include "core/css/resolver/CSSPropertyPriority.h"
 #include "core/css/resolver/MatchedPropertiesCache.h"
 #include "core/css/resolver/StyleBuilder.h"
-#include "core/dom/DocumentOrderedList.h"
 #include "core/style/CachedUAStyle.h"
 #include "platform/heap/Handle.h"
 #include "wtf/Deque.h"
@@ -50,16 +49,14 @@ class AnimatableValue;
 class CSSRuleList;
 class CSSStyleSheet;
 class CSSValue;
-class ContainerNode;
 class Document;
 class Element;
 class Interpolation;
 class MatchResult;
 class MediaQueryEvaluator;
-class ScopedStyleResolver;
 class StylePropertySet;
 class StyleRule;
-class ViewportStyleResolver;
+class StyleRuleUsageTracker;
 
 enum StyleSharingBehavior {
   AllowStyleSharing,
@@ -114,16 +111,12 @@ class CORE_EXPORT StyleResolver final
   // we factor StyleResolver further.
   // https://bugs.webkit.org/show_bug.cgi?id=108890
   void appendAuthorStyleSheets(const HeapVector<Member<CSSStyleSheet>>&);
-  void resetAuthorStyle(TreeScope&);
-  void resetRuleFeatures();
-  void finishAppendAuthorStyleSheets();
-
   void lazyAppendAuthorStyleSheets(unsigned firstNew,
                                    const HeapVector<Member<CSSStyleSheet>>&);
   void removePendingAuthorStyleSheets(const HeapVector<Member<CSSStyleSheet>>&);
   void appendPendingAuthorStyleSheets();
   bool hasPendingAuthorStyleSheets() const {
-    return m_pendingStyleSheets.size() > 0 || m_needCollectFeatures;
+    return m_pendingStyleSheets.size() > 0;
   }
 
   // TODO(esprehn): StyleResolver should probably not contain tree walking
@@ -155,10 +148,6 @@ class CORE_EXPORT StyleResolver final
 
   void computeFont(ComputedStyle*, const StylePropertySet&);
 
-  ViewportStyleResolver* viewportStyleResolver() {
-    return m_viewportStyleResolver.get();
-  }
-
   void addViewportDependentMediaQueries(const MediaQueryResultList&);
   bool hasViewportDependentMediaQueries() const {
     return !m_viewportDependentMediaQueryResults.isEmpty();
@@ -177,17 +166,7 @@ class CORE_EXPORT StyleResolver final
     return s_styleNotYetAvailable;
   }
 
-  RuleFeatureSet& ensureUpdatedRuleFeatureSet() {
-    if (hasPendingAuthorStyleSheets())
-      appendPendingAuthorStyleSheets();
-    RELEASE_ASSERT(m_features.isAlive());
-    return m_features;
-  }
-
   StyleSharingList& styleSharingList();
-
-  bool hasRulesForId(const AtomicString&) const;
-  bool hasFullscreenUAStyle() const { return m_hasFullscreenUAStyle; }
 
   void addToStyleSharingList(Element&);
   void clearStyleSharingList();
@@ -199,8 +178,7 @@ class CORE_EXPORT StyleResolver final
 
   DECLARE_TRACE();
 
-  void addTreeBoundaryCrossingScope(ContainerNode& scope);
-  void initWatchedSelectorRules();
+  void setRuleUsageTracker(StyleRuleUsageTracker*);
 
  private:
   explicit StyleResolver(Document&);
@@ -209,6 +187,8 @@ class CORE_EXPORT StyleResolver final
 
   // FIXME: This should probably go away, folded into FontBuilder.
   void updateFont(StyleResolverState&);
+
+  void addMatchedRulesToTracker(const ElementRuleCollector&);
 
   void loadPendingResources(StyleResolverState&);
   void adjustComputedStyle(StyleResolverState&, Element*);
@@ -227,24 +207,50 @@ class CORE_EXPORT StyleResolver final
   void matchAllRules(StyleResolverState&,
                      ElementRuleCollector&,
                      bool includeSMILProperties);
-  void collectFeatures();
-  void collectTreeBoundaryCrossingRules(const Element&, ElementRuleCollector&);
+  void collectTreeBoundaryCrossingRulesV0CascadeOrder(const Element&,
+                                                      ElementRuleCollector&);
 
   void applyMatchedProperties(StyleResolverState&, const MatchResult&);
   bool applyAnimatedProperties(StyleResolverState&,
                                const Element* animatingElement);
   void applyCallbackSelectors(StyleResolverState&);
 
-  template <CSSPropertyPriority priority>
+  // These flags indicate whether an apply pass for a given CSSPropertyPriority
+  // and isImportant is required.
+  class NeedsApplyPass {
+   public:
+    bool get(CSSPropertyPriority priority, bool isImportant) const {
+      return m_flags[getIndex(priority, isImportant)];
+    }
+    void set(CSSPropertyPriority priority, bool isImportant) {
+      m_flags[getIndex(priority, isImportant)] = true;
+    }
+
+   private:
+    static size_t getIndex(CSSPropertyPriority priority, bool isImportant) {
+      DCHECK(priority >= 0 && priority < PropertyPriorityCount);
+      return priority * 2 + isImportant;
+    }
+    bool m_flags[PropertyPriorityCount * 2] = {0};
+  };
+
+  enum ShouldUpdateNeedsApplyPass {
+    CheckNeedsApplyPass = false,
+    UpdateNeedsApplyPass = true,
+  };
+
+  template <CSSPropertyPriority priority, ShouldUpdateNeedsApplyPass>
   void applyMatchedProperties(StyleResolverState&,
                               const MatchedPropertiesRange&,
                               bool important,
-                              bool inheritedOnly);
-  template <CSSPropertyPriority priority>
+                              bool inheritedOnly,
+                              NeedsApplyPass&);
+  template <CSSPropertyPriority priority, ShouldUpdateNeedsApplyPass>
   void applyProperties(StyleResolverState&,
                        const StylePropertySet* properties,
                        bool isImportant,
                        bool inheritedOnly,
+                       NeedsApplyPass&,
                        PropertyWhitelistType = PropertyWhitelistNone);
   template <CSSPropertyPriority priority>
   void applyAnimatedProperties(StyleResolverState&,
@@ -254,10 +260,11 @@ class CORE_EXPORT StyleResolver final
                         const CSSValue&,
                         bool inheritedOnly,
                         PropertyWhitelistType);
-  template <CSSPropertyPriority priority>
+  template <CSSPropertyPriority priority, ShouldUpdateNeedsApplyPass>
   void applyPropertiesForApplyAtRule(StyleResolverState&,
                                      const CSSValue&,
                                      bool isImportant,
+                                     NeedsApplyPass&,
                                      PropertyWhitelistType);
 
   bool pseudoStyleForElementInternal(Element&,
@@ -282,23 +289,11 @@ class CORE_EXPORT StyleResolver final
   Member<Document> m_document;
   SelectorFilter m_selectorFilter;
 
-  Member<ViewportStyleResolver> m_viewportStyleResolver;
-
   HeapListHashSet<Member<CSSStyleSheet>, 16> m_pendingStyleSheets;
 
-  // FIXME: The entire logic of collecting features on StyleResolver, as well as
-  // transferring them between various parts of machinery smells wrong. This
-  // needs to be better somehow.
-  RuleFeatureSet m_features;
-  Member<RuleSet> m_siblingRuleSet;
-  Member<RuleSet> m_uncommonAttributeRuleSet;
-  Member<RuleSet> m_watchedSelectorsRules;
+  Member<StyleRuleUsageTracker> m_tracker;
 
-  DocumentOrderedList m_treeBoundaryCrossingScopes;
-
-  bool m_needCollectFeatures;
   bool m_printMediaType;
-  bool m_hasFullscreenUAStyle = false;
 
   unsigned m_styleSharingDepth;
   HeapVector<Member<StyleSharingList>, styleSharingMaxDepth>

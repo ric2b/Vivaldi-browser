@@ -16,19 +16,17 @@
 #include "content/renderer/input/input_handler_manager_client.h"
 #include "content/renderer/input/main_thread_event_queue.h"
 #include "ipc/message_filter.h"
-#include "third_party/WebKit/public/web/WebInputEvent.h"
+#include "third_party/WebKit/public/platform/WebInputEvent.h"
 
 namespace base {
 class SingleThreadTaskRunner;
 }
 
 namespace ui {
-class SynchronousInputHandlerProxy;
 struct DidOverscrollParams;
 }
 
 namespace IPC {
-class Listener;
 class Sender;
 }
 
@@ -67,7 +65,6 @@ class CONTENT_EXPORT InputEventFilter : public InputHandlerManagerClient,
   void UnregisterRoutingID(int routing_id) override;
   void DidOverscroll(int routing_id,
                      const ui::DidOverscrollParams& params) override;
-  void DidStartFlinging(int routing_id) override;
   void DidStopFlinging(int routing_id) override;
   void DispatchNonBlockingEventToMainThread(
       int routing_id,
@@ -114,7 +111,6 @@ class CONTENT_EXPORT InputEventFilter : public InputHandlerManagerClient,
       std::unique_ptr<ui::DidOverscrollParams> overscroll_params);
   void SendMessage(std::unique_ptr<IPC::Message> message);
   void SendMessageOnIOThread(std::unique_ptr<IPC::Message> message);
-  void SetIsFlingingInMainThreadEventQueue(int routing_id, bool is_flinging);
 
   scoped_refptr<base::SingleThreadTaskRunner> main_task_runner_;
   base::Callback<void(const IPC::Message&)> main_listener_;

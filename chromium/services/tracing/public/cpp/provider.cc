@@ -17,9 +17,10 @@
 #include "base/time/time.h"
 #include "base/trace_event/trace_config.h"
 #include "base/trace_event/trace_event.h"
-#include "services/shell/public/cpp/connection.h"
-#include "services/shell/public/cpp/connector.h"
+#include "services/service_manager/public/cpp/connection.h"
+#include "services/service_manager/public/cpp/connector.h"
 #include "services/tracing/public/cpp/switches.h"
+#include "services/tracing/public/interfaces/constants.mojom.h"
 
 namespace tracing {
 namespace {
@@ -29,12 +30,8 @@ namespace {
 base::LazyInstance<base::Lock>::Leaky g_singleton_lock =
     LAZY_INSTANCE_INITIALIZER;
 
-// Whether we are the first TracingImpl to be created in this mojo
-// application. The first TracingImpl in a physical mojo application connects
-// to the mojo:tracing service.
-//
-// If this is a ContentHandler, it will outlive all its served Applications. If
-// this is a raw mojo application, it is the only Application served.
+// Whether we are the first TracingImpl to be created in this service. The first
+// TracingImpl in a physical service connects to the tracing service.
 bool g_tracing_singleton_created = false;
 
 }
@@ -46,23 +43,10 @@ Provider::~Provider() {
   StopTracing();
 }
 
-void Provider::Initialize(shell::Connector* connector, const std::string& url) {
-  {
-    base::AutoLock lock(g_singleton_lock.Get());
-    if (g_tracing_singleton_created)
-      return;
-    g_tracing_singleton_created = true;
-  }
-
-  // This will only set the name for the first app in a loaded mojo file. It's
-  // up to something like CoreServices to name its own child threads.
-  base::PlatformThread::SetName(url);
-
-  mojom::FactoryPtr factory;
-  connector->ConnectToInterface("service:tracing", &factory);
+void Provider::InitializeWithFactoryInternal(mojom::FactoryPtr* factory) {
   mojom::ProviderPtr provider;
   Bind(GetProxy(&provider));
-  factory->CreateRecorder(std::move(provider));
+  (*factory)->CreateRecorder(std::move(provider));
 #ifdef NDEBUG
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           tracing::kEarlyTracing)) {
@@ -71,6 +55,32 @@ void Provider::Initialize(shell::Connector* connector, const std::string& url) {
 #else
   ForceEnableTracing();
 #endif
+}
+
+void Provider::InitializeWithFactory(mojom::FactoryPtr* factory) {
+  {
+    base::AutoLock lock(g_singleton_lock.Get());
+    if (g_tracing_singleton_created)
+      return;
+    g_tracing_singleton_created = true;
+  }
+  InitializeWithFactoryInternal(factory);
+}
+
+void Provider::Initialize(service_manager::Connector* connector,
+                          const std::string& url) {
+  {
+    base::AutoLock lock(g_singleton_lock.Get());
+    if (g_tracing_singleton_created)
+      return;
+    g_tracing_singleton_created = true;
+  }
+  mojom::FactoryPtr factory;
+  connector->ConnectToInterface(tracing::mojom::kServiceName, &factory);
+  InitializeWithFactoryInternal(&factory);
+  // This will only set the name for the first app in a loaded mojo file. It's
+  // up to something like CoreServices to name its own child threads.
+  base::PlatformThread::SetName(url);
 }
 
 void Provider::Bind(mojom::ProviderRequest request) {

@@ -33,6 +33,7 @@
 
 ActiveScriptWrappable
 CEReactions
+CachedAccessor
 CachedAttribute=*
 CallWith=ExecutionContext|ScriptState|ScriptArguments|CurrentWindow|EnteredWindow|ThisValue
 CheckSecurity=Receiver|ReturnValue
@@ -57,6 +58,7 @@ FeaturePolicy=*
 FlexibleArrayBufferView
 Global=|*
 HTMLConstructor
+ImmutablePrototype
 ImplementedAs=*
 ImplementedInPrivateScript
 Iterable
@@ -98,7 +100,7 @@ SetWrapperReferenceFrom=*
 SetWrapperReferenceTo=*
 SetterCallWith=ExecutionContext|ScriptArguments|CurrentWindow|EnteredWindow
 TreatNullAs=NullString|EmptyString
-TreatUndefinedAs=NullString
 URL
 Unforgeable
 Unscopable
+WebModuleAPI

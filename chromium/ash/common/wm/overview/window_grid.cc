@@ -12,7 +12,6 @@
 
 #include "ash/common/ash_switches.h"
 #include "ash/common/shelf/wm_shelf.h"
-#include "ash/common/shell_window_ids.h"
 #include "ash/common/wm/overview/cleanup_animation_observer.h"
 #include "ash/common/wm/overview/scoped_overview_animation_settings.h"
 #include "ash/common/wm/overview/scoped_overview_animation_settings_factory.h"
@@ -25,6 +24,7 @@
 #include "ash/common/wm_root_window_controller.h"
 #include "ash/common/wm_window.h"
 #include "ash/public/cpp/shelf_types.h"
+#include "ash/public/cpp/shell_window_ids.h"
 #include "base/command_line.h"
 #include "base/i18n/string_search.h"
 #include "base/memory/scoped_vector.h"
@@ -262,6 +262,11 @@ views::Widget* CreateBackgroundWidget(WmWindow* root_window,
   return widget;
 }
 
+bool IsMinimizedStateType(wm::WindowStateType type) {
+  return type == wm::WINDOW_STATE_TYPE_DOCKED_MINIMIZED ||
+         type == wm::WINDOW_STATE_TYPE_MINIMIZED;
+}
+
 }  // namespace
 
 WindowGrid::WindowGrid(WmWindow* root_window,
@@ -270,6 +275,7 @@ WindowGrid::WindowGrid(WmWindow* root_window,
     : root_window_(root_window),
       window_selector_(window_selector),
       window_observer_(this),
+      window_state_observer_(this),
       selected_index_(0),
       num_columns_(0),
       prepared_for_overview_(false) {
@@ -281,6 +287,7 @@ WindowGrid::WindowGrid(WmWindow* root_window,
 
   for (auto* window : windows_in_root) {
     window_observer_.Add(window);
+    window_state_observer_.Add(window->GetWindowState());
     window_list_.push_back(new WindowSelectorItem(window, window_selector_));
   }
 }
@@ -558,6 +565,7 @@ void WindowGrid::WindowClosing(WindowSelectorItem* window) {
 
 void WindowGrid::OnWindowDestroying(WmWindow* window) {
   window_observer_.Remove(window);
+  window_state_observer_.Remove(window->GetWindowState());
   ScopedVector<WindowSelectorItem>::iterator iter =
       std::find_if(window_list_.begin(), window_list_.end(),
                    WindowSelectorItemComparator(window));
@@ -590,9 +598,8 @@ void WindowGrid::OnWindowDestroying(WmWindow* window) {
 void WindowGrid::OnWindowBoundsChanged(WmWindow* window,
                                        const gfx::Rect& old_bounds,
                                        const gfx::Rect& new_bounds) {
-  // During preparation, window bounds can change (e.g. by unminimizing a
-  // window). Ignore bounds change notifications in this case; we'll reposition
-  // soon.
+  // During preparation, window bounds can change. Ignore bounds
+  // change notifications in this case; we'll reposition soon.
   if (!prepared_for_overview_)
     return;
 
@@ -603,6 +610,27 @@ void WindowGrid::OnWindowBoundsChanged(WmWindow* window,
   // Immediately finish any active bounds animation.
   window->StopAnimatingProperty(ui::LayerAnimationElement::BOUNDS);
   PositionWindows(false);
+}
+
+void WindowGrid::OnPostWindowStateTypeChange(wm::WindowState* window_state,
+                                             wm::WindowStateType old_type) {
+  // During preparation, window state can change, e.g. updating shelf
+  // visibility may show the temporarily hidden (minimized) panels.
+  if (!prepared_for_overview_)
+    return;
+
+  wm::WindowStateType new_type = window_state->GetStateType();
+  if (IsMinimizedStateType(old_type) == IsMinimizedStateType(new_type))
+    return;
+
+  auto iter = std::find_if(window_list_.begin(), window_list_.end(),
+                           [window_state](WindowSelectorItem* item) {
+                             return item->Contains(window_state->window());
+                           });
+  if (iter != window_list_.end()) {
+    (*iter)->OnMinimizedStateChanged();
+    PositionWindows(false);
+  }
 }
 
 void WindowGrid::InitShieldWidget() {

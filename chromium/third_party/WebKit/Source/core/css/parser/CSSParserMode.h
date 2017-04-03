@@ -85,14 +85,20 @@ class CORE_EXPORT CSSParserContext {
   USING_FAST_MALLOC(CSSParserContext);
 
  public:
-  CSSParserContext(CSSParserMode, UseCounter*);
+  // https://drafts.csswg.org/selectors/#profiles
+  enum SelectorProfile { DynamicProfile, StaticProfile };
+
+  CSSParserContext(CSSParserMode,
+                   UseCounter*,
+                   SelectorProfile = DynamicProfile);
   // FIXME: We shouldn't need the UseCounter argument as we could infer it from
   // the Document but some callers want to disable use counting (e.g. the
   // WebInspector).
   CSSParserContext(const Document&,
                    UseCounter*,
                    const KURL& baseURL = KURL(),
-                   const String& charset = emptyString());
+                   const String& charset = emptyString(),
+                   SelectorProfile = DynamicProfile);
   // FIXME: This constructor shouldn't exist if we properly piped the UseCounter
   // through the CSS subsystem. Currently the UseCounter life time is too crazy
   // and we need a way to override it.
@@ -109,6 +115,8 @@ class CORE_EXPORT CSSParserContext {
   const String& charset() const { return m_charset; }
   const Referrer& referrer() const { return m_referrer; }
   bool isHTMLDocument() const { return m_isHTMLDocument; }
+  bool isDynamicProfile() const { return m_profile == DynamicProfile; }
+  bool isStaticProfile() const { return m_profile == StaticProfile; }
 
   // This quirk is to maintain compatibility with Android apps built on
   // the Android SDK prior to and including version 18. Presumably, this
@@ -140,6 +148,7 @@ class CORE_EXPORT CSSParserContext {
   String m_charset;
   CSSParserMode m_mode;
   CSSParserMode m_matchMode;
+  SelectorProfile m_profile = DynamicProfile;
   Referrer m_referrer;
   bool m_isHTMLDocument;
   bool m_useLegacyBackgroundSizeShorthandBehavior;

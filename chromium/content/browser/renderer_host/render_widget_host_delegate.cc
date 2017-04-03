@@ -2,8 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "build/build_config.h"
 #include "content/browser/renderer_host/render_widget_host_delegate.h"
+
+#include "build/build_config.h"
+#include "content/browser/renderer_host/render_view_host_delegate_view.h"
 #include "ui/gfx/geometry/rect.h"
 
 namespace content {
@@ -50,10 +52,10 @@ RenderWidgetHostImpl* RenderWidgetHostDelegate::GetFocusedRenderWidgetHost(
   return receiving_widget;
 }
 
-gfx::Rect RenderWidgetHostDelegate::GetRootWindowResizerRect(
-    RenderWidgetHostImpl* render_widget_host) const {
-  return gfx::Rect();
-};
+RenderWidgetHostImpl*
+RenderWidgetHostDelegate::GetRenderWidgetHostWithPageFocus() {
+  return nullptr;
+}
 
 bool RenderWidgetHostDelegate::IsFullscreenForCurrentTab() const {
   return false;
@@ -77,9 +79,17 @@ bool RenderWidgetHostDelegate::IsHidden() {
   return false;
 }
 
+RenderViewHostDelegateView* RenderWidgetHostDelegate::GetDelegateView() {
+  return nullptr;
+}
+
 RenderWidgetHostImpl* RenderWidgetHostDelegate::GetFullscreenRenderWidgetHost()
     const {
   return nullptr;
+}
+
+bool RenderWidgetHostDelegate::OnUpdateDragCursor() {
+  return false;
 }
 
 }  // namespace content

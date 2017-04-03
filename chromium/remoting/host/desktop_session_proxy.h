@@ -15,15 +15,15 @@
 #include "base/memory/weak_ptr.h"
 #include "base/process/process.h"
 #include "base/sequenced_task_runner_helpers.h"
+#include "ipc/ipc_channel_handle.h"
 #include "ipc/ipc_listener.h"
-#include "ipc/ipc_platform_file.h"
 #include "remoting/host/audio_capturer.h"
 #include "remoting/host/desktop_environment.h"
 #include "remoting/host/screen_resolution.h"
 #include "remoting/proto/event.pb.h"
 #include "remoting/protocol/clipboard_stub.h"
 #include "remoting/protocol/errors.h"
-#include "third_party/webrtc/modules/desktop_capture/screen_capturer.h"
+#include "third_party/webrtc/modules/desktop_capture/desktop_capturer.h"
 
 namespace base {
 class SingleThreadTaskRunner;
@@ -76,8 +76,7 @@ class DesktopSessionProxy
       scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
       base::WeakPtr<ClientSessionControl> client_session_control,
       base::WeakPtr<DesktopSessionConnector> desktop_session_connector,
-      bool virtual_terminal,
-      bool supports_touch_events);
+      bool virtual_terminal);
 
   // Mirrors DesktopEnvironment.
   std::unique_ptr<AudioCapturer> CreateAudioCapturer();
@@ -94,8 +93,7 @@ class DesktopSessionProxy
   void OnChannelError() override;
 
   // Connects to the desktop session agent.
-  bool AttachToDesktop(base::Process desktop_process,
-                       IPC::PlatformFileForTransit desktop_pipe);
+  bool AttachToDesktop(const IPC::ChannelHandle& desktop_pipe, int session_id);
 
   // Closes the connection to the desktop session agent and cleans up
   // the associated resources.
@@ -205,9 +203,6 @@ class DesktopSessionProxy
   // IPC channel to the desktop session agent.
   std::unique_ptr<IPC::ChannelProxy> desktop_channel_;
 
-  // Handle of the desktop process.
-  base::Process desktop_process_;
-
   int pending_capture_frame_requests_;
 
   // Shared memory buffers by Id. Each buffer is owned by the corresponding
@@ -222,9 +217,6 @@ class DesktopSessionProxy
   bool is_desktop_session_connected_;
 
   bool virtual_terminal_;
-
-  // True if touch events are supported by the desktop session.
-  bool supports_touch_events_;
 
   // Stores the session id for the proxied desktop process.
   uint32_t desktop_session_id_ = UINT32_MAX;

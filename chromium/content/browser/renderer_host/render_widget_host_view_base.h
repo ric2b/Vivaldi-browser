@@ -42,7 +42,6 @@
 
 class SkBitmap;
 
-struct AccessibilityHostMsg_EventParams;
 struct ViewHostMsg_SelectionBounds_Params;
 
 namespace media {
@@ -93,6 +92,7 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
 
   RenderWidgetHost* GetRenderWidgetHost() const override;
   void SetBackgroundColor(SkColor color) override;
+  SkColor background_color() override;
   void SetBackgroundColorToDefault() final;
   bool GetBackgroundOpaque() override;
   ui::TextInputClient* GetTextInputClient() override;
@@ -163,9 +163,9 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
 
   // Whether or not Blink's viewport size should be shrunk by the height of the
   // URL-bar.
-  virtual bool DoTopControlsShrinkBlinkSize() const;
+  virtual bool DoBrowserControlsShrinkBlinkSize() const;
 
-  // The height of the URL-bar top controls.
+  // The height of the URL-bar browser controls.
   virtual float GetTopControlsHeight() const;
 
   // The height of the bottom bar.
@@ -259,18 +259,21 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   // RenderWidget and needs to be translated to viewport coordinates for the
   // root RWHV, in which case this method is called on the root RWHV with the
   // out-of-process iframe's SurfaceId.
-  // This does not transform points between surfaces where one does not
-  // contain the other. To transform between sibling surfaces, the point must
-  // be transformed to the root's coordinate space as an intermediate step.
-  virtual gfx::Point TransformPointToLocalCoordSpace(
+  // Returns false when this attempts to transform a point between coordinate
+  // spaces of surfaces where one does not contain the other. To transform
+  // between sibling surfaces, the point must be transformed to the root's
+  // coordinate space as an intermediate step.
+  virtual bool TransformPointToLocalCoordSpace(
       const gfx::Point& point,
-      const cc::SurfaceId& original_surface);
+      const cc::SurfaceId& original_surface,
+      gfx::Point* transformed_point);
 
   // Transform a point that is in the coordinate space for the current
   // RenderWidgetHostView to the coordinate space of the target_view.
-  virtual gfx::Point TransformPointToCoordSpaceForView(
+  virtual bool TransformPointToCoordSpaceForView(
       const gfx::Point& point,
-      RenderWidgetHostViewBase* target_view);
+      RenderWidgetHostViewBase* target_view,
+      gfx::Point* transformed_point);
 
   // TODO(kenrb, wjmaclean): This is a temporary subclass identifier for
   // RenderWidgetHostViewGuests that is needed for special treatment during
@@ -415,16 +418,6 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   void AddObserver(RenderWidgetHostViewBaseObserver* observer);
   void RemoveObserver(RenderWidgetHostViewBaseObserver* observer);
 
-  // Exposed for testing.
-  virtual bool IsChildFrameForTesting() const;
-  virtual cc::SurfaceId SurfaceIdForTesting() const;
-
- protected:
-  // Interface class only, do not construct.
-  RenderWidgetHostViewBase();
-
-  void NotifyObserversAboutShutdown();
-
   // Returns a reference to the current instance of TextInputManager. The
   // reference is obtained from RenderWidgetHostDelegate. The first time a non-
   // null reference is obtained, its value is cached in |text_input_manager_|
@@ -436,6 +429,21 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   // It is safer to use this method rather than directly dereferencing
   // |text_input_manager_|.
   TextInputManager* GetTextInputManager();
+
+  bool is_fullscreen() { return is_fullscreen_; }
+
+  // Exposed for testing.
+  virtual bool IsChildFrameForTesting() const;
+  virtual cc::SurfaceId SurfaceIdForTesting() const;
+
+ protected:
+  // Interface class only, do not construct.
+  RenderWidgetHostViewBase();
+
+  void NotifyObserversAboutShutdown();
+
+  // Is this a fullscreen view?
+  bool is_fullscreen_;
 
   // Whether this view is a popup and what kind of popup it is (select,
   // autofill...).
@@ -475,10 +483,6 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
 
   // The orientation of the display the renderer is currently on.
   display::Display::Rotation current_display_rotation_;
-
-  // Whether pinch-to-zoom should be enabled and pinch events forwarded to the
-  // renderer.
-  bool pinch_zoom_enabled_;
 
   // A reference to current TextInputManager instance this RWHV is registered
   // with. This is initially nullptr until the first time the view calls

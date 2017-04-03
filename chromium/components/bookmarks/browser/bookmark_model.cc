@@ -135,8 +135,8 @@ BookmarkModel::BookmarkModel(std::unique_ptr<BookmarkClient> client)
 }
 
 BookmarkModel::~BookmarkModel() {
-  FOR_EACH_OBSERVER(BookmarkModelObserver, observers_,
-                    BookmarkModelBeingDeleted(this));
+  for (BookmarkModelObserver& observer : observers_)
+    observer.BookmarkModelBeingDeleted(this);
 
   if (store_.get()) {
     // The store maintains a reference back to us. We need to tell it we're gone
@@ -174,13 +174,6 @@ void BookmarkModel::Load(
   store_->LoadBookmarks(CreateLoadDetails(), ui_task_runner);
 }
 
-const BookmarkNode* BookmarkModel::GetParentForNewNodes() {
-  std::vector<const BookmarkNode*> nodes =
-      GetMostRecentlyModifiedUserFolders(this, 1);
-  DCHECK(!nodes.empty());  // This list is always padded with default folders.
-  return nodes[0];
-}
-
 void BookmarkModel::AddObserver(BookmarkModelObserver* observer) {
   observers_.AddObserver(observer);
 }
@@ -191,8 +184,8 @@ void BookmarkModel::RemoveObserver(BookmarkModelObserver* observer) {
 
 void BookmarkModel::BeginExtensiveChanges() {
   if (++extensive_changes_ == 1) {
-    FOR_EACH_OBSERVER(BookmarkModelObserver, observers_,
-                      ExtensiveBookmarkChangesBeginning(this));
+    for (BookmarkModelObserver& observer : observers_)
+      observer.ExtensiveBookmarkChangesBeginning(this);
   }
 }
 
@@ -200,19 +193,19 @@ void BookmarkModel::EndExtensiveChanges() {
   --extensive_changes_;
   DCHECK_GE(extensive_changes_, 0);
   if (extensive_changes_ == 0) {
-    FOR_EACH_OBSERVER(BookmarkModelObserver, observers_,
-                      ExtensiveBookmarkChangesEnded(this));
+    for (BookmarkModelObserver& observer : observers_)
+      observer.ExtensiveBookmarkChangesEnded(this);
   }
 }
 
 void BookmarkModel::BeginGroupedChanges() {
-  FOR_EACH_OBSERVER(BookmarkModelObserver, observers_,
-                    GroupedBookmarkChangesBeginning(this));
+  for (BookmarkModelObserver& observer : observers_)
+    observer.GroupedBookmarkChangesBeginning(this);
 }
 
 void BookmarkModel::EndGroupedChanges() {
-  FOR_EACH_OBSERVER(BookmarkModelObserver, observers_,
-                    GroupedBookmarkChangesEnded(this));
+  for (BookmarkModelObserver& observer : observers_)
+    observer.GroupedBookmarkChangesEnded(this);
 }
 
 void BookmarkModel::Remove(const BookmarkNode* node) {
@@ -231,8 +224,8 @@ void BookmarkModel::RemoveAllUserBookmarks() {
   };
   std::vector<RemoveNodeData> removed_node_data_list;
 
-  FOR_EACH_OBSERVER(BookmarkModelObserver, observers_,
-                    OnWillRemoveAllUserBookmarks(this));
+  for (BookmarkModelObserver& observer : observers_)
+    observer.OnWillRemoveAllUserBookmarks(this);
 
   BeginExtensiveChanges();
   // Skip deleting permanent nodes. Permanent bookmark nodes are the root and
@@ -257,8 +250,8 @@ void BookmarkModel::RemoveAllUserBookmarks() {
   if (store_.get())
     store_->ScheduleSave();
 
-  FOR_EACH_OBSERVER(BookmarkModelObserver, observers_,
-                    BookmarkAllUserNodesRemoved(this, removed_urls));
+  for (BookmarkModelObserver& observer : observers_)
+    observer.BookmarkAllUserNodesRemoved(this, removed_urls);
 
   BeginGroupedChanges();
   for (auto& removed_node_data : removed_node_data_list) {
@@ -307,9 +300,8 @@ void BookmarkModel::Move(const BookmarkNode* node,
   if (store_.get())
     store_->ScheduleSave();
 
-  FOR_EACH_OBSERVER(BookmarkModelObserver, observers_,
-                    BookmarkNodeMoved(this, old_parent, old_index,
-                                      new_parent, index));
+  for (BookmarkModelObserver& observer : observers_)
+    observer.BookmarkNodeMoved(this, old_parent, old_index, new_parent, index);
 }
 
 void BookmarkModel::Copy(const BookmarkNode* node,
@@ -365,8 +357,8 @@ void BookmarkModel::SetTitle(const BookmarkNode* node,
     return;
   }
 
-  FOR_EACH_OBSERVER(BookmarkModelObserver, observers_,
-                    OnWillChangeBookmarkNode(this, node));
+  for (BookmarkModelObserver& observer : observers_)
+    observer.OnWillChangeBookmarkNode(this, node);
 
   // The title index doesn't support changing the title, instead we remove then
   // add it back.
@@ -377,8 +369,8 @@ void BookmarkModel::SetTitle(const BookmarkNode* node,
   if (store_.get())
     store_->ScheduleSave();
 
-  FOR_EACH_OBSERVER(BookmarkModelObserver, observers_,
-                    BookmarkNodeChanged(this, node));
+  for (BookmarkModelObserver& observer : observers_)
+    observer.BookmarkNodeChanged(this, node);
 }
 
 void BookmarkModel::SetURL(const BookmarkNode* node, const GURL& url) {
@@ -391,8 +383,8 @@ void BookmarkModel::SetURL(const BookmarkNode* node, const GURL& url) {
   mutable_node->InvalidateFavicon();
   CancelPendingFaviconLoadRequests(mutable_node);
 
-  FOR_EACH_OBSERVER(BookmarkModelObserver, observers_,
-                    OnWillChangeBookmarkNode(this, node));
+  for (BookmarkModelObserver& observer : observers_)
+    observer.OnWillChangeBookmarkNode(this, node);
 
   {
     base::AutoLock url_lock(url_lock_);
@@ -404,8 +396,8 @@ void BookmarkModel::SetURL(const BookmarkNode* node, const GURL& url) {
   if (store_.get())
     store_->ScheduleSave();
 
-  FOR_EACH_OBSERVER(BookmarkModelObserver, observers_,
-                    BookmarkNodeChanged(this, node));
+  for (BookmarkModelObserver& observer : observers_)
+    observer.BookmarkNodeChanged(this, node);
 }
 
 void BookmarkModel::SetNodeMetaInfo(const BookmarkNode* node,
@@ -415,17 +407,17 @@ void BookmarkModel::SetNodeMetaInfo(const BookmarkNode* node,
   if (node->GetMetaInfo(key, &old_value) && old_value == value)
     return;
 
-  FOR_EACH_OBSERVER(BookmarkModelObserver, observers_,
-                    OnWillChangeBookmarkMetaInfo(this, node));
+  for (BookmarkModelObserver& observer : observers_)
+    observer.OnWillChangeBookmarkMetaInfo(this, node);
 
   if (AsMutable(node)->SetMetaInfo(key, value) && store_.get())
     store_->ScheduleSave();
 
-  FOR_EACH_OBSERVER(BookmarkModelObserver, observers_,
-                    BookmarkMetaInfoChanged(this, node));
+  for (BookmarkModelObserver& observer : observers_)
+    observer.BookmarkMetaInfoChanged(this, node);
 
-  FOR_EACH_OBSERVER(BookmarkModelObserver, observers_,
-                    BookmarkNodeChanged(this, node));
+  for (BookmarkModelObserver& observer : observers_)
+    observer.BookmarkNodeChanged(this, node);
 }
 
 void BookmarkModel::SetNodeMetaInfoMap(
@@ -436,15 +428,15 @@ void BookmarkModel::SetNodeMetaInfoMap(
       (old_meta_info_map && meta_info_map == *old_meta_info_map))
     return;
 
-  FOR_EACH_OBSERVER(BookmarkModelObserver, observers_,
-                    OnWillChangeBookmarkMetaInfo(this, node));
+  for (BookmarkModelObserver& observer : observers_)
+    observer.OnWillChangeBookmarkMetaInfo(this, node);
 
   AsMutable(node)->SetMetaInfoMap(meta_info_map);
   if (store_.get())
     store_->ScheduleSave();
 
-  FOR_EACH_OBSERVER(BookmarkModelObserver, observers_,
-                    BookmarkMetaInfoChanged(this, node));
+  for (BookmarkModelObserver& observer : observers_)
+    observer.BookmarkMetaInfoChanged(this, node);
 }
 
 void BookmarkModel::DeleteNodeMetaInfo(const BookmarkNode* node,
@@ -453,14 +445,14 @@ void BookmarkModel::DeleteNodeMetaInfo(const BookmarkNode* node,
   if (!meta_info_map || meta_info_map->find(key) == meta_info_map->end())
     return;
 
-  FOR_EACH_OBSERVER(BookmarkModelObserver, observers_,
-                    OnWillChangeBookmarkMetaInfo(this, node));
+  for (BookmarkModelObserver& observer : observers_)
+    observer.OnWillChangeBookmarkMetaInfo(this, node);
 
   if (AsMutable(node)->DeleteMetaInfo(key) && store_.get())
     store_->ScheduleSave();
 
-  FOR_EACH_OBSERVER(BookmarkModelObserver, observers_,
-                    BookmarkMetaInfoChanged(this, node));
+  for (BookmarkModelObserver& observer : observers_)
+    observer.BookmarkMetaInfoChanged(this, node);
 }
 
 void BookmarkModel::AddNonClonedKey(const std::string& key) {
@@ -508,9 +500,8 @@ void BookmarkModel::OnFaviconsChanged(const std::set<GURL>& page_urls,
     BookmarkNode* mutable_node = AsMutable(node);
     mutable_node->InvalidateFavicon();
     CancelPendingFaviconLoadRequests(mutable_node);
-    FOR_EACH_OBSERVER(BookmarkModelObserver,
-                      observers_,
-                      BookmarkNodeFaviconChanged(this, node));
+    for (BookmarkModelObserver& observer : observers_)
+      observer.BookmarkNodeFaviconChanged(this, node);
   }
 }
 
@@ -737,8 +728,8 @@ void BookmarkModel::SortChildren(const BookmarkNode* parent) {
     return;
   }
 
-  FOR_EACH_OBSERVER(BookmarkModelObserver, observers_,
-                    OnWillReorderBookmarkNode(this, parent));
+  for (BookmarkModelObserver& observer : observers_)
+    observer.OnWillReorderBookmarkNode(this, parent);
 
   UErrorCode error = U_ZERO_ERROR;
   std::unique_ptr<icu::Collator> collator(icu::Collator::createInstance(error));
@@ -752,8 +743,8 @@ void BookmarkModel::SortChildren(const BookmarkNode* parent) {
   if (store_.get())
     store_->ScheduleSave();
 
-  FOR_EACH_OBSERVER(BookmarkModelObserver, observers_,
-                    BookmarkNodeChildrenReordered(this, parent));
+  for (BookmarkModelObserver& observer : observers_)
+    observer.BookmarkNodeChildrenReordered(this, parent);
 }
 
 void BookmarkModel::ReorderChildren(
@@ -766,8 +757,8 @@ void BookmarkModel::ReorderChildren(
   for (const BookmarkNode* node : ordered_nodes)
     DCHECK_EQ(parent, node->parent());
 
-  FOR_EACH_OBSERVER(BookmarkModelObserver, observers_,
-                    OnWillReorderBookmarkNode(this, parent));
+  for (BookmarkModelObserver& observer : observers_)
+    observer.OnWillReorderBookmarkNode(this, parent);
 
   if (ordered_nodes.size() > 1) {
     std::map<const BookmarkNode*, int> order;
@@ -787,8 +778,8 @@ void BookmarkModel::ReorderChildren(
       store_->ScheduleSave();
   }
 
-  FOR_EACH_OBSERVER(BookmarkModelObserver, observers_,
-                    BookmarkNodeChildrenReordered(this, parent));
+  for (BookmarkModelObserver& observer : observers_)
+    observer.BookmarkNodeChildrenReordered(this, parent);
 }
 
 void BookmarkModel::SetDateFolderModified(const BookmarkNode* parent,
@@ -863,8 +854,8 @@ void BookmarkModel::RestoreRemovedNode(const BookmarkNode* parent,
 
 void BookmarkModel::NotifyNodeAddedForAllDescendents(const BookmarkNode* node) {
   for (int i = 0; i < node->child_count(); ++i) {
-    FOR_EACH_OBSERVER(BookmarkModelObserver, observers_,
-                      BookmarkNodeAdded(this, node, i));
+    for (BookmarkModelObserver& observer : observers_)
+      observer.BookmarkNodeAdded(this, node, i);
     NotifyNodeAddedForAllDescendents(node->GetChild(i));
   }
 }
@@ -994,8 +985,8 @@ void BookmarkModel::DoneLoading(std::unique_ptr<BookmarkLoadDetails> details) {
       FROM_HERE_WITH_EXPLICIT_FUNCTION("467179 BookmarkModel::DoneLoading6"));
 
   // Notify our direct observers.
-  FOR_EACH_OBSERVER(BookmarkModelObserver, observers_,
-                    BookmarkModelLoaded(this, details->ids_reassigned()));
+  for (BookmarkModelObserver& observer : observers_)
+    observer.BookmarkModelLoaded(this, details->ids_reassigned());
 }
 
 void BookmarkModel::RemoveAndDeleteNode(BookmarkNode* node_ptr) {
@@ -1006,8 +997,8 @@ void BookmarkModel::RemoveAndDeleteNode(BookmarkNode* node_ptr) {
   int index = parent->GetIndexOf(node_ptr);
   DCHECK_NE(-1, index);
 
-  FOR_EACH_OBSERVER(BookmarkModelObserver, observers_,
-                    OnWillRemoveBookmarks(this, parent, index, node_ptr));
+  for (BookmarkModelObserver& observer : observers_)
+    observer.OnWillRemoveBookmarks(this, parent, index, node_ptr);
 
   std::set<GURL> removed_urls;
   {
@@ -1018,10 +1009,8 @@ void BookmarkModel::RemoveAndDeleteNode(BookmarkNode* node_ptr) {
   if (store_.get())
     store_->ScheduleSave();
 
-  FOR_EACH_OBSERVER(
-      BookmarkModelObserver,
-      observers_,
-      BookmarkNodeRemoved(this, parent, index, node.get(), removed_urls));
+  for (BookmarkModelObserver& observer : observers_)
+    observer.BookmarkNodeRemoved(this, parent, index, node.get(), removed_urls);
 
   undo_delegate()->OnBookmarkNodeRemoved(this, parent, index, std::move(node));
 }
@@ -1083,8 +1072,8 @@ BookmarkNode* BookmarkModel::AddNode(BookmarkNode* parent,
     AddNodeToInternalMaps(node_ptr);
   }
 
-  FOR_EACH_OBSERVER(BookmarkModelObserver, observers_,
-                    BookmarkNodeAdded(this, parent, index));
+  for (BookmarkModelObserver& observer : observers_)
+    observer.BookmarkNodeAdded(this, parent, index);
 
   return node_ptr;
 }
@@ -1182,8 +1171,8 @@ void BookmarkModel::LoadFavicon(BookmarkNode* node,
 }
 
 void BookmarkModel::FaviconLoaded(const BookmarkNode* node) {
-  FOR_EACH_OBSERVER(BookmarkModelObserver, observers_,
-                    BookmarkNodeFaviconChanged(this, node));
+  for (BookmarkModelObserver& observer : observers_)
+    observer.BookmarkNodeFaviconChanged(this, node);
 }
 
 void BookmarkModel::CancelPendingFaviconLoadRequests(BookmarkNode* node) {

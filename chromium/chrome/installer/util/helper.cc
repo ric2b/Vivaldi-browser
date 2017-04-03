@@ -4,7 +4,6 @@
 
 #include "chrome/installer/util/helper.h"
 
-#include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/path_service.h"
@@ -12,6 +11,8 @@
 #include "chrome/installer/util/install_util.h"
 #include "chrome/installer/util/installation_state.h"
 #include "chrome/installer/util/util_constants.h"
+
+#include "base/command_line.h"
 
 namespace installer {
 

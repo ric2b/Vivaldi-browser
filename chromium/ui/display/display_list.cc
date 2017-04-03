@@ -41,14 +41,6 @@ DisplayList::Displays::const_iterator DisplayList::FindDisplayById(
   return displays_.end();
 }
 
-DisplayList::Displays::iterator DisplayList::FindDisplayById(int64_t id) {
-  for (auto iter = displays_.begin(); iter != displays_.end(); ++iter) {
-    if (iter->id() == id)
-      return iter;
-  }
-  return displays_.end();
-}
-
 DisplayList::Displays::const_iterator DisplayList::GetPrimaryDisplayIterator()
     const {
   return primary_display_index_ == -1
@@ -60,8 +52,12 @@ std::unique_ptr<DisplayListObserverLock> DisplayList::SuspendObserverUpdates() {
   return base::WrapUnique(new DisplayListObserverLock(this));
 }
 
+void DisplayList::UpdateDisplay(const display::Display& display) {
+  UpdateDisplay(display, GetTypeByDisplayId(display.id()));
+}
+
 void DisplayList::UpdateDisplay(const display::Display& display, Type type) {
-  auto iter = FindDisplayById(display.id());
+  auto iter = FindDisplayByIdInternal(display.id());
   DCHECK(iter != displays_.end());
 
   display::Display* local_display = &(*iter);
@@ -92,24 +88,24 @@ void DisplayList::UpdateDisplay(const display::Display& display, Type type) {
         display::DisplayObserver::DISPLAY_METRIC_DEVICE_SCALE_FACTOR;
   }
   if (should_notify_observers()) {
-    FOR_EACH_OBSERVER(display::DisplayObserver, observers_,
-                      OnDisplayMetricsChanged(*local_display, changed_values));
+    for (display::DisplayObserver& observer : observers_)
+      observer.OnDisplayMetricsChanged(*local_display, changed_values);
   }
 }
 
 void DisplayList::AddDisplay(const display::Display& display, Type type) {
-  DCHECK(displays_.end() == FindDisplayById(display.id()));
+  DCHECK(displays_.end() == FindDisplayByIdInternal(display.id()));
   displays_.push_back(display);
   if (type == Type::PRIMARY)
     primary_display_index_ = static_cast<int>(displays_.size()) - 1;
   if (should_notify_observers()) {
-    FOR_EACH_OBSERVER(display::DisplayObserver, observers_,
-                      OnDisplayAdded(display));
+    for (display::DisplayObserver& observer : observers_)
+      observer.OnDisplayAdded(display);
   }
 }
 
 void DisplayList::RemoveDisplay(int64_t id) {
-  auto iter = FindDisplayById(id);
+  auto iter = FindDisplayByIdInternal(id);
   DCHECK(displays_.end() != iter);
   if (primary_display_index_ == static_cast<int>(iter - displays_.begin())) {
     // The primary display can only be removed if it is the last display.
@@ -123,8 +119,8 @@ void DisplayList::RemoveDisplay(int64_t id) {
   const display::Display display = *iter;
   displays_.erase(iter);
   if (should_notify_observers()) {
-    FOR_EACH_OBSERVER(display::DisplayObserver, observers_,
-                      OnDisplayRemoved(display));
+    for (display::DisplayObserver& observer : observers_)
+      observer.OnDisplayRemoved(display);
   }
 }
 
@@ -135,6 +131,23 @@ void DisplayList::IncrementObserverSuspendLockCount() {
 void DisplayList::DecrementObserverSuspendLockCount() {
   DCHECK_GT(observer_suspend_lock_count_, 0);
   observer_suspend_lock_count_--;
+}
+
+DisplayList::Type DisplayList::GetTypeByDisplayId(int64_t display_id) const {
+  if (primary_display_index_ == -1)
+    return Type::NOT_PRIMARY;
+  return (displays_[primary_display_index_].id() == display_id
+              ? Type::PRIMARY
+              : Type::NOT_PRIMARY);
+}
+
+DisplayList::Displays::iterator DisplayList::FindDisplayByIdInternal(
+    int64_t id) {
+  for (auto iter = displays_.begin(); iter != displays_.end(); ++iter) {
+    if (iter->id() == id)
+      return iter;
+  }
+  return displays_.end();
 }
 
 }  // namespace display

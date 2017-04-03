@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "base/callback_forward.h"
+#include "base/memory/ref_counted.h"
 #include "base/strings/string_piece.h"
 #include "build/build_config.h"
 #include "content/public/browser/web_contents_delegate.h"
@@ -34,6 +35,9 @@ class WMTestHelper;
 namespace views {
 class Widget;
 class ViewsDelegate;
+}
+namespace wm {
+class WMState;
 }
 #endif  // defined(USE_AURA)
 
@@ -85,10 +89,11 @@ class Shell : public WebContentsDelegate,
   // Do one time initialization at application startup.
   static void Initialize();
 
-  static Shell* CreateNewWindow(BrowserContext* browser_context,
-                                const GURL& url,
-                                SiteInstance* site_instance,
-                                const gfx::Size& initial_size);
+  static Shell* CreateNewWindow(
+      BrowserContext* browser_context,
+      const GURL& url,
+      const scoped_refptr<SiteInstance>& site_instance,
+      const gfx::Size& initial_size);
 
   // Returns the Shell object corresponding to the given RenderViewHost.
   static Shell* FromRenderViewHost(RenderViewHost* rvh);
@@ -153,12 +158,14 @@ class Shell : public WebContentsDelegate,
   void HandleKeyboardEvent(WebContents* source,
                            const NativeWebKeyboardEvent& event) override;
 #endif
-  bool AddMessageToConsole(WebContents* source,
-                           int32_t level,
-                           const base::string16& message,
-                           int32_t line_no,
-                           const base::string16& source_id) override;
-  void RendererUnresponsive(WebContents* source) override;
+  bool DidAddMessageToConsole(WebContents* source,
+                              int32_t level,
+                              const base::string16& message,
+                              int32_t line_no,
+                              const base::string16& source_id) override;
+  void RendererUnresponsive(
+      WebContents* source,
+      const WebContentsUnresponsiveState& unresponsive_state) override;
   void ActivateContents(WebContents* contents) override;
 
   static gfx::Size GetShellDefaultSize();
@@ -249,6 +256,8 @@ class Shell : public WebContentsDelegate,
 #if defined(OS_CHROMEOS)
   static wm::WMTestHelper* wm_test_helper_;
   static display::Screen* test_screen_;
+#else
+  static wm::WMState* wm_state_;
 #endif
 #if defined(TOOLKIT_VIEWS)
   static views::ViewsDelegate* views_delegate_;

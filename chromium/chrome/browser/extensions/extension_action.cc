@@ -23,7 +23,6 @@
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkPaint.h"
 #include "third_party/skia/include/effects/SkGradientShader.h"
-#include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/animation/animation_delegate.h"
 #include "ui/gfx/canvas.h"
@@ -40,12 +39,6 @@
 #include "app/vivaldi_apptools.h"
 
 namespace {
-
-// Returns the default icon image for extensions.
-gfx::Image GetDefaultIcon() {
-  return ui::ResourceBundle::GetSharedInstance().GetImageNamed(
-      IDR_EXTENSIONS_FAVICON);
-}
 
 class GetAttentionImageSource : public gfx::ImageSkiaSource {
  public:
@@ -80,13 +73,18 @@ bool HasValue(const std::map<int, T>& map, int tab_id) {
 
 }  // namespace
 
+// static
 extension_misc::ExtensionIcons ExtensionAction::ActionIconSize() {
   if (vivaldi::IsVivaldiRunning()) {
     return extension_misc::EXTENSION_ICON_MEDIUM;
   }
-  return ui::MaterialDesignController::IsModeMaterial()
-             ? extension_misc::EXTENSION_ICON_BITTY
-             : extension_misc::EXTENSION_ICON_ACTION;
+  return extension_misc::EXTENSION_ICON_BITTY;
+}
+
+// static
+gfx::Image ExtensionAction::FallbackIcon() {
+  return ui::ResourceBundle::GetSharedInstance().GetImageNamed(
+      IDR_EXTENSIONS_FAVICON);
 }
 
 const int ExtensionAction::kDefaultTabId = -1;
@@ -153,12 +151,11 @@ bool ExtensionAction::ParseIconFromCanvasDictionary(
     CHECK(!bitmap.isNull());
 
     // Chrome helpfully scales the provided icon(s), but let's not go overboard.
-    const int kActionIconMaxSize = 10 * extension_misc::EXTENSION_ICON_ACTION;
+    const int kActionIconMaxSize = 10 * ActionIconSize();
     if (bitmap.drawsNothing() || bitmap.width() > kActionIconMaxSize)
       continue;
 
-    float scale =
-        static_cast<float>(bitmap.width()) / ExtensionAction::ActionIconSize();
+    float scale = static_cast<float>(bitmap.width()) / ActionIconSize();
     icon->AddRepresentation(gfx::ImageSkiaRep(bitmap, scale));
   }
   return true;
@@ -233,15 +230,9 @@ void ExtensionAction::ClearAllValuesForTab(int tab_id) {
   // which prevents me from cleaning everything up now.
 }
 
-extensions::IconImage* ExtensionAction::LoadDefaultIconImage(
-    const extensions::Extension& extension,
-    content::BrowserContext* browser_context) {
-  if (default_icon_ && !default_icon_image_) {
-    default_icon_image_.reset(new extensions::IconImage(
-        browser_context, &extension, *default_icon(), ActionIconSize(),
-        *GetDefaultIcon().ToImageSkia(), nullptr));
-  }
-  return default_icon_image_.get();
+void ExtensionAction::SetDefaultIconImage(
+    std::unique_ptr<extensions::IconImage> icon_image) {
+  default_icon_image_ = std::move(icon_image);
 }
 
 gfx::Image ExtensionAction::GetDefaultIconImage() const {
@@ -259,7 +250,7 @@ gfx::Image ExtensionAction::GetDefaultIconImage() const {
           extensions::ExtensionIconPlaceholder::CreateImage(ActionIconSize(),
                                                             extension_name_);
     } else {
-      placeholder_icon_image_ = GetDefaultIcon();
+      placeholder_icon_image_ = FallbackIcon();
     }
   }
 

@@ -33,6 +33,7 @@
 #include "core/frame/FrameTypes.h"
 #include "core/loader/FrameLoaderTypes.h"
 #include "core/page/FrameTree.h"
+#include "platform/feature_policy/FeaturePolicy.h"
 #include "platform/heap/Handle.h"
 #include "wtf/Forward.h"
 
@@ -89,6 +90,8 @@ class CORE_EXPORT Frame : public GarbageCollectedFinalized<Frame> {
   void disconnectOwnerElement();
   virtual bool shouldClose() = 0;
 
+  virtual void setDocumentHasReceivedUserGesture() = 0;
+
   FrameClient* client() const;
 
   // NOTE: Page is moving out of Blink up into the browser process as
@@ -118,9 +121,11 @@ class CORE_EXPORT Frame : public GarbageCollectedFinalized<Frame> {
   // otherwise.
   virtual bool prepareForCommit() = 0;
 
+  // TODO(japhet): These should all move to LocalFrame.
   bool canNavigate(const Frame&);
   virtual void printNavigationErrorMessage(const Frame&,
                                            const char* reason) = 0;
+  virtual void printNavigationWarning(const String&) = 0;
 
   // TODO(pilgrim): Replace all instances of ownerLayoutObject() with
   // ownerLayoutItem(), https://crbug.com/499321

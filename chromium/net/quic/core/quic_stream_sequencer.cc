@@ -17,24 +17,23 @@
 #include "net/quic/core/quic_clock.h"
 #include "net/quic/core/quic_flags.h"
 #include "net/quic/core/quic_protocol.h"
+#include "net/quic/core/quic_stream.h"
 #include "net/quic/core/quic_stream_sequencer_buffer.h"
 #include "net/quic/core/quic_utils.h"
-#include "net/quic/core/reliable_quic_stream.h"
 
 using base::IntToString;
 using base::StringPiece;
 using base::StringPrintf;
 using std::min;
-using std::numeric_limits;
 using std::string;
 
 namespace net {
 
-QuicStreamSequencer::QuicStreamSequencer(ReliableQuicStream* quic_stream,
+QuicStreamSequencer::QuicStreamSequencer(QuicStream* quic_stream,
                                          const QuicClock* clock)
     : stream_(quic_stream),
       buffered_frames_(kStreamReceiveWindowLimit),
-      close_offset_(numeric_limits<QuicStreamOffset>::max()),
+      close_offset_(std::numeric_limits<QuicStreamOffset>::max()),
       blocked_(false),
       num_frames_received_(0),
       num_duplicate_frames_received_(0),
@@ -90,7 +89,8 @@ void QuicStreamSequencer::OnStreamFrame(const QuicStreamFrame& frame) {
 }
 
 void QuicStreamSequencer::CloseStreamAtOffset(QuicStreamOffset offset) {
-  const QuicStreamOffset kMaxOffset = numeric_limits<QuicStreamOffset>::max();
+  const QuicStreamOffset kMaxOffset =
+      std::numeric_limits<QuicStreamOffset>::max();
 
   // If there is a scheduled close, the new offset should match it.
   if (close_offset_ != kMaxOffset && offset != close_offset_) {
@@ -142,7 +142,7 @@ int QuicStreamSequencer::Readv(const struct iovec* iov, size_t iov_len) {
   size_t bytes_read;
   QuicErrorCode read_error =
       buffered_frames_.Readv(iov, iov_len, &bytes_read, &error_details);
-  if (FLAGS_quic_stream_sequencer_buffer_debug && read_error != QUIC_NO_ERROR) {
+  if (read_error != QUIC_NO_ERROR) {
     string details = StringPrintf("Stream %" PRIu32 ": %s", stream_->id(),
                                   error_details.c_str());
     stream_->CloseConnectionWithDetails(read_error, details);
@@ -198,7 +198,7 @@ void QuicStreamSequencer::ReleaseBuffer() {
 }
 
 void QuicStreamSequencer::ReleaseBufferIfEmpty() {
-  if (FLAGS_quic_release_crypto_stream_buffer && buffered_frames_.Empty()) {
+  if (buffered_frames_.Empty()) {
     buffered_frames_.ReleaseWholeBuffer();
   }
 }

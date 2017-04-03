@@ -40,6 +40,7 @@
 namespace blink {
 
 class DedicatedWorkerThread;
+class InProcessWorkerObjectProxy;
 class WorkerThreadStartupData;
 
 class CORE_EXPORT DedicatedWorkerGlobalScope final : public WorkerGlobalScope {
@@ -64,9 +65,9 @@ class CORE_EXPORT DedicatedWorkerGlobalScope final : public WorkerGlobalScope {
                    const MessagePortArray&,
                    ExceptionState&);
 
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(message);
+  static bool canTransferArrayBuffer() { return true; }
 
-  DedicatedWorkerThread* thread() const;
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(message);
 
   DECLARE_VIRTUAL_TRACE();
 
@@ -79,6 +80,8 @@ class CORE_EXPORT DedicatedWorkerGlobalScope final : public WorkerGlobalScope {
                              double timeOrigin,
                              std::unique_ptr<SecurityOrigin::PrivilegeData>,
                              WorkerClients*);
+
+  InProcessWorkerObjectProxy& workerObjectProxy() const;
 };
 
 }  // namespace blink

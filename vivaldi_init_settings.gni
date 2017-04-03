@@ -20,6 +20,6 @@ declare_overrides() {
   if (is_mac && !is_component_build) {
     # We need to force SDK 10.10 for Mac builds
     # Static builds are mostly built by the builder
-    mac_use_sdk = "10.10"
+    mac_use_sdk = "10.10" 
   }
 }

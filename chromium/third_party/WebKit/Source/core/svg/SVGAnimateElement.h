@@ -88,16 +88,8 @@ class CORE_EXPORT SVGAnimateElement : public SVGAnimationElement {
  private:
   void resetAnimatedPropertyType();
 
-  enum ShouldApplyAnimationType {
-    DontApplyAnimation,
-    ApplyCSSAnimation,
-    ApplyXMLAnimation,
-    ApplyXMLandCSSAnimation
-  };
-
-  ShouldApplyAnimationType shouldApplyAnimation(
-      SVGElement* targetElement,
-      const QualifiedName& attributeName);
+  bool shouldApplyAnimation(const SVGElement& targetElement,
+                            const QualifiedName& attributeName);
 
   void setAttributeType(const AtomicString&);
 
@@ -105,7 +97,9 @@ class CORE_EXPORT SVGAnimateElement : public SVGAnimationElement {
   bool hasInvalidCSSAttributeType() const {
     return m_hasInvalidCSSAttributeType;
   }
-  bool hasValidAttributeType() override;
+  bool hasValidTarget() final;
+  bool hasValidAttributeName() const;
+  virtual bool hasValidAttributeType();
 
   SVGPropertyBase* adjustForInheritance(SVGPropertyBase*,
                                         AnimatedPropertyValueType) const;

@@ -8,6 +8,7 @@
 
 #include "components/policy/core/common/policy_namespace.h"
 #include "components/policy/core/common/schema.h"
+#include "extensions/features/features.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -114,18 +115,18 @@ TEST(SchemaRegistryTest, IsReady) {
   registry.AddObserver(&observer);
 
   EXPECT_FALSE(registry.IsReady());
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   EXPECT_CALL(observer, OnSchemaRegistryReady()).Times(0);
-  registry.SetReady(POLICY_DOMAIN_EXTENSIONS);
+  registry.SetExtensionsDomainsReady();
   Mock::VerifyAndClearExpectations(&observer);
   EXPECT_FALSE(registry.IsReady());
 #endif
   EXPECT_CALL(observer, OnSchemaRegistryReady());
-  registry.SetReady(POLICY_DOMAIN_CHROME);
+  registry.SetDomainReady(POLICY_DOMAIN_CHROME);
   Mock::VerifyAndClearExpectations(&observer);
   EXPECT_TRUE(registry.IsReady());
   EXPECT_CALL(observer, OnSchemaRegistryReady()).Times(0);
-  registry.SetReady(POLICY_DOMAIN_CHROME);
+  registry.SetDomainReady(POLICY_DOMAIN_CHROME);
   Mock::VerifyAndClearExpectations(&observer);
   EXPECT_TRUE(registry.IsReady());
 
@@ -273,27 +274,22 @@ TEST(SchemaRegistryTest, ForwardingSchemaRegistry) {
   EXPECT_FALSE(registry->IsReady());
   EXPECT_FALSE(forwarding.IsReady());
 
-  registry->SetReady(POLICY_DOMAIN_EXTENSIONS);
+  registry->SetExtensionsDomainsReady();
   EXPECT_FALSE(registry->IsReady());
   EXPECT_FALSE(forwarding.IsReady());
 
-  registry->SetReady(POLICY_DOMAIN_CHROME);
+  EXPECT_CALL(observer, OnSchemaRegistryReady());
+  registry->SetDomainReady(POLICY_DOMAIN_CHROME);
   EXPECT_TRUE(registry->IsReady());
-  // The ForwardingSchemaRegistry becomes ready independently of the wrapped
-  // registry.
-  EXPECT_FALSE(forwarding.IsReady());
+  EXPECT_TRUE(forwarding.IsReady());
+  Mock::VerifyAndClearExpectations(&observer);
 
   EXPECT_TRUE(SchemaMapEquals(registry->schema_map(), forwarding.schema_map()));
   Mock::VerifyAndClearExpectations(&observer);
 
-  forwarding.SetReady(POLICY_DOMAIN_EXTENSIONS);
-  EXPECT_FALSE(forwarding.IsReady());
-  Mock::VerifyAndClearExpectations(&observer);
-
-  EXPECT_CALL(observer, OnSchemaRegistryReady());
-  forwarding.SetReady(POLICY_DOMAIN_CHROME);
+  forwarding.SetExtensionsDomainsReady();
+  forwarding.SetDomainReady(POLICY_DOMAIN_CHROME);
   EXPECT_TRUE(forwarding.IsReady());
-  Mock::VerifyAndClearExpectations(&observer);
 
   // Keep the same SchemaMap when the original registry is gone.
   // No notifications are expected in this case either.
@@ -303,6 +299,31 @@ TEST(SchemaRegistryTest, ForwardingSchemaRegistry) {
   Mock::VerifyAndClearExpectations(&observer);
 
   forwarding.RemoveObserver(&observer);
+}
+
+TEST(SchemaRegistryTest, ForwardingSchemaRegistryReadiness) {
+  std::unique_ptr<SchemaRegistry> registry(new SchemaRegistry);
+
+  ForwardingSchemaRegistry forwarding_1(registry.get());
+  EXPECT_FALSE(registry->IsReady());
+  EXPECT_FALSE(forwarding_1.IsReady());
+
+  // Once the wrapped registry gets ready, the forwarding schema registry
+  // becomes ready too.
+  registry->SetAllDomainsReady();
+  EXPECT_TRUE(registry->IsReady());
+  EXPECT_TRUE(forwarding_1.IsReady());
+
+  // The wrapped registry was ready at the time when the forwarding registry was
+  // constructed, so the forwarding registry is immediately ready too.
+  ForwardingSchemaRegistry forwarding_2(registry.get());
+  EXPECT_TRUE(forwarding_2.IsReady());
+
+  // Destruction of the wrapped registry doesn't change the readiness of the
+  // forwarding registry.
+  registry.reset();
+  EXPECT_TRUE(forwarding_1.IsReady());
+  EXPECT_TRUE(forwarding_2.IsReady());
 }
 
 }  // namespace policy

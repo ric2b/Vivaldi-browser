@@ -99,8 +99,7 @@ void WebFormControlElement::setAutofillValue(const WebString& value) {
                                             nullptr);
     unwrap<Element>()->dispatchScopedEvent(
         Event::createBubble(EventTypeNames::keydown));
-    unwrap<HTMLTextFormControlElement>()->setValue(value,
-                                                   DispatchInputAndChangeEvent);
+    unwrap<TextControlElement>()->setValue(value, DispatchInputAndChangeEvent);
     unwrap<Element>()->dispatchScopedEvent(
         Event::createBubble(EventTypeNames::keyup));
     if (!focused())
@@ -180,9 +179,9 @@ int WebFormControlElement::selectionEnd() const {
 WebString WebFormControlElement::alignmentForFormData() const {
   if (const ComputedStyle* style =
           constUnwrap<HTMLFormControlElement>()->computedStyle()) {
-    if (style->textAlign() == RIGHT)
+    if (style->textAlign() == ETextAlign::Right)
       return WebString::fromUTF8("right");
-    if (style->textAlign() == LEFT)
+    if (style->textAlign() == ETextAlign::Left)
       return WebString::fromUTF8("left");
   }
   return WebString();

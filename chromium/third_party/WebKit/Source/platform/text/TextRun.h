@@ -30,12 +30,11 @@
 #include "platform/heap/Heap.h"
 #include "platform/text/TabSize.h"
 #include "platform/text/TextDirection.h"
-#include "platform/text/TextPath.h"
-#include "third_party/skia/include/core/SkRefCnt.h"
 #include "wtf/Allocator.h"
 #include "wtf/text/StringView.h"
 #include "wtf/text/WTFString.h"
 
+#include <SkRefCnt.h>
 #include <unicode/utf16.h>
 
 class SkTextBlob;
@@ -160,16 +159,16 @@ class PLATFORM_EXPORT TextRun final {
   }
 
   UChar operator[](unsigned i) const {
-    ASSERT_WITH_SECURITY_IMPLICATION(i < m_len);
+    SECURITY_DCHECK(i < m_len);
     return is8Bit() ? m_data.characters8[i] : m_data.characters16[i];
   }
   const LChar* data8(unsigned i) const {
-    ASSERT_WITH_SECURITY_IMPLICATION(i < m_len);
+    SECURITY_DCHECK(i < m_len);
     ASSERT(is8Bit());
     return &m_data.characters8[i];
   }
   const UChar* data16(unsigned i) const {
-    ASSERT_WITH_SECURITY_IMPLICATION(i < m_len);
+    SECURITY_DCHECK(i < m_len);
     ASSERT(!is8Bit());
     return &m_data.characters16[i];
   }

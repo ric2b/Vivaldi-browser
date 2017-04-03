@@ -7,7 +7,10 @@
 #include "bindings/core/v8/ScriptController.h"
 #include "bindings/core/v8/ScriptSourceCode.h"
 #include "bindings/core/v8/V8PersistentValueVector.h"
+#include "bindings/core/v8/WindowProxy.h"
 #include "core/dom/Document.h"
+#include "core/dom/DocumentUserGestureToken.h"
+#include "core/dom/TaskRunnerHelper.h"
 #include "core/frame/LocalFrame.h"
 #include "platform/UserGestureIndicator.h"
 #include "public/platform/WebVector.h"
@@ -54,8 +57,9 @@ WebScriptExecutor::WebScriptExecutor(
 Vector<v8::Local<v8::Value>> WebScriptExecutor::execute(LocalFrame* frame) {
   std::unique_ptr<UserGestureIndicator> indicator;
   if (m_userGesture) {
-    indicator = wrapUnique(
-        new UserGestureIndicator(DefinitelyProcessingNewUserGesture));
+    indicator =
+        wrapUnique(new UserGestureIndicator(DocumentUserGestureToken::create(
+            frame->document(), UserGestureToken::NewGesture)));
   }
 
   Vector<v8::Local<v8::Value>> results;
@@ -75,7 +79,6 @@ Vector<v8::Local<v8::Value>> WebScriptExecutor::execute(LocalFrame* frame) {
 class V8FunctionExecutor : public SuspendableScriptExecutor::Executor {
  public:
   V8FunctionExecutor(v8::Isolate*,
-                     ScriptState*,
                      v8::Local<v8::Function>,
                      v8::Local<v8::Value> receiver,
                      int argc,
@@ -87,11 +90,10 @@ class V8FunctionExecutor : public SuspendableScriptExecutor::Executor {
   ScopedPersistent<v8::Function> m_function;
   ScopedPersistent<v8::Value> m_receiver;
   V8PersistentValueVector<v8::Value> m_args;
-  RefPtr<ScriptState> m_scriptState;
+  RefPtr<UserGestureToken> m_gestureToken;
 };
 
 V8FunctionExecutor::V8FunctionExecutor(v8::Isolate* isolate,
-                                       ScriptState* scriptState,
                                        v8::Local<v8::Function> function,
                                        v8::Local<v8::Value> receiver,
                                        int argc,
@@ -99,7 +101,7 @@ V8FunctionExecutor::V8FunctionExecutor(v8::Isolate* isolate,
     : m_function(isolate, function),
       m_receiver(isolate, receiver),
       m_args(isolate),
-      m_scriptState(scriptState) {
+      m_gestureToken(UserGestureIndicator::currentToken()) {
   m_args.ReserveCapacity(argc);
   for (int i = 0; i < argc; ++i)
     m_args.Append(argv[i]);
@@ -108,20 +110,24 @@ V8FunctionExecutor::V8FunctionExecutor(v8::Isolate* isolate,
 Vector<v8::Local<v8::Value>> V8FunctionExecutor::execute(LocalFrame* frame) {
   v8::Isolate* isolate = v8::Isolate::GetCurrent();
   Vector<v8::Local<v8::Value>> results;
-  if (!m_scriptState->contextIsValid())
-    return results;
-  ScriptState::Scope scope(m_scriptState.get());
   v8::Local<v8::Value> singleResult;
   Vector<v8::Local<v8::Value>> args;
   args.reserveCapacity(m_args.Size());
   for (size_t i = 0; i < m_args.Size(); ++i)
     args.append(m_args.Get(i));
-  if (V8ScriptRunner::callFunction(m_function.newLocal(isolate),
-                                   frame->document(),
-                                   m_receiver.newLocal(isolate), args.size(),
-                                   args.data(), toIsolate(frame))
-          .ToLocal(&singleResult))
-    results.append(singleResult);
+  {
+    std::unique_ptr<UserGestureIndicator> gestureIndicator;
+    if (m_gestureToken) {
+      gestureIndicator =
+          wrapUnique(new UserGestureIndicator(m_gestureToken.release()));
+    }
+    if (V8ScriptRunner::callFunction(m_function.newLocal(isolate),
+                                     frame->document(),
+                                     m_receiver.newLocal(isolate), args.size(),
+                                     args.data(), toIsolate(frame))
+            .ToLocal(&singleResult))
+      results.append(singleResult);
+  }
   return results;
 }
 
@@ -134,8 +140,13 @@ void SuspendableScriptExecutor::createAndRun(
     int extensionGroup,
     bool userGesture,
     WebScriptExecutionCallback* callback) {
+  // TODO(devlin): Passing in a v8::Isolate* directly would be better than
+  // toIsolate() here.
+  ScriptState* scriptState = ScriptState::forWorld(
+      frame,
+      *DOMWrapperWorld::fromWorldId(toIsolate(frame), worldID, extensionGroup));
   SuspendableScriptExecutor* executor = new SuspendableScriptExecutor(
-      frame, callback,
+      frame, scriptState, callback,
       new WebScriptExecutor(sources, worldID, extensionGroup, userGesture));
   executor->run();
 }
@@ -156,8 +167,8 @@ void SuspendableScriptExecutor::createAndRun(
     return;
   }
   SuspendableScriptExecutor* executor = new SuspendableScriptExecutor(
-      frame, callback, new V8FunctionExecutor(isolate, scriptState, function,
-                                              receiver, argc, argv));
+      frame, scriptState, callback,
+      new V8FunctionExecutor(isolate, function, receiver, argc, argv));
   executor->run();
 }
 
@@ -170,10 +181,11 @@ void SuspendableScriptExecutor::contextDestroyed() {
 
 SuspendableScriptExecutor::SuspendableScriptExecutor(
     LocalFrame* frame,
+    ScriptState* scriptState,
     WebScriptExecutionCallback* callback,
     Executor* executor)
-    : SuspendableTimer(frame->document()),
-      m_frame(frame),
+    : SuspendableTimer(frame->document(), TaskType::Timer),
+      m_scriptState(scriptState),
       m_callback(callback),
       m_keepAlive(this),
       m_executor(executor) {}
@@ -197,16 +209,20 @@ void SuspendableScriptExecutor::run() {
 }
 
 void SuspendableScriptExecutor::executeAndDestroySelf() {
-  v8::HandleScope scope(v8::Isolate::GetCurrent());
-  Vector<v8::Local<v8::Value>> results = m_executor->execute(m_frame);
+  CHECK(m_scriptState->contextIsValid());
+
+  ScriptState::Scope scriptScope(m_scriptState.get());
+  Vector<v8::Local<v8::Value>> results =
+      m_executor->execute(toDocument(getExecutionContext())->frame());
 
   // The script may have removed the frame, in which case contextDestroyed()
   // will have handled the disposal/callback.
-  if (!m_frame->client())
+  if (!m_scriptState->contextIsValid())
     return;
 
   if (m_callback)
     m_callback->completed(results);
+
   dispose();
 }
 
@@ -218,7 +234,6 @@ void SuspendableScriptExecutor::dispose() {
 }
 
 DEFINE_TRACE(SuspendableScriptExecutor) {
-  visitor->trace(m_frame);
   visitor->trace(m_executor);
   SuspendableTimer::trace(visitor);
 }

@@ -8,7 +8,7 @@
 #include "base/memory/ptr_util.h"
 #include "third_party/skia/include/core/SkPaint.h"
 #include "third_party/skia/include/core/SkPath.h"
-#include "ui/accessibility/ax_view_state.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/views/border.h"
@@ -256,13 +256,10 @@ void MenuScrollViewContainer::OnPaintBackground(gfx::Canvas* canvas) {
       NativeTheme::kMenuPopupBackground, NativeTheme::kNormal, bounds, extra);
 }
 
-void MenuScrollViewContainer::GetAccessibleState(
-    ui::AXViewState* state) {
+void MenuScrollViewContainer::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   // Get the name from the submenu view.
-  content_view_->GetAccessibleState(state);
-
-  // Now change the role.
-  state->role = ui::AX_ROLE_MENU_BAR;
+  content_view_->GetAccessibleNodeData(node_data);
+  node_data->role = ui::AX_ROLE_MENU_BAR;
 }
 
 void MenuScrollViewContainer::OnBoundsChanged(
@@ -292,13 +289,13 @@ void MenuScrollViewContainer::CreateDefaultBorder() {
                         ? GetNativeTheme()->GetSystemColor(
                               ui::NativeTheme::kColorId_MenuBorderColor)
                         : gfx::kPlaceholderColor;
-    SetBorder(views::Border::CreateBorderPainter(
+    SetBorder(views::CreateBorderPainter(
         base::MakeUnique<views::RoundRectPainter>(color,
                                                   menu_config.corner_radius),
         gfx::Insets(vertical_inset, horizontal_inset)));
   } else {
-    SetBorder(Border::CreateEmptyBorder(vertical_inset, horizontal_inset,
-                                        vertical_inset, horizontal_inset));
+    SetBorder(CreateEmptyBorder(vertical_inset, horizontal_inset,
+                                vertical_inset, horizontal_inset));
   }
 }
 

@@ -47,6 +47,13 @@ OffscreenBrowserCompositorOutputSurface::
   DiscardBackbuffer();
 }
 
+void OffscreenBrowserCompositorOutputSurface::BindToClient(
+    cc::OutputSurfaceClient* client) {
+  DCHECK(client);
+  DCHECK(!client_);
+  client_ = client;
+}
+
 void OffscreenBrowserCompositorOutputSurface::EnsureBackbuffer() {
   bool update_source_texture = !reflector_texture_ || reflector_changed_;
   reflector_changed_ = false;
@@ -57,8 +64,8 @@ void OffscreenBrowserCompositorOutputSurface::EnsureBackbuffer() {
 
     const int max_texture_size =
         context_provider_->ContextCapabilities().max_texture_size;
-    int texture_width = std::min(max_texture_size, surface_size_.width());
-    int texture_height = std::min(max_texture_size, surface_size_.height());
+    int texture_width = std::min(max_texture_size, reshape_size_.width());
+    int texture_height = std::min(max_texture_size, reshape_size_.height());
 
     gl->BindTexture(GL_TEXTURE_2D, reflector_texture_->texture_id());
     gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -107,11 +114,7 @@ void OffscreenBrowserCompositorOutputSurface::Reshape(
     float scale_factor,
     const gfx::ColorSpace& color_space,
     bool alpha) {
-  if (size == surface_size_)
-    return;
-
-  surface_size_ = size;
-  device_scale_factor_ = scale_factor;
+  reshape_size_ = size;
   DiscardBackbuffer();
   EnsureBackbuffer();
 }
@@ -132,7 +135,7 @@ void OffscreenBrowserCompositorOutputSurface::BindFramebuffer() {
 void OffscreenBrowserCompositorOutputSurface::SwapBuffers(
     cc::OutputSurfaceFrame frame) {
   gfx::Size surface_size = frame.size;
-  DCHECK(surface_size == surface_size_);
+  DCHECK(surface_size == reshape_size_);
   gfx::Rect swap_rect = frame.sub_buffer_rect;
 
   if (reflector_) {
@@ -185,7 +188,7 @@ void OffscreenBrowserCompositorOutputSurface::OnReflectorChanged() {
 }
 
 void OffscreenBrowserCompositorOutputSurface::OnSwapBuffersComplete() {
-  client_->DidSwapBuffersComplete();
+  client_->DidReceiveSwapBuffersAck();
 }
 
 }  // namespace content

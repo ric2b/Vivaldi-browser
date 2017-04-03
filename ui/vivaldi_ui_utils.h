@@ -39,7 +39,8 @@ extern bool EncodeBitmap(
     extensions::api::extension_types::ImageFormat image_format,
     gfx::Size size,
     double scale,
-    int image_quality);
+    int image_quality,
+    bool resize);
 
 extern SkBitmap SmartCropAndSize(const SkBitmap& capture,
                                  int target_width,

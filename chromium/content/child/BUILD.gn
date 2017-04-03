@@ -4,6 +4,7 @@
 
 import("//build/config/features.gni")
 import("//build/config/ui.gni")
+import("//third_party/WebKit/public/public_features.gni")
 
 if (is_component_build) {
   link_target_type = "source_set"
@@ -55,8 +56,6 @@ target(link_target_type, "child") {
     "blob_storage/webblobregistry_impl.h",
     "browser_font_resource_trusted.cc",
     "browser_font_resource_trusted.h",
-    "child_discardable_shared_memory_manager.cc",
-    "child_discardable_shared_memory_manager.h",
     "child_gpu_memory_buffer_manager.cc",
     "child_gpu_memory_buffer_manager.h",
     "child_histogram_message_filter.cc",
@@ -101,6 +100,10 @@ target(link_target_type, "child") {
     "ftp_directory_listing_response_delegate.h",
     "image_decoder.cc",
     "image_decoder.h",
+    "indexed_db/indexed_db_callbacks_impl.cc",
+    "indexed_db/indexed_db_callbacks_impl.h",
+    "indexed_db/indexed_db_database_callbacks_impl.cc",
+    "indexed_db/indexed_db_database_callbacks_impl.h",
     "indexed_db/indexed_db_dispatcher.cc",
     "indexed_db/indexed_db_dispatcher.h",
     "indexed_db/indexed_db_key_builders.cc",
@@ -126,8 +129,6 @@ target(link_target_type, "child") {
     "notifications/notification_dispatcher.h",
     "notifications/notification_manager.cc",
     "notifications/notification_manager.h",
-    "power_monitor_broadcast_source.cc",
-    "power_monitor_broadcast_source.h",
     "push_messaging/push_dispatcher.cc",
     "push_messaging/push_dispatcher.h",
     "push_messaging/push_provider.cc",
@@ -173,8 +174,6 @@ target(link_target_type, "child") {
     "shared_memory_received_data_factory.h",
     "shared_worker_devtools_agent.cc",
     "shared_worker_devtools_agent.h",
-    "simple_webmimeregistry_impl.cc",
-    "simple_webmimeregistry_impl.h",
     "site_isolation_stats_gatherer.cc",
     "site_isolation_stats_gatherer.h",
     "storage_util.cc",
@@ -222,6 +221,7 @@ target(link_target_type, "child") {
 
   deps = [
     "//base",
+    "//components/discardable_memory/client",
     "//components/mime_util",
     "//components/tracing",
     "//components/tracing:startup_tracing",
@@ -231,6 +231,7 @@ target(link_target_type, "child") {
     "//content/common",
     "//content/public/common:common_sources",
     "//crypto:platform",
+    "//device/power_monitor/public/cpp",
     "//gpu/command_buffer/client",
     "//ipc",
     "//ipc:mojom",
@@ -238,12 +239,13 @@ target(link_target_type, "child") {
     "//mojo/common",
     "//mojo/edk/system",
     "//net",
-    "//services/shell/public/cpp",
-    "//services/shell/public/interfaces",
-    "//services/shell/runner/common",
+    "//services/service_manager/public/cpp",
+    "//services/service_manager/public/interfaces",
+    "//services/service_manager/runner/common",
     "//skia",
     "//storage/common",
     "//third_party/WebKit/public:blink_headers",
+    "//third_party/WebKit/public:features",
     "//third_party/WebKit/public:image_resources",
     "//third_party/WebKit/public:resources",
     "//third_party/ced",

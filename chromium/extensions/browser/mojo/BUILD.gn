@@ -8,12 +8,10 @@ source_set("mojo") {
     "keep_alive_impl.h",
     "service_registration.cc",
     "service_registration.h",
-    "stash_backend.cc",
-    "stash_backend.h",
   ]
 
   deps = [
     "//extensions/common:mojo",
-    "//services/shell/public/cpp",
+    "//services/service_manager/public/cpp",
   ]
 }

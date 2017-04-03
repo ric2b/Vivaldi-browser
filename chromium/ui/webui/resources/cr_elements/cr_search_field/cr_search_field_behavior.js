@@ -51,12 +51,17 @@ var CrSearchFieldBehavior = {
   /**
    * Sets the value of the search field.
    * @param {string} value
+   * @param {boolean=} opt_noEvent Whether to prevent a 'search-changed' event
+   *     firing for this change.
    */
-  setValue: function(value) {
-    // Use bindValue when setting the input value so that changes propagate
-    // correctly.
-    this.getSearchInput().bindValue = value;
-    this.onValueChanged_(value);
+  setValue: function(value, opt_noEvent) {
+    var searchInput = this.getSearchInput();
+    searchInput.value = value;
+    // If the input is an iron-input, ensure that the new value propagates as
+    // expected.
+    if (searchInput.bindValue != undefined)
+      searchInput.bindValue = value;
+    this.onValueChanged_(value, !!opt_noEvent);
   },
 
   showAndFocus: function() {
@@ -70,21 +75,25 @@ var CrSearchFieldBehavior = {
   },
 
   onSearchTermSearch: function() {
-    this.onValueChanged_(this.getValue());
+    this.onValueChanged_(this.getValue(), false);
   },
 
   /**
    * Updates the internal state of the search field based on a change that has
    * already happened.
    * @param {string} newValue
+   * @param {boolean} noEvent Whether to prevent a 'search-changed' event firing
+   *     for this change.
    * @private
    */
-  onValueChanged_: function(newValue) {
+  onValueChanged_: function(newValue, noEvent) {
     if (newValue == this.lastValue_)
       return;
 
-    this.fire('search-changed', newValue);
     this.lastValue_ = newValue;
+
+    if (!noEvent)
+      this.fire('search-changed', newValue);
   },
 
   onSearchTermKeydown: function(e) {
@@ -92,8 +101,16 @@ var CrSearchFieldBehavior = {
       this.showingSearch = false;
   },
 
-  /** @private */
-  showingSearchChanged_: function() {
+  /**
+   * @param {boolean} current
+   * @param {boolean|undefined} previous
+   * @private
+   */
+  showingSearchChanged_: function(current, previous) {
+    // Prevent unnecessary 'search-changed' event from firing on startup.
+    if (previous == undefined)
+      return;
+
     if (this.showingSearch) {
       this.focus_();
       return;

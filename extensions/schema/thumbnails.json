@@ -44,6 +44,36 @@
           "height": {
             "type": "integer",
             "description": "Height of the capture."
+          },
+          "encodeFormat": {
+            "type": "string",
+            "optional": true,
+            "description": "The encoding format. 'jpg' or 'png'. Defaults to 'png'."
+          },
+          "encodeQuality": {
+            "type": "integer",
+            "optional": true,
+            "description": "The jpg encoding quality if format is 'jpg', otherwise ignored. Default is 90, which is very high quality."
+          },
+          "saveToBasePath": {
+            "type": "string",
+            "optional": true,
+            "description": "The resulting image is saved under the |saveToBasePath| location in the OS Pictures directory."
+          },
+          "showFileInPath": {
+            "type": "boolean",
+            "optional": true,
+            "description": "If |saveToBasePath| is provided, setting this to true will open the folder with the file selected after capture has completed. Default is false."
+          },
+          "encodeToDataUrl": {
+            "type": "boolean",
+            "optional": true,
+            "description": "If true, the appropiate data will be inserted to make it a valid data url that can be set as url in elements. Default is false."
+          },
+          "copyToClipboard": {
+            "type": "boolean",
+            "optional": true,
+            "description": "If true, will copy the image to clipboard in a raw and uncompressed format. This will override any file path arguments. Default is false."
           }
         }
       },
@@ -81,6 +111,16 @@
             "type": "string",
             "optional": true,
             "description": "The resulting image is saved under the |saveToBasePath| location in the OS Pictures directory."
+          },
+          "showFileInPath": {
+            "type": "boolean",
+            "optional": true,
+            "description": "If |saveToBasePath| is provided, setting this to true will open the folder with the file selected after capture has completed. Default is false."
+          },
+          "copyToClipboard": {
+            "type": "boolean",
+            "optional": true,
+            "description": "If true, will copy the image to clipboard in a raw and uncompressed format. This will override any file path arguments. Default is false."
           }
         }
       }

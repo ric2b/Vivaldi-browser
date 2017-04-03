@@ -26,11 +26,6 @@
 
 namespace cc {
 
-namespace proto {
-class ScrollUpdateInfo;
-class ScrollAndScaleSet;
-}
-
 class LayerImpl;
 class Layer;
 class SwapPromise;
@@ -81,7 +76,6 @@ class CC_EXPORT LayerTreeHostCommon {
         bool can_adjust_raster_scales,
         bool verify_clip_tree_calculations,
         bool verify_visible_rect_calculations,
-        bool verify_transform_tree_calculations,
         LayerImplList* render_surface_layer_list,
         PropertyTrees* property_trees);
 
@@ -100,7 +94,6 @@ class CC_EXPORT LayerTreeHostCommon {
     bool can_adjust_raster_scales;
     bool verify_clip_tree_calculations;
     bool verify_visible_rect_calculations;
-    bool verify_transform_tree_calculations;
     LayerImplList* render_surface_layer_list;
     PropertyTrees* property_trees;
   };
@@ -144,16 +137,43 @@ class CC_EXPORT LayerTreeHostCommon {
   struct CC_EXPORT ScrollUpdateInfo {
     int layer_id;
     // TODO(miletus): Use ScrollOffset once LayerTreeHost/Blink fully supports
-    // franctional scroll offset.
+    // fractional scroll offset.
     gfx::Vector2d scroll_delta;
 
     ScrollUpdateInfo();
 
     bool operator==(const ScrollUpdateInfo& other) const;
-
-    void ToProtobuf(proto::ScrollUpdateInfo* proto) const;
-    void FromProtobuf(const proto::ScrollUpdateInfo& proto);
   };
+
+  // Used to communicate scrollbar visibility from Impl thread to Blink.
+  // Scrollbar input is handled by Blink but the compositor thread animates
+  // opacity on scrollbars to fade them out when they're overlay. Blink needs
+  // to be told when they're faded out so it can stop handling input for
+  // invisible scrollbars.
+  struct CC_EXPORT ScrollbarsUpdateInfo {
+    int layer_id;
+    bool hidden;
+
+    ScrollbarsUpdateInfo();
+    ScrollbarsUpdateInfo(int layer_id, bool hidden);
+
+    bool operator==(const ScrollbarsUpdateInfo& other) const;
+  };
+};
+
+// A container for the state that was reported to the main thread during
+// BeginMainFrame, but could not be applied/resolved on the main thread.
+struct CC_EXPORT ReflectedMainFrameState {
+  struct ScrollUpdate {
+    int layer_id = Layer::LayerIdLabels::INVALID_ID;
+    gfx::Vector2dF scroll_delta;
+  };
+
+  ReflectedMainFrameState();
+  ~ReflectedMainFrameState();
+
+  std::vector<ScrollUpdate> scrolls;
+  float page_scale_delta;
 };
 
 struct CC_EXPORT ScrollAndScaleSet {
@@ -170,11 +190,8 @@ struct CC_EXPORT ScrollAndScaleSet {
   float page_scale_delta;
   gfx::Vector2dF elastic_overscroll_delta;
   float top_controls_delta;
+  std::vector<LayerTreeHostCommon::ScrollbarsUpdateInfo> scrollbars;
   std::vector<std::unique_ptr<SwapPromise>> swap_promises;
-
-  bool EqualsForTesting(const ScrollAndScaleSet& other) const;
-  void ToProtobuf(proto::ScrollAndScaleSet* proto) const;
-  void FromProtobuf(const proto::ScrollAndScaleSet& proto);
 
  private:
   DISALLOW_COPY_AND_ASSIGN(ScrollAndScaleSet);

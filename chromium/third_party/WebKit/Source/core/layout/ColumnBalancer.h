@@ -73,8 +73,10 @@ class ColumnBalancer {
   // right after entering and before traversing the subtree of the box, and the
   // second one right after having traversed the subtree.
   virtual void examineBoxAfterEntering(const LayoutBox&,
+                                       LayoutUnit childLogicalHeight,
                                        EBreak previousBreakAfterValue) = 0;
-  virtual void examineBoxBeforeLeaving(const LayoutBox&) = 0;
+  virtual void examineBoxBeforeLeaving(const LayoutBox&,
+                                       LayoutUnit childLogicalHeight) = 0;
 
   // Examine and collect column balancing data from a line that has been found
   // to intersect with the flow thread portion. Does not recurse into layout
@@ -89,6 +91,9 @@ class ColumnBalancer {
 
  private:
   void traverseSubtree(const LayoutBox&);
+
+  void traverseLines(const LayoutBlockFlow&);
+  void traverseChildren(const LayoutObject&);
 
   const LayoutMultiColumnSet& m_columnSet;
   const LayoutUnit m_logicalTopInFlowThread;
@@ -126,8 +131,9 @@ class InitialColumnHeightFinder final : public ColumnBalancer {
 
  private:
   void examineBoxAfterEntering(const LayoutBox&,
+                               LayoutUnit childLogicalHeight,
                                EBreak previousBreakAfterValue);
-  void examineBoxBeforeLeaving(const LayoutBox&);
+  void examineBoxBeforeLeaving(const LayoutBox&, LayoutUnit childLogicalHeight);
   void examineLine(const RootInlineBox&);
 
   // Record that there's a pagination strut that ends at the specified
@@ -143,6 +149,23 @@ class InitialColumnHeightFinder final : public ColumnBalancer {
   // content runs are used to determine where implicit/soft breaks will occur,
   // in order to calculate an initial column height.
   void addContentRun(LayoutUnit endOffsetInFlowThread);
+
+  // Normally we'll just return 0 here, because in most cases we won't add more
+  // content runs than used column-count. However, if we're at the initial
+  // balancing pass for a multicol that lives inside another to-be-balanced
+  // outer multicol container, and there is a sufficient number of forced column
+  // breaks, we may exceed used column-count. In such cases, we're going to
+  // assume a minimal number of fragmentainer groups (rows) that will eventually
+  // be created, and when distributing implicit column breaks to calculate an
+  // initial balanced height, we'll only focus on content that has any chance at
+  // all to end up in the last row.
+  unsigned firstContentRunIndexInLastRow() const {
+    unsigned columnCount = columnSet().usedColumnCount();
+    if (m_contentRuns.size() <= columnCount)
+      return 0;
+    unsigned lastRunIndex = m_contentRuns.size() - 1;
+    return lastRunIndex / columnCount * columnCount;
+  }
 
   // Return the index of the content run with the currently tallest columns,
   // taking all implicit breaks assumed so far into account.
@@ -220,8 +243,9 @@ class MinimumSpaceShortageFinder final : public ColumnBalancer {
 
  private:
   void examineBoxAfterEntering(const LayoutBox&,
+                               LayoutUnit childLogicalHeight,
                                EBreak previousBreakAfterValue);
-  void examineBoxBeforeLeaving(const LayoutBox&);
+  void examineBoxBeforeLeaving(const LayoutBox&, LayoutUnit childLogicalHeight);
   void examineLine(const RootInlineBox&);
 
   void recordSpaceShortage(LayoutUnit shortage) {

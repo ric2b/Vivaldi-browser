@@ -357,7 +357,7 @@ function updateAppWindowProperties(update) {
   if (!oldData.maximized && update.maximized)
     dispatchEventIfExists(currentWindow, "onMaximized");
 
-  // do not send restore when in fullscreen
+  // do not send restore when in fullscreen (VB-976)
   if ((oldData.fullscreen && !update.fullscreen) ||
       (oldData.minimized && !update.minimized) ||
       (!oldData.fullscreen && (oldData.maximized && !update.maximized)))

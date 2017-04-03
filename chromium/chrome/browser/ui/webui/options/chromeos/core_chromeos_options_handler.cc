@@ -13,6 +13,7 @@
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -32,6 +33,9 @@
 #include "chrome/browser/ui/webui/options/chromeos/accounts_options_handler.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
+#include "chromeos/network/network_handler.h"
+#include "chromeos/network/proxy/ui_proxy_config_service.h"
+#include "components/onc/onc_pref_names.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/proxy_config/proxy_config_pref_names.h"
 #include "components/user_manager/user_manager.h"
@@ -69,10 +73,11 @@ bool IsSettingShared(const std::string& pref) {
 
 // Creates a user info dictionary to be stored in the |ListValue| that is
 // passed to Javascript for the |kAccountsPrefUsers| preference.
-base::DictionaryValue* CreateUserInfo(const std::string& username,
-                                      const std::string& display_email,
-                                      const std::string& display_name) {
-  base::DictionaryValue* user_dict = new base::DictionaryValue;
+std::unique_ptr<base::DictionaryValue> CreateUserInfo(
+    const std::string& username,
+    const std::string& display_email,
+    const std::string& display_name) {
+  auto user_dict = base::MakeUnique<base::DictionaryValue>();
   user_dict->SetString("username", username);
   user_dict->SetString("name", display_email);
   user_dict->SetString("email", display_name);
@@ -111,10 +116,15 @@ bool IsSecondaryUser(Profile* profile) {
   user_manager::UserManager* user_manager = user_manager::UserManager::Get();
   const user_manager::User* user =
       ProfileHelper::Get()->GetUserByProfile(profile);
-  return user && user->email() != user_manager->GetPrimaryUser()->email();
+  return user &&
+         user->GetAccountId() != user_manager->GetPrimaryUser()->GetAccountId();
 }
 
 const char kSelectNetworkMessage[] = "selectNetwork";
+
+UIProxyConfigService* GetUiProxyConfigService() {
+  return NetworkHandler::Get()->ui_proxy_config_service();
+}
 
 }  // namespace
 
@@ -137,23 +147,12 @@ void CoreChromeOSOptionsHandler::RegisterMessages() {
 
 void CoreChromeOSOptionsHandler::InitializeHandler() {
   // This function is both called on the initial page load and on each reload.
-  // For the latter case, forget the last selected network.
-  proxy_config_service_.SetCurrentNetworkGuid("");
-  // And clear the cached configuration.
-  proxy_config_service_.UpdateFromPrefs();
-
   CoreOptionsHandler::InitializeHandler();
 
-  PrefService* profile_prefs = NULL;
-  Profile* profile = Profile::FromWebUI(web_ui());
-  if (!ProfileHelper::IsSigninProfile(profile)) {
-    profile_prefs = profile->GetPrefs();
-    ObservePref(prefs::kOpenNetworkConfiguration);
-  }
+  if (!ProfileHelper::IsSigninProfile(Profile::FromWebUI(web_ui())))
+    ObservePref(onc::prefs::kOpenNetworkConfiguration);
   ObservePref(proxy_config::prefs::kProxy);
-  ObservePref(prefs::kDeviceOpenNetworkConfiguration);
-  proxy_config_service_.SetPrefs(profile_prefs,
-                                 g_browser_process->local_state());
+  ObservePref(onc::prefs::kDeviceOpenNetworkConfiguration);
 }
 
 void CoreChromeOSOptionsHandler::Observe(
@@ -179,15 +178,16 @@ base::Value* CoreChromeOSOptionsHandler::FetchPref(
   if (proxy_cros_settings_parser::IsProxyPref(pref_name)) {
     base::Value* value = nullptr;
     proxy_cros_settings_parser::GetProxyPrefValue(
-        proxy_config_service_, pref_name, &value);
+        network_guid_, pref_name, GetUiProxyConfigService(), &value);
     return value ? value : base::Value::CreateNullValue().release();
   }
 
   Profile* profile = Profile::FromWebUI(web_ui());
   if (!CrosSettings::IsCrosSettings(pref_name)) {
-    std::string controlling_pref = pref_name == prefs::kUseSharedProxies
-                                       ? proxy_config::prefs::kProxy
-                                       : std::string();
+    std::string controlling_pref =
+        pref_name == proxy_config::prefs::kUseSharedProxies
+            ? proxy_config::prefs::kProxy
+            : std::string();
     base::Value* value = CreateValueForPref(pref_name, controlling_pref);
     if (!IsSettingShared(pref_name) || !IsSecondaryUser(profile))
       return value;
@@ -254,7 +254,7 @@ void CoreChromeOSOptionsHandler::SetPref(const std::string& pref_name,
                                          const std::string& metric) {
   if (proxy_cros_settings_parser::IsProxyPref(pref_name)) {
     proxy_cros_settings_parser::SetProxyPrefValue(
-        pref_name, value, &proxy_config_service_);
+        network_guid_, pref_name, value, GetUiProxyConfigService());
     base::StringValue proxy_type(pref_name);
     web_ui()->CallJavascriptFunctionUnsafe(
         "options.internet.DetailsInternetPage.updateProxySettings", proxy_type);
@@ -298,7 +298,7 @@ base::Value* CoreChromeOSOptionsHandler::CreateValueForPref(
     ash::SessionStateDelegate* delegate =
         ash::WmShell::Get()->GetSessionStateDelegate();
     if (pref && pref->IsUserModifiable() &&
-        delegate->ShouldLockScreenBeforeSuspending()) {
+        delegate->ShouldLockScreenAutomatically()) {
       bool screen_lock = false;
       bool success = pref->GetValue()->GetAsBoolean(&screen_lock);
       DCHECK(success);
@@ -329,7 +329,8 @@ void CoreChromeOSOptionsHandler::GetLocalizedValues(
   user_manager::UserManager* user_manager = user_manager::UserManager::Get();
 
   if (IsSecondaryUser(profile)) {
-    const std::string& primary_email = user_manager->GetPrimaryUser()->email();
+    const std::string& primary_email =
+        user_manager->GetPrimaryUser()->GetAccountId().GetUserEmail();
 
     // Set secondaryUser to show the shared icon by the network section header.
     localized_strings->SetBoolean("secondaryUser", true);
@@ -374,12 +375,10 @@ void CoreChromeOSOptionsHandler::GetLocalizedValues(
 
 void CoreChromeOSOptionsHandler::SelectNetworkCallback(
     const base::ListValue* args) {
-  std::string guid;
-  if (args->GetSize() != 1 || !args->GetString(0, &guid)) {
+  if (args->GetSize() != 1 || !args->GetString(0, &network_guid_)) {
     NOTREACHED();
     return;
   }
-  proxy_config_service_.SetCurrentNetworkGuid(guid);
   NotifyProxyPrefsChanged();
 }
 
@@ -388,16 +387,17 @@ void CoreChromeOSOptionsHandler::OnPreferenceChanged(
     const std::string& pref_name) {
   // Redetermine the current proxy settings and notify the UI if any of these
   // preferences change.
-  if (pref_name == prefs::kOpenNetworkConfiguration ||
-      pref_name == prefs::kDeviceOpenNetworkConfiguration ||
+  if (pref_name == onc::prefs::kOpenNetworkConfiguration ||
+      pref_name == onc::prefs::kDeviceOpenNetworkConfiguration ||
       pref_name == proxy_config::prefs::kProxy) {
     NotifyProxyPrefsChanged();
     return;
   }
-  if (pref_name == prefs::kUseSharedProxies) {
+  if (pref_name == proxy_config::prefs::kUseSharedProxies) {
     // kProxy controls kUseSharedProxies and decides if it's managed by
     // policy/extension.
-    NotifyPrefChanged(prefs::kUseSharedProxies, proxy_config::prefs::kProxy);
+    NotifyPrefChanged(proxy_config::prefs::kUseSharedProxies,
+                      proxy_config::prefs::kProxy);
     return;
   }
   ::options::CoreOptionsHandler::OnPreferenceChanged(service, pref_name);
@@ -413,14 +413,16 @@ void CoreChromeOSOptionsHandler::NotifySettingsChanged(
 }
 
 void CoreChromeOSOptionsHandler::NotifyProxyPrefsChanged() {
-  proxy_config_service_.UpdateFromPrefs();
-  for (size_t i = 0; i < kProxySettingsCount; ++i) {
+  GetUiProxyConfigService()->UpdateFromPrefs(network_guid_);
+  for (size_t i = 0; i < proxy_cros_settings_parser::kProxySettingsCount; ++i) {
     base::Value* value = NULL;
     proxy_cros_settings_parser::GetProxyPrefValue(
-        proxy_config_service_, kProxySettings[i], &value);
+        network_guid_, proxy_cros_settings_parser::kProxySettings[i],
+        GetUiProxyConfigService(), &value);
     DCHECK(value);
     std::unique_ptr<base::Value> ptr(value);
-    DispatchPrefChangeNotification(kProxySettings[i], std::move(ptr));
+    DispatchPrefChangeNotification(
+        proxy_cros_settings_parser::kProxySettings[i], std::move(ptr));
   }
 }
 

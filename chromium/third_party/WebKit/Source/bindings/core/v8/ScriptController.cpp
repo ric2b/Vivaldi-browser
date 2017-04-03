@@ -32,7 +32,6 @@
 
 #include "bindings/core/v8/ScriptController.h"
 
-#include "bindings/core/v8/BindingSecurity.h"
 #include "bindings/core/v8/ScriptSourceCode.h"
 #include "bindings/core/v8/ScriptValue.h"
 #include "bindings/core/v8/V8Binding.h"
@@ -77,16 +76,6 @@
 #include "wtf/text/TextPosition.h"
 
 namespace blink {
-
-bool ScriptController::canAccessFromCurrentOrigin(v8::Isolate* isolate,
-                                                  Frame* frame) {
-  if (!frame)
-    return false;
-  return !isolate->InContext() ||
-         BindingSecurity::shouldAllowAccessToFrame(
-             currentDOMWindow(isolate), frame,
-             BindingSecurity::ErrorReportOption::Report);
-}
 
 ScriptController::ScriptController(LocalFrame* frame)
     : m_windowProxyManager(WindowProxyManager::create(*frame)) {}
@@ -331,7 +320,8 @@ bool ScriptController::canExecuteScripts(
   return allowed;
 }
 
-bool ScriptController::executeScriptIfJavaScriptURL(const KURL& url) {
+bool ScriptController::executeScriptIfJavaScriptURL(const KURL& url,
+                                                    Element* element) {
   if (!protocolIsJavaScript(url))
     return false;
 
@@ -340,8 +330,10 @@ bool ScriptController::executeScriptIfJavaScriptURL(const KURL& url) {
   if (!frame()->page() ||
       (!shouldBypassMainWorldContentSecurityPolicy &&
        !frame()->document()->contentSecurityPolicy()->allowJavaScriptURLs(
-           frame()->document()->url(), eventHandlerPosition().m_line)))
+           element, frame()->document()->url(),
+           eventHandlerPosition().m_line))) {
     return true;
+  }
 
   bool progressNotificationsNeeded =
       frame()->loader().stateMachine()->isDisplayingInitialEmptyDocument() &&

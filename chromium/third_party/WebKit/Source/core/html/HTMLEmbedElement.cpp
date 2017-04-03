@@ -117,6 +117,14 @@ void HTMLEmbedElement::parseAttribute(const QualifiedName& name,
       if (!m_imageLoader)
         m_imageLoader = HTMLImageLoader::create(this);
       m_imageLoader->updateFromElement(ImageLoader::UpdateIgnorePreviousError);
+    } else if (layoutObject()) {
+      // Check if this Embed can transition from potentially-active to active
+      if (fastHasAttribute(typeAttr)) {
+        setNeedsWidgetUpdate(true);
+        lazyReattachIfNeeded();
+      }
+    } else {
+      requestPluginCreationWithoutLayoutObjectIfPossible();
     }
   } else {
     HTMLPlugInElement::parseAttribute(name, oldValue, value);
@@ -190,7 +198,8 @@ bool HTMLEmbedElement::layoutObjectIsNeeded(const ComputedStyle& style) {
   ContainerNode* p = parentNode();
   if (isHTMLObjectElement(p)) {
     DCHECK(p->layoutObject());
-    if (!toHTMLObjectElement(p)->useFallbackContent()) {
+    if (!toHTMLObjectElement(p)->willUseFallbackContentAtLayout() &&
+        !toHTMLObjectElement(p)->useFallbackContent()) {
       DCHECK(!p->layoutObject()->isEmbeddedObject());
       return false;
     }

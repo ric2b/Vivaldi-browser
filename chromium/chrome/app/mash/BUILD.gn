@@ -2,7 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//services/shell/public/service_manifest.gni")
+import("//services/service_manager/public/service_manifest.gni")
 
 source_set("mash") {
   sources = [
@@ -15,17 +15,21 @@ source_set("mash") {
     "//components/tracing:startup_tracing",
     "//content/public/common",
     "//mash/package",
-    "//services/shell",
-    "//services/shell/background:lib",
-    "//services/shell/public/cpp",
-    "//services/shell/public/interfaces",
-    "//services/shell/runner/common",
-    "//services/shell/runner/host:child_process_base",
-    "//services/shell/runner/host:lib",
+    "//services/catalog/public/interfaces",
+    "//services/service_manager",
+    "//services/service_manager/background:lib",
+    "//services/service_manager/public/cpp",
+    "//services/service_manager/public/interfaces",
+    "//services/service_manager/runner:init",
+    "//services/service_manager/runner/common",
+    "//services/service_manager/runner/host:child_process_base",
+    "//services/service_manager/runner/host:lib",
     "//url",
   ]
   data_deps = [
-    ":manifest",
+    ":browser_manifest",
+    ":mash_manifest",
+    "//chrome/app:service_manifests",
   ]
 
   if (is_linux && !is_android) {
@@ -33,15 +37,14 @@ source_set("mash") {
   }
 }
 
-service_manifest("manifest") {
-  type = "exe"
+service_manifest("mash_manifest") {
   name = "chrome_mash"
   source = "chrome_mash_manifest.json"
   deps = [
     "//ash/autoclick/mus:manifest",
     "//ash/mus:manifest",
     "//ash/touch_hud/mus:manifest",
-    "//mash/app_driver:manifest",
+    "//mash/catalog_viewer:manifest",
     "//mash/quick_launch:manifest",
     "//mash/session:manifest",
     "//mash/task_viewer:manifest",
@@ -50,8 +53,8 @@ service_manifest("manifest") {
   ]
   packaged_services = [
     "accessibility_autoclick",
-    "app_driver",
     "ash",
+    "catalog_viewer",
     "mash_session",
     "quick_launch",
     "task_viewer",
@@ -64,4 +67,14 @@ service_manifest("manifest") {
     deps += [ "//components/font_service:manifest" ]
     packaged_services += [ "font_service" ]
   }
+}
+
+service_manifest("browser_manifest") {
+  name = "content_browser"
+  source = "${root_out_dir}/Packages/chrome_content_browser/manifest.json"
+  output_name = "chrome_mash_content_browser"
+  deps = [
+    "//chrome/app:chrome_content_browser_manifest",
+  ]
+  overlays = [ "chrome_mash_content_browser_manifest_overlay.json" ]
 }

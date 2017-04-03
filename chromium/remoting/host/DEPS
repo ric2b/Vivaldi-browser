@@ -6,6 +6,8 @@ include_rules = [
   "+extensions/browser/api/messaging",
   "+google_apis",
   "+jingle/glue",
+  "+mojo/public",
+  "+mojo/edk/embedder",
   "+net",
   "+remoting/codec",
   "+remoting/protocol",
@@ -16,3 +18,9 @@ include_rules = [
   "+third_party/webrtc",
   "+ui",
 ]
+
+specific_include_rules = {
+  ".*unittest\.cc": [
+    "+mojo/edk/test",
+  ],
+}

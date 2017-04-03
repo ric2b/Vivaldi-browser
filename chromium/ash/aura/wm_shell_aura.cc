@@ -17,7 +17,6 @@
 #include "ash/common/wm/overview/window_selector_controller.h"
 #include "ash/common/wm_activation_observer.h"
 #include "ash/common/wm_display_observer.h"
-#include "ash/display/display_manager.h"
 #include "ash/display/window_tree_host_manager.h"
 #include "ash/laser/laser_pointer_controller.h"
 #include "ash/metrics/task_switch_metrics_recorder.h"
@@ -25,6 +24,7 @@
 #include "ash/shell.h"
 #include "ash/touch/touch_uma.h"
 #include "ash/wm/drag_window_resizer.h"
+#include "ash/wm/lock_state_controller.h"
 #include "ash/wm/maximize_mode/maximize_mode_event_handler_aura.h"
 #include "ash/wm/screen_pinning_controller.h"
 #include "ash/wm/window_cycle_event_filter_aura.h"
@@ -34,6 +34,7 @@
 #include "ui/aura/client/capture_client.h"
 #include "ui/aura/client/focus_client.h"
 #include "ui/aura/env.h"
+#include "ui/display/manager/display_manager.h"
 #include "ui/wm/public/activation_client.h"
 
 #if defined(OS_CHROMEOS)
@@ -138,7 +139,8 @@ bool WmShellAura::IsInUnifiedMode() const {
 bool WmShellAura::IsInUnifiedModeIgnoreMirroring() const {
   return Shell::GetInstance()
              ->display_manager()
-             ->current_default_multi_display_mode() == DisplayManager::UNIFIED;
+             ->current_default_multi_display_mode() ==
+         display::DisplayManager::UNIFIED;
 }
 
 bool WmShellAura::IsForceMaximizeOnFirstRun() {
@@ -158,10 +160,6 @@ bool WmShellAura::IsPinned() {
 void WmShellAura::SetPinnedWindow(WmWindow* window) {
   return Shell::GetInstance()->screen_pinning_controller()->SetPinnedWindow(
       window);
-}
-
-bool WmShellAura::CanShowWindowForUser(WmWindow* window) {
-  return delegate()->CanShowWindowForUser(window);
 }
 
 void WmShellAura::LockCursor() {
@@ -239,12 +237,13 @@ std::unique_ptr<KeyEventWatcher> WmShellAura::CreateKeyEventWatcher() {
 }
 
 void WmShellAura::OnOverviewModeStarting() {
-  FOR_EACH_OBSERVER(ShellObserver, *shell_observers(),
-                    OnOverviewModeStarting());
+  for (auto& observer : *shell_observers())
+    observer.OnOverviewModeStarting();
 }
 
 void WmShellAura::OnOverviewModeEnded() {
-  FOR_EACH_OBSERVER(ShellObserver, *shell_observers(), OnOverviewModeEnded());
+  for (auto& observer : *shell_observers())
+    observer.OnOverviewModeEnded();
 }
 
 SessionStateDelegate* WmShellAura::GetSessionStateDelegate() {
@@ -284,6 +283,10 @@ void WmShellAura::RemovePointerWatcher(views::PointerWatcher* watcher) {
   pointer_watcher_adapter_->RemovePointerWatcher(watcher);
 }
 
+void WmShellAura::RequestShutdown() {
+  Shell::GetInstance()->lock_state_controller()->RequestShutdown();
+}
+
 bool WmShellAura::IsTouchDown() {
   return aura::Env::GetInstance()->is_touch_down();
 }
@@ -308,26 +311,26 @@ void WmShellAura::OnWindowActivated(
   WmWindow* lost_active_wm = WmWindowAura::Get(lost_active);
   if (gained_active_wm)
     set_root_window_for_new_windows(gained_active_wm->GetRootWindow());
-  FOR_EACH_OBSERVER(WmActivationObserver, activation_observers_,
-                    OnWindowActivated(gained_active_wm, lost_active_wm));
+  for (auto& observer : activation_observers_)
+    observer.OnWindowActivated(gained_active_wm, lost_active_wm);
 }
 
 void WmShellAura::OnAttemptToReactivateWindow(aura::Window* request_active,
                                               aura::Window* actual_active) {
-  FOR_EACH_OBSERVER(
-      WmActivationObserver, activation_observers_,
-      OnAttemptToReactivateWindow(WmWindowAura::Get(request_active),
-                                  WmWindowAura::Get(actual_active)));
+  for (auto& observer : activation_observers_) {
+    observer.OnAttemptToReactivateWindow(WmWindowAura::Get(request_active),
+                                         WmWindowAura::Get(actual_active));
+  }
 }
 
 void WmShellAura::OnDisplayConfigurationChanging() {
-  FOR_EACH_OBSERVER(WmDisplayObserver, display_observers_,
-                    OnDisplayConfigurationChanging());
+  for (auto& observer : display_observers_)
+    observer.OnDisplayConfigurationChanging();
 }
 
 void WmShellAura::OnDisplayConfigurationChanged() {
-  FOR_EACH_OBSERVER(WmDisplayObserver, display_observers_,
-                    OnDisplayConfigurationChanged());
+  for (auto& observer : display_observers_)
+    observer.OnDisplayConfigurationChanged();
 }
 
 }  // namespace ash

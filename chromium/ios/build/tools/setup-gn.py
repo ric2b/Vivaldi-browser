@@ -96,6 +96,8 @@ class GnGenerator(object):
     args.append(('is_official_build', self._config == 'Official'))
     args.append(('is_chrome_branded', 'is_official_build'))
     args.append(('use_xcode_clang', 'is_official_build'))
+    if os.environ.get('FORCE_MAC_TOOLCHAIN'):
+      args.append(('use_system_xcode', False))
 
     cpu_values = self.TARGET_CPU_VALUES[self._target]
     build_arch = self._settings.getstring('build', 'arch')
@@ -163,7 +165,7 @@ class GnGenerator(object):
       if isinstance(value, bool):
         stream.write('%s = %s\n' % (name, str(value).lower()))
       elif isinstance(value, list):
-        stream.write('%s = [%s' % (name, '\n' if len(value) else ''))
+        stream.write('%s = [%s' % (name, '\n' if len(value) > 1 else ''))
         if len(value) == 1:
           prefix = ' '
           suffix = ' '

@@ -8,7 +8,6 @@
 #include <memory>
 
 #include "ash/mus/disconnected_app_handler.h"
-#include "ash/public/interfaces/container.mojom.h"
 #include "services/ui/public/cpp/window_observer.h"
 #include "services/ui/public/interfaces/window_manager_constants.mojom.h"
 #include "ui/display/display.h"
@@ -17,7 +16,7 @@ namespace gfx {
 class Insets;
 }
 
-namespace shell {
+namespace service_manager {
 class Connector;
 }
 
@@ -46,7 +45,7 @@ class RootWindowController {
 
   void Shutdown();
 
-  shell::Connector* GetConnector();
+  service_manager::Connector* GetConnector();
 
   ui::Window* root() { return root_; }
   WmRootWindowControllerMus* wm_root_window_controller() {
@@ -56,11 +55,10 @@ class RootWindowController {
   ui::Window* NewTopLevelWindow(
       std::map<std::string, std::vector<uint8_t>>* properties);
 
-  ui::Window* GetWindowForContainer(mojom::Container container);
-
   WmWindowMus* GetWindowByShellWindowId(int id);
 
   void SetWorkAreaInests(const gfx::Insets& insets);
+  void SetDisplay(const display::Display& display);
 
   WindowManager* window_manager() { return window_manager_; }
 

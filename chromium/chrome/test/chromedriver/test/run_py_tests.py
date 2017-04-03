@@ -72,6 +72,13 @@ _VERSION_SPECIFIC_FILTER['HEAD'] = [
     # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1503
     'ChromeDriverTest.testShadowDomHover',
     'ChromeDriverTest.testMouseMoveTo',
+    'ChromeDriverTest.testHoverOverElement',
+]
+_VERSION_SPECIFIC_FILTER['55'] = [
+    # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1503
+    'ChromeDriverTest.testShadowDomHover',
+    'ChromeDriverTest.testMouseMoveTo',
+    'ChromeDriverTest.testHoverOverElement',
 ]
 
 _OS_SPECIFIC_FILTER = {}
@@ -149,6 +156,12 @@ _ANDROID_NEGATIVE_FILTER['chrome_beta'] = (
 _ANDROID_NEGATIVE_FILTER['chromium'] = (
     _ANDROID_NEGATIVE_FILTER['chrome'] + [
         'ChromeDriverTest.testSwitchToWindow',
+        # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1503
+        'ChromeDriverTest.testShadowDomHover',
+        'ChromeDriverTest.testMouseMoveTo',
+        'ChromeDriverTest.testHoverOverElement',
+        # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1478
+        'ChromeDriverTest.testShouldHandleNewWindowLoadingProperly',
     ]
 )
 _ANDROID_NEGATIVE_FILTER['chromedriver_webview_shell'] = (
@@ -858,7 +871,9 @@ class ChromeDriverTest(ChromeDriverBaseTestWithWebServer):
 
   def testGetLogOnClosedWindow(self):
     self._driver.Load(self.GetHttpUrlForFile('/chromedriver/page_test.html'))
+    old_handles = self._driver.GetWindowHandles()
     self._driver.FindElement('id', 'link').Click()
+    self.WaitForNewWindow(self._driver, old_handles)
     self._driver.CloseWindow()
     try:
       self._driver.GetLog('browser')
@@ -1315,6 +1330,26 @@ class ChromeDriverTest(ChromeDriverBaseTestWithWebServer):
     self.assertRaisesRegexp(
         chromedriver.UnknownError, "some error",
         self._driver.ExecuteScript, 'throw new Error("some error")')
+
+  def testDoesntCrashWhenScriptLogsUndefinedValue(self):
+    # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1547
+    self._driver.ExecuteScript('var b; console.log(b);')
+
+  def testDoesntThrowWhenPageLogsUndefinedValue(self):
+    # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1547
+    self._driver.Load(self.GetHttpUrlForFile(
+        '/chromedriver/log_undefined_value.html'))
+
+  def testCanSetCheckboxWithSpaceKey(self):
+     self._driver.Load('about:blank')
+     self._driver.ExecuteScript(
+         "document.body.innerHTML = '<input type=\"checkbox\">';")
+     checkbox = self._driver.FindElement('tag name', 'input')
+     self.assertFalse(
+         self._driver.ExecuteScript('return arguments[0].checked', checkbox))
+     checkbox.SendKeys(' ')
+     self.assertTrue(
+         self._driver.ExecuteScript('return arguments[0].checked', checkbox))
 
 
 class ChromeDriverPageLoadTimeoutTest(ChromeDriverBaseTestWithWebServer):

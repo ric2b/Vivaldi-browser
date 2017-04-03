@@ -5,8 +5,10 @@
 package org.chromium.content.browser;
 
 import android.app.Activity;
+import android.content.Context;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
+import android.view.Surface;
 
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.Log;
@@ -15,8 +17,10 @@ import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.content_public.common.ScreenOrientationConstants;
 import org.chromium.content_public.common.ScreenOrientationValues;
+import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.display.DisplayAndroid;
-import org.chromium.ui.gfx.DeviceDisplayInfo;
+
+import javax.annotation.Nullable;
 
 /**
  * This is the implementation of the C++ counterpart ScreenOrientationProvider.
@@ -26,7 +30,7 @@ public class ScreenOrientationProvider {
     private static final String TAG = "cr.ScreenOrientation";
 
     private static int getOrientationFromWebScreenOrientations(byte orientation,
-            Activity activity) {
+            @Nullable WindowAndroid window, Context context) {
         switch (orientation) {
             case ScreenOrientationValues.DEFAULT:
                 return ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
@@ -45,15 +49,18 @@ public class ScreenOrientationProvider {
             case ScreenOrientationValues.ANY:
                 return ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR;
             case ScreenOrientationValues.NATURAL:
-                DeviceDisplayInfo displayInfo = DeviceDisplayInfo.create(activity);
-                int rotation = displayInfo.getRotationDegrees();
-                if (rotation == 0 || rotation == 180) {
-                    if (displayInfo.getDisplayHeight() >= displayInfo.getDisplayWidth()) {
+                // If the tab is being reparented, we don't have a display strongly associated with
+                // it, so we get the default display.
+                DisplayAndroid displayAndroid = (window != null) ? window.getDisplay()
+                        : DisplayAndroid.getNonMultiDisplay(context);
+                int rotation = displayAndroid.getRotation();
+                if (rotation == Surface.ROTATION_0 || rotation == Surface.ROTATION_180) {
+                    if (displayAndroid.getDisplayHeight() >= displayAndroid.getDisplayWidth()) {
                         return ActivityInfo.SCREEN_ORIENTATION_PORTRAIT;
                     }
                     return ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE;
                 } else {
-                    if (displayInfo.getDisplayHeight() < displayInfo.getDisplayWidth()) {
+                    if (displayAndroid.getDisplayHeight() < displayAndroid.getDisplayWidth()) {
                         return ActivityInfo.SCREEN_ORIENTATION_PORTRAIT;
                     }
                     return ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE;
@@ -64,15 +71,18 @@ public class ScreenOrientationProvider {
         }
     }
 
+    // Note that WindowAndroid may be null if the tab is being reparented.
     @CalledByNative
-    static void lockOrientation(byte orientation) {
-        lockOrientation(orientation, ApplicationStatus.getLastTrackedFocusedActivity());
+    static void lockOrientation(@Nullable WindowAndroid window, byte orientation) {
+        lockOrientation(window, orientation, ApplicationStatus.getLastTrackedFocusedActivity());
     }
 
-    public static void lockOrientation(byte webScreenOrientation, Activity activity) {
+    public static void lockOrientation(@Nullable WindowAndroid window, byte webScreenOrientation,
+            Activity activity) {
         if (activity == null) return;
 
-        int orientation = getOrientationFromWebScreenOrientations(webScreenOrientation, activity);
+        int orientation = getOrientationFromWebScreenOrientations(webScreenOrientation, window,
+                activity);
         if (orientation == ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED) {
             return;
         }
@@ -80,8 +90,9 @@ public class ScreenOrientationProvider {
         activity.setRequestedOrientation(orientation);
     }
 
+    // Note that WindowAndroid may be null if the tab is being reparented.
     @CalledByNative
-    static void unlockOrientation() {
+    static void unlockOrientation(@Nullable WindowAndroid window) {
         Activity activity = ApplicationStatus.getLastTrackedFocusedActivity();
         if (activity == null) {
             return;
@@ -95,7 +106,7 @@ public class ScreenOrientationProvider {
                 ScreenOrientationConstants.EXTRA_ORIENTATION,
                 ScreenOrientationValues.DEFAULT);
         defaultOrientation = getOrientationFromWebScreenOrientations(
-                (byte) orientation, activity);
+                (byte) orientation, window, activity);
 
         try {
             if (defaultOrientation == ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED) {

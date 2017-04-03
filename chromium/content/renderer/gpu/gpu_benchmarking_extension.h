@@ -17,7 +17,6 @@ class Arguments;
 }
 
 namespace v8 {
-class Function;
 class Isolate;
 class Object;
 }
@@ -44,6 +43,8 @@ class GpuBenchmarking : public gin::Wrappable<GpuBenchmarking> {
   void PrintToSkPicture(v8::Isolate* isolate, const std::string& dirname);
   void PrintPagesToSkPictures(v8::Isolate* isolate,
                               const std::string& filename);
+  void PrintPagesToXPS(v8::Isolate* isolate,
+                         const std::string& filename);
   bool GestureSourceTypeSupported(int gesture_source_type);
   bool SmoothScrollBy(gin::Arguments* args);
   bool SmoothDrag(gin::Arguments* args);

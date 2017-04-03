@@ -11,6 +11,7 @@
 #include "base/location.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/sequenced_task_runner.h"
+#include "base/single_thread_task_runner.h"
 #include "base/task_runner_util.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_compression_stats.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_io_data.h"
@@ -68,8 +69,8 @@ void DataReductionProxyService::SetIOData(
   DCHECK(CalledOnValidThread());
   io_data_ = io_data;
   initialized_ = true;
-  FOR_EACH_OBSERVER(DataReductionProxyServiceObserver,
-                    observer_list_, OnServiceInitialized());
+  for (DataReductionProxyServiceObserver& observer : observer_list_)
+    observer.OnServiceInitialized();
 
   // Load the Data Reduction Proxy configuration from |prefs_| and apply it.
   if (prefs_) {
@@ -88,18 +89,6 @@ void DataReductionProxyService::SetIOData(
 void DataReductionProxyService::Shutdown() {
   DCHECK(CalledOnValidThread());
   weak_factory_.InvalidateWeakPtrs();
-}
-
-void DataReductionProxyService::EnableCompressionStatisticsLogging(
-    PrefService* prefs,
-    const scoped_refptr<base::SequencedTaskRunner>& ui_task_runner,
-    const base::TimeDelta& commit_delay) {
-  DCHECK(CalledOnValidThread());
-  DCHECK(!compression_stats_);
-  DCHECK(!prefs_);
-  prefs_ = prefs;
-  compression_stats_.reset(
-      new DataReductionProxyCompressionStats(this, prefs_, commit_delay));
 }
 
 void DataReductionProxyService::UpdateContentLengths(

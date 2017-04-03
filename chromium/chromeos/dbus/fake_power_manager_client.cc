@@ -14,7 +14,7 @@ namespace chromeos {
 
 namespace {
 // Minimum power for a USB power source to be classified as AC.
-const double kUsbMinAcWatts = 24;
+constexpr double kUsbMinAcWatts = 24;
 }
 
 FakePowerManagerClient::FakePowerManagerClient()
@@ -24,6 +24,7 @@ FakePowerManagerClient::FakePowerManagerClient()
       num_set_is_projecting_calls_(0),
       num_pending_suspend_readiness_callbacks_(0),
       is_projecting_(false),
+      backlights_forced_off_(false),
       weak_ptr_factory_(this) {
 }
 
@@ -134,6 +135,16 @@ void FakePowerManagerClient::SetPowerSource(const std::string& id) {
   NotifyObservers();
 }
 
+void FakePowerManagerClient::SetBacklightsForcedOff(bool forced_off) {
+  backlights_forced_off_ = forced_off;
+}
+
+void FakePowerManagerClient::GetBacklightsForcedOff(
+    const GetBacklightsForcedOffCallback& callback) {
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::Bind(callback, backlights_forced_off_));
+}
+
 base::Closure FakePowerManagerClient::GetSuspendReadinessCallback() {
   ++num_pending_suspend_readiness_callbacks_;
 
@@ -153,7 +164,8 @@ bool FakePowerManagerClient::PopVideoActivityReport() {
 }
 
 void FakePowerManagerClient::SendSuspendImminent() {
-  FOR_EACH_OBSERVER(Observer, observers_, SuspendImminent());
+  for (auto& observer : observers_)
+    observer.SuspendImminent();
   if (render_process_manager_delegate_)
     render_process_manager_delegate_->SuspendImminent();
 }
@@ -162,18 +174,26 @@ void FakePowerManagerClient::SendSuspendDone() {
   if (render_process_manager_delegate_)
     render_process_manager_delegate_->SuspendDone();
 
-  FOR_EACH_OBSERVER(Observer, observers_, SuspendDone(base::TimeDelta()));
+  for (auto& observer : observers_)
+    observer.SuspendDone(base::TimeDelta());
 }
 
 void FakePowerManagerClient::SendDarkSuspendImminent() {
-  FOR_EACH_OBSERVER(Observer, observers_, DarkSuspendImminent());
+  for (auto& observer : observers_)
+    observer.DarkSuspendImminent();
+}
+
+void FakePowerManagerClient::SendBrightnessChanged(int level,
+                                                   bool user_initiated) {
+  for (auto& observer : observers_)
+    observer.BrightnessChanged(level, user_initiated);
 }
 
 void FakePowerManagerClient::SendPowerButtonEvent(
     bool down,
     const base::TimeTicks& timestamp) {
-  FOR_EACH_OBSERVER(Observer, observers_,
-                    PowerButtonEventReceived(down, timestamp));
+  for (auto& observer : observers_)
+    observer.PowerButtonEventReceived(down, timestamp);
 }
 
 void FakePowerManagerClient::UpdatePowerProperties(
@@ -183,7 +203,8 @@ void FakePowerManagerClient::UpdatePowerProperties(
 }
 
 void FakePowerManagerClient::NotifyObservers() {
-  FOR_EACH_OBSERVER(Observer, observers_, PowerChanged(props_));
+  for (auto& observer : observers_)
+    observer.PowerChanged(props_);
 }
 
 void FakePowerManagerClient::HandleSuspendReadiness() {

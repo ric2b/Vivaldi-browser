@@ -11,6 +11,7 @@
 #include "device/vr/vr_service.mojom-blink.h"
 #include "modules/vr/VRDisplayCapabilities.h"
 #include "modules/vr/VRLayer.h"
+#include "mojo/public/cpp/bindings/binding.h"
 #include "platform/Timer.h"
 #include "platform/heap/Handle.h"
 #include "public/platform/WebGraphicsContext3DProvider.h"
@@ -26,6 +27,7 @@ class GLES2Interface;
 namespace blink {
 
 class NavigatorVR;
+class ScriptedAnimationController;
 class VRController;
 class VREyeParameters;
 class VRFrameData;
@@ -37,8 +39,10 @@ class WebGLRenderingContextBase;
 enum VREye { VREyeNone, VREyeLeft, VREyeRight };
 
 class VRDisplay final : public GarbageCollectedFinalized<VRDisplay>,
+                        public device::mojom::blink::VRDisplayClient,
                         public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
+  USING_PRE_FINALIZER(VRDisplay, dispose);
 
  public:
   ~VRDisplay();
@@ -66,6 +70,7 @@ class VRDisplay final : public GarbageCollectedFinalized<VRDisplay>,
 
   int requestAnimationFrame(FrameRequestCallback*);
   void cancelAnimationFrame(int id);
+  void serviceScriptedAnimations(double monotonicAnimationStartTime);
 
   ScriptPromise requestPresent(ScriptState*, const HeapVector<VRLayer>& layers);
   ScriptPromise exitPresent(ScriptState*);
@@ -74,18 +79,22 @@ class VRDisplay final : public GarbageCollectedFinalized<VRDisplay>,
 
   void submitFrame();
 
+  Document* document();
+
   DECLARE_VIRTUAL_TRACE();
 
  protected:
   friend class VRController;
 
-  VRDisplay(NavigatorVR*);
+  VRDisplay(NavigatorVR*,
+            device::mojom::blink::VRDisplayPtr,
+            device::mojom::blink::VRDisplayClientRequest);
 
-  void update(const device::blink::VRDisplayPtr&);
+  void update(const device::mojom::blink::VRDisplayInfoPtr&);
 
   void updatePose();
 
-  void beginPresent(ScriptPromiseResolver*);
+  void beginPresent();
   void forceExitPresent();
 
   void updateLayerBounds();
@@ -95,29 +104,79 @@ class VRDisplay final : public GarbageCollectedFinalized<VRDisplay>,
 
  private:
   void onFullscreenCheck(TimerBase*);
+  void onPresentComplete(bool);
+
+  void onConnected();
+  void onDisconnected();
+
+  void OnPresentChange();
+
+  // VRDisplayClient
+  void OnChanged(device::mojom::blink::VRDisplayInfoPtr) override;
+  void OnExitPresent() override;
+  void OnBlur() override;
+  void OnFocus() override;
+  void OnActivate(device::mojom::blink::VRDisplayEventReason) override;
+  void OnDeactivate(device::mojom::blink::VRDisplayEventReason) override;
+
+  ScriptedAnimationController& ensureScriptedAnimationController(Document*);
 
   Member<NavigatorVR> m_navigatorVR;
   unsigned m_displayId;
   String m_displayName;
   bool m_isConnected;
   bool m_isPresenting;
+  bool m_isValidDeviceForPresenting;
   bool m_canUpdateFramePose;
-  unsigned m_compositorHandle;
   Member<VRDisplayCapabilities> m_capabilities;
   Member<VRStageParameters> m_stageParameters;
   Member<VREyeParameters> m_eyeParametersLeft;
   Member<VREyeParameters> m_eyeParametersRight;
-  device::blink::VRPosePtr m_framePose;
+  device::mojom::blink::VRPosePtr m_framePose;
   VRLayer m_layer;
   double m_depthNear;
   double m_depthFar;
 
+  void dispose();
+
   Timer<VRDisplay> m_fullscreenCheckTimer;
+  String m_fullscreenOrigWidth;
+  String m_fullscreenOrigHeight;
   gpu::gles2::GLES2Interface* m_contextGL;
   Member<WebGLRenderingContextBase> m_renderingContext;
+
+  Member<ScriptedAnimationController> m_scriptedAnimationController;
+  bool m_animationCallbackRequested;
+  bool m_inAnimationFrame;
+  bool m_displayBlurred;
+
+  device::mojom::blink::VRDisplayPtr m_display;
+
+  mojo::Binding<device::mojom::blink::VRDisplayClient> m_binding;
+
+  HeapDeque<Member<ScriptPromiseResolver>> m_pendingPresentResolvers;
 };
 
 using VRDisplayVector = HeapVector<Member<VRDisplay>>;
+
+enum class PresentationResult {
+  Requested = 0,
+  Success = 1,
+  SuccessAlreadyPresenting = 2,
+  VRDisplayCannotPresent = 3,
+  PresentationNotSupportedByDisplay = 4,
+  VRDisplayNotFound = 5,
+  NotInitiatedByUserGesture = 6,
+  InvalidNumberOfLayers = 7,
+  InvalidLayerSource = 8,
+  LayerSourceMissingWebGLContext = 9,
+  InvalidLayerBounds = 10,
+  ServiceInactive = 11,
+  RequestDenied = 12,
+  PresentationResultMax,  // Must be last member of enum.
+};
+
+void ReportPresentationResult(PresentationResult);
 
 }  // namespace blink
 

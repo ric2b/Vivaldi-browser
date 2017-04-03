@@ -115,7 +115,6 @@ struct CONTENT_EXPORT WebPreferences {
   bool databases_enabled;
   bool application_cache_enabled;
   bool tabs_to_links;
-  bool caret_browsing_enabled;
   bool history_entry_requires_user_gesture;
   bool hyperlink_auditing_enabled;
   bool allow_universal_access_from_file_urls;
@@ -185,7 +184,6 @@ struct CONTENT_EXPORT WebPreferences {
   bool initialize_at_minimum_page_scale;
   bool smart_insert_delete_enabled;
   bool spatial_navigation_enabled;
-  int pinch_overlay_scrollbar_thickness;
   bool use_solid_color_scrollbars;
   bool navigate_on_drag_drop;
   V8CacheOptions v8_cache_options;
@@ -213,6 +211,14 @@ struct CONTENT_EXPORT WebPreferences {
   // Cues will not be placed in this margin area.
   float text_track_margin_percentage;
 
+  // Specifies aggressiveness of background tab throttling.
+  // expensive_background_throttling_cpu_budget is given in percentages,
+  // other values are in seconds.
+  float expensive_background_throttling_cpu_budget;
+  float expensive_background_throttling_initial_budget;
+  float expensive_background_throttling_max_budget;
+  float expensive_background_throttling_max_delay;
+
 #if defined(OS_ANDROID)
   bool text_autosizing_enabled;
   float font_scale_factor;
@@ -237,7 +243,6 @@ struct CONTENT_EXPORT WebPreferences {
   // Used by Android_WebView only to support legacy apps that inject script into
   // a top-level initial empty document and expect it to persist on navigation.
   bool resue_global_for_unowned_main_frame;
-  bool autoplay_muted_videos_enabled;
   ProgressBarCompletion progress_bar_completion;
   // Specifies default setting for spellcheck when the spellcheck attribute is
   // not explicitly specified.
@@ -253,6 +258,9 @@ struct CONTENT_EXPORT WebPreferences {
   // in WebSettings.
   float default_minimum_page_scale_factor;
   float default_maximum_page_scale_factor;
+
+  // Whether download UI should be hidden on this page.
+  bool hide_download_ui;
 
   // We try to keep the default values the same as the default values in
   // chrome, except for the cases where it would require lots of extra work for

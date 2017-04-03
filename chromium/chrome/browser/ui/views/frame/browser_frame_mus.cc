@@ -34,7 +34,7 @@ ui::Window* CreateMusWindow(BrowserView* browser_view) {
       mojo::ConvertTo<std::vector<uint8_t>>(true);
   properties[ui::mojom::WindowManager::kAppID_Property] =
       mojo::ConvertTo<std::vector<uint8_t>>(chrome_app_id);
-  return views::WindowManagerConnection::Get()->NewWindow(properties);
+  return views::WindowManagerConnection::Get()->NewTopLevelWindow(properties);
 }
 
 }  // namespace
@@ -43,7 +43,7 @@ BrowserFrameMus::BrowserFrameMus(BrowserFrame* browser_frame,
                                  BrowserView* browser_view)
     : views::NativeWidgetMus(browser_frame,
                              CreateMusWindow(browser_view),
-                             ui::mojom::SurfaceType::DEFAULT),
+                             ui::mojom::CompositorFrameSinkType::DEFAULT),
       browser_view_(browser_view) {}
 
 BrowserFrameMus::~BrowserFrameMus() {}

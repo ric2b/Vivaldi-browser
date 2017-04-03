@@ -24,13 +24,6 @@
 namespace ash {
 namespace {
 
-// Returns the font used by any displayed labels.
-const gfx::FontList& GetLabelFont() {
-  // TODO(tdanderson|jdufault): Use TrayPopupItemStyle instead.
-  return ui::ResourceBundle::GetSharedInstance().GetFontListWithDelta(
-      1, gfx::Font::FontStyle::NORMAL, gfx::Font::Weight::MEDIUM);
-}
-
 void AddHistogramTimes(PaletteToolId id, base::TimeDelta duration) {
   if (id == PaletteToolId::LASER_POINTER) {
     UMA_HISTOGRAM_CUSTOM_TIMES("Ash.Shelf.Palette.InLaserPointerMode", duration,
@@ -59,7 +52,7 @@ void CommonPaletteTool::OnEnable() {
   start_time_ = base::TimeTicks::Now();
 
   if (highlight_view_) {
-    highlight_view_->SetRightIconVisible(true);
+    highlight_view_->SetRightViewVisible(true);
     highlight_view_->SetAccessiblityState(
         HoverHighlightView::AccessibilityState::CHECKED_CHECKBOX);
   }
@@ -70,7 +63,7 @@ void CommonPaletteTool::OnDisable() {
   AddHistogramTimes(GetToolId(), base::TimeTicks::Now() - start_time_);
 
   if (highlight_view_) {
-    highlight_view_->SetRightIconVisible(false);
+    highlight_view_->SetRightViewVisible(false);
     highlight_view_->SetAccessiblityState(
         HoverHighlightView::AccessibilityState::UNCHECKED_CHECKBOX);
   }
@@ -96,21 +89,19 @@ views::View* CommonPaletteTool::CreateDefaultView(const base::string16& name) {
                                           kMenuIconSize, gfx::kGoogleGreen700);
 
   highlight_view_ = new HoverHighlightView(this);
-  highlight_view_->SetBorder(
-      views::Border::CreateEmptyBorder(0, kMenuExtraMarginFromLeftEdge, 0, 0));
+  highlight_view_->SetBorder(views::CreateEmptyBorder(0, 0, 0, 0));
   const int interior_button_padding = (kMenuButtonSize - kMenuIconSize) / 2;
   highlight_view_->AddIconAndLabelCustomSize(icon, name, false, kMenuIconSize,
                                              interior_button_padding,
                                              kTrayPopupPaddingHorizontal);
   highlight_view_->AddRightIcon(check, kMenuIconSize);
   highlight_view_->set_custom_height(kMenuButtonSize);
-  highlight_view_->text_label()->SetFontList(GetLabelFont());
 
   if (enabled()) {
     highlight_view_->SetAccessiblityState(
         HoverHighlightView::AccessibilityState::CHECKED_CHECKBOX);
   } else {
-    highlight_view_->SetRightIconVisible(false);
+    highlight_view_->SetRightViewVisible(false);
     highlight_view_->SetAccessiblityState(
         HoverHighlightView::AccessibilityState::UNCHECKED_CHECKBOX);
   }

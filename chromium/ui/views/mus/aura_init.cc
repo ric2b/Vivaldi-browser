@@ -11,12 +11,14 @@
 #include "base/path_service.h"
 #include "build/build_config.h"
 #include "services/catalog/public/cpp/resource_loader.h"
-#include "services/shell/public/cpp/connector.h"
+#include "services/catalog/public/interfaces/constants.mojom.h"
+#include "services/service_manager/public/cpp/connector.h"
 #include "ui/aura/env.h"
 #include "ui/base/ime/input_method_initializer.h"
 #include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/ui_base_paths.h"
+#include "ui/views/mus/mus_client.h"
 #include "ui/views/views_delegate.h"
 
 #if defined(OS_LINUX)
@@ -45,13 +47,22 @@ class MusViewsDelegate : public ViewsDelegate {
 
 }  // namespace
 
-AuraInit::AuraInit(shell::Connector* connector,
+AuraInit::AuraInit(service_manager::Connector* connector,
+                   const service_manager::Identity& identity,
                    const std::string& resource_file,
-                   const std::string& resource_file_200)
+                   const std::string& resource_file_200,
+                   scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
+                   Mode mode)
     : resource_file_(resource_file),
       resource_file_200_(resource_file_200),
-      env_(aura::Env::CreateInstance()),
+      env_(aura::Env::CreateInstance(mode == Mode::AURA_MUS
+                                         ? aura::Env::Mode::MUS
+                                         : aura::Env::Mode::LOCAL)),
       views_delegate_(new MusViewsDelegate) {
+  if (mode == Mode::AURA_MUS) {
+    mus_client_ =
+        base::WrapUnique(new MusClient(connector, identity, io_task_runner));
+  }
   ui::MaterialDesignController::Initialize();
   InitializeResources(connector);
 
@@ -80,7 +91,7 @@ AuraInit::~AuraInit() {
 #endif
 }
 
-void AuraInit::InitializeResources(shell::Connector* connector) {
+void AuraInit::InitializeResources(service_manager::Connector* connector) {
   // Resources may have already been initialized (e.g. when 'chrome --mash' is
   // used to launch the current app).
   if (ui::ResourceBundle::HasSharedInstance())
@@ -92,7 +103,7 @@ void AuraInit::InitializeResources(shell::Connector* connector) {
 
   catalog::ResourceLoader loader;
   filesystem::mojom::DirectoryPtr directory;
-  connector->ConnectToInterface("service:catalog", &directory);
+  connector->ConnectToInterface(catalog::mojom::kServiceName, &directory);
   CHECK(loader.OpenFiles(std::move(directory), resource_paths));
   ui::RegisterPathProvider();
   base::File pak_file = loader.TakeFile(resource_file_);

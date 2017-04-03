@@ -22,7 +22,6 @@
 #include "build/build_config.h"
 #include "content/browser/child_process_launcher.h"
 #include "content/browser/dom_storage/session_storage_namespace_impl.h"
-#include "content/browser/power_monitor_message_broadcaster.h"
 #include "content/browser/webrtc/webrtc_eventlog_host.h"
 #include "content/common/associated_interfaces.mojom.h"
 #include "content/common/content_export.h"
@@ -34,23 +33,19 @@
 #include "mojo/public/cpp/bindings/associated_binding.h"
 #include "mojo/public/cpp/bindings/associated_binding_set.h"
 #include "mojo/public/cpp/bindings/interface_ptr.h"
-#include "services/shell/public/cpp/interface_registry.h"
-#include "services/shell/public/interfaces/service.mojom.h"
+#include "services/service_manager/public/cpp/interface_registry.h"
+#include "services/service_manager/public/interfaces/service.mojom.h"
 #include "ui/gfx/gpu_memory_buffer.h"
 #include "ui/gl/gpu_switching_observer.h"
+
+#if defined(OS_ANDROID)
+#include "content/browser/android/synchronous_compositor_browser_filter.h"
+#endif
 
 namespace base {
 class CommandLine;
 class MessageLoop;
 class SharedPersistentMemoryAllocator;
-}
-
-namespace gfx {
-class Size;
-}
-
-namespace IPC {
-class ChannelMojoHost;
 }
 
 namespace content {
@@ -69,15 +64,13 @@ class RendererMainThread;
 class RenderFrameMessageFilter;
 class RenderWidgetHelper;
 class RenderWidgetHost;
-class RenderWidgetHostImpl;
-class RenderWidgetHostViewFrameSubscriber;
 class ResourceMessageFilter;
 class StoragePartition;
 class StoragePartitionImpl;
 
 namespace mojom {
 class StoragePartitionService;
-}
+}  // namespace mojom
 
 typedef base::Thread* (*RendererMainThreadFactoryFunction)(
     const InProcessChildThreadParams& params);
@@ -114,8 +107,8 @@ class CONTENT_EXPORT RenderProcessHostImpl
   ~RenderProcessHostImpl() override;
 
   // RenderProcessHost implementation (public portion).
-  void EnableSendQueue() override;
   bool Init() override;
+  void EnableSendQueue() override;
   int GetNextRoutingID() override;
   void AddRoute(int32_t routing_id, IPC::Listener* listener) override;
   void RemoveRoute(int32_t routing_id) override;
@@ -163,7 +156,7 @@ class CONTENT_EXPORT RenderProcessHostImpl
       const WebRtcRtpPacketCallback& packet_callback) override;
 #endif
   void ResumeDeferredNavigation(const GlobalRequestID& request_id) override;
-  shell::InterfaceProvider* GetRemoteInterfaces() override;
+  service_manager::InterfaceProvider* GetRemoteInterfaces() override;
   std::unique_ptr<base::SharedPersistentMemoryAllocator> TakeMetricsAllocator()
       override;
   const base::TimeTicks& GetInitTimeForNavigationMetrics() const override;
@@ -175,10 +168,10 @@ class CONTENT_EXPORT RenderProcessHostImpl
   void ForceReleaseWorkerRefCounts() override;
   bool IsWorkerRefCountDisabled() override;
   void PurgeAndSuspend() override;
+  void Resume() override;
+  mojom::Renderer* GetRendererInterface() override;
 
   mojom::RouteProvider* GetRemoteRouteProvider();
-
-  static mojom::Renderer* GetRendererInterface(RenderProcessHost* host);
 
   // IPC::Sender via RenderProcessHost.
   bool Send(IPC::Message* msg) override;
@@ -263,6 +256,12 @@ class CONTENT_EXPORT RenderProcessHostImpl
     return notification_message_filter_.get();
   }
 
+#if defined(OS_ANDROID)
+  SynchronousCompositorBrowserFilter* synchronous_compositor_filter() const {
+    return synchronous_compositor_filter_.get();
+  }
+#endif
+
   void set_is_for_guests_only_for_testing(bool is_for_guests_only) {
     is_for_guests_only_ = is_for_guests_only;
   }
@@ -307,7 +306,13 @@ class CONTENT_EXPORT RenderProcessHostImpl
     return service_worker_ref_count_ + shared_worker_ref_count_;
   }
 
-  std::unique_ptr<IPC::ChannelProxy> CreateChannelProxy();
+  // Initializes a new IPC::ChannelProxy in |channel_|, which will be connected
+  // to the next child process launched for this host, if any.
+  void InitializeChannelProxy();
+
+  // Resets |channel_|, removing it from the attachment broker if necessary.
+  // Always call this in lieu of directly resetting |channel_|.
+  void ResetChannelProxy();
 
   // Creates and adds the IO thread message filters.
   void CreateMessageFilters();
@@ -336,14 +341,14 @@ class CONTENT_EXPORT RenderProcessHostImpl
 
   // Generates a command line to be used to spawn a renderer and appends the
   // results to |*command_line|.
-  void AppendRendererCommandLine(base::CommandLine* command_line) const;
+  void AppendRendererCommandLine(base::CommandLine* command_line);
 
   // Copies applicable command line switches from the given |browser_cmd| line
   // flags to the output |renderer_cmd| line flags. Not all switches will be
   // copied over.
   void PropagateBrowserCommandLineToRenderer(
       const base::CommandLine& browser_cmd,
-      base::CommandLine* renderer_cmd) const;
+      base::CommandLine* renderer_cmd);
 
   // Inspects the current object state and sets/removes background priority if
   // appropriate. Should be called after any of the involved data members
@@ -402,7 +407,7 @@ class CONTENT_EXPORT RenderProcessHostImpl
   // the render process currently hosted by the RPHI. Callbacks added by this
   // method will never run beyond the next invocation of Cleanup().
   template <typename CallbackType>
-  void AddUIThreadInterface(shell::InterfaceRegistry* registry,
+  void AddUIThreadInterface(service_manager::InterfaceRegistry* registry,
                             const CallbackType& callback) {
     registry->AddInterface(
         base::Bind(&InterfaceGetter<CallbackType>::GetInterfaceOnUIThread,
@@ -416,7 +421,7 @@ class CONTENT_EXPORT RenderProcessHostImpl
   int connection_filter_id_ =
       ServiceManagerConnection::kInvalidConnectionFilterId;
   scoped_refptr<ConnectionFilterController> connection_filter_controller_;
-  shell::mojom::ServicePtr test_service_;
+  service_manager::mojom::ServicePtr test_service_;
 
   size_t service_worker_ref_count_;
   size_t shared_worker_ref_count_;
@@ -455,12 +460,19 @@ class CONTENT_EXPORT RenderProcessHostImpl
   // closure per notification that must be freed when the notification closes.
   scoped_refptr<NotificationMessageFilter> notification_message_filter_;
 
+#if defined(OS_ANDROID)
+  scoped_refptr<SynchronousCompositorBrowserFilter>
+      synchronous_compositor_filter_;
+#endif
+
   // Used in single-process mode.
   std::unique_ptr<base::Thread> in_process_renderer_;
 
-  // True after Init() has been called. We can't just check channel_ because we
-  // also reset that in the case of process termination.
-  bool is_initialized_;
+  // True after Init() has been called.
+  bool is_initialized_ = false;
+
+  // True after ProcessDied(), until the next call to Init().
+  bool is_dead_ = false;
 
   // PlzNavigate
   // Stores the time at which the first call to Init happened.
@@ -469,16 +481,13 @@ class CONTENT_EXPORT RenderProcessHostImpl
   // Used to launch and terminate the process without blocking the UI thread.
   std::unique_ptr<ChildProcessLauncher> child_process_launcher_;
 
-  // Messages we queue before the ChannelProxy is created.
-  using MessageQueue = std::queue<std::unique_ptr<IPC::Message>>;
-  MessageQueue queued_messages_;
-
   // The globally-unique identifier for this RPH.
   const int id_;
 
-  // A secondary ID used by the Mojo shell to distinguish different incarnations
-  // of the same RPH from each other. Unlike |id_| this is not globally unique,
-  // but it is guaranteed to change every time Init() is called.
+  // A secondary ID used by the Service Manager to distinguish different
+  // incarnations of the same RPH from each other. Unlike |id_| this is not
+  // globally unique, but it is guaranteed to change every time ProcessDied() is
+  // called.
   int instance_id_ = 1;
 
   BrowserContext* browser_context_;
@@ -519,9 +528,6 @@ class CONTENT_EXPORT RenderProcessHostImpl
   // Indicates whether RenderProcessHostImpl is currently iterating and calling
   // through RenderProcessHostObserver::RenderProcessExited.
   bool within_process_died_observer_;
-
-  // Forwards power state messages to the renderer process.
-  PowerMonitorMessageBroadcaster power_monitor_broadcaster_;
 
   scoped_refptr<AudioRendererHost> audio_renderer_host_;
 
@@ -573,6 +579,7 @@ class CONTENT_EXPORT RenderProcessHostImpl
   scoped_refptr<ResourceMessageFilter> resource_message_filter_;
 
   mojom::RouteProviderAssociatedPtr remote_route_provider_;
+  mojom::RendererAssociatedPtr renderer_interface_;
 
   // A WeakPtrFactory which is reset every time Cleanup() runs. Used to vend
   // WeakPtrs which are invalidated any time the RPHI is recycled.

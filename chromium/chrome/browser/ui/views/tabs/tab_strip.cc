@@ -40,7 +40,7 @@
 #include "third_party/skia/include/effects/SkBlurMaskFilter.h"
 #include "third_party/skia/include/effects/SkLayerDrawLooper.h"
 #include "third_party/skia/include/pathops/SkPathOps.h"
-#include "ui/accessibility/ax_view_state.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/base/default_theme_provider.h"
 #include "ui/base/dragdrop/drag_drop_types.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -137,13 +137,13 @@ sk_sp<SkDrawLooper> CreateShadowDrawLooper(SkColor color) {
   SkLayerDrawLooper::LayerInfo layer_info;
   layer_info.fPaintBits |= SkLayerDrawLooper::kMaskFilter_Bit;
   layer_info.fPaintBits |= SkLayerDrawLooper::kColorFilter_Bit;
-  layer_info.fColorMode = SkXfermode::kDst_Mode;
+  layer_info.fColorMode = SkBlendMode::kDst;
   layer_info.fOffset.set(0, 1);
   SkPaint* layer_paint = looper_builder.addLayer(layer_info);
   layer_paint->setMaskFilter(SkBlurMaskFilter::Make(
       kNormal_SkBlurStyle, 0.5, SkBlurMaskFilter::kHighQuality_BlurFlag));
   layer_paint->setColorFilter(
-      SkColorFilter::MakeModeFilter(color, SkXfermode::kSrcIn_Mode));
+      SkColorFilter::MakeModeFilter(color, SkBlendMode::kSrcIn));
 
   return looper_builder.detach();
 }
@@ -322,6 +322,7 @@ NewTabButton::NewTabButton(TabStrip* tab_strip, views::ButtonListener* listener)
     : views::ImageButton(listener),
       tab_strip_(tab_strip),
       destroyed_(NULL) {
+  set_animate_on_state_change(true);
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
   set_triggerable_event_flags(triggerable_event_flags() |
                               ui::EF_MIDDLE_MOUSE_BUTTON);
@@ -600,8 +601,8 @@ TabStrip::TabStrip(TabStripController* controller)
 }
 
 TabStrip::~TabStrip() {
-  FOR_EACH_OBSERVER(TabStripObserver, observers_,
-                    TabStripDeleted(this));
+  for (TabStripObserver& observer : observers_)
+    observer.TabStripDeleted(this);
 
   // The animations may reference the tabs. Shut down the animation before we
   // delete the tabs.
@@ -699,8 +700,8 @@ void TabStrip::AddTabAt(int model_index,
 
   SwapLayoutIfNecessary();
 
-  FOR_EACH_OBSERVER(TabStripObserver, observers_,
-                    TabStripAddedTabAt(this, model_index));
+  for (TabStripObserver& observer : observers_)
+    observer.TabStripAddedTabAt(this, model_index);
 
   // Stop dragging when a new tab is added and dragging a window. Doing
   // otherwise results in a confusing state if the user attempts to reattach. We
@@ -740,8 +741,8 @@ void TabStrip::MoveTab(int from_model_index,
   }
   SwapLayoutIfNecessary();
 
-  FOR_EACH_OBSERVER(TabStripObserver, observers_,
-                    TabStripMovedTab(this, from_model_index, to_model_index));
+  for (TabStripObserver& observer : observers_)
+    observer.TabStripMovedTab(this, from_model_index, to_model_index);
 }
 
 void TabStrip::RemoveTabAt(content::WebContents* contents, int model_index) {
@@ -762,8 +763,8 @@ void TabStrip::RemoveTabAt(content::WebContents* contents, int model_index) {
   }
   SwapLayoutIfNecessary();
 
-  FOR_EACH_OBSERVER(TabStripObserver, observers_,
-                    TabStripRemovedTabAt(this, model_index));
+  for (TabStripObserver& observer : observers_)
+    observer.TabStripRemovedTabAt(this, model_index);
 
   // Stop dragging when a new tab is removed and dragging a window. Doing
   // otherwise results in a confusing state if the user attempts to reattach. We
@@ -1349,9 +1350,9 @@ int TabStrip::GetBackgroundResourceId(bool* custom_image) const {
 }
 
 void TabStrip::UpdateTabAccessibilityState(const Tab* tab,
-                                           ui::AXViewState* state) {
-  state->count = tab_count();
-  state->index = GetModelIndexOfTab(tab);
+                                           ui::AXNodeData* node_data) {
+  node_data->AddIntAttribute(ui::AX_ATTR_SET_SIZE, tab_count());
+  node_data->AddIntAttribute(ui::AX_ATTR_POS_IN_SET, GetModelIndexOfTab(tab));
 }
 
 void TabStrip::MouseMovedOutOfHost() {
@@ -1577,8 +1578,8 @@ int TabStrip::OnPerformDrop(const DropTargetEvent& event) {
   return GetDropEffect(event);
 }
 
-void TabStrip::GetAccessibleState(ui::AXViewState* state) {
-  state->role = ui::AX_ROLE_TAB_LIST;
+void TabStrip::GetAccessibleNodeData(ui::AXNodeData* node_data) {
+  node_data->role = ui::AX_ROLE_TAB_LIST;
 }
 
 views::View* TabStrip::GetTooltipHandlerForPoint(const gfx::Point& point) {
@@ -2427,8 +2428,10 @@ void TabStrip::GenerateIdealBounds() {
                          GetLayoutConstant(TABSTRIP_NEW_TAB_BUTTON_OVERLAP));
   const int old_max_x = newtab_button_bounds_.right();
   newtab_button_bounds_.set_origin(gfx::Point(new_tab_x, 0));
-  if (newtab_button_bounds_.right() != old_max_x)
-    FOR_EACH_OBSERVER(TabStripObserver, observers_, TabStripMaxXChanged(this));
+  if (newtab_button_bounds_.right() != old_max_x) {
+    for (TabStripObserver& observer : observers_)
+      observer.TabStripMaxXChanged(this);
+  }
 }
 
 int TabStrip::GenerateIdealBoundsForPinnedTabs(int* first_non_pinned_index) {

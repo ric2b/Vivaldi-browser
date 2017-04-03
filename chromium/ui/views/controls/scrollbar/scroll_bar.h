@@ -60,7 +60,7 @@ class VIEWS_EXPORT ScrollBar : public View {
   ~ScrollBar() override;
 
   // Overridden from View:
-  void GetAccessibleState(ui::AXViewState* state) override;
+  void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
 
   // Returns whether this scrollbar is horizontal.
   bool IsHorizontal() const;
@@ -90,8 +90,10 @@ class VIEWS_EXPORT ScrollBar : public View {
   // Default is 0.
   virtual int GetContentOverlapSize() const;
 
-  virtual void OnMouseEnteredScrollView(const ui::MouseEvent& event);
-  virtual void OnMouseExitedScrollView(const ui::MouseEvent& event);
+  // Called when a ScrollEvent (in any, or no, direction) is seen by the parent
+  // ScrollView. E.g., this may reveal an overlay scrollbar to indicate
+  // possible scrolling directions to the user.
+  virtual void ObserveScrollEvent(const ui::ScrollEvent& event);
 
  protected:
   // Create new scrollbar, either horizontal or vertical. These are protected

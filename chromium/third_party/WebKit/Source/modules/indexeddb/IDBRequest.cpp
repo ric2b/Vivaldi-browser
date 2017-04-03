@@ -42,6 +42,7 @@
 #include "modules/indexeddb/IDBEventDispatcher.h"
 #include "modules/indexeddb/IDBTracing.h"
 #include "modules/indexeddb/IDBValue.h"
+#include "modules/indexeddb/WebIDBCallbacksImpl.h"
 #include "platform/SharedBuffer.h"
 #include "public/platform/WebBlobInfo.h"
 #include <memory>
@@ -68,7 +69,6 @@ IDBRequest::IDBRequest(ScriptState* scriptState,
     : ActiveScriptWrappable(this),
       ActiveDOMObject(scriptState->getExecutionContext()),
       m_transaction(transaction),
-      m_scriptState(scriptState),
       m_source(source) {}
 
 IDBRequest::~IDBRequest() {
@@ -89,7 +89,8 @@ DEFINE_TRACE(IDBRequest) {
   ActiveDOMObject::trace(visitor);
 }
 
-ScriptValue IDBRequest::result(ExceptionState& exceptionState) {
+ScriptValue IDBRequest::result(ScriptState* scriptState,
+                               ExceptionState& exceptionState) {
   if (m_readyState != DONE) {
     // Must throw if returning an empty value. Message is arbitrary since it
     // will never be seen.
@@ -97,13 +98,13 @@ ScriptValue IDBRequest::result(ExceptionState& exceptionState) {
         InvalidStateError, IDBDatabase::requestNotFinishedErrorMessage);
     return ScriptValue();
   }
-  if (m_contextStopped || !getExecutionContext()) {
+  if (!getExecutionContext()) {
     exceptionState.throwDOMException(InvalidStateError,
                                      IDBDatabase::databaseClosedErrorMessage);
     return ScriptValue();
   }
   m_resultDirty = false;
-  ScriptValue value = ScriptValue::from(m_scriptState.get(), m_result);
+  ScriptValue value = ScriptValue::from(scriptState, m_result);
   return value;
 }
 
@@ -116,11 +117,11 @@ DOMException* IDBRequest::error(ExceptionState& exceptionState) const {
   return m_error;
 }
 
-ScriptValue IDBRequest::source() const {
-  if (m_contextStopped || !getExecutionContext())
+ScriptValue IDBRequest::source(ScriptState* scriptState) const {
+  if (!getExecutionContext())
     return ScriptValue();
 
-  return ScriptValue::from(m_scriptState.get(), m_source);
+  return ScriptValue::from(scriptState, m_source);
 }
 
 const String& IDBRequest::readyState() const {
@@ -132,9 +133,22 @@ const String& IDBRequest::readyState() const {
   return IndexedDBNames::done;
 }
 
+std::unique_ptr<WebIDBCallbacks> IDBRequest::createWebCallbacks() {
+  DCHECK(!m_webCallbacks);
+  std::unique_ptr<WebIDBCallbacks> callbacks =
+      WebIDBCallbacksImpl::create(this);
+  m_webCallbacks = callbacks.get();
+  return callbacks;
+}
+
+void IDBRequest::webCallbacksDestroyed() {
+  DCHECK(m_webCallbacks);
+  m_webCallbacks = nullptr;
+}
+
 void IDBRequest::abort() {
   DCHECK(!m_requestAborted);
-  if (m_contextStopped || !getExecutionContext())
+  if (!getExecutionContext())
     return;
   DCHECK(m_readyState == PENDING || m_readyState == DONE);
   if (m_readyState == DONE)
@@ -215,7 +229,7 @@ void IDBRequest::ackReceivedBlobs(const Vector<RefPtr<IDBValue>>& values) {
 }
 
 bool IDBRequest::shouldEnqueueEvent() const {
-  if (m_contextStopped || !getExecutionContext())
+  if (!getExecutionContext())
     return false;
   DCHECK(m_readyState == PENDING || m_readyState == DONE);
   if (m_requestAborted)
@@ -323,11 +337,9 @@ void IDBRequest::onSuccess(PassRefPtr<IDBValue> prpValue) {
   }
 
 #if DCHECK_IS_ON()
-  if (value->primaryKey()) {
-    DCHECK(value->keyPath() == effectiveObjectStore(m_source)->idbKeyPath());
-    assertPrimaryKeyValidOrInjectable(m_scriptState.get(), value.get());
-  }
-#endif  // DCHECK_IS_ON()
+  DCHECK(!value->primaryKey() ||
+         value->keyPath() == effectiveObjectStore(m_source)->idbKeyPath());
+#endif
 
   onSuccessInternal(IDBAny::create(value.release()));
 }
@@ -347,7 +359,7 @@ void IDBRequest::onSuccess() {
 }
 
 void IDBRequest::onSuccessInternal(IDBAny* result) {
-  DCHECK(!m_contextStopped);
+  DCHECK(getExecutionContext());
   DCHECK(!m_pendingCursor);
   setResult(result);
   enqueueEvent(Event::create(EventTypeNames::success));
@@ -373,15 +385,10 @@ bool IDBRequest::hasPendingActivity() const {
   // FIXME: In an ideal world, we should return true as long as anyone has a or
   //        can get a handle to us and we have event listeners. This is order to
   //        handle user generated events properly.
-  return m_hasPendingActivity && !m_contextStopped;
+  return m_hasPendingActivity && getExecutionContext();
 }
 
 void IDBRequest::contextDestroyed() {
-  if (m_contextStopped)
-    return;
-
-  m_contextStopped = true;
-
   if (m_readyState == PENDING) {
     m_readyState = EarlyDeath;
     if (m_transaction) {
@@ -397,6 +404,10 @@ void IDBRequest::contextDestroyed() {
     m_result->contextWillBeDestroyed();
   if (m_pendingCursor)
     m_pendingCursor->contextWillBeDestroyed();
+  if (m_webCallbacks) {
+    m_webCallbacks->detach();
+    m_webCallbacks = nullptr;
+  }
 }
 
 const AtomicString& IDBRequest::interfaceName() const {
@@ -409,14 +420,12 @@ ExecutionContext* IDBRequest::getExecutionContext() const {
 
 DispatchEventResult IDBRequest::dispatchEventInternal(Event* event) {
   IDB_TRACE("IDBRequest::dispatchEvent");
-  if (m_contextStopped || !getExecutionContext())
+  if (!getExecutionContext())
     return DispatchEventResult::CanceledBeforeDispatch;
   DCHECK_EQ(m_readyState, PENDING);
   DCHECK(m_hasPendingActivity);
   DCHECK(m_enqueuedEvents.size());
   DCHECK_EQ(event->target(), this);
-
-  ScriptState::Scope scope(m_scriptState.get());
 
   if (event->type() != EventTypeNames::blocked)
     m_readyState = DONE;
@@ -515,7 +524,7 @@ void IDBRequest::transactionDidFinishAndDispatch() {
   DCHECK(getExecutionContext());
   m_transaction.clear();
 
-  if (m_contextStopped)
+  if (!getExecutionContext())
     return;
 
   m_readyState = PENDING;
@@ -524,7 +533,7 @@ void IDBRequest::transactionDidFinishAndDispatch() {
 void IDBRequest::enqueueEvent(Event* event) {
   DCHECK(m_readyState == PENDING || m_readyState == DONE);
 
-  if (m_contextStopped || !getExecutionContext())
+  if (!getExecutionContext())
     return;
 
   DCHECK(m_readyState == PENDING || m_didFireUpgradeNeededEvent)

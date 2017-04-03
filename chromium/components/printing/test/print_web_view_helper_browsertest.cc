@@ -18,9 +18,11 @@
 #include "components/printing/test/mock_printer.h"
 #include "components/printing/test/print_mock_render_thread.h"
 #include "components/printing/test/print_test_content_renderer_client.h"
+#include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_view.h"
 #include "content/public/test/render_view_test.h"
 #include "ipc/ipc_listener.h"
+#include "printing/features/features.h"
 #include "printing/print_job_constants.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/WebKit/public/platform/WebString.h"
@@ -51,7 +53,7 @@ const char kPrintOnUserAction[] =
     "  <button id=\"print\" onclick=\"window.print();\">Hello World!</button>"
     "</body>";
 
-#if defined(ENABLE_PRINT_PREVIEW)
+#if BUILDFLAG(ENABLE_PRINT_PREVIEW)
 // HTML with 3 pages.
 const char kMultipageHTML[] =
     "<html><head><style>"
@@ -113,10 +115,10 @@ void CreatePrintSettingsDictionary(base::DictionaryValue* dict) {
   dict->SetBoolean(kSettingShouldPrintBackgrounds, false);
   dict->SetBoolean(kSettingShouldPrintSelectionOnly, false);
 }
-#endif  // defined(ENABLE_PRINT_PREVIEW)
+#endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
 #endif  // !defined(OS_CHROMEOS)
 
-#if defined(ENABLE_PRINT_PREVIEW)
+#if BUILDFLAG(ENABLE_PRINT_PREVIEW)
 class DidPreviewPageListener : public IPC::Listener {
  public:
   explicit DidPreviewPageListener(base::RunLoop* run_loop)
@@ -134,7 +136,7 @@ class DidPreviewPageListener : public IPC::Listener {
   base::RunLoop* const run_loop_;
   DISALLOW_COPY_AND_ASSIGN(DidPreviewPageListener);
 };
-#endif  // defined(ENABLE_PRINT_PREVIEW)
+#endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
 
 }  // namespace
 
@@ -191,7 +193,7 @@ class PrintWebViewHelperTestBase : public content::RenderViewTest {
 #endif  // defined(OS_CHROMEOS)
   }
 
-#if defined(ENABLE_PRINT_PREVIEW)
+#if BUILDFLAG(ENABLE_PRINT_PREVIEW)
   // The renderer should be done calculating the number of rendered pages
   // according to the specified settings defined in the mock render thread.
   // Verify the page count is correct.
@@ -205,7 +207,7 @@ class PrintWebViewHelperTestBase : public content::RenderViewTest {
                                               &post_page_count_param);
     EXPECT_EQ(count, std::get<0>(post_page_count_param).page_count);
   }
-#endif  // defined(ENABLE_PRINT_PREVIEW)
+#endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
 
   // Verifies whether the pages printed or not.
   void VerifyPagesPrinted(bool printed) {
@@ -221,14 +223,14 @@ class PrintWebViewHelperTestBase : public content::RenderViewTest {
     }
   }
 
-#if defined(ENABLE_BASIC_PRINTING)
+#if BUILDFLAG(ENABLE_BASIC_PRINTING)
   void OnPrintPages() {
-    PrintWebViewHelper::Get(view_)->OnPrintPages();
+    GetPrintWebViewHelper()->OnPrintPages();
     ProcessPendingMessages();
   }
-#endif  // defined(ENABLE_BASIC_PRINTING)
+#endif  // BUILDFLAG(ENABLE_BASIC_PRINTING)
 
-#if defined(ENABLE_PRINT_PREVIEW)
+#if BUILDFLAG(ENABLE_PRINT_PREVIEW)
   void VerifyPreviewRequest(bool requested) {
     const IPC::Message* print_msg =
         render_thread_->sink().GetUniqueMessageMatching(
@@ -238,7 +240,7 @@ class PrintWebViewHelperTestBase : public content::RenderViewTest {
   }
 
   void OnPrintPreview(const base::DictionaryValue& dict) {
-    PrintWebViewHelper* print_web_view_helper = PrintWebViewHelper::Get(view_);
+    PrintWebViewHelper* print_web_view_helper = GetPrintWebViewHelper();
     print_web_view_helper->OnInitiatePrintPreview(false);
     base::RunLoop run_loop;
     DidPreviewPageListener filter(&run_loop);
@@ -247,14 +249,19 @@ class PrintWebViewHelperTestBase : public content::RenderViewTest {
     run_loop.Run();
     render_thread_->sink().RemoveFilter(&filter);
   }
-#endif  // defined(ENABLE_PRINT_PREVIEW)
+#endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
 
-#if defined(ENABLE_BASIC_PRINTING)
+#if BUILDFLAG(ENABLE_BASIC_PRINTING)
   void OnPrintForPrintPreview(const base::DictionaryValue& dict) {
-    PrintWebViewHelper::Get(view_)->OnPrintForPrintPreview(dict);
+    GetPrintWebViewHelper()->OnPrintForPrintPreview(dict);
     ProcessPendingMessages();
   }
-#endif  // defined(ENABLE_BASIC_PRINTING)
+#endif  // BUILDFLAG(ENABLE_BASIC_PRINTING)
+
+  PrintWebViewHelper* GetPrintWebViewHelper() {
+    return PrintWebViewHelper::Get(
+        content::RenderFrame::FromWebFrame(GetMainFrame()));
+  }
 
   // Naked pointer as ownership is with content::RenderViewTest::render_thread_.
   PrintMockRenderThread* print_render_thread_;
@@ -283,7 +290,7 @@ class MAYBE_PrintWebViewHelperTest : public PrintWebViewHelperTestBase {
 };
 
 // This tests only for platforms without print preview.
-#if !defined(ENABLE_PRINT_PREVIEW)
+#if !BUILDFLAG(ENABLE_PRINT_PREVIEW)
 // Tests that the renderer blocks window.print() calls if they occur too
 // frequently.
 TEST_F(MAYBE_PrintWebViewHelperTest, BlockScriptInitiatedPrinting) {
@@ -301,7 +308,7 @@ TEST_F(MAYBE_PrintWebViewHelperTest, BlockScriptInitiatedPrinting) {
   VerifyPagesPrinted(false);
 
   // Unblock script initiated printing and verify printing works.
-  PrintWebViewHelper::Get(view_)->scripting_throttler_.Reset();
+  GetPrintWebViewHelper()->scripting_throttler_.Reset();
   print_render_thread_->printer()->ResetPrinter();
   PrintWithJavaScript();
   VerifyPageCount(1);
@@ -328,7 +335,7 @@ TEST_F(MAYBE_PrintWebViewHelperTest, AllowUserOriginatedPrinting) {
   print_render_thread_->printer()->ResetPrinter();
   LoadHTML(kPrintOnUserAction);
   gfx::Size new_size(200, 100);
-  Resize(new_size, gfx::Rect(), false);
+  Resize(new_size, false);
 
   gfx::Rect bounds = GetElementBounds("print");
   EXPECT_FALSE(bounds.IsEmpty());
@@ -354,9 +361,9 @@ TEST_F(MAYBE_PrintWebViewHelperTest, PrintWithJavascript) {
   VerifyPageCount(1);
   VerifyPagesPrinted(true);
 }
-#endif  // !defined(ENABLE_PRINT_PREVIEW)
+#endif  // !BUILDFLAG(ENABLE_PRINT_PREVIEW)
 
-#if defined(ENABLE_BASIC_PRINTING)
+#if BUILDFLAG(ENABLE_BASIC_PRINTING)
 // Tests that printing pages work and sending and receiving messages through
 // that channel all works.
 TEST_F(MAYBE_PrintWebViewHelperTest, OnPrintPages) {
@@ -366,9 +373,9 @@ TEST_F(MAYBE_PrintWebViewHelperTest, OnPrintPages) {
   VerifyPageCount(1);
   VerifyPagesPrinted(true);
 }
-#endif  // defined(ENABLE_BASIC_PRINTING)
+#endif  // BUILDFLAG(ENABLE_BASIC_PRINTING)
 
-#if defined(OS_MACOSX) && defined(ENABLE_BASIC_PRINTING)
+#if defined(OS_MACOSX) && BUILDFLAG(ENABLE_BASIC_PRINTING)
 // TODO(estade): I don't think this test is worth porting to Linux. We will have
 // to rip out and replace most of the IPC code if we ever plan to improve
 // printing, and the comment below by sverrir suggests that it doesn't do much
@@ -388,12 +395,11 @@ TEST_F(MAYBE_PrintWebViewHelperTest, PrintWithIframe) {
 
   // Find the frame and set it as the focused one.  This should mean that that
   // the printout should only contain the contents of that frame.
-  WebFrame* sub1_frame =
-      view_->GetWebView()->findFrameByName(WebString::fromUTF8("sub1"));
+  auto* web_view = view_->GetWebView();
+  WebFrame* sub1_frame = web_view->findFrameByName(WebString::fromUTF8("sub1"));
   ASSERT_TRUE(sub1_frame);
-  view_->GetWebView()->setFocusedFrame(sub1_frame);
-  ASSERT_NE(view_->GetWebView()->focusedFrame(),
-            view_->GetWebView()->mainFrame());
+  web_view->setFocusedFrame(sub1_frame);
+  ASSERT_NE(web_view->focusedFrame(), web_view->mainFrame());
 
   // Initiate printing.
   OnPrintPages();
@@ -426,7 +432,7 @@ struct TestPageData {
   const wchar_t* file;
 };
 
-#if defined(OS_MACOSX) && defined(ENABLE_BASIC_PRINTING)
+#if defined(OS_MACOSX) && BUILDFLAG(ENABLE_BASIC_PRINTING)
 const TestPageData kTestPages[] = {
     {
         "<html>"
@@ -446,14 +452,14 @@ const TestPageData kTestPages[] = {
         600, 780, nullptr, nullptr,
     },
 };
-#endif  // defined(OS_MACOSX) && defined(ENABLE_BASIC_PRINTING)
+#endif  // defined(OS_MACOSX) && BUILDFLAG(ENABLE_BASIC_PRINTING)
 }  // namespace
 
 // TODO(estade): need to port MockPrinter to get this on Linux. This involves
 // hooking up Cairo to read a pdf stream, or accessing the cairo surface in the
 // metafile directly.
 // Same for printing via PDF on Windows.
-#if defined(OS_MACOSX) && defined(ENABLE_BASIC_PRINTING)
+#if defined(OS_MACOSX) && BUILDFLAG(ENABLE_BASIC_PRINTING)
 TEST_F(MAYBE_PrintWebViewHelperTest, PrintLayoutTest) {
   bool baseline = false;
 
@@ -520,7 +526,7 @@ TEST_F(MAYBE_PrintWebViewHelperTest, PrintLayoutTest) {
 #define MAYBE_PrintWebViewHelperPreviewTest PrintWebViewHelperPreviewTest
 #endif  // defined(OS_ANDROID)
 
-#if defined(ENABLE_PRINT_PREVIEW)
+#if BUILDFLAG(ENABLE_PRINT_PREVIEW)
 class MAYBE_PrintWebViewHelperPreviewTest : public PrintWebViewHelperTestBase {
  public:
   MAYBE_PrintWebViewHelperPreviewTest() {}
@@ -622,12 +628,12 @@ class MAYBE_PrintWebViewHelperPreviewTest : public PrintWebViewHelperTestBase {
 
 TEST_F(MAYBE_PrintWebViewHelperPreviewTest, BlockScriptInitiatedPrinting) {
   LoadHTML(kHelloWorldHTML);
-  PrintWebViewHelper* print_web_view_helper = PrintWebViewHelper::Get(view_);
-  print_web_view_helper->SetScriptedPrintBlocked(true);
+  PrintWebViewHelper* print_web_view_helper = GetPrintWebViewHelper();
+  print_web_view_helper->OnSetPrintingEnabled(false);
   PrintWithJavaScript();
   VerifyPreviewRequest(false);
 
-  print_web_view_helper->SetScriptedPrintBlocked(false);
+  print_web_view_helper->OnSetPrintingEnabled(true);
   PrintWithJavaScript();
   VerifyPreviewRequest(true);
 }
@@ -635,7 +641,7 @@ TEST_F(MAYBE_PrintWebViewHelperPreviewTest, BlockScriptInitiatedPrinting) {
 TEST_F(MAYBE_PrintWebViewHelperPreviewTest, PrintWithJavaScript) {
   LoadHTML(kPrintOnUserAction);
   gfx::Size new_size(200, 100);
-  Resize(new_size, gfx::Rect(), false);
+  Resize(new_size, false);
 
   gfx::Rect bounds = GetElementBounds("print");
   EXPECT_FALSE(bounds.IsEmpty());
@@ -947,7 +953,7 @@ TEST_F(MAYBE_PrintWebViewHelperPreviewTest, OnPrintPreviewCancel) {
   VerifyPagesPrinted(false);
 }
 
-#if defined(ENABLE_BASIC_PRINTING)
+#if BUILDFLAG(ENABLE_BASIC_PRINTING)
 // Tests that printing from print preview works and sending and receiving
 // messages through that channel all works.
 TEST_F(MAYBE_PrintWebViewHelperPreviewTest, OnPrintForPrintPreview) {
@@ -973,7 +979,7 @@ TEST_F(MAYBE_PrintWebViewHelperPreviewTest, OnPrintForPrintPreviewFail) {
 
   VerifyPagesPrinted(false);
 }
-#endif  // defined(ENABLE_BASIC_PRINTING)
+#endif  // BUILDFLAG(ENABLE_BASIC_PRINTING)
 
 // Tests that when default printer has invalid printer settings, print preview
 // receives error message.
@@ -1038,7 +1044,7 @@ TEST_F(MAYBE_PrintWebViewHelperPreviewTest,
   VerifyPrintPreviewGenerated(false);
 }
 
-#if defined(ENABLE_BASIC_PRINTING)
+#if BUILDFLAG(ENABLE_BASIC_PRINTING)
 TEST_F(MAYBE_PrintWebViewHelperPreviewTest,
        OnPrintForPrintPreviewUsingInvalidPrinterSettings) {
   LoadHTML(kPrintPreviewHTML);
@@ -1054,8 +1060,8 @@ TEST_F(MAYBE_PrintWebViewHelperPreviewTest,
   VerifyPrintFailed(true);
   VerifyPagesPrinted(false);
 }
-#endif  // defined(ENABLE_BASIC_PRINTING)
-#endif  // defined(ENABLE_PRINT_PREVIEW)
+#endif  // BUILDFLAG(ENABLE_BASIC_PRINTING)
+#endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
 
 #endif  // !defined(OS_CHROMEOS)
 

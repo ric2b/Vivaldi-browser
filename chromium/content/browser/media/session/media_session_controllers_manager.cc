@@ -5,9 +5,7 @@
 #include "content/browser/media/session/media_session_controllers_manager.h"
 
 #include "base/command_line.h"
-#include "content/browser/media/session/media_session.h"
 #include "content/browser/media/session/media_session_controller.h"
-#include "content/browser/media/session/media_session_observer.h"
 #include "media/base/media_switches.h"
 
 namespace content {

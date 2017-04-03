@@ -16,9 +16,12 @@
 #include "content/browser/loader/resource_dispatcher_host_impl.h"
 #include "content/browser/loader/resource_request_info_impl.h"
 #include "content/common/resource_request_completion_status.h"
+#include "content/public/browser/global_request_id.h"
+#include "content/public/browser/resource_controller.h"
 #include "content/public/browser/resource_dispatcher_host_delegate.h"
 #include "content/public/common/resource_response.h"
 #include "mojo/public/c/system/data_pipe.h"
+#include "mojo/public/cpp/bindings/message.h"
 #include "mojo/public/cpp/system/data_pipe.h"
 #include "net/base/io_buffer.h"
 #include "net/base/load_flags.h"
@@ -103,14 +106,18 @@ class MojoAsyncResourceHandler::WriterIOBuffer final
 MojoAsyncResourceHandler::MojoAsyncResourceHandler(
     net::URLRequest* request,
     ResourceDispatcherHostImpl* rdh,
-    mojo::InterfaceRequest<mojom::URLLoader> mojo_request,
-    mojom::URLLoaderClientPtr url_loader_client)
+    mojom::URLLoaderAssociatedRequest mojo_request,
+    mojom::URLLoaderClientAssociatedPtr url_loader_client)
     : ResourceHandler(request),
       rdh_(rdh),
       binding_(this, std::move(mojo_request)),
       url_loader_client_(std::move(url_loader_client)) {
   DCHECK(url_loader_client_);
   InitializeResourceBufferConstants();
+  // This unretained pointer is safe, because |binding_| is owned by |this| and
+  // the callback will never be called after |this| is destroyed.
+  binding_.set_connection_error_handler(
+      base::Bind(&MojoAsyncResourceHandler::Cancel, base::Unretained(this)));
 }
 
 MojoAsyncResourceHandler::~MojoAsyncResourceHandler() {
@@ -122,8 +129,24 @@ bool MojoAsyncResourceHandler::OnRequestRedirected(
     const net::RedirectInfo& redirect_info,
     ResourceResponse* response,
     bool* defer) {
-  // Not implemented.
-  return false;
+  // Unlike OnResponseStarted, OnRequestRedirected will NOT be preceded by
+  // OnWillRead.
+  DCHECK(!shared_writer_);
+
+  *defer = true;
+  request()->LogBlockedBy("MojoAsyncResourceHandler");
+  did_defer_on_redirect_ = true;
+
+  NetLogObserver::PopulateResponseInfo(request(), response);
+  response->head.encoded_data_length = request()->GetTotalReceivedBytes();
+  response->head.request_start = request()->creation_time();
+  response->head.response_start = base::TimeTicks::Now();
+  // TODO(davidben): Is it necessary to pass the new first party URL for
+  // cookies? The only case where it can change is top-level navigation requests
+  // and hopefully those will eventually all be owned by the browser. It's
+  // possible this is still needed while renderer-owned ones exist.
+  url_loader_client_->OnReceiveRedirect(redirect_info, response->head);
+  return true;
 }
 
 bool MojoAsyncResourceHandler::OnResponseStarted(ResourceResponse* response,
@@ -213,8 +236,10 @@ bool MojoAsyncResourceHandler::OnReadCompleted(int bytes_read, bool* defer) {
     buffer_bytes_read_ = bytes_read;
     if (!CopyReadDataToDataPipe(defer))
       return false;
-    if (*defer)
-      OnDefer();
+    if (*defer) {
+      request()->LogBlockedBy("MojoAsyncResourceHandler");
+      did_defer_on_writing_ = true;
+    }
     return true;
   }
 
@@ -224,25 +249,42 @@ bool MojoAsyncResourceHandler::OnReadCompleted(int bytes_read, bool* defer) {
   // doesn't have |defer| parameter.
   if (!AllocateWriterIOBuffer(&buffer_, defer))
     return false;
-  if (*defer)
-    OnDefer();
+  if (*defer) {
+    request()->LogBlockedBy("MojoAsyncResourceHandler");
+    did_defer_on_writing_ = true;
+  }
   return true;
 }
 
 void MojoAsyncResourceHandler::OnDataDownloaded(int bytes_downloaded) {
-  // Not implemented.
+  int64_t total_received_bytes = request()->GetTotalReceivedBytes();
+  int64_t bytes_to_report =
+      total_received_bytes - reported_total_received_bytes_;
+  reported_total_received_bytes_ = total_received_bytes;
+  DCHECK_LE(0, bytes_to_report);
+
+  url_loader_client_->OnDataDownloaded(bytes_downloaded, bytes_to_report);
 }
 
 void MojoAsyncResourceHandler::FollowRedirect() {
-  NOTIMPLEMENTED();
+  if (!request()->status().is_success()) {
+    DVLOG(1) << "FollowRedirect for invalid request";
+    return;
+  }
+  if (!did_defer_on_redirect_) {
+    DVLOG(1) << "Malformed FollowRedirect request";
+    ReportBadMessage("Malformed FollowRedirect request");
+    return;
+  }
+
+  DCHECK(!did_defer_on_writing_);
+  did_defer_on_redirect_ = false;
+  request()->LogUnblocked();
+  controller()->Resume();
 }
 
-void MojoAsyncResourceHandler::Cancel() {
-  NOTIMPLEMENTED();
-}
-
-void MojoAsyncResourceHandler::ResumeForTesting() {
-  Resume();
+void MojoAsyncResourceHandler::OnWritableForTesting() {
+  OnWritable(MOJO_RESULT_OK);
 }
 
 void MojoAsyncResourceHandler::SetAllocationSizeForTesting(size_t size) {
@@ -344,40 +386,6 @@ bool MojoAsyncResourceHandler::AllocateWriterIOBuffer(
   return true;
 }
 
-void MojoAsyncResourceHandler::Resume() {
-  if (!did_defer_)
-    return;
-  bool defer = false;
-  if (is_using_io_buffer_not_from_writer_) {
-    // |buffer_| is set to a net::IOBufferWithSize. Write the buffer contents
-    // to the data pipe.
-    DCHECK_GT(buffer_bytes_read_, 0u);
-    if (!CopyReadDataToDataPipe(&defer)) {
-      controller()->CancelWithError(net::ERR_FAILED);
-      return;
-    }
-  } else {
-    // Allocate a buffer for the next OnWillRead call here.
-    if (!AllocateWriterIOBuffer(&buffer_, &defer)) {
-      controller()->CancelWithError(net::ERR_FAILED);
-      return;
-    }
-  }
-
-  if (defer) {
-    // Continue waiting.
-    return;
-  }
-  did_defer_ = false;
-  request()->LogUnblocked();
-  controller()->Resume();
-}
-
-void MojoAsyncResourceHandler::OnDefer() {
-  request()->LogBlockedBy("MojoAsyncResourceHandler");
-  did_defer_ = true;
-}
-
 bool MojoAsyncResourceHandler::CheckForSufficientResource() {
   if (has_checked_for_sufficient_resources_)
     return true;
@@ -390,8 +398,44 @@ bool MojoAsyncResourceHandler::CheckForSufficientResource() {
   return false;
 }
 
-void MojoAsyncResourceHandler::OnWritable(MojoResult unused) {
-  Resume();
+void MojoAsyncResourceHandler::OnWritable(MojoResult result) {
+  if (!did_defer_on_writing_)
+    return;
+  DCHECK(!did_defer_on_redirect_);
+  did_defer_on_writing_ = false;
+
+  if (is_using_io_buffer_not_from_writer_) {
+    // |buffer_| is set to a net::IOBufferWithSize. Write the buffer contents
+    // to the data pipe.
+    DCHECK_GT(buffer_bytes_read_, 0u);
+    if (!CopyReadDataToDataPipe(&did_defer_on_writing_)) {
+      controller()->CancelWithError(net::ERR_FAILED);
+      return;
+    }
+  } else {
+    // Allocate a buffer for the next OnWillRead call here.
+    if (!AllocateWriterIOBuffer(&buffer_, &did_defer_on_writing_)) {
+      controller()->CancelWithError(net::ERR_FAILED);
+      return;
+    }
+  }
+
+  if (did_defer_on_writing_) {
+    // Continue waiting.
+    return;
+  }
+  request()->LogUnblocked();
+  controller()->Resume();
+}
+
+void MojoAsyncResourceHandler::Cancel() {
+  const ResourceRequestInfoImpl* info = GetRequestInfo();
+  ResourceDispatcherHostImpl::Get()->CancelRequestFromRenderer(
+      GlobalRequestID(info->GetChildID(), info->GetRequestID()));
+}
+
+void MojoAsyncResourceHandler::ReportBadMessage(const std::string& error) {
+  mojo::ReportBadMessage(error);
 }
 
 }  // namespace content

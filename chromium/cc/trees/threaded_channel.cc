@@ -9,9 +9,9 @@
 #include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/trace_event/trace_event.h"
-#include "cc/animation/animation_events.h"
-#include "cc/animation/layer_tree_mutator.h"
 #include "cc/trees/layer_tree_host.h"
+#include "cc/trees/layer_tree_mutator.h"
+#include "cc/trees/mutator_host.h"
 
 namespace cc {
 
@@ -37,14 +37,15 @@ ThreadedChannel::~ThreadedChannel() {
   DCHECK(!IsInitialized());
 }
 
-void ThreadedChannel::UpdateTopControlsStateOnImpl(TopControlsState constraints,
-                                                   TopControlsState current,
-                                                   bool animate) {
+void ThreadedChannel::UpdateBrowserControlsStateOnImpl(
+    BrowserControlsState constraints,
+    BrowserControlsState current,
+    bool animate) {
   DCHECK(IsMainThread());
   ImplThreadTaskRunner()->PostTask(
       FROM_HERE,
-      base::Bind(&ProxyImpl::UpdateTopControlsStateOnImpl, proxy_impl_weak_ptr_,
-                 constraints, current, animate));
+      base::Bind(&ProxyImpl::UpdateBrowserControlsStateOnImpl,
+                 proxy_impl_weak_ptr_, constraints, current, animate));
 }
 
 void ThreadedChannel::InitializeCompositorFrameSinkOnImpl(
@@ -191,10 +192,10 @@ void ThreadedChannel::SynchronouslyCloseImpl() {
   main().initialized = false;
 }
 
-void ThreadedChannel::DidCompleteSwapBuffers() {
+void ThreadedChannel::DidReceiveCompositorFrameAck() {
   DCHECK(IsImplThread());
   MainThreadTaskRunner()->PostTask(
-      FROM_HERE, base::Bind(&ProxyMain::DidCompleteSwapBuffers,
+      FROM_HERE, base::Bind(&ProxyMain::DidReceiveCompositorFrameAck,
                             impl().proxy_main_weak_ptr));
 }
 
@@ -213,7 +214,7 @@ void ThreadedChannel::DidCommitAndDrawFrame() {
 }
 
 void ThreadedChannel::SetAnimationEvents(
-    std::unique_ptr<AnimationEvents> events) {
+    std::unique_ptr<MutatorEvents> events) {
   DCHECK(IsImplThread());
   MainThreadTaskRunner()->PostTask(
       FROM_HERE, base::Bind(&ProxyMain::SetAnimationEvents,

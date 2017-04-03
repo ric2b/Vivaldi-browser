@@ -9,6 +9,7 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
 #include "base/strings/string_util.h"
@@ -16,6 +17,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "content/browser/download/download_manager_impl.h"
+#include "content/browser/loader/resource_dispatcher_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
@@ -238,6 +240,52 @@ IN_PROC_BROWSER_TEST_F(ResourceDispatcherHostBrowserTest,
   ASSERT_FALSE(got_downloads());
 }
 
+namespace {
+
+// Responses with a HungResponse for the specified URL to hang on the request,
+// and cancells all requests from specifield |child_id|.
+std::unique_ptr<net::test_server::HttpResponse> CancelOnRequest(
+    const std::string& relative_url,
+    int child_id,
+    const net::test_server::HttpRequest& request) {
+  if (request.relative_url != relative_url)
+    return nullptr;
+
+  content::BrowserThread::PostTask(
+      content::BrowserThread::IO,
+      FROM_HERE,
+      base::Bind(&ResourceDispatcherHostImpl::CancelRequestsForProcess,
+                 base::Unretained(ResourceDispatcherHostImpl::Get()),
+                 child_id));
+
+  return base::MakeUnique<net::test_server::HungResponse>();
+}
+
+}  // namespace
+
+// Tests the case where the request is cancelled by a layer above the
+// URLRequest, which passes the error on ResourceLoader teardown, rather than in
+// response to call to AsyncResourceHandler::OnResponseComplete.
+IN_PROC_BROWSER_TEST_F(ResourceDispatcherHostBrowserTest,
+                       SyncXMLHttpRequest_Cancelled) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  WaitForLoadStop(shell()->web_contents());
+
+  embedded_test_server()->RegisterRequestHandler(
+      base::Bind(&CancelOnRequest, "/hung",
+                 shell()->web_contents()->GetRenderProcessHost()->GetID()));
+  NavigateToURL(shell(), embedded_test_server()->GetURL(
+                             "/sync_xmlhttprequest_cancelled.html"));
+
+  int status_code = -1;
+  EXPECT_TRUE(ExecuteScriptAndExtractInt(
+      shell(), "window.domAutomationController.send(getErrorCode());",
+      &status_code));
+
+  // 19 is the value of NETWORK_ERROR on DOMException.
+  EXPECT_EQ(19, status_code);
+}
+
 // Flaky everywhere. http://crbug.com/130404
 // Tests that onunload is run for cross-site requests.  (Bug 1114994)
 IN_PROC_BROWSER_TEST_F(ResourceDispatcherHostBrowserTest,
@@ -297,6 +345,10 @@ std::unique_ptr<net::test_server::HttpResponse> NoContentResponseHandler(
 // If this flakes use http://crbug.com/80596.
 IN_PROC_BROWSER_TEST_F(ResourceDispatcherHostBrowserTest,
                        CrossSiteNoUnloadOn204) {
+  const char kNoContentPath[] = "/nocontent";
+  embedded_test_server()->RegisterRequestHandler(
+      base::Bind(&NoContentResponseHandler, kNoContentPath));
+
   ASSERT_TRUE(embedded_test_server()->Start());
 
   // Start with a URL that sets a cookie in its unload handler.
@@ -304,9 +356,6 @@ IN_PROC_BROWSER_TEST_F(ResourceDispatcherHostBrowserTest,
   CheckTitleTest(url, "set cookie on unload");
 
   // Navigate to a cross-site URL that returns a 204 No Content response.
-  const char kNoContentPath[] = "/nocontent";
-  embedded_test_server()->RegisterRequestHandler(
-      base::Bind(&NoContentResponseHandler, kNoContentPath));
   NavigateToURL(shell(), embedded_test_server()->GetURL(kNoContentPath));
 
   // Check that the unload cookie was not set.
@@ -480,9 +529,9 @@ std::unique_ptr<net::test_server::HttpResponse> HandleRedirectRequest(
 // Test that we update the cookie policy URLs correctly when transferring
 // navigations.
 IN_PROC_BROWSER_TEST_F(ResourceDispatcherHostBrowserTest, CookiePolicy) {
-  ASSERT_TRUE(embedded_test_server()->Start());
   embedded_test_server()->RegisterRequestHandler(
       base::Bind(&HandleRedirectRequest, "/redirect?"));
+  ASSERT_TRUE(embedded_test_server()->Start());
 
   std::string set_cookie_url(base::StringPrintf(
       "http://localhost:%u/set_cookie.html", embedded_test_server()->port()));
@@ -755,11 +804,11 @@ namespace {
 struct RequestDataForDelegate {
   const GURL url;
   const GURL first_party;
-  const url::Origin initiator;
+  const base::Optional<url::Origin> initiator;
 
   RequestDataForDelegate(const GURL& url,
                          const GURL& first_party,
-                         const url::Origin initiator)
+                         const base::Optional<url::Origin>& initiator)
       : url(url), first_party(first_party), initiator(initiator) {}
 };
 

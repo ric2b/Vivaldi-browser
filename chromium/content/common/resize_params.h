@@ -28,7 +28,7 @@ struct CONTENT_EXPORT ResizeParams {
 
   // Whether or not Blink's viewport size should be shrunk by the height of the
   // URL-bar (always false on platforms where URL-bar hiding isn't supported).
-  bool top_controls_shrink_blink_size;
+  bool browser_controls_shrink_blink_size;
 
   // The height of the top controls (always 0 on platforms where URL-bar hiding
   // isn't supported).
@@ -41,9 +41,6 @@ struct CONTENT_EXPORT ResizeParams {
   // view is partially occluded (e.g. by a virtual keyboard).  The size is in
   // DPI-adjusted pixels.
   gfx::Size visible_viewport_size;
-
-  // The resizer rect.
-  gfx::Rect resizer_rect;
 
   // Indicates whether tab-initiated fullscreen was granted.
   bool is_fullscreen_granted;

@@ -5,11 +5,13 @@
 #include "modules/webgl/WebGL2RenderingContextBase.h"
 
 #include "bindings/modules/v8/WebGLAny.h"
+#include "core/dom/DOMException.h"
 #include "core/frame/ImageBitmap.h"
 #include "core/html/HTMLCanvasElement.h"
 #include "core/html/HTMLImageElement.h"
 #include "core/html/HTMLVideoElement.h"
 #include "core/html/ImageData.h"
+#include "gpu/GLES2/gl2extchromium.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "modules/webgl/WebGLActiveInfo.h"
 #include "modules/webgl/WebGLBuffer.h"
@@ -36,10 +38,14 @@ namespace blink {
 
 namespace {
 
+const GLuint64 kMaxClientWaitTimeout = 0u;
+
 GLsync syncObjectOrZero(const WebGLSync* object) {
   return object ? object->object() : nullptr;
 }
 
+// TODO(kainino): Change outByteLength to GLuint and change the associated
+// range checking (and all uses) - overflow becomes possible in cases below
 bool validateSubSourceAndGetData(DOMArrayBufferView* view,
                                  GLuint subOffset,
                                  GLuint subLength,
@@ -135,18 +141,86 @@ const GLenum kSupportedInternalFormatsStorage[] = {
     GL_DEPTH32F_STENCIL8,
 };
 
-const GLenum kCompressedTextureFormatsETC2EAC[] = {
-    GL_COMPRESSED_R11_EAC,
-    GL_COMPRESSED_SIGNED_R11_EAC,
-    GL_COMPRESSED_RG11_EAC,
-    GL_COMPRESSED_SIGNED_RG11_EAC,
-    GL_COMPRESSED_RGB8_ETC2,
-    GL_COMPRESSED_SRGB8_ETC2,
-    GL_COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2,
-    GL_COMPRESSED_SRGB8_PUNCHTHROUGH_ALPHA1_ETC2,
-    GL_COMPRESSED_RGBA8_ETC2_EAC,
-    GL_COMPRESSED_SRGB8_ALPHA8_ETC2_EAC,
+class WebGLGetBufferSubDataAsyncCallback
+    : public GarbageCollected<WebGLGetBufferSubDataAsyncCallback> {
+ public:
+  WebGLGetBufferSubDataAsyncCallback(
+      WebGL2RenderingContextBase* context,
+      ScriptPromiseResolver* promiseResolver,
+      void* shmReadbackResultData,
+      GLuint commandsIssuedQueryID,
+      DOMArrayBufferView* destinationArrayBufferView,
+      void* destinationDataPtr,
+      long long destinationByteLength)
+      : m_context(context),
+        m_promiseResolver(promiseResolver),
+        m_shmReadbackResultData(shmReadbackResultData),
+        m_commandsIssuedQueryID(commandsIssuedQueryID),
+        m_destinationArrayBufferView(destinationArrayBufferView),
+        m_destinationDataPtr(destinationDataPtr),
+        m_destinationByteLength(destinationByteLength) {
+    DCHECK(shmReadbackResultData);
+    DCHECK(destinationDataPtr);
+  }
+
+  void destroy() {
+    DCHECK(m_shmReadbackResultData);
+    m_context->contextGL()->FreeSharedMemory(m_shmReadbackResultData);
+    m_shmReadbackResultData = nullptr;
+    DOMException* exception =
+        DOMException::create(InvalidStateError, "Context lost or destroyed");
+    m_promiseResolver->reject(exception);
+  }
+
+  void resolve() {
+    if (!m_context || !m_shmReadbackResultData) {
+      DOMException* exception =
+          DOMException::create(InvalidStateError, "Context lost or destroyed");
+      m_promiseResolver->reject(exception);
+      return;
+    }
+    if (m_destinationArrayBufferView->buffer()->isNeutered()) {
+      DOMException* exception = DOMException::create(
+          InvalidStateError, "ArrayBufferView became invalid asynchronously");
+      m_promiseResolver->reject(exception);
+      return;
+    }
+    memcpy(m_destinationDataPtr, m_shmReadbackResultData,
+           m_destinationByteLength);
+    // TODO(kainino): What would happen if the DOM was suspended when the
+    // promise became resolved? Could another JS task happen between the memcpy
+    // and the promise resolution task, which would see the wrong data?
+    m_promiseResolver->resolve(m_destinationArrayBufferView);
+
+    m_context->contextGL()->DeleteQueriesEXT(1, &m_commandsIssuedQueryID);
+    this->destroy();
+    m_context->unregisterGetBufferSubDataAsyncCallback(this);
+  }
+
+  DECLARE_TRACE();
+
+ private:
+  WeakMember<WebGL2RenderingContextBase> m_context;
+  Member<ScriptPromiseResolver> m_promiseResolver;
+
+  // Pointer to shared memory where the gpu readback result is stored.
+  void* m_shmReadbackResultData;
+  // ID of the GL query used to call this callback.
+  GLuint m_commandsIssuedQueryID;
+
+  // ArrayBufferView returned from the promise.
+  Member<DOMArrayBufferView> m_destinationArrayBufferView;
+  // Pointer into the offset into destinationArrayBufferView.
+  void* m_destinationDataPtr;
+  // Size in bytes of the copy operation being performed.
+  long long m_destinationByteLength;
 };
+
+DEFINE_TRACE(WebGLGetBufferSubDataAsyncCallback) {
+  visitor->trace(m_context);
+  visitor->trace(m_promiseResolver);
+  visitor->trace(m_destinationArrayBufferView);
+}
 
 WebGL2RenderingContextBase::WebGL2RenderingContextBase(
     HTMLCanvasElement* passedCanvas,
@@ -155,22 +229,22 @@ WebGL2RenderingContextBase::WebGL2RenderingContextBase(
     : WebGLRenderingContextBase(passedCanvas,
                                 std::move(contextProvider),
                                 requestedAttributes,
-                                2) {
+                                2),
+      m_readFramebufferBinding(this, nullptr),
+      m_transformFeedbackBinding(this, nullptr),
+      m_boundCopyReadBuffer(this, nullptr),
+      m_boundCopyWriteBuffer(this, nullptr),
+      m_boundPixelPackBuffer(this, nullptr),
+      m_boundPixelUnpackBuffer(this, nullptr),
+      m_boundTransformFeedbackBuffer(this, nullptr),
+      m_boundUniformBuffer(this, nullptr),
+      m_currentBooleanOcclusionQuery(this, nullptr),
+      m_currentTransformFeedbackPrimitivesWrittenQuery(this, nullptr),
+      m_currentElapsedQuery(this, nullptr) {
   m_supportedInternalFormatsStorage.insert(
       kSupportedInternalFormatsStorage,
       kSupportedInternalFormatsStorage +
           WTF_ARRAY_LENGTH(kSupportedInternalFormatsStorage));
-  m_supportedInternalFormatsStorage.insert(
-      kCompressedTextureFormatsETC2EAC,
-      kCompressedTextureFormatsETC2EAC +
-          WTF_ARRAY_LENGTH(kCompressedTextureFormatsETC2EAC));
-  m_compressedTextureFormatsETC2EAC.insert(
-      kCompressedTextureFormatsETC2EAC,
-      kCompressedTextureFormatsETC2EAC +
-          WTF_ARRAY_LENGTH(kCompressedTextureFormatsETC2EAC));
-  m_compressedTextureFormats.append(
-      kCompressedTextureFormatsETC2EAC,
-      WTF_ARRAY_LENGTH(kCompressedTextureFormatsETC2EAC));
 }
 
 WebGL2RenderingContextBase::~WebGL2RenderingContextBase() {
@@ -185,6 +259,16 @@ WebGL2RenderingContextBase::~WebGL2RenderingContextBase() {
 
   m_currentBooleanOcclusionQuery = nullptr;
   m_currentTransformFeedbackPrimitivesWrittenQuery = nullptr;
+  m_currentElapsedQuery = nullptr;
+}
+
+void WebGL2RenderingContextBase::destroyContext() {
+  for (auto& callback : m_getBufferSubDataAsyncCallbacks) {
+    callback->destroy();
+  }
+  m_getBufferSubDataAsyncCallbacks.clear();
+
+  WebGLRenderingContextBase::destroyContext();
 }
 
 void WebGL2RenderingContextBase::initializeNewContext() {
@@ -202,6 +286,7 @@ void WebGL2RenderingContextBase::initializeNewContext() {
 
   m_currentBooleanOcclusionQuery = nullptr;
   m_currentTransformFeedbackPrimitivesWrittenQuery = nullptr;
+  m_currentElapsedQuery = nullptr;
 
   GLint numCombinedTextureImageUnits = 0;
   contextGL()->GetIntegerv(GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS,
@@ -357,33 +442,108 @@ void WebGL2RenderingContextBase::getBufferSubData(GLenum target,
                                                   DOMArrayBufferView* dstData,
                                                   GLuint dstOffset,
                                                   GLuint length) {
-  const char* funcName = "getBufferSubData";
-  if (isContextLost())
-    return;
-  if (!validateValueFitNonNegInt32(funcName, "srcByteOffset", srcByteOffset)) {
+  WebGLBuffer* sourceBuffer = nullptr;
+  void* destinationDataPtr = nullptr;
+  long long destinationByteLength = 0;
+  const char* message = validateGetBufferSubData(
+      __FUNCTION__, target, srcByteOffset, dstData, dstOffset, length,
+      &sourceBuffer, &destinationDataPtr, &destinationByteLength);
+  if (message) {
+    // If there was a GL error, it was already synthesized in
+    // validateGetBufferSubData, so it's not done here.
     return;
   }
-  WebGLBuffer* buffer = validateBufferDataTarget(funcName, target);
-  if (!buffer)
-    return;
-  void* subBaseAddress = nullptr;
-  long long subByteLength = 0;
-  if (!validateSubSourceAndGetData(dstData, dstOffset, length, &subBaseAddress,
-                                   &subByteLength)) {
-    synthesizeGLError(GL_INVALID_VALUE, funcName, "buffer overflow");
+
+  // If the length of the copy is zero, this is a no-op.
+  if (!destinationByteLength) {
     return;
   }
 
   void* mappedData =
       contextGL()->MapBufferRange(target, static_cast<GLintptr>(srcByteOffset),
-                                  subByteLength, GL_MAP_READ_BIT);
+                                  destinationByteLength, GL_MAP_READ_BIT);
 
   if (!mappedData)
     return;
 
-  memcpy(subBaseAddress, mappedData, subByteLength);
+  memcpy(destinationDataPtr, mappedData, destinationByteLength);
 
   contextGL()->UnmapBuffer(target);
+}
+
+ScriptPromise WebGL2RenderingContextBase::getBufferSubDataAsync(
+    ScriptState* scriptState,
+    GLenum target,
+    GLintptr srcByteOffset,
+    DOMArrayBufferView* dstData,
+    GLuint dstOffset,
+    GLuint length) {
+  ScriptPromiseResolver* resolver = ScriptPromiseResolver::create(scriptState);
+  ScriptPromise promise = resolver->promise();
+
+  WebGLBuffer* sourceBuffer = nullptr;
+  void* destinationDataPtr = nullptr;
+  long long destinationByteLength = 0;
+  const char* message = validateGetBufferSubData(
+      __FUNCTION__, target, srcByteOffset, dstData, dstOffset, length,
+      &sourceBuffer, &destinationDataPtr, &destinationByteLength);
+  if (message) {
+    // If there was a GL error, it was already synthesized in
+    // validateGetBufferSubData, so it's not done here.
+    DOMException* exception = DOMException::create(InvalidStateError, message);
+    resolver->reject(exception);
+    return promise;
+  }
+
+  message = validateGetBufferSubDataBounds(
+      __FUNCTION__, sourceBuffer, srcByteOffset, destinationByteLength);
+  if (message) {
+    // If there was a GL error, it was already synthesized in
+    // validateGetBufferSubDataBounds, so it's not done here.
+    DOMException* exception = DOMException::create(InvalidStateError, message);
+    resolver->reject(exception);
+    return promise;
+  }
+
+  // If the length of the copy is zero, this is a no-op.
+  if (!destinationByteLength) {
+    resolver->resolve(dstData);
+    return promise;
+  }
+
+  GLuint queryID;
+  contextGL()->GenQueriesEXT(1, &queryID);
+  contextGL()->BeginQueryEXT(GL_COMMANDS_ISSUED_CHROMIUM, queryID);
+  void* mappedData = contextGL()->GetBufferSubDataAsyncCHROMIUM(
+      target, srcByteOffset, destinationByteLength);
+  contextGL()->EndQueryEXT(GL_COMMANDS_ISSUED_CHROMIUM);
+  if (!mappedData) {
+    DOMException* exception =
+        DOMException::create(InvalidStateError, "Out of memory");
+    resolver->reject(exception);
+    return promise;
+  }
+
+  auto callbackObject = new WebGLGetBufferSubDataAsyncCallback(
+      this, resolver, mappedData, queryID, dstData, destinationDataPtr,
+      destinationByteLength);
+  registerGetBufferSubDataAsyncCallback(callbackObject);
+  auto callback = WTF::bind(&WebGLGetBufferSubDataAsyncCallback::resolve,
+                            wrapPersistent(callbackObject));
+  drawingBuffer()->contextProvider()->signalQuery(
+      queryID, convertToBaseCallback(std::move(callback)));
+
+  return promise;
+}
+
+void WebGL2RenderingContextBase::registerGetBufferSubDataAsyncCallback(
+    WebGLGetBufferSubDataAsyncCallback* callback) {
+  m_getBufferSubDataAsyncCallbacks.add(callback);
+}
+
+void WebGL2RenderingContextBase::unregisterGetBufferSubDataAsyncCallback(
+    WebGLGetBufferSubDataAsyncCallback* callback) {
+  m_getBufferSubDataAsyncCallbacks.remove(callback);
 }
 
 void WebGL2RenderingContextBase::blitFramebuffer(GLint srcX0,
@@ -603,6 +763,12 @@ bool WebGL2RenderingContextBase::checkAndTranslateAttachments(
   return true;
 }
 
+IntRect WebGL2RenderingContextBase::getTextureSourceSubRectangle(
+    GLsizei width,
+    GLsizei height) {
+  return IntRect(m_unpackSkipPixels, m_unpackSkipRows, width, height);
+}
+
 bool WebGL2RenderingContextBase::canUseTexImageByGPU(
     TexImageFunctionID functionID,
     GLint internalformat,
@@ -751,8 +917,26 @@ void WebGL2RenderingContextBase::readPixels(GLint x,
     return;
   }
 
-  WebGLRenderingContextBase::readPixels(x, y, width, height, format, type,
-                                        pixels);
+  readPixelsHelper(x, y, width, height, format, type, pixels, 0);
+}
+
+void WebGL2RenderingContextBase::readPixels(GLint x,
+                                            GLint y,
+                                            GLsizei width,
+                                            GLsizei height,
+                                            GLenum format,
+                                            GLenum type,
+                                            DOMArrayBufferView* pixels,
+                                            GLuint offset) {
+  if (isContextLost())
+    return;
+  if (m_boundPixelPackBuffer.get()) {
+    synthesizeGLError(GL_INVALID_OPERATION, "readPixels",
+                      "PIXEL_PACK buffer should not be bound");
+    return;
+  }
+
+  readPixelsHelper(x, y, width, height, format, type, pixels, offset);
 }
 
 void WebGL2RenderingContextBase::readPixels(GLint x,
@@ -944,30 +1128,30 @@ void WebGL2RenderingContextBase::renderbufferStorageMultisample(
 void WebGL2RenderingContextBase::resetUnpackParameters() {
   WebGLRenderingContextBase::resetUnpackParameters();
 
-  if (!m_unpackRowLength)
+  if (m_unpackRowLength)
     contextGL()->PixelStorei(GL_UNPACK_ROW_LENGTH, 0);
-  if (!m_unpackImageHeight)
+  if (m_unpackImageHeight)
     contextGL()->PixelStorei(GL_UNPACK_IMAGE_HEIGHT, 0);
-  if (!m_unpackSkipPixels)
+  if (m_unpackSkipPixels)
     contextGL()->PixelStorei(GL_UNPACK_SKIP_PIXELS, 0);
-  if (!m_unpackSkipRows)
+  if (m_unpackSkipRows)
     contextGL()->PixelStorei(GL_UNPACK_SKIP_ROWS, 0);
-  if (!m_unpackSkipImages)
+  if (m_unpackSkipImages)
     contextGL()->PixelStorei(GL_UNPACK_SKIP_IMAGES, 0);
 }
 
 void WebGL2RenderingContextBase::restoreUnpackParameters() {
   WebGLRenderingContextBase::restoreUnpackParameters();
 
-  if (!m_unpackRowLength)
+  if (m_unpackRowLength)
     contextGL()->PixelStorei(GL_UNPACK_ROW_LENGTH, m_unpackRowLength);
-  if (!m_unpackImageHeight)
+  if (m_unpackImageHeight)
     contextGL()->PixelStorei(GL_UNPACK_IMAGE_HEIGHT, m_unpackImageHeight);
-  if (!m_unpackSkipPixels)
+  if (m_unpackSkipPixels)
     contextGL()->PixelStorei(GL_UNPACK_SKIP_PIXELS, m_unpackSkipPixels);
-  if (!m_unpackSkipRows)
+  if (m_unpackSkipRows)
     contextGL()->PixelStorei(GL_UNPACK_SKIP_ROWS, m_unpackSkipRows);
-  if (!m_unpackSkipImages)
+  if (m_unpackSkipImages)
     contextGL()->PixelStorei(GL_UNPACK_SKIP_IMAGES, m_unpackSkipImages);
 }
 
@@ -1131,8 +1315,11 @@ void WebGL2RenderingContextBase::texImage2D(GLenum target,
                                             GLint border,
                                             GLenum format,
                                             GLenum type,
-                                            ImageData* imageData) {
-  // TODO(zmo): To be implemented.
+                                            ImageData* pixels) {
+  DCHECK(pixels);
+  texImageHelperImageData(TexImage2D, target, level, internalformat, 0, format,
+                          type, 1, 0, 0, 0, pixels,
+                          getTextureSourceSubRectangle(width, height), 0);
 }
 
 void WebGL2RenderingContextBase::texImage2D(GLenum target,
@@ -1145,7 +1332,10 @@ void WebGL2RenderingContextBase::texImage2D(GLenum target,
                                             GLenum type,
                                             HTMLImageElement* image,
                                             ExceptionState& exceptionState) {
-  // TODO(zmo): To be implemented.
+  texImageHelperHTMLImageElement(TexImage2D, target, level, internalformat,
+                                 format, type, 0, 0, 0, image,
+                                 getTextureSourceSubRectangle(width, height), 1,
+                                 m_unpackImageHeight, exceptionState);
 }
 
 void WebGL2RenderingContextBase::texImage2D(GLenum target,
@@ -1158,7 +1348,9 @@ void WebGL2RenderingContextBase::texImage2D(GLenum target,
                                             GLenum type,
                                             HTMLCanvasElement* canvas,
                                             ExceptionState& exceptionState) {
-  // TODO(zmo): To be implemented.
+  texImageHelperHTMLCanvasElement(
+      TexImage2D, target, level, internalformat, format, type, 0, 0, 0, canvas,
+      getTextureSourceSubRectangle(width, height), 1, 0, exceptionState);
 }
 
 void WebGL2RenderingContextBase::texImage2D(GLenum target,
@@ -1171,7 +1363,9 @@ void WebGL2RenderingContextBase::texImage2D(GLenum target,
                                             GLenum type,
                                             HTMLVideoElement* video,
                                             ExceptionState& exceptionState) {
-  // TODO(zmo): To be implemented.
+  texImageHelperHTMLVideoElement(
+      TexImage2D, target, level, internalformat, format, type, 0, 0, 0, video,
+      getTextureSourceSubRectangle(width, height), 1, 0, exceptionState);
 }
 
 void WebGL2RenderingContextBase::texImage2D(GLenum target,
@@ -1182,9 +1376,12 @@ void WebGL2RenderingContextBase::texImage2D(GLenum target,
                                             GLint border,
                                             GLenum format,
                                             GLenum type,
-                                            ImageBitmap* imageBitMap,
+                                            ImageBitmap* bitmap,
                                             ExceptionState& exceptionState) {
-  // TODO(zmo): To be implemented.
+  DCHECK(bitmap);
+  texImageHelperImageBitmap(
+      TexImage2D, target, level, internalformat, format, type, 0, 0, 0, bitmap,
+      getTextureSourceSubRectangle(width, height), 1, 0, exceptionState);
 }
 
 void WebGL2RenderingContextBase::texImage2D(GLenum target,
@@ -1278,7 +1475,10 @@ void WebGL2RenderingContextBase::texSubImage2D(GLenum target,
                                                GLenum format,
                                                GLenum type,
                                                ImageData* pixels) {
-  // TODO(zmo): To be implemented.
+  DCHECK(pixels);
+  texImageHelperImageData(TexSubImage2D, target, level, 0, 0, format, type, 1,
+                          xoffset, yoffset, 0, pixels,
+                          getTextureSourceSubRectangle(width, height), 0);
 }
 
 void WebGL2RenderingContextBase::texSubImage2D(GLenum target,
@@ -1291,7 +1491,9 @@ void WebGL2RenderingContextBase::texSubImage2D(GLenum target,
                                                GLenum type,
                                                HTMLImageElement* image,
                                                ExceptionState& exceptionState) {
-  // TODO(zmo): To be implemente.
+  texImageHelperHTMLImageElement(
+      TexSubImage2D, target, level, 0, format, type, xoffset, yoffset, 0, image,
+      getTextureSourceSubRectangle(width, height), 1, 0, exceptionState);
 }
 
 void WebGL2RenderingContextBase::texSubImage2D(GLenum target,
@@ -1304,7 +1506,10 @@ void WebGL2RenderingContextBase::texSubImage2D(GLenum target,
                                                GLenum type,
                                                HTMLCanvasElement* canvas,
                                                ExceptionState& exceptionState) {
-  // TODO(zmo): To be implemented.
+  texImageHelperHTMLCanvasElement(TexSubImage2D, target, level, 0, format, type,
+                                  xoffset, yoffset, 0, canvas,
+                                  getTextureSourceSubRectangle(width, height),
+                                  1, 0, exceptionState);
 }
 
 void WebGL2RenderingContextBase::texSubImage2D(GLenum target,
@@ -1317,7 +1522,9 @@ void WebGL2RenderingContextBase::texSubImage2D(GLenum target,
                                                GLenum type,
                                                HTMLVideoElement* video,
                                                ExceptionState& exceptionState) {
-  // TODO(zmo): To be implemented.
+  texImageHelperHTMLVideoElement(
+      TexSubImage2D, target, level, 0, format, type, xoffset, yoffset, 0, video,
+      getTextureSourceSubRectangle(width, height), 1, 0, exceptionState);
 }
 
 void WebGL2RenderingContextBase::texSubImage2D(GLenum target,
@@ -1330,7 +1537,11 @@ void WebGL2RenderingContextBase::texSubImage2D(GLenum target,
                                                GLenum type,
                                                ImageBitmap* bitmap,
                                                ExceptionState& exceptionState) {
-  // TODO(zmo): To be implemented.
+  DCHECK(bitmap);
+  texImageHelperImageBitmap(TexSubImage2D, target, level, 0, format, type,
+                            xoffset, yoffset, 0, bitmap,
+                            getTextureSourceSubRectangle(width, height), 1, 0,
+                            exceptionState);
 }
 
 void WebGL2RenderingContextBase::texSubImage2D(GLenum target,
@@ -1492,8 +1703,14 @@ void WebGL2RenderingContextBase::texImage3D(GLenum target,
                                             GLint border,
                                             GLenum format,
                                             GLenum type,
-                                            ImageData* imageData) {
-  // TODO(zmo): To be implemented.
+                                            ImageData* pixels) {
+  DCHECK(pixels);
+  IntRect sourceImageRect;
+  sourceImageRect.setLocation(IntPoint(m_unpackSkipPixels, m_unpackSkipRows));
+  sourceImageRect.setSize(IntSize(width, height));
+  texImageHelperImageData(TexImage3D, target, level, internalformat, 0, format,
+                          type, depth, 0, 0, 0, pixels, sourceImageRect,
+                          m_unpackImageHeight);
 }
 
 void WebGL2RenderingContextBase::texImage3D(GLenum target,
@@ -1507,7 +1724,10 @@ void WebGL2RenderingContextBase::texImage3D(GLenum target,
                                             GLenum type,
                                             HTMLImageElement* image,
                                             ExceptionState& exceptionState) {
-  // TODO(zmo): To be implemented.
+  texImageHelperHTMLImageElement(TexImage3D, target, level, internalformat,
+                                 format, type, 0, 0, 0, image,
+                                 getTextureSourceSubRectangle(width, height),
+                                 depth, m_unpackImageHeight, exceptionState);
 }
 
 void WebGL2RenderingContextBase::texImage3D(GLenum target,
@@ -1521,7 +1741,10 @@ void WebGL2RenderingContextBase::texImage3D(GLenum target,
                                             GLenum type,
                                             HTMLCanvasElement* canvas,
                                             ExceptionState& exceptionState) {
-  // TODO(zmo): To be implemented.
+  texImageHelperHTMLCanvasElement(TexImage3D, target, level, internalformat,
+                                  format, type, 0, 0, 0, canvas,
+                                  getTextureSourceSubRectangle(width, height),
+                                  depth, m_unpackImageHeight, exceptionState);
 }
 
 void WebGL2RenderingContextBase::texImage3D(GLenum target,
@@ -1535,7 +1758,10 @@ void WebGL2RenderingContextBase::texImage3D(GLenum target,
                                             GLenum type,
                                             HTMLVideoElement* video,
                                             ExceptionState& exceptionState) {
-  // TODO(zmo): To be implemented.
+  texImageHelperHTMLVideoElement(TexImage3D, target, level, internalformat,
+                                 format, type, 0, 0, 0, video,
+                                 getTextureSourceSubRectangle(width, height),
+                                 depth, m_unpackImageHeight, exceptionState);
 }
 
 void WebGL2RenderingContextBase::texImage3D(GLenum target,
@@ -1547,9 +1773,12 @@ void WebGL2RenderingContextBase::texImage3D(GLenum target,
                                             GLint border,
                                             GLenum format,
                                             GLenum type,
-                                            ImageBitmap* imageBitMap,
+                                            ImageBitmap* bitmap,
                                             ExceptionState& exceptionState) {
-  // TODO(zmo): To be implemented.
+  texImageHelperImageBitmap(TexImage3D, target, level, internalformat, format,
+                            type, 0, 0, 0, bitmap,
+                            getTextureSourceSubRectangle(width, height), depth,
+                            m_unpackImageHeight, exceptionState);
 }
 
 void WebGL2RenderingContextBase::texSubImage3D(GLenum target,
@@ -1612,7 +1841,11 @@ void WebGL2RenderingContextBase::texSubImage3D(GLenum target,
                                                GLenum format,
                                                GLenum type,
                                                ImageData* pixels) {
-  // TODO(zmo): To be implemented.
+  DCHECK(pixels);
+  texImageHelperImageData(TexSubImage3D, target, level, 0, 0, format, type,
+                          depth, xoffset, yoffset, zoffset, pixels,
+                          getTextureSourceSubRectangle(width, height),
+                          m_unpackImageHeight);
 }
 
 void WebGL2RenderingContextBase::texSubImage3D(GLenum target,
@@ -1623,82 +1856,14 @@ void WebGL2RenderingContextBase::texSubImage3D(GLenum target,
                                                GLsizei width,
                                                GLsizei height,
                                                GLsizei depth,
-                                               GLenum format,
-                                               GLenum type,
-                                               HTMLImageElement* image,
-                                               ExceptionState& exceptionState) {
-  // TODO(zmo): To be implemented.
-}
-
-void WebGL2RenderingContextBase::texSubImage3D(GLenum target,
-                                               GLint level,
-                                               GLint xoffset,
-                                               GLint yoffset,
-                                               GLint zoffset,
-                                               GLsizei width,
-                                               GLsizei height,
-                                               GLsizei depth,
-                                               GLenum format,
-                                               GLenum type,
-                                               HTMLCanvasElement* canvas,
-                                               ExceptionState& exceptionState) {
-  // TODO(zmo): To be implemented.
-}
-
-void WebGL2RenderingContextBase::texSubImage3D(GLenum target,
-                                               GLint level,
-                                               GLint xoffset,
-                                               GLint yoffset,
-                                               GLint zoffset,
-                                               GLsizei width,
-                                               GLsizei height,
-                                               GLsizei depth,
-                                               GLenum format,
-                                               GLenum type,
-                                               HTMLVideoElement* video,
-                                               ExceptionState& exceptionState) {
-  // TODO(zmo): To be implemented.
-}
-
-void WebGL2RenderingContextBase::texSubImage3D(GLenum target,
-                                               GLint level,
-                                               GLint xoffset,
-                                               GLint yoffset,
-                                               GLint zoffset,
-                                               GLsizei width,
-                                               GLsizei height,
-                                               GLsizei depth,
-                                               GLenum format,
-                                               GLenum type,
-                                               ImageBitmap* bitmap,
-                                               ExceptionState& exceptionState) {
-  // TODO(zmo): To be implemented.
-}
-
-void WebGL2RenderingContextBase::texSubImage3D(GLenum target,
-                                               GLint level,
-                                               GLint xoffset,
-                                               GLint yoffset,
-                                               GLint zoffset,
-                                               GLenum format,
-                                               GLenum type,
-                                               ImageData* pixels) {
-  texImageHelperImageData(TexSubImage3D, target, level, 0, 0, format, type, 1,
-                          xoffset, yoffset, zoffset, pixels);
-}
-
-void WebGL2RenderingContextBase::texSubImage3D(GLenum target,
-                                               GLint level,
-                                               GLint xoffset,
-                                               GLint yoffset,
-                                               GLint zoffset,
                                                GLenum format,
                                                GLenum type,
                                                HTMLImageElement* image,
                                                ExceptionState& exceptionState) {
   texImageHelperHTMLImageElement(TexSubImage3D, target, level, 0, format, type,
                                  xoffset, yoffset, zoffset, image,
-                                 exceptionState);
+                                 getTextureSourceSubRectangle(width, height),
+                                 depth, m_unpackImageHeight, exceptionState);
 }
 
 void WebGL2RenderingContextBase::texSubImage3D(GLenum target,
@@ -1706,13 +1871,17 @@ void WebGL2RenderingContextBase::texSubImage3D(GLenum target,
                                                GLint xoffset,
                                                GLint yoffset,
                                                GLint zoffset,
+                                               GLsizei width,
+                                               GLsizei height,
+                                               GLsizei depth,
                                                GLenum format,
                                                GLenum type,
                                                HTMLCanvasElement* canvas,
                                                ExceptionState& exceptionState) {
   texImageHelperHTMLCanvasElement(TexSubImage3D, target, level, 0, format, type,
                                   xoffset, yoffset, zoffset, canvas,
-                                  exceptionState);
+                                  getTextureSourceSubRectangle(width, height),
+                                  depth, m_unpackImageHeight, exceptionState);
 }
 
 void WebGL2RenderingContextBase::texSubImage3D(GLenum target,
@@ -1720,13 +1889,17 @@ void WebGL2RenderingContextBase::texSubImage3D(GLenum target,
                                                GLint xoffset,
                                                GLint yoffset,
                                                GLint zoffset,
+                                               GLsizei width,
+                                               GLsizei height,
+                                               GLsizei depth,
                                                GLenum format,
                                                GLenum type,
                                                HTMLVideoElement* video,
                                                ExceptionState& exceptionState) {
   texImageHelperHTMLVideoElement(TexSubImage3D, target, level, 0, format, type,
                                  xoffset, yoffset, zoffset, video,
-                                 exceptionState);
+                                 getTextureSourceSubRectangle(width, height),
+                                 depth, m_unpackImageHeight, exceptionState);
 }
 
 void WebGL2RenderingContextBase::texSubImage3D(GLenum target,
@@ -1734,12 +1907,17 @@ void WebGL2RenderingContextBase::texSubImage3D(GLenum target,
                                                GLint xoffset,
                                                GLint yoffset,
                                                GLint zoffset,
+                                               GLsizei width,
+                                               GLsizei height,
+                                               GLsizei depth,
                                                GLenum format,
                                                GLenum type,
                                                ImageBitmap* bitmap,
                                                ExceptionState& exceptionState) {
   texImageHelperImageBitmap(TexSubImage3D, target, level, 0, format, type,
-                            xoffset, yoffset, zoffset, bitmap, exceptionState);
+                            xoffset, yoffset, zoffset, bitmap,
+                            getTextureSourceSubRectangle(width, height), depth,
+                            m_unpackImageHeight, exceptionState);
 }
 
 void WebGL2RenderingContextBase::copyTexSubImage3D(GLenum target,
@@ -1765,6 +1943,98 @@ void WebGL2RenderingContextBase::copyTexSubImage3D(GLenum target,
                                  width, height);
 }
 
+void WebGL2RenderingContextBase::compressedTexImage2D(
+    GLenum target,
+    GLint level,
+    GLenum internalformat,
+    GLsizei width,
+    GLsizei height,
+    GLint border,
+    DOMArrayBufferView* data) {
+  WebGLRenderingContextBase::compressedTexImage2D(target, level, internalformat,
+                                                  width, height, border, data);
+}
+
+void WebGL2RenderingContextBase::compressedTexImage2D(
+    GLenum target,
+    GLint level,
+    GLenum internalformat,
+    GLsizei width,
+    GLsizei height,
+    GLint border,
+    DOMArrayBufferView* data,
+    GLuint srcOffset,
+    GLuint srcLengthOverride) {
+  if (isContextLost())
+    return;
+  if (!validateTexture2DBinding("compressedTexImage2D", target))
+    return;
+  if (!validateCompressedTexFormat("compressedTexImage2D", internalformat))
+    return;
+  if (srcOffset > data->byteLength()) {
+    synthesizeGLError(GL_INVALID_VALUE, "compressedTexImage2D",
+                      "srcOffset is out of range");
+    return;
+  }
+  if (srcLengthOverride == 0) {
+    srcLengthOverride = data->byteLength() - srcOffset;
+  } else if (srcLengthOverride > data->byteLength() - srcOffset) {
+    synthesizeGLError(GL_INVALID_VALUE, "compressedTexImage2D",
+                      "srcLengthOverride is out of range");
+    return;
+  }
+  contextGL()->CompressedTexImage2D(
+      target, level, internalformat, width, height, border, srcLengthOverride,
+      static_cast<uint8_t*>(data->baseAddress()) + srcOffset);
+}
+
+void WebGL2RenderingContextBase::compressedTexSubImage2D(
+    GLenum target,
+    GLint level,
+    GLint xoffset,
+    GLint yoffset,
+    GLsizei width,
+    GLsizei height,
+    GLenum format,
+    DOMArrayBufferView* data) {
+  WebGLRenderingContextBase::compressedTexSubImage2D(
+      target, level, xoffset, yoffset, width, height, format, data);
+}
+
+void WebGL2RenderingContextBase::compressedTexSubImage2D(
+    GLenum target,
+    GLint level,
+    GLint xoffset,
+    GLint yoffset,
+    GLsizei width,
+    GLsizei height,
+    GLenum format,
+    DOMArrayBufferView* data,
+    GLuint srcOffset,
+    GLuint srcLengthOverride) {
+  if (isContextLost())
+    return;
+  if (!validateTexture2DBinding("compressedTexSubImage2D", target))
+    return;
+  if (!validateCompressedTexFormat("compressedTexSubImage2D", format))
+    return;
+  if (srcOffset > data->byteLength()) {
+    synthesizeGLError(GL_INVALID_VALUE, "compressedTexSubImage2D",
+                      "srcOffset is out of range");
+    return;
+  }
+  if (srcLengthOverride == 0) {
+    srcLengthOverride = data->byteLength() - srcOffset;
+  } else if (srcLengthOverride > data->byteLength() - srcOffset) {
+    synthesizeGLError(GL_INVALID_VALUE, "compressedTexImage2D",
+                      "srcLengthOverride is out of range");
+    return;
+  }
+  contextGL()->CompressedTexSubImage2D(
+      target, level, xoffset, yoffset, width, height, format, srcLengthOverride,
+      static_cast<uint8_t*>(data->baseAddress()) + srcOffset);
+}
+
 void WebGL2RenderingContextBase::compressedTexImage3D(
     GLenum target,
     GLint level,
@@ -1773,16 +2043,31 @@ void WebGL2RenderingContextBase::compressedTexImage3D(
     GLsizei height,
     GLsizei depth,
     GLint border,
-    DOMArrayBufferView* data) {
+    DOMArrayBufferView* data,
+    GLuint srcOffset,
+    GLuint srcLengthOverride) {
   if (isContextLost())
     return;
   if (!validateTexture3DBinding("compressedTexImage3D", target))
     return;
   if (!validateCompressedTexFormat("compressedTexImage3D", internalformat))
     return;
-  contextGL()->CompressedTexImage3D(target, level, internalformat, width,
-                                    height, depth, border, data->byteLength(),
-                                    data->baseAddress());
+  if (srcOffset > data->byteLength()) {
+    synthesizeGLError(GL_INVALID_VALUE, "compressedTexImage3D",
+                      "srcOffset is out of range");
+    return;
+  }
+  if (srcLengthOverride == 0) {
+    srcLengthOverride = data->byteLength() - srcOffset;
+  } else if (srcLengthOverride > data->byteLength() - srcOffset) {
+    synthesizeGLError(GL_INVALID_VALUE, "compressedTexImage3D",
+                      "srcLengthOverride is out of range");
+    return;
+  }
+  contextGL()->CompressedTexImage3D(
+      target, level, internalformat, width, height, depth, border,
+      srcLengthOverride,
+      static_cast<uint8_t*>(data->baseAddress()) + srcOffset);
 }
 
 void WebGL2RenderingContextBase::compressedTexSubImage3D(
@@ -1795,16 +2080,31 @@ void WebGL2RenderingContextBase::compressedTexSubImage3D(
     GLsizei height,
     GLsizei depth,
     GLenum format,
-    DOMArrayBufferView* data) {
+    DOMArrayBufferView* data,
+    GLuint srcOffset,
+    GLuint srcLengthOverride) {
   if (isContextLost())
     return;
   if (!validateTexture3DBinding("compressedTexSubImage3D", target))
     return;
   if (!validateCompressedTexFormat("compressedTexSubImage3D", format))
     return;
-  contextGL()->CompressedTexSubImage3D(target, level, xoffset, yoffset, zoffset,
-                                       width, height, depth, format,
-                                       data->byteLength(), data->baseAddress());
+  if (srcOffset > data->byteLength()) {
+    synthesizeGLError(GL_INVALID_VALUE, "compressedTexSubImage3D",
+                      "srcOffset is out of range");
+    return;
+  }
+  if (srcLengthOverride == 0) {
+    srcLengthOverride = data->byteLength() - srcOffset;
+  } else if (srcLengthOverride > data->byteLength() - srcOffset) {
+    synthesizeGLError(GL_INVALID_VALUE, "compressedTexSubImage3D",
+                      "srcLengthOverride is out of range");
+    return;
+  }
+  contextGL()->CompressedTexSubImage3D(
+      target, level, xoffset, yoffset, zoffset, width, height, depth, format,
+      srcLengthOverride,
+      static_cast<uint8_t*>(data->baseAddress()) + srcOffset);
 }
 
 GLint WebGL2RenderingContextBase::getFragDataLocation(WebGLProgram* program,
@@ -2486,6 +2786,11 @@ void WebGL2RenderingContextBase::deleteQuery(WebGLQuery* query) {
     m_currentTransformFeedbackPrimitivesWrittenQuery = nullptr;
   }
 
+  if (m_currentElapsedQuery == query) {
+    contextGL()->EndQueryEXT(m_currentElapsedQuery->getTarget());
+    m_currentElapsedQuery = nullptr;
+  }
+
   deleteObject(query);
 }
 
@@ -2498,12 +2803,7 @@ GLboolean WebGL2RenderingContextBase::isQuery(WebGLQuery* query) {
 
 void WebGL2RenderingContextBase::beginQuery(GLenum target, WebGLQuery* query) {
   bool deleted;
-  if (!query) {
-    synthesizeGLError(GL_INVALID_OPERATION, "beginQuery",
-                      "query object is null");
-    return;
-  }
-
+  DCHECK(query);
   if (!checkObjectToBeBound("beginQuery", query, deleted))
     return;
   if (deleted) {
@@ -2535,6 +2835,18 @@ void WebGL2RenderingContextBase::beginQuery(GLenum target, WebGLQuery* query) {
         return;
       }
       m_currentTransformFeedbackPrimitivesWrittenQuery = query;
+    } break;
+    case GL_TIME_ELAPSED_EXT: {
+      if (!extensionEnabled(EXTDisjointTimerQueryWebGL2Name)) {
+        synthesizeGLError(GL_INVALID_ENUM, "beginQuery", "invalid target");
+        return;
+      }
+      if (m_currentElapsedQuery) {
+        synthesizeGLError(GL_INVALID_OPERATION, "beginQuery",
+                          "a query is already active for target");
+        return;
+      }
+      m_currentElapsedQuery = query;
     } break;
     default:
       synthesizeGLError(GL_INVALID_ENUM, "beginQuery", "invalid target");
@@ -2574,6 +2886,20 @@ void WebGL2RenderingContextBase::endQuery(GLenum target) {
         return;
       }
     } break;
+    case GL_TIME_ELAPSED_EXT: {
+      if (!extensionEnabled(EXTDisjointTimerQueryWebGL2Name)) {
+        synthesizeGLError(GL_INVALID_ENUM, "endQuery", "invalid target");
+        return;
+      }
+      if (m_currentElapsedQuery) {
+        m_currentElapsedQuery->resetCachedResult();
+        m_currentElapsedQuery = nullptr;
+      } else {
+        synthesizeGLError(GL_INVALID_OPERATION, "endQuery",
+                          "target query is not active");
+        return;
+      }
+    } break;
     default:
       synthesizeGLError(GL_INVALID_ENUM, "endQuery", "invalid target");
       return;
@@ -2582,13 +2908,38 @@ void WebGL2RenderingContextBase::endQuery(GLenum target) {
   contextGL()->EndQueryEXT(target);
 }
 
-WebGLQuery* WebGL2RenderingContextBase::getQuery(GLenum target, GLenum pname) {
+ScriptValue WebGL2RenderingContextBase::getQuery(ScriptState* scriptState,
+                                                 GLenum target,
+                                                 GLenum pname) {
   if (isContextLost())
-    return nullptr;
+    return ScriptValue::createNull(scriptState);
+
+  if (extensionEnabled(EXTDisjointTimerQueryWebGL2Name)) {
+    if (pname == GL_QUERY_COUNTER_BITS_EXT) {
+      if (target == GL_TIMESTAMP_EXT || target == GL_TIME_ELAPSED_EXT) {
+        GLint value = 0;
+        contextGL()->GetQueryivEXT(target, pname, &value);
+        return WebGLAny(scriptState, value);
+      }
+      synthesizeGLError(GL_INVALID_ENUM, "getQuery",
+                        "invalid target/pname combination");
+      return ScriptValue::createNull(scriptState);
+    }
+
+    if (target == GL_TIME_ELAPSED_EXT && pname == GL_CURRENT_QUERY) {
+      return m_currentElapsedQuery
+                 ? WebGLAny(scriptState, m_currentElapsedQuery)
+                 : ScriptValue::createNull(scriptState);
+    }
+
+    if (target == GL_TIMESTAMP_EXT && pname == GL_CURRENT_QUERY) {
+      return ScriptValue::createNull(scriptState);
+    }
+  }
 
   if (pname != GL_CURRENT_QUERY) {
     synthesizeGLError(GL_INVALID_ENUM, "getQuery", "invalid parameter name");
-    return nullptr;
+    return ScriptValue::createNull(scriptState);
   }
 
   switch (target) {
@@ -2596,27 +2947,24 @@ WebGLQuery* WebGL2RenderingContextBase::getQuery(GLenum target, GLenum pname) {
     case GL_ANY_SAMPLES_PASSED_CONSERVATIVE:
       if (m_currentBooleanOcclusionQuery &&
           m_currentBooleanOcclusionQuery->getTarget() == target)
-        return m_currentBooleanOcclusionQuery;
+        return WebGLAny(scriptState, m_currentBooleanOcclusionQuery);
       break;
     case GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN:
-      return m_currentTransformFeedbackPrimitivesWrittenQuery;
+      return WebGLAny(scriptState,
+                      m_currentTransformFeedbackPrimitivesWrittenQuery);
     default:
       synthesizeGLError(GL_INVALID_ENUM, "getQuery", "invalid target");
-      return nullptr;
+      return ScriptValue::createNull(scriptState);
   }
-  return nullptr;
+  return ScriptValue::createNull(scriptState);
 }
 
 ScriptValue WebGL2RenderingContextBase::getQueryParameter(
     ScriptState* scriptState,
     WebGLQuery* query,
     GLenum pname) {
+  DCHECK(query);
   bool deleted;
-  if (!query) {
-    synthesizeGLError(GL_INVALID_OPERATION, "getQueryParameter",
-                      "query object is null");
-    return ScriptValue::createNull(scriptState);
-  }
   if (!checkObjectToBeBound("getQueryParameter", query, deleted))
     return ScriptValue::createNull(scriptState);
   if (deleted) {
@@ -2633,7 +2981,8 @@ ScriptValue WebGL2RenderingContextBase::getQueryParameter(
     return ScriptValue::createNull(scriptState);
   }
   if (query == m_currentBooleanOcclusionQuery ||
-      query == m_currentTransformFeedbackPrimitivesWrittenQuery) {
+      query == m_currentTransformFeedbackPrimitivesWrittenQuery ||
+      query == m_currentElapsedQuery) {
     synthesizeGLError(GL_INVALID_OPERATION, "getQueryParameter",
                       "query is currently active");
     return ScriptValue::createNull(scriptState);
@@ -2704,7 +3053,7 @@ void WebGL2RenderingContextBase::bindSampler(GLuint unit,
     return;
   }
 
-  m_samplerUnits[unit] = sampler;
+  m_samplerUnits[unit] = TraceWrapperMember<WebGLSampler>(this, sampler);
 
   contextGL()->BindSampler(unit, objectOrZero(sampler));
 }
@@ -2870,18 +3219,17 @@ void WebGL2RenderingContextBase::deleteSync(WebGLSync* sync) {
 
 GLenum WebGL2RenderingContextBase::clientWaitSync(WebGLSync* sync,
                                                   GLbitfield flags,
-                                                  GLint64 timeout) {
+                                                  GLuint64 timeout) {
   if (isContextLost() || !validateWebGLObject("clientWaitSync", sync))
     return GL_WAIT_FAILED;
 
-  if (timeout < -1) {
-    synthesizeGLError(GL_INVALID_VALUE, "clientWaitSync", "timeout < -1");
+  if (timeout > kMaxClientWaitTimeout) {
+    synthesizeGLError(GL_INVALID_OPERATION, "clientWaitSync",
+                      "timeout > MAX_CLIENT_WAIT_TIMEOUT_WEBGL");
     return GL_WAIT_FAILED;
   }
 
-  GLuint64 timeout64 =
-      timeout == -1 ? GL_TIMEOUT_IGNORED : static_cast<GLuint64>(timeout);
-  return contextGL()->ClientWaitSync(syncObjectOrZero(sync), flags, timeout64);
+  return contextGL()->ClientWaitSync(syncObjectOrZero(sync), flags, timeout);
 }
 
 void WebGL2RenderingContextBase::waitSync(WebGLSync* sync,
@@ -2890,14 +3238,17 @@ void WebGL2RenderingContextBase::waitSync(WebGLSync* sync,
   if (isContextLost() || !validateWebGLObject("waitSync", sync))
     return;
 
-  if (timeout < -1) {
-    synthesizeGLError(GL_INVALID_VALUE, "waitSync", "timeout < -1");
+  if (flags) {
+    synthesizeGLError(GL_INVALID_VALUE, "waitSync", "invalid flags");
     return;
   }
 
-  GLuint64 timeout64 =
-      timeout == -1 ? GL_TIMEOUT_IGNORED : static_cast<GLuint64>(timeout);
-  contextGL()->WaitSync(syncObjectOrZero(sync), flags, timeout64);
+  if (timeout != -1) {
+    synthesizeGLError(GL_INVALID_VALUE, "waitSync", "invalid timeout");
+    return;
+  }
+
+  // This is intentionally changed to an no-op in WebGL2.
 }
 
 ScriptValue WebGL2RenderingContextBase::getSyncParameter(
@@ -3535,7 +3886,6 @@ void WebGL2RenderingContextBase::deleteFramebuffer(
     m_readFramebufferBinding = nullptr;
   }
   if (target) {
-    drawingBuffer()->setFramebufferBinding(target, 0);
     // Have to call drawingBuffer()->bind() here to bind back to internal fbo.
     drawingBuffer()->bind(target);
   }
@@ -3571,7 +3921,7 @@ ScriptValue WebGL2RenderingContextBase::getParameter(ScriptState* scriptState,
     case GL_MAX_ARRAY_TEXTURE_LAYERS:
       return getIntParameter(scriptState, pname);
     case GC3D_MAX_CLIENT_WAIT_TIMEOUT_WEBGL:
-      return WebGLAny(scriptState, 0u);
+      return WebGLAny(scriptState, kMaxClientWaitTimeout);
     case GL_MAX_COLOR_ATTACHMENTS:
       return getIntParameter(scriptState, pname);
     case GL_MAX_COMBINED_FRAGMENT_UNIFORM_COMPONENTS:
@@ -3684,6 +4034,22 @@ ScriptValue WebGL2RenderingContextBase::getParameter(ScriptState* scriptState,
       return getIntParameter(scriptState, pname);
     case GL_UNPACK_SKIP_ROWS:
       return getIntParameter(scriptState, pname);
+    case GL_TIMESTAMP_EXT:
+      if (extensionEnabled(EXTDisjointTimerQueryWebGL2Name)) {
+        return WebGLAny(scriptState, 0);
+      }
+      synthesizeGLError(GL_INVALID_ENUM, "getParameter",
+                        "invalid parameter name, "
+                        "EXT_disjoint_timer_query_webgl2 not enabled");
+      return ScriptValue::createNull(scriptState);
+    case GL_GPU_DISJOINT_EXT:
+      if (extensionEnabled(EXTDisjointTimerQueryWebGL2Name)) {
+        return getBooleanParameter(scriptState, GL_GPU_DISJOINT_EXT);
+      }
+      synthesizeGLError(GL_INVALID_ENUM, "getParameter",
+                        "invalid parameter name, "
+                        "EXT_disjoint_timer_query_webgl2 not enabled");
+      return ScriptValue::createNull(scriptState);
 
     default:
       return WebGLRenderingContextBase::getParameter(scriptState, pname);
@@ -3897,7 +4263,8 @@ bool WebGL2RenderingContextBase::validateAndUpdateBufferBindBaseTarget(
         synthesizeGLError(GL_INVALID_VALUE, functionName, "index out of range");
         return false;
       }
-      m_boundIndexedTransformFeedbackBuffers[index] = buffer;
+      m_boundIndexedTransformFeedbackBuffers[index] =
+          TraceWrapperMember<WebGLBuffer>(this, buffer);
       m_boundTransformFeedbackBuffer = buffer;
       break;
     case GL_UNIFORM_BUFFER:
@@ -3905,7 +4272,8 @@ bool WebGL2RenderingContextBase::validateAndUpdateBufferBindBaseTarget(
         synthesizeGLError(GL_INVALID_VALUE, functionName, "index out of range");
         return false;
       }
-      m_boundIndexedUniformBuffers[index] = buffer;
+      m_boundIndexedUniformBuffers[index] =
+          TraceWrapperMember<WebGLBuffer>(this, buffer);
       m_boundUniformBuffer = buffer;
 
       // Keep track of what the maximum bound uniform buffer index is
@@ -4257,8 +4625,38 @@ DEFINE_TRACE(WebGL2RenderingContextBase) {
   visitor->trace(m_boundIndexedUniformBuffers);
   visitor->trace(m_currentBooleanOcclusionQuery);
   visitor->trace(m_currentTransformFeedbackPrimitivesWrittenQuery);
+  visitor->trace(m_currentElapsedQuery);
   visitor->trace(m_samplerUnits);
+  visitor->trace(m_getBufferSubDataAsyncCallbacks);
   WebGLRenderingContextBase::trace(visitor);
+}
+
+DEFINE_TRACE_WRAPPERS(WebGL2RenderingContextBase) {
+  if (isContextLost()) {
+    return;
+  }
+
+  visitor->traceWrappers(m_transformFeedbackBinding);
+  visitor->traceWrappers(m_readFramebufferBinding);
+  visitor->traceWrappers(m_boundCopyReadBuffer);
+  visitor->traceWrappers(m_boundCopyWriteBuffer);
+  visitor->traceWrappers(m_boundPixelPackBuffer);
+  visitor->traceWrappers(m_boundPixelUnpackBuffer);
+  visitor->traceWrappers(m_boundTransformFeedbackBuffer);
+  visitor->traceWrappers(m_boundUniformBuffer);
+  for (auto& buf : m_boundIndexedTransformFeedbackBuffers) {
+    visitor->traceWrappers(buf);
+  }
+  for (auto& buf : m_boundIndexedUniformBuffers) {
+    visitor->traceWrappers(buf);
+  }
+  visitor->traceWrappers(m_currentBooleanOcclusionQuery);
+  visitor->traceWrappers(m_currentTransformFeedbackPrimitivesWrittenQuery);
+  visitor->traceWrappers(m_currentElapsedQuery);
+  for (auto& unit : m_samplerUnits) {
+    visitor->traceWrappers(unit);
+  }
+  WebGLRenderingContextBase::traceWrappers(visitor);
 }
 
 WebGLTexture* WebGL2RenderingContextBase::validateTexture3DBinding(
@@ -4389,6 +4787,63 @@ bool WebGL2RenderingContextBase::validateBufferDataUsage(
   }
 }
 
+const char* WebGL2RenderingContextBase::validateGetBufferSubData(
+    const char* functionName,
+    GLenum target,
+    GLintptr sourceByteOffset,
+    DOMArrayBufferView* destinationArrayBufferView,
+    GLuint destinationOffset,
+    GLuint length,
+    WebGLBuffer** outSourceBuffer,
+    void** outDestinationDataPtr,
+    long long* outDestinationByteLength) {
+  if (isContextLost()) {
+    return "Context lost";
+  }
+
+  if (!validateValueFitNonNegInt32(functionName, "srcByteOffset",
+                                   sourceByteOffset)) {
+    return "Invalid value: srcByteOffset";
+  }
+  if (target == GL_TRANSFORM_FEEDBACK_BUFFER && m_currentProgram &&
+      m_currentProgram->activeTransformFeedbackCount()) {
+    synthesizeGLError(GL_INVALID_OPERATION, functionName,
+                      "targeted transform feedback buffer is active");
+    return "Invalid operation: targeted transform feedback buffer is active";
+  }
+
+  WebGLBuffer* sourceBuffer = validateBufferDataTarget(functionName, target);
+  if (!sourceBuffer) {
+    return "Invalid operation: no buffer bound to target";
+  }
+  *outSourceBuffer = sourceBuffer;
+
+  if (!validateSubSourceAndGetData(
+          destinationArrayBufferView, destinationOffset, length,
+          outDestinationDataPtr, outDestinationByteLength)) {
+    synthesizeGLError(GL_INVALID_VALUE, functionName, "overflow of dstData");
+    return "Invalid value: overflow of dstData";
+  }
+
+  return nullptr;
+}
+
+const char* WebGL2RenderingContextBase::validateGetBufferSubDataBounds(
+    const char* functionName,
+    WebGLBuffer* sourceBuffer,
+    GLintptr sourceByteOffset,
+    long long destinationByteLength) {
+  CheckedNumeric<long long> srcEnd = sourceByteOffset;
+  srcEnd += destinationByteLength;
+  if (!srcEnd.IsValid() || srcEnd.ValueOrDie() > sourceBuffer->getSize()) {
+    synthesizeGLError(GL_INVALID_VALUE, functionName,
+                      "overflow of bound buffer");
+    return "Invalid value: overflow of bound buffer";
+  }
+
+  return nullptr;
+}
+
 void WebGL2RenderingContextBase::removeBoundBuffer(WebGLBuffer* buffer) {
   if (m_boundCopyReadBuffer == buffer)
     m_boundCopyReadBuffer = nullptr;
@@ -4450,6 +4905,8 @@ void WebGL2RenderingContextBase::visitChildDOMWrappers(
       wrapper, m_currentBooleanOcclusionQuery, isolate);
   DOMWrapperWorld::setWrapperReferencesInAllWorlds(
       wrapper, m_currentTransformFeedbackPrimitivesWrittenQuery, isolate);
+  DOMWrapperWorld::setWrapperReferencesInAllWorlds(
+      wrapper, m_currentElapsedQuery, isolate);
 
   for (auto& unit : m_samplerUnits) {
     DOMWrapperWorld::setWrapperReferencesInAllWorlds(wrapper, unit, isolate);
@@ -4479,6 +4936,14 @@ WebGL2RenderingContextBase::getUnpackPixelStoreParams(
     params.skipImages = m_unpackSkipImages;
   }
   return params;
+}
+
+void WebGL2RenderingContextBase::
+    DrawingBufferClientRestorePixelUnpackBufferBinding() {
+  if (!contextGL())
+    return;
+  contextGL()->BindBuffer(GL_PIXEL_UNPACK_BUFFER,
+                          objectOrZero(m_boundPixelUnpackBuffer.get()));
 }
 
 }  // namespace blink

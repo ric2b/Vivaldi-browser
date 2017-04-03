@@ -4,27 +4,31 @@
 
 #include "ui/aura/client/default_capture_client.h"
 
+#include "ui/aura/client/capture_client_observer.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/aura/window_tree_host.h"
 
 namespace aura {
 namespace client {
+namespace {
 
-// static
 // Track the active capture window across root windows.
 Window* global_capture_window_ = nullptr;
 
+}  // namespace
+
 DefaultCaptureClient::DefaultCaptureClient(Window* root_window)
-    : root_window_(root_window),
-      capture_window_(NULL) {
-  SetCaptureClient(root_window_, this);
+    : root_window_(root_window), capture_window_(nullptr) {
+  if (root_window_)
+    SetCaptureClient(root_window_, this);
 }
 
 DefaultCaptureClient::~DefaultCaptureClient() {
   if (global_capture_window_ == capture_window_)
     global_capture_window_ = nullptr;
-  SetCaptureClient(root_window_, NULL);
+  if (root_window_)
+    SetCaptureClient(root_window_, nullptr);
 }
 
 void DefaultCaptureClient::SetCapture(Window* window) {
@@ -37,13 +41,22 @@ void DefaultCaptureClient::SetCapture(Window* window) {
   capture_window_ = window;
   global_capture_window_ = window;
 
-  CaptureDelegate* capture_delegate = root_window_->GetHost()->dispatcher();
-  if (capture_window_)
+  CaptureDelegate* capture_delegate = nullptr;
+  if (capture_window_) {
+    DCHECK(!root_window_ || root_window_ == capture_window_->GetRootWindow());
+    capture_delegate = capture_window_->GetHost()->dispatcher();
     capture_delegate->SetNativeCapture();
-  else
+  } else {
+    DCHECK(!root_window_ ||
+           root_window_ == old_capture_window->GetRootWindow());
+    capture_delegate = old_capture_window->GetHost()->dispatcher();
     capture_delegate->ReleaseNativeCapture();
+  }
 
   capture_delegate->UpdateCapture(old_capture_window, capture_window_);
+
+  for (CaptureClientObserver& observer : observers_)
+    observer.OnCaptureChanged(old_capture_window, capture_window_);
 }
 
 void DefaultCaptureClient::ReleaseCapture(Window* window) {
@@ -58,6 +71,14 @@ Window* DefaultCaptureClient::GetCaptureWindow() {
 
 Window* DefaultCaptureClient::GetGlobalCaptureWindow() {
   return global_capture_window_;
+}
+
+void DefaultCaptureClient::AddObserver(CaptureClientObserver* observer) {
+  observers_.AddObserver(observer);
+}
+
+void DefaultCaptureClient::RemoveObserver(CaptureClientObserver* observer) {
+  observers_.RemoveObserver(observer);
 }
 
 }  // namespace client

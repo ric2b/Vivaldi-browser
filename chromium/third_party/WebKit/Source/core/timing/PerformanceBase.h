@@ -46,7 +46,6 @@
 namespace blink {
 
 class DOMWindow;
-class Document;
 class ExceptionState;
 class PerformanceObserver;
 class PerformanceTiming;
@@ -99,10 +98,6 @@ class CORE_EXPORT PerformanceBase : public EventTargetWithInlineData {
   void addLongTaskTiming(double, double, const String&, DOMWindow*);
 
   void addResourceTiming(const ResourceTimingInfo&);
-
-  void addRenderTiming(Document*, unsigned, double, double);
-
-  void addCompositeTiming(Document*, unsigned, double);
 
   void mark(const String& markName, ExceptionState&);
   void clearMarks(const String& markName);

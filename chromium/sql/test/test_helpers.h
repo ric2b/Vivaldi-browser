@@ -33,6 +33,10 @@ namespace test {
 // actual file size.  The resulting file will return SQLITE_CORRUPT
 // for most operations unless PRAGMA writable_schema is turned ON.
 //
+// This function operates on the raw database file, outstanding database
+// connections may not see the change because of the database cache.  See
+// CorruptSizeInHeaderWithLock().
+//
 // Returns false if any error occurs accessing the file.
 bool CorruptSizeInHeader(const base::FilePath& db_path) WARN_UNUSED_RESULT;
 
@@ -40,6 +44,12 @@ bool CorruptSizeInHeader(const base::FilePath& db_path) WARN_UNUSED_RESULT;
 // memory. Shared between CorruptSizeInHeader() and the the mojo proxy testing
 // code.
 void CorruptSizeInHeaderMemory(unsigned char* header, int64_t db_size);
+
+// Call CorruptSizeInHeader() while holding a SQLite-compatible lock
+// on the database.  This can be used to corrupt a database which is
+// already open elsewhere.  Blocks until a write lock can be acquired.
+bool CorruptSizeInHeaderWithLock(
+    const base::FilePath& db_path) WARN_UNUSED_RESULT;
 
 // Frequently corruption is a result of failure to atomically update
 // pages in different structures.  For instance, if an index update
@@ -87,6 +97,27 @@ bool CreateDatabaseFromSQL(const base::FilePath& db_path,
 // TODO(shess): sql::Connection::IntegrityCheck() is basically the
 // same, but not as convenient for testing.  Maybe combine.
 std::string IntegrityCheck(sql::Connection* db) WARN_UNUSED_RESULT;
+
+// ExecuteWithResult() executes |sql| and returns the first column of the first
+// row as a string.  The empty string is returned for no rows.  This makes it
+// easier to test simple query results using EXPECT_EQ().  For instance:
+//   EXPECT_EQ("1024", ExecuteWithResult(db, "PRAGMA page_size"));
+//
+// ExecuteWithResults() stringifies a larger result set by putting |column_sep|
+// between columns and |row_sep| between rows.  For instance:
+//   EXPECT_EQ("1,3,5", ExecuteWithResults(
+//       db, "SELECT id FROM t ORDER BY id", "|", ","));
+// Note that EXPECT_EQ() can nicely diff when using \n as |row_sep|.
+//
+// To test NULL, use the COALESCE() function:
+//   EXPECT_EQ("<NULL>", ExecuteWithResult(
+//       db, "SELECT c || '<NULL>' FROM t WHERE id = 1"));
+// To test blobs use the HEX() function.
+std::string ExecuteWithResult(sql::Connection* db, const char* sql);
+std::string ExecuteWithResults(sql::Connection* db,
+                               const char* sql,
+                               const char* column_sep,
+                               const char* row_sep);
 
 }  // namespace test
 }  // namespace sql

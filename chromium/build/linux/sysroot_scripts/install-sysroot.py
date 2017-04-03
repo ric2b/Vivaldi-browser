@@ -38,39 +38,39 @@ URL_PATH = 'chrome-linux-sysroot/toolchain'
 
 SYSROOTS = {
     ('Wheezy', 'amd64'): {
-        'Revision' : '76b5bff8f195819fe17b2e0f773d0a5b427c75f5',
+        'Revision' : '7d200a1ddfeb50dbf9f7e2c1c4ff1080679edf02',
         'Tarball' : 'debian_wheezy_amd64_sysroot.tgz',
-        'Sha1Sum' : '9fdebab9633a0337a5b0e6d1c01ab15e25a5dbc7',
+        'Sha1Sum' : 'cc43f16c817fbb8c525405363ece863347210a30',
         'SysrootDir' : 'debian_wheezy_amd64-sysroot'
     },
     ('Wheezy', 'arm'): {
-        'Revision' : '76b5bff8f195819fe17b2e0f773d0a5b427c75f5',
+        'Revision' : '7d200a1ddfeb50dbf9f7e2c1c4ff1080679edf02',
         'Tarball' : 'debian_wheezy_arm_sysroot.tgz',
-        'Sha1Sum' : '0abadf3af78ce18147426bd017933899bae3f0ad',
+        'Sha1Sum' : 'c09ac9576642d81209f25cde19a64f427b5fbaf8',
         'SysrootDir' : 'debian_wheezy_arm-sysroot'
     },
     ('Wheezy', 'i386'): {
-        'Revision' : '76b5bff8f195819fe17b2e0f773d0a5b427c75f5',
+        'Revision' : '7d200a1ddfeb50dbf9f7e2c1c4ff1080679edf02',
         'Tarball' : 'debian_wheezy_i386_sysroot.tgz',
-        'Sha1Sum' : '970d5e7eb9c43f20f862690fc88577aacaada27e',
+        'Sha1Sum' : '1b28326d17094b9d3616579b988eb5554c3dc9f8',
         'SysrootDir' : 'debian_wheezy_i386-sysroot'
     },
     ('Wheezy', 'mips'): {
-        'Revision' : '76b5bff8f195819fe17b2e0f773d0a5b427c75f5',
+        'Revision' : '7d200a1ddfeb50dbf9f7e2c1c4ff1080679edf02',
         'Tarball' : 'debian_wheezy_mips_sysroot.tgz',
-        'Sha1Sum' : 'df5adf99d64a65eec7e93c4ea2bfec21aab3ae63',
+        'Sha1Sum' : 'c0948a2c955588079dc31d688e8105730744ef45',
         'SysrootDir' : 'debian_wheezy_mips-sysroot'
     },
     ('Jessie', 'arm64'): {
-        'Revision' : '76b5bff8f195819fe17b2e0f773d0a5b427c75f5',
+        'Revision' : '7d200a1ddfeb50dbf9f7e2c1c4ff1080679edf02',
         'Tarball' : 'debian_jessie_arm64_sysroot.tgz',
-        'Sha1Sum' : 'a485259703842bf24c81b05e94f7d09e5dd3a8a2',
+        'Sha1Sum' : 'bd9b894d9db7f834b707ba4c9c2bbfbe0d162c6f',
         'SysrootDir' : 'debian_jessie_arm64-sysroot'
     },
     ('Precise', 'amd64'): {
-        'Revision' : '76b5bff8f195819fe17b2e0f773d0a5b427c75f5',
+        'Revision' : '7d200a1ddfeb50dbf9f7e2c1c4ff1080679edf02',
         'Tarball' : 'ubuntu_precise_amd64_sysroot.tgz',
-        'Sha1Sum' : 'a3dba43c6be4410df7bd0e251fe7483936c62e32',
+        'Sha1Sum' : 'fdf81c55a0c6decd44f07781ebf163f97deb26cc',
         'SysrootDir' : 'ubuntu_precise_amd64-sysroot'
     }
 }

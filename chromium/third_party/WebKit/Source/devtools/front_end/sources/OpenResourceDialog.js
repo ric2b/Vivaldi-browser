@@ -5,136 +5,126 @@
  */
 
 /**
- * @constructor
- * @extends {WebInspector.FilteredUISourceCodeListDelegate}
- * @param {!WebInspector.SourcesView} sourcesView
- * @param {!Map.<!WebInspector.UISourceCode, number>} defaultScores
- * @param {!Array<string>} history
+ * @unrestricted
  */
-WebInspector.OpenResourceDialog = function(sourcesView, defaultScores, history)
-{
-    WebInspector.FilteredUISourceCodeListDelegate.call(this, defaultScores, history);
+Sources.OpenResourceDialog = class extends Sources.FilteredUISourceCodeListDelegate {
+  /**
+   * @param {!Sources.SourcesView} sourcesView
+   * @param {!Map.<!Workspace.UISourceCode, number>} defaultScores
+   * @param {!Array<string>} history
+   */
+  constructor(sourcesView, defaultScores, history) {
+    super(defaultScores, history);
     this._sourcesView = sourcesView;
-}
+    this.populate();
+  }
 
-WebInspector.OpenResourceDialog.prototype = {
-
-    /**
-     * @override
-     * @param {?WebInspector.UISourceCode} uiSourceCode
-     * @param {number=} lineNumber
-     * @param {number=} columnNumber
-     */
-    uiSourceCodeSelected: function(uiSourceCode, lineNumber, columnNumber)
-    {
-        if (!uiSourceCode)
-            uiSourceCode = this._sourcesView.currentUISourceCode();
-        if (!uiSourceCode)
-            return;
-        this._sourcesView.showSourceLocation(uiSourceCode, lineNumber, columnNumber);
-    },
-
-    /**
-     * @override
-     * @param {string} query
-     * @return {boolean}
-     */
-    shouldShowMatchingItems: function(query)
-    {
-        return !query.startsWith(":");
-    },
-
-    /**
-     * @override
-     * @param {!WebInspector.Project} project
-     * @return {boolean}
-     */
-    filterProject: function(project)
-    {
-        return !WebInspector.Project.isServiceProject(project);
-    },
-
-    /**
-     * @override
-     * @return {boolean}
-     */
-    renderAsTwoRows: function()
-    {
-        return true;
-    },
-
-    __proto__: WebInspector.FilteredUISourceCodeListDelegate.prototype
-}
-
-/**
- * @param {!WebInspector.SourcesView} sourcesView
- * @param {string} query
- * @param {!Map.<!WebInspector.UISourceCode, number>} defaultScores
- * @param {!Array<string>} history
- */
-WebInspector.OpenResourceDialog.show = function(sourcesView, query, defaultScores, history)
-{
-    WebInspector.OpenResourceDialog._instanceForTest = new WebInspector.OpenResourceDialog(sourcesView, defaultScores, history);
-    var filteredItemSelectionDialog = new WebInspector.FilteredListWidget(WebInspector.OpenResourceDialog._instanceForTest);
+  /**
+   * @param {!Sources.SourcesView} sourcesView
+   * @param {string} query
+   * @param {!Map.<!Workspace.UISourceCode, number>} defaultScores
+   * @param {!Array<string>} history
+   */
+  static show(sourcesView, query, defaultScores, history) {
+    Sources.OpenResourceDialog._instanceForTest = new Sources.OpenResourceDialog(sourcesView, defaultScores, history);
+    var filteredItemSelectionDialog = new UI.FilteredListWidget(Sources.OpenResourceDialog._instanceForTest);
     filteredItemSelectionDialog.showAsDialog();
     filteredItemSelectionDialog.setQuery(query);
-}
+  }
+
+  /**
+   * @override
+   * @param {?Workspace.UISourceCode} uiSourceCode
+   * @param {number=} lineNumber
+   * @param {number=} columnNumber
+   */
+  uiSourceCodeSelected(uiSourceCode, lineNumber, columnNumber) {
+    if (!uiSourceCode)
+      uiSourceCode = this._sourcesView.currentUISourceCode();
+    if (!uiSourceCode)
+      return;
+    this._sourcesView.showSourceLocation(uiSourceCode, lineNumber, columnNumber);
+  }
+
+  /**
+   * @override
+   * @param {string} query
+   * @return {boolean}
+   */
+  shouldShowMatchingItems(query) {
+    return !query.startsWith(':');
+  }
+
+  /**
+   * @override
+   * @param {!Workspace.Project} project
+   * @return {boolean}
+   */
+  filterProject(project) {
+    return !Workspace.Project.isServiceProject(project);
+  }
+
+  /**
+   * @override
+   * @return {boolean}
+   */
+  renderAsTwoRows() {
+    return true;
+  }
+};
+
 
 /**
- * @constructor
- * @extends {WebInspector.FilteredUISourceCodeListDelegate}
- * @param {!Array.<string>} types
- * @param {function(?WebInspector.UISourceCode)} callback
+ * @unrestricted
  */
-WebInspector.SelectUISourceCodeForProjectTypesDialog = function(types, callback)
-{
+Sources.SelectUISourceCodeForProjectTypesDialog = class extends Sources.FilteredUISourceCodeListDelegate {
+  /**
+   * @param {!Array.<string>} types
+   * @param {function(?Workspace.UISourceCode)} callback
+   */
+  constructor(types, callback) {
+    super();
     this._types = types;
-    WebInspector.FilteredUISourceCodeListDelegate.call(this);
     this._callback = callback;
-}
+    this.populate();
+  }
 
-WebInspector.SelectUISourceCodeForProjectTypesDialog.prototype = {
-    /**
-     * @override
-     * @param {?WebInspector.UISourceCode} uiSourceCode
-     * @param {number=} lineNumber
-     * @param {number=} columnNumber
-     */
-    uiSourceCodeSelected: function(uiSourceCode, lineNumber, columnNumber)
-    {
-        this._callback(uiSourceCode);
-    },
-
-    /**
-     * @override
-     * @param {!WebInspector.Project} project
-     * @return {boolean}
-     */
-    filterProject: function(project)
-    {
-        return this._types.indexOf(project.type()) !== -1;
-    },
-
-    /**
-     * @override
-     * @return {boolean}
-     */
-    renderAsTwoRows: function()
-    {
-        return true;
-    },
-
-    __proto__: WebInspector.FilteredUISourceCodeListDelegate.prototype
-}
-
-/**
- * @param {string} name
- * @param {!Array.<string>} types
- * @param {function(?WebInspector.UISourceCode)} callback
- */
-WebInspector.SelectUISourceCodeForProjectTypesDialog.show = function(name, types, callback)
-{
-    var filteredItemSelectionDialog = new WebInspector.FilteredListWidget(new WebInspector.SelectUISourceCodeForProjectTypesDialog(types, callback));
+  /**
+   * @param {string} name
+   * @param {!Array.<string>} types
+   * @param {function(?Workspace.UISourceCode)} callback
+   */
+  static show(name, types, callback) {
+    var filteredItemSelectionDialog =
+        new UI.FilteredListWidget(new Sources.SelectUISourceCodeForProjectTypesDialog(types, callback));
     filteredItemSelectionDialog.showAsDialog();
     filteredItemSelectionDialog.setQuery(name);
-}
+  }
+
+  /**
+   * @override
+   * @param {?Workspace.UISourceCode} uiSourceCode
+   * @param {number=} lineNumber
+   * @param {number=} columnNumber
+   */
+  uiSourceCodeSelected(uiSourceCode, lineNumber, columnNumber) {
+    this._callback(uiSourceCode);
+  }
+
+  /**
+   * @override
+   * @param {!Workspace.Project} project
+   * @return {boolean}
+   */
+  filterProject(project) {
+    return this._types.indexOf(project.type()) !== -1;
+  }
+
+  /**
+   * @override
+   * @return {boolean}
+   */
+  renderAsTwoRows() {
+    return true;
+  }
+};

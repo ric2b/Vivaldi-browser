@@ -11,8 +11,10 @@
 #include "components/constrained_window/constrained_window_views.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "content/public/browser/browser_thread.h"
+#include "ui/gfx/geometry/insets.h"
 #include "ui/views/controls/link.h"
 #include "ui/views/controls/styled_label.h"
+#include "ui/views/layout/layout_constants.h"
 #include "ui/views/window/dialog_client_view.h"
 
 ChooserDialogView::ChooserDialogView(
@@ -29,7 +31,7 @@ ChooserDialogView::ChooserDialogView(
   // | -------------------------------- |
   // |           [ Connect ] [ Cancel ] |
   // |----------------------------------|
-  // | Not seeing your device? Get help |
+  // | Get help                         |
   // ------------------------------------
 
   DCHECK(chooser_controller);
@@ -60,12 +62,25 @@ bool ChooserDialogView::IsDialogButtonEnabled(ui::DialogButton button) const {
   return chooser_content_view_->IsDialogButtonEnabled(button);
 }
 
-views::View* ChooserDialogView::CreateExtraView() {
-  return chooser_content_view_->CreateExtraView();
+views::View* ChooserDialogView::CreateFootnoteView() {
+  return chooser_content_view_->footnote_link();
 }
 
-views::View* ChooserDialogView::CreateFootnoteView() {
-  return chooser_content_view_->CreateFootnoteView();
+views::ClientView* ChooserDialogView::CreateClientView(views::Widget* widget) {
+  views::DialogClientView* client =
+      new views::DialogClientView(widget, GetContentsView());
+  client->set_button_row_insets(gfx::Insets());
+  return client;
+}
+
+views::NonClientFrameView* ChooserDialogView::CreateNonClientFrameView(
+    views::Widget* widget) {
+  // ChooserDialogView always has a parent, so ShouldUseCustomFrame() should
+  // always be true.
+  DCHECK(ShouldUseCustomFrame());
+  return views::DialogDelegate::CreateDialogFrameView(
+      widget, gfx::Insets(views::kPanelVertMargin, views::kPanelHorizMargin,
+                          views::kPanelVertMargin, views::kPanelHorizMargin));
 }
 
 bool ChooserDialogView::Accept() {

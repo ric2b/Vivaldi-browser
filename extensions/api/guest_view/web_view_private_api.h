@@ -224,6 +224,23 @@ class WebViewPrivateGetFocusedElementInfoFunction
    DISALLOW_COPY_AND_ASSIGN(WebViewPrivateGetFocusedElementInfoFunction);
 };
 
+
+class WebViewPrivateResetGestureStateFunction
+    : public LegacyWebViewInternalExtensionFunction {
+public:
+    DECLARE_EXTENSION_FUNCTION("webViewPrivate.resetGestureState",
+                               WEBVIEWINTERNAL_RESETGESTURESTATE)
+    WebViewPrivateResetGestureStateFunction();
+
+protected:
+    ~WebViewPrivateResetGestureStateFunction() override;
+
+private:
+    bool RunAsyncSafe(WebViewGuest* guest) override;
+
+    DISALLOW_COPY_AND_ASSIGN(WebViewPrivateResetGestureStateFunction);
+};
+
 }  // namespace vivaldi
 }  // namespace extensions
 

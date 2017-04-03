@@ -61,8 +61,7 @@ PasswordSyncState IOSChromePasswordManagerClient::GetPasswordSyncState() const {
 }
 
 bool IOSChromePasswordManagerClient::PromptUserToChooseCredentials(
-    ScopedVector<autofill::PasswordForm> local_forms,
-    ScopedVector<autofill::PasswordForm> federated_forms,
+    std::vector<std::unique_ptr<autofill::PasswordForm>> local_forms,
     const GURL& origin,
     const CredentialsCallback& callback) {
   NOTIMPLEMENTED();
@@ -76,7 +75,7 @@ bool IOSChromePasswordManagerClient::PromptUserToSaveOrUpdatePassword(
   if (form_to_save->IsBlacklisted())
     return false;
 
-  if (update_password && IsUpdatePasswordUIEnabled()) {
+  if (update_password) {
     [delegate_ showUpdatePasswordInfoBar:std::move(form_to_save)];
   } else {
     [delegate_ showSavePasswordInfoBar:std::move(form_to_save)];
@@ -105,7 +104,7 @@ PasswordStore* IOSChromePasswordManagerClient::GetPasswordStore() const {
 }
 
 void IOSChromePasswordManagerClient::NotifyUserAutoSignin(
-    ScopedVector<autofill::PasswordForm> local_forms,
+    std::vector<std::unique_ptr<autofill::PasswordForm>> local_forms,
     const GURL& origin) {}
 
 void IOSChromePasswordManagerClient::NotifyUserCouldBeAutoSignedIn(
@@ -125,10 +124,6 @@ bool IOSChromePasswordManagerClient::IsSavingAndFillingEnabledForCurrentPage()
   return *saving_passwords_enabled_ && !IsOffTheRecord() &&
          !DidLastPageLoadEncounterSSLErrors() &&
          IsFillingEnabledForCurrentPage();
-}
-
-bool IOSChromePasswordManagerClient::IsUpdatePasswordUIEnabled() const {
-  return experimental_flags::IsUpdatePasswordUIEnabled();
 }
 
 const GURL& IOSChromePasswordManagerClient::GetLastCommittedEntryURL() const {

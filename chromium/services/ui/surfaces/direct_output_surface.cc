@@ -23,20 +23,17 @@ DirectOutputSurface::DirectOutputSurface(
     : cc::OutputSurface(context_provider),
       synthetic_begin_frame_source_(synthetic_begin_frame_source),
       weak_ptr_factory_(this) {
+  capabilities_.flipped_output_surface =
+      context_provider->ContextCapabilities().flips_vertically;
   context_provider->SetDelegate(this);
 }
 
-DirectOutputSurface::~DirectOutputSurface() = default;
+DirectOutputSurface::~DirectOutputSurface() {}
 
-bool DirectOutputSurface::BindToClient(cc::OutputSurfaceClient* client) {
-  if (!cc::OutputSurface::BindToClient(client))
-    return false;
-
-  if (capabilities_.uses_default_gl_framebuffer) {
-    capabilities_.flipped_output_surface =
-        context_provider()->ContextCapabilities().flips_vertically;
-  }
-  return true;
+void DirectOutputSurface::BindToClient(cc::OutputSurfaceClient* client) {
+  DCHECK(client);
+  DCHECK(!client_);
+  client_ = client;
 }
 
 void DirectOutputSurface::EnsureBackbuffer() {}
@@ -47,6 +44,14 @@ void DirectOutputSurface::DiscardBackbuffer() {
 
 void DirectOutputSurface::BindFramebuffer() {
   context_provider()->ContextGL()->BindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+void DirectOutputSurface::Reshape(const gfx::Size& size,
+                                  float device_scale_factor,
+                                  const gfx::ColorSpace& color_space,
+                                  bool has_alpha) {
+  context_provider()->ContextGL()->ResizeCHROMIUM(
+      size.width(), size.height(), device_scale_factor, has_alpha);
 }
 
 void DirectOutputSurface::SwapBuffers(cc::OutputSurfaceFrame frame) {
@@ -109,7 +114,7 @@ void DirectOutputSurface::OnVSyncParametersUpdated(
 }
 
 void DirectOutputSurface::OnSwapBuffersComplete() {
-  client_->DidSwapBuffersComplete();
+  client_->DidReceiveSwapBuffersAck();
 }
 
 }  // namespace ui

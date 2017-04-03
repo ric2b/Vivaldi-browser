@@ -8,6 +8,7 @@
 #include "bindings/core/v8/V8Blob.h"
 #include "bindings/core/v8/V8CompositorProxy.h"
 #include "bindings/core/v8/V8File.h"
+#include "bindings/core/v8/V8FileList.h"
 #include "bindings/core/v8/V8ImageBitmap.h"
 #include "bindings/core/v8/V8ImageData.h"
 #include "bindings/core/v8/V8MessagePort.h"
@@ -18,6 +19,7 @@
 #include "public/platform/WebBlobInfo.h"
 #include "wtf/AutoReset.h"
 #include "wtf/DateMath.h"
+#include "wtf/allocator/Partitions.h"
 #include "wtf/text/StringUTF8Adaptor.h"
 
 namespace blink {
@@ -40,7 +42,6 @@ RefPtr<SerializedScriptValue> V8ScriptValueSerializer::serialize(
 #endif
   DCHECK(m_serializedScriptValue);
   AutoReset<const ExceptionState*> reset(&m_exceptionState, &exceptionState);
-  ScriptState::Scope scope(m_scriptState.get());
 
   // Prepare to transfer the provided transferables.
   prepareTransfer(transferables);
@@ -63,13 +64,9 @@ RefPtr<SerializedScriptValue> V8ScriptValueSerializer::serialize(
     return nullptr;
 
   // Finalize the results.
-  std::vector<uint8_t> buffer = m_serializer.ReleaseBuffer();
-  // Currently, the output must be padded to a multiple of two bytes.
-  // TODO(jbroman): Remove this old conversion to WTF::String.
-  if (buffer.size() % 2)
-    buffer.push_back(0);
+  std::pair<uint8_t*, size_t> buffer = m_serializer.Release();
   m_serializedScriptValue->setData(
-      String(reinterpret_cast<const UChar*>(&buffer[0]), buffer.size() / 2));
+      SerializedScriptValue::DataBufferPtr(buffer.first), buffer.second);
   return std::move(m_serializedScriptValue);
 }
 
@@ -144,7 +141,7 @@ bool V8ScriptValueSerializer::writeDOMObject(ScriptWrappable* wrappable,
     if (m_blobInfoArray) {
       size_t index = m_blobInfoArray->size();
       DCHECK_LE(index, std::numeric_limits<uint32_t>::max());
-      m_blobInfoArray->emplaceAppend(blob->uuid(), blob->type(), blob->size());
+      m_blobInfoArray->emplace_back(blob->uuid(), blob->type(), blob->size());
       writeTag(BlobIndexTag);
       writeUint32(static_cast<uint32_t>(index));
     } else {
@@ -174,7 +171,21 @@ bool V8ScriptValueSerializer::writeDOMObject(ScriptWrappable* wrappable,
     return true;
   }
   if (wrapperTypeInfo == &V8File::wrapperTypeInfo) {
+    writeTag(m_blobInfoArray ? FileIndexTag : FileTag);
     return writeFile(wrappable->toImpl<File>(), exceptionState);
+  }
+  if (wrapperTypeInfo == &V8FileList::wrapperTypeInfo) {
+    // This does not presently deduplicate a File object and its entry in a
+    // FileList, which is non-standard behavior.
+    FileList* fileList = wrappable->toImpl<FileList>();
+    unsigned length = fileList->length();
+    writeTag(m_blobInfoArray ? FileListIndexTag : FileListTag);
+    writeUint32(length);
+    for (unsigned i = 0; i < length; i++) {
+      if (!writeFile(fileList->item(i), exceptionState))
+        return false;
+    }
+    return true;
   }
   if (wrapperTypeInfo == &V8ImageBitmap::wrapperTypeInfo) {
     ImageBitmap* imageBitmap = wrappable->toImpl<ImageBitmap>();
@@ -264,11 +275,12 @@ bool V8ScriptValueSerializer::writeDOMObject(ScriptWrappable* wrappable,
     writeTag(OffscreenCanvasTransferTag);
     writeUint32(canvas->width());
     writeUint32(canvas->height());
-    writeUint32(canvas->getAssociatedCanvasId());
+    writeUint32(canvas->placeholderCanvasId());
     writeUint32(canvas->clientId());
     writeUint32(canvas->sinkId());
     writeUint32(canvas->localId());
-    writeUint64(canvas->nonce());
+    writeUint64(canvas->nonceHigh());
+    writeUint64(canvas->nonceLow());
     return true;
   }
   return false;
@@ -292,12 +304,10 @@ bool V8ScriptValueSerializer::writeFile(File* file,
     file->captureSnapshot(size, lastModifiedMs);
     // FIXME: transition WebBlobInfo.lastModified to be milliseconds-based also.
     double lastModified = lastModifiedMs / msPerSecond;
-    m_blobInfoArray->emplaceAppend(file->uuid(), file->path(), file->name(),
-                                   file->type(), lastModified, size);
-    writeTag(FileIndexTag);
+    m_blobInfoArray->emplace_back(file->uuid(), file->path(), file->name(),
+                                  file->type(), lastModified, size);
     writeUint32(static_cast<uint32_t>(index));
   } else {
-    writeTag(FileTag);
     writeUTF8String(file->hasBackingFile() ? file->path() : emptyString());
     writeUTF8String(file->name());
     writeUTF8String(file->webkitRelativePath());
@@ -357,6 +367,18 @@ v8::Maybe<bool> V8ScriptValueSerializer::WriteHostObject(
         DataCloneError, interface + " object could not be cloned.");
   }
   return v8::Nothing<bool>();
+}
+
+void* V8ScriptValueSerializer::ReallocateBufferMemory(void* oldBuffer,
+                                                      size_t size,
+                                                      size_t* actualSize) {
+  *actualSize = WTF::Partitions::bufferActualSize(size);
+  return WTF::Partitions::bufferRealloc(oldBuffer, size,
+                                        "SerializedScriptValue buffer");
+}
+
+void V8ScriptValueSerializer::FreeBufferMemory(void* buffer) {
+  return WTF::Partitions::bufferFree(buffer);
 }
 
 }  // namespace blink

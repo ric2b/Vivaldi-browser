@@ -31,8 +31,6 @@ class SkPicture;
 
 namespace blink {
 
-class GraphicsContext;
-
 static const size_t kInitialDisplayItemListCapacityBytes = 512;
 
 template class RasterInvalidationTrackingMap<const PaintChunk>;
@@ -167,6 +165,13 @@ class PLATFORM_EXPORT PaintController {
   bool imagePainted() const { return m_imagePainted; }
   void setImagePainted() { m_imagePainted = true; }
 
+  bool nonDefaultBackgroundColorPainted() const {
+    return m_nonDefaultBackgroundColorPainted;
+  }
+  void setNonDefaultBackgroundColorPainted() {
+    m_nonDefaultBackgroundColorPainted = true;
+  }
+
   // Returns displayItemList added using createAndAppend() since beginning or
   // the last commitNewDisplayItems(). Use with care.
   DisplayItemList& newDisplayItemList() { return m_newDisplayItemList; }
@@ -197,6 +202,7 @@ class PLATFORM_EXPORT PaintController {
         m_subsequenceCachingDisabled(false),
         m_textPainted(false),
         m_imagePainted(false),
+        m_nonDefaultBackgroundColorPainted(false),
         m_skippingCacheCount(0),
         m_numCachedNewItems(0),
         m_currentCachedSubsequenceBeginIndexInNewList(kNotFound)
@@ -300,6 +306,7 @@ class PLATFORM_EXPORT PaintController {
   // false.
   bool m_textPainted;
   bool m_imagePainted;
+  bool m_nonDefaultBackgroundColorPainted;
 
   int m_skippingCacheCount;
 

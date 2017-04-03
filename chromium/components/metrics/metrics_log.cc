@@ -14,7 +14,7 @@
 #include "base/base64.h"
 #include "base/build_time.h"
 #include "base/cpu.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/metrics/histogram_samples.h"
 #include "base/metrics/metrics_hashes.h"
 #include "base/sha1.h"
@@ -352,7 +352,7 @@ void MetricsLog::WriteRealtimeStabilityAttributes(
     stability->set_uptime_sec(uptime_sec);
 }
 
-void MetricsLog::RecordEnvironment(
+std::string MetricsLog::RecordEnvironment(
     const std::vector<MetricsProvider*>& metrics_providers,
     const std::vector<variations::ActiveGroupId>& synthetic_trials,
     int64_t install_date,
@@ -420,6 +420,8 @@ void MetricsLog::RecordEnvironment(
   std::string serialized_system_profile;
   std::string base64_system_profile;
   if (system_profile->SerializeToString(&serialized_system_profile)) {
+    // Persist the system profile to disk. In the event of an unclean shutdown,
+    // it will be used as part of the initial stability report.
     base::Base64Encode(serialized_system_profile, &base64_system_profile);
     PrefService* local_state = local_state_;
     local_state->SetString(prefs::kStabilitySavedSystemProfile,
@@ -427,6 +429,8 @@ void MetricsLog::RecordEnvironment(
     local_state->SetString(prefs::kStabilitySavedSystemProfileHash,
                            ComputeSHA1(serialized_system_profile));
   }
+
+  return serialized_system_profile;
 }
 
 bool MetricsLog::LoadSavedEnvironmentFromPrefs(std::string* app_version) {
@@ -438,11 +442,8 @@ bool MetricsLog::LoadSavedEnvironmentFromPrefs(std::string* app_version) {
       local_state->GetString(prefs::kStabilitySavedSystemProfile);
   if (base64_system_profile.empty())
     return false;
-
   const std::string system_profile_hash =
       local_state->GetString(prefs::kStabilitySavedSystemProfileHash);
-  local_state->ClearPref(prefs::kStabilitySavedSystemProfile);
-  local_state->ClearPref(prefs::kStabilitySavedSystemProfileHash);
 
   SystemProfileProto* system_profile = uma_proto()->mutable_system_profile();
   std::string serialized_system_profile;

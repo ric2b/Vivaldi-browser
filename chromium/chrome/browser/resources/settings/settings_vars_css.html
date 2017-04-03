@@ -19,6 +19,9 @@
     --settings-disabled-opacity: .65;
     --settings-error-color: var(--paper-red-700);
 
+    --settings-icon-ripple-size: 36px;
+    --settings-icon-size: 20px;
+
     --settings-list-frame-padding: {
       -webkit-padding-end: var(--settings-box-row-padding);
       -webkit-padding-start: 56px;
@@ -30,8 +33,16 @@
 
     --settings-page-vertical-margin: 21px;
 
+    /* These are used for row items such as radio buttons, check boxes, list
+     * items etc. */
     --settings-row-min-height: 44px;
     --settings-row-two-line-min-height: 56px;
+
+    /* These are used for the settings-box containers, which may contain one or
+     * more "row items". */
+    --settings-box-min-height: 48px;
+    --settings-box-two-line-min-height: 60px;
+
     --settings-secondary: {
       color: var(--paper-grey-600);
       font-weight: 400;
@@ -54,20 +65,25 @@
       width: 16px;
     };
     --settings-toggle-color: var(--google-blue-500);
-  }
 
-  :root {
     --checkbox-margin-start: 2px;
     --checkbox-size: 16px;
     --checkbox-spacing: 18px;
     --iron-icon-fill-color: var(--paper-grey-600);
-    --iron-icon-height: 20px;
-    --iron-icon-width: 20px;
+    --iron-icon-height: var(--settings-icon-size);
+    --iron-icon-width: var(--settings-icon-size);
     --paper-checkbox-label-color: inherit;
     --paper-dialog-color: inherit;
     --paper-icon-button: {
-      height: 36px;
-      width: 36px;
+      height: var(--settings-icon-ripple-size);
+      width: var(--settings-icon-ripple-size);
+    };
+    --paper-input-container-focus-color: var(--google-blue-500);
+    --paper-input-container-input: {
+      color: inherit;
+      font-size: inherit;
+      font-weight: inherit;
+      vertical-align: baseline;
     };
     --paper-input-max-width: 264px;
     --paper-item: {

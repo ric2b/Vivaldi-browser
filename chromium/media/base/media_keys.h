@@ -66,20 +66,6 @@ typedef ScopedVector<CdmKeyInformation> CdmKeysInfo;
 class MEDIA_EXPORT MediaKeys
     : public base::RefCountedThreadSafe<MediaKeys, MediaKeysTraits> {
  public:
-  // TODO(xhwang): Remove after prefixed EME support is removed. See
-  // http://crbug.com/249976
-  // Must be a superset of cdm::MediaKeyException.
-  enum Exception {
-    NOT_SUPPORTED_ERROR,
-    INVALID_STATE_ERROR,
-    INVALID_ACCESS_ERROR,
-    QUOTA_EXCEEDED_ERROR,
-    UNKNOWN_ERROR,
-    CLIENT_ERROR,
-    OUTPUT_ERROR,
-    EXCEPTION_MAX = OUTPUT_ERROR
-  };
-
   // Type of license required when creating/loading a session.
   // Must be consistent with the values specified in the spec:
   // https://w3c.github.io/encrypted-media/#idl-def-MediaKeySessionType
@@ -121,7 +107,11 @@ class MEDIA_EXPORT MediaKeys
       const std::vector<uint8_t>& init_data,
       std::unique_ptr<NewSessionCdmPromise> promise) = 0;
 
-  // Loads a session with the |session_id| provided.
+  // Loads a session with the |session_id| provided. Resolves the |promise| with
+  // |session_id| if the session is successfully loaded. Resolves the |promise|
+  // with an empty session ID if the session cannot be found. Rejects the
+  // |promise| if session loading is not supported, or other unexpected failure
+  // happened.
   // Note: UpdateSession(), CloseSession() and RemoveSession() should only be
   //       called after the |promise| is resolved.
   virtual void LoadSession(SessionType session_type,

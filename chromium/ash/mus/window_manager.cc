@@ -8,7 +8,6 @@
 
 #include <utility>
 
-#include "ash/common/shell_window_ids.h"
 #include "ash/mus/accelerators/accelerator_handler.h"
 #include "ash/mus/accelerators/accelerator_ids.h"
 #include "ash/mus/app_list_presenter_mus.h"
@@ -23,14 +22,16 @@
 #include "ash/mus/shadow_controller.h"
 #include "ash/mus/shell_delegate_mus.h"
 #include "ash/mus/window_manager_observer.h"
-#include "ash/public/interfaces/container.mojom.h"
+#include "ash/public/cpp/shell_window_ids.h"
 #include "base/memory/ptr_util.h"
+#include "services/service_manager/public/cpp/connector.h"
 #include "services/ui/common/event_matcher_util.h"
 #include "services/ui/common/types.h"
 #include "services/ui/public/cpp/property_type_converters.h"
 #include "services/ui/public/cpp/window.h"
 #include "services/ui/public/cpp/window_property.h"
 #include "services/ui/public/cpp/window_tree_client.h"
+#include "services/ui/public/interfaces/constants.mojom.h"
 #include "services/ui/public/interfaces/mus_constants.mojom.h"
 #include "services/ui/public/interfaces/window_manager.mojom.h"
 #include "ui/base/hit_test.h"
@@ -42,7 +43,7 @@
 namespace ash {
 namespace mus {
 
-WindowManager::WindowManager(shell::Connector* connector)
+WindowManager::WindowManager(service_manager::Connector* connector)
     : connector_(connector) {}
 
 WindowManager::~WindowManager() {
@@ -55,7 +56,14 @@ void WindowManager::Init(
   DCHECK(!window_tree_client_);
   window_tree_client_ = std::move(window_tree_client);
 
+  // |connector_| will be null in some tests.
+  if (connector_) {
+    connector_->ConnectToInterface(ui::mojom::kServiceName,
+                                   &display_controller_);
+  }
+
   screen_ = base::MakeUnique<display::ScreenBase>();
+  display::Screen::SetScreenInstance(screen_.get());
 
   pointer_watcher_event_router_.reset(
       new views::PointerWatcherEventRouter(window_tree_client_.get()));
@@ -80,6 +88,9 @@ void WindowManager::Init(
                               this, pointer_watcher_event_router_.get()));
   shell_->Initialize(blocking_pool);
   lookup_.reset(new WmLookupMus);
+
+  // TODO: this should be called when logged in. See http://crbug.com/654606.
+  shell_->CreateShelf();
 }
 
 void WindowManager::SetScreenLocked(bool is_locked) {
@@ -134,6 +145,10 @@ void WindowManager::RemoveObserver(WindowManagerObserver* observer) {
   observers_.RemoveObserver(observer);
 }
 
+display::mojom::DisplayController* WindowManager::GetDisplayController() {
+  return display_controller_ ? display_controller_.get() : nullptr;
+}
+
 RootWindowController* WindowManager::CreateRootWindowController(
     ui::Window* window,
     const display::Display& display) {
@@ -145,10 +160,10 @@ RootWindowController* WindowManager::CreateRootWindowController(
   // notify DisplayObservers. Classic ash does this by making sure
   // WindowTreeHostManager is added as a DisplayObserver early on.
   std::unique_ptr<display::DisplayListObserverLock> display_lock =
-      screen_->display_list()->SuspendObserverUpdates();
-  const bool is_first_display = screen_->display_list()->displays().empty();
+      screen_->display_list().SuspendObserverUpdates();
+  const bool is_first_display = screen_->display_list().displays().empty();
   // TODO(sky): should be passed whether display is primary.
-  screen_->display_list()->AddDisplay(
+  screen_->display_list().AddDisplay(
       display, is_first_display ? display::DisplayList::Type::PRIMARY
                                 : display::DisplayList::Type::NOT_PRIMARY);
 
@@ -158,12 +173,14 @@ RootWindowController* WindowManager::CreateRootWindowController(
       root_window_controller_ptr.get();
   root_window_controllers_.insert(std::move(root_window_controller_ptr));
 
-  FOR_EACH_OBSERVER(WindowManagerObserver, observers_,
-                    OnRootWindowControllerAdded(root_window_controller));
+  // TODO: this should be called when logged in. See http://crbug.com/654606.
+  root_window_controller->wm_root_window_controller()->CreateShelf();
 
-  FOR_EACH_OBSERVER(display::DisplayObserver,
-                    *screen_->display_list()->observers(),
-                    OnDisplayAdded(root_window_controller->display()));
+  for (auto& observer : observers_)
+    observer.OnRootWindowControllerAdded(root_window_controller);
+
+  for (auto& observer : *screen_->display_list().observers())
+    observer.OnDisplayAdded(root_window_controller->display());
 
   return root_window_controller;
 }
@@ -193,8 +210,8 @@ void WindowManager::Shutdown() {
 
   // Observers can rely on WmShell from the callback. So notify the observers
   // before destroying it.
-  FOR_EACH_OBSERVER(WindowManagerObserver, observers_,
-                    OnWindowTreeClientDestroyed());
+  for (auto& observer : observers_)
+    observer.OnWindowTreeClientDestroyed();
 
   // Primary RootWindowController must be destroyed last.
   RootWindowController* primary_root_window_controller =
@@ -223,6 +240,9 @@ void WindowManager::Shutdown() {
 
   window_tree_client_.reset();
   window_manager_client_ = nullptr;
+
+  DCHECK_EQ(screen_.get(), display::Screen::GetScreen());
+  display::Screen::SetScreenInstance(nullptr);
 }
 
 WindowManager::RootWindowControllers::iterator
@@ -327,6 +347,18 @@ void WindowManager::OnWmDisplayRemoved(ui::Window* window) {
   auto iter = FindRootWindowControllerByWindow(window);
   DCHECK(iter != root_window_controllers_.end());
   DestroyRootWindowController(iter->get());
+}
+
+void WindowManager::OnWmDisplayModified(const display::Display& display) {
+  for (auto& controller : root_window_controllers_) {
+    if (controller->display().id() == display.id()) {
+      controller->SetDisplay(display);
+      // The root window will be resized by the window server.
+      return;
+    }
+  }
+
+  NOTREACHED();
 }
 
 void WindowManager::OnWmPerformMoveLoop(

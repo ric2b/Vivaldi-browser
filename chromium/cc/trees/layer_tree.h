@@ -30,10 +30,8 @@ namespace cc {
 
 namespace proto {
 class LayerTree;
-class LayerUpdate;
 }  // namespace proto
 
-class AnimationHost;
 class ClientPictureCache;
 class EnginePictureCache;
 class HeadsUpDisplayLayer;
@@ -41,18 +39,15 @@ class Layer;
 class LayerTreeHost;
 class LayerTreeImpl;
 class LayerTreeSettings;
+class MutatorHost;
 struct PendingPageScaleAnimation;
-class UIResourceManager;
-class SwapPromiseManager;
-class SurfaceSequenceGenerator;
 
 class CC_EXPORT LayerTree : public MutatorHostClient {
  public:
   using LayerSet = std::unordered_set<Layer*>;
   using LayerIdMap = std::unordered_map<int, Layer*>;
 
-  LayerTree(std::unique_ptr<AnimationHost> animation_host,
-            LayerTreeHost* layer_tree_host);
+  LayerTree(MutatorHost* mutator_host, LayerTreeHost* layer_tree_host);
   virtual ~LayerTree();
 
   void SetRootLayer(scoped_refptr<Layer> root_layer);
@@ -76,6 +71,7 @@ class CC_EXPORT LayerTree : public MutatorHostClient {
   }
 
   void RegisterSelection(const LayerSelection& selection);
+  const LayerSelection& selection() const { return inputs_.selection; }
 
   void SetHaveScrollEventHandlers(bool have_event_handlers);
   bool have_scroll_event_handlers() const {
@@ -94,20 +90,25 @@ class CC_EXPORT LayerTree : public MutatorHostClient {
     return inputs_.device_viewport_size;
   }
 
-  void SetTopControlsHeight(float height, bool shrink);
-  void SetTopControlsShownRatio(float ratio);
+  void SetBrowserControlsHeight(float height, bool shrink);
+  void SetBrowserControlsShownRatio(float ratio);
   void SetBottomControlsHeight(float height);
 
   void SetPageScaleFactorAndLimits(float page_scale_factor,
                                    float min_page_scale_factor,
                                    float max_page_scale_factor);
   float page_scale_factor() const { return inputs_.page_scale_factor; }
+  float min_page_scale_factor() const { return inputs_.min_page_scale_factor; }
+  float max_page_scale_factor() const { return inputs_.max_page_scale_factor; }
 
   void set_background_color(SkColor color) { inputs_.background_color = color; }
   SkColor background_color() const { return inputs_.background_color; }
 
   void set_has_transparent_background(bool transparent) {
     inputs_.has_transparent_background = transparent;
+  }
+  bool has_transparent_background() const {
+    return inputs_.has_transparent_background;
   }
 
   void StartPageScaleAnimation(const gfx::Vector2d& target_offset,
@@ -120,6 +121,9 @@ class CC_EXPORT LayerTree : public MutatorHostClient {
   float device_scale_factor() const { return inputs_.device_scale_factor; }
 
   void SetPaintedDeviceScaleFactor(float painted_device_scale_factor);
+  float painted_device_scale_factor() const {
+    return inputs_.painted_device_scale_factor;
+  }
 
   void SetDeviceColorSpace(const gfx::ColorSpace& device_color_space);
   const gfx::ColorSpace& device_color_space() const {
@@ -181,12 +185,12 @@ class CC_EXPORT LayerTree : public MutatorHostClient {
 
   void SetPropertyTreesNeedRebuild();
 
-  void PushPropertiesTo(LayerTreeImpl* tree_impl);
+  void PushPropertiesTo(LayerTreeImpl* tree_impl,
+                        float unapplied_page_scale_delta);
 
-  void ToProtobuf(proto::LayerTree* proto, bool inputs_only);
-  void FromProtobuf(const proto::LayerTree& proto);
+  void ToProtobuf(proto::LayerTree* proto);
 
-  AnimationHost* animation_host() const { return animation_host_.get(); }
+  MutatorHost* mutator_host() const { return mutator_host_; }
 
   Layer* LayerByElementId(ElementId element_id) const;
   void RegisterElement(ElementId element_id,
@@ -207,8 +211,6 @@ class CC_EXPORT LayerTree : public MutatorHostClient {
   // ---------------------------------------------------------------------
 
  private:
-  friend class LayerTreeHostSerializationTest;
-
   // MutatorHostClient implementation.
   bool IsElementInList(ElementId element_id,
                        ElementListType list_type) const override;
@@ -251,7 +253,7 @@ class CC_EXPORT LayerTree : public MutatorHostClient {
 
     float top_controls_height;
     float top_controls_shown_ratio;
-    bool top_controls_shrink_blink_size;
+    bool browser_controls_shrink_blink_size;
 
     float bottom_controls_height;
 
@@ -298,7 +300,7 @@ class CC_EXPORT LayerTree : public MutatorHostClient {
 
   bool in_paint_layer_contents_;
 
-  std::unique_ptr<AnimationHost> animation_host_;
+  MutatorHost* mutator_host_;
   LayerTreeHost* layer_tree_host_;
 
   // TODO(khushalsagar): Make these go away once we transition blimp to an

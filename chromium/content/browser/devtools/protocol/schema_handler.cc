@@ -23,9 +23,9 @@ Response SchemaHandler::GetDomains(
   static const char* kDomains[] = {
     "Inspector", "Memory", "Page", "Rendering", "Emulation", "Security",
     "Network", "Database", "IndexedDB", "CacheStorage", "DOMStorage", "CSS",
-    "ApplicationCache", "DOM", "IO", "DOMDebugger", "Worker", "ServiceWorker",
+    "ApplicationCache", "DOM", "IO", "DOMDebugger", "ServiceWorker",
     "Input", "LayerTree", "DeviceOrientation", "Tracing", "Animation",
-    "Accessibility", "Storage", "Log", "Browser", "Runtime", "Debugger",
+    "Accessibility", "Storage", "Log", "Runtime", "Debugger",
     "Profiler", "HeapProfiler", "Schema", "Target"
   };
   for (size_t i = 0; i < arraysize(kDomains); ++i) {

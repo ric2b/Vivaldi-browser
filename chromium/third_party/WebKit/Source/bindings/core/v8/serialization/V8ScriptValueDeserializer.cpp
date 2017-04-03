@@ -11,6 +11,7 @@
 #include "core/dom/MessagePort.h"
 #include "core/fileapi/Blob.h"
 #include "core/fileapi/File.h"
+#include "core/fileapi/FileList.h"
 #include "core/frame/ImageBitmap.h"
 #include "core/html/ImageData.h"
 #include "core/offscreencanvas/OffscreenCanvas.h"
@@ -28,10 +29,8 @@ V8ScriptValueDeserializer::V8ScriptValueDeserializer(
     : m_scriptState(std::move(scriptState)),
       m_serializedScriptValue(std::move(serializedScriptValue)),
       m_deserializer(m_scriptState->isolate(),
-                     reinterpret_cast<const uint8_t*>(
-                         m_serializedScriptValue->data().ensure16Bit(),
-                         m_serializedScriptValue->data().characters16()),
-                     m_serializedScriptValue->data().length() * 2,
+                     m_serializedScriptValue->data(),
+                     m_serializedScriptValue->dataLengthInBytes(),
                      this) {
   DCHECK(RuntimeEnabledFeatures::v8BasedStructuredCloneEnabled());
   m_deserializer.SetSupportsLegacyWireFormat(true);
@@ -151,6 +150,36 @@ ScriptWrappable* V8ScriptValueDeserializer::readDOMObject(
       return readFile();
     case FileIndexTag:
       return readFileIndex();
+    case FileListTag: {
+      // This does not presently deduplicate a File object and its entry in a
+      // FileList, which is non-standard behavior.
+      uint32_t length;
+      if (!readUint32(&length))
+        return nullptr;
+      FileList* fileList = FileList::create();
+      for (uint32_t i = 0; i < length; i++) {
+        if (File* file = readFile())
+          fileList->append(file);
+        else
+          return nullptr;
+      }
+      return fileList;
+    }
+    case FileListIndexTag: {
+      // This does not presently deduplicate a File object and its entry in a
+      // FileList, which is non-standard behavior.
+      uint32_t length;
+      if (!readUint32(&length))
+        return nullptr;
+      FileList* fileList = FileList::create();
+      for (uint32_t i = 0; i < length; i++) {
+        if (File* file = readFileIndex())
+          fileList->append(file);
+        else
+          return nullptr;
+      }
+      return fileList;
+    }
     case ImageBitmapTag: {
       uint32_t originClean = 0, isPremultiplied = 0, width = 0, height = 0,
                pixelLength = 0;
@@ -205,14 +234,15 @@ ScriptWrappable* V8ScriptValueDeserializer::readDOMObject(
     case OffscreenCanvasTransferTag: {
       uint32_t width = 0, height = 0, canvasId = 0, clientId = 0, sinkId = 0,
                localId = 0;
-      uint64_t nonce = 0;
+      uint64_t nonceHigh = 0, nonceLow = 0;
       if (!readUint32(&width) || !readUint32(&height) ||
           !readUint32(&canvasId) || !readUint32(&clientId) ||
-          !readUint32(&sinkId) || !readUint32(&localId) || !readUint64(&nonce))
+          !readUint32(&sinkId) || !readUint32(&localId) ||
+          !readUint64(&nonceHigh) || !readUint64(&nonceLow))
         return nullptr;
       OffscreenCanvas* canvas = OffscreenCanvas::create(width, height);
-      canvas->setAssociatedCanvasId(canvasId);
-      canvas->setSurfaceId(clientId, sinkId, localId, nonce);
+      canvas->setPlaceholderCanvasId(canvasId);
+      canvas->setSurfaceId(clientId, sinkId, localId, nonceHigh, nonceLow);
       return canvas;
     }
     default:

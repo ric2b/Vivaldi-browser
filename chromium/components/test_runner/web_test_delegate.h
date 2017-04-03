@@ -12,7 +12,6 @@
 #include "base/callback_forward.h"
 #include "base/memory/ref_counted.h"
 #include "third_party/WebKit/public/platform/WebString.h"
-#include "third_party/WebKit/public/platform/WebTaskRunner.h"
 #include "third_party/WebKit/public/platform/WebURL.h"
 #include "third_party/WebKit/public/platform/WebVector.h"
 #include "third_party/WebKit/public/platform/modules/screen_orientation/WebScreenOrientationType.h"
@@ -26,7 +25,7 @@ class DictionaryValue;
 namespace blink {
 class WebDeviceMotionData;
 class WebDeviceOrientationData;
-class WebLocalFrame;
+class WebFrame;
 class WebGamepad;
 class WebGamepads;
 class WebHistoryItem;
@@ -151,8 +150,10 @@ class WebTestDelegate {
   virtual void SetDatabaseQuota(int quota) = 0;
 
   // Controls Web Notifications.
-  virtual void SimulateWebNotificationClick(const std::string& title,
-                                            int action_index) = 0;
+  virtual void SimulateWebNotificationClick(
+      const std::string& title,
+      int action_index,
+      const base::NullableString16& reply) = 0;
   virtual void SimulateWebNotificationClose(const std::string& title,
                                             bool by_user) = 0;
 
@@ -274,15 +275,19 @@ class WebTestDelegate {
 
   virtual cc::SharedBitmapManager* GetSharedBitmapManager() = 0;
 
-  // Causes the beforeinstallprompt event to be sent to the renderer with a
-  // request id of |request_id|. |event_platforms| are the platforms to be sent
-  // with the event. Once the event listener completes, |callback| will be
-  // called with a boolean argument. This argument will be true if the event is
-  // canceled, and false otherwise.
+  // Causes the beforeinstallprompt event to be sent to the renderer.
+  // |event_platforms| are the platforms to be sent with the event. Once the
+  // event listener completes, |callback| will be called with a boolean
+  // argument. This argument will be true if the event is canceled, and false
+  // otherwise.
   virtual void DispatchBeforeInstallPromptEvent(
-      int request_id,
       const std::vector<std::string>& event_platforms,
       const base::Callback<void(bool)>& callback) = 0;
+
+  // Resolves the in-flight beforeinstallprompt event userChoice promise with a
+  // platform of |platform|.
+  virtual void ResolveBeforeInstallPromptPromise(
+      const std::string& platform) = 0;
 
   virtual blink::WebPlugin* CreatePluginPlaceholder(
     blink::WebLocalFrame* frame,
@@ -292,6 +297,10 @@ class WebTestDelegate {
 
   // Run all pending idle tasks, and then run callback.
   virtual void RunIdleTasks(const base::Closure& callback) = 0;
+
+  // Forces a text input state update for the client of WebFrameWidget
+  // associated with |frame|.
+  virtual void ForceTextInputStateUpdate(blink::WebFrame* frame) = 0;
 };
 
 }  // namespace test_runner

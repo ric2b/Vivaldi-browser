@@ -54,6 +54,12 @@ var GetAnchorOffset = requireNative('automationInternal').GetAnchorOffset;
 
 /**
  * @param {number} axTreeID The id of the accessibility tree.
+ * @return {?string} The selection anchor affinity.
+ */
+var GetAnchorAffinity = requireNative('automationInternal').GetAnchorAffinity;
+
+/**
+ * @param {number} axTreeID The id of the accessibility tree.
  * @return {?number} The ID of the selection focus object.
  */
 var GetFocusObjectID = requireNative('automationInternal').GetFocusObjectID;
@@ -63,6 +69,12 @@ var GetFocusObjectID = requireNative('automationInternal').GetFocusObjectID;
  * @return {?number} The selection focus offset.
  */
 var GetFocusOffset = requireNative('automationInternal').GetFocusOffset;
+
+/**
+ * @param {number} axTreeID The id of the accessibility tree.
+ * @return {?string} The selection focus affinity.
+ */
+var GetFocusAffinity = requireNative('automationInternal').GetFocusAffinity;
 
 /**
  * @param {number} axTreeID The id of the accessibility tree.
@@ -368,6 +380,10 @@ AutomationNodeImpl.prototype = {
     }
   },
 
+  setSequentialFocusNavigationStartingPoint: function() {
+    this.performAction_('setSequentialFocusNavigationStartingPoint');
+  },
+
   showContextMenu: function() {
     this.performAction_('showContextMenu');
   },
@@ -423,7 +439,7 @@ AutomationNodeImpl.prototype = {
              attributes: this.attributes };
   },
 
-  dispatchEvent: function(eventType, eventFrom) {
+  dispatchEvent: function(eventType, eventFrom, mouseX, mouseY) {
     var path = [];
     var parent = this.parent;
     while (parent) {
@@ -431,6 +447,8 @@ AutomationNodeImpl.prototype = {
       parent = parent.parent;
     }
     var event = new AutomationEvent(eventType, this.wrapper, eventFrom);
+    event.mouseX = mouseX;
+    event.mouseY = mouseY;
 
     // Dispatch the event through the propagation path in three phases:
     // - capturing: starting from the root and going down to the target's parent
@@ -694,6 +712,8 @@ var intAttributes = [
 
 var nodeRefAttributes = [
     ['activedescendantId', 'activeDescendant'],
+    ['nextOnLineId', 'nextOnLine'],
+    ['previousOnLineId', 'previousOnLine'],
     ['tableColumnHeaderId', 'tableColumnHeader'],
     ['tableHeaderId', 'tableHeader'],
     ['tableRowHeaderId', 'tableRowHeader'],
@@ -701,6 +721,7 @@ var nodeRefAttributes = [
 
 var intListAttributes = [
     'characterOffsets',
+    'lineBreaks',
     'markerEnds',
     'markerStarts',
     'markerTypes',
@@ -936,6 +957,12 @@ AutomationRootNodeImpl.prototype = {
       return GetAnchorOffset(this.treeID);
   },
 
+  get anchorAffinity() {
+    var id = GetAnchorObjectID(this.treeID);
+    if (id && id != -1)
+      return GetAnchorAffinity(this.treeID);
+  },
+
   get focusObject() {
     var id = GetFocusObjectID(this.treeID);
     if (id && id != -1)
@@ -948,6 +975,12 @@ AutomationRootNodeImpl.prototype = {
     var id = GetFocusObjectID(this.treeID);
     if (id && id != -1)
       return GetFocusOffset(this.treeID);
+  },
+
+  get focusAffinity() {
+    var id = GetFocusObjectID(this.treeID);
+    if (id && id != -1)
+      return GetFocusAffinity(this.treeID);
   },
 
   get: function(id) {
@@ -991,7 +1024,8 @@ AutomationRootNodeImpl.prototype = {
     if (targetNode) {
       var targetNodeImpl = privates(targetNode).impl;
       targetNodeImpl.dispatchEvent(
-          eventParams.eventType, eventParams.eventFrom);
+          eventParams.eventType, eventParams.eventFrom,
+          eventParams.mouseX, eventParams.mouseY);
     } else {
       logging.WARNING('Got ' + eventParams.eventType +
                       ' event on unknown node: ' + eventParams.targetID +
@@ -1031,6 +1065,7 @@ utils.expose(AutomationNode, AutomationNodeImpl, {
     'makeVisible',
     'matches',
     'setSelection',
+    'setSequentialFocusNavigationStartingPoint',
     'showContextMenu',
     'addEventListener',
     'removeEventListener',
@@ -1068,8 +1103,10 @@ utils.expose(AutomationRootNode, AutomationRootNodeImpl, {
     'docLoadingProgress',
     'anchorObject',
     'anchorOffset',
+    'anchorAffinity',
     'focusObject',
     'focusOffset',
+    'focusAffinity',
   ],
 });
 

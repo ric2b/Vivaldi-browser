@@ -7,6 +7,8 @@
 #include "base/lazy_instance.h"
 #include "base/macros.h"
 
+#include "components/version_info/version_info_values.h"
+
 namespace vivaldi {
 
 namespace {
@@ -54,6 +56,14 @@ const std::set<std::string> &GetVivaldiExtraLocales() {
 bool IsVivaldiExtraLocale(const std::string &locale) {
   auto &extra_locales = GetVivaldiExtraLocales();
   return extra_locales.find(locale) != extra_locales.end();
+}
+
+std::string GetVivaldiVersionString() {
+  return VIVALDI_VERSION;
+}
+
+std::string VivaldiLastChange() {
+  return LAST_CHANGE_VIVALDI;
 }
 
 } // namespace vivaldi

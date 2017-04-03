@@ -35,8 +35,8 @@ namespace {
 const double kNextFireIntervalInvalid = -1.0;
 }
 
-SuspendableTimer::SuspendableTimer(ExecutionContext* context)
-    : TimerBase(TaskRunnerHelper::get(TaskType::Timer, context)),
+SuspendableTimer::SuspendableTimer(ExecutionContext* context, TaskType taskType)
+    : TimerBase(TaskRunnerHelper::get(taskType, context)),
       ActiveDOMObject(context),
       m_nextFireInterval(kNextFireIntervalInvalid),
       m_repeatInterval(0)

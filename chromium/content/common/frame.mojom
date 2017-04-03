@@ -4,16 +4,20 @@
 
 module content.mojom;
 
-import "services/shell/public/interfaces/interface_provider.mojom";
+import "services/service_manager/public/interfaces/interface_provider.mojom";
+
+// The name of the InterfaceProviderSpec in service manifests used by the
+// frame tree to expose frame-specific interfaces between renderer and browser.
+const string kNavigation_FrameSpec = "navigation:frame";
 
 // Implemented by the frame provider (e.g. renderer processes).
 interface Frame {
-  GetInterfaceProvider(shell.mojom.InterfaceProvider& interfaces);
+  GetInterfaceProvider(service_manager.mojom.InterfaceProvider& interfaces);
 };
 
 // Implemented by the frame server (i.e. the browser process).
 interface FrameHost {
-  GetInterfaceProvider(shell.mojom.InterfaceProvider& interfaces);
+  GetInterfaceProvider(service_manager.mojom.InterfaceProvider& interfaces);
 };
 
 // Implemented by a service that provides implementations of the Frame

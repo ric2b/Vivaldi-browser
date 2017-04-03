@@ -8,7 +8,6 @@
 #include "base/i18n/message_formatter.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
-#include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/webui/version_handler.h"
 #include "chrome/common/channel_info.h"
@@ -42,16 +41,7 @@
 #include "chrome/browser/ui/webui/version_handler_chromeos.h"
 #endif
 
-#define BUILD_VERSION_normal 0
-#define BUILD_VERSION_snapshot 0
-#define BUILD_VERSION_preview 0
-#define BUILD_VERSION_beta 1
-#define BUILD_VERSION_final 1
-
-#define S(s) BUILD_VERSION_ ## s
-#define BUILD_VERSION(s) S(s)
-
-#define VIVALDI_BUILD_PUBLIC_RELEASE 1
+#include "ui/about/vivaldi_about_version.h"
 
 using content::WebUIDataSource;
 
@@ -66,7 +56,7 @@ WebUIDataSource* CreateVersionUIDataSource() {
   html_source->AddLocalizedString(version_ui::kApplicationLabel,
                                   IDS_PRODUCT_NAME);
   html_source->AddString(version_ui::kVersion,
-                         chrome::GetVivaldiVersionString());
+                         version_info::GetVersionNumber());
   html_source->AddString(version_ui::kVersionModifier,
                          chrome::GetChannelString());
   html_source->AddLocalizedString(version_ui::kOSName, IDS_VERSION_UI_OS);
@@ -97,17 +87,10 @@ WebUIDataSource* CreateVersionUIDataSource() {
   html_source->AddLocalizedString(version_ui::kRevision,
                                   IDS_VERSION_UI_REVISION);
   html_source->AddString(version_ui::kCL, version_info::GetLastChange());
-#if defined(OFFICIAL_BUILD) &&  \
-    (BUILD_VERSION(VIVALDI_RELEASE) == VIVALDI_BUILD_PUBLIC_RELEASE)
-  html_source->AddString("official",
-      std::string(VIVALDI_PRODUCT_VERSION).empty() ?
-        "Stable channel" : VIVALDI_PRODUCT_VERSION);
-#else
   html_source->AddLocalizedString(version_ui::kOfficial,
                                   version_info::IsOfficialBuild()
                                       ? IDS_VERSION_UI_OFFICIAL
                                       : IDS_VERSION_UI_UNOFFICIAL);
-#endif
 #if defined(ARCH_CPU_64_BITS)
   html_source->AddLocalizedString(version_ui::kVersionBitSize,
                                   IDS_VERSION_UI_64BIT);
@@ -166,18 +149,14 @@ WebUIDataSource* CreateVersionUIDataSource() {
 #endif
 #endif  // defined(OS_WIN)
 
-  html_source->AddString("productLicense",
-      l10n_util::GetStringFUTF16(IDS_VERSION_UI_LICENSE,
-          base::ASCIIToUTF16(chrome::kChromiumProjectURL),
-          base::ASCIIToUTF16(chrome::kChromeUICreditsURL)));
-  base::string16 tos = l10n_util::GetStringFUTF16(
-      IDS_ABOUT_TERMS_OF_SERVICE, base::UTF8ToUTF16(chrome::kChromeUITermsURL));
-  html_source->AddString("productTOS", tos);
   html_source->SetJsonPath("strings.js");
   html_source->AddResourcePath(version_ui::kVersionJS, IDR_VERSION_UI_JS);
   html_source->AddResourcePath(version_ui::kAboutVersionCSS,
                                IDR_VERSION_UI_CSS);
   html_source->SetDefaultResource(IDR_VERSION_UI_HTML);
+
+  vivaldi::UpdateVersionUIDataSource(html_source);
+
   return html_source;
 }
 

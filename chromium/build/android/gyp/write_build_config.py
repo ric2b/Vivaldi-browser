@@ -120,12 +120,31 @@ class Deps(object):
     self.all_deps_config_paths.remove(path)
     self.all_deps_configs.remove(GetDepConfig(path))
 
-  def PrebuiltJarPaths(self):
+  def GradlePrebuiltJarPaths(self):
     ret = []
-    for config in self.Direct('java_library'):
-      if config['is_prebuilt']:
-        ret.append(config['jar_path'])
-        ret.extend(Deps(config['deps_configs']).PrebuiltJarPaths())
+
+    def helper(cur):
+      for config in cur.Direct('java_library'):
+        if config['is_prebuilt'] or config['gradle_treat_as_prebuilt']:
+          if config['jar_path'] not in ret:
+            ret.append(config['jar_path'])
+
+    helper(self)
+    return ret
+
+  def GradleLibraryProjectDeps(self):
+    ret = []
+
+    def helper(cur):
+      for config in cur.Direct('java_library'):
+        if config['is_prebuilt']:
+          pass
+        elif config['gradle_treat_as_prebuilt']:
+          helper(Deps(config['deps_configs']))
+        elif config not in ret:
+          ret.append(config)
+
+    helper(self)
     return ret
 
 
@@ -209,11 +228,20 @@ def _ExtractSharedLibsFromRuntimeDeps(runtime_deps_files):
   ret.reverse()
   return ret
 
+
 def _CreateJavaLibrariesList(library_paths):
-  """ Create a java literal array with the "base" library names:
+  """Returns a java literal array with the "base" library names:
   e.g. libfoo.so -> foo
   """
   return ('{%s}' % ','.join(['"%s"' % s[3:-3] for s in library_paths]))
+
+
+def _CreateLocalePaksAssetJavaList(assets):
+  """Returns a java literal array from a list of assets in the form src:dst."""
+  names_only = (a.split(':')[1][:-4] for a in assets if a.endswith('.pak'))
+  locales_only = (a for a in names_only if '-' in a or len(a) == 2)
+  return '{%s}' % ','.join(sorted('"%s"' % a for a in locales_only))
+
 
 def main(argv):
   parser = optparse.OptionParser()
@@ -233,8 +261,6 @@ def main(argv):
   parser.add_option('--package-name',
       help='Java package name for these resources.')
   parser.add_option('--android-manifest', help='Path to android manifest.')
-  parser.add_option('--is-locale-resource', action='store_true',
-                    help='Whether it is locale resource.')
   parser.add_option('--resource-dirs', action='append', default=[],
                     help='GYP-list of resource dirs')
 
@@ -261,6 +287,10 @@ def main(argv):
   parser.add_option('--extra-classpath-jars',
       help='GYP-list of .jar files to include on the classpath when compiling, '
            'but not to include in the final binary.')
+  parser.add_option('--gradle-treat-as-prebuilt', action='store_true',
+      help='Whether this library should be treated as a prebuilt library by '
+           'generate_gradle.py.')
+  parser.add_option('--main-class', help='Java class for java_binary targets.')
 
   # android library options
   parser.add_option('--dex-path', help='Path to target\'s dex output.')
@@ -290,8 +320,6 @@ def main(argv):
       help='GYP-list of proguard flag files to use in final apk.')
   parser.add_option('--proguard-info',
       help='Path to the proguard .info output for this apk.')
-  parser.add_option('--has-alternative-locale-resource', action='store_true',
-      help='Whether there is alternative-locale-resource in direct deps')
   parser.add_option('--fail',
       help='GYP-list of error message lines to fail with.')
 
@@ -339,21 +367,6 @@ def main(argv):
   deps = Deps(direct_deps_config_paths)
   all_inputs = deps.AllConfigPaths()
 
-  # Remove other locale resources if there is alternative_locale_resource in
-  # direct deps.
-  if options.has_alternative_locale_resource:
-    alternative = [r['path'] for r in deps.Direct('android_resources')
-                   if r.get('is_locale_resource')]
-    # We can only have one locale resources in direct deps.
-    if len(alternative) != 1:
-      raise Exception('The number of locale resource in direct deps is wrong %d'
-                       % len(alternative))
-    unwanted = [r['path'] for r in deps.All('android_resources')
-                if r.get('is_locale_resource') and r['path'] not in alternative]
-    for p in unwanted:
-      deps.RemoveNonDirectDep(p)
-
-
   direct_library_deps = deps.Direct('java_library')
   all_library_deps = deps.All('java_library')
 
@@ -386,6 +399,7 @@ def main(argv):
   # Required for generating gradle files.
   if options.type == 'java_library':
     deps_info['is_prebuilt'] = is_java_prebuilt
+    deps_info['gradle_treat_as_prebuilt'] = options.gradle_treat_as_prebuilt
 
   if options.android_manifest:
     gradle['android_manifest'] = options.android_manifest
@@ -396,16 +410,18 @@ def main(argv):
       gradle['bundled_srcjars'] = (
           build_utils.ParseGnList(options.bundled_srcjars))
 
-    gradle['dependent_prebuilt_jars'] = deps.PrebuiltJarPaths()
-
     gradle['dependent_android_projects'] = []
     gradle['dependent_java_projects'] = []
-    for c in direct_library_deps:
-      if not c['is_prebuilt']:
-        if c['requires_android']:
-          gradle['dependent_android_projects'].append(c['path'])
-        else:
-          gradle['dependent_java_projects'].append(c['path'])
+    gradle['dependent_prebuilt_jars'] = deps.GradlePrebuiltJarPaths()
+
+    if options.main_class:
+      gradle['main_class'] = options.main_class
+
+    for c in deps.GradleLibraryProjectDeps():
+      if c['requires_android']:
+        gradle['dependent_android_projects'].append(c['path'])
+      else:
+        gradle['dependent_java_projects'].append(c['path'])
 
 
   if (options.type in ('java_binary', 'java_library') and
@@ -485,8 +501,6 @@ def main(argv):
       deps_info['package_name'] = options.package_name
     if options.r_text:
       deps_info['r_text'] = options.r_text
-    if options.is_locale_resource:
-      deps_info['is_locale_resource'] = True
 
     deps_info['resources_dirs'] = []
     if options.resource_dirs:
@@ -658,6 +672,10 @@ def main(argv):
     }
     config['assets'], config['uncompressed_assets'] = (
         _MergeAssets(deps.All('android_assets')))
+    config['compressed_locales_java_list'] = (
+        _CreateLocalePaksAssetJavaList(config['assets']))
+    config['uncompressed_locales_java_list'] = (
+        _CreateLocalePaksAssetJavaList(config['uncompressed_assets']))
 
   build_utils.WriteJson(config, options.build_config, only_if_changed=True)
 

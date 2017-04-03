@@ -20,7 +20,6 @@ class CSSSelectorList;
 class Element;
 class ImmutableStylePropertySet;
 class MutableStylePropertySet;
-class StyleColor;
 class StyleRuleBase;
 class StyleRuleKeyframe;
 class StyleSheetContents;
@@ -36,7 +35,8 @@ class CORE_EXPORT CSSParser {
                                   const String&);
   static void parseSheet(const CSSParserContext&,
                          StyleSheetContents*,
-                         const String&);
+                         const String&,
+                         bool deferPropertyParsing = false);
   static CSSSelectorList parseSelector(const CSSParserContext&,
                                        StyleSheetContents*,
                                        const String&);

@@ -168,7 +168,8 @@ void SupervisedUserPrefStore::OnNewSettingsAvailable(
   }
 
   if (!old_prefs) {
-    FOR_EACH_OBSERVER(Observer, observers_, OnInitializationCompleted(true));
+    for (Observer& observer : observers_)
+      observer.OnInitializationCompleted(true);
     return;
   }
 
@@ -177,7 +178,8 @@ void SupervisedUserPrefStore::OnNewSettingsAvailable(
 
   // Send out change notifications.
   for (const std::string& pref : changed_prefs) {
-    FOR_EACH_OBSERVER(Observer, observers_, OnPrefValueChanged(pref));
+    for (Observer& observer : observers_)
+      observer.OnPrefValueChanged(pref);
   }
 }
 

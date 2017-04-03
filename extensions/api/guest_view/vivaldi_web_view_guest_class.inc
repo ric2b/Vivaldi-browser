@@ -26,6 +26,7 @@
   void UpdateTargetURL(content::WebContents *source, const GURL &url) override;
   void CreateSearch(const base::ListValue & search) override;
   void PasteAndGo(const base::ListValue & search) override;
+  void SimpleAction(const base::ListValue & search);
   void ToggleFullscreenModeForTab(content::WebContents *web_contents,
                                   bool enter_fullscreen);
   void ShowValidationMessage(content::WebContents *web_contents,
@@ -74,8 +75,10 @@
   void OnMouseEnter();
   void OnMouseLeave();
 
+  void ResetGestureState() { gesture_recording_ = false; }
+
  private:
-  void VisibleSSLStateChanged(const content::WebContents* source) override;
+  void VisibleSecurityStateChanged(content::WebContents* source) override;
 
   // Parses the user input string for new window creation.
   void ParseNewWindowUserInput(const std::string& user_input,
@@ -105,29 +108,17 @@
   // per RenderViewHost
   content::RenderViewHost* current_host_;
 
-  enum GestureDirection {
-    GestureDirectionNONE = -1,
-    GestureDirectionUp,
-    GestureDirectionRight,
-    GestureDirectionDown,
-    GestureDirectionLeft
-  };
   enum GestureState {
     GestureStateNone,
     GestureStateRecording,
     GestureStateBlocked
   };
 
-  GestureState gesture_state_;
-  int x_;
-  int y_;
-  // Current gesture direction
-  GestureDirection gesture_direction_;
-  // Candidate position for mouse gesture direction change.
-  int gesture_direction_candidate_x_;
-  int gesture_direction_candidate_y_;
-  // Accumulated gesture state.
-  int gesture_data_;
+  int mousedown_x_;
+  int mousedown_y_;
+  bool fire_context_menu_;
+
+  bool gesture_recording_;
 
 #ifdef VIVALDI_BUILD
   TabAlertState media_state_;

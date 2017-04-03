@@ -6,6 +6,7 @@
 
 #include "base/bind.h"
 #include "base/lazy_instance.h"
+#include "base/memory/weak_ptr.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "blimp/client/public/compositor/compositor_dependencies.h"
 #include "blimp/client/support/compositor/blimp_context_provider.h"
@@ -41,12 +42,19 @@ class SimpleTaskGraphRunner : public cc::SingleThreadTaskGraphRunner {
 class DisplayOutputSurface : public cc::OutputSurface {
  public:
   explicit DisplayOutputSurface(
-      scoped_refptr<cc::ContextProvider> context_provider)
-      : cc::OutputSurface(std::move(context_provider)) {}
+      scoped_refptr<cc::ContextProvider> context_provider,
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner)
+      : cc::OutputSurface(std::move(context_provider)),
+        task_runner_(std::move(task_runner)),
+        weak_ptr_factory_(this) {}
 
   ~DisplayOutputSurface() override = default;
 
   // cc::OutputSurface implementation
+  void BindToClient(cc::OutputSurfaceClient* client) override {
+    client_ = client;
+  }
+
   void EnsureBackbuffer() override {}
   void DiscardBackbuffer() override {
     context_provider()->ContextGL()->DiscardBackbufferCHROMIUM();
@@ -54,10 +62,20 @@ class DisplayOutputSurface : public cc::OutputSurface {
   void BindFramebuffer() override {
     context_provider()->ContextGL()->BindFramebuffer(GL_FRAMEBUFFER, 0);
   }
+  void Reshape(const gfx::Size& size,
+               float device_scale_factor,
+               const gfx::ColorSpace& color_space,
+               bool has_alpha) override {
+    context_provider()->ContextGL()->ResizeCHROMIUM(
+        size.width(), size.height(), device_scale_factor, has_alpha);
+  }
   void SwapBuffers(cc::OutputSurfaceFrame frame) override {
-    // See cc::OutputSurface::SwapBuffers() comment for details.
     context_provider_->ContextSupport()->Swap();
-    cc::OutputSurface::PostSwapBuffersComplete();
+    // The ack for SwapBuffers must be run asynchronously, that will be
+    // satisfied since we will go through a PostTask here.
+    task_runner_->PostTask(
+        FROM_HERE, base::Bind(&DisplayOutputSurface::SwapBuffersCallback,
+                              weak_ptr_factory_.GetWeakPtr()));
   }
   cc::OverlayCandidateValidator* GetOverlayCandidateValidator() const override {
     return nullptr;
@@ -74,6 +92,12 @@ class DisplayOutputSurface : public cc::OutputSurface {
   void ApplyExternalStencil() override {}
 
  private:
+  void SwapBuffersCallback() { client_->DidReceiveSwapBuffersAck(); }
+
+  cc::OutputSurfaceClient* client_ = nullptr;
+  scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
+  base::WeakPtrFactory<DisplayOutputSurface> weak_ptr_factory_;
+
   DISALLOW_COPY_AND_ASSIGN(DisplayOutputSurface);
 };
 
@@ -91,15 +115,15 @@ BlimpEmbedderCompositor::BlimpEmbedderCompositor(
   compositor_dependencies_->GetSurfaceManager()->RegisterFrameSinkId(
       frame_sink_id_);
 
+  animation_host_ = cc::AnimationHost::CreateMainInstance();
+
   cc::LayerTreeHostInProcess::InitParams params;
   params.client = this;
-  params.gpu_memory_buffer_manager =
-      compositor_dependencies_->GetGpuMemoryBufferManager();
   params.task_graph_runner = g_task_graph_runner.Pointer();
   cc::LayerTreeSettings settings;
   params.settings = &settings;
   params.main_task_runner = base::ThreadTaskRunnerHandle::Get();
-  params.animation_host = cc::AnimationHost::CreateMainInstance();
+  params.mutator_host = animation_host_.get();
   host_ = cc::LayerTreeHostInProcess::CreateSingleThreaded(this, &params);
 
   root_layer_->SetBackgroundColor(SK_ColorWHITE);
@@ -175,33 +199,37 @@ void BlimpEmbedderCompositor::HandlePendingCompositorFrameSinkRequest() {
     return;
 
   DCHECK(context_provider_);
+  context_provider_->BindToCurrentThread();
 
   gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager =
       compositor_dependencies_->GetGpuMemoryBufferManager();
+  cc::SharedBitmapManager* shared_bitmap_manager = nullptr;
 
+  auto task_runner = base::ThreadTaskRunnerHandle::Get();
   auto display_output_surface =
-      base::MakeUnique<DisplayOutputSurface>(context_provider_);
+      base::MakeUnique<DisplayOutputSurface>(context_provider_, task_runner);
 
-  auto* task_runner = base::ThreadTaskRunnerHandle::Get().get();
   std::unique_ptr<cc::SyntheticBeginFrameSource> begin_frame_source(
       new cc::DelayBasedBeginFrameSource(
-          base::MakeUnique<cc::DelayBasedTimeSource>(task_runner)));
+          base::MakeUnique<cc::DelayBasedTimeSource>(task_runner.get())));
   std::unique_ptr<cc::DisplayScheduler> scheduler(new cc::DisplayScheduler(
-      begin_frame_source.get(), task_runner,
+      begin_frame_source.get(), task_runner.get(),
       display_output_surface->capabilities().max_frames_pending));
 
   display_ = base::MakeUnique<cc::Display>(
-      nullptr /*shared_bitmap_manager*/, gpu_memory_buffer_manager,
-      host_->GetSettings().renderer_settings, std::move(begin_frame_source),
-      std::move(display_output_surface), std::move(scheduler),
-      base::MakeUnique<cc::TextureMailboxDeleter>(task_runner));
+      shared_bitmap_manager, gpu_memory_buffer_manager,
+      host_->GetSettings().renderer_settings, frame_sink_id_,
+      std::move(begin_frame_source), std::move(display_output_surface),
+      std::move(scheduler),
+      base::MakeUnique<cc::TextureMailboxDeleter>(task_runner.get()));
   display_->SetVisible(true);
   display_->Resize(viewport_size_in_px_);
 
   // The Browser compositor and display share the same context provider.
   auto compositor_frame_sink = base::MakeUnique<cc::DirectCompositorFrameSink>(
       frame_sink_id_, compositor_dependencies_->GetSurfaceManager(),
-      display_.get(), context_provider_, nullptr);
+      display_.get(), context_provider_, nullptr, gpu_memory_buffer_manager,
+      shared_bitmap_manager);
 
   host_->SetCompositorFrameSink(std::move(compositor_frame_sink));
 }

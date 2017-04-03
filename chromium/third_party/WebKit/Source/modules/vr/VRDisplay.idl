@@ -9,7 +9,7 @@ enum VREye {
 
 // http://mozvr.github.io/webvr-spec/webvr.html#vrdisplay
 [
-    RuntimeEnabled=WebVR
+    OriginTrialEnabled=WebVR
 ] interface VRDisplay {
     // An identifier for this device unique across VRDisplays.
     readonly attribute unsigned long displayId;
@@ -26,7 +26,7 @@ enum VREye {
     readonly attribute VRStageParameters stageParameters;
 
     boolean getFrameData(VRFrameData frameData);
-    VRPose getPose();
+    [DeprecateAs=VRDeprecatedGetPose] VRPose getPose();
     void resetPose();
 
     attribute double depthNear;

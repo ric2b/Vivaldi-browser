@@ -295,7 +295,7 @@ class PolicyRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
       return (400, 'Invalid request parameter')
     if request_type == 'register':
       response = self.ProcessRegister(rmsg.register_request)
-    elif request_type == 'cert_based_register':
+    elif request_type == 'certificate_based_register':
       response = self.ProcessCertBasedRegister(rmsg.register_request)
     elif request_type == 'api_authorization':
       response = self.ProcessApiAuthorization(rmsg.service_api_access_request)
@@ -550,7 +550,9 @@ class PolicyRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
               'google/ios/user')):
         fetch_response = response.policy_response.response.add()
         self.ProcessCloudPolicy(request, token_info, fetch_response, username)
-      elif request.policy_type == 'google/chrome/extension':
+      elif (request.policy_type in
+             ('google/chrome/extension',
+              'google/chromeos/signinextension')):
         self.ProcessCloudPolicyForExtensions(
             request, response.policy_response, token_info, username)
       else:
@@ -809,7 +811,7 @@ class PolicyRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     """
     # Send one PolicyFetchResponse for each extension that has
     # configuration data at the server.
-    ids = self.server.ListMatchingComponents('google/chrome/extension')
+    ids = self.server.ListMatchingComponents(request.policy_type)
     for settings_entity_id in ids:
       # Reuse the extension policy request, to trigger the same signature
       # type in the response.
@@ -819,7 +821,8 @@ class PolicyRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
       # Don't do key rotations for these messages.
       fetch_response.ClearField('new_public_key')
       fetch_response.ClearField('new_public_key_signature')
-      fetch_response.ClearField('new_public_key_verification_signature')
+      fetch_response.ClearField(
+          'new_public_key_verification_signature_deprecated')
 
   def ProcessCloudPolicy(self, msg, token_info, response, username=None):
     """Handles a cloud policy request. (New protocol for policy requests.)
@@ -863,7 +866,8 @@ class PolicyRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         if payload is None:
           self.GatherDevicePolicySettings(settings, policy.get(policy_key, {}))
           payload = settings.SerializeToString()
-      elif msg.policy_type == 'google/chrome/extension':
+      elif msg.policy_type in ('google/chrome/extension',
+                               'google/chromeos/signinextension'):
         settings = ep.ExternalPolicyData()
         payload = self.server.ReadPolicyFromDataDir(policy_key, settings)
         if payload is None:
@@ -919,7 +923,7 @@ class PolicyRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     else:
       # If the correct |username| is unknown, rely on a manually-configured
       # username from the configuration file or use a default.
-      policy_data.username = policy.get('policy_user', 'user@example.com')
+      policy_data.username = policy.get('policy_user', 'username@example.com')
     policy_data.device_id = token_info['device_id']
 
     # Set affiliation IDs so that user was managed on the device.
@@ -950,7 +954,8 @@ class PolicyRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
           if verification_sig:
             assert len(verification_sig) == 256, \
                 'bad signature size: %d' % len(verification_sig)
-            response.new_public_key_verification_signature = verification_sig
+            response.new_public_key_verification_signature_deprecated = (
+                verification_sig)
 
         if req_key:
           response.new_public_key_signature = (
@@ -1156,7 +1161,8 @@ class PolicyTestServer(testserver_base.BrokenPipeHandlerMixIn,
       dm.DeviceRegisterRequest.DEVICE: [
           'google/chromeos/device',
           'google/chromeos/publicaccount',
-          'google/chrome/extension'
+          'google/chrome/extension',
+          'google/chromeos/signinextension'
       ],
       dm.DeviceRegisterRequest.ANDROID_BROWSER: [
           'google/android/user'
@@ -1403,7 +1409,7 @@ class PolicyServerRunner(testserver_base.TestServerRunner):
                                   'in the same location: <filename>.sig and if '
                                   'present will add the signature to the '
                                   'policy blob as appropriate via the '
-                                  'new_public_key_verification_signature '
+                             'new_public_key_verification_signature_deprecated '
                                   'field.')
     self.option_parser.add_option('--log-level', dest='log_level',
                                   default='WARN',

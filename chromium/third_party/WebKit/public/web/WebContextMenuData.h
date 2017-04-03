@@ -128,8 +128,8 @@ struct WebContextMenuData {
   // Whether spell checking is enabled.
   bool isSpellCheckingEnabled;
 
-  //Wether to display paste and go context menu in input field
-  bool isVivaldiAddressfield;
+  // Kind of input field. Can be empty.
+  WebString vivaldiInputType;
 
   // Suggested filename for saving file.
   WebString suggestedFilename;
@@ -199,7 +199,6 @@ struct WebContextMenuData {
         hasImageContents(true),
         mediaFlags(MediaNone),
         isSpellCheckingEnabled(false),
-        isVivaldiAddressfield(false),
         misspellingHash(0),
         isEditable(false),
         writingDirectionDefault(CheckableMenuItemDisabled),

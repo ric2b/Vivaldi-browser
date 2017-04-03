@@ -79,7 +79,7 @@
 #include "chrome/browser/sessions/session_service_factory.h"
 #include "chrome/browser/sessions/session_tab_helper.h"
 #include "chrome/browser/sessions/tab_restore_service_factory.h"
-#include "chrome/browser/ssl/chrome_security_state_model_client.h"
+#include "chrome/browser/ssl/security_state_tab_helper.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/sync/sync_ui_util.h"
 #include "chrome/browser/tab_contents/retargeting_details.h"
@@ -167,7 +167,8 @@
 #include "components/history/core/browser/top_sites.h"
 #include "components/prefs/pref_service.h"
 #include "components/search/search.h"
-#include "components/security_state/security_state_model.h"
+#include "components/security_state/content/content_utils.h"
+#include "components/security_state/core/security_state.h"
 #include "components/sessions/core/session_types.h"
 #include "components/sessions/core/tab_restore_service.h"
 #include "components/startup_metric_utils/browser/startup_metric_utils.h"
@@ -203,6 +204,7 @@
 #include "extensions/common/constants.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/manifest_handlers/background_info.h"
+#include "extensions/features/features.h"
 #include "net/base/filename_util.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "net/cookies/cookie_monster.h"
@@ -222,10 +224,6 @@
 #include "ui/base/win/shell.h"
 #endif  // OS_WIN
 
-#if defined(ENABLE_EXTENSIONS)
-#include "chrome/browser/extensions/api/web_navigation/web_navigation_api.h"
-#endif // ENABLE_EXTENSIONS
-
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/fileapi/external_file_url_util.h"
 #endif
@@ -237,6 +235,10 @@
 #include "app/vivaldi_apptools.h"
 #include "extensions/api/extension_action_utils/extension_action_utils_api.h"
 #include "extensions/api/tabs/tabs_private_api.h"
+
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+#include "chrome/browser/extensions/api/web_navigation/web_navigation_api.h"
+#endif // ENABLE_EXTENSIONS
 
 using base::TimeDelta;
 using base::UserMetricsAction;
@@ -250,7 +252,6 @@ using content::RenderWidgetHostView;
 using content::SiteInstance;
 using content::WebContents;
 using extensions::Extension;
-using security_state::SecurityStateModel;
 using ui::WebDialogDelegate;
 using web_modal::WebContentsModalDialogManager;
 using blink::WebWindowFeatures;
@@ -399,7 +400,7 @@ Browser::Browser(const CreateParams& params)
 
   tab_strip_model_->AddObserver(this);
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   // In Vivaldi we add the ExtensionActionUtil object as an tabstripobserver for
   // each browser. We fetch the correct browser for each update.
   extensions::ExtensionActionUtil* extensionactionutils =
@@ -495,7 +496,7 @@ Browser::~Browser() {
   tab_strip_model_->RemoveObserver(this);
   bubble_manager_.reset();
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   // In Vivaldi we add the ExtensionActionUtil object as an tabstripobserver for
   // each browser. We fetch the correct browser for each update.
   extensions::ExtensionActionUtil* extensionactionutils =
@@ -1348,16 +1349,16 @@ bool Browser::CanDragEnter(content::WebContents* source,
   return true;
 }
 
-content::SecurityStyle Browser::GetSecurityStyle(
+blink::WebSecurityStyle Browser::GetSecurityStyle(
     WebContents* web_contents,
     content::SecurityStyleExplanations* security_style_explanations) {
-  ChromeSecurityStateModelClient* model_client =
-      ChromeSecurityStateModelClient::FromWebContents(web_contents);
-  DCHECK(model_client);
-  security_state::SecurityStateModel::SecurityInfo security_info;
-  model_client->GetSecurityInfo(&security_info);
-  return model_client->GetSecurityStyle(security_info,
-                                        security_style_explanations);
+  SecurityStateTabHelper* helper =
+      SecurityStateTabHelper::FromWebContents(web_contents);
+  DCHECK(helper);
+  security_state::SecurityInfo security_info;
+  helper->GetSecurityInfo(&security_info);
+  return security_state::GetSecurityStyle(security_info,
+                                          security_style_explanations);
 }
 
 void Browser::ShowCertificateViewerInDevTools(
@@ -1499,12 +1500,16 @@ void Browser::NavigationStateChanged(WebContents* source,
     hosted_app_controller_->UpdateLocationBarVisibility(true);
 }
 
-void Browser::VisibleSSLStateChanged(const WebContents* source) {
-  // When the current tab's SSL state changes, we need to update the URL
+void Browser::VisibleSecurityStateChanged(WebContents* source) {
+  // When the current tab's security state changes, we need to update the URL
   // bar to reflect the new state.
   DCHECK(source);
   if (tab_strip_model_->GetActiveWebContents() == source)
     UpdateToolbar(false);
+
+  SecurityStateTabHelper* helper =
+      SecurityStateTabHelper::FromWebContents(source);
+  helper->VisibleSecurityStateChanged();
 }
 
 void Browser::AddNewContents(WebContents* source,
@@ -1602,10 +1607,6 @@ bool Browser::TakeFocus(content::WebContents* source,
   return false;
 }
 
-gfx::Rect Browser::GetRootWindowResizerRect() const {
-  return window_->GetRootWindowResizerRect();
-}
-
 void Browser::BeforeUnloadFired(WebContents* web_contents,
                                 bool proceed,
                                 bool* proceed_to_fire_unload) {
@@ -1623,15 +1624,20 @@ void Browser::BeforeUnloadFired(WebContents* web_contents,
 }
 
 bool Browser::ShouldFocusLocationBarByDefault(WebContents* source) {
+  // Navigations in background tabs shouldn't change the focus state of the
+  // omnibox, since it's associated with the foreground tab.
+  if (source != tab_strip_model_->GetActiveWebContents())
+    return false;
+
   const content::NavigationEntry* entry =
       source->GetController().GetActiveEntry();
   if (entry) {
-    GURL url = entry->GetURL();
-    GURL virtual_url = entry->GetVirtualURL();
+    const GURL& url = entry->GetURL();
+    const GURL& virtual_url = entry->GetVirtualURL();
     if ((url.SchemeIs(content::kChromeUIScheme) &&
-        url.host() == chrome::kChromeUINewTabHost) ||
+         url.host_piece() == chrome::kChromeUINewTabHost) ||
         (virtual_url.SchemeIs(content::kChromeUIScheme) &&
-        virtual_url.host() == chrome::kChromeUINewTabHost)) {
+         virtual_url.host_piece() == chrome::kChromeUINewTabHost)) {
       return true;
     }
   }
@@ -1705,14 +1711,17 @@ void Browser::WebContentsCreated(WebContents* source_contents,
       content::Details<RetargetingDetails>(&details));
 }
 
-void Browser::RendererUnresponsive(WebContents* source) {
+void Browser::RendererUnresponsive(
+    WebContents* source,
+    const content::WebContentsUnresponsiveState& unresponsive_state) {
   // Ignore hangs if a tab is blocked.
   int index = tab_strip_model_->GetIndexOfWebContents(source);
   DCHECK_NE(TabStripModel::kNoTab, index);
   if (tab_strip_model_->IsTabBlocked(index))
     return;
 
-  TabDialogs::FromWebContents(source)->ShowHungRendererDialog();
+  TabDialogs::FromWebContents(source)->ShowHungRendererDialog(
+      unresponsive_state);
 }
 
 void Browser::RendererResponsive(WebContents* source) {
@@ -1927,6 +1936,18 @@ void Browser::SwapTabContents(content::WebContents* old_contents,
                               content::WebContents* new_contents,
                               bool did_start_load,
                               bool did_finish_load) {
+  // Copies the background color from an old WebContents to a new one that
+  // replaces it on the screen. This allows the new WebContents to use the
+  // old one's background color as the starting background color, before having
+  // loaded any contents. As a result, we avoid flashing white when navigating
+  // from a site whith a dark background to another site with a dark background.
+  if (old_contents && new_contents) {
+    RenderWidgetHostView* old_view = old_contents->GetMainFrame()->GetView();
+    RenderWidgetHostView* new_view = new_contents->GetMainFrame()->GetView();
+    if (old_view && new_view)
+      new_view->SetBackgroundColor(old_view->background_color());
+  }
+
   int index = tab_strip_model_->GetIndexOfWebContents(old_contents);
   DCHECK_NE(TabStripModel::kNoTab, index);
   tab_strip_model_->ReplaceWebContentsAt(index, new_contents);
@@ -1976,7 +1997,13 @@ void Browser::SetWebContentsBlocked(content::WebContents* web_contents,
     return;
   }
   tab_strip_model_->SetTabBlocked(index, blocked);
-  if (!blocked && tab_strip_model_->GetActiveWebContents() == web_contents)
+
+  bool browser_active = BrowserList::GetInstance()->GetLastActive() == this;
+  bool contents_is_active =
+      tab_strip_model_->GetActiveWebContents() == web_contents;
+  // If the WebContents is foremost (the active tab in the front-most browser)
+  // and is being unblocked, focus it to make sure that input works again.
+  if (!blocked && contents_is_active && browser_active)
     web_contents->Focus();
 }
 
@@ -2070,7 +2097,7 @@ void Browser::Observe(int type,
   }
 }
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 ///////////////////////////////////////////////////////////////////////////////
 // Browser, extensions::ExtensionRegistryObserver implementation:
 
@@ -2114,7 +2141,7 @@ void Browser::OnExtensionUnloaded(
       // schemes, e.g. https://mail.google.com if you have the Gmail app
       // installed.
       if ((web_contents->GetURL().SchemeIs(extensions::kExtensionScheme) &&
-           web_contents->GetURL().host() == extension->id()) ||
+           web_contents->GetURL().host_piece() == extension->id()) ||
           (extensions::TabHelper::FromWebContents(web_contents)
                ->extension_app() == extension)) {
         tab_strip_model_->CloseWebContentsAt(i, TabStripModel::CLOSE_NONE);
@@ -2124,7 +2151,7 @@ void Browser::OnExtensionUnloaded(
     }
   }
 }
-#endif  // defined(ENABLE_EXTENSIONS)
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
 ///////////////////////////////////////////////////////////////////////////////
 // Browser, translate::ContentTranslateDriver::Observer implementation:
@@ -2595,7 +2622,7 @@ void Browser::UpdateBookmarkBarState(BookmarkBarStateChangeReason reason) {
 }
 
 bool Browser::ShouldHideUIForFullscreen() const {
-  // Windows and GTK remove the top controls in fullscreen, but Mac and Ash
+  // Windows and GTK remove the browser controls in fullscreen, but Mac and Ash
   // keep the controls in a slide-down panel.
   return window_ && window_->ShouldHideUIForFullscreen();
 }

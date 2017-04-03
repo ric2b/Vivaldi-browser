@@ -21,12 +21,10 @@
 #include "android_webview/common/aw_switches.h"
 #include "android_webview/common/devtools_instrumentation.h"
 #include "android_webview/native/aw_autofill_client.h"
-#include "android_webview/native/aw_browser_dependency_factory.h"
 #include "android_webview/native/aw_contents_client_bridge.h"
 #include "android_webview/native/aw_contents_io_thread_client_impl.h"
 #include "android_webview/native/aw_contents_lifecycle_notifier.h"
 #include "android_webview/native/aw_gl_functor.h"
-#include "android_webview/native/aw_message_port_service_impl.h"
 #include "android_webview/native/aw_pdf_exporter.h"
 #include "android_webview/native/aw_picture.h"
 #include "android_webview/native/aw_web_contents_delegate.h"
@@ -57,6 +55,7 @@
 #include "components/autofill/core/browser/autofill_manager.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata_service.h"
 #include "components/navigation_interception/intercept_navigation_delegate.h"
+#include "content/public/browser/android/app_web_message_port_service.h"
 #include "content/public/browser/android/content_view_core.h"
 #include "content/public/browser/android/synchronous_compositor.h"
 #include "content/public/browser/browser_thread.h"
@@ -108,6 +107,8 @@ bool g_force_auxiliary_bitmap_rendering = false;
 
 std::string g_locale;
 
+std::string g_locale_list;
+
 const void* kAwContentsUserDataKey = &kAwContentsUserDataKey;
 
 class AwContentsUserData : public base::SupportsUserData::Data {
@@ -148,15 +149,22 @@ AwContents* AwContents::FromID(int render_process_id, int render_view_id) {
 }
 
 // static
-void SetLocale(JNIEnv* env,
-               const JavaParamRef<jclass>&,
-               const JavaParamRef<jstring>& locale) {
+void UpdateDefaultLocale(JNIEnv* env,
+                         const JavaParamRef<jclass>&,
+                         const JavaParamRef<jstring>& locale,
+                         const JavaParamRef<jstring>& locale_list) {
   g_locale = ConvertJavaStringToUTF8(env, locale);
+  g_locale_list = ConvertJavaStringToUTF8(env, locale_list);
 }
 
 // static
 std::string AwContents::GetLocale() {
   return g_locale;
+}
+
+// static
+std::string AwContents::GetLocaleList() {
+  return g_locale_list;
 }
 
 // static
@@ -268,7 +276,7 @@ void AwContents::InitAutofillIfNecessary(bool enabled) {
   AwAutofillClient::CreateForWebContents(web_contents);
   ContentAutofillDriverFactory::CreateForWebContentsAndDelegate(
       web_contents, AwAutofillClient::FromWebContents(web_contents),
-      base::android::GetDefaultLocale(),
+      base::android::GetDefaultLocaleString(),
       AutofillManager::DISABLE_AUTOFILL_DOWNLOAD_MANAGER);
 }
 
@@ -850,11 +858,6 @@ void AwContents::SetIsPaused(JNIEnv* env,
                              bool paused) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   browser_view_renderer_.SetIsPaused(paused);
-  ContentViewCore* cvc =
-      ContentViewCore::FromWebContents(web_contents_.get());
-  if (cvc) {
-    cvc->PauseOrResumeGeolocation(paused);
-  }
 }
 
 void AwContents::OnAttachedToWindow(JNIEnv* env,
@@ -1224,15 +1227,9 @@ void AwContents::PostMessageToFrame(JNIEnv* env,
   base::string16 j_message(ConvertJavaStringToUTF16(env, message));
   std::vector<int> j_ports;
 
-  if (sent_ports != nullptr) {
+  if (sent_ports != nullptr)
     base::android::JavaIntArrayToIntVector(env, sent_ports, &j_ports);
-    BrowserThread::PostTask(
-        BrowserThread::IO,
-        FROM_HERE,
-        base::Bind(&AwMessagePortServiceImpl::RemoveSentPorts,
-                   base::Unretained(AwMessagePortServiceImpl::GetInstance()),
-                   j_ports));
-  }
+
   content::MessagePortProvider::PostMessageToFrame(web_contents_.get(),
                                                    source_origin,
                                                    j_target_origin,
@@ -1240,24 +1237,11 @@ void AwContents::PostMessageToFrame(JNIEnv* env,
                                                    j_ports);
 }
 
-scoped_refptr<AwMessagePortMessageFilter>
-AwContents::GetMessagePortMessageFilter() {
-  // Create a message port message filter if necessary
-  if (message_port_message_filter_.get() == nullptr) {
-    message_port_message_filter_ =
-        new AwMessagePortMessageFilter(
-            web_contents_->GetMainFrame()->GetRoutingID());
-    web_contents_->GetRenderProcessHost()->AddFilter(
-        message_port_message_filter_.get());
-  }
-  return message_port_message_filter_;
-}
-
 void AwContents::CreateMessageChannel(JNIEnv* env,
                                       const JavaParamRef<jobject>& obj,
                                       const JavaParamRef<jobjectArray>& ports) {
-  AwMessagePortServiceImpl::GetInstance()->CreateMessageChannel(env, ports,
-      GetMessagePortMessageFilter());
+  content::MessagePortProvider::GetAppWebMessagePortService()
+      ->CreateMessageChannel(env, ports, web_contents_.get());
 }
 
 void AwContents::GrantFileSchemeAccesstoChildProcess(

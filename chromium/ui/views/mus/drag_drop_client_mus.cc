@@ -11,8 +11,8 @@
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "services/ui/public/cpp/window.h"
+#include "ui/aura/mus/os_exchange_data_provider_mus.h"
 #include "ui/aura/window.h"
-#include "ui/views/mus/os_exchange_data_provider_mus.h"
 
 namespace views {
 namespace {
@@ -35,7 +35,8 @@ int DragDropClientMus::StartDragAndDrop(
     ui::DragDropTypes::DragEventSource source,
     bool& cancelled) {
   std::map<std::string, std::vector<uint8_t>> drag_data =
-      static_cast<const OSExchangeDataProviderMus&>(data.provider()).GetData();
+      static_cast<const aura::OSExchangeDataProviderMus&>(data.provider())
+          .GetData();
 
   // TODO(erg): Right now, I'm passing the cursor_location, but maybe I want to
   // pass OSExchangeData::GetDragImageOffset() instead?
@@ -59,18 +60,6 @@ int DragDropClientMus::StartDragAndDrop(
   current_dragging_client = nullptr;
 
   return action_taken;
-}
-
-void DragDropClientMus::DragUpdate(aura::Window* target,
-                                   const ui::LocatedEvent& event) {
-  // Only called on OSX.
-  NOTREACHED();
-}
-
-void DragDropClientMus::Drop(aura::Window* target,
-                             const ui::LocatedEvent& event) {
-  // Only called on OSX.
-  NOTREACHED();
 }
 
 void DragDropClientMus::DragCancel() {

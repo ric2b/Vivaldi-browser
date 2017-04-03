@@ -2,8 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "core/dom/DOMMatrixReadOnly.h"
+
+#include "bindings/core/v8/V8ObjectBuilder.h"
 #include "core/dom/DOMMatrix.h"
 #include "core/dom/DOMMatrixInit.h"
+#include "core/dom/DOMPoint.h"
+#include "core/dom/DOMPointInit.h"
 
 namespace blink {
 namespace {
@@ -153,8 +158,17 @@ DOMMatrix* DOMMatrixReadOnly::translate(double tx, double ty, double tz) {
   return DOMMatrix::create(this)->translateSelf(tx, ty, tz);
 }
 
-DOMMatrix* DOMMatrixReadOnly::scale(double scale, double ox, double oy) {
-  return DOMMatrix::create(this)->scaleSelf(scale, ox, oy);
+DOMMatrix* DOMMatrixReadOnly::scale(double sx) {
+  return scale(sx, sx);
+}
+
+DOMMatrix* DOMMatrixReadOnly::scale(double sx,
+                                    double sy,
+                                    double sz,
+                                    double ox,
+                                    double oy,
+                                    double oz) {
+  return DOMMatrix::create(this)->scaleSelf(sx, sy, sz, ox, oy, oz);
 }
 
 DOMMatrix* DOMMatrixReadOnly::scale3d(double scale,
@@ -164,13 +178,27 @@ DOMMatrix* DOMMatrixReadOnly::scale3d(double scale,
   return DOMMatrix::create(this)->scale3dSelf(scale, ox, oy, oz);
 }
 
-DOMMatrix* DOMMatrixReadOnly::scaleNonUniform(double sx,
-                                              double sy,
-                                              double sz,
-                                              double ox,
-                                              double oy,
-                                              double oz) {
-  return DOMMatrix::create(this)->scaleNonUniformSelf(sx, sy, sz, ox, oy, oz);
+DOMMatrix* DOMMatrixReadOnly::rotate(double rotX) {
+  return DOMMatrix::create(this)->rotateSelf(rotX);
+}
+
+DOMMatrix* DOMMatrixReadOnly::rotate(double rotX, double rotY) {
+  return DOMMatrix::create(this)->rotateSelf(rotX, rotY);
+}
+
+DOMMatrix* DOMMatrixReadOnly::rotate(double rotX, double rotY, double rotZ) {
+  return DOMMatrix::create(this)->rotateSelf(rotX, rotY, rotZ);
+}
+
+DOMMatrix* DOMMatrixReadOnly::rotateFromVector(double x, double y) {
+  return DOMMatrix::create(this)->rotateFromVectorSelf(x, y);
+}
+
+DOMMatrix* DOMMatrixReadOnly::rotateAxisAngle(double x,
+                                              double y,
+                                              double z,
+                                              double angle) {
+  return DOMMatrix::create(this)->rotateAxisAngleSelf(x, y, z, angle);
 }
 
 DOMMatrix* DOMMatrixReadOnly::skewX(double sx) {
@@ -201,6 +229,24 @@ DOMMatrix* DOMMatrixReadOnly::flipY() {
 
 DOMMatrix* DOMMatrixReadOnly::inverse() {
   return DOMMatrix::create(this)->invertSelf();
+}
+
+DOMPoint* DOMMatrixReadOnly::transformPoint(const DOMPointInit& point) {
+  if (is2D() && point.z() == 0 && point.w() == 1) {
+    double x = point.x() * m11() + point.y() * m12() + m41();
+    double y = point.x() * m12() + point.y() * m22() + m42();
+    return DOMPoint::create(x, y, 0, 1);
+  }
+
+  double x = point.x() * m11() + point.y() * m21() + point.z() * m31() +
+             point.w() * m41();
+  double y = point.x() * m12() + point.y() * m22() + point.z() * m32() +
+             point.w() * m42();
+  double z = point.x() * m13() + point.y() * m23() + point.z() * m33() +
+             point.w() * m43();
+  double w = point.x() * m14() + point.y() * m24() + point.z() * m34() +
+             point.w() * m44();
+  return DOMPoint::create(x, y, z, w);
 }
 
 DOMFloat32Array* DOMMatrixReadOnly::toFloat32Array() const {
@@ -242,6 +288,36 @@ const String DOMMatrixReadOnly::toString() const {
   stream << ")";
 
   return String(stream.str().c_str());
+}
+
+ScriptValue DOMMatrixReadOnly::toJSONForBinding(
+    ScriptState* scriptState) const {
+  V8ObjectBuilder result(scriptState);
+  result.addNumber("a", a());
+  result.addNumber("b", b());
+  result.addNumber("c", c());
+  result.addNumber("d", d());
+  result.addNumber("e", e());
+  result.addNumber("f", f());
+  result.addNumber("m11", m11());
+  result.addNumber("m12", m12());
+  result.addNumber("m13", m13());
+  result.addNumber("m14", m14());
+  result.addNumber("m21", m21());
+  result.addNumber("m22", m22());
+  result.addNumber("m23", m23());
+  result.addNumber("m24", m24());
+  result.addNumber("m31", m31());
+  result.addNumber("m32", m32());
+  result.addNumber("m33", m33());
+  result.addNumber("m34", m34());
+  result.addNumber("m41", m41());
+  result.addNumber("m42", m42());
+  result.addNumber("m43", m43());
+  result.addNumber("m44", m44());
+  result.addBoolean("is2D", is2D());
+  result.addBoolean("isIdentity", isIdentity());
+  return result.scriptValue();
 }
 
 }  // namespace blink

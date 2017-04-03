@@ -20,8 +20,6 @@
 
 namespace ui {
 
-class UIResourceProvider;
-
 // A Java counterpart will be generated for this enum.
 // GENERATED_JAVA_ENUM_PACKAGE: org.chromium.ui.resources
 enum AndroidResourceType {
@@ -46,6 +44,7 @@ class UI_ANDROID_EXPORT ResourceManager {
     ~Resource();
     gfx::Rect Border(const gfx::Size& bounds) const;
     gfx::Rect Border(const gfx::Size& bounds, const gfx::InsetsF& scale) const;
+    size_t EstimateMemoryUsage() const;
 
     std::unique_ptr<cc::ScopedUIResource> ui_resource;
     gfx::Size size;

@@ -3,26 +3,30 @@
 # found in the LICENSE file.
 
 import("//build/config/features.gni")
+import("//third_party/WebKit/public/public_features.gni")
 import("//third_party/WebKit/Source/core/core.gni")
 
 devtools_embedder_scripts = [
-  "front_end/devtools.js",
+  "front_end/devtools_compatibility.js",
   "front_end/Tests.js",
 ]
 devtools_core_base_files = [
+  "front_end/audits2_worker.js",
+  "front_end/audits2_worker.json",
   "front_end/inspector.js",
   "front_end/inspector.json",
   "front_end/formatter_worker.js",
   "front_end/formatter_worker.json",
   "front_end/heap_snapshot_worker.js",
   "front_end/heap_snapshot_worker.json",
-  "front_end/temp_storage_shared_worker.js",
-  "front_end/temp_storage_shared_worker.json",
+  "front_end/utility_shared_worker.js",
+  "front_end/utility_shared_worker.json",
   "front_end/toolbox.js",
   "front_end/toolbox.json",
   "front_end/Runtime.js",
 ]
 devtools_common_js_files = [
+  "front_end/common/CharacterIdMap.js",
   "front_end/common/Color.js",
   "front_end/common/Console.js",
   "front_end/common/ContentProvider.js",
@@ -45,7 +49,6 @@ devtools_common_js_files = [
   "front_end/common/Throttler.js",
   "front_end/common/Trie.js",
   "front_end/common/UIString.js",
-  "front_end/common/WebInspector.js",
   "front_end/common/Worker.js",
 ]
 devtools_components_js_files = [
@@ -64,6 +67,7 @@ devtools_components_js_files = [
   "front_end/components/DOMPresentationUtils.js",
   "front_end/components/ExecutionContextSelector.js",
   "front_end/components/HandlerRegistry.js",
+  "front_end/components/JavaScriptAutocomplete.js",
   "front_end/components/BreakpointsSidebarPaneBase.js",
   "front_end/components/Linkifier.js",
   "front_end/components/NetworkConditionsSelector.js",
@@ -98,6 +102,7 @@ devtools_screencast_js_files = [
 ]
 devtools_sdk_js_files = [
   "front_end/sdk/ApplicationCacheModel.js",
+  "front_end/sdk/Connections.js",
   "front_end/sdk/ConsoleModel.js",
   "front_end/sdk/ContentProviders.js",
   "front_end/sdk/CookieParser.js",
@@ -118,6 +123,7 @@ devtools_sdk_js_files = [
   "front_end/sdk/HeapProfilerModel.js",
   "front_end/sdk/InspectorBackend.js",
   "front_end/sdk/InspectorBackendHostedMode.js",
+  "front_end/sdk/LayerTreeBase.js",
   "front_end/sdk/NetworkLog.js",
   "front_end/sdk/NetworkManager.js",
   "front_end/sdk/NetworkRequest.js",
@@ -137,7 +143,6 @@ devtools_sdk_js_files = [
   "front_end/sdk/TargetManager.js",
   "front_end/sdk/TracingManager.js",
   "front_end/sdk/TracingModel.js",
-  "front_end/sdk/WorkerManager.js",
 ]
 devtools_workspace_js_files = [
   "front_end/workspace/FileManager.js",
@@ -159,7 +164,6 @@ devtools_bindings_js_files = [
   "front_end/bindings/FileSystemWorkspaceBinding.js",
   "front_end/bindings/FileUtils.js",
   "front_end/bindings/LiveLocation.js",
-  "front_end/bindings/NetworkMapping.js",
   "front_end/bindings/NetworkProject.js",
   "front_end/bindings/PresentationConsoleMessageHelper.js",
   "front_end/bindings/ResourceScriptMapping.js",
@@ -170,7 +174,9 @@ devtools_bindings_js_files = [
 ]
 devtools_persistence_js_files = [
   "front_end/persistence/DefaultMapping.js",
+  "front_end/persistence/Automapping.js",
   "front_end/persistence/Persistence.js",
+  "front_end/persistence/PersistenceUtils.js",
 ]
 devtools_platform_js_files = [
   "front_end/platform/DOMExtension.js",
@@ -228,7 +234,6 @@ devtools_ui_js_files = [
   "front_end/ui/slider.css",
   "front_end/ui/softContextMenu.css",
   "front_end/ui/smallBubble.css",
-  "front_end/ui/smallIcon.css",
   "front_end/ui/splitWidget.css",
   "front_end/ui/toolbar.css",
   "front_end/ui/tooltip.css",
@@ -253,6 +258,7 @@ devtools_ui_js_files = [
   "front_end/ui/FilterBar.js",
   "front_end/ui/ForwardedInputEventHandler.js",
   "front_end/ui/HistoryInput.js",
+  "front_end/ui/Icon.js",
   "front_end/ui/Infobar.js",
   "front_end/ui/InplaceEditor.js",
   "front_end/ui/TextEditor.js",
@@ -291,10 +297,8 @@ devtools_main_js_files = [
   "front_end/main/remoteDebuggingTerminatedScreen.css",
   "front_end/main/renderingOptions.css",
   "front_end/main/targetCrashedScreen.css",
-  "front_end/main/Connections.js",
   "front_end/main/Main.js",
   "front_end/main/OverlayController.js",
-  "front_end/main/RemoteLocationManager.js",
   "front_end/main/RenderingOptions.js",
   "front_end/main/SimpleApp.js",
 ]
@@ -302,6 +306,8 @@ devtools_module_json_files = [
   "front_end/accessibility/module.json",
   "front_end/animation/module.json",
   "front_end/audits/module.json",
+  "front_end/audits2/module.json",
+  "front_end/audits2_worker/module.json",
   "front_end/bindings/module.json",
   "front_end/cm_modes/module.json",
   "front_end/common/module.json",
@@ -333,7 +339,7 @@ devtools_module_json_files = [
   "front_end/source_frame/module.json",
   "front_end/sources/module.json",
   "front_end/snippets/module.json",
-  "front_end/temp_storage_shared_worker/module.json",
+  "front_end/utility_shared_worker/module.json",
   "front_end/text_editor/module.json",
   "front_end/timeline_model/module.json",
   "front_end/timeline/module.json",
@@ -378,6 +384,11 @@ devtools_audits_js_files = [
   "front_end/audits/AuditRules.js",
   "front_end/audits/AuditsPanel.js",
 ]
+devtools_audits2_js_files = [ "front_end/audits2/Audits2Panel.js" ]
+devtools_audits2_worker_js_files = [
+  "front_end/audits2_worker/Audits2Service.js",
+  "front_end/audits2_worker/lighthouse/lighthouse-background.js",
+]
 devtools_cm_modes_js_files = [
   "front_end/cm_modes/clike.js",
   "front_end/cm_modes/coffeescript.js",
@@ -395,6 +406,7 @@ devtools_components_lazy_js_files = [
   "front_end/components_lazy/FilmStripModel.js",
   "front_end/components_lazy/FilmStripView.js",
   "front_end/components_lazy/LineLevelProfile.js",
+  "front_end/components_lazy/CoverageProfile.js",
 ]
 devtools_console_js_files = [
   "front_end/console/consoleView.css",
@@ -504,6 +516,7 @@ devtools_heap_snapshot_worker_js_files = [
 ]
 devtools_layers_js_files = [
   "front_end/layers/LayerPaintProfilerView.js",
+  "front_end/layers/LayerTreeModel.js",
   "front_end/layers/LayersPanel.js",
 ]
 devtools_network_js_files = [
@@ -533,6 +546,7 @@ devtools_network_js_files = [
   "front_end/network/NetworkOverview.js",
   "front_end/network/NetworkPanel.js",
   "front_end/network/NetworkTimeCalculator.js",
+  "front_end/network/NetworkWaterfallColumn.js",
   "front_end/network/RequestCookiesView.js",
   "front_end/network/RequestHeadersView.js",
   "front_end/network/RequestHTMLView.js",
@@ -634,6 +648,7 @@ devtools_source_frame_js_files = [
 devtools_sources_js_files = [
   "front_end/sources/eventListenerBreakpoints.css",
   "front_end/sources/fileBasedSearchResultsPane.css",
+  "front_end/sources/navigatorTree.css",
   "front_end/sources/navigatorView.css",
   "front_end/sources/revisionHistory.css",
   "front_end/sources/serviceWorkersSidebar.css",
@@ -682,8 +697,8 @@ devtools_snippets_js_files = [
   "front_end/snippets/ScriptSnippetModel.js",
   "front_end/snippets/SnippetStorage.js",
 ]
-devtools_temp_storage_shared_worker_js_files =
-    [ "front_end/temp_storage_shared_worker/TempStorageSharedWorker.js" ]
+devtools_utility_shared_worker_js_files =
+    [ "front_end/utility_shared_worker/TempStorage.js" ]
 devtools_text_editor_js_files = [
   "front_end/text_editor/cmdevtools.css",
   "front_end/text_editor/CodeMirrorTextEditor.js",
@@ -698,7 +713,7 @@ devtools_terminal_js_files = [
   "front_end/terminal/xterm.js/build/xterm.js",
 ]
 devtools_timeline_model_js_files = [
-  "front_end/timeline_model/LayerTreeModel.js",
+  "front_end/timeline_model/TracingLayerTree.js",
   "front_end/timeline_model/TimelineFrameModel.js",
   "front_end/timeline_model/TimelineIRModel.js",
   "front_end/timeline_model/TimelineJSProfile.js",
@@ -719,6 +734,7 @@ devtools_layer_viewer_js_files = [
 devtools_timeline_js_files = [
   "front_end/timeline/invalidationsTree.css",
   "front_end/timeline/timelineFlamechartPopover.css",
+  "front_end/timeline/timelinePaintProfiler.css",
   "front_end/timeline/timelinePanel.css",
   "front_end/timeline/timelineStatusDialog.css",
   "front_end/timeline/CountersGraph.js",
@@ -741,6 +757,7 @@ devtools_ui_lazy_js_files = [
   "front_end/ui_lazy/overviewGrid.css",
   "front_end/ui_lazy/pieChart.css",
   "front_end/ui_lazy/timelineGrid.css",
+  "front_end/ui_lazy/ChartViewport.js",
   "front_end/ui_lazy/CommandMenu.js",
   "front_end/ui_lazy/DataGrid.js",
   "front_end/ui_lazy/FilteredListWidget.js",
@@ -753,6 +770,8 @@ devtools_ui_lazy_js_files = [
   "front_end/ui_lazy/TimelineOverviewPane.js",
   "front_end/ui_lazy/ViewportDataGrid.js",
 ]
+devtools_worker_service_js_files =
+    [ "front_end/worker_service/ServiceDispatcher.js" ]
 
 # Third-party code.
 devtools_cm_css_files = [ "front_end/cm/codemirror.css" ]
@@ -802,8 +821,6 @@ devtools_image_files = [
   "front_end/Images/fileSystem.png",
   "front_end/Images/forward.png",
   "front_end/Images/frame.png",
-  "front_end/Images/graphLabelCalloutLeft.png",
-  "front_end/Images/graphLabelCalloutRight.png",
   "front_end/Images/ic_info_black_18dp.svg",
   "front_end/Images/ic_warning_black_18dp.svg",
   "front_end/Images/navigationControls.png",
@@ -860,6 +877,7 @@ devtools_core_files =
 
 devtools_modules_js_files =
     devtools_accessibility_js_files + devtools_audits_js_files +
+    devtools_audits2_js_files + devtools_audits2_worker_js_files +
     devtools_animation_js_files + devtools_cm_modes_js_files +
     devtools_components_lazy_js_files + devtools_console_js_files +
     devtools_devices_js_files + devtools_diff_js_files +
@@ -872,10 +890,10 @@ devtools_modules_js_files =
     devtools_formatter_worker_js_files + devtools_settings_js_files +
     devtools_services_js_files + devtools_snippets_js_files +
     devtools_source_frame_js_files + devtools_sources_js_files +
-    devtools_temp_storage_shared_worker_js_files +
-    devtools_text_editor_js_files + devtools_terminal_js_files +
-    devtools_timeline_model_js_files + devtools_timeline_js_files +
-    devtools_ui_lazy_js_files + devtools_layer_viewer_js_files
+    devtools_utility_shared_worker_js_files + devtools_text_editor_js_files +
+    devtools_terminal_js_files + devtools_timeline_model_js_files +
+    devtools_timeline_js_files + devtools_ui_lazy_js_files +
+    devtools_layer_viewer_js_files + devtools_worker_service_js_files
 
 all_devtools_files = devtools_cm_css_files + devtools_cm_js_files +
                      devtools_core_files + devtools_module_json_files +
@@ -898,12 +916,13 @@ generated_entry_files = [
 generated_workers = [
   "$resources_out_dir/formatter_worker.js",
   "$resources_out_dir/heap_snapshot_worker.js",
-  "$resources_out_dir/temp_storage_shared_worker.js",
+  "$resources_out_dir/utility_shared_worker.js",
 ]
 
 generated_bundled_modules = [
   "$resources_out_dir/animation/animation_module.js",
   "$resources_out_dir/audits/audits_module.js",
+  "$resources_out_dir/audits2/audits2_module.js",
   "$resources_out_dir/components_lazy/components_lazy_module.js",
   "$resources_out_dir/console/console_module.js",
   "$resources_out_dir/devices/devices_module.js",
@@ -916,7 +935,6 @@ generated_bundled_modules = [
   "$resources_out_dir/resources/resources_module.js",
   "$resources_out_dir/sass/sass_module.js",
   "$resources_out_dir/security/security_module.js",
-  "$resources_out_dir/services/services_module.js",
   "$resources_out_dir/settings/settings_module.js",
   "$resources_out_dir/snippets/snippets_module.js",
   "$resources_out_dir/source_frame/source_frame_module.js",
@@ -941,7 +959,7 @@ devtools_applications = [
   "toolbox",
   "formatter_worker",
   "heap_snapshot_worker",
-  "temp_storage_shared_worker",
+  "utility_shared_worker",
 ]
 
 #-------------------------------------------------------------------------------
@@ -985,7 +1003,7 @@ copy("copy_emulated_devices_images") {
 }
 
 action("generate_devtools_grd") {
-  script = "scripts/generate_devtools_grd.py"
+  script = "scripts/build/generate_devtools_grd.py"
 
   deps = [
     ":devtools_frontend_resources",
@@ -1025,7 +1043,7 @@ action("generate_devtools_grd") {
 }
 
 action("devtools_extension_api") {
-  script = "scripts/generate_devtools_extension_api.py"
+  script = "scripts/build/generate_devtools_extension_api.py"
 
   inputs = devtools_extension_api_files
   outputs = [
@@ -1037,7 +1055,7 @@ action("devtools_extension_api") {
 }
 
 action("supported_css_properties") {
-  script = "scripts/generate_supported_css.py"
+  script = "scripts/build/generate_supported_css.py"
 
   inputs = [
     "../core/css/CSSProperties.in",
@@ -1052,7 +1070,7 @@ action("supported_css_properties") {
 }
 
 action("frontend_protocol_sources") {
-  script = "scripts/CodeGeneratorFrontend.py"
+  script = "scripts/build/code_generator_frontend.py"
   deps = [
     "../core/inspector:protocol_version",
   ]
@@ -1070,7 +1088,7 @@ action("frontend_protocol_sources") {
 }
 
 action("build_release_devtools") {
-  script = "scripts/build_release_applications.py"
+  script = "scripts/build/build_release_applications.py"
 
   deps = [
     ":frontend_protocol_sources",
@@ -1078,8 +1096,8 @@ action("build_release_devtools") {
   ]
 
   helper_scripts = [
-    "scripts/modular_build.py",
-    "scripts/rjsmin.py",
+    "scripts/build/modular_build.py",
+    "scripts/build/rjsmin.py",
   ]
 
   inputs = helper_scripts + all_devtools_files + generated_scripts + [
@@ -1102,7 +1120,7 @@ if (debug_devtools) {
   resources_out_debug_dir = "$root_out_dir/resources/inspector/debug"
 
   action("build_debug_devtools") {
-    script = "scripts/build_debug_applications.py"
+    script = "scripts/build/build_debug_applications.py"
 
     deps = [
       ":copy_generated_scripts",

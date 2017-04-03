@@ -16,12 +16,15 @@
 #include "base/memory/weak_ptr.h"
 #include "base/threading/non_thread_safe.h"
 #include "content/common/content_export.h"
+#include "content/common/media/media_devices.h"
+#include "content/common/media/media_devices.mojom.h"
 #include "content/public/renderer/render_frame_observer.h"
+#include "content/renderer/media/media_devices_event_dispatcher.h"
 #include "content/renderer/media/media_stream_dispatcher_eventhandler.h"
 #include "content/renderer/media/media_stream_source.h"
+#include "services/service_manager/public/cpp/interface_provider.h"
 #include "third_party/WebKit/public/platform/WebMediaStream.h"
 #include "third_party/WebKit/public/platform/WebMediaStreamSource.h"
-#include "third_party/WebKit/public/platform/WebSourceInfo.h"
 #include "third_party/WebKit/public/platform/WebVector.h"
 #include "third_party/WebKit/public/web/WebMediaDeviceChangeObserver.h"
 #include "third_party/WebKit/public/web/WebMediaDevicesRequest.h"
@@ -33,7 +36,6 @@ class PeerConnectionDependencyFactory;
 class MediaStreamAudioSource;
 class MediaStreamDispatcher;
 class MediaStreamVideoSource;
-class VideoCapturerDelegate;
 
 // UserMediaClientImpl is a delegate for the Media Stream GetUserMedia API.
 // It ties together WebKit and MediaStreamManager
@@ -64,8 +66,6 @@ class CONTENT_EXPORT UserMediaClientImpl
       const blink::WebUserMediaRequest& user_media_request) override;
   void requestMediaDevices(
       const blink::WebMediaDevicesRequest& media_devices_request) override;
-  void requestSources(
-      const blink::WebMediaStreamTrackSourcesRequest& sources_request) override;
   void setMediaDeviceChangeObserver(
       const blink::WebMediaDeviceChangeObserver& observer) override;
 
@@ -78,16 +78,16 @@ class CONTENT_EXPORT UserMediaClientImpl
                                 MediaStreamRequestResult result) override;
   void OnDeviceStopped(const std::string& label,
                        const StreamDeviceInfo& device_info) override;
-  void OnDevicesEnumerated(int request_id,
-                           const StreamDeviceInfoArray& device_array) override;
   void OnDeviceOpened(int request_id,
                       const std::string& label,
                       const StreamDeviceInfo& device_info) override;
   void OnDeviceOpenFailed(int request_id) override;
-  void OnDevicesChanged() override;
 
   // RenderFrameObserver override
   void WillCommitProvisionalLoad() override;
+
+  void SetMediaDevicesDispatcherForTesting(
+      ::mojom::MediaDevicesDispatcherHostPtr media_devices_dispatcher);
 
  protected:
   // Called when |source| has been stopped from JavaScript.
@@ -114,9 +114,6 @@ class CONTENT_EXPORT UserMediaClientImpl
   virtual void EnumerateDevicesSucceded(
       blink::WebMediaDevicesRequest* request,
       blink::WebVector<blink::WebMediaDeviceInfo>& devices);
-  virtual void EnumerateSourcesSucceded(
-      blink::WebMediaStreamTrackSourcesRequest* request,
-      blink::WebVector<blink::WebSourceInfo>& sources);
 
   // Creates a MediaStreamAudioSource/MediaStreamVideoSource objects.
   // These are virtual for test purposes.
@@ -190,8 +187,6 @@ class CONTENT_EXPORT UserMediaClientImpl
 
  private:
   typedef std::vector<blink::WebMediaStreamSource> LocalStreamSources;
-  struct MediaDevicesRequestInfo;
-  typedef ScopedVector<MediaDevicesRequestInfo> MediaDevicesRequests;
 
   // RenderFrameObserver implementation.
   void OnDestruct() override;
@@ -227,15 +222,11 @@ class CONTENT_EXPORT UserMediaClientImpl
       const StreamDeviceInfoArray& audio_array,
       const StreamDeviceInfoArray& video_array);
 
-  void FinalizeEnumerateDevices(MediaDevicesRequestInfo* request);
-  void FinalizeEnumerateSources(MediaDevicesRequestInfo* request);
+  using EnumerationResult = std::vector<MediaDeviceInfoArray>;
+  void FinalizeEnumerateDevices(blink::WebMediaDevicesRequest request,
+                                const EnumerationResult& result);
 
   void DeleteAllUserMediaRequests();
-
-  MediaDevicesRequestInfo* FindMediaDevicesRequestInfo(int request_id);
-  MediaDevicesRequestInfo* FindMediaDevicesRequestInfo(
-      const blink::WebMediaDevicesRequest& request);
-  void CancelAndDeleteMediaDevicesRequest(MediaDevicesRequestInfo* request);
 
   // Returns the source that use a device with |device.session_id|
   // and |device.device.id|. NULL if such source doesn't exist.
@@ -249,6 +240,13 @@ class CONTENT_EXPORT UserMediaClientImpl
   void StopLocalSource(const blink::WebMediaStreamSource& source,
                        bool notify_dispatcher);
 
+  const ::mojom::MediaDevicesDispatcherHostPtr& GetMediaDevicesDispatcher();
+
+  // Callback invoked by MediaDevicesEventDispatcher when a device-change
+  // notification arrives.
+  void DevicesChanged(MediaDeviceType device_type,
+                      const MediaDeviceInfoArray& device_infos);
+
   // Weak ref to a PeerConnectionDependencyFactory, owned by the RenderThread.
   // It's valid for the lifetime of RenderThread.
   // TODO(xians): Remove this dependency once audio do not need it for local
@@ -259,12 +257,13 @@ class CONTENT_EXPORT UserMediaClientImpl
   // (or RenderFrameObserver) to ensure tear-down occurs in the right order.
   const std::unique_ptr<MediaStreamDispatcher> media_stream_dispatcher_;
 
+  ::mojom::MediaDevicesDispatcherHostPtr media_devices_dispatcher_;
+
   LocalStreamSources local_sources_;
 
   UserMediaRequests user_media_requests_;
-
-  // Requests to enumerate media devices.
-  MediaDevicesRequests media_devices_requests_;
+  MediaDevicesEventDispatcher::SubscriptionIdList
+      device_change_subscription_ids_;
 
   blink::WebMediaDeviceChangeObserver media_device_change_observer_;
 

@@ -21,12 +21,12 @@
 #include "chrome/browser/chromeos/sim_dialog_delegate.h"
 #include "chrome/browser/chromeos/ui/choose_mobile_network_dialog.h"
 #include "chrome/browser/chromeos/ui/mobile_config_ui.h"
-#include "chrome/browser/chromeos/ui_proxy_config_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/webui/chromeos/mobile_setup_dialog.h"
 #include "chrome/browser/ui/webui/options/chromeos/internet_options_handler_strings.h"
 #include "chromeos/login/login_state.h"
 #include "chromeos/network/managed_network_configuration_handler.h"
+#include "chromeos/network/network_connect.h"
 #include "chromeos/network/network_state.h"
 #include "chromeos/network/network_state_handler.h"
 #include "components/onc/onc_constants.h"
@@ -37,7 +37,6 @@
 #include "extensions/browser/api/vpn_provider/vpn_service_factory.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
 #include "ui/base/webui/web_ui_util.h"
-#include "ui/chromeos/network/network_connect.h"
 
 namespace chromeos {
 namespace options {
@@ -65,18 +64,6 @@ const char kTagSimOpConfigure[] = "configure";
 const char kTagSimOpSetLocked[] = "setLocked";
 const char kTagSimOpSetUnlocked[] = "setUnlocked";
 const char kTagSimOpUnlock[] = "unlock";
-
-const NetworkState* GetNetworkState(const std::string& service_path) {
-  return NetworkHandler::Get()->network_state_handler()->
-      GetNetworkState(service_path);
-}
-
-std::string ServicePathFromGuid(const std::string& guid) {
-  const NetworkState* network =
-      NetworkHandler::Get()->network_state_handler()->GetNetworkStateFromGuid(
-          guid);
-  return network ? network->path() : "";
-}
 
 Profile* GetProfileForPrimaryUser() {
   return chromeos::ProfileHelper::Get()->GetProfileByUser(
@@ -147,9 +134,7 @@ void InternetOptionsHandler::ShowMorePlanInfoCallback(
     NOTREACHED();
     return;
   }
-  std::string service_path = ServicePathFromGuid(guid);
-  if (!service_path.empty())
-    ui::NetworkConnect::Get()->ShowMobileSetup(service_path);
+  NetworkConnect::Get()->ShowMobileSetup(guid);
 }
 
 void InternetOptionsHandler::SimOperationCallback(const base::ListValue* args) {
@@ -239,11 +224,9 @@ void InternetOptionsHandler::ConfigureNetwork(const base::ListValue* args) {
   if (args->GetSize() >= 2)
     args->GetBoolean(1, &force_show);
 
-  const std::string service_path = ServicePathFromGuid(guid);
-  if (service_path.empty())
-    return;
-
-  const NetworkState* network = GetNetworkState(service_path);
+  const NetworkState* network =
+      NetworkHandler::Get()->network_state_handler()->GetNetworkStateFromGuid(
+          guid);
   if (!network)
     return;
 
@@ -259,11 +242,11 @@ void InternetOptionsHandler::ConfigureNetwork(const base::ListValue* args) {
 
   // If a network is not connectable, show the enrollment dialog if available.
   if (!force_show && !network->connectable() &&
-      enrollment::CreateDialog(service_path, GetNativeWindow())) {
+      enrollment::CreateEnrollmentDialog(guid, GetNativeWindow())) {
     return;
   }
 
-  NetworkConfigView::Show(service_path, GetNativeWindow());
+  NetworkConfigView::ShowForNetworkId(guid, GetNativeWindow());
 }
 
 }  // namespace options

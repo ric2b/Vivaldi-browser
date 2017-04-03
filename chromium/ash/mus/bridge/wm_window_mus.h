@@ -7,8 +7,8 @@
 
 #include <memory>
 
-#include "ash/common/shell_window_ids.h"
 #include "ash/common/wm_window.h"
+#include "ash/public/cpp/shell_window_ids.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
 #include "services/ui/public/cpp/window_observer.h"
@@ -152,6 +152,11 @@ class WmWindowMus : public WmWindow, public ui::WindowObserver {
   void SetColorProperty(WmWindowProperty key, SkColor value) override;
   int GetIntProperty(WmWindowProperty key) override;
   void SetIntProperty(WmWindowProperty key, int value) override;
+  std::string GetStringProperty(WmWindowProperty key) override;
+  void SetStringProperty(WmWindowProperty key,
+                         const std::string& value) override;
+  gfx::ImageSkia GetWindowIcon() override;
+  gfx::ImageSkia GetAppIcon() override;
   const wm::WindowState* GetWindowState() const override;
   WmWindow* GetToplevelWindow() override;
   WmWindow* GetToplevelWindowForFocus() override;
@@ -162,6 +167,7 @@ class WmWindowMus : public WmWindow, public ui::WindowObserver {
   const WmWindow* GetParent() const override;
   const WmWindow* GetTransientParent() const override;
   std::vector<WmWindow*> GetTransientChildren() override;
+  bool MoveToEventRoot(const ui::Event& event) override;
   void SetLayoutManager(
       std::unique_ptr<WmLayoutManager> layout_manager) override;
   WmLayoutManager* GetLayoutManager() override;
@@ -275,7 +281,7 @@ class WmWindowMus : public WmWindow, public ui::WindowObserver {
   ui::Window* window_;
 
   // The shell window id of this window. Shell window ids are defined in
-  // ash/common/shell_window_ids.h.
+  // ash/public/cpp/shell_window_ids.h.
   int shell_window_id_ = kShellWindowId_Invalid;
 
   std::unique_ptr<wm::WindowState> window_state_;

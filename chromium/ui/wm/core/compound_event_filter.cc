@@ -8,6 +8,7 @@
 #include "base/logging.h"
 #include "build/build_config.h"
 #include "ui/aura/client/cursor_client.h"
+#include "ui/aura/client/drag_drop_client.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_delegate.h"
@@ -15,7 +16,6 @@
 #include "ui/base/hit_test.h"
 #include "ui/events/event.h"
 #include "ui/wm/public/activation_client.h"
-#include "ui/wm/public/drag_drop_client.h"
 
 #if defined(OS_CHROMEOS) && defined(USE_X11)
 #include "ui/events/devices/x11/touch_factory_x11.h"  // nogncheck
@@ -129,29 +129,26 @@ void CompoundEventFilter::UpdateCursor(aura::Window* target,
 }
 
 void CompoundEventFilter::FilterKeyEvent(ui::KeyEvent* event) {
-  if (handlers_.might_have_observers()) {
-    base::ObserverListBase<ui::EventHandler>::Iterator it(&handlers_);
-    ui::EventHandler* handler;
-    while (!event->stopped_propagation() && (handler = it.GetNext()) != NULL)
-      handler->OnKeyEvent(event);
+  for (ui::EventHandler& handler : handlers_) {
+    if (event->stopped_propagation())
+      break;
+    handler.OnKeyEvent(event);
   }
 }
 
 void CompoundEventFilter::FilterMouseEvent(ui::MouseEvent* event) {
-  if (handlers_.might_have_observers()) {
-    base::ObserverListBase<ui::EventHandler>::Iterator it(&handlers_);
-    ui::EventHandler* handler;
-    while (!event->stopped_propagation() && (handler = it.GetNext()) != NULL)
-      handler->OnMouseEvent(event);
+  for (ui::EventHandler& handler : handlers_) {
+    if (event->stopped_propagation())
+      break;
+    handler.OnMouseEvent(event);
   }
 }
 
 void CompoundEventFilter::FilterTouchEvent(ui::TouchEvent* event) {
-  if (handlers_.might_have_observers()) {
-    base::ObserverListBase<ui::EventHandler>::Iterator it(&handlers_);
-    ui::EventHandler* handler;
-    while (!event->stopped_propagation() && (handler = it.GetNext()) != NULL)
-      handler->OnTouchEvent(event);
+  for (ui::EventHandler& handler : handlers_) {
+    if (event->stopped_propagation())
+      break;
+    handler.OnTouchEvent(event);
   }
 }
 
@@ -240,11 +237,10 @@ void CompoundEventFilter::OnTouchEvent(ui::TouchEvent* event) {
 }
 
 void CompoundEventFilter::OnGestureEvent(ui::GestureEvent* event) {
-  if (handlers_.might_have_observers()) {
-    base::ObserverListBase<ui::EventHandler>::Iterator it(&handlers_);
-    ui::EventHandler* handler;
-    while (!event->stopped_propagation() && (handler = it.GetNext()) != NULL)
-      handler->OnGestureEvent(event);
+  for (ui::EventHandler& handler : handlers_) {
+    if (event->stopped_propagation())
+      break;
+    handler.OnGestureEvent(event);
   }
 }
 

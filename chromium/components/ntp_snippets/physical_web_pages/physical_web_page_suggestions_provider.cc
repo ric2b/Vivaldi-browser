@@ -4,11 +4,15 @@
 
 #include "components/ntp_snippets/physical_web_pages/physical_web_page_suggestions_provider.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "grit/components_strings.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/image/image.h"
 
 namespace ntp_snippets {
@@ -66,11 +70,15 @@ CategoryStatus PhysicalWebPageSuggestionsProvider::GetCategoryStatus(
 
 CategoryInfo PhysicalWebPageSuggestionsProvider::GetCategoryInfo(
     Category category) {
-  // TODO(vitaliii): Use a proper string once it's been agreed on.
-  return CategoryInfo(base::ASCIIToUTF16("Physical web pages"),
-                      ContentSuggestionsCardLayout::MINIMAL_CARD,
-                      /* has_more_button */ true,
-                      /* show_if_empty */ false);
+  // TODO(vitaliii): Use the proper strings once they've been agreed on.
+  return CategoryInfo(
+      base::ASCIIToUTF16("Physical web pages"),
+      ContentSuggestionsCardLayout::MINIMAL_CARD,
+      /*has_more_action=*/false,
+      /*has_reload_action=*/false,
+      /*has_view_all_action=*/false,
+      /*show_if_empty=*/false,
+      l10n_util::GetStringUTF16(IDS_NTP_SUGGESTIONS_SECTION_EMPTY));
 }
 
 void PhysicalWebPageSuggestionsProvider::DismissSuggestion(
@@ -85,6 +93,20 @@ void PhysicalWebPageSuggestionsProvider::FetchSuggestionImage(
   // TODO(vitaliii): Implement.
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::Bind(callback, gfx::Image()));
+}
+
+void PhysicalWebPageSuggestionsProvider::Fetch(
+    const Category& category,
+    const std::set<std::string>& known_suggestion_ids,
+    const FetchDoneCallback& callback) {
+  LOG(DFATAL)
+      << "PhysicalWebPageSuggestionsProvider has no |Fetch| functionality!";
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE,
+      base::Bind(callback, Status(StatusCode::PERMANENT_ERROR,
+                                  "PhysicalWebPageSuggestionsProvider "
+                                  "has no |Fetch| functionality!"),
+                 base::Passed(std::vector<ContentSuggestion>())));
 }
 
 void PhysicalWebPageSuggestionsProvider::ClearHistory(

@@ -49,6 +49,13 @@ std::unique_ptr<HidService> HidService::Create(
 #endif
 }
 
+void HidService::Shutdown() {
+#if DCHECK_IS_ON()
+  DCHECK(!did_shutdown_);
+  did_shutdown_ = true;
+#endif
+}
+
 void HidService::GetDevices(const GetDevicesCallback& callback) {
   DCHECK(thread_checker_.CalledOnValidThread());
   if (enumeration_ready_) {
@@ -82,11 +89,13 @@ scoped_refptr<HidDeviceInfo> HidService::GetDeviceInfo(
   return it->second;
 }
 
-HidService::HidService() : enumeration_ready_(false) {
-}
+HidService::HidService() = default;
 
 HidService::~HidService() {
   DCHECK(thread_checker_.CalledOnValidThread());
+#if DCHECK_IS_ON()
+  DCHECK(did_shutdown_);
+#endif
 }
 
 void HidService::AddDevice(scoped_refptr<HidDeviceInfo> device_info) {
@@ -103,7 +112,8 @@ void HidService::AddDevice(scoped_refptr<HidDeviceInfo> device_info) {
                   << device_info->device_id() << "'";
 
     if (enumeration_ready_) {
-      FOR_EACH_OBSERVER(Observer, observer_list_, OnDeviceAdded(device_info));
+      for (auto& observer : observer_list_)
+        observer.OnDeviceAdded(device_info);
     }
   }
 }
@@ -116,12 +126,13 @@ void HidService::RemoveDevice(const HidDeviceId& device_id) {
 
     scoped_refptr<HidDeviceInfo> device = it->second;
     if (enumeration_ready_) {
-      FOR_EACH_OBSERVER(Observer, observer_list_, OnDeviceRemoved(device));
+      for (auto& observer : observer_list_)
+        observer.OnDeviceRemoved(device);
     }
     devices_.erase(it);
     if (enumeration_ready_) {
-      FOR_EACH_OBSERVER(Observer, observer_list_,
-                        OnDeviceRemovedCleanup(device));
+      for (auto& observer : observer_list_)
+        observer.OnDeviceRemovedCleanup(device);
     }
   }
 }

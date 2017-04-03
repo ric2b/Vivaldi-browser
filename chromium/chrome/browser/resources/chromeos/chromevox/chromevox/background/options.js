@@ -10,6 +10,7 @@
 goog.provide('cvox.OptionsPage');
 
 goog.require('Msgs');
+goog.require('PanelCommand');
 goog.require('cvox.BrailleTable');
 goog.require('cvox.BrailleTranslatorManager');
 goog.require('cvox.ChromeEarcons');
@@ -18,8 +19,6 @@ goog.require('cvox.ChromeVox');
 goog.require('cvox.ChromeVoxPrefs');
 goog.require('cvox.CommandStore');
 goog.require('cvox.ExtensionBridge');
-goog.require('cvox.KeyMap');
-goog.require('cvox.KeySequence');
 goog.require('cvox.PlatformFilter');
 goog.require('cvox.PlatformUtil');
 
@@ -36,32 +35,13 @@ cvox.OptionsPage = function() {
  */
 cvox.OptionsPage.prefs;
 
-
 /**
- * A mapping from keycodes to their human readable text equivalents.
- * This is initialized in cvox.OptionsPage.init for internationalization.
- * @type {Object<string>}
- */
-cvox.OptionsPage.KEYCODE_TO_TEXT = {
-};
-
-/**
- * A mapping from human readable text to keycode values.
- * This is initialized in cvox.OptionsPage.init for internationalization.
- * @type {Object<string>}
- */
-cvox.OptionsPage.TEXT_TO_KEYCODE = {
-};
-
-/**
- * Initialize the options page by setting the current value of all prefs,
- * building the key bindings table, and adding event listeners.
+ * Initialize the options page by setting the current value of all prefs, and
+ * adding event listeners.
  * @suppress {missingProperties} Property prefs never defined on Window
  */
 cvox.OptionsPage.init = function() {
   cvox.OptionsPage.prefs = chrome.extension.getBackgroundPage().prefs;
-  cvox.OptionsPage.populateKeyMapSelect();
-  cvox.OptionsPage.addKeys();
   cvox.OptionsPage.populateVoicesSelect();
   cvox.BrailleTable.getAll(function(tables) {
     /** @type {!Array<cvox.BrailleTable.Table>} */
@@ -71,6 +51,26 @@ cvox.OptionsPage.init = function() {
   chrome.storage.local.get({'brailleWordWrap': true}, function(items) {
     $('brailleWordWrap').checked = items.brailleWordWrap;
   });
+
+  $('virtual_braille_display_rows_input').value =
+      localStorage['virtualBrailleRows'];
+  $('virtual_braille_display_columns_input').value =
+      localStorage['virtualBrailleColumns'];
+  var changeToInterleave =
+      Msgs.getMsg('options_change_current_display_style_interleave');
+  var changeToSideBySide =
+      Msgs.getMsg('options_change_current_display_style_side_by_side');
+  var currentlyDisplayingInterleave =
+      Msgs.getMsg('options_current_display_style_interleave');
+  var currentlyDisplayingSideBySide =
+      Msgs.getMsg('options_current_display_style_side_by_side');
+  $('changeDisplayStyle').textContent =
+      localStorage['brailleSideBySide'] === 'true' ?
+      changeToInterleave : changeToSideBySide;
+  $('currentDisplayStyle').textContent =
+      localStorage['brailleSideBySide'] === 'true' ?
+      currentlyDisplayingSideBySide : currentlyDisplayingInterleave;
+
 
   Msgs.addTranslatedMessagesToDom(document);
   cvox.OptionsPage.hidePlatformSpecifics();
@@ -82,25 +82,42 @@ cvox.OptionsPage.init = function() {
   document.addEventListener('keydown', cvox.OptionsPage.eventListener, false);
 
   cvox.ExtensionBridge.addMessageListener(function(message) {
-    if (message['keyBindings'] || message['prefs']) {
+    if (message['prefs']) {
       cvox.OptionsPage.update();
     }
   });
-
-  $('selectKeys').addEventListener(
-      'click', cvox.OptionsPage.reset, false);
 
   if (cvox.PlatformUtil.matchesPlatform(cvox.PlatformFilter.WML)) {
     $('version').textContent =
         chrome.app.getDetails().version;
   }
 
-  $('useNext').addEventListener('change', function(evt) {
-    var checked = evt.target.checked;
-    var background =
-        chrome.extension.getBackgroundPage().ChromeVoxState.instance;
-    background.toggleNext(checked);
+  var clearVirtualDisplay = function() {
+    var groups = [];
+    var sizeOfDisplay = parseInt(localStorage['virtualBrailleRows'], 10) *
+        parseInt(localStorage['virtualBrailleColumns'], 10);
+    for (var i = 0; i < sizeOfDisplay; i++) {
+        groups.push(['X', 'X']);
+    }
+    (new PanelCommand(PanelCommandType.UPDATE_BRAILLE,
+                      {groups: groups})).send();
+  };
+
+  $('changeDisplayStyle').addEventListener('click', function(evt) {
+    var sideBySide = localStorage['brailleSideBySide'] !== 'true';
+    localStorage['brailleSideBySide'] = sideBySide;
+    $('changeDisplayStyle').textContent =
+        sideBySide ? changeToInterleave : changeToSideBySide;
+    $('currentDisplayStyle').textContent =
+        sideBySide ? currentlyDisplayingSideBySide :
+        currentlyDisplayingInterleave;
+    clearVirtualDisplay();
   }, true);
+
+  handleNumbericalInputPref('virtual_braille_display_rows_input',
+      'virtualBrailleRows');
+  handleNumbericalInputPref('virtual_braille_display_columns_input',
+      'virtualBrailleColumns');
 };
 
 /**
@@ -119,210 +136,26 @@ cvox.OptionsPage.update = function() {
     }
   }
 };
-
 /**
- * Populate the keymap select element with stored keymaps
+ * Adds event listeners to input boxes to update local storage values and
+ * make sure that the input is a positive nonempty number between 1 and 99.
+ * @param {string} id Id of the input box.
+ * @param {string} pref Preference key in localStorage to access and modify.
  */
-cvox.OptionsPage.populateKeyMapSelect = function() {
-  var select = $('cvox_keymaps');
-  for (var id in cvox.KeyMap.AVAILABLE_MAP_INFO) {
-    var info = cvox.KeyMap.AVAILABLE_MAP_INFO[id];
-    var option = document.createElement('option');
-    option.id = id;
-    option.className = 'i18n';
-    option.setAttribute('msgid', id);
-    if (cvox.OptionsPage.prefs.getPrefs()['currentKeyMap'] == id) {
-      option.setAttribute('selected', '');
-    }
-    select.appendChild(option);
-  }
-
-  select.addEventListener('change', cvox.OptionsPage.reset, true);
-};
-
-/**
- * Add the input elements for the key bindings to the container element
- * in the page. They're sorted in order of description.
- */
-cvox.OptionsPage.addKeys = function() {
-  var container = $('keysContainer');
-  var keyMap = cvox.OptionsPage.prefs.getKeyMap();
-
-  cvox.OptionsPage.prevTime = new Date().getTime();
-  cvox.OptionsPage.keyCount = 0;
-  container.addEventListener('keypress', goog.bind(function(evt) {
-    if (evt.target.id == 'cvoxKey') {
+var handleNumbericalInputPref = function(id, pref) {
+  $(id).addEventListener('input', function(evt) {
+    if ($(id).value === '')
       return;
-    }
-    this.keyCount++;
-    var currentTime = new Date().getTime();
-    if (currentTime - this.prevTime > 1000 || this.keyCount > 2) {
-      if (document.activeElement.id == 'toggleKeyPrefix') {
-        this.keySequence = new cvox.KeySequence(evt, false);
-        this.keySequence.keys['ctrlKey'][0] = true;
-      } else {
-        this.keySequence = new cvox.KeySequence(evt, true);
-      }
+    else if (parseInt($(id).value, 10) < 1 || parseInt($(id).value, 10) > 99)
+      $(id).value = localStorage[pref];
+    else
+      localStorage[pref] = $(id).value;
+  }, true);
 
-      this.keyCount = 1;
-    } else {
-      this.keySequence.addKeyEvent(evt);
-    }
-
-    var keySeqStr = cvox.KeyUtil.keySequenceToString(this.keySequence, true);
-    var announce = keySeqStr.replace(/\+/g,
-        ' ' + Msgs.getMsg('then') + ' ');
-    announce = announce.replace(/>/g,
-        ' ' + Msgs.getMsg('followed_by') + ' ');
-    announce = announce.replace('Cvox',
-        ' ' + Msgs.getMsg('modifier_key') + ' ');
-
-    // TODO(dtseng): Only basic conflict detection; it does not speak the
-    // conflicting command. Nor does it detect prefix conflicts like Cvox+L vs
-    // Cvox+L>L.
-    if (cvox.OptionsPage.prefs.setKey(document.activeElement.id,
-        this.keySequence)) {
-      document.activeElement.value = keySeqStr;
-    } else {
-      announce = Msgs.getMsg('key_conflict', [announce]);
-    }
-    cvox.OptionsPage.speak(announce, cvox.QueueMode.QUEUE);
-    this.prevTime = currentTime;
-
-    evt.preventDefault();
-    evt.stopPropagation();
-  }, cvox.OptionsPage), true);
-
-  var categories = cvox.CommandStore.categories();
-  for (var i = 0; i < categories.length; i++) {
-    // Braille bindings can't be customized, so don't include them.
-    if (categories[i] == 'braille') {
-      continue;
-    }
-    var headerElement = document.createElement('h3');
-    headerElement.className = 'i18n';
-    headerElement.setAttribute('msgid', categories[i]);
-    headerElement.id = categories[i];
-    container.appendChild(headerElement);
-    var commands = cvox.CommandStore.commandsForCategory(categories[i]);
-    for (var j = 0; j < commands.length; j++) {
-      var command = commands[j];
-      // TODO: Someday we may want to have more than one key
-      // mapped to a command, so we'll need to figure out how to display
-      // that. For now, just take the first key.
-      var keySeqObj = keyMap.keyForCommand(command)[0];
-
-      // Explicitly skip toggleChromeVox in ChromeOS.
-      if (command == 'toggleChromeVox' &&
-          cvox.PlatformUtil.matchesPlatform(cvox.PlatformFilter.CHROMEOS)) {
-        continue;
-      }
-
-      var inputElement = document.createElement('input');
-      inputElement.type = 'text';
-      inputElement.className = 'key active-key';
-      inputElement.id = command;
-
-      var displayedCombo;
-      if (keySeqObj != null) {
-        displayedCombo = cvox.KeyUtil.keySequenceToString(keySeqObj, true);
-      } else {
-        displayedCombo = '';
-      }
-      inputElement.value = displayedCombo;
-
-      // Don't allow the user to change the sticky mode or stop speaking key.
-      if (command == 'toggleStickyMode' || command == 'stopSpeech') {
-        inputElement.disabled = true;
-      }
-      var message = cvox.CommandStore.messageForCommand(command);
-      if (!message) {
-        // TODO(dtseng): missing message id's.
-        message = command;
-      }
-
-      var labelElement = document.createElement('label');
-      labelElement.className = 'i18n';
-      labelElement.setAttribute('msgid', message);
-      labelElement.setAttribute('for', inputElement.id);
-
-      var divElement = document.createElement('div');
-      divElement.className = 'key-container';
-      container.appendChild(divElement);
-      divElement.appendChild(inputElement);
-      divElement.appendChild(labelElement);
-    }
-      var brElement = document.createElement('br');
-      container.appendChild(brElement);
-  }
-
-  if ($('cvoxKey') == null) {
-    // Add the cvox key field
-    var inputElement = document.createElement('input');
-    inputElement.type = 'text';
-    inputElement.className = 'key';
-    inputElement.id = 'cvoxKey';
-
-    var labelElement = document.createElement('label');
-    labelElement.className = 'i18n';
-    labelElement.setAttribute('msgid', 'options_cvox_modifier_key');
-    labelElement.setAttribute('for', 'cvoxKey');
-
-    var modifierSectionSibling =
-        $('modifier_keys').nextSibling;
-    var modifierSectionParent = modifierSectionSibling.parentNode;
-    modifierSectionParent.insertBefore(labelElement, modifierSectionSibling);
-    modifierSectionParent.insertBefore(inputElement, labelElement);
-    var cvoxKey = $('cvoxKey');
-    cvoxKey.value = localStorage['cvoxKey'];
-
-    cvoxKey.addEventListener('keydown', function(evt) {
-      if (!this.modifierSeq_) {
-        this.modifierCount_ = 0;
-        this.modifierSeq_ = new cvox.KeySequence(evt, false);
-      } else {
-        this.modifierSeq_.addKeyEvent(evt);
-      }
-
-      //  Never allow non-modified keys.
-      if (!this.modifierSeq_.isAnyModifierActive()) {
-        // Indicate error and instructions excluding tab.
-        if (evt.keyCode != 9) {
-          cvox.OptionsPage.speak(
-              Msgs.getMsg('modifier_entry_error'),
-              cvox.QueueMode.FLUSH, {});
-        }
-        this.modifierSeq_ = null;
-      } else {
-        this.modifierCount_++;
-      }
-
-      // Don't trap tab or shift.
-      if (!evt.shiftKey && evt.keyCode != 9) {
-        evt.preventDefault();
-        evt.stopPropagation();
-      }
-    }, true);
-
-    cvoxKey.addEventListener('keyup', function(evt) {
-      if (this.modifierSeq_) {
-        this.modifierCount_--;
-
-        if (this.modifierCount_ == 0) {
-          var modifierStr =
-              cvox.KeyUtil.keySequenceToString(this.modifierSeq_, true, true);
-          evt.target.value = modifierStr;
-          cvox.OptionsPage.speak(
-              Msgs.getMsg('modifier_entry_set', [modifierStr]),
-              cvox.QueueMode.QUEUE);
-          localStorage['cvoxKey'] = modifierStr;
-          this.modifierSeq_ = null;
-        }
-        evt.preventDefault();
-        evt.stopPropagation();
-      }
-    }, true);
-  }
+  $(id).addEventListener('focusout', function(evt) {
+    if ($(id).value === '')
+      $(id).value = localStorage[pref];
+  }, true);
 };
 
 /**
@@ -496,54 +329,10 @@ cvox.OptionsPage.eventListener = function(event) {
           }
         }
       }
-    } else if (target.classList.contains('key')) {
-      var keySeq = cvox.KeySequence.fromStr(target.value);
-      var success = false;
-      if (target.id == 'cvoxKey') {
-        cvox.OptionsPage.prefs.setPref(target.id, target.value);
-        cvox.OptionsPage.prefs.sendPrefsToAllTabs(true, true);
-        success = true;
-      } else {
-        success =
-            cvox.OptionsPage.prefs.setKey(target.id, keySeq);
-
-        // TODO(dtseng): Don't surface conflicts until we have a better
-        // workflow.
-      }
     }
   }, 0);
   return true;
 };
-
-/**
- * Refreshes all dynamic content on the page.
- * This includes all key related information.
- */
-cvox.OptionsPage.reset = function() {
-  var selectKeyMap = $('cvox_keymaps');
-  var id = selectKeyMap.options[selectKeyMap.selectedIndex].id;
-
-  var msgs = Msgs;
-  var announce = cvox.OptionsPage.prefs.getPrefs()['currentKeyMap'] == id ?
-      msgs.getMsg('keymap_reset', [msgs.getMsg(id)]) :
-      msgs.getMsg('keymap_switch', [msgs.getMsg(id)]);
-  cvox.OptionsPage.updateStatus_(announce);
-
-  cvox.OptionsPage.prefs.switchToKeyMap(id);
-  $('keysContainer').innerHTML = '';
-  cvox.OptionsPage.addKeys();
-  Msgs.addTranslatedMessagesToDom(document);
-};
-
-/**
- * Updates the status live region.
- * @param {string} status The new status.
- * @private
- */
-cvox.OptionsPage.updateStatus_ = function(status) {
-  $('status').innerText = status;
-};
-
 
 /**
  * Hides all elements not matching the current platform.
@@ -558,19 +347,6 @@ cvox.OptionsPage.hidePlatformSpecifics = function() {
   }
 };
 
-
-/**
- * Calls a {@code cvox.TtsInterface.speak} method in the background page to
- * speak an utterance.  See that method for further details.
- * @param {string} textString The string of text to be spoken.
- * @param {cvox.QueueMode} queueMode The queue mode to use.
- * @param {Object=} properties Speech properties to use for this utterance.
- */
-cvox.OptionsPage.speak = function(textString, queueMode, properties) {
-  var speak =
-      /** @type Function} */ (chrome.extension.getBackgroundPage()['speak']);
-  speak.apply(null, arguments);
-};
 
 /**
  * @return {cvox.BrailleTranslatorManager}

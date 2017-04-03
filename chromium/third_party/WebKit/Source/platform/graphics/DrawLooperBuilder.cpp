@@ -37,7 +37,6 @@
 #include "third_party/skia/include/core/SkColorFilter.h"
 #include "third_party/skia/include/core/SkDrawLooper.h"
 #include "third_party/skia/include/core/SkPaint.h"
-#include "third_party/skia/include/core/SkXfermode.h"
 #include "third_party/skia/include/effects/SkBlurMaskFilter.h"
 #include "wtf/PtrUtil.h"
 #include "wtf/RefPtr.h"
@@ -48,10 +47,6 @@ namespace blink {
 DrawLooperBuilder::DrawLooperBuilder() {}
 
 DrawLooperBuilder::~DrawLooperBuilder() {}
-
-std::unique_ptr<DrawLooperBuilder> DrawLooperBuilder::create() {
-  return wrapUnique(new DrawLooperBuilder);
-}
 
 sk_sp<SkDrawLooper> DrawLooperBuilder::detachDrawLooper() {
   return m_skDrawLooperBuilder.detach();
@@ -79,10 +74,10 @@ void DrawLooperBuilder::addShadow(const FloatSize& offset,
 
   switch (shadowAlphaMode) {
     case ShadowRespectsAlpha:
-      info.fColorMode = SkXfermode::kDst_Mode;
+      info.fColorMode = SkBlendMode::kDst;
       break;
     case ShadowIgnoresAlpha:
-      info.fColorMode = SkXfermode::kSrc_Mode;
+      info.fColorMode = SkBlendMode::kSrc;
       break;
     default:
       ASSERT_NOT_REACHED();
@@ -106,7 +101,7 @@ void DrawLooperBuilder::addShadow(const FloatSize& offset,
   }
 
   paint->setColorFilter(
-      SkColorFilter::MakeModeFilter(skColor, SkXfermode::kSrcIn_Mode));
+      SkColorFilter::MakeModeFilter(skColor, SkBlendMode::kSrcIn));
 }
 
 }  // namespace blink

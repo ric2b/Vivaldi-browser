@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
@@ -13,6 +14,7 @@
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
@@ -21,13 +23,13 @@
 #include "base/rand_util.h"
 #include "base/strings/string16.h"
 #include "base/threading/platform_thread.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/google/google_brand.h"
 #include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
 #include "chrome/browser/metrics/chrome_stability_metrics_provider.h"
-#include "chrome/browser/metrics/https_engagement_metrics_provider.h"
 #include "chrome/browser/metrics/metrics_reporting_state.h"
 #include "chrome/browser/metrics/sampling_metrics_provider.h"
 #include "chrome/browser/metrics/subprocess_metrics_provider.h"
@@ -69,17 +71,19 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/histogram_fetcher.h"
 #include "content/public/browser/notification_service.h"
+#include "extensions/features/features.h"
+#include "printing/features/features.h"
 
 #if BUILDFLAG(ANDROID_JAVA_UI)
 #include "chrome/browser/metrics/android_metrics_provider.h"
 #include "chrome/browser/metrics/page_load_metrics_provider.h"
 #endif
 
-#if defined(ENABLE_PRINT_PREVIEW)
+#if BUILDFLAG(ENABLE_PRINT_PREVIEW)
 #include "chrome/browser/service_process/service_process_control.h"
 #endif
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "chrome/browser/metrics/extensions_metrics_provider.h"
 #endif
 
@@ -103,6 +107,10 @@
 #include "components/browser_watcher/watcher_metrics_provider_win.h"
 #endif
 
+#if defined(OS_WIN) || defined(OS_MACOSX)
+#include "third_party/crashpad/crashpad/client/crashpad_info.h"
+#endif
+
 #if !defined(OS_CHROMEOS)
 #include "chrome/browser/signin/chrome_signin_status_metrics_provider_delegate.h"
 #include "components/signin/core/browser/signin_status_metrics_provider.h"
@@ -117,6 +125,19 @@ const int kMaxHistogramGatheringWaitDuration = 60000;  // 60 seconds.
 // Needs to be kept in sync with the writer in
 // third_party/crashpad/crashpad/handler/handler_main.cc.
 const char kCrashpadHistogramAllocatorName[] = "CrashpadMetrics";
+
+#if defined(OS_WIN) || defined(OS_MACOSX)
+// The stream type assigned to the minidump stream that holds the serialized
+// system profile proto.
+const uint32_t kSystemProfileMinidumpStreamType = 0x4B6B0003;
+
+// A serialized environment (SystemProfileProto) that was registered with the
+// crash reporter, or the empty string if no environment was registered yet.
+// Ownership must be maintained after registration as the crash reporter does
+// not assume it.
+// TODO(manzagop): revisit this if the Crashpad API evolves.
+base::LazyInstance<std::string>::Leaky g_environment_for_crash_reporter;
+#endif  // defined(OS_WIN) || defined(OS_MACOSX)
 
 void RegisterFileMetricsPreferences(PrefRegistrySimple* registry) {
   metrics::FileMetricsProvider::RegisterPrefs(
@@ -239,7 +260,6 @@ void GetExecutableVersionDetails(base::string16* product_name,
 
 }  // namespace
 
-
 const char ChromeMetricsServiceClient::kBrowserMetricsName[] = "BrowserMetrics";
 
 ChromeMetricsServiceClient::ChromeMetricsServiceClient(
@@ -341,6 +361,31 @@ std::string ChromeMetricsServiceClient::GetVersionString() {
   return metrics::GetVersionString();
 }
 
+void ChromeMetricsServiceClient::OnEnvironmentUpdate(std::string* environment) {
+#if defined(OS_WIN) || defined(OS_MACOSX)
+  DCHECK(environment);
+
+  // Register the environment with the crash reporter. Note this only registers
+  // the first environment, meaning ulterior updates to the environment are not
+  // reflected in crash report environments (e.g. fieldtrial information). This
+  // approach is due to the Crashpad API at time of implementation (registered
+  // data cannot be updated). It would however be unwise to rely on such a
+  // mechanism to retrieve the value of the dynamic fields due to the
+  // environment update lag. Also note there is a window from startup to this
+  // point during which crash reports will not have an environment set.
+  if (!g_environment_for_crash_reporter.Get().empty())
+    return;
+
+  g_environment_for_crash_reporter.Get() = std::move(*environment);
+
+  crashpad::CrashpadInfo::GetCrashpadInfo()->AddUserDataMinidumpStream(
+      kSystemProfileMinidumpStreamType,
+      reinterpret_cast<const void*>(
+          g_environment_for_crash_reporter.Get().data()),
+      g_environment_for_crash_reporter.Get().size());
+#endif  // OS_WIN || OS_MACOSX
+}
+
 void ChromeMetricsServiceClient::OnLogUploadComplete() {
   // Collect time ticks stats after each UMA upload.
 #if defined(OS_WIN)
@@ -350,16 +395,85 @@ void ChromeMetricsServiceClient::OnLogUploadComplete() {
 
 void ChromeMetricsServiceClient::InitializeSystemProfileMetrics(
     const base::Closure& done_callback) {
-  finished_init_task_callback_ = done_callback;
-  base::Closure got_hardware_class_callback =
-      base::Bind(&ChromeMetricsServiceClient::OnInitTaskGotHardwareClass,
+  DCHECK(initialize_task_queue_.empty());
+
+  // Each provider's initializer takes its own "done_callback" to enable
+  // asynchronously chaining. We bind |next_task| to this callback, so
+  // OnInitNextTask() gets called after each initializer, and we can go through
+  // successive tasks in |initialize_task_queue_|. Note that |next_task| is
+  // copied by value when passed into base::Bind().
+  base::Closure next_task =
+      base::Bind(&ChromeMetricsServiceClient::OnInitNextTask,
                  weak_ptr_factory_.GetWeakPtr());
+
+  // The providers below can be bound using base::Unretained(), because task
+  // execution occurs at OnInitNextTask() via |next_task|, which is guarded by
+  // weak pointer usage.
+
 #if defined(OS_CHROMEOS)
-  chromeos_metrics_provider_->InitTaskGetHardwareClass(
-      got_hardware_class_callback);
-#else
-  got_hardware_class_callback.Run();
+  // Load hardware class information.
+  initialize_task_queue_.push_back(
+      base::Bind(&ChromeOSMetricsProvider::InitTaskGetHardwareClass,
+                 base::Unretained(chromeos_metrics_provider_), next_task));
+  // Get a Bluetooth Adapter.
+  initialize_task_queue_.push_back(
+      base::Bind(&ChromeOSMetricsProvider::InitTaskGetBluetoothAdapter,
+                 base::Unretained(chromeos_metrics_provider_), next_task));
 #endif  // defined(OS_CHROMEOS)
+
+#if defined(ENABLE_PLUGINS)
+  // Load plugin information.
+  initialize_task_queue_.push_back(
+      base::Bind(&PluginMetricsProvider::GetPluginInformation,
+                 base::Unretained(plugin_metrics_provider_), next_task));
+#endif  // defined(ENABLE_PLUGINS)
+
+#if defined(OS_WIN) && defined(GOOGLE_CHROME_BUILD)
+  // Launch task to gather Google Update statistics.
+  initialize_task_queue_.push_back(
+      base::Bind(&GoogleUpdateMetricsProviderWin::GetGoogleUpdateData,
+                 base::Unretained(google_update_metrics_provider_), next_task));
+#endif  // defined(OS_WIN) && defined(GOOGLE_CHROME_BUILD)
+
+#if defined(OS_WIN)
+  // Load AntiVirus metrics.
+  initialize_task_queue_.push_back(
+      base::Bind(&AntiVirusMetricsProvider::GetAntiVirusMetrics,
+                 base::Unretained(antivirus_metrics_provider_), next_task));
+#endif  // defined(OS_WIN)
+
+  // Load drive metrics.
+  initialize_task_queue_.push_back(
+      base::Bind(&metrics::DriveMetricsProvider::GetDriveMetrics,
+                 base::Unretained(drive_metrics_provider_), next_task));
+
+#if defined(OS_WIN)
+  // Optionally collect postmortem reports.
+  initialize_task_queue_.push_back(base::Bind(
+      &browser_watcher::WatcherMetricsProviderWin::CollectPostmortemReports,
+      base::Unretained(watcher_metrics_provider_), next_task));
+#endif  // defined(OS_WIN)
+
+  // Finally, call |done_callback| (which skips |next_task|).
+  initialize_task_queue_.push_back(done_callback);
+
+  // Do not add more items to |initialize_task_queue_| here; |done_callback|
+  // should be the last!
+
+  OnInitNextTask();
+}
+
+void ChromeMetricsServiceClient::OnInitNextTask() {
+  if (initialize_task_queue_.empty())
+    return;
+
+  auto task = initialize_task_queue_.front();
+  // |task.Run()| can be asynchronous or synchronous. For the latter case, we
+  // may recurse back to this function. Therefore we must pop_front() first.
+  initialize_task_queue_.pop_front();
+  // Assumes this causes |OnInitNextTask()| to be called again for all but the
+  // last task in |initialize_task_queue_|.
+  task.Run();
 }
 
 void ChromeMetricsServiceClient::CollectFinalMetricsForLog(
@@ -439,7 +553,7 @@ void ChromeMetricsServiceClient::Initialize() {
           new SubprocessMetricsProvider()));
 
   // Register metrics providers.
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   metrics_service_->RegisterMetricsProvider(
       std::unique_ptr<metrics::MetricsProvider>(
           new ExtensionsMetricsProvider(metrics_state_manager_)));
@@ -567,78 +681,6 @@ void ChromeMetricsServiceClient::Initialize() {
       std::unique_ptr<metrics::MetricsProvider>(
           new syncer::DeviceCountMetricsProvider(base::Bind(
               &browser_sync::ChromeSyncClient::GetDeviceInfoTrackers))));
-
-  metrics_service_->RegisterMetricsProvider(
-      std::unique_ptr<metrics::MetricsProvider>(
-          new HttpsEngagementMetricsProvider()));
-}
-
-void ChromeMetricsServiceClient::OnInitTaskGotHardwareClass() {
-  const base::Closure got_bluetooth_adapter_callback =
-      base::Bind(&ChromeMetricsServiceClient::OnInitTaskGotBluetoothAdapter,
-                 weak_ptr_factory_.GetWeakPtr());
-#if defined(OS_CHROMEOS)
-  chromeos_metrics_provider_->InitTaskGetBluetoothAdapter(
-      got_bluetooth_adapter_callback);
-#else
-  got_bluetooth_adapter_callback.Run();
-#endif  // defined(OS_CHROMEOS)
-}
-
-void ChromeMetricsServiceClient::OnInitTaskGotBluetoothAdapter() {
-  const base::Closure got_plugin_info_callback =
-      base::Bind(&ChromeMetricsServiceClient::OnInitTaskGotPluginInfo,
-                 weak_ptr_factory_.GetWeakPtr());
-
-#if defined(ENABLE_PLUGINS)
-  plugin_metrics_provider_->GetPluginInformation(got_plugin_info_callback);
-#else
-  got_plugin_info_callback.Run();
-#endif  // defined(ENABLE_PLUGINS)
-}
-
-void ChromeMetricsServiceClient::OnInitTaskGotPluginInfo() {
-  const base::Closure got_metrics_callback =
-      base::Bind(&ChromeMetricsServiceClient::OnInitTaskGotGoogleUpdateData,
-                 weak_ptr_factory_.GetWeakPtr());
-
-#if defined(OS_WIN) && defined(GOOGLE_CHROME_BUILD)
-  google_update_metrics_provider_->GetGoogleUpdateData(got_metrics_callback);
-#else
-  got_metrics_callback.Run();
-#endif  // defined(OS_WIN) && defined(GOOGLE_CHROME_BUILD)
-}
-
-void ChromeMetricsServiceClient::OnInitTaskGotGoogleUpdateData() {
-  const base::Closure got_metrics_callback =
-      base::Bind(&ChromeMetricsServiceClient::OnInitTaskGotAntiVirusData,
-                 weak_ptr_factory_.GetWeakPtr());
-
-#if defined(OS_WIN)
-  antivirus_metrics_provider_->GetAntiVirusMetrics(got_metrics_callback);
-#else
-  got_metrics_callback.Run();
-#endif  // defined(OS_WIN)
-}
-
-void ChromeMetricsServiceClient::OnInitTaskGotAntiVirusData() {
-  drive_metrics_provider_->GetDriveMetrics(
-      base::Bind(&ChromeMetricsServiceClient::OnInitTaskGotDriveMetrics,
-                 weak_ptr_factory_.GetWeakPtr()));
-}
-
-void ChromeMetricsServiceClient::OnInitTaskGotDriveMetrics() {
-#if defined(OS_WIN)
-  watcher_metrics_provider_->CollectPostmortemReports(base::Bind(
-      &ChromeMetricsServiceClient::OnInitTaskCollectedPostmortemReports,
-      weak_ptr_factory_.GetWeakPtr()));
-#else
-  OnInitTaskCollectedPostmortemReports();
-#endif  // defined(OS_WIN)
-}
-
-void ChromeMetricsServiceClient::OnInitTaskCollectedPostmortemReports() {
-  finished_init_task_callback_.Run();
 }
 
 bool ChromeMetricsServiceClient::ShouldIncludeProfilerDataInLog() {
@@ -717,7 +759,7 @@ void ChromeMetricsServiceClient::OnMemoryDetailCollectionDone() {
 
   DCHECK_EQ(num_async_histogram_fetches_in_progress_, 0);
 
-#if !defined(ENABLE_PRINT_PREVIEW)
+#if !BUILDFLAG(ENABLE_PRINT_PREVIEW)
   num_async_histogram_fetches_in_progress_ = 2;
 #else   // !ENABLE_PRINT_PREVIEW
   num_async_histogram_fetches_in_progress_ = 3;
@@ -743,8 +785,8 @@ void ChromeMetricsServiceClient::OnMemoryDetailCollectionDone() {
   // Set up the callback task to call after we receive histograms from all
   // child processes. |timeout| specifies how long to wait before absolutely
   // calling us back on the task.
-  content::FetchHistogramsAsynchronously(base::MessageLoop::current(), callback,
-                                         timeout);
+  content::FetchHistogramsAsynchronously(base::ThreadTaskRunnerHandle::Get(),
+                                         callback, timeout);
 }
 
 void ChromeMetricsServiceClient::OnHistogramSynchronizationDone() {

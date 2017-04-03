@@ -31,6 +31,7 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "components/plugins/renderer/plugin_placeholder.h"
+#include "components/test_runner/app_banner_service.h"
 #include "components/test_runner/gamepad_controller.h"
 #include "components/test_runner/layout_and_paint_async_then.h"
 #include "components/test_runner/pixel_dump.h"
@@ -55,27 +56,26 @@
 #include "content/shell/renderer/layout_test/leak_detector.h"
 #include "media/base/audio_capturer_source.h"
 #include "media/base/audio_parameters.h"
-#include "media/base/video_capturer_source.h"
+#include "media/capture/video_capturer_source.h"
 #include "net/base/filename_util.h"
 #include "net/base/net_errors.h"
-#include "services/shell/public/cpp/interface_provider.h"
+#include "services/service_manager/public/cpp/interface_provider.h"
+#include "services/service_manager/public/cpp/interface_registry.h"
 #include "skia/ext/platform_canvas.h"
 #include "third_party/WebKit/public/platform/FilePathConversion.h"
 #include "third_party/WebKit/public/platform/Platform.h"
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "third_party/WebKit/public/platform/WebPoint.h"
 #include "third_party/WebKit/public/platform/WebRect.h"
-#include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
 #include "third_party/WebKit/public/platform/WebSize.h"
 #include "third_party/WebKit/public/platform/WebString.h"
-#include "third_party/WebKit/public/platform/WebTaskRunner.h"
 #include "third_party/WebKit/public/platform/WebThread.h"
 #include "third_party/WebKit/public/platform/WebTraceLocation.h"
 #include "third_party/WebKit/public/platform/WebURL.h"
 #include "third_party/WebKit/public/platform/WebURLError.h"
 #include "third_party/WebKit/public/platform/WebURLRequest.h"
 #include "third_party/WebKit/public/platform/WebURLResponse.h"
-#include "third_party/WebKit/public/platform/modules/app_banner/WebAppBannerPromptReply.h"
+#include "third_party/WebKit/public/platform/modules/app_banner/app_banner.mojom.h"
 #include "third_party/WebKit/public/web/WebArrayBufferView.h"
 #include "third_party/WebKit/public/web/WebContextMenuData.h"
 #include "third_party/WebKit/public/web/WebDataSource.h"
@@ -295,16 +295,15 @@ void BlinkTestRunner::PrintMessage(const std::string& message) {
 }
 
 void BlinkTestRunner::PostTask(const base::Closure& task) {
-  Platform::current()
-      ->currentThread()
-      ->getWebTaskRunner()
-      ->toSingleThreadTaskRunner()
-      ->PostTask(BLINK_FROM_HERE, task);
+  Platform::current()->currentThread()->getSingleThreadTaskRunner()->PostTask(
+      FROM_HERE, task);
 }
 
 void BlinkTestRunner::PostDelayedTask(const base::Closure& task, long long ms) {
-  Platform::current()->currentThread()->getWebTaskRunner()->postDelayedTask(
-      BLINK_FROM_HERE, task, ms);
+  Platform::current()
+      ->currentThread()
+      ->getSingleThreadTaskRunner()
+      ->PostDelayedTask(FROM_HERE, task, base::TimeDelta::FromMilliseconds(ms));
 }
 
 WebString BlinkTestRunner::RegisterIsolatedFileSystem(
@@ -481,10 +480,12 @@ void BlinkTestRunner::SetDatabaseQuota(int quota) {
   Send(new LayoutTestHostMsg_SetDatabaseQuota(routing_id(), quota));
 }
 
-void BlinkTestRunner::SimulateWebNotificationClick(const std::string& title,
-                                                   int action_index) {
+void BlinkTestRunner::SimulateWebNotificationClick(
+    const std::string& title,
+    int action_index,
+    const base::NullableString16& reply) {
   Send(new LayoutTestHostMsg_SimulateWebNotificationClick(routing_id(), title,
-                                                          action_index));
+                                                          action_index, reply));
 }
 
 void BlinkTestRunner::SimulateWebNotificationClose(const std::string& title,
@@ -704,22 +705,24 @@ cc::SharedBitmapManager* BlinkTestRunner::GetSharedBitmapManager() {
 }
 
 void BlinkTestRunner::DispatchBeforeInstallPromptEvent(
-    int request_id,
     const std::vector<std::string>& event_platforms,
     const base::Callback<void(bool)>& callback) {
-  // Send the event to the frame.
-  blink::WebAppBannerPromptReply reply;
-  std::vector<blink::WebString> blink_web_strings;
-  for (const auto& platform : event_platforms)
-    blink_web_strings.push_back(blink::WebString::fromUTF8(platform));
-  blink::WebVector<blink::WebString> blink_event_platforms(blink_web_strings);
+  app_banner_service_.reset(new test_runner::AppBannerService());
 
-  WebLocalFrame* main_frame =
-      render_view()->GetWebView()->mainFrame()->toWebLocalFrame();
-  main_frame->willShowInstallBannerPrompt(request_id, blink_event_platforms,
-                                          &reply);
+  service_manager::InterfaceRegistry::TestApi test_api(
+      render_view()->GetMainRenderFrame()->GetInterfaceRegistry());
+  test_api.GetLocalInterface(
+      mojo::GetProxy(&app_banner_service_->controller()));
 
-  callback.Run(reply == blink::WebAppBannerPromptReply::Cancel);
+  app_banner_service_->SendBannerPromptRequest(event_platforms, callback);
+}
+
+void BlinkTestRunner::ResolveBeforeInstallPromptPromise(
+    const std::string& platform) {
+  if (app_banner_service_) {
+    app_banner_service_->ResolvePromise(platform);
+    app_banner_service_.reset(nullptr);
+  }
 }
 
 blink::WebPlugin* BlinkTestRunner::CreatePluginPlaceholder(
@@ -739,6 +742,10 @@ float BlinkTestRunner::GetDeviceScaleFactor() const {
 
 void BlinkTestRunner::RunIdleTasks(const base::Closure& callback) {
     SchedulerRunIdleTasks(callback);
+}
+
+void BlinkTestRunner::ForceTextInputStateUpdate(WebFrame* frame) {
+  ForceTextInputStateUpdateForRenderFrame(RenderFrame::FromWebFrame(frame));
 }
 
 bool BlinkTestRunner::AddMediaStreamVideoSourceAndTrack(
@@ -993,7 +1000,6 @@ void BlinkTestRunner::OnReset() {
   // Navigating to about:blank will make sure that no new loads are initiated
   // by the renderer.
   WebURLRequest request = WebURLRequest(GURL(url::kAboutBlankURL));
-  request.setRequestorOrigin(blink::WebSecurityOrigin::createUnique());
   render_view()->GetWebView()->mainFrame()->loadRequest(request);
   Send(new ShellViewHostMsg_ResetDone(routing_id()));
 }

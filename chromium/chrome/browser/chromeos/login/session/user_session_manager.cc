@@ -91,7 +91,6 @@
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/session_manager_client.h"
 #include "chromeos/login/auth/stub_authenticator.h"
-#include "chromeos/login/user_names.h"
 #include "chromeos/network/portal_detector/network_portal_detector.h"
 #include "chromeos/network/portal_detector/network_portal_detector_strategy.h"
 #include "chromeos/settings/cros_settings_names.h"
@@ -111,6 +110,7 @@
 #include "components/user_manager/known_user.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
+#include "components/user_manager/user_names.h"
 #include "components/user_manager/user_type.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
@@ -141,7 +141,8 @@ static const int kMaxRestartDelaySeconds = 10;
 // ChromeVox tutorial URL (used in place of "getting started" url when
 // accessibility is enabled).
 const char kChromeVoxTutorialURLPattern[] =
-    "http://www.chromevox.com/tutorial/index.html?lang=%s";
+    "chrome-extension://mndnfokpggljbaajbnioimlmbfngpief/"
+    "cvox2/background/panel.html?tutorial";
 
 void InitLocaleAndInputMethodsForNewUser(
     UserSessionManager* session_manager,
@@ -441,7 +442,7 @@ void UserSessionManager::CompleteGuestSessionLogin(const GURL& start_url) {
   if (!about_flags::AreSwitchesIdenticalToCurrentCommandLine(
           user_flags, *base::CommandLine::ForCurrentProcess(), NULL)) {
     DBusThreadManager::Get()->GetSessionManagerClient()->SetFlagsForUser(
-        cryptohome::Identification(login::GuestAccountId()),
+        cryptohome::Identification(user_manager::GuestAccountId()),
         base::CommandLine::StringVector());
   }
 
@@ -487,10 +488,6 @@ void UserSessionManager::StartSession(
   if (!has_active_session)
     StartCrosSession();
 
-  // TODO(nkostylev): Notify UserLoggedIn() after profile is actually
-  // ready to be used (http://crbug.com/361528).
-  NotifyUserLoggedIn();
-
   if (!user_context.GetDeviceId().empty()) {
     user_manager::known_user::SetDeviceId(user_context.GetAccountId(),
                                           user_context.GetDeviceId());
@@ -532,14 +529,15 @@ void UserSessionManager::RestoreAuthenticationSession(Profile* user_profile) {
       ProfileHelper::Get()->GetUserByProfile(user_profile);
   DCHECK(user);
   if (!net::NetworkChangeNotifier::IsOffline()) {
-    pending_signin_restore_sessions_.erase(user->email());
+    pending_signin_restore_sessions_.erase(user->GetAccountId().GetUserEmail());
     RestoreAuthSessionImpl(user_profile, false /* has_auth_cookies */);
   } else {
     // Even if we're online we should wait till initial
     // OnConnectionTypeChanged() call. Otherwise starting fetchers too early may
     // end up canceling all request when initial network connection type is
     // processed. See http://crbug.com/121643.
-    pending_signin_restore_sessions_.insert(user->email());
+    pending_signin_restore_sessions_.insert(
+        user->GetAccountId().GetUserEmail());
   }
 }
 
@@ -696,6 +694,12 @@ bool UserSessionManager::RestartToApplyPerSessionFlagsIfNeed(
   if (ProfileHelper::IsSigninProfile(profile))
     return false;
 
+  // Kiosk sessions keeps the startup flags.
+  if (user_manager::UserManager::Get() &&
+      user_manager::UserManager::Get()->IsLoggedInAsKioskApp()) {
+    return false;
+  }
+
   if (early_restart && !CanPerformEarlyRestart())
     return false;
 
@@ -790,7 +794,7 @@ void UserSessionManager::OnSessionRestoreStateChanged(
   if (!connection_error) {
     // We are in one of "done" states here.
     user_manager::UserManager::Get()->SaveUserOAuthStatus(
-        user_manager::UserManager::Get()->GetLoggedInUser()->GetAccountId(),
+        user_manager::UserManager::Get()->GetActiveUser()->GetAccountId(),
         user_status);
   }
 
@@ -837,9 +841,9 @@ void UserSessionManager::OnConnectionTypeChanged(
       continue;
 
     Profile* user_profile = ProfileHelper::Get()->GetProfileByUserUnsafe(*it);
-    bool should_restore_session =
-        pending_signin_restore_sessions_.find((*it)->email()) !=
-        pending_signin_restore_sessions_.end();
+    bool should_restore_session = pending_signin_restore_sessions_.find(
+                                      (*it)->GetAccountId().GetUserEmail()) !=
+                                  pending_signin_restore_sessions_.end();
     OAuth2LoginManager* login_manager =
         OAuth2LoginManagerFactory::GetInstance()->GetForProfile(user_profile);
     if (login_manager->SessionRestoreIsRunning()) {
@@ -847,7 +851,8 @@ void UserSessionManager::OnConnectionTypeChanged(
       // we need to kick off OAuth token verification process again.
       login_manager->ContinueSessionRestore();
     } else if (should_restore_session) {
-      pending_signin_restore_sessions_.erase((*it)->email());
+      pending_signin_restore_sessions_.erase(
+          (*it)->GetAccountId().GetUserEmail());
       RestoreAuthSessionImpl(user_profile, false /* has_auth_cookies */);
     }
   }
@@ -887,6 +892,8 @@ void UserSessionManager::CreateUserSession(const UserContext& user_context,
   has_auth_cookies_ = has_auth_cookies;
   InitSessionRestoreStrategy();
   StoreUserContextDataBeforeProfileIsCreated();
+  session_manager::SessionManager::Get()->CreateSession(
+      user_context_.GetAccountId(), user_context_.GetUserIDHash());
 }
 
 void UserSessionManager::PreStartSession() {
@@ -909,15 +916,6 @@ void UserSessionManager::StartCrosSession() {
   DBusThreadManager::Get()->GetSessionManagerClient()->StartSession(
       cryptohome::Identification(user_context_.GetAccountId()));
   btl->AddLoginTimeMarker("StartSession-End", false);
-}
-
-void UserSessionManager::NotifyUserLoggedIn() {
-  BootTimesRecorder* btl = BootTimesRecorder::Get();
-  btl->AddLoginTimeMarker("UserLoggedIn-Start", false);
-  user_manager::UserManager* user_manager = user_manager::UserManager::Get();
-  user_manager->UserLoggedIn(user_context_.GetAccountId(),
-                             user_context_.GetUserIDHash(), false);
-  btl->AddLoginTimeMarker("UserLoggedIn-End", false);
 }
 
 void UserSessionManager::PrepareProfile() {
@@ -1135,8 +1133,8 @@ void UserSessionManager::FinalizePrepareProfile(Profile* profile) {
 
   profile->OnLogin();
 
-  g_browser_process->platform_part()->SessionManager()->SetSessionState(
-      session_manager::SESSION_STATE_LOGGED_IN_NOT_ACTIVE);
+  session_manager::SessionManager::Get()->SetSessionState(
+      session_manager::SessionState::LOGGED_IN_NOT_ACTIVE);
 
   // Send the notification before creating the browser so additional objects
   // that need the profile (e.g. the launcher) can be created first.
@@ -1228,11 +1226,7 @@ void UserSessionManager::InitializeStartUrls() const {
   if (!user_manager->IsLoggedInAsPublicAccount()) {
     if (AccessibilityManager::Get()->IsSpokenFeedbackEnabled()) {
       const char* url = kChromeVoxTutorialURLPattern;
-      PrefService* prefs = g_browser_process->local_state();
-      const std::string current_locale =
-          base::ToLowerASCII(prefs->GetString(prefs::kApplicationLocale));
-      std::string vox_url = base::StringPrintf(url, current_locale.c_str());
-      start_urls.push_back(vox_url);
+      start_urls.push_back(url);
       can_show_getstarted_guide = false;
     }
   }
@@ -1339,7 +1333,6 @@ void UserSessionManager::RestoreAuthSessionImpl(
     bool restore_from_auth_cookies) {
   CHECK((authenticator_.get() && authenticator_->authentication_context()) ||
         !restore_from_auth_cookies);
-
   if (chrome::IsRunningInForcedAppMode() ||
       base::CommandLine::ForCurrentProcess()->HasSwitch(
           chromeos::switches::kDisableGaiaServices)) {
@@ -1521,9 +1514,8 @@ void UserSessionManager::NotifyPendingUserSessionsRestoreFinished() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   user_sessions_restored_ = true;
   user_sessions_restore_in_progress_ = false;
-  FOR_EACH_OBSERVER(chromeos::UserSessionStateObserver,
-                    session_state_observer_list_,
-                    PendingUserSessionsRestoreFinished());
+  for (auto& observer : session_state_observer_list_)
+    observer.PendingUserSessionsRestoreFinished();
 }
 
 void UserSessionManager::UpdateEasyUnlockKeys(const UserContext& user_context) {
@@ -1746,7 +1738,7 @@ void UserSessionManager::DoBrowserLaunchInternal(Profile* profile,
   // browser before it is dereferenced by the login host.
   if (login_host)
     login_host->Finalize();
-  user_manager::UserManager::Get()->SessionStarted();
+  session_manager::SessionManager::Get()->SessionStarted();
   chromeos::BootTimesRecorder::Get()->LoginDone(
       user_manager::UserManager::Get()->IsCurrentUserNew());
 

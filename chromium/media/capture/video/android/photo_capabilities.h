@@ -45,26 +45,32 @@ class PhotoCapabilities {
   int getMinIso() const;
   int getMaxIso() const;
   int getCurrentIso() const;
+  int getStepIso() const;
   int getMinHeight() const;
   int getMaxHeight() const;
   int getCurrentHeight() const;
+  int getStepHeight() const;
   int getMinWidth() const;
   int getMaxWidth() const;
   int getCurrentWidth() const;
-  int getMinZoom() const;
-  int getMaxZoom() const;
-  int getCurrentZoom() const;
+  int getStepWidth() const;
+  double getMinZoom() const;
+  double getMaxZoom() const;
+  double getCurrentZoom() const;
+  double getStepZoom() const;
   AndroidMeteringMode getFocusMode() const;
   AndroidMeteringMode getExposureMode() const;
-  int getMinExposureCompensation() const;
-  int getMaxExposureCompensation() const;
-  int getCurrentExposureCompensation() const;
+  double getMinExposureCompensation() const;
+  double getMaxExposureCompensation() const;
+  double getCurrentExposureCompensation() const;
+  double getStepExposureCompensation() const;
   AndroidMeteringMode getWhiteBalanceMode() const;
   AndroidFillLightMode getFillLightMode() const;
   bool getRedEyeReduction() const;
   int getMinColorTemperature() const;
   int getMaxColorTemperature() const;
   int getCurrentColorTemperature() const;
+  int getStepColorTemperature() const;
 
  private:
   const base::android::ScopedJavaLocalRef<jobject> object_;

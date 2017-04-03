@@ -63,12 +63,14 @@
   DISABLE_MULTI(CacheStorageCacheTestP, TwoKeysThenOne)
   DISABLE_MULTI(CacheStorageCacheTestP, DeleteWithIgnoreSearchTrue)
   DISABLE_MULTI(CacheStorageCacheTestP, KeysWithIgnoreSearchTrue)
+  DISABLE_MULTI(CacheStorageCacheTestP, MatchAll_TwoResponsesThenOne)
   DISABLE_MULTI(CacheStorageCacheTestP, TwoKeys)
   DISABLE_MULTI(CacheStorageCacheTestP, MatchAll_TwoResponsesThenOne)
   DISABLE(InputEventFilterTest, NonBlockingWheel)
   DISABLE(InputEventFilterTest, Basic)
   DISABLE(RenderViewImplTest, RendererNavigationStartTransmittedToBrowser)
   DISABLE(SRTFetcherTest, ReporterLogging_EnabledNoRecentLogging)
+  DISABLE(SpdySessionTest, MetricsCollectionOnPushStreams)
 
   // Fails on tester, works on dev PC; assume it is the timing issue
   DISABLE(NotificationPermissionContextTest, TestDenyInIncognitoAfterDelay)

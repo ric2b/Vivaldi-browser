@@ -198,6 +198,11 @@ def interface_context(interface, interfaces):
     is_global = ('PrimaryGlobal' in extended_attributes or
                  'Global' in extended_attributes)
 
+    # [ImmutablePrototype]
+    # TODO(littledan): Is it possible to deduce this based on inheritance,
+    # as in the WebIDL spec?
+    is_immutable_prototype = is_global or 'ImmutablePrototype' in extended_attributes
+
     # [SetWrapperReferenceFrom]
     set_wrapper_reference_from = extended_attributes.get('SetWrapperReferenceFrom')
     if set_wrapper_reference_from:
@@ -258,6 +263,7 @@ def interface_context(interface, interfaces):
         'is_event_target': is_event_target,
         'is_exception': interface.is_exception,
         'is_global': is_global,
+        'is_immutable_prototype': is_immutable_prototype,
         'is_node': inherits_interface(interface.name, 'Node'),
         'is_partial': interface.is_partial,
         'is_typed_array_type': is_typed_array_type,
@@ -299,11 +305,12 @@ def interface_context(interface, interfaces):
             raise Exception('[Constructor] and [NoInterfaceObject] MUST NOT be'
                             ' specified with [HTMLConstructor]: '
                             '%s' % interface.name)
+        includes.add('bindings/core/v8/V8HTMLConstructor.h')
 
     # [NamedConstructor]
     named_constructor = named_constructor_context(interface)
 
-    if constructors or custom_constructors or has_html_constructor or named_constructor:
+    if constructors or custom_constructors or named_constructor:
         if interface.is_partial:
             raise Exception('[Constructor] and [NamedConstructor] MUST NOT be'
                             ' specified on partial interface definitions: '
@@ -312,8 +319,9 @@ def interface_context(interface, interfaces):
         includes.add('bindings/core/v8/V8ObjectConstructor.h')
         includes.add('core/frame/LocalDOMWindow.h')
     elif 'Measure' in extended_attributes or 'MeasureAs' in extended_attributes:
-        raise Exception('[Measure] or [MeasureAs] specified for interface without a constructor: '
-                        '%s' % interface.name)
+        if not interface.is_partial:
+            raise Exception('[Measure] or [MeasureAs] specified for interface without a constructor: '
+                            '%s' % interface.name)
 
     # [Unscopable] attributes and methods
     unscopables = []
@@ -366,7 +374,70 @@ def interface_context(interface, interfaces):
     })
 
     # Methods
+    methods, iterator_method = methods_context(interface)
+    context.update({
+        'has_origin_safe_method_setter': is_global and any(
+            method['is_check_security_for_receiver'] and not method['is_unforgeable']
+            for method in methods),
+        'has_private_script': (any(attribute['is_implemented_in_private_script'] for attribute in attributes) or
+                               any(method['is_implemented_in_private_script'] for method in methods)),
+        'iterator_method': iterator_method,
+        'methods': methods,
+    })
+
+    # Window.idl in Blink has indexed properties, but the spec says Window
+    # interface doesn't have indexed properties, instead the WindowProxy exotic
+    # object has indexed properties.  Thus, Window interface must not support
+    # iterators.
+    has_array_iterator = (not interface.is_partial and
+                          interface.has_indexed_elements and
+                          interface.name != 'Window')
+    context.update({
+        'has_array_iterator': has_array_iterator,
+    })
+
+    # Conditionally enabled members
+    has_conditional_attributes_on_prototype = any(  # pylint: disable=invalid-name
+        (attribute['exposed_test'] or attribute['secure_context_test']) and attribute['on_prototype']
+        for attribute in attributes)
+    context.update({
+        'has_conditional_attributes_on_prototype':
+            has_conditional_attributes_on_prototype,
+    })
+
+    context.update({
+        'legacy_caller': legacy_caller(interface.legacy_caller, interface),
+        'indexed_property_getter': property_getter(interface.indexed_property_getter, ['index']),
+        'indexed_property_setter': property_setter(interface.indexed_property_setter, interface),
+        'indexed_property_deleter': property_deleter(interface.indexed_property_deleter),
+        'is_override_builtins': 'OverrideBuiltins' in extended_attributes,
+        'named_property_getter': property_getter(interface.named_property_getter, ['name']),
+        'named_property_setter': property_setter(interface.named_property_setter, interface),
+        'named_property_deleter': property_deleter(interface.named_property_deleter),
+    })
+    context.update({
+        'has_named_properties_object': is_global and context['named_property_getter'],
+    })
+
+    # Origin Trials
+    context.update({
+        'origin_trial_features': origin_trial_features(interface, context['constants'], context['attributes'], context['methods']),
+    })
+    return context
+
+
+def methods_context(interface):
+    """Creates a list of Jinja template contexts for methods of an interface.
+
+    Args:
+        interface: An interface to create contexts for
+
+    Returns:
+        A list of method contexts, and an iterator context if available or None
+    """
+
     methods = []
+
     if interface.original_interface:
         methods.extend([v8_methods.method_context(interface, operation, is_visible=False)
                         for operation in interface.original_interface.operations
@@ -383,7 +454,7 @@ def interface_context(interface, interfaces):
     compute_method_overloads_context(interface, methods)
 
     def generated_method(return_type, name, arguments=None, extended_attributes=None, implemented_as=None):
-        operation = IdlOperation(interface.idl_name)
+        operation = IdlOperation()
         operation.idl_type = return_type
         operation.name = name
         if arguments:
@@ -396,7 +467,7 @@ def interface_context(interface, interfaces):
         return v8_methods.method_context(interface, operation)
 
     def generated_argument(idl_type, name, is_optional=False, extended_attributes=None):
-        argument = IdlArgument(interface.idl_name)
+        argument = IdlArgument()
         argument.idl_type = idl_type
         argument.name = name
         argument.is_optional = is_optional
@@ -406,15 +477,15 @@ def interface_context(interface, interfaces):
 
     # [Iterable], iterable<>, maplike<> and setlike<>
     iterator_method = None
-    has_array_iterator = False
 
     # FIXME: support Iterable in partial interfaces. However, we don't
     # need to support iterator overloads between interface and
     # partial interface definitions.
     # http://heycam.github.io/webidl/#idl-overloading
-    if (not interface.is_partial and
-            (interface.iterable or interface.maplike or interface.setlike or
-             interface.has_indexed_elements or 'Iterable' in extended_attributes)):
+    if (not interface.is_partial and (
+            interface.iterable or interface.maplike or interface.setlike or
+            interface.has_indexed_elements or
+            'Iterable' in interface.extended_attributes)):
 
         used_extended_attributes = {}
 
@@ -447,13 +518,7 @@ def interface_context(interface, interfaces):
                 extended_attributes=used_extended_attributes,
                 implemented_as=implemented_as)
 
-        if interface.has_indexed_elements:
-            # Window.idl in Blink has indexed properties, but the spec says
-            # Window interface doesn't have indexed properties, instead
-            # the WindowProxy exotic object has indexed properties.  Thus,
-            # Window interface must not support iterators.
-            has_array_iterator = (interface.name != 'Window')
-        elif interface.iterable or interface.maplike or interface.setlike or 'Iterable' in extended_attributes:
+        if not interface.has_indexed_elements:
             iterator_method = generated_iterator_method('iterator', implemented_as='iterator')
 
         if interface.iterable or interface.maplike or interface.setlike:
@@ -579,44 +644,7 @@ def interface_context(interface, interfaces):
         method['length'] = (method['overloads']['length'] if 'overloads' in method else
                             method['number_of_required_arguments'])
 
-    context.update({
-        'has_origin_safe_method_setter': is_global and any(
-            method['is_check_security_for_receiver'] and not method['is_unforgeable']
-            for method in methods),
-        'has_private_script': (any(attribute['is_implemented_in_private_script'] for attribute in attributes) or
-                               any(method['is_implemented_in_private_script'] for method in methods)),
-        'iterator_method': iterator_method,
-        'has_array_iterator': has_array_iterator,
-        'methods': methods,
-    })
-
-    # Conditionally enabled members
-    has_conditional_attributes_on_prototype = any(
-        (attribute['exposed_test'] or attribute['secure_context_test']) and attribute['on_prototype']
-        for attribute in attributes)
-    context.update({
-        'has_conditional_attributes_on_prototype':
-            has_conditional_attributes_on_prototype,
-    })
-
-    context.update({
-        'indexed_property_getter': property_getter(interface.indexed_property_getter, ['index']),
-        'indexed_property_setter': property_setter(interface.indexed_property_setter, interface),
-        'indexed_property_deleter': property_deleter(interface.indexed_property_deleter),
-        'is_override_builtins': 'OverrideBuiltins' in extended_attributes,
-        'named_property_getter': property_getter(interface.named_property_getter, ['name']),
-        'named_property_setter': property_setter(interface.named_property_setter, interface),
-        'named_property_deleter': property_deleter(interface.named_property_deleter),
-    })
-    context.update({
-        'has_named_properties_object': is_global and context['named_property_getter'],
-    })
-
-    # Origin Trials
-    context.update({
-        'origin_trial_features': origin_trial_features(interface, context['constants'], context['attributes'], context['methods']),
-    })
-    return context
+    return methods, iterator_method
 
 
 def reflected_name(constant_name):
@@ -1117,7 +1145,7 @@ def resolution_tests_methods(effective_overloads):
     # same thing.
     try:
         method = next(method for idl_type, method in idl_types_methods
-                      if idl_type.is_callback_function)
+                      if idl_type.is_custom_callback_function)
         test = '%s->IsFunction()' % cpp_value
         yield test, method
     except StopIteration:
@@ -1333,6 +1361,12 @@ def interface_length(constructors):
 # Special operations (methods)
 # http://heycam.github.io/webidl/#idl-special-operations
 ################################################################################
+
+def legacy_caller(caller, interface):
+    if not caller:
+        return None
+
+    return v8_methods.method_context(interface, caller)
 
 def property_getter(getter, cpp_arguments):
     if not getter:

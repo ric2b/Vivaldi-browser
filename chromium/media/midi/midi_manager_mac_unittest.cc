@@ -17,10 +17,12 @@
 #include "base/synchronization/lock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-namespace media {
 namespace midi {
 
 namespace {
+
+using mojom::PortState;
+using mojom::Result;
 
 void Noop(const MIDIPacketList*, void*, void*) {}
 
@@ -50,8 +52,8 @@ class FakeMidiManagerClient : public MidiManagerClient {
     info_ = info;
     wait_for_port_ = false;
   }
-  void SetInputPortState(uint32_t port_index, MidiPortState state) override {}
-  void SetOutputPortState(uint32_t port_index, MidiPortState state) override {}
+  void SetInputPortState(uint32_t port_index, PortState state) override {}
+  void SetOutputPortState(uint32_t port_index, PortState state) override {}
 
   void CompleteStartSession(Result result) override {
     base::AutoLock lock(lock_);
@@ -171,4 +173,3 @@ TEST_F(MidiManagerMacTest, MidiNotification) {
 }  // namespace
 
 }  // namespace midi
-}  // namespace media

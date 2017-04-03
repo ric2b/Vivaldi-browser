@@ -14,7 +14,10 @@ namespace blink {
 
 class Event;
 class IntRect;
+class LocalFrame;
+class MessageEvent;
 class ResourceRequest;
+class SecurityOrigin;
 
 class RemoteFrameClient : public FrameClient {
  public:
@@ -39,6 +42,8 @@ class RemoteFrameClient : public FrameClient {
   virtual void advanceFocus(WebFocusType, LocalFrame* source) = 0;
 
   virtual void visibilityChanged(bool visible) = 0;
+
+  virtual void setHasReceivedUserGesture() = 0;
 };
 
 }  // namespace blink

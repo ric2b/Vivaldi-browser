@@ -143,16 +143,6 @@ const ExceptionsInfoMap& GetExceptionsInfoMap() {
         ContentSettingWithExceptions(
             true, UserMetricsAction("Options_DefaultPopupsSettingChanged"))));
     exceptions_info_map.insert(std::make_pair(
-        CONTENT_SETTINGS_TYPE_FULLSCREEN,
-        ContentSettingWithExceptions(
-            true,
-            UserMetricsAction("Options_DefaultFullScreenSettingChanged"))));
-    exceptions_info_map.insert(std::make_pair(
-        CONTENT_SETTINGS_TYPE_MOUSELOCK,
-        ContentSettingWithExceptions(
-            true,
-            UserMetricsAction("Options_DefaultMouseLockSettingChanged"))));
-    exceptions_info_map.insert(std::make_pair(
         CONTENT_SETTINGS_TYPE_PPAPI_BROKER,
         ContentSettingWithExceptions(
             true,
@@ -432,14 +422,6 @@ void ContentSettingsHandler::GetLocalizedValues(
     {"notificationsAllow", IDS_NOTIFICATIONS_ALLOW_RADIO},
     {"notificationsAsk", IDS_NOTIFICATIONS_ASK_RADIO},
     {"notificationsBlock", IDS_NOTIFICATIONS_BLOCK_RADIO},
-    // Fullscreen filter.
-    {"fullscreenTabLabel", IDS_FULLSCREEN_TAB_LABEL},
-    {"fullscreenHeader", IDS_FULLSCREEN_HEADER},
-    {"fullscreenDeprecated", IDS_EXCLUSIVE_ACCESS_DEPRECATED},
-    // Mouse Lock filter.
-    {"mouselockTabLabel", IDS_MOUSE_LOCK_TAB_LABEL},
-    {"mouselockHeader", IDS_MOUSE_LOCK_HEADER},
-    {"mouselockDeprecated", IDS_EXCLUSIVE_ACCESS_DEPRECATED},
 #if defined(OS_CHROMEOS) || defined(OS_WIN)
     // Protected Content filter
     {"protectedContentTabLabel", IDS_PROTECTED_CONTENT_TAB_LABEL},
@@ -558,10 +540,6 @@ void ContentSettingsHandler::GetLocalizedValues(
                 IDS_GEOLOCATION_TAB_LABEL);
   RegisterTitle(localized_strings, "notifications",
                 IDS_NOTIFICATIONS_TAB_LABEL);
-  RegisterTitle(localized_strings, "fullscreen",
-                IDS_FULLSCREEN_TAB_LABEL);
-  RegisterTitle(localized_strings, "mouselock",
-                IDS_MOUSE_LOCK_TAB_LABEL);
 #if defined(OS_CHROMEOS)
   RegisterTitle(localized_strings, "protectedContent",
                 IDS_PROTECTED_CONTENT_TAB_LABEL);
@@ -1119,14 +1097,6 @@ void ContentSettingsHandler::UpdateExceptionsViewFromHostContentSettingsMap(
                                          type_string, exceptions);
 
   UpdateExceptionsViewFromOTRHostContentSettingsMap(type);
-
-  // Fullscreen and mouse lock have no global settings to update.
-  // TODO(mgiuca): Delete this after removing these content settings entirely
-  // (https://crbug.com/591896).
-  if (type == CONTENT_SETTINGS_TYPE_FULLSCREEN ||
-      type == CONTENT_SETTINGS_TYPE_MOUSELOCK) {
-    return;
-  }
 
 #if defined(OS_CHROMEOS)
   // Also the default for protected contents is managed in another place.

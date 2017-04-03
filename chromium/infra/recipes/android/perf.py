@@ -146,7 +146,7 @@ def RunSteps(api):
     test_spec = api.chromium_tests.read_test_spec(api, test_spec_file)
 
     scripts_compile_targets = \
-        api.chromium_tests.get_compile_targets_for_scripts().json.output
+        api.chromium_tests.get_compile_targets_for_scripts()
 
     builder['tests'] = api.chromium_tests.generate_tests_from_test_spec(
         api, test_spec, builder, buildername, mastername, False, None,
@@ -155,6 +155,22 @@ def RunSteps(api):
 
   api.path['checkout'] = api.path['slave_build'].join('src')
   api.chromium_android.clean_local_files()
+
+  # TODO(jbudorick): Remove this after resolving
+  # https://github.com/catapult-project/catapult/issues/2901
+  devil_path = api.path['checkout'].join('third_party', 'catapult', 'devil')
+  api.python.inline(
+      'initialize devil',
+      """
+      import sys
+      sys.path.append(sys.argv[1])
+      from devil import devil_env
+      devil_env.config.Initialize()
+      devil_env.config.PrefetchPaths(dependencies=['adb'])
+      """,
+      args=[devil_path])
+  api.adb.set_adb_path(
+      devil_path.join('bin', 'deps', 'linux2', 'x86_64', 'bin', 'adb'))
 
   api.chromium_android.download_build(bucket=builder['bucket'],
     path=builder['path'](api))
@@ -188,8 +204,7 @@ def RunSteps(api):
         num_host_shards=builder.get('num_host_shards', 1),
         shard_index=builder.get('shard_index', 0),
         override_browser_name=builder.get('browser_name'),
-        enable_platform_mode=builder.get('enable_platform_mode'),
-        pass_adb_path=False)
+        enable_platform_mode=builder.get('enable_platform_mode'))
     dynamic_perf_tests.run(api, None)
 
     if failures:

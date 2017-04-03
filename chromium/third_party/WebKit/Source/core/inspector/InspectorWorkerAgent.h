@@ -33,18 +33,17 @@
 
 #include "core/CoreExport.h"
 #include "core/inspector/InspectorBaseAgent.h"
-#include "core/inspector/protocol/Worker.h"
+#include "core/inspector/protocol/Target.h"
 #include "core/workers/WorkerInspectorProxy.h"
 #include "wtf/Forward.h"
 #include "wtf/HashMap.h"
 
 namespace blink {
 class InspectedFrames;
-class KURL;
 class WorkerInspectorProxy;
 
 class CORE_EXPORT InspectorWorkerAgent final
-    : public InspectorBaseAgent<protocol::Worker::Metainfo>,
+    : public InspectorBaseAgent<protocol::Target::Metainfo>,
       public WorkerInspectorProxy::PageInspector {
   WTF_MAKE_NONCOPYABLE(InspectorWorkerAgent);
 
@@ -53,7 +52,7 @@ class CORE_EXPORT InspectorWorkerAgent final
   ~InspectorWorkerAgent() override;
   DECLARE_VIRTUAL_TRACE();
 
-  void disable(ErrorString*) override;
+  Response disable() override;
   void restore() override;
   void didCommitLoadForLocalFrame(LocalFrame*) override;
 
@@ -63,17 +62,16 @@ class CORE_EXPORT InspectorWorkerAgent final
   void workerTerminated(WorkerInspectorProxy*);
 
   // Called from Dispatcher
-  void enable(ErrorString*) override;
-  void sendMessageToWorker(ErrorString*,
-                           const String& workerId,
-                           const String& message) override;
-  void setWaitForDebuggerOnStart(ErrorString*, bool value) override;
+  Response setAutoAttach(bool autoAttach, bool waitForDebuggerOnStart) override;
+  Response sendMessageToTarget(const String& targetId,
+                               const String& message) override;
 
   void setTracingSessionId(const String&);
 
  private:
-  bool enabled();
+  bool autoAttachEnabled();
   void connectToAllProxies();
+  void disconnectFromAllProxies();
   void connectToProxy(WorkerInspectorProxy*, bool waitingForDebugger);
 
   // WorkerInspectorProxy::PageInspector implementation.

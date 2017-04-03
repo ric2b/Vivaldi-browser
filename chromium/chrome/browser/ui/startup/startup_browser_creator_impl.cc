@@ -283,11 +283,10 @@ void AppendTabs(const StartupTabs& from, StartupTabs* to) {
 }
 
 // Determines whether the Consolidated startup flow should be used, based on
-// OS, OS version, and the kUseConsolidatedStartupFlow Feature.
+// the kUseConsolidatedStartupFlow Feature. Not enabled on Windows 10+.
 bool UseConsolidatedFlow() {
 #if defined(OS_WIN)
-  // TODO(tmartino): Enable for Windows 10+ once relevant Win 10-specific logic
-  // is added to StartupTabProvider.
+  // TODO(tmartino): Add a Win10+ specific experiment.
   if (base::win::GetVersion() >= base::win::VERSION_WIN10)
     return false;
 #endif  // defined(OS_WIN)
@@ -701,7 +700,7 @@ StartupTabs StartupBrowserCreatorImpl::DetermineStartupTabs(
   // Policies for onboarding (e.g., first run) may show promotional and
   // introductory content depending on a number of system status factors,
   // including OS and whether or not this is First Run.
-  StartupTabs onboarding_tabs = provider.GetOnboardingTabs();
+  StartupTabs onboarding_tabs = provider.GetOnboardingTabs(profile_);
   AppendTabs(onboarding_tabs, &tabs);
 
   // If the user has set the preference indicating URLs to show on opening,
@@ -1140,10 +1139,11 @@ void StartupBrowserCreatorImpl::AddStartupURLs(
       // behavior is desired because completing or skipping the sync promo
       // causes a redirect to the NTP.
       if (!startup_urls->empty() &&
-          startup_urls->at(0) == GURL(chrome::kChromeUINewTabURL))
+          startup_urls->at(0) == chrome::kChromeUINewTabURL) {
         startup_urls->at(0) = sync_promo_url;
-      else
+      } else {
         startup_urls->insert(startup_urls->begin(), sync_promo_url);
+      }
     }
   }
 }

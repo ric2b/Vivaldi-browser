@@ -12,7 +12,7 @@
 
 #include "base/command_line.h"
 #include "base/logging.h"
-#include "base/metrics/sparse_histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
@@ -45,7 +45,7 @@ scoped_refptr<gl::GLSurface> InitializeGLSurface() {
 
 scoped_refptr<gl::GLContext> InitializeGLContext(gl::GLSurface* surface) {
   scoped_refptr<gl::GLContext> context(
-      gl::init::CreateGLContext(nullptr, surface, gl::PreferIntegratedGpu));
+      gl::init::CreateGLContext(nullptr, surface, gl::GLContextAttribs()));
   if (!context.get()) {
     LOG(ERROR) << "gl::init::CreateGLContext failed";
     return NULL;

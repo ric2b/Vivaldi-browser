@@ -9,8 +9,8 @@
 
 #include "components/sync/base/model_type.h"
 #include "components/sync/base/weak_handle.h"
-#include "components/sync/core/sync_encryption_handler.h"
-#include "components/sync/core/sync_manager.h"
+#include "components/sync/engine/sync_encryption_handler.h"
+#include "components/sync/engine/sync_manager.h"
 #include "components/sync/protocol/sync_protocol_error.h"
 
 namespace sync_pb {
@@ -76,11 +76,11 @@ class SyncFrontend {
       ModelType type,
       const UpdateCounters& counters) = 0;
 
-  // Called when we receive an updated status counter for a directory type.
+  // Called when we receive an updated status counter for a datatype.
   //
   // Disabled by default.  Enable by calling
   // EnableDirectoryTypeDebugInfoForwarding() on the backend.
-  virtual void OnDirectoryTypeStatusCounterUpdated(
+  virtual void OnDatatypeStatusCounterUpdated(
       ModelType type,
       const StatusCounters& counters) = 0;
 

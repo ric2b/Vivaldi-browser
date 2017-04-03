@@ -5,6 +5,8 @@
 import("//build/config/features.gni")
 import("//build/config/ui.gni")
 import("//media/media_options.gni")
+import("//ppapi/features/features.gni")
+import("//printing/features/features.gni")
 import("//third_party/webrtc/build/webrtc.gni")
 import("//tools/ipc_fuzzer/ipc_fuzzer.gni")
 
@@ -30,6 +32,8 @@ target(link_target_type, "renderer") {
     "accessibility/render_accessibility_impl.h",
     "android/address_detector.cc",
     "android/address_detector.h",
+    "android/app_web_message_port_client.cc",
+    "android/app_web_message_port_client.h",
     "android/content_detector.cc",
     "android/content_detector.h",
     "android/disambiguation_popup_helper.cc",
@@ -91,8 +95,6 @@ target(link_target_type, "renderer") {
     "devtools/lock_free_circular_queue.h",
     "devtools/render_widget_screen_metrics_emulator.cc",
     "devtools/render_widget_screen_metrics_emulator.h",
-    "devtools/v8_sampling_profiler.cc",
-    "devtools/v8_sampling_profiler.h",
     "dom_automation_controller.cc",
     "dom_automation_controller.h",
     "dom_storage/dom_storage_cached_area.cc",
@@ -116,14 +118,14 @@ target(link_target_type, "renderer") {
     "drop_data_builder.h",
     "effective_connection_type_helper.cc",
     "effective_connection_type_helper.h",
+    "fetchers/associated_resource_fetcher_impl.cc",
+    "fetchers/associated_resource_fetcher_impl.h",
     "fetchers/manifest_fetcher.cc",
     "fetchers/manifest_fetcher.h",
     "fetchers/multi_resolution_image_resource_fetcher.cc",
     "fetchers/multi_resolution_image_resource_fetcher.h",
     "fetchers/resource_fetcher_impl.cc",
     "fetchers/resource_fetcher_impl.h",
-    "fetchers/web_url_loader_client_impl.cc",
-    "fetchers/web_url_loader_client_impl.h",
     "frame_blame_context.cc",
     "frame_blame_context.h",
     "gamepad_shared_memory_reader.cc",
@@ -248,8 +250,6 @@ target(link_target_type, "renderer") {
     "media/video_capture_impl.h",
     "media/video_capture_impl_manager.cc",
     "media/video_capture_impl_manager.h",
-    "media/video_capture_message_filter.cc",
-    "media/video_capture_message_filter.h",
     "media/web_media_element_source_utils.cc",
     "media/web_media_element_source_utils.h",
     "media/webmediaplayer_ms.cc",
@@ -260,6 +260,8 @@ target(link_target_type, "renderer") {
     "menu_item_builder.h",
     "mojo/blink_interface_provider_impl.cc",
     "mojo/blink_interface_provider_impl.h",
+    "mojo/blink_interface_registry_impl.cc",
+    "mojo/blink_interface_registry_impl.h",
     "mojo/interface_provider_js_wrapper.cc",
     "mojo/interface_provider_js_wrapper.h",
     "mojo_bindings_controller.cc",
@@ -379,8 +381,8 @@ target(link_target_type, "renderer") {
     "webgraphicscontext3d_provider_impl.h",
     "webpublicsuffixlist_impl.cc",
     "webpublicsuffixlist_impl.h",
-    "webscrollbarbehavior_impl_gtkoraura.cc",
-    "webscrollbarbehavior_impl_gtkoraura.h",
+    "webscrollbarbehavior_impl_aura.cc",
+    "webscrollbarbehavior_impl_aura.h",
     "webscrollbarbehavior_impl_mac.h",
     "webscrollbarbehavior_impl_mac.mm",
     "websharedworker_proxy.cc",
@@ -402,6 +404,7 @@ target(link_target_type, "renderer") {
     "//cc/proto",
     "//cc/surfaces",
     "//cc/surfaces:surface_id",
+    "//components/discardable_memory/client",
     "//components/url_formatter",
     "//content:resources",
     "//content/child",
@@ -415,7 +418,7 @@ target(link_target_type, "renderer") {
     "//device/base/synchronization",
     "//device/battery:mojo_bindings",
     "//device/bluetooth",
-    "//device/time_zone_monitor/public/interfaces",
+    "//device/sensors/public/cpp",
     "//device/usb/public/interfaces",
     "//device/vibration:mojo_bindings",
     "//device/vr:mojo_bindings",
@@ -430,24 +433,28 @@ target(link_target_type, "renderer") {
     "//media/gpu/ipc/client",
     "//media/gpu/ipc/common",
     "//media/midi",
+    "//media/midi:mojo_cpp_sources",
     "//media/mojo/interfaces:remoting",
     "//mojo/common",
     "//mojo/edk/js",
     "//mojo/public/cpp/bindings",
     "//mojo/public/js",
     "//net",
+    "//ppapi/features",
+    "//printing/features",
     "//sandbox",
-    "//services/shell/public/cpp",
-    "//services/shell/public/interfaces",
+    "//services/service_manager/public/cpp",
+    "//services/service_manager/public/interfaces",
     "//skia",
     "//storage/common",
     "//third_party/WebKit/public:blink",
+    "//third_party/WebKit/public:features",
     "//third_party/WebKit/public:mojo_bindings",
     "//third_party/boringssl",
     "//third_party/icu",
     "//third_party/libjingle",
     "//third_party/libyuv",
-    "//third_party/widevine/cdm:version_h",
+    "//third_party/widevine/cdm:headers",
     "//ui/accessibility",
     "//ui/base",
     "//ui/base/ime",
@@ -478,8 +485,8 @@ target(link_target_type, "renderer") {
 
   if (is_mac) {
     sources -= [
-      "webscrollbarbehavior_impl_gtkoraura.cc",
-      "webscrollbarbehavior_impl_gtkoraura.h",
+      "webscrollbarbehavior_impl_aura.cc",
+      "webscrollbarbehavior_impl_aura.h",
     ]
   }
 
@@ -504,6 +511,10 @@ target(link_target_type, "renderer") {
       "java/gin_java_function_invocation_helper.h",
     ]
   }
+
+  if (enable_media_remoting) {
+    deps += [ "//media/remoting" ]
+}
 
   if (system_proprietary_codecs) {
     sources += [
@@ -541,6 +552,10 @@ target(link_target_type, "renderer") {
       "media/image_capture_frame_grabber.h",
       "media/local_media_stream_audio_source.cc",
       "media/local_media_stream_audio_source.h",
+      "media/media_devices_event_dispatcher.cc",
+      "media/media_devices_event_dispatcher.h",
+      "media/media_devices_listener_impl.cc",
+      "media/media_devices_listener_impl.h",
       "media/media_recorder_handler.cc",
       "media/media_recorder_handler.h",
       "media/media_stream.cc",

@@ -8,7 +8,7 @@
 
 #include "base/logging.h"
 #include "build/build_config.h"
-#include "ui/accessibility/ax_view_state.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/strings/grit/ui_strings.h"
@@ -191,16 +191,18 @@ ClientView* DialogDelegate::CreateClientView(Widget* widget) {
 
 NonClientFrameView* DialogDelegate::CreateNonClientFrameView(Widget* widget) {
   if (ShouldUseCustomFrame())
-    return CreateDialogFrameView(widget);
+    return CreateDialogFrameView(widget, gfx::Insets());
   return WidgetDelegate::CreateNonClientFrameView(widget);
 }
 
 // static
-NonClientFrameView* DialogDelegate::CreateDialogFrameView(Widget* widget) {
+NonClientFrameView* DialogDelegate::CreateDialogFrameView(
+    Widget* widget,
+    const gfx::Insets& content_margins) {
   BubbleFrameView* frame =
       new BubbleFrameView(gfx::Insets(kPanelVertMargin, kButtonHEdgeMarginNew,
                                       0, kButtonHEdgeMarginNew),
-                          gfx::Insets());
+                          content_margins);
   const BubbleBorder::Shadow kShadow = BubbleBorder::SMALL_SHADOW;
   std::unique_ptr<BubbleBorder> border(
       new BubbleBorder(BubbleBorder::FLOAT, kShadow, gfx::kPlaceholderColor));
@@ -254,9 +256,9 @@ View* DialogDelegateView::GetContentsView() {
   return this;
 }
 
-void DialogDelegateView::GetAccessibleState(ui::AXViewState* state) {
-  state->name = GetWindowTitle();
-  state->role = ui::AX_ROLE_DIALOG;
+void DialogDelegateView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
+  node_data->SetName(GetWindowTitle());
+  node_data->role = ui::AX_ROLE_DIALOG;
 }
 
 void DialogDelegateView::ViewHierarchyChanged(

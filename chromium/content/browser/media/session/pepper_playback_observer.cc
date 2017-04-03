@@ -6,7 +6,7 @@
 
 #include "base/feature_list.h"
 #include "base/metrics/histogram_macros.h"
-#include "content/browser/media/session/media_session.h"
+#include "content/browser/media/session/media_session_impl.h"
 #include "content/browser/media/session/pepper_player_delegate.h"
 #include "content/common/frame_messages.h"
 #include "ipc/ipc_message_macros.h"
@@ -14,6 +14,16 @@
 #include "media/base/media_switches.h"
 
 namespace content {
+
+namespace {
+
+bool ShouldDuckFlash() {
+  return base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+             switches::kEnableDefaultMediaSession) ==
+         switches::kEnableDefaultMediaSessionDuckFlash;
+}
+
+}  // anonymous namespace
 
 PepperPlaybackObserver::PepperPlaybackObserver(WebContentsImpl *contents)
     : contents_(contents) {}
@@ -25,7 +35,7 @@ PepperPlaybackObserver::~PepperPlaybackObserver() {
   // RenderViewHost has been destroyed.
   for (PlayersMap::iterator iter = players_map_.begin();
        iter != players_map_.end();) {
-    MediaSession::Get(contents_)->RemovePlayer(
+    MediaSessionImpl::Get(contents_)->RemovePlayer(
         iter->second.get(), PepperPlayerDelegate::kPlayerId);
     iter = players_map_.erase(iter);
   }
@@ -46,25 +56,23 @@ void PepperPlaybackObserver::PepperInstanceDeleted(int32_t pp_instance) {
 void PepperPlaybackObserver::PepperStartsPlayback(int32_t pp_instance) {
   players_played_sound_map_[pp_instance] = true;
 
-  if (!base::FeatureList::IsEnabled(media::kFlashJoinsMediaSession))
-    return;
-
   if (players_map_.count(pp_instance))
     return;
 
   players_map_[pp_instance].reset(new PepperPlayerDelegate(
       contents_, pp_instance));
-  MediaSession::Get(contents_)->AddPlayer(
-      players_map_[pp_instance].get(),
-      PepperPlayerDelegate::kPlayerId,
-      media::MediaContentType::Pepper);
+
+  MediaSessionImpl::Get(contents_)->AddPlayer(
+      players_map_[pp_instance].get(), PepperPlayerDelegate::kPlayerId,
+      ShouldDuckFlash() ? media::MediaContentType::Pepper
+                        : media::MediaContentType::OneShot);
 }
 
 void PepperPlaybackObserver::PepperStopsPlayback(int32_t pp_instance) {
   if (!players_map_.count(pp_instance))
     return;
 
-  MediaSession::Get(contents_)->RemovePlayer(
+  MediaSessionImpl::Get(contents_)->RemovePlayer(
       players_map_[pp_instance].get(), PepperPlayerDelegate::kPlayerId);
 
   players_map_.erase(pp_instance);

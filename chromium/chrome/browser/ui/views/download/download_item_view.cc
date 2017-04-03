@@ -40,9 +40,10 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/prefs/pref_service.h"
+#include "components/safe_browsing_db/safe_browsing_prefs.h"
 #include "content/public/browser/download_danger_type.h"
 #include "third_party/icu/source/common/unicode/uchar.h"
-#include "ui/accessibility/ax_view_state.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/theme_provider.h"
@@ -58,6 +59,7 @@
 #include "ui/gfx/vector_icons_public.h"
 #include "ui/views/animation/flood_fill_ink_drop_ripple.h"
 #include "ui/views/animation/ink_drop_highlight.h"
+#include "ui/views/animation/ink_drop_impl.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/controls/button/vector_icon_button.h"
@@ -74,7 +76,6 @@ namespace {
 
 // All values in dp.
 const int kTextWidth = 140;
-const int kDangerousTextWidth = 200;
 
 // The normal height of the item which may be exceeded if text is large.
 const int kDefaultHeight = 48;
@@ -193,8 +194,7 @@ DownloadItemView::DownloadItemView(DownloadItem* download_item,
   set_context_menu_controller(this);
 
   dropdown_button_->SetBorder(
-      views::Border::CreateEmptyBorder(gfx::Insets(kDropdownBorderWidth)));
-  dropdown_button_->set_ink_drop_size(gfx::Size(32, 32));
+      views::CreateEmptyBorder(gfx::Insets(kDropdownBorderWidth)));
   AddChildView(dropdown_button_);
 
   LoadIcon();
@@ -254,6 +254,28 @@ SkColor DownloadItemView::GetTextColorForThemeProvider(
 void DownloadItemView::OnExtractIconComplete(gfx::Image* icon_bitmap) {
   if (icon_bitmap)
     shelf_->SchedulePaint();
+}
+
+void DownloadItemView::MaybeSubmitDownloadToFeedbackService(
+    DownloadCommands::Command download_command) {
+  PrefService* prefs = shelf_->browser()->profile()->GetPrefs();
+  if (model_.MightBeMalicious() && model_.ShouldAllowDownloadFeedback() &&
+      !shelf_->browser()->profile()->IsOffTheRecord()) {
+    if (safe_browsing::ExtendedReportingPrefExists(*prefs)) {
+      SubmitDownloadWhenFeedbackServiceEnabled(
+          download_command, safe_browsing::IsExtendedReportingEnabled(*prefs));
+    } else {
+      // Show dialog, because the dialog hasn't been shown before.
+      DownloadFeedbackDialogView::Show(
+          shelf_->get_parent()->GetNativeWindow(), shelf_->browser()->profile(),
+          shelf_->GetNavigator(),
+          base::Bind(
+              &DownloadItemView::SubmitDownloadWhenFeedbackServiceEnabled,
+              weak_ptr_factory_.GetWeakPtr(), download_command));
+    }
+  } else {
+    DownloadCommands(download()).ExecuteCommand(download_command);
+  }
 }
 
 // DownloadObserver interface.
@@ -469,13 +491,13 @@ bool DownloadItemView::GetTooltipText(const gfx::Point& p,
   return true;
 }
 
-void DownloadItemView::GetAccessibleState(ui::AXViewState* state) {
-  state->name = accessible_name_;
-  state->role = ui::AX_ROLE_BUTTON;
+void DownloadItemView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
+  node_data->SetName(accessible_name_);
+  node_data->role = ui::AX_ROLE_BUTTON;
   if (model_.IsDangerous())
-    state->AddStateFlag(ui::AX_STATE_DISABLED);
+    node_data->AddStateFlag(ui::AX_STATE_DISABLED);
   else
-    state->AddStateFlag(ui::AX_STATE_HASPOPUP);
+    node_data->AddStateFlag(ui::AX_STATE_HASPOPUP);
 }
 
 void DownloadItemView::OnThemeChanged() {
@@ -490,10 +512,14 @@ void DownloadItemView::AddInkDropLayer(ui::Layer* ink_drop_layer) {
   layer()->SetMasksToBounds(true);
 }
 
+std::unique_ptr<views::InkDrop> DownloadItemView::CreateInkDrop() {
+  return CreateDefaultFloodFillInkDropImpl();
+}
+
 std::unique_ptr<views::InkDropRipple> DownloadItemView::CreateInkDropRipple()
     const {
   return base::MakeUnique<views::FloodFillInkDropRipple>(
-      GetLocalBounds(), GetInkDropCenterBasedOnLastEvent(),
+      size(), GetInkDropCenterBasedOnLastEvent(),
       color_utils::DeriveDefaultIconColor(GetTextColor()),
       ink_drop_visible_opacity());
 }
@@ -568,27 +594,10 @@ void DownloadItemView::ButtonPressed(views::Button* sender,
     return;
   }
 
-  // WARNING: all end states after this point delete |this|.
   DCHECK_EQ(discard_button_, sender);
   UMA_HISTOGRAM_LONG_TIMES("clickjacking.discard_download", warning_duration);
-  if (!model_.IsMalicious() && model_.ShouldAllowDownloadFeedback() &&
-      !shelf_->browser()->profile()->IsOffTheRecord()) {
-    if (!shelf_->browser()->profile()->GetPrefs()->HasPrefPath(
-            prefs::kSafeBrowsingExtendedReportingEnabled)) {
-      // Show dialog, because the dialog hasn't been shown before.
-      DownloadFeedbackDialogView::Show(
-          shelf_->get_parent()->GetNativeWindow(), shelf_->browser()->profile(),
-          shelf_->GetNavigator(),
-          base::Bind(&DownloadItemView::PossiblySubmitDownloadToFeedbackService,
-                     weak_ptr_factory_.GetWeakPtr()));
-    } else {
-      PossiblySubmitDownloadToFeedbackService(
-          shelf_->browser()->profile()->GetPrefs()->GetBoolean(
-              prefs::kSafeBrowsingExtendedReportingEnabled));
-    }
-    return;
-  }
-  download()->Remove();
+  MaybeSubmitDownloadToFeedbackService(DownloadCommands::DISCARD);
+  // WARNING: 'this' maybe deleted at this point. Don't access 'this'.
 }
 
 SkColor DownloadItemView::GetVectorIconBaseColor() const {
@@ -753,7 +762,8 @@ void DownloadItemView::OpenDownload() {
   download()->OpenDownload();
 }
 
-bool DownloadItemView::SubmitDownloadToFeedbackService() {
+bool DownloadItemView::SubmitDownloadToFeedbackService(
+    DownloadCommands::Command download_command) {
 #if defined(FULL_SAFE_BROWSING)
   safe_browsing::SafeBrowsingService* sb_service =
       g_browser_process->safe_browsing_service();
@@ -764,7 +774,7 @@ bool DownloadItemView::SubmitDownloadToFeedbackService() {
   if (!download_protection_service)
     return false;
   download_protection_service->feedback_service()->BeginFeedbackForDownload(
-      download());
+      download(), download_command);
   // WARNING: we are deleted at this point.  Don't access 'this'.
   return true;
 #else
@@ -773,9 +783,13 @@ bool DownloadItemView::SubmitDownloadToFeedbackService() {
 #endif
 }
 
-void DownloadItemView::PossiblySubmitDownloadToFeedbackService(bool enabled) {
-  if (!enabled || !SubmitDownloadToFeedbackService())
-    download()->Remove();
+void DownloadItemView::SubmitDownloadWhenFeedbackServiceEnabled(
+    DownloadCommands::Command download_command,
+    bool feedback_enabled) {
+  if (feedback_enabled && SubmitDownloadToFeedbackService(download_command))
+    return;
+
+  DownloadCommands(download()).ExecuteCommand(download_command);
   // WARNING: 'this' is deleted at this point. Don't access 'this'.
 }
 
@@ -825,7 +839,7 @@ void DownloadItemView::ShowContextMenuImpl(const gfx::Rect& rect,
       ->SetMouseHandler(nullptr);
 
   if (!context_menu_.get())
-    context_menu_.reset(new DownloadShelfContextMenuView(download()));
+    context_menu_.reset(new DownloadShelfContextMenuView(this));
   context_menu_->Run(GetWidget()->GetTopLevelWidget(), rect, source_type,
                      base::Bind(&DownloadItemView::ReleaseDropdown,
                                 weak_ptr_factory_.GetWeakPtr()));
@@ -972,7 +986,8 @@ gfx::ImageSkia DownloadItemView::GetWarningIcon() {
     case content::DOWNLOAD_DANGER_TYPE_UNCOMMON_CONTENT:
     case content::DOWNLOAD_DANGER_TYPE_DANGEROUS_HOST:
     case content::DOWNLOAD_DANGER_TYPE_POTENTIALLY_UNWANTED:
-      return gfx::CreateVectorIcon(gfx::VectorIconId::REMOVE_CIRCLE,
+    case content::DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE:
+      return gfx::CreateVectorIcon(gfx::VectorIconId::WARNING,
                                    kWarningIconSize, gfx::kGoogleRed700);
 
     case content::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS:
@@ -981,10 +996,6 @@ gfx::ImageSkia DownloadItemView::GetWarningIcon() {
     case content::DOWNLOAD_DANGER_TYPE_MAX:
       NOTREACHED();
       break;
-
-    case content::DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE:
-      return gfx::CreateVectorIcon(gfx::VectorIconId::WARNING, kWarningIconSize,
-                                   gfx::kGoogleYellow700);
   }
   return gfx::ImageSkia();
 }
@@ -1004,13 +1015,27 @@ void DownloadItemView::SizeLabelToMinWidth() {
   if (dangerous_download_label_sized_)
     return;
 
-  base::string16 label_text = dangerous_download_label_->text();
+  dangerous_download_label_->SetSize(
+      AdjustTextAndGetSize(dangerous_download_label_));
+  dangerous_download_label_sized_ = true;
+}
+
+// static
+gfx::Size DownloadItemView::AdjustTextAndGetSize(views::Label* label) {
+  gfx::Size size = label->GetPreferredSize();
+
+  // If the label's width is already narrower than 200, we don't need to
+  // linebreak it, as it will fit on a single line.
+  if (size.width() <= 200)
+    return size;
+
+  base::string16 label_text = label->text();
   base::TrimWhitespace(label_text, base::TRIM_ALL, &label_text);
   DCHECK_EQ(base::string16::npos, label_text.find('\n'));
 
   // Make the label big so that GetPreferredSize() is not constrained by the
   // current width.
-  dangerous_download_label_->SetBounds(0, 0, 1000, 1000);
+  label->SetBounds(0, 0, 1000, 1000);
 
   // Use a const string from here. BreakIterator requies that text.data() not
   // change during its lifetime.
@@ -1023,16 +1048,11 @@ void DownloadItemView::SizeLabelToMinWidth() {
   bool status = iter.Init();
   DCHECK(status);
 
-  base::string16 prev_text = original_text;
-  gfx::Size size = dangerous_download_label_->GetPreferredSize();
-  int min_width = size.width();
-
   // Go through the string and try each line break (starting with no line break)
-  // searching for the optimal line break position.  Stop if we find one that
-  // yields one that is less than kDangerousTextWidth wide.  This is to prevent
-  // a short string (e.g.: "This file is malicious") from being broken up
-  // unnecessarily.
-  while (iter.Advance() && min_width > kDangerousTextWidth) {
+  // searching for the optimal line break position. Stop if we find one that
+  // yields minimum label width.
+  base::string16 prev_text = original_text;
+  for (gfx::Size min_width_size = size; iter.Advance(); min_width_size = size) {
     size_t pos = iter.pos();
     if (pos >= original_text.length())
       break;
@@ -1045,21 +1065,17 @@ void DownloadItemView::SizeLabelToMinWidth() {
       current_text.replace(pos - 1, 1, 1, base::char16('\n'));
     else
       current_text.insert(pos, 1, base::char16('\n'));
-    dangerous_download_label_->SetText(current_text);
-    size = dangerous_download_label_->GetPreferredSize();
+    label->SetText(current_text);
+    size = label->GetPreferredSize();
 
     // If the width is growing again, it means we passed the optimal width spot.
-    if (size.width() > min_width) {
-      dangerous_download_label_->SetText(prev_text);
-      break;
-    } else {
-      min_width = size.width();
+    if (size.width() > min_width_size.width()) {
+      label->SetText(prev_text);
+      return min_width_size;
     }
     prev_text = current_text;
   }
-
-  dangerous_download_label_->SetSize(size);
-  dangerous_download_label_sized_ = true;
+  return size;
 }
 
 void DownloadItemView::Reenable() {

@@ -14,7 +14,6 @@ namespace blink {
 
 class ExceptionState;
 class HTMLDivElement;
-class ScriptState;
 class TestCallback;
 class TestInterfaceCallback;
 class TestReceiverObjectCallback;
@@ -30,20 +29,15 @@ class CallbackFunctionTest final
 
   static CallbackFunctionTest* create() { return new CallbackFunctionTest(); }
 
-  String testCallback(ScriptState*,
-                      TestCallback*,
+  String testCallback(TestCallback*,
                       const String&,
                       const String&,
                       ExceptionState&);
-  void testInterfaceCallback(ScriptState*,
-                             TestInterfaceCallback*,
+  void testInterfaceCallback(TestInterfaceCallback*,
                              HTMLDivElement*,
                              ExceptionState&);
-  void testReceiverObjectCallback(ScriptState*,
-                                  TestReceiverObjectCallback*,
-                                  ExceptionState&);
-  Vector<String> testSequenceCallback(ScriptState*,
-                                      TestSequenceCallback*,
+  void testReceiverObjectCallback(TestReceiverObjectCallback*, ExceptionState&);
+  Vector<String> testSequenceCallback(TestSequenceCallback*,
                                       const Vector<int>& numbers,
                                       ExceptionState&);
 };

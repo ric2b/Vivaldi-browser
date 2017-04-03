@@ -13,13 +13,14 @@ Polymer({
     /** @type {!SearchEngine} */
     engine: Object,
 
-    /** @private {!settings.SearchEnginesBrowserProxy} */
+    /** @private {!settings.ExtensionControlBrowserProxy} */
     browserProxy_: Object,
   },
 
   /** @override */
   created: function() {
-    this.browserProxy_ = settings.SearchEnginesBrowserProxyImpl.getInstance();
+    this.browserProxy_ =
+        settings.ExtensionControlBrowserProxyImpl.getInstance();
   },
 
   /** @private */
@@ -36,7 +37,7 @@ Polymer({
 
   /** @private */
   closePopupMenu_: function() {
-    this.$$('iron-dropdown').close();
+    this.$$('dialog[is=cr-action-menu]').close();
   },
 
   /**
@@ -46,5 +47,12 @@ Polymer({
    */
   getIconSet_: function(url) {
     return cr.icon.getFavicon(url);
+  },
+
+  /** @private */
+  onDotsTap_: function() {
+    /** @type {!CrActionMenuElement} */ (
+        this.$$('dialog[is=cr-action-menu]')).showAt(
+            assert(this.$$('paper-icon-button')));
   },
 });

@@ -64,7 +64,7 @@ class RemoteMediaPlayerBridge : public media::MediaPlayerAndroid {
   void OnRouteAvailabilityChanged(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj,
-      jboolean available);
+      int availability);
   base::android::ScopedJavaLocalRef<jstring> GetTitle(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj);
@@ -75,6 +75,9 @@ class RemoteMediaPlayerBridge : public media::MediaPlayerAndroid {
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj,
       const base::android::JavaParamRef<jstring>& casting_message);
+  void OnCastStarted(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj);
   void OnCastStopping(JNIEnv* env,
                       const base::android::JavaParamRef<jobject>& obj);
   void OnSeekCompleted(JNIEnv* env,
@@ -88,6 +91,7 @@ class RemoteMediaPlayerBridge : public media::MediaPlayerAndroid {
   // Wrappers for calls to Java used by the remote media player manager
   void RequestRemotePlayback();
   void RequestRemotePlaybackControl();
+  void RequestRemotePlaybackStop();
   void SetNativePlayer();
   void OnPlayerCreated();
   void OnPlayerDestroyed();

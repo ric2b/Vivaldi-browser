@@ -35,8 +35,7 @@ class StubWebMediaPlayer : public WebMediaPlayer {
     m_client->networkStateChanged();
     m_readyState = ReadyStateHaveEnoughData;
     m_client->readyStateChanged();
-    m_webLayer =
-        wrapUnique(Platform::current()->compositorSupport()->createLayer());
+    m_webLayer = Platform::current()->compositorSupport()->createLayer();
     m_client->setWebLayer(m_webLayer.get());
   }
   void play() override {}
@@ -86,7 +85,7 @@ class StubFrameLoaderClient : public EmptyFrameLoaderClient {
       HTMLMediaElement&,
       const WebMediaPlayerSource&,
       WebMediaPlayerClient* client) override {
-    return wrapUnique(new StubWebMediaPlayer(client));
+    return makeUnique<StubWebMediaPlayer>(client);
   }
 };
 
@@ -125,8 +124,7 @@ class VideoPainterTestForSPv2 : public ::testing::Test {
 
 TEST_F(VideoPainterTestForSPv2, VideoLayerAppearsInLayerTree) {
   // Insert a <video> and allow it to begin loading.
-  document().body()->setInnerHTML("<video width=300 height=200 src=test.ogv>",
-                                  ASSERT_NO_EXCEPTION);
+  document().body()->setInnerHTML("<video width=300 height=200 src=test.ogv>");
   testing::runPendingTasks();
 
   // Force the page to paint.

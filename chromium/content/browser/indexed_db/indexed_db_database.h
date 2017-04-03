@@ -21,11 +21,11 @@
 #include "content/browser/indexed_db/indexed_db.h"
 #include "content/browser/indexed_db/indexed_db_backing_store.h"
 #include "content/browser/indexed_db/indexed_db_callbacks.h"
-#include "content/browser/indexed_db/indexed_db_metadata.h"
 #include "content/browser/indexed_db/indexed_db_observer.h"
 #include "content/browser/indexed_db/indexed_db_pending_connection.h"
 #include "content/browser/indexed_db/indexed_db_transaction_coordinator.h"
 #include "content/browser/indexed_db/list_set.h"
+#include "content/common/indexed_db/indexed_db_metadata.h"
 #include "third_party/WebKit/public/platform/modules/indexeddb/WebIDBTypes.h"
 
 namespace url {
@@ -34,14 +34,12 @@ class Origin;
 
 namespace content {
 
-class IndexedDBBlobInfo;
 class IndexedDBConnection;
 class IndexedDBDatabaseCallbacks;
 class IndexedDBFactory;
 class IndexedDBKey;
 class IndexedDBKeyPath;
 class IndexedDBKeyRange;
-class IndexedDBObservation;
 class IndexedDBObserverChanges;
 class IndexedDBTransaction;
 struct IndexedDBValue;
@@ -49,9 +47,6 @@ struct IndexedDBValue;
 class CONTENT_EXPORT IndexedDBDatabase
     : NON_EXPORTED_BASE(public base::RefCounted<IndexedDBDatabase>) {
  public:
-  // An index and corresponding set of keys
-  using IndexKeys = std::pair<int64_t, std::vector<IndexedDBKey>>;
-
   // Identifier is pair of (origin, database name).
   using Identifier = std::pair<url::Origin, base::string16>;
 
@@ -177,11 +172,11 @@ class CONTENT_EXPORT IndexedDBDatabase
            std::unique_ptr<IndexedDBKey> key,
            blink::WebIDBPutMode mode,
            scoped_refptr<IndexedDBCallbacks> callbacks,
-           const std::vector<IndexKeys>& index_keys);
+           const std::vector<IndexedDBIndexKeys>& index_keys);
   void SetIndexKeys(int64_t transaction_id,
                     int64_t object_store_id,
                     std::unique_ptr<IndexedDBKey> primary_key,
-                    const std::vector<IndexKeys>& index_keys);
+                    const std::vector<IndexedDBIndexKeys>& index_keys);
   void SetIndexesReady(int64_t transaction_id,
                        int64_t object_store_id,
                        const std::vector<int64_t>& index_ids);
@@ -351,8 +346,6 @@ class CONTENT_EXPORT IndexedDBDatabase
   // is executing. It prevents rentrant calls if the active request completes
   // synchronously.
   bool processing_pending_requests_ = false;
-
-  bool experimental_web_platform_features_enabled_;
 
   DISALLOW_COPY_AND_ASSIGN(IndexedDBDatabase);
 };

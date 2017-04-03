@@ -48,7 +48,7 @@
 #include "modules/webgl/OESVertexArrayObject.h"
 #include "modules/webgl/WebGLCompressedTextureASTC.h"
 #include "modules/webgl/WebGLCompressedTextureATC.h"
-#include "modules/webgl/WebGLCompressedTextureES30.h"
+#include "modules/webgl/WebGLCompressedTextureETC.h"
 #include "modules/webgl/WebGLCompressedTextureETC1.h"
 #include "modules/webgl/WebGLCompressedTexturePVRTC.h"
 #include "modules/webgl/WebGLCompressedTextureS3TC.h"
@@ -164,8 +164,8 @@ void WebGLRenderingContext::setOffscreenCanvasGetContextResult(
 }
 
 ImageBitmap* WebGLRenderingContext::transferToImageBitmap(
-    ExceptionState& exceptionState) {
-  return transferToImageBitmapBase();
+    ScriptState* scriptState) {
+  return transferToImageBitmapBase(scriptState);
 }
 
 void WebGLRenderingContext::registerContextExtensions() {
@@ -193,8 +193,8 @@ void WebGLRenderingContext::registerContextExtensions() {
                                                 DraftExtension);
   registerExtension<WebGLCompressedTextureATC>(m_webglCompressedTextureATC,
                                                ApprovedExtension, bothPrefixes);
-  registerExtension<WebGLCompressedTextureES30>(m_webglCompressedTextureES30,
-                                                DraftExtension);
+  registerExtension<WebGLCompressedTextureETC>(m_webglCompressedTextureETC,
+                                               DraftExtension);
   registerExtension<WebGLCompressedTextureETC1>(m_webglCompressedTextureETC1);
   registerExtension<WebGLCompressedTexturePVRTC>(
       m_webglCompressedTexturePVRTC, ApprovedExtension, bothPrefixes);
@@ -232,7 +232,7 @@ DEFINE_TRACE(WebGLRenderingContext) {
   visitor->trace(m_webglDrawBuffers);
   visitor->trace(m_webglCompressedTextureASTC);
   visitor->trace(m_webglCompressedTextureATC);
-  visitor->trace(m_webglCompressedTextureES30);
+  visitor->trace(m_webglCompressedTextureETC);
   visitor->trace(m_webglCompressedTextureETC1);
   visitor->trace(m_webglCompressedTexturePVRTC);
   visitor->trace(m_webglCompressedTextureS3TC);
@@ -242,31 +242,8 @@ DEFINE_TRACE(WebGLRenderingContext) {
 }
 
 DEFINE_TRACE_WRAPPERS(WebGLRenderingContext) {
-  visitor->traceWrappers(m_angleInstancedArrays);
-  visitor->traceWrappers(m_extBlendMinMax);
-  visitor->traceWrappers(m_extDisjointTimerQuery);
-  visitor->traceWrappers(m_extFragDepth);
-  visitor->traceWrappers(m_extShaderTextureLOD);
-  visitor->traceWrappers(m_extsRGB);
-  visitor->traceWrappers(m_extTextureFilterAnisotropic);
-  visitor->traceWrappers(m_oesTextureFloat);
-  visitor->traceWrappers(m_oesTextureFloatLinear);
-  visitor->traceWrappers(m_oesTextureHalfFloat);
-  visitor->traceWrappers(m_oesTextureHalfFloatLinear);
-  visitor->traceWrappers(m_oesStandardDerivatives);
-  visitor->traceWrappers(m_oesVertexArrayObject);
-  visitor->traceWrappers(m_oesElementIndexUint);
-  visitor->traceWrappers(m_webglLoseContext);
-  visitor->traceWrappers(m_webglDebugRendererInfo);
-  visitor->traceWrappers(m_webglDebugShaders);
-  visitor->traceWrappers(m_webglDrawBuffers);
-  visitor->traceWrappers(m_webglCompressedTextureASTC);
-  visitor->traceWrappers(m_webglCompressedTextureATC);
-  visitor->traceWrappers(m_webglCompressedTextureES30);
-  visitor->traceWrappers(m_webglCompressedTextureETC1);
-  visitor->traceWrappers(m_webglCompressedTexturePVRTC);
-  visitor->traceWrappers(m_webglCompressedTextureS3TC);
-  visitor->traceWrappers(m_webglCompressedTextureS3TCsRGB);
-  visitor->traceWrappers(m_webglDepthTexture);
+  // Extensions are managed base WebGLRenderingContextBase.
+  WebGLRenderingContextBase::traceWrappers(visitor);
 }
+
 }  // namespace blink

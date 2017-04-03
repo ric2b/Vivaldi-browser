@@ -30,10 +30,10 @@ public abstract class ContentSwitches {
     // Sets the ISO country code that will be used for phone number detection.
     public static final String NETWORK_COUNTRY_ISO = "network-country-iso";
 
-    // How much of the top controls need to be shown before they will auto show.
+    // How much of the browser controls need to be shown before they will auto show.
     public static final String TOP_CONTROLS_SHOW_THRESHOLD = "top-controls-show-threshold";
 
-    // How much of the top controls need to be hidden before they will auto hide.
+    // How much of the browser controls need to be hidden before they will auto hide.
     public static final String TOP_CONTROLS_HIDE_THRESHOLD = "top-controls-hide-threshold";
 
     // Native switch - chrome_switches::kEnableInstantExtendedAPI
@@ -44,10 +44,6 @@ public abstract class ContentSwitches {
 
     // Native switch - chrome_switches::kDisablePopupBlocking
     public static final String DISABLE_POPUP_BLOCKING = "disable-popup-blocking";
-
-    // Native switch - gfx_switches::kForceDeviceScaleFactor
-    public static final String FORCE_DEVICE_SCALE_FACTOR =
-            "force-device-scale-factor";
 
     // Enable mouse hover emulation by holding your finger just over the screen.
     public static final String ENABLE_TOUCH_HOVER = "enable-touch-hover";
@@ -80,6 +76,9 @@ public abstract class ContentSwitches {
 
     // Native switch kGPUProcess
     public static final String SWITCH_GPU_PROCESS = "gpu-process";
+
+    // Enable content intent detection in the renderer
+    public static final String ENABLE_CONTENT_INTENT_DETECTION = "enable-content-intent-detection";
 
     // Prevent instantiation.
     private ContentSwitches() {}

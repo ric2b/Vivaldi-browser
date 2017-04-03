@@ -8,11 +8,14 @@
 #include "base/macros.h"
 #include "third_party/skia/include/core/SkPaint.h"
 #include "third_party/skia/include/core/SkPath.h"
-#include "ui/accessibility/ax_view_state.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/base/default_style.h"
 #include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/events/keycodes/keyboard_codes.h"
+#include "ui/gfx/animation/animation_delegate.h"
+#include "ui/gfx/animation/linear_animation.h"
+#include "ui/gfx/animation/tween.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/font_list.h"
 #include "ui/native_theme/native_theme.h"
@@ -20,6 +23,7 @@
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/tabbed_pane/tabbed_pane_listener.h"
 #include "ui/views/layout/box_layout.h"
+#include "ui/views/layout/fill_layout.h"
 #include "ui/views/layout/layout_manager.h"
 #include "ui/views/widget/widget.h"
 
@@ -36,7 +40,6 @@ const gfx::Font::Weight kHoverWeight = gfx::Font::Weight::NORMAL;
 const gfx::Font::Weight kActiveWeight = gfx::Font::Weight::BOLD;
 const gfx::Font::Weight kInactiveWeight = gfx::Font::Weight::NORMAL;
 
-const int kHarmonyTabStripVerticalPad = 16;
 const int kHarmonyTabStripTabHeight = 40;
 
 }  // namespace
@@ -46,54 +49,6 @@ namespace views {
 // static
 const char TabbedPane::kViewClassName[] = "TabbedPane";
 
-// The tab view shown in the tab strip.
-class Tab : public View {
- public:
-  // Internal class name.
-  static const char kViewClassName[];
-
-  Tab(TabbedPane* tabbed_pane, const base::string16& title, View* contents);
-  ~Tab() override;
-
-  View* contents() const { return contents_; }
-
-  bool selected() const { return contents_->visible(); }
-  void SetSelected(bool selected);
-
-  // Overridden from View:
-  bool OnMousePressed(const ui::MouseEvent& event) override;
-  void OnMouseEntered(const ui::MouseEvent& event) override;
-  void OnMouseExited(const ui::MouseEvent& event) override;
-  void OnGestureEvent(ui::GestureEvent* event) override;
-  gfx::Size GetPreferredSize() const override;
-  void Layout() override;
-  const char* GetClassName() const override;
-
- protected:
-  Label* title() { return title_; }
-
-  // Called whenever |tab_state_| changes.
-  virtual void OnStateChanged();
-
- private:
-  enum TabState {
-    TAB_INACTIVE,
-    TAB_ACTIVE,
-    TAB_HOVERED,
-  };
-
-  void SetState(TabState tab_state);
-
-  TabbedPane* tabbed_pane_;
-  Label* title_;
-  gfx::Size preferred_title_size_;
-  TabState tab_state_;
-  // The content view associated with this tab.
-  View* contents_;
-
-  DISALLOW_COPY_AND_ASSIGN(Tab);
-};
-
 // A subclass of Tab that implements the Harmony visual styling.
 class MdTab : public Tab {
  public:
@@ -102,6 +57,11 @@ class MdTab : public Tab {
 
   // Overridden from Tab:
   void OnStateChanged() override;
+
+  // Overridden from View:
+  gfx::Size GetPreferredSize() const override;
+  void OnFocus() override;
+  void OnBlur() override;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MdTab);
@@ -113,34 +73,57 @@ class TabStrip : public View {
   // Internal class name.
   static const char kViewClassName[];
 
-  explicit TabStrip(TabbedPane* tabbed_pane);
+  TabStrip();
   ~TabStrip() override;
 
+  // Called by TabStrip when the selected tab changes. This function is only
+  // called if |from_tab| is not null, i.e., there was a previously selected
+  // tab.
+  virtual void OnSelectedTabChanged(Tab* from_tab, Tab* to_tab);
+
   // Overridden from View:
-  gfx::Size GetPreferredSize() const override;
-  void Layout() override;
   const char* GetClassName() const override;
-  void OnPaint(gfx::Canvas* canvas) override;
+  void OnPaintBorder(gfx::Canvas* canvas) override;
+
+  Tab* GetSelectedTab() const;
+  Tab* GetTabAtDeltaFromSelected(int delta) const;
+  Tab* GetTabAtIndex(int index) const;
+  int GetSelectedTabIndex() const;
 
  private:
-  TabbedPane* tabbed_pane_;
-
   DISALLOW_COPY_AND_ASSIGN(TabStrip);
 };
 
 // A subclass of TabStrip that implements the Harmony visual styling. This
 // class uses a BoxLayout to position tabs.
-class MdTabStrip : public TabStrip {
+class MdTabStrip : public TabStrip, public gfx::AnimationDelegate {
  public:
-  explicit MdTabStrip(TabbedPane* tabbed_pane);
+  MdTabStrip();
   ~MdTabStrip() override;
 
+  // Overridden from TabStrip:
+  void OnSelectedTabChanged(Tab* from_tab, Tab* to_tab) override;
+
   // Overridden from View:
-  gfx::Size GetPreferredSize() const override;
-  void Layout() override;
-  void OnPaint(gfx::Canvas* canvas) override;
+  void OnPaintBorder(gfx::Canvas* canvas) override;
+
+  // Overridden from AnimationDelegate:
+  void AnimationProgressed(const gfx::Animation* animation) override;
+  void AnimationEnded(const gfx::Animation* animation) override;
 
  private:
+  // Animations for expanding and contracting the selection bar. When changing
+  // selections, the selection bar first grows to encompass both the old and new
+  // selections, then shrinks to encompass only the new selection. The rates of
+  // expansion and contraction each follow the cubic bezier curves used in
+  // gfx::Tween; see MdTabStrip::OnPaintBorder for details.
+  std::unique_ptr<gfx::LinearAnimation> expand_animation_;
+  std::unique_ptr<gfx::LinearAnimation> contract_animation_;
+
+  // The x-coordinate ranges of the old selection and the new selection.
+  gfx::Range animating_from_;
+  gfx::Range animating_to_;
+
   DISALLOW_COPY_AND_ASSIGN(MdTabStrip);
 };
 
@@ -160,6 +143,13 @@ Tab::Tab(TabbedPane* tabbed_pane, const base::string16& title, View* contents)
   // Calculate this now while the font list is guaranteed to be bold.
   preferred_title_size_ = title_->GetPreferredSize();
 
+  const int kTabVerticalPadding = 5;
+  const int kTabHorizontalPadding = 10;
+
+  SetBorder(CreateEmptyBorder(
+      gfx::Insets(kTabVerticalPadding, kTabHorizontalPadding)));
+  SetLayoutManager(new FillLayout);
+
   SetState(TAB_INACTIVE);
   AddChildView(title_);
 }
@@ -169,6 +159,12 @@ Tab::~Tab() {}
 void Tab::SetSelected(bool selected) {
   contents_->SetVisible(selected);
   SetState(selected ? TAB_ACTIVE : TAB_INACTIVE);
+#if defined(OS_MACOSX)
+  SetFocusBehavior(selected ? FocusBehavior::ACCESSIBLE_ONLY
+                            : FocusBehavior::NEVER);
+#else
+  SetFocusBehavior(selected ? FocusBehavior::ALWAYS : FocusBehavior::NEVER);
+#endif
 }
 
 void Tab::OnStateChanged() {
@@ -226,18 +222,8 @@ void Tab::OnGestureEvent(ui::GestureEvent* event) {
 
 gfx::Size Tab::GetPreferredSize() const {
   gfx::Size size(preferred_title_size_);
-  size.Enlarge(21, 9);
-  const int kTabMinWidth = 54;
-  if (size.width() < kTabMinWidth)
-    size.set_width(kTabMinWidth);
+  size.Enlarge(GetInsets().width(), GetInsets().height());
   return size;
-}
-
-void Tab::Layout() {
-  gfx::Rect bounds = GetLocalBounds();
-  bounds.Inset(0, 1, 0, 0);
-  bounds.ClampToCenteredSize(preferred_title_size_);
-  title_->SetBoundsRect(bounds);
 }
 
 const char* Tab::GetClassName() const {
@@ -252,10 +238,35 @@ void Tab::SetState(TabState tab_state) {
   SchedulePaint();
 }
 
+void Tab::OnFocus() {
+  OnStateChanged();
+  // When the tab gains focus, send an accessibility event indicating that the
+  // contents are focused. When the tab loses focus, whichever new View ends up
+  // with focus will send an AX_EVENT_FOCUS of its own, so there's no need to
+  // send one in OnBlur().
+  if (contents())
+    contents()->NotifyAccessibilityEvent(ui::AX_EVENT_FOCUS, true);
+  SchedulePaint();
+}
+
+void Tab::OnBlur() {
+  OnStateChanged();
+  SchedulePaint();
+}
+
+bool Tab::OnKeyPressed(const ui::KeyEvent& event) {
+  ui::KeyboardCode key = event.key_code();
+  if (key != ui::VKEY_LEFT && key != ui::VKEY_RIGHT)
+    return false;
+  return tabbed_pane_->MoveSelectionBy(key == ui::VKEY_RIGHT ? 1 : -1);
+}
+
 MdTab::MdTab(TabbedPane* tabbed_pane,
              const base::string16& title,
              View* contents)
     : Tab(tabbed_pane, title, contents) {
+  const int kBorderThickness = 2;
+  SetBorder(CreateEmptyBorder(gfx::Insets(kBorderThickness)));
   OnStateChanged();
 }
 
@@ -263,12 +274,6 @@ MdTab::~MdTab() {}
 
 void MdTab::OnStateChanged() {
   ui::NativeTheme* theme = GetNativeTheme();
-  SkColor border_color = theme->GetSystemColor(
-      selected() ? ui::NativeTheme::kColorId_FocusedBorderColor
-                 : ui::NativeTheme::kColorId_UnfocusedBorderColor);
-  int border_thickness = selected() ? 2 : 1;
-  SetBorder(
-      Border::CreateSolidSidedBorder(0, 0, border_thickness, 0, border_color));
 
   SkColor font_color = selected()
       ? theme->GetSystemColor(ui::NativeTheme::kColorId_ProminentButtonColor)
@@ -286,49 +291,54 @@ void MdTab::OnStateChanged() {
                                                gfx::Font::NORMAL, font_weight));
 }
 
+gfx::Size MdTab::GetPreferredSize() const {
+  return gfx::Size(Tab::GetPreferredSize().width(), kHarmonyTabStripTabHeight);
+}
+
+void MdTab::OnFocus() {
+  SetBorder(CreateSolidBorder(
+      GetInsets().top(),
+      SkColorSetA(GetNativeTheme()->GetSystemColor(
+                      ui::NativeTheme::kColorId_FocusedBorderColor),
+                  0x66)));
+  SchedulePaint();
+}
+
+void MdTab::OnBlur() {
+  SetBorder(CreateEmptyBorder(GetInsets()));
+  SchedulePaint();
+}
+
 // static
 const char TabStrip::kViewClassName[] = "TabStrip";
 
-TabStrip::TabStrip(TabbedPane* tabbed_pane) : tabbed_pane_(tabbed_pane) {}
+TabStrip::TabStrip() {
+  const int kTabStripLeadingEdgePadding = 9;
+  BoxLayout* layout =
+      new BoxLayout(BoxLayout::kHorizontal, kTabStripLeadingEdgePadding, 0, 0);
+  layout->set_main_axis_alignment(BoxLayout::MAIN_AXIS_ALIGNMENT_START);
+  layout->set_cross_axis_alignment(BoxLayout::CROSS_AXIS_ALIGNMENT_END);
+  layout->SetDefaultFlex(0);
+  SetLayoutManager(layout);
+}
 
 TabStrip::~TabStrip() {}
 
-gfx::Size TabStrip::GetPreferredSize() const {
-  gfx::Size size;
-  for (int i = 0; i < child_count(); ++i) {
-    const gfx::Size child_size = child_at(i)->GetPreferredSize();
-    size.SetSize(size.width() + child_size.width(),
-                 std::max(size.height(), child_size.height()));
-  }
-  return size;
-}
-
-void TabStrip::Layout() {
-  const int kTabOffset = 9;
-  int x = kTabOffset;  // Layout tabs with an offset to the tabstrip border.
-  for (int i = 0; i < child_count(); ++i) {
-    gfx::Size ps = child_at(i)->GetPreferredSize();
-    child_at(i)->SetBounds(x, 0, ps.width(), ps.height());
-    x = child_at(i)->bounds().right();
-  }
-}
+void TabStrip::OnSelectedTabChanged(Tab* from_tab, Tab* to_tab) {}
 
 const char* TabStrip::GetClassName() const {
   return kViewClassName;
 }
 
-void TabStrip::OnPaint(gfx::Canvas* canvas) {
-  OnPaintBackground(canvas);
-
-  // Draw the TabStrip border.
+void TabStrip::OnPaintBorder(gfx::Canvas* canvas) {
   SkPaint paint;
   paint.setColor(kTabBorderColor);
   paint.setStrokeWidth(kTabBorderThickness);
   SkScalar line_y = SkIntToScalar(height()) - (kTabBorderThickness / 2);
   SkScalar line_end = SkIntToScalar(width());
-  int selected_tab_index = tabbed_pane_->selected_tab_index();
+  int selected_tab_index = GetSelectedTabIndex();
   if (selected_tab_index >= 0) {
-    Tab* selected_tab = tabbed_pane_->GetTabAt(selected_tab_index);
+    Tab* selected_tab = GetTabAtIndex(selected_tab_index);
     SkPath path;
     SkScalar tab_height =
         SkIntToScalar(selected_tab->height()) - kTabBorderThickness;
@@ -352,60 +362,157 @@ void TabStrip::OnPaint(gfx::Canvas* canvas) {
   }
 }
 
-MdTabStrip::MdTabStrip(TabbedPane* tabbed_pane) : TabStrip(tabbed_pane) {
-  BoxLayout* layout =
-      new BoxLayout(BoxLayout::kHorizontal, 0, kHarmonyTabStripVerticalPad, 0);
+Tab* TabStrip::GetTabAtIndex(int index) const {
+  return static_cast<Tab*>(const_cast<View*>(child_at(index)));
+}
+
+int TabStrip::GetSelectedTabIndex() const {
+  for (int i = 0; i < child_count(); ++i)
+    if (GetTabAtIndex(i)->selected())
+      return i;
+  return -1;
+}
+
+Tab* TabStrip::GetSelectedTab() const {
+  int index = GetSelectedTabIndex();
+  return index >= 0 ? GetTabAtIndex(index) : nullptr;
+}
+
+Tab* TabStrip::GetTabAtDeltaFromSelected(int delta) const {
+  int index = (GetSelectedTabIndex() + delta) % child_count();
+  if (index < 0)
+    index += child_count();
+  return GetTabAtIndex(index);
+}
+
+MdTabStrip::MdTabStrip() {
+  BoxLayout* layout = new BoxLayout(BoxLayout::kHorizontal, 0, 0, 0);
   layout->set_main_axis_alignment(BoxLayout::MAIN_AXIS_ALIGNMENT_CENTER);
   layout->set_cross_axis_alignment(BoxLayout::CROSS_AXIS_ALIGNMENT_STRETCH);
   layout->SetDefaultFlex(1);
   SetLayoutManager(layout);
+
+  // These durations are taken from the Paper Tabs source:
+  // https://github.com/PolymerElements/paper-tabs/blob/master/paper-tabs.html
+  // See |selectionBar.expand| and |selectionBar.contract|.
+  const int kExpandAnimationDurationMs = 150;
+  expand_animation_.reset(new gfx::LinearAnimation(this));
+  expand_animation_->SetDuration(kExpandAnimationDurationMs);
+
+  const int kContractAnimationDurationMs = 180;
+  contract_animation_.reset(new gfx::LinearAnimation(this));
+  contract_animation_->SetDuration(kContractAnimationDurationMs);
 }
 
 MdTabStrip::~MdTabStrip() {}
 
-gfx::Size MdTabStrip::GetPreferredSize() const {
-  return gfx::Size(width(),
-                   kHarmonyTabStripVerticalPad * 2 + kHarmonyTabStripTabHeight);
+void MdTabStrip::OnSelectedTabChanged(Tab* from_tab, Tab* to_tab) {
+  DCHECK(!from_tab->selected());
+  DCHECK(to_tab->selected());
+
+  animating_from_ =
+      gfx::Range(from_tab->x(), from_tab->x() + from_tab->width());
+  animating_to_ = gfx::Range(to_tab->x(), to_tab->x() + to_tab->width());
+
+  contract_animation_->Stop();
+  expand_animation_->Start();
 }
 
-// Let this class's LayoutManager handle the layout.
-void MdTabStrip::Layout() {
-  return View::Layout();
+void MdTabStrip::OnPaintBorder(gfx::Canvas* canvas) {
+  int max_y = child_at(0)->y() + child_at(0)->height();
+  const int kUnselectedBorderThickness = 1;
+  const int kSelectedBorderThickness = 2;
+
+  // First, draw the unselected border across the TabStrip's entire width. The
+  // area underneath the selected tab will be overdrawn later.
+  canvas->FillRect(gfx::Rect(0, max_y - kUnselectedBorderThickness, width(),
+                             kUnselectedBorderThickness),
+                   GetNativeTheme()->GetSystemColor(
+                       ui::NativeTheme::kColorId_UnfocusedBorderColor));
+
+  int min_x = 0;
+  int max_x = 0;
+
+  // Now, figure out the range to draw the selection marker underneath. There
+  // are three states here:
+  // 1) Expand animation is running: use FAST_OUT_LINEAR_IN to grow the
+  //    selection marker until it encompasses both the previously selected tab
+  //    and the currently selected tab;
+  // 2) Contract animation is running: use LINEAR_OUT_SLOW_IN to shrink the
+  //    selection marker until it encompasses only the currently selected tab;
+  // 3) No animations running: the selection marker is only under the currently
+  //    selected tab.
+  Tab* tab = GetSelectedTab();
+  if (!tab)
+    return;
+  if (expand_animation_->is_animating()) {
+    bool animating_left = animating_to_.start() < animating_from_.start();
+    double anim_value = gfx::Tween::CalculateValue(
+        gfx::Tween::FAST_OUT_LINEAR_IN, expand_animation_->GetCurrentValue());
+
+    if (animating_left) {
+      min_x = gfx::Tween::IntValueBetween(anim_value, animating_from_.start(),
+                                          animating_to_.start());
+      max_x = animating_from_.end();
+    } else {
+      min_x = animating_from_.start();
+      max_x = gfx::Tween::IntValueBetween(anim_value, animating_from_.end(),
+                                          animating_to_.end());
+    }
+  } else if (contract_animation_->is_animating()) {
+    bool animating_left = animating_to_.start() < animating_from_.start();
+    double anim_value = gfx::Tween::CalculateValue(
+        gfx::Tween::LINEAR_OUT_SLOW_IN, contract_animation_->GetCurrentValue());
+    if (animating_left) {
+      min_x = animating_to_.start();
+      max_x = gfx::Tween::IntValueBetween(anim_value, animating_from_.end(),
+                                          animating_to_.end());
+    } else {
+      min_x = gfx::Tween::IntValueBetween(anim_value, animating_from_.start(),
+                                          animating_to_.start());
+      max_x = animating_to_.end();
+    }
+  } else if (tab) {
+    min_x = tab->x();
+    max_x = tab->x() + tab->width();
+  }
+
+  DCHECK(min_x != max_x);
+  // Draw over the unselected border from above.
+  canvas->FillRect(gfx::Rect(min_x, max_y - kSelectedBorderThickness,
+                             max_x - min_x, kSelectedBorderThickness),
+                   GetNativeTheme()->GetSystemColor(
+                       ui::NativeTheme::kColorId_FocusedBorderColor));
 }
 
-// The tab strip "border" is drawn as part of the tabs, so all this method needs
-// to do is paint the background.
-void MdTabStrip::OnPaint(gfx::Canvas* canvas) {
-  OnPaintBackground(canvas);
+void MdTabStrip::AnimationProgressed(const gfx::Animation* animation) {
+  SchedulePaint();
+}
+
+void MdTabStrip::AnimationEnded(const gfx::Animation* animation) {
+  if (animation == expand_animation_.get())
+    contract_animation_->Start();
 }
 
 TabbedPane::TabbedPane()
     : listener_(NULL),
       tab_strip_(ui::MaterialDesignController::IsSecondaryUiMaterial()
-                     ? new MdTabStrip(this)
-                     : new TabStrip(this)),
-      contents_(new View()),
-      selected_tab_index_(-1) {
-#if defined(OS_MACOSX)
-  SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
-#else
-  SetFocusBehavior(FocusBehavior::ALWAYS);
-#endif
-
+                     ? new MdTabStrip
+                     : new TabStrip),
+      contents_(new View()) {
   AddChildView(tab_strip_);
   AddChildView(contents_);
 }
 
 TabbedPane::~TabbedPane() {}
 
+int TabbedPane::GetSelectedTabIndex() const {
+  return tab_strip_->GetSelectedTabIndex();
+}
+
 int TabbedPane::GetTabCount() {
   DCHECK_EQ(tab_strip_->child_count(), contents_->child_count());
   return contents_->child_count();
-}
-
-View* TabbedPane::GetSelectedTab() {
-  return selected_tab_index() < 0 ?
-      NULL : GetTabAt(selected_tab_index())->contents();
 }
 
 void TabbedPane::AddTab(const base::string16& title, View* contents) {
@@ -424,41 +531,42 @@ void TabbedPane::AddTabAtIndex(int index,
           : new Tab(this, title, contents),
       index);
   contents_->AddChildViewAt(contents, index);
-  if (selected_tab_index() < 0)
+  if (!GetSelectedTab())
     SelectTabAt(index);
 
   PreferredSizeChanged();
 }
 
-void TabbedPane::SelectTabAt(int index) {
-  DCHECK(index >= 0 && index < GetTabCount());
-  if (index == selected_tab_index())
+void TabbedPane::SelectTab(Tab* new_selected_tab) {
+  Tab* old_selected_tab = tab_strip_->GetSelectedTab();
+  if (old_selected_tab == new_selected_tab)
     return;
 
-  if (selected_tab_index() >= 0)
-    GetTabAt(selected_tab_index())->SetSelected(false);
-
-  selected_tab_index_ = index;
-  Tab* tab = GetTabAt(index);
-  tab->SetSelected(true);
+  new_selected_tab->SetSelected(true);
+  if (old_selected_tab) {
+    if (old_selected_tab->HasFocus())
+      new_selected_tab->RequestFocus();
+    old_selected_tab->SetSelected(false);
+    tab_strip_->OnSelectedTabChanged(old_selected_tab, new_selected_tab);
+  }
   tab_strip_->SchedulePaint();
 
-  FocusManager* focus_manager = tab->contents()->GetFocusManager();
+  FocusManager* focus_manager = new_selected_tab->contents()->GetFocusManager();
   if (focus_manager) {
     const View* focused_view = focus_manager->GetFocusedView();
     if (focused_view && contents_->Contains(focused_view) &&
-        !tab->contents()->Contains(focused_view))
-      focus_manager->SetFocusedView(tab->contents());
+        !new_selected_tab->contents()->Contains(focused_view))
+      focus_manager->SetFocusedView(new_selected_tab->contents());
   }
 
   if (listener())
-    listener()->TabSelectedAt(index);
+    listener()->TabSelectedAt(tab_strip_->GetIndexOf(new_selected_tab));
 }
 
-void TabbedPane::SelectTab(Tab* tab) {
-  const int index = tab_strip_->GetIndexOf(tab);
-  if (index >= 0)
-    SelectTabAt(index);
+void TabbedPane::SelectTabAt(int index) {
+  Tab* tab = tab_strip_->GetTabAtIndex(index);
+  if (tab)
+    SelectTab(tab);
 }
 
 gfx::Size TabbedPane::GetPreferredSize() const {
@@ -469,8 +577,15 @@ gfx::Size TabbedPane::GetPreferredSize() const {
   return size;
 }
 
-Tab* TabbedPane::GetTabAt(int index) {
-  return static_cast<Tab*>(tab_strip_->child_at(index));
+Tab* TabbedPane::GetSelectedTab() {
+  return tab_strip_->GetSelectedTab();
+}
+
+bool TabbedPane::MoveSelectionBy(int delta) {
+  if (contents_->child_count() <= 1)
+    return false;
+  SelectTab(tab_strip_->GetTabAtDeltaFromSelected(delta));
+  return true;
 }
 
 void TabbedPane::Layout() {
@@ -495,34 +610,19 @@ void TabbedPane::ViewHierarchyChanged(
 bool TabbedPane::AcceleratorPressed(const ui::Accelerator& accelerator) {
   // Handle Ctrl+Tab and Ctrl+Shift+Tab navigation of pages.
   DCHECK(accelerator.key_code() == ui::VKEY_TAB && accelerator.IsCtrlDown());
-  const int tab_count = GetTabCount();
-  if (tab_count <= 1)
-    return false;
-  const int increment = accelerator.IsShiftDown() ? -1 : 1;
-  int next_tab_index = (selected_tab_index() + increment) % tab_count;
-  // Wrap around.
-  if (next_tab_index < 0)
-    next_tab_index += tab_count;
-  SelectTabAt(next_tab_index);
-  return true;
+  return MoveSelectionBy(accelerator.IsShiftDown() ? -1 : 1);
 }
 
 const char* TabbedPane::GetClassName() const {
   return kViewClassName;
 }
 
-void TabbedPane::OnFocus() {
-  View::OnFocus();
-
-  View* selected_tab = GetSelectedTab();
-  if (selected_tab) {
-    selected_tab->NotifyAccessibilityEvent(
-        ui::AX_EVENT_FOCUS, true);
-  }
+View* TabbedPane::GetSelectedTabContentView() {
+  return GetSelectedTab() ? GetSelectedTab()->contents() : nullptr;
 }
 
-void TabbedPane::GetAccessibleState(ui::AXViewState* state) {
-  state->role = ui::AX_ROLE_TAB_LIST;
+void TabbedPane::GetAccessibleNodeData(ui::AXNodeData* node_data) {
+  node_data->role = ui::AX_ROLE_TAB_LIST;
 }
 
 }  // namespace views

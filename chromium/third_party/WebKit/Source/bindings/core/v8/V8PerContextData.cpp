@@ -34,7 +34,7 @@
 #include "bindings/core/v8/ScriptState.h"
 #include "bindings/core/v8/V8Binding.h"
 #include "bindings/core/v8/V8ObjectConstructor.h"
-#include "core/inspector/InstanceCounters.h"
+#include "platform/InstanceCounters.h"
 #include "wtf/PtrUtil.h"
 #include "wtf/StringExtras.h"
 #include <memory>
@@ -46,7 +46,7 @@ V8PerContextData::V8PerContextData(v8::Local<v8::Context> context)
     : m_isolate(context->GetIsolate()),
       m_wrapperBoilerplates(m_isolate),
       m_constructorMap(m_isolate),
-      m_contextHolder(wrapUnique(new gin::ContextHolder(m_isolate))),
+      m_contextHolder(makeUnique<gin::ContextHolder>(m_isolate)),
       m_context(m_isolate, context),
       m_activityLogger(0),
       m_compiledPrivateScript(m_isolate) {

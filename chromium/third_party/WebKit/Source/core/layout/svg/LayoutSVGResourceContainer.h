@@ -22,10 +22,10 @@
 
 #include "core/layout/svg/LayoutSVGHiddenContainer.h"
 #include "core/svg/SVGDocumentExtensions.h"
-#include "core/svg/SVGResourceClient.h"
-#include "platform/heap/Handle.h"
 
 namespace blink {
+
+class SVGElementProxySet;
 
 enum LayoutSVGResourceType {
   MaskerResourceType,
@@ -36,8 +36,6 @@ enum LayoutSVGResourceType {
   FilterResourceType,
   ClipperResourceType
 };
-
-class PaintLayer;
 
 class LayoutSVGResourceContainer : public LayoutSVGHiddenContainer {
  public:
@@ -65,8 +63,6 @@ class LayoutSVGResourceContainer : public LayoutSVGHiddenContainer {
   }
 
   void idChanged();
-  void addResourceClient(SVGResourceClient*);
-  void removeResourceClient(SVGResourceClient*);
 
   void invalidateCacheAndMarkForLayout(SubtreeLayoutScope* = nullptr);
 
@@ -88,8 +84,10 @@ class LayoutSVGResourceContainer : public LayoutSVGHiddenContainer {
   // Used from the invalidateClient/invalidateClients methods from classes,
   // inheriting from us.
   void markAllClientsForInvalidation(InvalidationMode);
-  void markAllResourceClientsForInvalidation();
   void markClientForInvalidation(LayoutObject*, InvalidationMode);
+
+  void notifyContentChanged();
+  SVGElementProxySet* elementProxySet();
 
   void willBeDestroyed() override;
 
@@ -113,7 +111,6 @@ class LayoutSVGResourceContainer : public LayoutSVGHiddenContainer {
   // 22 padding bits available
 
   HashSet<LayoutObject*> m_clients;
-  PersistentHeapHashSet<WeakMember<SVGResourceClient>> m_resourceClients;
 };
 
 inline LayoutSVGResourceContainer* getLayoutSVGResourceContainerById(

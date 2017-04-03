@@ -14,12 +14,12 @@
 #include "base/strings/string_util.h"
 #include "base/threading/thread_checker.h"
 #include "base/trace_event/trace_event_impl.h"
-#include "cc/animation/element_id.h"
 #include "cc/base/region.h"
 #include "cc/base/switches.h"
 #include "cc/blink/web_blend_mode.h"
 #include "cc/layers/layer.h"
 #include "cc/layers/layer_position_constraint.h"
+#include "cc/trees/element_id.h"
 #include "cc/trees/layer_tree_host.h"
 #include "third_party/WebKit/public/platform/WebFloatPoint.h"
 #include "third_party/WebKit/public/platform/WebFloatRect.h"
@@ -372,6 +372,8 @@ ToWebLayerStickyPositionConstraint(
   web_constraint.rightOffset = constraint.right_offset;
   web_constraint.topOffset = constraint.top_offset;
   web_constraint.bottomOffset = constraint.bottom_offset;
+  web_constraint.parentRelativeStickyBoxOffset =
+      constraint.parent_relative_sticky_box_offset;
   web_constraint.scrollContainerRelativeStickyBoxRect =
       constraint.scroll_container_relative_sticky_box_rect;
   web_constraint.scrollContainerRelativeContainingBlockRect =
@@ -390,6 +392,8 @@ static cc::LayerStickyPositionConstraint ToStickyPositionConstraint(
   constraint.right_offset = web_constraint.rightOffset;
   constraint.top_offset = web_constraint.topOffset;
   constraint.bottom_offset = web_constraint.bottomOffset;
+  constraint.parent_relative_sticky_box_offset =
+      web_constraint.parentRelativeStickyBoxOffset;
   constraint.scroll_container_relative_sticky_box_rect =
       web_constraint.scrollContainerRelativeStickyBoxRect;
   constraint.scroll_container_relative_containing_block_rect =
@@ -468,6 +472,14 @@ void WebLayerImpl::SetContentsOpaqueIsFixed(bool fixed) {
 
 void WebLayerImpl::setHasWillChangeTransformHint(bool has_will_change) {
   layer_->SetHasWillChangeTransformHint(has_will_change);
+}
+
+void WebLayerImpl::setPreferredRasterBounds(const WebSize& bounds) {
+  layer_->SetPreferredRasterBounds(bounds);
+}
+
+void WebLayerImpl::clearPreferredRasterBounds() {
+  layer_->ClearPreferredRasterBounds();
 }
 
 }  // namespace cc_blink

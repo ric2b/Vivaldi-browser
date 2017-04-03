@@ -10,13 +10,10 @@
 #include "base/memory/ref_counted.h"
 
 namespace gfx {
-class Vector2d;
 class Vector2dF;
 }
 
 namespace cc {
-class ContextProvider;
-class InputHandlerClient;
 class CompositorFrameSink;
 struct BeginFrameArgs;
 
@@ -56,7 +53,7 @@ class LayerTreeHostClient {
   virtual void WillCommit() = 0;
   virtual void DidCommit() = 0;
   virtual void DidCommitAndDrawFrame() = 0;
-  virtual void DidCompleteSwapBuffers() = 0;
+  virtual void DidReceiveCompositorFrameAck() = 0;
   virtual void DidCompletePageScaleAnimation() = 0;
 
  protected:

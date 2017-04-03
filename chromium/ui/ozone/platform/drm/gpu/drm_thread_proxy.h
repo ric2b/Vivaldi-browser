@@ -12,10 +12,6 @@
 #include "ui/ozone/platform/drm/gpu/drm_thread.h"
 #include "ui/ozone/public/interfaces/device_cursor.mojom.h"
 
-namespace shell {
-class Connection;
-}
-
 namespace ui {
 
 class DrmWindowProxy;

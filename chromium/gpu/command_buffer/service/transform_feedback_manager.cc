@@ -26,6 +26,8 @@ TransformFeedback::TransformFeedback(TransformFeedbackManager* manager,
 
 TransformFeedback::~TransformFeedback() {
   if (!manager_->lost_context()) {
+    if (active_)
+      glEndTransformFeedback();
     glDeleteTransformFeedbacks(1, &service_id_);
   }
 }
@@ -79,6 +81,7 @@ TransformFeedbackManager::TransformFeedbackManager(
           max_transform_feedback_separate_attribs),
       needs_emulation_(needs_emulation),
       lost_context_(false) {
+  DCHECK(needs_emulation);
 }
 
 TransformFeedbackManager::~TransformFeedbackManager() {
@@ -111,13 +114,6 @@ TransformFeedback* TransformFeedbackManager::GetTransformFeedback(
 void TransformFeedbackManager::RemoveTransformFeedback(GLuint client_id) {
   if (client_id) {
     transform_feedbacks_.erase(client_id);
-  }
-}
-
-void TransformFeedbackManager::RemoveBoundBuffer(Buffer* buffer) {
-  for (auto iter = transform_feedbacks_.begin();
-       iter != transform_feedbacks_.end(); ++iter) {
-    iter->second->RemoveBoundBuffer(buffer);
   }
 }
 

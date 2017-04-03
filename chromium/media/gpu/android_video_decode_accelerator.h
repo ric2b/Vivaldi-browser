@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "base/compiler_specific.h"
+#include "base/optional.h"
 #include "base/threading/thread_checker.h"
 #include "base/timer/timer.h"
 #include "gpu/command_buffer/service/gles2_cmd_decoder.h"
@@ -44,6 +45,9 @@ class MEDIA_GPU_EXPORT AndroidVideoDecodeAccelerator
     : public VideoDecodeAccelerator,
       public AVDAStateProvider {
  public:
+  static VideoDecodeAccelerator::Capabilities GetCapabilities(
+      const gpu::GpuPreferences& gpu_preferences);
+
   AndroidVideoDecodeAccelerator(
       const MakeGLContextCurrentCallback& make_context_current_cb,
       const GetGLES2DecoderCallback& get_gles2_decoder_cb);
@@ -57,6 +61,7 @@ class MEDIA_GPU_EXPORT AndroidVideoDecodeAccelerator
   void ReusePictureBuffer(int32_t picture_buffer_id) override;
   void Flush() override;
   void Reset() override;
+  void SetSurface(int32_t surface_id) override;
   void Destroy() override;
   bool TryToSetupDecodeOnSeparateThread(
       const base::WeakPtr<Client>& decode_client,
@@ -66,11 +71,8 @@ class MEDIA_GPU_EXPORT AndroidVideoDecodeAccelerator
   // AVDAStateProvider implementation:
   const gfx::Size& GetSize() const override;
   base::WeakPtr<gpu::gles2::GLES2Decoder> GetGlDecoder() const override;
-  void PostError(const ::tracked_objects::Location& from_here,
-                 VideoDecodeAccelerator::Error error) override;
-
-  static VideoDecodeAccelerator::Capabilities GetCapabilities(
-      const gpu::GpuPreferences& gpu_preferences);
+  // Notifies the client about the error and sets |state_| to |ERROR|.
+  void NotifyError(Error error) override;
 
  private:
   friend class AVDAManager;
@@ -125,6 +127,10 @@ class MEDIA_GPU_EXPORT AndroidVideoDecodeAccelerator
     // thread for construction / destruction, and to decide if we should
     // restrict the codec to be software only.
     AVDACodecAllocator::TaskType task_type_;
+
+    // Codec specific data (SPS and PPS for H264).
+    std::vector<uint8_t> csd0_;
+    std::vector<uint8_t> csd1_;
 
    protected:
     friend class base::RefCountedThreadSafe<CodecConfig>;
@@ -224,14 +230,6 @@ class MEDIA_GPU_EXPORT AndroidVideoDecodeAccelerator
   // Notifies the client that the decoder was reset.
   void NotifyResetDone();
 
-  // Notifies about decoding errors.
-  // Note: you probably don't want to call this directly.  Use PostError or
-  // RETURN_ON_FAILURE, since we can defer error reporting to keep the pipeline
-  // from breaking.  NotifyError will do so immediately, PostError may wait.
-  // |token| has to match |error_sequence_token_|, or else it's assumed to be
-  // from a post that's prior to a previous reset, and ignored.
-  void NotifyError(VideoDecodeAccelerator::Error error, int token);
-
   // Start or stop our work-polling timer based on whether we did any work, and
   // how long it has been since we've done work.  Calling this with true will
   // start the timer.  Calling it with false may stop the timer.
@@ -272,6 +270,12 @@ class MEDIA_GPU_EXPORT AndroidVideoDecodeAccelerator
   // Indicates if MediaCodec should not be used for software decoding since we
   // have safer versions elsewhere.
   bool IsMediaCodecSoftwareDecodingForbidden() const;
+
+  // On platforms which support seamless surface changes, this will reinitialize
+  // the picture buffer manager with the new surface. This function reads and
+  // clears the surface id from |pending_surface_id_|. It will issue a decode
+  // error if the surface change fails. Returns false on failure.
+  bool UpdateSurface();
 
   // Used to DCHECK that we are called on the correct thread.
   base::ThreadChecker thread_checker_;
@@ -363,9 +367,6 @@ class MEDIA_GPU_EXPORT AndroidVideoDecodeAccelerator
   // from being sent after a reset.
   int error_sequence_token_;
 
-  // PostError will defer sending an error if and only if this is true.
-  bool defer_errors_;
-
   // True if and only if VDA initialization is deferred, and we have not yet
   // called NotifyInitializationComplete.
   bool deferred_initialization_pending_;
@@ -378,6 +379,11 @@ class MEDIA_GPU_EXPORT AndroidVideoDecodeAccelerator
   // True if surface creation and |picture_buffer_manager_| initialization has
   // been defered until the first Decode() call.
   bool defer_surface_creation_;
+
+  // Has a value if a SetSurface() call has occurred and a new surface should be
+  // switched to when possible. Cleared during OnDestroyingSurface() and if all
+  // pictures have been rendered in DequeueOutput().
+  base::Optional<int32_t> pending_surface_id_;
 
   // Copy of the VDA::Config we were given.
   Config config_;

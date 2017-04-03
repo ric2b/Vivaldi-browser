@@ -55,6 +55,16 @@ const QualifiedName& HTMLTableRowElement::subResourceAttributeName() const {
   return backgroundAttr;
 }
 
+static int findIndexInRowCollection(const HTMLCollection& rows,
+                                    const HTMLTableRowElement& target) {
+  Element* candidate = rows.item(0);
+  for (int i = 0; candidate; i++, candidate = rows.item(i)) {
+    if (target == candidate)
+      return i;
+  }
+  return -1;
+}
+
 int HTMLTableRowElement::rowIndex() const {
   ContainerNode* maybeTable = parentNode();
   if (maybeTable && isHTMLTableSectionElement(maybeTable)) {
@@ -63,27 +73,22 @@ int HTMLTableRowElement::rowIndex() const {
   }
   if (!(maybeTable && isHTMLTableElement(maybeTable)))
     return -1;
-
-  HTMLTableRowsCollection* rows = toHTMLTableElement(maybeTable)->rows();
-  HTMLTableRowElement* candidate = rows->item(0);
-  for (int i = 0; candidate; i++, candidate = rows->item(i)) {
-    if (this == candidate)
-      return i;
-  }
-
-  return -1;
+  return findIndexInRowCollection(*toHTMLTableElement(maybeTable)->rows(),
+                                  *this);
 }
 
 int HTMLTableRowElement::sectionRowIndex() const {
-  int rIndex = 0;
-  const Node* n = this;
-  do {
-    n = n->previousSibling();
-    if (n && isHTMLTableRowElement(*n))
-      ++rIndex;
-  } while (n);
-
-  return rIndex;
+  ContainerNode* maybeTable = parentNode();
+  if (!maybeTable)
+    return -1;
+  HTMLCollection* rows = nullptr;
+  if (isHTMLTableSectionElement(maybeTable))
+    rows = toHTMLTableSectionElement(maybeTable)->rows();
+  else if (isHTMLTableElement(maybeTable))
+    rows = toHTMLTableElement(maybeTable)->rows();
+  if (!rows)
+    return -1;
+  return findIndexInRowCollection(*rows, *this);
 }
 
 HTMLElement* HTMLTableRowElement::insertCell(int index,
@@ -110,17 +115,25 @@ void HTMLTableRowElement::deleteCell(int index,
                                      ExceptionState& exceptionState) {
   HTMLCollection* children = cells();
   int numCells = children ? children->length() : 0;
-  if (index == -1)
-    index = numCells - 1;
-  if (index >= 0 && index < numCells) {
-    Element* cell = children->item(index);
-    HTMLElement::removeChild(cell, exceptionState);
-  } else {
+  // 1. If index is less than −1 or greater than or equal to the number of
+  // elements in the cells collection, then throw "IndexSizeError".
+  if (index < -1 || index >= numCells) {
     exceptionState.throwDOMException(
         IndexSizeError, "The value provided (" + String::number(index) +
                             ") is outside the range [0, " +
                             String::number(numCells) + ").");
+    return;
   }
+  // 2. If index is −1, remove the last element in the cells collection
+  // from its parent, or do nothing if the cells collection is empty.
+  if (index == -1) {
+    if (numCells == 0)
+      return;
+    index = numCells - 1;
+  }
+  // 3. Remove the indexth element in the cells collection from its parent.
+  Element* cell = children->item(index);
+  HTMLElement::removeChild(cell, exceptionState);
 }
 
 HTMLCollection* HTMLTableRowElement::cells() {

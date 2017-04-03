@@ -168,25 +168,35 @@ cr.define('md_history', function() {
     },
 
     /**
-     * When a history-item is selected the toolbar is notified and increases
-     * or decreases its count of selected items accordingly.
+     * Toggle item selection whenever the checkbox or any non-interactive part
+     * of the item is clicked.
      * @param {MouseEvent} e
      * @private
      */
-    onCheckboxSelected_: function(e) {
-      // TODO(calamity): Fire this event whenever |selected| changes.
+    onItemClick_: function(e) {
+      for (var i = 0; i < e.path.length; i++) {
+        var elem = e.path[i];
+        if (elem.id != 'checkbox' &&
+            (elem.nodeName == 'A' || elem.nodeName == 'BUTTON')) {
+          return;
+        }
+      }
+
+      if (this.selectionNotAllowed_())
+        return;
+
+      this.$.checkbox.focus();
       this.fire('history-checkbox-select', {
         element: this,
         shiftKey: e.shiftKey,
       });
-      e.preventDefault();
     },
 
     /**
      * @param {MouseEvent} e
      * @private
      */
-    onCheckboxMousedown_: function(e) {
+    onItemMousedown_: function(e) {
       // Prevent shift clicking a checkbox from selecting text.
       if (e.shiftKey)
         e.preventDefault();
@@ -262,7 +272,8 @@ cr.define('md_history', function() {
         return;
 
       browserService.recordHistogram(
-          'HistoryPage.ClickPosition', this.index, UMA_MAX_BUCKET_VALUE);
+          'HistoryPage.ClickPosition',
+          Math.min(this.index, UMA_MAX_BUCKET_VALUE), UMA_MAX_BUCKET_VALUE);
 
       if (this.index <= UMA_MAX_SUBSET_BUCKET_VALUE) {
         browserService.recordHistogram(
@@ -299,6 +310,13 @@ cr.define('md_history', function() {
       if (!search)
         return this.item.dateRelativeDay;
       return HistoryItem.searchResultsTitle(numberOfItems, search);
+    },
+
+    /** @private */
+    addTimeTitle_: function() {
+      var el = this.$['time-accessed'];
+      el.setAttribute('title', new Date(this.item.time).toString());
+      this.unlisten(el, 'mouseover', 'addTimeTitle_');
     },
   });
 

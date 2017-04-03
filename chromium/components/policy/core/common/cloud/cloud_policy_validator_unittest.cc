@@ -107,12 +107,13 @@ class CloudPolicyValidatorTest : public testing::Test {
                                  cached_key_signature_,
                                  GetPolicyVerificationKey(),
                                  owning_domain_);
-    validator->ValidateSignature(public_key,
-                                 GetPolicyVerificationKey(),
-                                 owning_domain_,
-                                 allow_key_rotation_);
-    if (allow_key_rotation_)
+    if (allow_key_rotation_) {
+      validator->ValidateSignatureAllowingRotation(
+          public_key, GetPolicyVerificationKey(), owning_domain_);
       validator->ValidateInitialKey(GetPolicyVerificationKey(), owning_domain_);
+    } else {
+      validator->ValidateSignature(public_key);
+    }
     return base::WrapUnique(validator);
   }
 
@@ -369,7 +370,8 @@ TEST_F(CloudPolicyValidatorTest, ErrorInvalidPublicKeySignature) {
 // (http://crbug.com/328038).
 TEST_F(CloudPolicyValidatorTest, ErrorInvalidPublicKeyVerificationSignature) {
   policy_.Build();
-  policy_.policy().set_new_public_key_verification_signature("invalid");
+  policy_.policy().set_new_public_key_verification_signature_deprecated(
+      "invalid");
   ValidatePolicy(CheckStatus(
       CloudPolicyValidatorBase::VALIDATION_BAD_KEY_VERIFICATION_SIGNATURE),
                  policy_.GetCopy());

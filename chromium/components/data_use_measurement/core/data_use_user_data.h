@@ -44,6 +44,12 @@ class DataUseUserData : public base::SupportsUserData::Data {
     DATA_REDUCTION_PROXY,
     PRECACHE,
     NTP_TILES,
+    FEEDBACK_UPLOADER,
+    TRACING_UPLOADER,
+    DOM_DISTILLER,
+    CLOUD_PRINT,
+    SEARCH_PROVIDER_LOGOS,
+    UPDATE_CLIENT,
   };
 
   // The state of the application. Only available on Android and on other

@@ -122,8 +122,8 @@ static String extractMessageForConsole(v8::Isolate* isolate,
   return emptyString();
 }
 
-static void messageHandlerInMainThread(v8::Local<v8::Message> message,
-                                       v8::Local<v8::Value> data) {
+void V8Initializer::messageHandlerInMainThread(v8::Local<v8::Message> message,
+                                               v8::Local<v8::Value> data) {
   ASSERT(isMainThread());
   v8::Isolate* isolate = v8::Isolate::GetCurrent();
 
@@ -328,9 +328,10 @@ static void initializeV8Common(v8::Isolate* isolate) {
   if (RuntimeEnabledFeatures::traceWrappablesEnabled()) {
     std::unique_ptr<ScriptWrappableVisitor> visitor(
         new ScriptWrappableVisitor(isolate));
-    isolate->SetEmbedderHeapTracer(visitor.get());
     V8PerIsolateData::from(isolate)->setScriptWrappableVisitor(
         std::move(visitor));
+    isolate->SetEmbedderHeapTracer(
+        V8PerIsolateData::from(isolate)->scriptWrappableVisitor());
   }
 
   v8::Debug::SetLiveEditEnabled(isolate, false);
@@ -407,8 +408,8 @@ void V8Initializer::initializeMainThread() {
 
   if (RuntimeEnabledFeatures::v8IdleTasksEnabled()) {
     WebScheduler* scheduler = Platform::current()->currentThread()->scheduler();
-    V8PerIsolateData::enableIdleTasks(
-        isolate, wrapUnique(new V8IdleTaskRunner(scheduler)));
+    V8PerIsolateData::enableIdleTasks(isolate,
+                                      makeUnique<V8IdleTaskRunner>(scheduler));
   }
 
   isolate->SetPromiseRejectCallback(promiseRejectHandlerInMainThread);
@@ -419,7 +420,7 @@ void V8Initializer::initializeMainThread() {
 
   ASSERT(ThreadState::mainThreadState());
   ThreadState::mainThreadState()->addInterruptor(
-      wrapUnique(new V8IsolateInterruptor(isolate)));
+      makeUnique<V8IsolateInterruptor>(isolate));
   if (RuntimeEnabledFeatures::traceWrappablesEnabled()) {
     ThreadState::mainThreadState()->registerTraceDOMWrappers(
         isolate, V8GCController::traceDOMWrappers,
@@ -431,7 +432,7 @@ void V8Initializer::initializeMainThread() {
   }
 
   V8PerIsolateData::from(isolate)->setThreadDebugger(
-      wrapUnique(new MainThreadDebugger(isolate)));
+      makeUnique<MainThreadDebugger>(isolate));
 }
 
 void V8Initializer::shutdownMainThread() {
@@ -488,6 +489,9 @@ static void messageHandlerInWorker(v8::Local<v8::Message> message,
   perIsolateData->setReportingException(false);
 }
 
+// Stack size for workers is limited to 500KB because default stack size for
+// secondary threads is 512KB on Mac OS X. See GetDefaultThreadStackSize() in
+// base/threading/platform_thread_mac.mm for details.
 static const int kWorkerMaxStackSize = 500 * 1024;
 
 // This function uses a local stack variable to determine the isolate's stack
@@ -502,8 +506,8 @@ void V8Initializer::initializeWorker(v8::Isolate* isolate) {
   isolate->SetFatalErrorHandler(reportFatalErrorInWorker);
 
   uint32_t here;
-  isolate->SetStackLimit(reinterpret_cast<uintptr_t>(
-      &here - kWorkerMaxStackSize / sizeof(uint32_t*)));
+  isolate->SetStackLimit(reinterpret_cast<uintptr_t>(&here) -
+                         kWorkerMaxStackSize);
   isolate->SetPromiseRejectCallback(promiseRejectHandlerInWorker);
 }
 

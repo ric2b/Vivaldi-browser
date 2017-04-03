@@ -24,8 +24,7 @@ void SVGImagePainter::paint(const PaintInfo& paintInfo) {
       !m_layoutSVGImage.imageResource()->hasImage())
     return;
 
-  FloatRect boundingBox =
-      m_layoutSVGImage.paintInvalidationRectInLocalSVGCoordinates();
+  FloatRect boundingBox = m_layoutSVGImage.visualRectInLocalSVGCoordinates();
   if (!paintInfo.cullRect().intersectsCullRect(
           m_layoutSVGImage.localToSVGParentTransform(), boundingBox))
     return;
@@ -85,7 +84,7 @@ void SVGImagePainter::paintForeground(const PaintInfo& paintInfo) {
 }
 
 FloatSize SVGImagePainter::computeImageViewportSize() const {
-  ASSERT(m_layoutSVGImage.imageResource()->hasImage());
+  DCHECK(m_layoutSVGImage.imageResource()->hasImage());
 
   if (toSVGImageElement(m_layoutSVGImage.element())
           ->preserveAspectRatio()

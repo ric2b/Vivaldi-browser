@@ -9,7 +9,7 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "third_party/webrtc/modules/desktop_capture/screen_capturer.h"
+#include "third_party/webrtc/modules/desktop_capture/desktop_capturer.h"
 
 namespace cc {
 class CopyOutputResult;
@@ -32,7 +32,9 @@ class AuraDesktopCapturer : public webrtc::DesktopCapturer {
 
   // webrtc::DesktopCapturer implementation.
   void Start(webrtc::DesktopCapturer::Callback* callback) override;
-  void Capture(const webrtc::DesktopRegion& region) override;
+  void CaptureFrame() override;
+  bool GetSourceList(SourceList* sources) override;
+  bool SelectSource(SourceId id) override;
 
  private:
   friend class AuraDesktopCapturerTest;

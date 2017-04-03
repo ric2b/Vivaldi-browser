@@ -14,30 +14,6 @@
 #include "crypto/symmetric_key.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-TEST(EncryptorTest, DES3_EncryptDecrypt) {
-  std::unique_ptr<crypto::SymmetricKey> key(
-      crypto::SymmetricKey::DeriveKeyFromPassword(
-          crypto::SymmetricKey::DES_EDE3, "password", "saltiest", 1000, 192));
-  EXPECT_TRUE(key.get());
-
-  crypto::Encryptor encryptor;
-  // The IV must be exactly as long as the cipher block size.
-  std::string iv("the 8 iv");
-  EXPECT_EQ(8U, iv.size());
-  EXPECT_TRUE(encryptor.Init(key.get(), crypto::Encryptor::CBC, iv));
-
-  std::string plaintext("this is the plaintext");
-  std::string ciphertext;
-  EXPECT_TRUE(encryptor.Encrypt(plaintext, &ciphertext));
-
-  EXPECT_LT(0U, ciphertext.size());
-
-  std::string decypted;
-  EXPECT_TRUE(encryptor.Decrypt(ciphertext, &decypted));
-
-  EXPECT_EQ(plaintext, decypted);
-}
-
 TEST(EncryptorTest, EncryptDecrypt) {
   std::unique_ptr<crypto::SymmetricKey> key(
       crypto::SymmetricKey::DeriveKeyFromPassword(

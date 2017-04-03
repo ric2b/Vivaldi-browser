@@ -79,17 +79,9 @@ void MojoAudioDecoderService::SetDataSource(
 void MojoAudioDecoderService::Decode(mojom::DecoderBufferPtr buffer,
                                      const DecodeCallback& callback) {
   DVLOG(3) << __FUNCTION__;
-
-  scoped_refptr<DecoderBuffer> media_buffer =
-      mojo_decoder_buffer_reader_->ReadDecoderBuffer(buffer);
-  if (!media_buffer) {
-    callback.Run(mojom::DecodeStatus::DECODE_ERROR);
-    return;
-  }
-
-  decoder_->Decode(media_buffer,
-                   base::Bind(&MojoAudioDecoderService::OnDecodeStatus,
-                              weak_this_, callback));
+  mojo_decoder_buffer_reader_->ReadDecoderBuffer(
+      std::move(buffer), base::BindOnce(&MojoAudioDecoderService::OnReadDone,
+                                        weak_this_, callback));
 }
 
 void MojoAudioDecoderService::Reset(const ResetCallback& callback) {
@@ -112,10 +104,27 @@ void MojoAudioDecoderService::OnInitialized(const InitializeCallback& callback,
   }
 }
 
+// The following methods are needed so that we can bind them with a weak pointer
+// to avoid running the |callback| after connection error happens and |this| is
+// deleted. It's not safe to run the |callback| after a connection error.
+
+void MojoAudioDecoderService::OnReadDone(const DecodeCallback& callback,
+                                         scoped_refptr<DecoderBuffer> buffer) {
+  DVLOG(3) << __FUNCTION__ << " success:" << !!buffer;
+
+  if (!buffer) {
+    callback.Run(DecodeStatus::DECODE_ERROR);
+    return;
+  }
+
+  decoder_->Decode(buffer, base::Bind(&MojoAudioDecoderService::OnDecodeStatus,
+                                      weak_this_, callback));
+}
+
 void MojoAudioDecoderService::OnDecodeStatus(const DecodeCallback& callback,
                                              media::DecodeStatus status) {
   DVLOG(3) << __FUNCTION__ << " status:" << status;
-  callback.Run(static_cast<mojom::DecodeStatus>(status));
+  callback.Run(status);
 }
 
 void MojoAudioDecoderService::OnResetDone(const ResetCallback& callback) {

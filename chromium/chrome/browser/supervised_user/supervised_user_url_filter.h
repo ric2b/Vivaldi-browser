@@ -16,6 +16,7 @@
 #include "base/observer_list.h"
 #include "base/threading/non_thread_safe.h"
 #include "base/values.h"
+#include "chrome/browser/safe_search_api/safe_search_url_checker.h"
 #include "chrome/browser/supervised_user/supervised_user_site_list.h"
 #include "chrome/browser/supervised_user/supervised_users.h"
 #include "components/supervised_user_error_page/supervised_user_error_page.h"
@@ -29,7 +30,6 @@ class URLRequestContextGetter;
 }
 
 class GURL;
-class SupervisedUserAsyncURLChecker;
 
 // This class manages the filtering behavior for a given URL, i.e. it tells
 // callers if a given URL should be allowed, blocked or warned about. It uses
@@ -83,7 +83,7 @@ class SupervisedUserURLFilter
 
   // For known "cache" URLs (e.g. from the AMP project CDN), this returns the
   // embedded URL. For all other URLs, returns an empty GURL.
-  // TODO(treib): Merge this with Normalize().
+  // TODO(treib): Merge this with Normalize()? See also crbug.com/663678.
   GURL GetEmbeddedURL(const GURL& url) const;
 
   // Returns true if the URL has a standard scheme. Only URLs with standard
@@ -103,7 +103,7 @@ class SupervisedUserURLFilter
   // Asterisks in other parts of the pattern are not allowed.
   // |host| and |pattern| are assumed to be normalized to lower-case.
   // This method is public for testing.
-  static bool HostMatchesPattern(const std::string& host,
+  static bool HostMatchesPattern(const std::string& canonical_host,
                                  const std::string& pattern);
 
   // Returns the filtering behavior for a given URL, based on the default
@@ -192,7 +192,7 @@ class SupervisedUserURLFilter
 
   void CheckCallback(const FilteringBehaviorCallback& callback,
                      const GURL& url,
-                     FilteringBehavior behavior,
+                     SafeSearchURLChecker::Classification classification,
                      bool uncertain) const;
 
   // This is mutable to allow notification in const member functions.
@@ -212,7 +212,7 @@ class SupervisedUserURLFilter
   // Not owned.
   const SupervisedUserBlacklist* blacklist_;
 
-  std::unique_ptr<SupervisedUserAsyncURLChecker> async_url_checker_;
+  std::unique_ptr<SafeSearchURLChecker> async_url_checker_;
 
   re2::RE2 amp_cache_path_regex_;
   re2::RE2 google_amp_viewer_path_regex_;

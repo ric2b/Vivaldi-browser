@@ -23,10 +23,8 @@ bool IsOverlayScrollbarEnabled() {
 
   if (command_line.HasSwitch(switches::kDisableOverlayScrollbar))
     return false;
-  else if (command_line.HasSwitch(switches::kEnableOverlayScrollbar))
-    return true;
 
-  return false;
+  return command_line.HasSwitch(switches::kEnableOverlayScrollbar);
 }
 
 }  // namespace ui

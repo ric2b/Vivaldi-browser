@@ -16,8 +16,6 @@ class Vector2dF;
 
 namespace cc {
 
-class ClipTree;
-struct DrawProperties;
 class Layer;
 class LayerImpl;
 class LayerTree;
@@ -36,8 +34,7 @@ void CC_EXPORT ConcatInverseSurfaceContentsScale(const EffectNode* effect_node,
                                                  gfx::Transform* transform);
 // Computes combined clips for every node in |clip_tree|. This function requires
 // that |transform_tree| has been updated via |ComputeTransforms|.
-void CC_EXPORT ComputeClips(ClipTree* clip_tree,
-                            const TransformTree& transform_tree,
+void CC_EXPORT ComputeClips(PropertyTrees* property_trees,
                             bool non_root_surfaces_enabled);
 
 // Computes combined (screen space) transforms for every node in the transform
@@ -66,14 +63,8 @@ void CC_EXPORT UpdatePropertyTrees(PropertyTrees* property_trees,
                                    bool can_render_to_separate_surface);
 
 void CC_EXPORT FindLayersThatNeedUpdates(LayerTree* layer_tree,
-                                         const TransformTree& transform_tree,
-                                         const EffectTree& effect_tree,
+                                         const PropertyTrees* property_trees,
                                          LayerList* update_layer_list);
-
-void CC_EXPORT
-ComputeVisibleRectsForTesting(PropertyTrees* property_trees,
-                              bool can_render_to_separate_surface,
-                              LayerList* visible_layer_list);
 
 void CC_EXPORT ComputeVisibleRects(LayerImpl* root_layer,
                                    PropertyTrees* property_trees,
@@ -97,23 +88,19 @@ void CC_EXPORT ComputeSurfaceDrawProperties(const PropertyTrees* property_trees,
                                             RenderSurfaceImpl* render_surface);
 
 bool CC_EXPORT LayerShouldBeSkipped(LayerImpl* layer,
-                                    bool layer_is_drawn,
                                     const TransformTree& transform_tree,
                                     const EffectTree& effect_tree);
 
 bool CC_EXPORT LayerNeedsUpdate(Layer* layer,
                                 bool layer_is_drawn,
-                                const TransformTree& tree);
+                                const PropertyTrees* property_trees);
 
 bool CC_EXPORT LayerNeedsUpdate(LayerImpl* layer,
                                 bool layer_is_drawn,
-                                const TransformTree& tree);
+                                const PropertyTrees* property_trees);
 
 void CC_EXPORT VerifyClipTreeCalculations(const LayerImplList& layer_list,
                                           PropertyTrees* property_trees);
-
-void CC_EXPORT VerifyTransformTreeCalculations(const LayerImplList& layer_list,
-                                               PropertyTrees* property_trees);
 
 gfx::Transform CC_EXPORT DrawTransform(const LayerImpl* layer,
                                        const TransformTree& transform_tree,

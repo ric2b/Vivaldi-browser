@@ -12,6 +12,7 @@
 #include "core/dom/DOMArrayBuffer.h"
 #include "core/dom/MessagePort.h"
 #include "core/frame/ImageBitmap.h"
+#include "platform/tracing/TraceEvent.h"
 #include "wtf/ByteOrder.h"
 #include "wtf/text/StringBuffer.h"
 
@@ -25,6 +26,7 @@ PassRefPtr<SerializedScriptValue> SerializedScriptValueFactory::create(
     Transferables* transferables,
     WebBlobInfoArray* blobInfo,
     ExceptionState& exceptionState) {
+  TRACE_EVENT0("blink", "SerializedScriptValueFactory::create");
   if (RuntimeEnabledFeatures::v8BasedStructuredCloneEnabled()) {
     V8ScriptValueSerializer serializer(ScriptState::current(isolate));
     serializer.setBlobInfoArray(blobInfo);
@@ -41,6 +43,7 @@ v8::Local<v8::Value> SerializedScriptValueFactory::deserialize(
     v8::Isolate* isolate,
     MessagePortArray* messagePorts,
     const WebBlobInfoArray* blobInfo) {
+  TRACE_EVENT0("blink", "SerializedScriptValueFactory::deserialize");
   if (RuntimeEnabledFeatures::v8BasedStructuredCloneEnabled()) {
     V8ScriptValueDeserializer deserializer(ScriptState::current(isolate),
                                            value);
@@ -52,20 +55,17 @@ v8::Local<v8::Value> SerializedScriptValueFactory::deserialize(
   // in |this| being destroyed.  Holding a RefPtr ensures we are alive (along
   // with our internal data) throughout the operation.
   RefPtr<SerializedScriptValue> protect(value);
-  String& data = value->data();
-  if (!data.impl())
+  if (!value->dataLengthInBytes())
     return v8::Null(isolate);
   static_assert(sizeof(SerializedScriptValueWriter::BufferValueType) == 2,
                 "BufferValueType should be 2 bytes");
-  data.ensure16Bit();
   // FIXME: SerializedScriptValue shouldn't use String for its underlying
   // storage. Instead, it should use SharedBuffer or Vector<uint8_t>. The
   // information stored in m_data isn't even encoded in UTF-16. Instead,
   // unicode characters are encoded as UTF-8 with two code units per UChar.
-  SerializedScriptValueReader reader(
-      reinterpret_cast<const uint8_t*>(data.impl()->characters16()),
-      2 * data.length(), blobInfo, value->blobDataHandles(),
-      ScriptState::current(isolate));
+  SerializedScriptValueReader reader(value->data(), value->dataLengthInBytes(),
+                                     blobInfo, value->blobDataHandles(),
+                                     ScriptState::current(isolate));
   ScriptValueDeserializer deserializer(reader, messagePorts,
                                        value->getArrayBufferContentsArray(),
                                        value->getImageBitmapContentsArray());

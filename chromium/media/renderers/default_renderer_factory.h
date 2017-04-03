@@ -39,8 +39,8 @@ class MEDIA_EXPORT DefaultRendererFactory : public RendererFactory {
       AudioRendererSink* audio_renderer_sink,
       VideoRendererSink* video_renderer_sink,
       const RequestSurfaceCB& request_surface_cb,
-      bool use_platform_media_pipeline,
-      bool platform_pipeline_enlarges_buffers_on_underflow) final;
+      bool use_platform_media_pipeline = false,
+      bool platform_pipeline_enlarges_buffers_on_underflow = false) final;
 
  private:
   ScopedVector<AudioDecoder> CreateAudioDecoders(

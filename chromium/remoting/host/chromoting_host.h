@@ -5,9 +5,9 @@
 #ifndef REMOTING_HOST_CHROMOTING_HOST_H_
 #define REMOTING_HOST_CHROMOTING_HOST_H_
 
-#include <list>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
@@ -66,6 +66,8 @@ class ChromotingHost : public base::NonThreadSafe,
                        public ClientSession::EventHandler,
                        public HostStatusMonitor {
  public:
+  typedef std::vector<std::unique_ptr<ClientSession>> ClientSessions;
+
   // |desktop_environment_factory| must outlive this object.
   ChromotingHost(
       DesktopEnvironmentFactory* desktop_environment_factory,
@@ -101,6 +103,8 @@ class ChromotingHost : public base::NonThreadSafe,
 
   // Enables/disables curtaining when one or more clients are connected.
   // Takes immediate effect if clients are already connected.
+  // TODO(zijiehe): Replace this function with
+  // SetDesktopEnvironmentOptions(const DesktopEnvironmentOptions&).
   void SetEnableCurtaining(bool enable);
 
   // Sets the maximum duration of any session. By default, a session has no
@@ -133,6 +137,8 @@ class ChromotingHost : public base::NonThreadSafe,
     pairing_registry_ = pairing_registry;
   }
 
+  const ClientSessions& client_sessions_for_tests() { return clients_; }
+
   base::WeakPtr<ChromotingHost> AsWeakPtr() {
     return weak_factory_.GetWeakPtr();
   }
@@ -140,7 +146,6 @@ class ChromotingHost : public base::NonThreadSafe,
  private:
   friend class ChromotingHostTest;
 
-  typedef std::list<ClientSession*> ClientList;
   typedef ScopedVector<HostExtension> HostExtensionList;
 
   // Immediately disconnects all active clients. Host-internal components may
@@ -162,7 +167,7 @@ class ChromotingHost : public base::NonThreadSafe,
   base::ObserverList<HostStatusObserver> status_observers_;
 
   // The connections to remote clients.
-  ClientList clients_;
+  ClientSessions clients_;
 
   // True if the host has been started.
   bool started_;

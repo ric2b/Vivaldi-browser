@@ -34,14 +34,8 @@ class CONTENT_EXPORT RenderWidgetOwnerDelegate {
   virtual void RenderWidgetFocusChangeComplete() = 0;
   virtual bool DoesRenderWidgetHaveTouchEventHandlersAt(
       const gfx::Point& point) const = 0;
-  virtual bool RenderWidgetWillHandleGestureEvent(
-      const blink::WebGestureEvent& event) = 0;
   virtual bool RenderWidgetWillHandleMouseEvent(
       const blink::WebMouseEvent& event) = 0;
-
-  // Painting notifications. DidFlushPaint happens once we've received the ACK
-  // that the screen has been updated.
-  virtual void RenderWidgetDidFlushPaint() = 0;
 
  protected:
   virtual ~RenderWidgetOwnerDelegate() {}

@@ -17,8 +17,9 @@
 #include "ipc/ipc_message_utils.h"
 #include "ipc/ipc_sync_message.h"
 #include "ipc/message_filter.h"
-#include "services/shell/public/cpp/interface_provider.h"
-#include "services/shell/public/cpp/interface_registry.h"
+#include "services/service_manager/public/cpp/interface_provider.h"
+#include "services/service_manager/public/cpp/interface_registry.h"
+#include "services/service_manager/public/interfaces/interface_provider_spec.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/WebKit/public/web/WebScriptController.h"
 
@@ -47,12 +48,31 @@ class MockRenderMessageFilterImpl : public mojom::RenderMessageFilter {
     NOTREACHED();
   }
 
-  // Note that
   bool CreateNewWindow(mojom::CreateNewWindowParamsPtr params,
                        mojom::CreateNewWindowReplyPtr* reply) override {
     *reply = mojom::CreateNewWindowReply::New();
     thread_->OnCreateWindow(*params, reply->get());
     return true;
+  }
+
+  void CreateNewWidget(int32_t opener_id,
+                      blink::WebPopupType popup_type,
+                      const CreateNewWidgetCallback& callback) override {
+    // See comment in CreateNewWindow().
+    NOTREACHED();
+  }
+
+  bool CreateNewWidget(int32_t opener_id,
+                       blink::WebPopupType popup_type,
+                       int32_t* route_id) override {
+    thread_->OnCreateWidget(opener_id, popup_type, route_id);
+    return true;
+  }
+
+  void CreateFullscreenWidget(
+      int opener_id,
+      const CreateFullscreenWidgetCallback& callback) override {
+    NOTREACHED();
   }
 
  private:
@@ -203,9 +223,6 @@ int64_t MockRenderThread::GetIdleNotificationDelayInMs() const {
 void MockRenderThread::SetIdleNotificationDelayInMs(
     int64_t idle_notification_delay_in_ms) {}
 
-void MockRenderThread::UpdateHistograms(int sequence_number) {
-}
-
 int MockRenderThread::PostTaskToAllWebWorkers(const base::Closure& closure) {
   return 0;
 }
@@ -216,6 +233,10 @@ bool MockRenderThread::ResolveProxy(const GURL& url, std::string* proxy_list) {
 
 base::WaitableEvent* MockRenderThread::GetShutdownEvent() {
   return NULL;
+}
+
+int32_t MockRenderThread::GetClientId() {
+  return 1;
 }
 
 #if defined(OS_WIN)
@@ -231,18 +252,20 @@ ServiceManagerConnection* MockRenderThread::GetServiceManagerConnection() {
   return nullptr;
 }
 
-shell::InterfaceRegistry* MockRenderThread::GetInterfaceRegistry() {
-  if (!interface_registry_)
-    interface_registry_.reset(new shell::InterfaceRegistry);
+service_manager::InterfaceRegistry* MockRenderThread::GetInterfaceRegistry() {
+  if (!interface_registry_) {
+    interface_registry_ = base::MakeUnique<service_manager::InterfaceRegistry>(
+        service_manager::mojom::kServiceManager_ConnectorSpec);
+  }
   return interface_registry_.get();
 }
 
-shell::InterfaceProvider* MockRenderThread::GetRemoteInterfaces() {
+service_manager::InterfaceProvider* MockRenderThread::GetRemoteInterfaces() {
   if (!remote_interfaces_) {
-    shell::mojom::InterfaceProviderPtr remote_interface_provider;
+    service_manager::mojom::InterfaceProviderPtr remote_interface_provider;
     pending_remote_interface_provider_request_ =
         GetProxy(&remote_interface_provider);
-    remote_interfaces_.reset(new shell::InterfaceProvider);
+    remote_interfaces_.reset(new service_manager::InterfaceProvider);
     remote_interfaces_->Bind(std::move(remote_interface_provider));
   }
   return remote_interfaces_.get();
@@ -253,7 +276,7 @@ void MockRenderThread::SendCloseMessage() {
   RenderViewImpl::FromRoutingID(routing_id_)->OnMessageReceived(msg);
 }
 
-// The Widget expects to be returned valid route_id.
+// The Widget expects to be returned a valid route_id.
 void MockRenderThread::OnCreateWidget(int opener_id,
                                       blink::WebPopupType popup_type,
                                       int* route_id) {
@@ -269,10 +292,8 @@ void MockRenderThread::OnCreateChildFrame(
 }
 
 bool MockRenderThread::OnControlMessageReceived(const IPC::Message& msg) {
-  base::ObserverListBase<RenderThreadObserver>::Iterator it(&observers_);
-  RenderThreadObserver* observer;
-  while ((observer = it.GetNext()) != NULL) {
-    if (observer->OnControlMessageReceived(msg))
+  for (auto& observer : observers_) {
+    if (observer.OnControlMessageReceived(msg))
       return true;
   }
   return OnMessageReceived(msg);
@@ -284,7 +305,6 @@ bool MockRenderThread::OnMessageReceived(const IPC::Message& msg) {
 
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP(MockRenderThread, msg)
-    IPC_MESSAGE_HANDLER(ViewHostMsg_CreateWidget, OnCreateWidget)
     IPC_MESSAGE_HANDLER(FrameHostMsg_CreateChildFrame, OnCreateChildFrame)
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()

@@ -5,12 +5,13 @@
 #ifndef REMOTING_PROTOCOL_JINGLE_SESSION_H_
 #define REMOTING_PROTOCOL_JINGLE_SESSION_H_
 
-#include <list>
-#include <set>
 #include <string>
+#include <vector>
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/rand_util.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/threading/thread_checker.h"
 #include "base/timer/timer.h"
 #include "crypto/rsa_private_key.h"
@@ -66,7 +67,7 @@ class JingleSession : public Session {
   // Sends |message| to the peer. The session is closed if the send fails or no
   // response is received within a reasonable time. All other responses are
   // ignored.
-  void SendMessage(const JingleMessage& message);
+  void SendMessage(std::unique_ptr<JingleMessage> message);
 
   // Iq response handler.
   void OnMessageResponse(JingleMessage::ActionType request_type,
@@ -81,15 +82,23 @@ class JingleSession : public Session {
   // Called by JingleSessionManager on incoming |message|. Must call
   // |reply_callback| to send reply message before sending any other
   // messages.
-  void OnIncomingMessage(const JingleMessage& message,
+  void OnIncomingMessage(const std::string& id,
+                         std::unique_ptr<JingleMessage> message,
                          const ReplyCallback& reply_callback);
 
+  // Called by OnIncomingMessage() to process the incoming Jingle messages
+  // in the same order that they are sent.
+  void ProcessIncomingMessage(std::unique_ptr<JingleMessage> message,
+                              const ReplyCallback& reply_callback);
+
   // Message handlers for incoming messages.
-  void OnAccept(const JingleMessage& message,
+  void OnAccept(std::unique_ptr<JingleMessage> message,
                 const ReplyCallback& reply_callback);
-  void OnSessionInfo(const JingleMessage& message,
+  void OnSessionInfo(std::unique_ptr<JingleMessage> message,
                      const ReplyCallback& reply_callback);
-  void OnTerminate(const JingleMessage& message,
+  void OnTransportInfo(std::unique_ptr<JingleMessage> message,
+                       const ReplyCallback& reply_callback);
+  void OnTerminate(std::unique_ptr<JingleMessage> message,
                    const ReplyCallback& reply_callback);
 
   // Called from OnAccept() to initialize session config.
@@ -101,9 +110,6 @@ class JingleSession : public Session {
   // Called after subsequent authenticator messages are processed.
   void ProcessAuthenticationStep();
 
-  // Called after the authenticating step is finished.
-  void ContinueAuthenticationStep();
-
   // Called when authentication is finished.
   void OnAuthenticated();
 
@@ -112,6 +118,10 @@ class JingleSession : public Session {
 
   // Returns true if the state of the session is not CLOSED or FAILED
   bool is_session_active();
+
+  // Returns the value of the ID attribute of the next outgoing set IQ with the
+  // sequence ID encoded.
+  std::string GetNextOutgoingId();
 
   base::ThreadChecker thread_checker_;
 
@@ -130,10 +140,34 @@ class JingleSession : public Session {
   Transport* transport_ = nullptr;
 
   // Pending Iq requests. Used for all messages except transport-info.
-  std::set<std::unique_ptr<IqRequest>> pending_requests_;
+  std::vector<std::unique_ptr<IqRequest>> pending_requests_;
 
   // Pending transport-info requests.
-  std::list<std::unique_ptr<IqRequest>> transport_info_requests_;
+  std::vector<std::unique_ptr<IqRequest>> transport_info_requests_;
+
+  struct PendingMessage {
+    PendingMessage();
+    PendingMessage(PendingMessage&& moved);
+    PendingMessage(std::unique_ptr<JingleMessage> message,
+                   const ReplyCallback& reply_callback);
+    ~PendingMessage();
+    PendingMessage& operator=(PendingMessage&& moved);
+    std::unique_ptr<JingleMessage> message;
+    ReplyCallback reply_callback;
+  };
+
+  // A message queue to guarantee the incoming messages are processed in order.
+  class OrderedMessageQueue;
+  std::unique_ptr<OrderedMessageQueue> message_queue_;
+
+  // This prefix is necessary to disambiguate between the ID's sent from the
+  // client and the ID's sent from the host.
+  std::string outgoing_id_prefix_ = base::Uint64ToString(base::RandUint64());
+  int next_outgoing_id_ = 0;
+
+  // Transport info messages that are received while the session is being
+  // authenticated.
+  std::vector<PendingMessage> pending_transport_info_;
 
   base::WeakPtrFactory<JingleSession> weak_factory_;
 

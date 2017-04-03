@@ -1,10 +1,13 @@
 include_rules = [
   # Allow inclusion of specific components that we depend on.
   # See comment in content/DEPS for which components are allowed.
+  "+components/discardable_memory/common",
+  "+components/discardable_memory/service",
   "+components/filesystem",
   "+components/leveldb",
   "+components/link_header_util",
   "+components/mime_util",
+  "+components/payments",
   "+components/profile_service",
   "+components/scheduler/common",
   "+components/tracing",
@@ -17,11 +20,13 @@ include_rules = [
   "+device/generic_sensor",  # For sensors service.
   "+device/geolocation",
   "+device/nfc",
+  "+device/power_monitor",
   "+device/power_save_blocker",
   "+device/sensors/public",
   "+device/time_zone_monitor",  # For TimeZoneMonitor creation.
   "+device/vibration",  # For Vibration API
   "+device/vr",  # For WebVR API
+  "+device/wake_lock",
   "+gin/v8_initializer.h",
   "+mojo",
   "+services",
@@ -58,11 +63,15 @@ include_rules = [
   "+third_party/WebKit/public/platform/WebFocusType.h",
   "+third_party/WebKit/public/platform/WebGamepad.h",
   "+third_party/WebKit/public/platform/WebGamepads.h",
+  "+third_party/WebKit/public/platform/WebGestureEvent.h",
+  "+third_party/WebKit/public/platform/WebInputEvent.h",
   "+third_party/WebKit/public/platform/WebInsecureRequestPolicy.h",
   "+third_party/WebKit/public/platform/WebNavigationHintType.h",
   "+third_party/WebKit/public/platform/WebReferrerPolicy.h",
   "+third_party/WebKit/public/platform/WebScreenInfo.h",
+  "+third_party/WebKit/public/platform/WebSecurityStyle.h",
   "+third_party/WebKit/public/platform/WebString.h",
+  "+third_party/WebKit/public/platform/WebTextInputType.h",
   "+third_party/WebKit/public/platform/mime_registry.mojom.h",
   "+third_party/WebKit/public/platform/modules/background_sync/background_sync.mojom.h",
   "+third_party/WebKit/public/platform/modules/broadcastchannel/broadcast_channel.mojom.h",
@@ -88,8 +97,8 @@ include_rules = [
   "+third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerState.h",
   "+third_party/WebKit/public/platform/modules/serviceworker/service_worker_event_status.mojom.h",
   "+third_party/WebKit/public/platform/modules/vr/WebVR.h",
-  "+third_party/WebKit/public/platform/modules/wake_lock/wake_lock_service.mojom.h",
   "+third_party/WebKit/public/platform/modules/websockets/websocket.mojom.h",
+  "+third_party/WebKit/public/public_features.h",
   "+third_party/WebKit/public/web/WebAXEnums.h",
   "+third_party/WebKit/public/web/WebCompositionUnderline.h",
   "+third_party/WebKit/public/web/WebConsoleMessage.h",
@@ -98,7 +107,6 @@ include_rules = [
   "+third_party/WebKit/public/web/WebDragStatus.h",
   "+third_party/WebKit/public/web/WebFindOptions.h",
   "+third_party/WebKit/public/web/WebFrameSerializerCacheControlPolicy.h",
-  "+third_party/WebKit/public/web/WebInputEvent.h",
   "+third_party/WebKit/public/web/WebMediaPlayerAction.h",
   "+third_party/WebKit/public/web/WebPluginAction.h",
   "+third_party/WebKit/public/web/WebPopupType.h",
@@ -107,7 +115,6 @@ include_rules = [
   "+third_party/WebKit/public/web/WebSharedWorkerCreationContextType.h",
   "+third_party/WebKit/public/web/WebSharedWorkerCreationErrors.h",
   "+third_party/WebKit/public/web/WebTextDirection.h",
-  "+third_party/WebKit/public/web/WebTextInputType.h",
   "+third_party/WebKit/public/web/WebTreeScopeType.h",
   "+third_party/WebKit/public/web/mac/WebScrollbarTheme.h",
 
@@ -115,6 +122,7 @@ include_rules = [
   # one separately.
   "+third_party/WebKit/public/platform/modules/bluetooth/web_bluetooth.mojom.h",
   "+third_party/WebKit/public/platform/modules/notifications/notification_service.mojom.h",
+  "+third_party/WebKit/public/platform/modules/shapedetection/shapedetection.mojom.h",
 
   # DO NOT ADD ANY CHROME OR COMPONENTS INCLUDES HERE!!!
   # See https://sites.google.com/a/chromium.org/dev/developers/content-module

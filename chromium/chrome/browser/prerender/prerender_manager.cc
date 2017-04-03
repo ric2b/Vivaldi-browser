@@ -21,8 +21,13 @@
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
+#include "base/strings/string_util.h"
 #include "base/sys_info.h"
+#include "base/test/simple_test_clock.h"
+#include "base/test/simple_test_tick_clock.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/time/default_clock.h"
+#include "base/time/default_tick_clock.h"
 #include "base/time/time.h"
 #include "base/timer/elapsed_timer.h"
 #include "base/values.h"
@@ -60,13 +65,14 @@
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/common/url_constants.h"
 #include "extensions/common/constants.h"
+#include "net/http/http_request_headers.h"
 #include "ui/gfx/geometry/rect.h"
 
+using chrome_browser_net::NetworkPredictionStatus;
 using content::BrowserThread;
 using content::RenderViewHost;
 using content::SessionStorageNamespace;
 using content::WebContents;
-using namespace chrome_browser_net;
 
 namespace prerender {
 
@@ -77,6 +83,22 @@ const int kPeriodicCleanupIntervalMs = 1000;
 
 // Length of prerender history, for display in chrome://net-internals
 const int kHistoryLength = 100;
+
+// Check if |extra_headers| requested via chrome::NavigateParams::extra_headers
+// are the same as what the HTTP server saw when serving prerendered contents.
+// PrerenderContents::StartPrerendering doesn't specify any extra headers when
+// calling content::NavigationController::LoadURLWithParams, but in reality
+// Blink will always add an Upgrade-Insecure-Requests http request header, so
+// that HTTP request for prerendered contents always includes this header.
+// Because of this, it is okay to show prerendered contents even if
+// |extra_headers| contains "Upgrade-Insecure-Requests" header.
+bool AreExtraHeadersCompatibleWithPrerenderContents(
+    const std::string& extra_headers) {
+  net::HttpRequestHeaders parsed_headers;
+  parsed_headers.AddHeadersFromString(extra_headers);
+  parsed_headers.RemoveHeader("upgrade-insecure-requests");
+  return parsed_headers.IsEmpty();
+}
 
 }  // namespace
 
@@ -147,15 +169,18 @@ struct PrerenderManager::NavigationRecord {
 PrerenderManager::PrerenderManager(Profile* profile)
     : profile_(profile),
       prerender_contents_factory_(PrerenderContents::CreateFactory()),
-      last_prerender_start_time_(
-          GetCurrentTimeTicks() -
-          base::TimeDelta::FromMilliseconds(kMinTimeBetweenPrerendersMs)),
       prerender_history_(new PrerenderHistory(kHistoryLength)),
       histograms_(new PrerenderHistograms()),
       profile_network_bytes_(0),
       last_recorded_profile_network_bytes_(0),
+      clock_(new base::DefaultClock()),
+      tick_clock_(new base::DefaultTickClock()),
       weak_factory_(this) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+  last_prerender_start_time_ =
+      GetCurrentTimeTicks() -
+      base::TimeDelta::FromMilliseconds(kMinTimeBetweenPrerendersMs);
 
   // Certain experiments override our default config_ values.
   switch (PrerenderManager::GetMode()) {
@@ -298,9 +323,14 @@ bool PrerenderManager::MaybeUsePrerenderedPage(const GURL& url,
   WebContents* web_contents = params->target_contents;
   DCHECK(!IsWebContentsPrerendering(web_contents, nullptr));
 
-  // Don't prerender if the navigation involves some special parameters.
-  if (params->uses_post || !params->extra_headers.empty())
+  // Don't prerender if the navigation involves some special parameters that
+  // are different from what was used by PrerenderContents::StartPrerendering
+  // (which always uses GET method and doesn't specify any extra headers when
+  // calling content::NavigationController::LoadURLWithParams).
+  if (params->uses_post ||
+      !AreExtraHeadersCompatibleWithPrerenderContents(params->extra_headers)) {
     return false;
+  }
 
   DeleteOldEntries();
   to_delete_prerenders_.clear();
@@ -692,6 +722,19 @@ PrerenderContents* PrerenderManager::GetPrerenderContentsForRoute(
   return web_contents ? GetPrerenderContents(web_contents) : nullptr;
 }
 
+PrerenderContents* PrerenderManager::GetPrerenderContentsForProcess(
+    int render_process_id) const {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  for (auto& prerender_data : active_prerenders_) {
+    PrerenderContents* prerender_contents = prerender_data->contents();
+    if (prerender_contents->GetRenderViewHost()->GetProcess()->GetID() ==
+        render_process_id) {
+      return prerender_contents;
+    }
+  }
+  return nullptr;
+}
+
 std::vector<WebContents*> PrerenderManager::GetAllPrerenderingContents() const {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   std::vector<WebContents*> result;
@@ -733,7 +776,7 @@ bool PrerenderManager::DoesURLHaveValidScheme(const GURL& url) {
 
 // static
 bool PrerenderManager::DoesSubresourceURLHaveValidScheme(const GURL& url) {
-  return DoesURLHaveValidScheme(url) || url == GURL(url::kAboutBlankURL);
+  return DoesURLHaveValidScheme(url) || url == url::kAboutBlankURL;
 }
 
 std::unique_ptr<base::DictionaryValue> PrerenderManager::GetAsValue() const {
@@ -1071,11 +1114,21 @@ void PrerenderManager::DeleteOldEntries() {
 }
 
 base::Time PrerenderManager::GetCurrentTime() const {
-  return base::Time::Now();
+  return clock_->Now();
 }
 
 base::TimeTicks PrerenderManager::GetCurrentTimeTicks() const {
-  return base::TimeTicks::Now();
+  return tick_clock_->NowTicks();
+}
+
+void PrerenderManager::SetClockForTesting(
+    std::unique_ptr<base::SimpleTestClock> clock) {
+  clock_ = std::move(clock);
+}
+
+void PrerenderManager::SetTickClockForTesting(
+    std::unique_ptr<base::SimpleTestTickClock> tick_clock) {
+  tick_clock_ = std::move(tick_clock);
 }
 
 std::unique_ptr<PrerenderContents> PrerenderManager::CreatePrerenderContents(
@@ -1278,7 +1331,7 @@ bool PrerenderManager::IsPrerenderSilenceExperiment(Origin origin) const {
 
 NetworkPredictionStatus PrerenderManager::GetPredictionStatus() const {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  return CanPrefetchAndPrerenderUI(profile_->GetPrefs());
+  return chrome_browser_net::CanPrefetchAndPrerenderUI(profile_->GetPrefs());
 }
 
 NetworkPredictionStatus PrerenderManager::GetPredictionStatusForOrigin(
@@ -1303,7 +1356,7 @@ NetworkPredictionStatus PrerenderManager::GetPredictionStatusForOrigin(
   // Prerendering forced for cellular networks still prevents navigation with
   // the DISABLED_ALWAYS selected via privacy settings.
   NetworkPredictionStatus prediction_status =
-      CanPrefetchAndPrerenderUI(profile_->GetPrefs());
+      chrome_browser_net::CanPrefetchAndPrerenderUI(profile_->GetPrefs());
   if (origin == ORIGIN_EXTERNAL_REQUEST_FORCED_CELLULAR &&
       prediction_status == NetworkPredictionStatus::DISABLED_DUE_TO_NETWORK) {
     return NetworkPredictionStatus::ENABLED;

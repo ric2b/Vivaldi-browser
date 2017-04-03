@@ -32,8 +32,8 @@ Notes_Model::Notes_Model(Profile *profile)
 }
 
 Notes_Model::~Notes_Model() {
-  FOR_EACH_OBSERVER(NotesModelObserver, observers_,
-                    NotesModelBeingDeleted(this));
+  for (auto& observer : observers_)
+    observer.NotesModelBeingDeleted(this);
 
   if (store_.get()) {
     // The store maintains a reference back to us. We need to tell it we're gone
@@ -89,7 +89,8 @@ void Notes_Model::DoneLoading(NotesLoadDetails *details_delete_me) {
   loaded_signal_.Signal();
 
   // Notify our direct observers.
-  FOR_EACH_OBSERVER(NotesModelObserver, observers_, Loaded(this, false));
+  for (auto& observer : observers_)
+    observer.Loaded(this, false);
 }
 
 void Notes_Model::BlockTillLoaded() { loaded_signal_.Wait(); }
@@ -117,8 +118,8 @@ void Notes_Model::RemoveObserver(NotesModelObserver *observer) {
 
 void Notes_Model::BeginExtensiveChanges() {
   if (++extensive_changes_ == 1) {
-    FOR_EACH_OBSERVER(NotesModelObserver, observers_,
-                      ExtensiveNotesChangesBeginning(this));
+    for (auto& observer : observers_)
+      observer.ExtensiveNotesChangesBeginning(this);
   }
 }
 
@@ -126,8 +127,8 @@ void Notes_Model::EndExtensiveChanges() {
   --extensive_changes_;
   DCHECK_GE(extensive_changes_, 0);
   if (extensive_changes_ == 0) {
-    FOR_EACH_OBSERVER(NotesModelObserver, observers_,
-                      ExtensiveNotesChangesEnded(this));
+    for (auto& observer : observers_)
+      observer.ExtensiveNotesChangesEnded(this);
   }
 }
 
@@ -142,8 +143,8 @@ Notes_Node *Notes_Model::AddNode(Notes_Node *parent, int index,
   if (store_.get())
     store_->ScheduleSave();
 
-  FOR_EACH_OBSERVER(NotesModelObserver, observers_,
-                    NotesNodeAdded(this, parent, index));
+  for (auto& observer : observers_)
+    observer.NotesNodeAdded(this, parent, index);
 
   return node_ptr;
 }

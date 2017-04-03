@@ -5,14 +5,25 @@
 #ifndef ASH_COMMON_SYSTEM_TRAY_TRAY_DETAILS_VIEW_H_
 #define ASH_COMMON_SYSTEM_TRAY_TRAY_DETAILS_VIEW_H_
 
+#include <memory>
+
 #include "ash/ash_export.h"
 #include "ash/common/system/tray/special_popup_row.h"
+#include "ash/common/system/tray/tray_constants.h"
 #include "ash/common/system/tray/view_click_listener.h"
 #include "base/macros.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/view.h"
 
+namespace base {
+class OneShotTimer;
+}  // namespace base
+
 namespace views {
+class BoxLayout;
+class CustomButton;
+class Label;
+class ProgressBar;
 class ScrollView;
 }  // namespace views
 
@@ -24,6 +35,7 @@ class TrayDetailsViewTest;
 class FixedSizedScrollView;
 class ScrollBorder;
 class SystemTrayItem;
+class TriView;
 
 class ASH_EXPORT TrayDetailsView : public views::View,
                                    public ViewClickListener,
@@ -33,10 +45,12 @@ class ASH_EXPORT TrayDetailsView : public views::View,
   ~TrayDetailsView() override;
 
   // ViewClickListener:
-  void OnViewClicked(views::View* sender) override;
+  // Don't override this --- override HandleViewClicked.
+  void OnViewClicked(views::View* sender) final;
 
   // views::ButtonListener:
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override;
+  // Don't override this --- override HandleButtonPressed.
+  void ButtonPressed(views::Button* sender, const ui::Event& event) final;
 
   SystemTrayItem* owner() { return owner_; }
   SpecialPopupRow* title_row() { return title_row_; }
@@ -46,7 +60,11 @@ class ASH_EXPORT TrayDetailsView : public views::View,
  protected:
   // views::View:
   void Layout() override;
+  int GetHeightForWidth(int width) const override;
   void OnPaintBorder(gfx::Canvas* canvas) override;
+
+  // Exposes the layout manager of this view to give control to subclasses.
+  views::BoxLayout* box_layout() { return box_layout_; }
 
   // Creates the row containing the back button and title. For material design
   // this appears at the top of the view, for non-material design it appears
@@ -63,8 +81,28 @@ class ASH_EXPORT TrayDetailsView : public views::View,
   // Removes (and destroys) all child views.
   void Reset();
 
+  // Shows or hides the progress bar below the title row. It occupies the same
+  // space as the separator, so when shown the separator is hidden. If
+  // |progress_bar_| doesn't already exist it will be created.
+  void ShowProgress(double value, bool visible);
+
+  // Helper functions which create and return the settings and help buttons,
+  // respectively, used in the material design top-most header row. The caller
+  // assumes ownership of the returned buttons.
+  views::CustomButton* CreateSettingsButton(LoginStatus status);
+  views::CustomButton* CreateHelpButton(LoginStatus status);
+
+  TriView* tri_view() { return tri_view_; }
+
  private:
   friend class test::TrayDetailsViewTest;
+
+  // views::View:
+  void OnNativeThemeChanged(const ui::NativeTheme* theme) override;
+
+  // Updates the style of |label_| based on the current native theme, if it
+  // exists. Only used for material design.
+  void UpdateStyle();
 
   // Overridden to handle clicks on subclass-specific views.
   virtual void HandleViewClicked(views::View* view);
@@ -76,26 +114,42 @@ class ASH_EXPORT TrayDetailsView : public views::View,
   // Creates and adds subclass-specific buttons to the title row.
   virtual void CreateExtraTitleRowButtons();
 
-  // Overridden to show WebUI settings for subclass-specific detailed views.
-  virtual void ShowSettings();
-
   // Transition to default view from details view. If |title_row_| has focus
   // before transition, the default view should focus on the owner of this
   // details view.
+  //
+  // In Material Design the actual transition is intentionally delayed to allow
+  // the user to perceive the ink drop animation on the clicked target.
   void TransitionToDefaultView();
 
+  // Actually transitions to the default view.
+  void DoTransitionToDefaultView();
+
+  // Helper function which creates and returns the back button used in the
+  // material design top-most header row. The caller assumes ownership of the
+  // returned button.
+  views::Button* CreateBackButton();
+
   SystemTrayItem* owner_;
-  SpecialPopupRow* title_row_;
+  views::BoxLayout* box_layout_;
+  SpecialPopupRow* title_row_;  // Not used in material design.
   FixedSizedScrollView* scroller_;
   views::View* scroll_content_;
+  views::ProgressBar* progress_bar_;
+
   ScrollBorder* scroll_border_;  // Weak reference
+
+  // The container view for the top-most title row in material design.
+  TriView* tri_view_;
+
+  // The label used in the top-most title row for material design.
+  views::Label* label_;
 
   // The back button that appears in the material design title row. Not owned.
   views::Button* back_button_;
 
-  // The settings button that appears in the material design title row. Not
-  // owned.
-  views::Button* settings_button_;
+  // Used to delay the transition to the default view.
+  std::unique_ptr<base::OneShotTimer> transition_delay_timer_;
 
   DISALLOW_COPY_AND_ASSIGN(TrayDetailsView);
 };

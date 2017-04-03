@@ -52,7 +52,7 @@ public class ContentViewClient {
      * @param topControlsOffsetY The Y offset of the top controls in physical pixels.
      * @param topContentOffsetY The Y offset of the content in physical pixels.
      */
-    public void onTopControlsChanged(float topControlsOffsetY, float topContentOffsetY) { }
+    public void onTopControlsChanged(float browserControlsOffsetY, float topContentOffsetY) {}
 
     /**
      * Notifies the client of the position of the bottom controls.
@@ -82,63 +82,6 @@ public class ContentViewClient {
      * @param editable Whether the focused node is editable.
      */
     public void onFocusedNodeEditabilityChanged(boolean editable) {
-    }
-
-    /**
-     * Called when the contextual ActionBar is shown.
-     */
-    public void onContextualActionBarShown() {
-    }
-
-    /**
-     * Called when the contextual ActionBar is hidden.
-     */
-    public void onContextualActionBarHidden() {
-    }
-
-    /**
-     * Perform a search on {@code searchQuery}.  This method is only called if
-     * {@link #doesPerformWebSearch()} returns {@code true}.
-     * @param searchQuery The string to search for.
-     */
-    public void performWebSearch(String searchQuery) {
-    }
-
-    /**
-     * If this returns {@code true} contextual web search attempts will be forwarded to
-     * {@link #performWebSearch(String)}.
-     * @return {@code true} iff this {@link ContentViewClient} wants to consume web search queries
-     *         and override the default intent behavior.
-     */
-    public boolean doesPerformWebSearch() {
-        return false;
-    }
-
-    /**
-     * If this returns {@code true} the text processing intents should be forwarded to {@link
-     * startProcessTextIntent(Intent)}, otherwise these intents should be sent by WindowAndroid by
-     * default.
-     * @return {@code true} iff this {@link ContentViewClient} wants to send the processing intents
-     * and override the default intent behavior.
-     */
-    public boolean doesPerformProcessText() {
-        return false;
-    }
-
-    /**
-     * Send the intent to process the current selected text.
-     */
-    public void startProcessTextIntent(Intent intent) {}
-
-    /**
-     * @param actionModeItem the flag for the action mode item in question. See
-     *        {@link WebActionModeCallback.ActionHandler} for a list of valid action
-     *        mode item flags.
-     * @return true if the action is allowed. Otherwise, the menu item
-     *         should be removed from the menu.
-     */
-    public boolean isSelectActionModeAllowed(int actionModeItem) {
-        return true;
     }
 
     /**

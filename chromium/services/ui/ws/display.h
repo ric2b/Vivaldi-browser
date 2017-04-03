@@ -20,6 +20,7 @@
 #include "services/ui/ws/focus_controller_delegate.h"
 #include "services/ui/ws/focus_controller_observer.h"
 #include "services/ui/ws/platform_display.h"
+#include "services/ui/ws/platform_display_delegate.h"
 #include "services/ui/ws/server_window.h"
 #include "services/ui/ws/server_window_observer.h"
 #include "services/ui/ws/server_window_tracker.h"
@@ -55,16 +56,16 @@ class Display : public PlatformDisplayDelegate,
                 public mojom::WindowTreeHost,
                 public FocusControllerObserver,
                 public FocusControllerDelegate,
-                public ServerWindowObserver,
                 public UserIdTrackerObserver,
                 public WindowManagerWindowTreeFactorySetObserver {
  public:
-  Display(WindowServer* window_server,
-          const PlatformDisplayInitParams& platform_display_init_params);
+  explicit Display(WindowServer* window_server);
   ~Display() override;
 
-  // Initializes state that depends on the existence of a Display.
-  void Init(std::unique_ptr<DisplayBinding> binding);
+  // Initializes the display root ServerWindow and PlatformDisplay. Adds this to
+  // DisplayManager as a pending display, until accelerated widget is available.
+  void Init(const PlatformDisplayInitParams& init_params,
+            std::unique_ptr<DisplayBinding> binding);
 
   int64_t GetId() const;
 
@@ -73,22 +74,10 @@ class Display : public PlatformDisplayDelegate,
 
   PlatformDisplay* platform_display() { return platform_display_.get(); }
 
-  // Returns a mojom::WsDisplay for the specified display. WindowManager
-  // specific values are not set.
-  mojom::WsDisplayPtr ToWsDisplay() const;
-
-  // Returns a display::Display for the specficied display.
+  // Returns a display::Display corresponding to this ws::Display.
   display::Display ToDisplay() const;
 
-  // Schedules a paint for the specified region in the coordinates of |window|.
-  void SchedulePaint(const ServerWindow* window, const gfx::Rect& bounds);
-
-  // Schedules destruction of surfaces in |window|. If a frame has been
-  // scheduled but not drawn surface destruction is delayed until the frame is
-  // drawn, otherwise destruction is immediate.
-  void ScheduleSurfaceDestruction(ServerWindow* window);
-
-  display::Display::Rotation GetRotation() const;
+  // Returns the size of the display in physical pixels.
   gfx::Size GetSize() const;
 
   WindowServer* window_server() { return window_server_; }
@@ -151,6 +140,9 @@ class Display : public PlatformDisplayDelegate,
   void SetSize(const gfx::Size& size) override;
   void SetTitle(const mojo::String& title) override;
 
+  // Updates the size of display root ServerWindow and WM root ServerWindow(s).
+  void OnViewportMetricsChanged(const display::ViewportMetrics& metrics);
+
  private:
   friend class test::DisplayTestApi;
 
@@ -158,7 +150,7 @@ class Display : public PlatformDisplayDelegate,
       std::map<UserId, WindowManagerDisplayRoot*>;
 
   // Inits the necessary state once the display is ready.
-  void InitWindowManagerDisplayRootsIfNecessary();
+  void InitWindowManagerDisplayRoots();
 
   // Creates the set of WindowManagerDisplayRoots from the
   // WindowManagerWindowTreeFactorySet.
@@ -167,15 +159,16 @@ class Display : public PlatformDisplayDelegate,
   void CreateWindowManagerDisplayRootFromFactory(
       WindowManagerWindowTreeFactory* factory);
 
+  // Creates the root ServerWindow for this display, where |size| is in physical
+  // pixels.
+  void CreateRootWindow(const gfx::Size& size);
+
   // PlatformDisplayDelegate:
-  void CreateRootWindow(const gfx::Size& size) override;
   ServerWindow* GetRootWindow() override;
+  void OnAcceleratedWidgetAvailable() override;
   bool IsInHighContrastMode() override;
   void OnEvent(const ui::Event& event) override;
   void OnNativeCaptureLost() override;
-  void OnViewportMetricsChanged(const ViewportMetrics& old_metrics,
-                                const ViewportMetrics& new_metrics) override;
-  void OnCompositorFrameDrawn() override;
 
   // FocusControllerDelegate:
   bool CanHaveActiveChildren(ServerWindow* window) const override;
@@ -187,9 +180,6 @@ class Display : public PlatformDisplayDelegate,
                       ServerWindow* old_focused_window,
                       ServerWindow* new_focused_window) override;
 
-  // ServerWindowObserver:
-  void OnWindowDestroyed(ServerWindow* window) override;
-
   // UserIdTrackerObserver:
   void OnUserIdRemoved(const UserId& id) override;
 
@@ -198,8 +188,6 @@ class Display : public PlatformDisplayDelegate,
       WindowManagerWindowTreeFactory* factory) override;
 
   std::unique_ptr<DisplayBinding> binding_;
-  // Set once Init() has been called.
-  bool init_called_ = false;
   WindowServer* const window_server_;
   std::unique_ptr<ServerWindow> root_;
   std::unique_ptr<PlatformDisplay> platform_display_;
@@ -209,10 +197,6 @@ class Display : public PlatformDisplayDelegate,
   mojom::Cursor last_cursor_;
 
   ServerWindowTracker activation_parents_;
-
-  // Set of windows with surfaces that need to be destroyed once the frame
-  // draws.
-  std::set<ServerWindow*> windows_needing_frame_destruction_;
 
   WindowManagerDisplayRootMap window_manager_display_root_map_;
 

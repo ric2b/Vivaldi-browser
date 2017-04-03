@@ -161,10 +161,6 @@ static void RecordVideoCodecStats(const VideoDecoderConfig& video_config,
     UMA_HISTOGRAM_ENUMERATION("Media.VideoCodecProfile", video_config.profile(),
                               VIDEO_CODEC_PROFILE_MAX + 1);
   }
-  UMA_HISTOGRAM_COUNTS_10000("Media.VideoCodedWidth",
-                             video_config.coded_size().width());
-  UmaHistogramAspectRatio("Media.VideoCodedAspectRatio",
-                          video_config.coded_size());
   UMA_HISTOGRAM_COUNTS_10000("Media.VideoVisibleWidth",
                              video_config.visible_rect().width());
   UmaHistogramAspectRatio("Media.VideoVisibleAspectRatio",
@@ -280,6 +276,7 @@ FFmpegDemuxerStream::FFmpegDemuxerStream(
       video_rotation_(VIDEO_ROTATION_0),
       is_enabled_(true),
       waiting_for_keyframe_(false),
+      aborted_(false),
       fixup_negative_timestamps_(false) {
   DCHECK(demuxer_);
 
@@ -596,9 +593,11 @@ void FFmpegDemuxerStream::FlushBuffers() {
   end_of_stream_ = false;
   last_packet_timestamp_ = kNoTimestamp;
   last_packet_duration_ = kNoTimestamp;
+  aborted_ = false;
 }
 
 void FFmpegDemuxerStream::Abort() {
+  aborted_ = true;
   if (!read_cb_.is_null())
     base::ResetAndReturn(&read_cb_).Run(DemuxerStream::kAborted, nullptr);
 }
@@ -646,6 +645,11 @@ void FFmpegDemuxerStream::Read(const ReadCB& read_cb) {
     return;
   }
 
+  if (aborted_) {
+    base::ResetAndReturn(&read_cb_).Run(kAborted, nullptr);
+    return;
+  }
+
   SatisfyPendingRead();
 }
 
@@ -670,6 +674,15 @@ void FFmpegDemuxerStream::InitBitstreamConverter() {
 #if defined(USE_PROPRIETARY_CODECS)
   switch (stream_->codec->codec_id) {
     case AV_CODEC_ID_H264:
+      // Clear |extra_data| so that future (fallback) decoders will know that
+      // conversion is forcibly enabled on this stream.
+      //
+      // TODO(sandersd): Ideally we would convert |extra_data| to concatenated
+      // SPS/PPS data, but it's too late to be useful because Initialize() was
+      // already called on GpuVideoDecoder, which is the only path that would
+      // consume that data.
+      if (video_config_)
+        video_config_->SetExtraData(std::vector<uint8_t>());
       bitstream_converter_.reset(
           new FFmpegH264ToAnnexBBitstreamConverter(stream_->codec));
       break;
@@ -1287,6 +1300,17 @@ void FFmpegDemuxer::OnFindStreamInfoDone(const PipelineStatusCB& status_cb,
     }
 
     StreamParser::TrackId track_id = stream->id;
+
+    if ((codec_type == AVMEDIA_TYPE_AUDIO &&
+         media_tracks->getAudioConfig(track_id).IsValidConfig()) ||
+        (codec_type == AVMEDIA_TYPE_VIDEO &&
+         media_tracks->getVideoConfig(track_id).IsValidConfig())) {
+      MEDIA_LOG(INFO, media_log_)
+          << GetDisplayName()
+          << ": skipping duplicate media stream id=" << track_id;
+      continue;
+    }
+
     std::string track_label = streams_[i]->GetMetadata("handler_name");
     std::string track_language = streams_[i]->GetMetadata("language");
 
@@ -1489,8 +1513,6 @@ void FFmpegDemuxer::LogMetadata(AVFormatContext* avctx,
       params.SetString("video_codec_name" + suffix, GetCodecName(video_codec));
       params.SetInteger("width" + suffix, video_codec->width);
       params.SetInteger("height" + suffix, video_codec->height);
-      params.SetInteger("coded_width" + suffix, video_codec->coded_width);
-      params.SetInteger("coded_height" + suffix, video_codec->coded_height);
       params.SetString("time_base" + suffix,
                        base::StringPrintf("%d/%d", video_codec->time_base.num,
                                           video_codec->time_base.den));

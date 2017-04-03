@@ -28,6 +28,10 @@ class AuraTestHelper;
 }
 }
 
+namespace display {
+class Screen;
+}
+
 namespace ui {
 class ScopedOleInitializer;
 }
@@ -41,7 +45,6 @@ class MockRenderProcessHost;
 class MockRenderProcessHostFactory;
 class NavigationController;
 class RenderProcessHostFactory;
-class RenderViewHostDelegate;
 class TestRenderFrameHostFactory;
 class TestRenderViewHostFactory;
 class WebContents;
@@ -103,16 +106,13 @@ class RenderFrameHostTester {
   // - did_create_new_entry should be true if simulating a navigation that
   //   created a new navigation entry; false for history navigations, reloads,
   //   and other navigations that don't affect the history list.
-  virtual void SendNavigate(int page_id,
-                            int nav_entry_id,
+  virtual void SendNavigate(int nav_entry_id,
                             bool did_create_new_entry,
                             const GURL& url) = 0;
-  virtual void SendFailedNavigate(int page_id,
-                                  int nav_entry_id,
+  virtual void SendFailedNavigate(int nav_entry_id,
                                   bool did_create_new_entry,
                                   const GURL& url) = 0;
-  virtual void SendNavigateWithTransition(int page_id,
-                                          int nav_entry_id,
+  virtual void SendNavigateWithTransition(int nav_entry_id,
                                           bool did_create_new_entry,
                                           const GURL& url,
                                           ui::PageTransition transition) = 0;
@@ -129,8 +129,7 @@ class RenderFrameHostTester {
   virtual void SimulateSwapOutACK() = 0;
 
   // Simulate a renderer-initiated navigation up until commit.
-  virtual void NavigateAndCommitRendererInitiated(int page_id,
-                                                  bool did_create_new_entry,
+  virtual void NavigateAndCommitRendererInitiated(bool did_create_new_entry,
                                                   const GURL& url) = 0;
 };
 
@@ -157,7 +156,6 @@ class RenderViewHostTester {
   virtual bool CreateTestRenderView(const base::string16& frame_name,
                                     int opener_frame_route_id,
                                     int proxy_routing_id,
-                                    int32_t max_page_id,
                                     bool created_with_opener) = 0;
 
   // Makes the WasHidden/WasShown calls to the RenderWidget that
@@ -284,6 +282,7 @@ class RenderViewHostTestHarness : public testing::Test {
 #endif
 #if defined(OS_ANDROID)
   std::unique_ptr<MockGpuChannelEstablishFactory> gpu_channel_factory_;
+  std::unique_ptr<display::Screen> screen_;
 #endif
   RenderViewHostTestEnabler rvh_test_enabler_;
 

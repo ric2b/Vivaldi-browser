@@ -16,14 +16,6 @@
 #include "content/public/browser/web_contents_user_data.h"
 #include "url/gurl.h"
 
-namespace autofill {
-struct PasswordForm;
-}
-
-namespace password_manager {
-class PasswordManager;
-}
-
 namespace prerender {
 
 class PrerenderManager;
@@ -70,6 +62,11 @@ class PrerenderTabHelper
 
   // Retrieves the PrerenderManager, or NULL, if none was found.
   PrerenderManager* MaybeGetPrerenderManager() const;
+
+  // Returns the current TimeTicks synchronized with PrerenderManager ticks. In
+  // tests the clock can be mocked out in PrerenderManager, but in production
+  // this should be always TimeTicks::Now().
+  base::TimeTicks GetTimeTicksFromPrerenderManager() const;
 
   // Returns whether the WebContents being observed is currently prerendering.
   bool IsPrerendering();

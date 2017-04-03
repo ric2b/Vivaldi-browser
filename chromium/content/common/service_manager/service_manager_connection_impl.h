@@ -14,10 +14,10 @@
 #include "content/public/common/service_manager_connection.h"
 #include "mojo/public/cpp/bindings/string.h"
 #include "mojo/public/cpp/system/message_pipe.h"
-#include "services/shell/public/cpp/identity.h"
-#include "services/shell/public/interfaces/service.mojom.h"
+#include "services/service_manager/public/cpp/identity.h"
+#include "services/service_manager/public/interfaces/service.mojom.h"
 
-namespace shell {
+namespace service_manager {
 class Connector;
 }
 
@@ -28,7 +28,7 @@ class EmbeddedServiceRunner;
 class ServiceManagerConnectionImpl : public ServiceManagerConnection {
  public:
   explicit ServiceManagerConnectionImpl(
-      shell::mojom::ServiceRequest request,
+      service_manager::mojom::ServiceRequest request,
       scoped_refptr<base::SequencedTaskRunner> io_task_runner);
   ~ServiceManagerConnectionImpl() override;
 
@@ -38,12 +38,12 @@ class ServiceManagerConnectionImpl : public ServiceManagerConnection {
   // ServiceManagerConnection:
   void Start() override;
   void SetInitializeHandler(const base::Closure& handler) override;
-  shell::Connector* GetConnector() override;
-  const shell::Identity& GetIdentity() const override;
+  service_manager::Connector* GetConnector() override;
+  const service_manager::Identity& GetIdentity() const override;
   void SetConnectionLostClosure(const base::Closure& closure) override;
   void SetupInterfaceRequestProxies(
-      shell::InterfaceRegistry* registry,
-      shell::InterfaceProvider* provider) override;
+      service_manager::InterfaceRegistry* registry,
+      service_manager::InterfaceProvider* provider) override;
   int AddConnectionFilter(std::unique_ptr<ConnectionFilter> filter) override;
   void RemoveConnectionFilter(int filter_id) override;
   void AddEmbeddedService(const std::string& name,
@@ -51,18 +51,24 @@ class ServiceManagerConnectionImpl : public ServiceManagerConnection {
   void AddServiceRequestHandler(
       const std::string& name,
       const ServiceRequestHandler& handler) override;
+  int AddOnConnectHandler(const OnConnectHandler& handler) override;
+  void RemoveOnConnectHandler(int id) override;
 
-  void OnContextInitialized(const shell::Identity& identity);
+  void OnContextInitialized(const service_manager::Identity& identity);
   void OnConnectionLost();
-  void CreateService(shell::mojom::ServiceRequest request,
+  void OnConnect(const service_manager::ServiceInfo& local_info,
+                 const service_manager::ServiceInfo& remote_info);
+  void CreateService(service_manager::mojom::ServiceRequest request,
                      const std::string& name);
-  void GetInterface(shell::mojom::InterfaceProvider* provider,
+  void GetInterface(service_manager::mojom::InterfaceProvider* provider,
                     const std::string& interface_name,
                     mojo::ScopedMessagePipeHandle request_handle);
 
-  shell::Identity identity_;
+  service_manager::Identity identity_;
+  service_manager::ServiceInfo local_info_;
+  service_manager::ServiceInfo last_remote_info_;
 
-  std::unique_ptr<shell::Connector> connector_;
+  std::unique_ptr<service_manager::Connector> connector_;
   scoped_refptr<IOThreadContext> context_;
 
   base::Closure initialize_handler_;
@@ -71,6 +77,8 @@ class ServiceManagerConnectionImpl : public ServiceManagerConnection {
   std::unordered_map<std::string, std::unique_ptr<EmbeddedServiceRunner>>
       embedded_services_;
   std::unordered_map<std::string, ServiceRequestHandler> request_handlers_;
+  int next_on_connect_handler_id_ = 0;
+  std::map<int, OnConnectHandler> on_connect_handlers_;
 
   base::WeakPtrFactory<ServiceManagerConnectionImpl> weak_factory_;
 

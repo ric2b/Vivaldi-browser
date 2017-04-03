@@ -9,9 +9,10 @@
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "mojo/common/common_type_converters.h"
-#include "services/shell/public/cpp/service_context.h"
-#include "services/shell/public/cpp/service_test.h"
+#include "services/service_manager/public/cpp/service_context.h"
+#include "services/service_manager/public/cpp/service_test.h"
 #include "services/ui/public/interfaces/clipboard.mojom.h"
+#include "services/ui/public/interfaces/constants.mojom.h"
 
 using mojo::Array;
 using mojo::Map;
@@ -28,16 +29,16 @@ const char* kHtmlData = "<html>data</html>";
 
 }  // namespace
 
-class ClipboardAppTest : public shell::test::ServiceTest {
+class ClipboardAppTest : public service_manager::test::ServiceTest {
  public:
-  ClipboardAppTest() : ServiceTest("exe:mus_clipboard_unittests") {}
+  ClipboardAppTest() : ServiceTest("mus_clipboard_unittests") {}
   ~ClipboardAppTest() override {}
 
-  // Overridden from shell::test::ServiceTest:
+  // Overridden from service_manager::test::ServiceTest:
   void SetUp() override {
     ServiceTest::SetUp();
 
-    connector()->ConnectToInterface("service:ui", &clipboard_);
+    connector()->ConnectToInterface(ui::mojom::kServiceName, &clipboard_);
     ASSERT_TRUE(clipboard_);
   }
 

@@ -7,6 +7,7 @@ from core import perf_benchmark
 import ct_benchmarks_util
 from measurements import rasterize_and_record_micro
 import page_sets
+from page_sets import repaint_helpers
 from telemetry import benchmark
 
 
@@ -56,11 +57,10 @@ class RasterizeAndRecordMicroTop25(_RasterizeAndRecordMicro):
 
   @classmethod
   def Name(cls):
-    return 'rasterize_and_record_micro.top_25_smooth'
+    return 'rasterize_and_record_micro.top_25'
 
 
-@benchmark.Disabled('mac', 'win',
-                    'android')  # http://crbug.com/531597
+@benchmark.Disabled('mac', 'win', 'android')  # http://crbug.com/531597
 class RasterizeAndRecordMicroKeyMobileSites(_RasterizeAndRecordMicro):
   """Measures rasterize and record performance on the key mobile sites.
 
@@ -69,10 +69,10 @@ class RasterizeAndRecordMicroKeyMobileSites(_RasterizeAndRecordMicro):
 
   @classmethod
   def Name(cls):
-    return 'rasterize_and_record_micro.key_mobile_sites_smooth'
+    return 'rasterize_and_record_micro.key_mobile_sites'
 
 
-@benchmark.Disabled('mac', 'win', 'android') # http://crbug.com/610424
+@benchmark.Disabled('all') # http://crbug.com/610424
 class RasterizeAndRecordMicroKeySilkCases(_RasterizeAndRecordMicro):
   """Measures rasterize and record performance on the silk sites.
 
@@ -135,4 +135,5 @@ class RasterizeAndRecordMicroCT(_RasterizeAndRecordMicro):
 
   def CreateStorySet(self, options):
     return page_sets.CTPageSet(
-        options.urls_list, options.user_agent, options.archive_data_file)
+        options.urls_list, options.user_agent, options.archive_data_file,
+        run_page_interaction_callback=repaint_helpers.WaitThenRepaint)

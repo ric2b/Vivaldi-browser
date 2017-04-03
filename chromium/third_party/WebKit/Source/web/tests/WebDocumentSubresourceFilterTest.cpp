@@ -48,7 +48,7 @@ class TestDocumentSubresourceFilter : public WebDocumentSubresourceFilter {
 class SubresourceFilteringWebFrameClient
     : public FrameTestHelpers::TestWebFrameClient {
  public:
-  void didStartProvisionalLoad(WebLocalFrame* localFrame, double) override {
+  void didStartProvisionalLoad(WebLocalFrame* localFrame) override {
     // Normally, the filter should be set when the load is committed. For
     // the sake of this test, however, inject it earlier to verify that it
     // is not consulted for the main resource load.
@@ -90,7 +90,7 @@ class WebDocumentSubresourceFilterTest : public ::testing::Test {
     WebElement webElement = mainFrame()->document().querySelector("img");
     ASSERT_TRUE(isHTMLImageElement(webElement));
     HTMLImageElement* imageElement = toHTMLImageElement(webElement);
-    EXPECT_EQ(loaded, !!imageElement->cachedImage());
+    EXPECT_EQ(loaded, !!imageElement->naturalWidth());
   }
 
   const std::string& baseURL() const { return m_baseURL; }

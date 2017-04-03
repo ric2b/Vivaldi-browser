@@ -21,10 +21,6 @@ if (is_android) {
 }
 
 declare_args() {
-  # Multicast DNS.
-  enable_mdns = is_win || is_linux
-
-  enable_extensions = !is_android && !is_ios
   enable_plugins = (!is_android && !is_ios) || is_chromecast
   enable_pdf = !is_android && !is_ios && !is_chromecast
 
@@ -36,12 +32,6 @@ declare_args() {
 
   # Non-SFI is not yet supported on mipsel
   enable_nacl_nonsfi = current_cpu != "mipsel"
-
-  # If debug_devtools is set to true, JavaScript files for DevTools are stored
-  # as is and loaded from disk. Otherwise, a concatenated file is stored in
-  # resources.pak. It is still possible to load JS files from disk by passing
-  # --debug-devtools cmdline switch.
-  debug_devtools = false
 
   # Enables WebRTC.
   enable_webrtc = !is_ios
@@ -60,24 +50,6 @@ declare_args() {
   system_proprietary_codecs =
       (is_win || is_mac) && enable_system_proprietary_codecs
 
-  enable_captive_portal_detection = !is_android && !is_ios && !is_chromecast
-
-  # Enables use of the session service, which is enabled by default.
-  # Android stores them separately on the Java side.
-  enable_session_service = !is_android && !is_ios && !is_chromecast
-
-  enable_plugin_installation = is_win || is_mac
-
-  enable_app_list = is_chromeos
-
-  enable_supervised_users = !is_ios && !is_chromecast
-
-  enable_remoting = !is_ios && !is_chromecast
-
-  # Hangout services is an extension that adds extra features to Hangouts.
-  # For official GYP builds, this flag is set.
-  enable_hangout_services_extension = false
-
   # Variable safe_browsing is used to control the build time configuration for
   # safe browsing feature. Safe browsing can be compiled in 3 different levels:
   # 0 disables it, 1 enables it fully, and 2 enables mobile protection via an
@@ -95,8 +67,6 @@ declare_args() {
   # Note: this setting is ignored if is_chrome_branded.
   fieldtrial_testing_like_official_build = is_chrome_branded
 
-  use_cups = (is_desktop_linux || is_mac) && !is_chromecast
-
   # Enables Wi-Fi Display functionality
   # WARNING: This enables MPEG Transport Stream (MPEG-TS) encoding!
   enable_wifi_display = false
@@ -112,37 +82,17 @@ declare_args() {
 
   use_gio = is_linux && !is_chromeos && !is_chromecast
 
-  # Enable basic printing support and UI.
-  enable_basic_printing = !is_chromecast && !is_ios
-
-  # Enable printing with print preview. It does not imply
-  # enable_basic_printing. It's possible to build Chrome with preview only.
-  enable_print_preview = !is_android && !is_chromecast && !is_ios
-
   # Whether or not to use external popup menu.
   use_external_popup_menu = is_android || is_mac
 
   # Enable WebVR support by default on Android
   # Still requires command line flag to access API
-  enable_webvr = is_android && is_component_build && is_debug &&
-                 (current_cpu == "x86" || current_cpu == "x64" ||
-                  current_cpu == "arm" || current_cpu == "arm64")
+  # TODO(bshe): Enable for other architecture too. Currently we only support arm
+  # and arm64.
+  enable_webvr = is_android && (current_cpu == "arm" || current_cpu == "arm64")
 }
 
 # Additional dependent variables -----------------------------------------------
-
-# Enable the spell checker.
-enable_spellcheck = !is_ios
-
-# Use the operating system's spellchecker rather than hunspell.
-use_browser_spellchecker = is_android || is_mac
-
-# Use Minikin hyphenation engine.
-use_minikin_hyphenation = is_android
-
-# Enables the use of CDMs in pepper plugins.
-enable_pepper_cdms =
-    enable_plugins && (is_linux || is_mac || is_win) && !is_chromecast
 
 # The seccomp-bpf sandbox is only supported on five architectures
 # currently.
@@ -167,17 +117,9 @@ enable_themes = !is_android && !is_ios
 enable_rlz_support = is_win || is_mac || is_ios || is_chromeos
 enable_rlz = (is_chrome_branded || is_vivaldi) && enable_rlz_support
 
-enable_service_discovery = enable_mdns || is_mac
-
-# Image loader extension is enabled on ChromeOS only.
-enable_image_loader_extension = is_chromeos
-
 # Chrome OS: whether to also build the upcoming version of
 # ChromeVox, which can then be enabled via a command-line switch.
 enable_chromevox_next = false
-
-# Use brlapi from brltty for braille display support.
-use_brlapi = is_chromeos
 
 enable_configuration_policy = !is_ios
 

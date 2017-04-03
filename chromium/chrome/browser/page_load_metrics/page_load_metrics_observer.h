@@ -9,7 +9,7 @@
 #include "base/optional.h"
 #include "chrome/common/page_load_metrics/page_load_timing.h"
 #include "content/public/browser/navigation_handle.h"
-#include "third_party/WebKit/public/web/WebInputEvent.h"
+#include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "url/gurl.h"
 
 namespace page_load_metrics {
@@ -32,17 +32,22 @@ enum UserAbortType {
   // meta refresh tag.
   ABORT_CLIENT_REDIRECT,
 
-  // If the navigation is replaced by a new navigation. This includes link
+  // If the page load is replaced by a new navigation. This includes link
   // clicks, typing in the omnibox (not a reload), and form submissions.
   ABORT_NEW_NAVIGATION,
 
   // If the user presses the stop X button.
   ABORT_STOP,
 
-  // If the navigation is aborted by closing the tab or browser.
+  // If the page load is aborted by closing the tab or browser.
   ABORT_CLOSE,
 
-  // We don't know why the navigation aborted. This is the value we assign to an
+  // The page load was backgrounded, e.g. the browser was minimized or the user
+  // switched tabs. Note that the same page may be foregrounded in the future,
+  // so this is not a 'terminal' abort type.
+  ABORT_BACKGROUND,
+
+  // We don't know why the page load aborted. This is the value we assign to an
   // aborted load if the only signal we get is a provisional load finishing
   // without committing, either without error or with net::ERR_ABORTED.
   ABORT_OTHER,
@@ -65,10 +70,9 @@ struct PageLoadExtraInfo {
       const base::Optional<base::TimeDelta>& first_background_time,
       const base::Optional<base::TimeDelta>& first_foreground_time,
       bool started_in_foreground,
-      bool user_gesture,
+      bool user_initiated,
       const GURL& committed_url,
       const GURL& start_url,
-      const base::Optional<base::TimeDelta>& time_to_commit,
       UserAbortType abort_type,
       bool abort_user_initiated,
       const base::Optional<base::TimeDelta>& time_to_abort,
@@ -91,7 +95,7 @@ struct PageLoadExtraInfo {
 
   // True if this is either a browser initiated navigation or the user_gesture
   // bit is true in the renderer.
-  const bool user_gesture;
+  const bool user_initiated;
 
   // Committed URL. If the page load did not commit, |committed_url| will be
   // empty.
@@ -100,13 +104,19 @@ struct PageLoadExtraInfo {
   // The URL that started the navigation, before redirects.
   const GURL start_url;
 
-  // Time from navigation start until commit.
-  const base::Optional<base::TimeDelta> time_to_commit;
-
   // The abort time and time to abort for this page load. If the page was not
   // aborted, |abort_type| will be |ABORT_NONE|.
   const UserAbortType abort_type;
 
+  // Whether the abort for this page load was user initiated. For example, if
+  // this page load was aborted by a new navigation, this field tracks whether
+  // that new navigation was user-initiated. This field is only useful if this
+  // page load's abort type is a value other than ABORT_NONE. Note that this
+  // value is currently experimental, and is subject to change. In particular,
+  // this field is never set to true for some abort types, such as stop and
+  // close, since we don't yet have sufficient instrumentation to know if a stop
+  // or close was caused by a user action.
+  //
   // TODO(csharrison): If more metadata for aborts is needed we should provide a
   // better abstraction. Note that this is an approximation.
   bool abort_user_initiated;
@@ -157,13 +167,14 @@ class PageLoadMetricsObserver {
   // The navigation handle holds relevant data for the navigation, but will
   // be destroyed soon after this call. Don't hold a reference to it. This can
   // be called multiple times.
-  virtual void OnRedirect(content::NavigationHandle* navigation_handle) {}
+  virtual ObservePolicy OnRedirect(
+      content::NavigationHandle* navigation_handle);
 
   // OnCommit is triggered when a page load commits, i.e. when we receive the
   // first data for the request. The navigation handle holds relevant data for
   // the navigation, but will be destroyed soon after this call. Don't hold a
   // reference to it.
-  // Note that this does not get called for same page navigations.
+  // Note that this does not get called for same-page navigations.
   // Observers that return STOP_OBSERVING will not receive any additional
   // callbacks, and will be deleted after invocation of this method returns.
   virtual ObservePolicy OnCommit(content::NavigationHandle* navigation_handle);
@@ -171,11 +182,12 @@ class PageLoadMetricsObserver {
   // OnHidden is triggered when a page leaves the foreground. It does not fire
   // when a foreground page is permanently closed; for that, listen to
   // OnComplete instead.
-  virtual void OnHidden() {}
+  virtual ObservePolicy OnHidden(const PageLoadTiming& timing,
+                                 const PageLoadExtraInfo& extra_info);
 
   // OnShown is triggered when a page is brought to the foreground. It does not
   // fire when the page first loads; for that, listen for OnStart instead.
-  virtual void OnShown() {}
+  virtual ObservePolicy OnShown();
 
   // The callbacks below are only invoked after a navigation commits, for
   // tracked page loads. Page loads that don't meet the criteria for being
@@ -229,10 +241,10 @@ class PageLoadMetricsObserver {
   // the application may be killed at any time after this method is invoked
   // without further notification. Note that this may be called both for
   // provisional loads as well as committed loads. Implementations that only
-  // want to track committed loads should check extra_info.time_to_commit to
-  // determine if the load had committed. If the implementation returns
-  // CONTINUE_OBSERVING, this method may be called multiple times per observer,
-  // once for each time that the application enters the backround.
+  // want to track committed loads should check whether extra_info.committed_url
+  // is empty to determine if the load had committed. If the implementation
+  // returns CONTINUE_OBSERVING, this method may be called multiple times per
+  // observer, once for each time that the application enters the backround.
   //
   // The default implementation does nothing, and returns CONTINUE_OBSERVING.
   virtual ObservePolicy FlushMetricsOnAppEnterBackground(
@@ -249,7 +261,9 @@ class PageLoadMetricsObserver {
   // instead.
 
   // OnComplete is invoked for tracked page loads that committed, immediately
-  // before the observer is deleted.
+  // before the observer is deleted. Observers that implement OnComplete may
+  // also want to implement FlushMetricsOnAppEnterBackground, to avoid loss of
+  // data if the application is killed while in the background.
   virtual void OnComplete(const PageLoadTiming& timing,
                           const PageLoadExtraInfo& extra_info) {}
 

@@ -41,6 +41,8 @@
 #include "public/platform/WebDisplayMode.h"
 #include "public/platform/WebFloatSize.h"
 #include "public/platform/WebGestureCurveTarget.h"
+#include "public/platform/WebGestureEvent.h"
+#include "public/platform/WebInputEvent.h"
 #include "public/platform/WebInputEventResult.h"
 #include "public/platform/WebLayer.h"
 #include "public/platform/WebPoint.h"
@@ -49,7 +51,6 @@
 #include "public/platform/WebSize.h"
 #include "public/platform/WebString.h"
 #include "public/platform/WebVector.h"
-#include "public/web/WebInputEvent.h"
 #include "public/web/WebNavigationPolicy.h"
 #include "public/web/WebPageImportanceSignals.h"
 #include "public/web/WebView.h"
@@ -70,6 +71,7 @@
 
 namespace blink {
 
+class BrowserControls;
 class DataObject;
 class DevToolsEmulator;
 class Frame;
@@ -79,11 +81,11 @@ class LinkHighlightImpl;
 class PageOverlay;
 class PageScaleConstraintsSet;
 class PaintLayerCompositor;
-class TopControls;
 class UserGestureToken;
 class WebActiveGestureAnimation;
 class WebDevToolsAgentImpl;
 class WebElement;
+class WebInputMethodControllerImpl;
 class WebLayerTreeView;
 class WebLocalFrame;
 class WebLocalFrameImpl;
@@ -92,7 +94,6 @@ class CompositorMutatorImpl;
 class WebPagePopupImpl;
 class WebPlugin;
 class WebRemoteFrame;
-class WebSelection;
 class WebSettingsImpl;
 class WebViewScheduler;
 
@@ -101,10 +102,25 @@ class WEB_EXPORT WebViewImpl final
       public RefCounted<WebViewImpl>,
       WTF_NON_EXPORTED_BASE(public WebGestureCurveTarget),
       public PageWidgetEventHandler,
-      public WebScheduler::InterventionReporter {
+      public WebScheduler::InterventionReporter,
+      public WebViewScheduler::WebViewSchedulerSettings {
  public:
   static WebViewImpl* create(WebViewClient*, WebPageVisibilityState);
   static HashSet<WebViewImpl*>& allInstances();
+
+  class UserGestureNotifier {
+   public:
+    // If a UserGestureIndicator is created for a user gesture since the last
+    // page load and the WebViewImpl's |m_userGestureObserved| is false, the
+    // UserGestureNotifier will notify the client and set
+    // |m_userGestureObserved| to true.
+    UserGestureNotifier(WebViewImpl*);
+    ~UserGestureNotifier();
+
+   private:
+    Persistent<WebLocalFrameImpl> m_frame;
+    bool* const m_userGestureObserved;
+  };
 
   // WebWidget methods:
   void close() override;
@@ -133,16 +149,9 @@ class WEB_EXPORT WebViewImpl final
                            const WebFloatSize& layoutViewportDelta,
                            const WebFloatSize& elasticOverscrollDelta,
                            float pageScaleDelta,
-                           float topControlsShownRatioDelta) override;
+                           float browserControlsShownRatioDelta) override;
   void mouseCaptureLost() override;
   void setFocus(bool enable) override;
-  bool setComposition(const WebString& text,
-                      const WebVector<WebCompositionUnderline>& underlines,
-                      int selectionStart,
-                      int selectionEnd) override;
-  bool commitText(const WebString& text, int relativeCaretPosition) override;
-  bool finishComposingText(
-      ConfirmCompositionBehavior selectionBehavior) override;
   WebRange compositionRange() override;
   WebTextInputInfo textInputInfo() override;
   WebTextInputType textInputType() override;
@@ -159,7 +168,6 @@ class WEB_EXPORT WebViewImpl final
   void didAcquirePointerLock() override;
   void didNotAcquirePointerLock() override;
   void didLosePointerLock() override;
-  void didChangeWindowResizerRect() override;
 
   // WebView methods:
   virtual bool isWebView() const { return true; }
@@ -178,16 +186,15 @@ class WEB_EXPORT WebViewImpl final
   void setDomainRelaxationForbidden(bool, const WebString& scheme) override;
   void setWindowFeatures(const WebWindowFeatures&) override;
   void setOpenedByDOM() override;
-  void resizeWithTopControls(const WebSize&,
-                             float topControlsHeight,
-                             bool topControlsShrinkLayout) override;
+  void resizeWithBrowserControls(const WebSize&,
+                                 float browserControlsHeight,
+                                 bool browserControlsShrinkLayout) override;
   WebFrame* mainFrame() override;
   WebFrame* findFrameByName(const WebString& name,
                             WebFrame* relativeToFrame) override;
   WebLocalFrame* focusedFrame() override;
   void setFocusedFrame(WebFrame*) override;
   void focusDocumentView(WebFrame*) override;
-  void unfocusDocumentView() override;
   void setInitialFocus(bool reverse) override;
   void clearFocusedElement() override;
   bool scrollFocusedEditableElementIntoRect(const WebRect&) override;
@@ -209,6 +216,7 @@ class WEB_EXPORT WebViewImpl final
   void setImagesEnabled(const bool images_enabled) override;
   void setServeResourceFromCacheOnly(const bool only_load_from_cache) override;
   void setPluginsEnabled(const bool plugins_enabled) override;
+  void loadImageAt(const WebPoint&) override;
   void setDefaultPageScaleLimits(float minScale, float maxScale) override;
   void setInitialPageScaleOverride(float) override;
   void setMaximumLegibleScale(float) override;
@@ -232,28 +240,10 @@ class WEB_EXPORT WebViewImpl final
   void performMediaPlayerAction(const WebMediaPlayerAction& action,
                                 const WebPoint& location) override;
   void performPluginAction(const WebPluginAction&, const WebPoint&) override;
+  void audioStateChanged(bool isAudioPlaying) override;
   WebHitTestResult hitTestResultAt(const WebPoint&) override;
   WebHitTestResult hitTestResultForTap(const WebPoint&,
                                        const WebSize&) override;
-  void loadImageAt(const WebPoint&) override;
-  void dragSourceEndedAt(const WebPoint& pointInViewport,
-                         const WebPoint& screenPoint,
-                         WebDragOperation) override;
-  void dragSourceSystemDragEnded() override;
-  WebDragOperation dragTargetDragEnter(const WebDragData&,
-                                       const WebPoint& pointInViewport,
-                                       const WebPoint& screenPoint,
-                                       WebDragOperationsMask operationsAllowed,
-                                       int modifiers) override;
-  WebDragOperation dragTargetDragOver(const WebPoint& pointInViewport,
-                                      const WebPoint& screenPoint,
-                                      WebDragOperationsMask operationsAllowed,
-                                      int modifiers) override;
-  void dragTargetDragLeave() override;
-  void dragTargetDrop(const WebDragData&,
-                      const WebPoint& pointInViewport,
-                      const WebPoint& screenPoint,
-                      int modifiers) override;
   void spellingMarkers(WebVector<uint32_t>* markers) override;
   void removeSpellingMarkersUnderWords(
       const WebVector<WebString>& words) override;
@@ -284,6 +274,12 @@ class WEB_EXPORT WebViewImpl final
 
   // WebScheduler::InterventionReporter implementation:
   void ReportIntervention(const WebString& message) override;
+
+  // WebViewScheduler::WebViewSchedulerSettings implementation:
+  float expensiveBackgroundThrottlingCPUBudget() override;
+  float expensiveBackgroundThrottlingInitialBudget() override;
+  float expensiveBackgroundThrottlingMaxBudget() override;
+  float expensiveBackgroundThrottlingMaxDelay() override;
 
   void didUpdateFullscreenSize();
 
@@ -395,13 +391,6 @@ class WEB_EXPORT WebViewImpl final
   void updateMainFrameLayoutSize();
   void updatePageDefinedViewportConstraints(const ViewportDescription&);
 
-  // Start a system drag and drop operation.
-  void startDragging(LocalFrame*,
-                     const WebDragData& dragData,
-                     WebDragOperationsMask mask,
-                     const WebImage& dragImage,
-                     const WebPoint& dragImageOffset);
-
   PagePopup* openPagePopup(PagePopupClient*);
   void closePagePopup(PagePopup*);
   void cleanupPagePopup();
@@ -424,11 +413,6 @@ class WEB_EXPORT WebViewImpl final
   void setVisibilityState(WebPageVisibilityState, bool) override;
 
   bool hasOpenedPopup() const { return m_pagePopup.get(); }
-
-  // Returns true if the event leads to scrolling.
-  static bool mapKeyCodeForScroll(int keyCode,
-                                  ScrollDirectionPhysical*,
-                                  ScrollGranularity*);
 
   // Called by a full frame plugin inside this view to inform it that its
   // zoom level has been updated.  The plugin should only call this function
@@ -469,7 +453,7 @@ class WEB_EXPORT WebViewImpl final
   }
 
   void enterFullscreenForElement(Element*);
-  void exitFullscreenForElement(Element*);
+  void exitFullscreen(LocalFrame*);
 
   // Exposed for the purpose of overriding device metrics.
   void sendResizeEventAndRepaint();
@@ -495,13 +479,14 @@ class WEB_EXPORT WebViewImpl final
     return m_matchesHeuristicsForGpuRasterization;
   }
 
-  void updateTopControlsState(WebTopControlsState constraint,
-                              WebTopControlsState current,
-                              bool animate) override;
+  void updateBrowserControlsState(WebBrowserControlsState constraint,
+                                  WebBrowserControlsState current,
+                                  bool animate) override;
 
-  TopControls& topControls();
-  // Called anytime top controls layout height or content offset have changed.
-  void didUpdateTopControls();
+  BrowserControls& browserControls();
+  // Called anytime browser controls layout height or content offset have
+  // changed.
+  void didUpdateBrowserControls();
 
   void forceNextWebGLContextCreationToFail() override;
   void forceNextDrawingBufferCreationToFail() override;
@@ -521,6 +506,11 @@ class WEB_EXPORT WebViewImpl final
 
   ChromeClientImpl& chromeClient() const { return *m_chromeClientImpl.get(); }
 
+  // Returns the currently active WebInputMethodController which the one
+  // corresponding to the focused frame. It will return nullptr if there are
+  // none or |m_imeAcceptEvents| is false.
+  WebInputMethodControllerImpl* getActiveWebInputMethodController() const;
+
  private:
   InspectorOverlay* inspectorOverlay();
 
@@ -536,9 +526,8 @@ class WEB_EXPORT WebViewImpl final
   IntSize contentsSize() const;
 
   void performResize();
-  void resizeViewWhileAnchored(FrameView*,
-                               float topControlsHeight,
-                               bool topControlsShrinkLayout);
+  void resizeViewWhileAnchored(float browserControlsHeight,
+                               bool browserControlsShrinkLayout);
 
   // Overrides the compositor visibility. See the description of
   // m_overrideCompositorVisibility for more details.
@@ -554,33 +543,13 @@ class WEB_EXPORT WebViewImpl final
   friend class WTF::RefCounted<WebViewImpl>;
   friend void setCurrentInputEventForTest(const WebInputEvent*);
 
-  enum DragAction { DragEnter, DragOver };
-
   explicit WebViewImpl(WebViewClient*, WebPageVisibilityState);
   ~WebViewImpl() override;
-
-  int textInputFlags();
-
-  WebString inputModeOfFocusedElement();
-
-  // Returns true if the event was actually processed.
-  bool keyEventDefault(const WebKeyboardEvent&);
-
-  // Returns true if the view was scrolled.
-  bool scrollViewWithKeyboard(int keyCode, int modifiers);
 
   void hideSelectPopup();
 
   HitTestResult hitTestResultForRootFramePos(const IntPoint&);
   HitTestResult hitTestResultForViewportPos(const IntPoint&);
-
-  // Consolidate some common code between starting a drag over a target and
-  // updating a drag over a target. If we're starting a drag, |isEntering|
-  // should be true.
-  WebDragOperation dragTargetDragEnterOrOver(const WebPoint& pointInViewport,
-                                             const WebPoint& screenPoint,
-                                             DragAction,
-                                             int modifiers);
 
   void configureAutoResizeMode();
 
@@ -660,9 +629,6 @@ class WEB_EXPORT WebViewImpl final
   // is called.
   std::unique_ptr<WebSettingsImpl> m_webSettings;
 
-  // A copy of the web drop data object we received from the browser.
-  Persistent<DataObject> m_currentDragData;
-
   // Keeps track of the current zoom level. 0 means no zoom, positive numbers
   // mean zoom in, negative numbers mean zoom out.
   double m_zoomLevel;
@@ -689,8 +655,6 @@ class WEB_EXPORT WebViewImpl final
   float m_fakePageScaleAnimationPageScaleFactor;
   bool m_fakePageScaleAnimationUseAnchor;
 
-  bool m_doingDragAndDrop;
-
   bool m_ignoreInputEvents;
 
   float m_compositorDeviceScaleFactorOverride;
@@ -704,14 +668,6 @@ class WEB_EXPORT WebViewImpl final
 
   // Represents whether or not this object should process incoming IME events.
   bool m_imeAcceptEvents;
-
-  // The available drag operations (copy, move link...) allowed by the source.
-  WebDragOperation m_operationsAllowed;
-
-  // The current drag operation as negotiated by the source and destination.
-  // When not equal to DragOperationNone, the drag data can be dropped onto the
-  // current drop target in this WebView (the drop target can accept the drop).
-  WebDragOperation m_dragOperation;
 
   // The popup associated with an input/select element.
   RefPtr<WebPagePopupImpl> m_pagePopup;

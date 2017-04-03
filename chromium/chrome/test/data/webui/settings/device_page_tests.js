@@ -107,6 +107,16 @@ cr.define('device_page_tests', function() {
             type: chrome.settingsPrivate.PrefType.NUMBER,
             value: 3,
           },
+          remap_escape_key_to: {
+            key: 'settings.language.remap_escape_key_to',
+            type: chrome.settingsPrivate.PrefType.NUMBER,
+            value: 5,
+          },
+          remap_backspace_key_to: {
+            key: 'settings.language.remap_backspace_key_to',
+            type: chrome.settingsPrivate.PrefType.NUMBER,
+            value: 6,
+          },
           send_function_keys: {
             key: 'settings.language.send_function_keys',
             type: chrome.settingsPrivate.PrefType.BOOLEAN,
@@ -475,8 +485,8 @@ cr.define('device_page_tests', function() {
         expectEquals(
             displayPage.displays[1].id, displayPage.selectedDisplay.id);
 
-        displayPage.onMakePrimaryTap_();
-        displayPage.onSetOrientation_({detail: {selected: '90'}});
+        displayPage.updatePrimaryDisplay_({target: {value: '0'}});
+        displayPage.onOrientationChange_({target: {value: '90'}});
         fakeSystemDisplay.onDisplayChanged.callListeners();
 
         return Promise.all([

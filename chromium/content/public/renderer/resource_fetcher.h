@@ -20,8 +20,6 @@ class TimeDelta;
 namespace blink {
 class WebFrame;
 class WebURLResponse;
-enum class WebCachePolicy;
-struct WebURLLoaderOptions;
 }
 
 namespace content {
@@ -29,11 +27,6 @@ namespace content {
 // Interface to download resources asynchronously.
 class CONTENT_EXPORT ResourceFetcher {
  public:
-  enum LoaderType {
-    PLATFORM_LOADER,         // uses Platform::createURLLoader
-    FRAME_ASSOCIATED_LOADER, // uses WebFrame::createAssociatedURLLoader
-  };
-
   virtual ~ResourceFetcher() {}
 
   // This will be called asynchronously after the URL has been fetched,
@@ -55,20 +48,12 @@ class CONTENT_EXPORT ResourceFetcher {
   virtual void SetBody(const std::string& body) = 0;
   virtual void SetHeader(const std::string& header,
                          const std::string& value) = 0;
-  virtual void SetSkipServiceWorker(
-      blink::WebURLRequest::SkipServiceWorker skip_service_worker) = 0;
-  virtual void SetCachePolicy(blink::WebCachePolicy policy) = 0;
-
-  // Associate the corresponding WebURLLoaderOptions to the loader. Must be
-  // called before Start. Used if the LoaderType is FRAME_ASSOCIATED_LOADER.
-  virtual void SetLoaderOptions(const blink::WebURLLoaderOptions& options) = 0;
 
   // Starts the request using the specified frame.  Calls |callback| when
   // done.
   virtual void Start(blink::WebFrame* frame,
                      blink::WebURLRequest::RequestContext request_context,
                      blink::WebURLRequest::FrameType frame_type,
-                     LoaderType loader_type,
                      const Callback& callback) = 0;
 
   // Sets how long to wait for the server to reply.  By default, there is no

@@ -33,196 +33,6 @@ var SiteSettingsBehaviorImpl = {
   },
 
   /**
-   * A utility function to lookup a category name from its enum. Note: The
-   * category name is visible to the user as part of the URL.
-   * @param {string} category The category ID to look up.
-   * @return {string} The category found or blank string if not found.
-   * @protected
-   */
-  computeCategoryTextId: function(category) {
-    switch (category) {
-      case settings.ContentSettingsTypes.AUTOMATIC_DOWNLOADS:
-        return 'automatic-downloads';
-      case settings.ContentSettingsTypes.BACKGROUND_SYNC:
-        return 'background-sync';
-      case settings.ContentSettingsTypes.CAMERA:
-        return 'camera';
-      case settings.ContentSettingsTypes.COOKIES:
-        return 'cookies';
-      case settings.ContentSettingsTypes.GEOLOCATION:
-        return 'location';
-      case settings.ContentSettingsTypes.IMAGES:
-        return 'images';
-      case settings.ContentSettingsTypes.JAVASCRIPT:
-        return 'javascript';
-      case settings.ContentSettingsTypes.KEYGEN:
-        return 'keygen';
-      case settings.ContentSettingsTypes.MIC:
-        return 'microphone';
-      case settings.ContentSettingsTypes.NOTIFICATIONS:
-        return 'notifications';
-      case settings.ContentSettingsTypes.PLUGINS:
-        return 'plugins';
-      case settings.ContentSettingsTypes.POPUPS:
-        return 'popups';
-      case settings.ContentSettingsTypes.PROTOCOL_HANDLERS:
-        return 'handlers';
-      case settings.ContentSettingsTypes.UNSANDBOXED_PLUGINS:
-        return 'unsandboxed-plugins';
-      case settings.ContentSettingsTypes.USB_DEVICES:
-        return 'usb-devices';
-      case settings.ContentSettingsTypes.ZOOM_LEVELS:
-        return 'zoom-levels';
-      default:
-        return '';
-    }
-  },
-
-  /**
-   * A utility function to lookup the route for a category name.
-   * @param {string} category The category ID to look up.
-   * @return {!settings.Route}
-   * @protected
-   */
-  computeCategoryRoute: function(category) {
-    switch (category) {
-      case settings.ContentSettingsTypes.AUTOMATIC_DOWNLOADS:
-        return settings.Route.SITE_SETTINGS_AUTOMATIC_DOWNLOADS;
-      case settings.ContentSettingsTypes.BACKGROUND_SYNC:
-        return settings.Route.SITE_SETTINGS_BACKGROUND_SYNC;
-      case settings.ContentSettingsTypes.CAMERA:
-        return settings.Route.SITE_SETTINGS_CAMERA;
-      case settings.ContentSettingsTypes.COOKIES:
-        return settings.Route.SITE_SETTINGS_COOKIES;
-      case settings.ContentSettingsTypes.GEOLOCATION:
-        return settings.Route.SITE_SETTINGS_LOCATION;
-      case settings.ContentSettingsTypes.IMAGES:
-        return settings.Route.SITE_SETTINGS_IMAGES;
-      case settings.ContentSettingsTypes.JAVASCRIPT:
-        return settings.Route.SITE_SETTINGS_JAVASCRIPT;
-      case settings.ContentSettingsTypes.KEYGEN:
-        return settings.Route.SITE_SETTINGS_KEYGEN;
-      case settings.ContentSettingsTypes.MIC:
-        return settings.Route.SITE_SETTINGS_MICROPHONE;
-      case settings.ContentSettingsTypes.NOTIFICATIONS:
-        return settings.Route.SITE_SETTINGS_NOTIFICATIONS;
-      case settings.ContentSettingsTypes.PLUGINS:
-        return settings.Route.SITE_SETTINGS_FLASH;
-      case settings.ContentSettingsTypes.POPUPS:
-        return settings.Route.SITE_SETTINGS_POPUPS;
-      case settings.ContentSettingsTypes.PROTOCOL_HANDLERS:
-        return settings.Route.SITE_SETTINGS_HANDLERS;
-      case settings.ContentSettingsTypes.UNSANDBOXED_PLUGINS:
-        return settings.Route.SITE_SETTINGS_UNSANDBOXED_PLUGINS;
-      case settings.ContentSettingsTypes.USB_DEVICES:
-        return settings.Route.SITE_SETTINGS_USB_DEVICES;
-      case settings.ContentSettingsTypes.ZOOM_LEVELS:
-        return settings.Route.SITE_SETTINGS_ZOOM_LEVELS;
-    }
-    assertNotReached();
-  },
-
-  /**
-   * A utility function to compute the icon to use for the category, both for
-   * the overall category as well as the individual permission in the details
-   * for a site.
-   * @param {string} category The category to show the icon for.
-   * @return {string} The id of the icon for the given category.
-   * @protected
-   */
-  computeIconForContentCategory: function(category) {
-    switch (category) {
-      case settings.ContentSettingsTypes.AUTOMATIC_DOWNLOADS:
-        return 'cr:file-download';
-      case settings.ContentSettingsTypes.BACKGROUND_SYNC:
-        return 'settings:sync';
-      case settings.ContentSettingsTypes.CAMERA:
-        return 'settings:videocam';
-      case settings.ContentSettingsTypes.COOKIES:
-        return 'settings:cookie';
-      case settings.ContentSettingsTypes.FULLSCREEN:
-        return 'cr:fullscreen';
-      case settings.ContentSettingsTypes.GEOLOCATION:
-        return 'settings:location-on';
-      case settings.ContentSettingsTypes.IMAGES:
-        return 'settings:photo';
-      case settings.ContentSettingsTypes.JAVASCRIPT:
-        return 'settings:input';
-      case settings.ContentSettingsTypes.KEYGEN:
-        return 'settings:code';
-      case settings.ContentSettingsTypes.MIC:
-        return 'settings:mic';
-      case settings.ContentSettingsTypes.NOTIFICATIONS:
-        return 'settings:notifications';
-      case settings.ContentSettingsTypes.PLUGINS:
-        return 'cr:extension';
-      case settings.ContentSettingsTypes.POPUPS:
-        return 'cr:open-in-new';
-      case settings.ContentSettingsTypes.PROTOCOL_HANDLERS:
-        return 'settings:protocol-handler';
-      case settings.ContentSettingsTypes.UNSANDBOXED_PLUGINS:
-        return 'cr:extension';
-      case settings.ContentSettingsTypes.USB_DEVICES:
-        return 'settings:usb';
-      case settings.ContentSettingsTypes.ZOOM_LEVELS:
-        return 'settings:zoom-in';
-      default:
-        assertNotReached('Invalid category: ' + category);
-        return '';
-    }
-  },
-
-  /**
-   * A utility function to compute the title of the category, both for
-   * the overall category as well as the individual permission in the details
-   * for a site.
-   * @param {string} category The category to show the title for.
-   * @return {string} The title for the given category.
-   * @protected
-   */
-  computeTitleForContentCategory: function(category) {
-    switch (category) {
-      case settings.ContentSettingsTypes.AUTOMATIC_DOWNLOADS:
-        return loadTimeData.getString('siteSettingsAutomaticDownloads');
-      case settings.ContentSettingsTypes.BACKGROUND_SYNC:
-        return loadTimeData.getString('siteSettingsBackgroundSync');
-      case settings.ContentSettingsTypes.CAMERA:
-        return loadTimeData.getString('siteSettingsCamera');
-      case settings.ContentSettingsTypes.COOKIES:
-        return loadTimeData.getString('siteSettingsCookies');
-      case settings.ContentSettingsTypes.FULLSCREEN:
-        return loadTimeData.getString('siteSettingsFullscreen');
-      case settings.ContentSettingsTypes.GEOLOCATION:
-        return loadTimeData.getString('siteSettingsLocation');
-      case settings.ContentSettingsTypes.IMAGES:
-        return loadTimeData.getString('siteSettingsImages');
-      case settings.ContentSettingsTypes.JAVASCRIPT:
-        return loadTimeData.getString('siteSettingsJavascript');
-      case settings.ContentSettingsTypes.KEYGEN:
-        return loadTimeData.getString('siteSettingsKeygen');
-      case settings.ContentSettingsTypes.MIC:
-        return loadTimeData.getString('siteSettingsMic');
-      case settings.ContentSettingsTypes.NOTIFICATIONS:
-        return loadTimeData.getString('siteSettingsNotifications');
-      case settings.ContentSettingsTypes.PLUGINS:
-        return loadTimeData.getString('siteSettingsFlash');
-      case settings.ContentSettingsTypes.POPUPS:
-        return loadTimeData.getString('siteSettingsPopups');
-      case settings.ContentSettingsTypes.PROTOCOL_HANDLERS:
-        return loadTimeData.getString('siteSettingsHandlers');
-      case settings.ContentSettingsTypes.UNSANDBOXED_PLUGINS:
-        return loadTimeData.getString('siteSettingsUnsandboxedPlugins');
-      case settings.ContentSettingsTypes.USB_DEVICES:
-        return loadTimeData.getString('siteSettingsUsbDevices');
-      case settings.ContentSettingsTypes.ZOOM_LEVELS:
-        return loadTimeData.getString('siteSettingsZoomLevels');
-      default:
-        assertNotReached('Invalid category: ' + category);
-        return '';
-    }
-  },
-
-  /**
    * A utility function to compute the description for the category.
    * @param {string} category The category to show the description for.
    * @param {string} setting The string value of the setting.
@@ -232,7 +42,7 @@ var SiteSettingsBehaviorImpl = {
    * @protected
    */
   computeCategoryDesc: function(category, setting, showRecommendation) {
-    var categoryEnabled = this.computeIsSettingEnabled(category, setting);
+    var categoryEnabled = this.computeIsSettingEnabled(setting);
     switch (category) {
       case settings.ContentSettingsTypes.JAVASCRIPT:
         // "Allowed (recommended)" vs "Blocked".
@@ -443,16 +253,12 @@ var SiteSettingsBehaviorImpl = {
 
   /**
    * Returns true if the passed content setting is considered 'enabled'.
-   * @param {string} category
    * @param {string} setting
    * @return {boolean}
    * @private
    */
-  computeIsSettingEnabled: function(category, setting) {
-    // FullScreen is Allow vs. Ask.
-    return category == settings.ContentSettingsTypes.FULLSCREEN ?
-        setting != settings.PermissionValues.ASK :
-        setting != settings.PermissionValues.BLOCK;
+  computeIsSettingEnabled: function(setting) {
+    return setting != settings.PermissionValues.BLOCK;
   },
 
   /**
@@ -483,8 +289,10 @@ var SiteSettingsBehaviorImpl = {
    */
   expandSiteException: function(exception) {
     var origin = exception.origin;
-    var url = this.toUrl(origin);
-    var originForDisplay = url ? this.sanitizePort(url.origin) : origin;
+    // TODO(dschuyler): If orginForDisplay becomes different from origin in the
+    // site settings, that filtering would happen here. If that doesn't happen
+    // then originForDisplay should be removed (it's redundant with origin).
+    // e.g. var originForDisplay = someFilter(origin);
 
     var embeddingOrigin = exception.embeddingOrigin;
     var embeddingOriginForDisplay = '';
@@ -495,7 +303,7 @@ var SiteSettingsBehaviorImpl = {
 
     return {
       origin: origin,
-      originForDisplay: originForDisplay,
+      originForDisplay: origin,
       embeddingOrigin: embeddingOrigin,
       embeddingOriginForDisplay: embeddingOriginForDisplay,
       incognito: exception.incognito,

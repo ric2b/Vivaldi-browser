@@ -5,19 +5,18 @@
 #include "components/sync/driver/glue/browser_thread_model_worker.h"
 
 #include "base/bind.h"
+#include "base/callback.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/waitable_event.h"
 
 using base::SingleThreadTaskRunner;
-using base::WaitableEvent;
 
 namespace syncer {
 
 BrowserThreadModelWorker::BrowserThreadModelWorker(
     const scoped_refptr<SingleThreadTaskRunner>& runner,
-    ModelSafeGroup group,
-    WorkerLoopDestructionObserver* observer)
-    : ModelSafeWorker(observer), runner_(runner), group_(group) {}
+    ModelSafeGroup group)
+    : runner_(runner), group_(group) {}
 
 SyncerError BrowserThreadModelWorker::DoWorkAndWaitUntilDoneImpl(
     const WorkCallback& work) {
@@ -27,15 +26,23 @@ SyncerError BrowserThreadModelWorker::DoWorkAndWaitUntilDoneImpl(
     return work.Run();
   }
 
+  // Signaled when the task is deleted, i.e. after it runs or when it is
+  // abandoned.
+  base::WaitableEvent work_done_or_abandoned(
+      base::WaitableEvent::ResetPolicy::AUTOMATIC,
+      base::WaitableEvent::InitialState::NOT_SIGNALED);
+
   if (!runner_->PostTask(
           FROM_HERE,
-          base::Bind(&BrowserThreadModelWorker::CallDoWorkAndSignalTask, this,
-                     work, work_done_or_stopped(), &error))) {
+          base::Bind(
+              &BrowserThreadModelWorker::CallDoWorkAndSignalTask, this, work,
+              base::Passed(syncer::ScopedEventSignal(&work_done_or_abandoned)),
+              &error))) {
     DLOG(WARNING) << "Failed to post task to runner " << runner_;
     error = CANNOT_DO_WORK;
     return error;
   }
-  work_done_or_stopped()->Wait();
+  work_done_or_abandoned.Wait();
   return error;
 }
 
@@ -43,25 +50,20 @@ ModelSafeGroup BrowserThreadModelWorker::GetModelSafeGroup() {
   return group_;
 }
 
-BrowserThreadModelWorker::~BrowserThreadModelWorker() {}
-
-void BrowserThreadModelWorker::RegisterForLoopDestruction() {
-  if (runner_->BelongsToCurrentThread()) {
-    SetWorkingLoopToCurrent();
-  } else {
-    runner_->PostTask(
-        FROM_HERE,
-        Bind(&BrowserThreadModelWorker::RegisterForLoopDestruction, this));
-  }
+bool BrowserThreadModelWorker::IsOnModelThread() {
+  return runner_->BelongsToCurrentThread();
 }
 
-void BrowserThreadModelWorker::CallDoWorkAndSignalTask(const WorkCallback& work,
-                                                       WaitableEvent* done,
-                                                       SyncerError* error) {
+BrowserThreadModelWorker::~BrowserThreadModelWorker() {}
+
+void BrowserThreadModelWorker::CallDoWorkAndSignalTask(
+    const WorkCallback& work,
+    syncer::ScopedEventSignal scoped_event_signal,
+    SyncerError* error) {
   DCHECK(runner_->BelongsToCurrentThread());
   if (!IsStopped())
     *error = work.Run();
-  done->Signal();
+  // The event in |scoped_event_signal| is signaled at the end of this scope.
 }
 
 }  // namespace syncer

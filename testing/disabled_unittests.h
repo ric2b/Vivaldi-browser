@@ -14,9 +14,6 @@
 
   DISABLE(NTPSnippetsServiceWithSyncTest, SyncStateCompatibility)
 
-  // Disabled in v51, seems an upstream revert broke the test
-  //DISABLE(PictureLayerImplTest, DontAddLowResForSmallLayers)
-
   // Failing media tests since proprietary media code was imported
   DISABLE(AudioVideoMetadataExtractorTest, AndroidRotatedMP4Video)
   DISABLE(AudioVideoMetadataExtractorTest, AudioMP3)
@@ -33,15 +30,6 @@
   DISABLE(MediaColorTest, Yuv444pH264)
   DISABLE(MediaColorTest, Yuvj420pH264)
 
-  /*
-  DISABLE(WebViewContextMenuInteractiveTest,
-              ContextMenuParamsAfterCSSTransforms)
-
-  // Toolbar tests that started failing in v52
-  DISABLE_ALL(ComponentToolbarActionsBrowserTest)
-  DISABLE_ALL(ShowPageActionWithoutPageActionRedesignTest)
-*/
-
   DISABLE_ALL(FirefoxProfileImporterBrowserTest)
 
   // Assume these fails due to switches::kExtensionActionRedesign being disabled
@@ -57,3 +45,9 @@
 
   // Seems to have broken on all the testers
   DISABLE(NavigatingExtensionPopupBrowserTest, DownloadViaPost)
+
+  // Seems to be disabled in Google Chrome mode and the feature is default disabled
+  DISABLE(PrintPreviewWebUITest, ScalingUnchecksFitToPage)
+
+  // Disable just for v56
+  DISABLE(PipelineIntegrationTest, BasicPlaybackLive)

@@ -12,8 +12,9 @@
 
 namespace blink {
 
-class DOMWindow;
 class AnimationWorklet;
+class DOMWindow;
+class LocalDOMWindow;
 class Worklet;
 
 class MODULES_EXPORT WindowAnimationWorklet final
@@ -26,6 +27,8 @@ class MODULES_EXPORT WindowAnimationWorklet final
   static WindowAnimationWorklet& from(LocalDOMWindow&);
   static Worklet* animationWorklet(DOMWindow&);
   AnimationWorklet* animationWorklet();
+
+  void frameDestroyed() override;
 
   DECLARE_TRACE();
 

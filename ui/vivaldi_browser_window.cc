@@ -4,16 +4,19 @@
 
 #include "ui/vivaldi_browser_window.h"
 
+#include <memory>
+#include <string>
+
 #include "app/vivaldi_constants.h"
 #include "base/command_line.h"
 #include "base/json/json_reader.h"
+#include "chrome/browser/chrome_notification_types.h"
+#include "chrome/browser/extensions/window_controller.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_list_observer.h"
-#include "chrome/browser/extensions/window_controller.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_switches.h"
-#include "chrome/browser/chrome_notification_types.h"
 #include "content/browser/browser_plugin/browser_plugin_guest.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/notification_service.h"
@@ -248,10 +251,6 @@ bool VivaldiBrowserWindow::IsToolbarVisible() const {
   return false;
 }
 
-gfx::Rect VivaldiBrowserWindow::GetRootWindowResizerRect() const {
-  return gfx::Rect();
-}
-
 bool VivaldiBrowserWindow::IsDownloadShelfVisible() const {
   return false;
 }
@@ -263,7 +262,7 @@ DownloadShelf* VivaldiBrowserWindow::GetDownloadShelf() {
 void VivaldiBrowserWindow::ShowWebsiteSettings(Profile* profile,
         content::WebContents* web_contents,
         const GURL& url,
-        const security_state::SecurityStateModel::SecurityInfo& security_info) {
+        const security_state::SecurityInfo& security_info) {
 
   // For Vivaldi we reroute this back to javascript site, for either
   // display a javascript siteinfo or call back to us (via webview) using
@@ -279,7 +278,7 @@ void VivaldiBrowserWindow::ShowWebsiteSettings(Profile* profile,
 void VivaldiBrowserWindow::VivaldiShowWebsiteSettingsAt(Profile* profile,
         content::WebContents* web_contents,
         const GURL& url,
-        const security_state::SecurityStateModel::SecurityInfo& security_info,
+        const security_state::SecurityInfo& security_info,
         gfx::Point pos) {
 #if defined(USE_AURA)
   // This is only for AURA.  Mac is done in VivaldiBrowserCocoa.
@@ -292,7 +291,6 @@ void VivaldiBrowserWindow::VivaldiShowWebsiteSettingsAt(Profile* profile,
     browser_.get(),
     GetAppWindow()->GetNativeWindow());
 #endif
-
 }
 
 WindowOpenDisposition VivaldiBrowserWindow::GetDispositionForPopupBounds(
@@ -319,13 +317,13 @@ void VivaldiBrowserWindow::ExecuteExtensionCommand(
   const extensions::Command& command) {}
 
 ExclusiveAccessContext* VivaldiBrowserWindow::GetExclusiveAccessContext() {
-  return NULL;
+  return this;
 }
 
 autofill::SaveCardBubbleView* VivaldiBrowserWindow::ShowSaveCreditCardBubble(
       content::WebContents* contents,
       autofill::SaveCardBubbleController* controller,
-      bool is_user_gesture){
+      bool is_user_gesture) {
   return NULL;
 }
 
@@ -343,4 +341,36 @@ std::string VivaldiBrowserWindow::GetWorkspace() const {
 
 bool VivaldiBrowserWindow::IsVisibleOnAllWorkspaces() const {
   return false;
+}
+
+Profile* VivaldiBrowserWindow::GetProfile() {
+  return browser_->profile();
+}
+
+void VivaldiBrowserWindow::EnterFullscreen(
+    const GURL& url,
+    ExclusiveAccessBubbleType bubble_type) {}
+
+void VivaldiBrowserWindow::ExitFullscreen() {}
+
+void VivaldiBrowserWindow::UpdateExclusiveAccessExitBubbleContent(
+    const GURL& url,
+    ExclusiveAccessBubbleType bubble_type) {}
+
+void VivaldiBrowserWindow::OnExclusiveAccessUserInput() {}
+
+content::WebContents* VivaldiBrowserWindow::GetActiveWebContents() {
+  return browser_->tab_strip_model()->GetActiveWebContents();
+}
+
+void VivaldiBrowserWindow::UnhideDownloadShelf() {}
+
+void VivaldiBrowserWindow::HideDownloadShelf() {}
+
+ShowTranslateBubbleResult VivaldiBrowserWindow::ShowTranslateBubble(
+    content::WebContents* contents,
+    translate::TranslateStep step,
+    translate::TranslateErrors::Type error_type,
+    bool is_user_gesture) {
+  return ShowTranslateBubbleResult::BROWSER_WINDOW_NOT_VALID;
 }

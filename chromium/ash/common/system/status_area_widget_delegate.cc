@@ -10,12 +10,12 @@
 #include "ash/common/shelf/shelf_constants.h"
 #include "ash/common/shelf/wm_shelf.h"
 #include "ash/common/shelf/wm_shelf_util.h"
-#include "ash/common/shell_window_ids.h"
 #include "ash/common/system/tray/tray_constants.h"
 #include "ash/common/wm_lookup.h"
 #include "ash/common/wm_root_window_controller.h"
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
+#include "ash/public/cpp/shell_window_ids.h"
 #include "base/strings/utf_string_conversions.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
@@ -246,8 +246,8 @@ void StatusAreaWidgetDelegate::SetBorderOnChild(views::View* child,
       right_edge = shelf_size - kShelfItemInset - item_height;
     }
   }
-  child->SetBorder(views::Border::CreateEmptyBorder(top_edge, left_edge,
-                                                    bottom_edge, right_edge));
+  child->SetBorder(
+      views::CreateEmptyBorder(top_edge, left_edge, bottom_edge, right_edge));
   // Layout on |child| needs to be updated based on new border value before
   // displaying; otherwise |child| will be showing with old border size.
   // Fix for crbug.com/623438.

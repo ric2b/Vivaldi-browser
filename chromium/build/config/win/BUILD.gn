@@ -48,36 +48,24 @@ config("compiler") {
   cflags_c = [ "/TC" ]
   cflags_cc = [ "/TP" ]
 
-  # Flags not supported in version 2013.
-  if (visual_studio_version != "2013" && visual_studio_version != "2013e") {
-    cflags += [
-      # Tell the compiler to crash on failures. This is undocumented
-      # and unsupported but very handy.
-      "/d2FastFail",
-    ]
-  }
+  cflags += [
+    # Tell the compiler to crash on failures. This is undocumented
+    # and unsupported but very handy.
+    "/d2FastFail",
 
-  if (visual_studio_version == "2015") {
-    cflags += [
-      # Work around crbug.com/526851, bug in VS 2015 RTM compiler.
-      "/Zc:sizedDealloc-",
+    # Work around crbug.com/526851, bug in VS 2015 RTM compiler.
+    "/Zc:sizedDealloc-",
 
-      # Disable thread-safe statics to avoid overhead and because
-      # they are disabled on other platforms. See crbug.com/587210
-      # and -fno-threadsafe-statics.
-      "/Zc:threadSafeInit-",
-    ]
-  }
+    # Disable thread-safe statics to avoid overhead and because
+    # they are disabled on other platforms. See crbug.com/587210
+    # and -fno-threadsafe-statics.
+    "/Zc:threadSafeInit-",
+  ]
 
   # Building with Clang on Windows is a work in progress and very
   # experimental. See crbug.com/82385.
-  # Keep this in sync with the similar block in build/common.gypi
   if (is_clang) {
-    if (visual_studio_version == "2013") {
-      cflags += [ "-fmsc-version=1800" ]
-    } else if (visual_studio_version == "2015") {
-      cflags += [ "-fmsc-version=1900" ]
-    }
+    cflags += [ "-fmsc-version=1900" ]
 
     if (current_cpu == "x86") {
       cflags += [ "-m32" ]
@@ -98,15 +86,32 @@ config("compiler") {
     lib_dirs = [ "$clang_base_path/lib/clang/$clang_version/lib/windows" ]
   }
 
-  # Ensures that the PDB file contains FIXUP information (growing the PDB file
-  # by about 5%) but does not otherwise alter the output binary. This
+  # /PROFILE ensures that the PDB file contains FIXUP information (growing the
+  # PDB file by about 5%) but does not otherwise alter the output binary. This
   # information is used by the Syzygy optimization tool when decomposing the
   # release image. It is enabled for syzyasan builds and opportunistically for
   # other builds where it is not prohibited (not supported when incrementally
   # linking, using /debug:fastlink, or building with clang).
-  if (is_syzyasan ||
-      (!is_debug && !is_component_build && !is_win_fastlink && !is_clang)) {
+  if (is_syzyasan) {
+    assert(!is_win_fastlink)
     ldflags = [ "/PROFILE" ]
+  } else {
+    if (!is_debug && !is_component_build && !is_clang) {
+      if (is_win_fastlink) {
+        # /PROFILE implies the following linker flags. Therefore if we are
+        # skipping /PROFILE because it is incompatible with /DEBUG:FASTLINK
+        # we should explicitly add these flags in order to avoid unintended
+        # consequences such as larger binaries.
+        ldflags = [
+          "/OPT:REF",
+          "/OPT:ICF",
+          "/INCREMENTAL:NO",
+          "/FIXED:NO",
+        ]
+      } else {
+        ldflags = [ "/PROFILE" ]
+      }
+    }
   }
 
   # arflags apply only to static_libraries. The normal linker configs are only
@@ -261,6 +266,17 @@ config("common_linker_setup") {
       "/time",
       "/verbose:incr",
     ]
+  }
+}
+
+# Control Flow Guard (CFG)
+# https://msdn.microsoft.com/en-us/library/windows/desktop/mt637065.aspx
+config("win_msvc_cfg") {
+  # /DYNAMICBASE (ASLR) is turned off in debug builds, therefore CFG can’t be
+  # turned on either.
+  if (!is_clang && !is_debug) {
+    cflags = [ "/guard:cf" ]
+    ldflags = [ "/guard:cf" ]
   }
 }
 

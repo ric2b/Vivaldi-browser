@@ -100,7 +100,10 @@ class TestingDeviceCloudPolicyManagerChromeOS
       ServerBackedStateKeysBroker* state_keys_broker)
       : DeviceCloudPolicyManagerChromeOS(std::move(store),
                                          task_runner,
-                                         state_keys_broker) {}
+                                         state_keys_broker) {
+    set_is_component_policy_enabled_for_testing(false);
+  }
+
   ~TestingDeviceCloudPolicyManagerChromeOS() override {}
 };
 
@@ -197,8 +200,9 @@ class DeviceCloudPolicyManagerChromeOSTest
     base::RunLoop loop;
     chromeos::InstallAttributes::LockResult result;
     install_attributes_->LockDevice(
-        PolicyBuilder::kFakeUsername,
         DEVICE_MODE_ENTERPRISE,
+        PolicyBuilder::kFakeDomain,
+        std::string(),  // realm
         PolicyBuilder::kFakeDeviceId,
         base::Bind(&CopyLockResult, &loop, &result));
     loop.Run();
@@ -599,11 +603,30 @@ class DeviceCloudPolicyManagerChromeOSEnrollmentTest
     if (done_)
       return;
 
+    // Process the second policy refresh that happens after the enrollment
+    // completes.
+    MockDeviceManagementJob* component_policy_fetch_job = NULL;
+    EXPECT_CALL(device_management_service_,
+                CreateJob(DeviceManagementRequestJob::TYPE_POLICY_FETCH, _))
+        .Times(AtMost(1))
+        .WillOnce(device_management_service_.CreateAsyncJob(
+            &component_policy_fetch_job));
+    EXPECT_CALL(device_management_service_,
+                StartJob(dm_protocol::kValueRequestPolicy, _, _, _, _, _))
+        .Times(AtMost(1));
+
     // Key installation and policy load.
     device_settings_test_helper_.set_policy_blob(loaded_blob_);
     owner_key_util_->SetPublicKeyFromPrivateKey(
         *device_policy_.GetNewSigningKey());
     ReloadDeviceSettings();
+
+    // Respond to the second policy refresh.
+    if (component_policy_fetch_job) {
+      component_policy_fetch_job->SendResponse(policy_fetch_status_,
+                                               policy_fetch_response_);
+    }
+    Mock::VerifyAndClearExpectations(&device_management_service_);
   }
 
   bool ShouldRegisterWithCert() const override { return GetParam(); }
@@ -613,7 +636,8 @@ class DeviceCloudPolicyManagerChromeOSEnrollmentTest
     if (ShouldRegisterWithCert()) {
       em::CertificateBasedDeviceRegistrationData data;
       const em::SignedData& signed_request =
-          register_request_.cert_based_register_request().signed_request();
+          register_request_.certificate_based_register_request()
+              .signed_request();
       EXPECT_TRUE(data.ParseFromString(signed_request.data().substr(
           0,
           signed_request.data().size() - signed_request.extra_data_bytes())));

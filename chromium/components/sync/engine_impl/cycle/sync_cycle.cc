@@ -8,6 +8,7 @@
 #include <iterator>
 
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "components/sync/syncable/directory.h"
 
 namespace syncer {
@@ -19,7 +20,7 @@ SyncCycle* SyncCycle::Build(SyncCycleContext* context, Delegate* delegate) {
 
 SyncCycle::SyncCycle(SyncCycleContext* context, Delegate* delegate)
     : context_(context), delegate_(delegate) {
-  status_controller_.reset(new StatusController());
+  status_controller_ = base::MakeUnique<StatusController>();
 }
 
 SyncCycle::~SyncCycle() {}
@@ -65,8 +66,8 @@ void SyncCycle::SendSyncCycleEndEventNotification(
 
   DVLOG(1) << "Sending cycle end event with snapshot: "
            << event.snapshot.ToString();
-  FOR_EACH_OBSERVER(SyncEngineEventListener, *(context_->listeners()),
-                    OnSyncCycleEvent(event));
+  for (auto& observer : *context_->listeners())
+    observer.OnSyncCycleEvent(event);
 }
 
 void SyncCycle::SendEventNotification(SyncCycleEvent::EventCause cause) {
@@ -74,13 +75,13 @@ void SyncCycle::SendEventNotification(SyncCycleEvent::EventCause cause) {
   event.snapshot = TakeSnapshot();
 
   DVLOG(1) << "Sending event with snapshot: " << event.snapshot.ToString();
-  FOR_EACH_OBSERVER(SyncEngineEventListener, *(context_->listeners()),
-                    OnSyncCycleEvent(event));
+  for (auto& observer : *context_->listeners())
+    observer.OnSyncCycleEvent(event);
 }
 
 void SyncCycle::SendProtocolEvent(const ProtocolEvent& event) {
-  FOR_EACH_OBSERVER(SyncEngineEventListener, *(context_->listeners()),
-                    OnProtocolEvent(event));
+  for (auto& observer : *context_->listeners())
+    observer.OnProtocolEvent(event);
 }
 
 }  // namespace syncer

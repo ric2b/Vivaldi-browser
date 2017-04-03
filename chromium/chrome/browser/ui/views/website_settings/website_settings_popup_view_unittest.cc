@@ -15,7 +15,7 @@
 #include "content/public/browser/ssl_status.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "content/public/test/test_web_contents_factory.h"
-#include "device/core/mock_device_client.h"
+#include "device/base/mock_device_client.h"
 #include "device/usb/mock_usb_device.h"
 #include "device/usb/mock_usb_service.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -45,7 +45,7 @@ class WebsiteSettingsPopupViewTestApi {
     if (view_)
       view_->GetWidget()->CloseNow();
 
-    security_state::SecurityStateModel::SecurityInfo security_info;
+    security_state::SecurityInfo security_info;
     views::View* anchor_view = nullptr;
     view_ =
         new WebsiteSettingsPopupView(anchor_view, parent_, profile_,

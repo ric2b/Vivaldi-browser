@@ -520,7 +520,9 @@ base::string16 BrowserAccessibility::GetValue() const {
   // Some screen readers like Jaws and older versions of VoiceOver require a
   // value to be set in text fields with rich content, even though the same
   // information is available on the children.
-  if (value.empty() && (IsSimpleTextControl() || IsRichTextControl()))
+  if (value.empty() &&
+      (IsSimpleTextControl() || IsRichTextControl()) &&
+      !IsNativeTextControl())
     value = GetInnerText();
   return value;
 }
@@ -716,7 +718,7 @@ int BrowserAccessibility::GetWordStartBoundary(
   }
 }
 
-BrowserAccessibility* BrowserAccessibility::BrowserAccessibilityForPoint(
+BrowserAccessibility* BrowserAccessibility::ApproximateHitTest(
     const gfx::Point& point) {
   // The best result found that's a child of this object.
   BrowserAccessibility* child_result = NULL;
@@ -736,7 +738,7 @@ BrowserAccessibility* BrowserAccessibility::BrowserAccessibilityForPoint(
       continue;
 
     if (child->GetScreenBoundsRect().Contains(point)) {
-      BrowserAccessibility* result = child->BrowserAccessibilityForPoint(point);
+      BrowserAccessibility* result = child->ApproximateHitTest(point);
       if (result == child && !child_result)
         child_result = result;
       if (result != child && !descendant_result)

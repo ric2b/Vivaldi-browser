@@ -31,17 +31,17 @@ class LatencyInfo;
 }
 
 namespace cc {
+
+class BeginFrameSource;
 class CompositorFrame;
 class CopyOutputRequest;
-class SurfaceManager;
 class SurfaceFactory;
-class SurfaceResourceHolder;
 
 class CC_SURFACES_EXPORT Surface {
  public:
   using DrawCallback = SurfaceFactory::DrawCallback;
 
-  Surface(const SurfaceId& id, SurfaceFactory* factory);
+  Surface(const SurfaceId& id, base::WeakPtr<SurfaceFactory> factory);
   ~Surface();
 
   const SurfaceId& surface_id() const { return surface_id_; }

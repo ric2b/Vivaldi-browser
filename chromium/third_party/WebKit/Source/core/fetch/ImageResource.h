@@ -29,6 +29,7 @@
 #include "platform/geometry/IntRect.h"
 #include "platform/geometry/IntSizeHash.h"
 #include "platform/geometry/LayoutSize.h"
+#include "platform/graphics/Image.h"
 #include "platform/graphics/ImageObserver.h"
 #include "platform/graphics/ImageOrientation.h"
 #include "wtf/HashMap.h"
@@ -37,7 +38,6 @@
 namespace blink {
 
 class FetchRequest;
-class FloatSize;
 class ImageResourceObserver;
 class MemoryCache;
 class ResourceClient;
@@ -65,7 +65,7 @@ class CORE_EXPORT ImageResource final
   }
 
   static ImageResource* create(const ResourceRequest& request) {
-    return new ImageResource(request, ResourceLoaderOptions());
+    return new ImageResource(request, ResourceLoaderOptions(), false);
   }
 
   ~ImageResource() override;
@@ -108,9 +108,17 @@ class CORE_EXPORT ImageResource final
 
   void updateImageAnimationPolicy();
 
-  // If this ImageResource has the Lo-Fi response headers, reload it with the
-  // Lo-Fi state set to off and bypassing the cache.
-  void reloadIfLoFi(ResourceFetcher*);
+  enum class ReloadCachePolicy {
+    UseExistingPolicy = 0,  // Don't modify the request's cache policy.
+    BypassCache,  // Modify the request so that the reload bypasses the cache.
+  };
+
+  // If this ImageResource has the Lo-Fi response headers or is a placeholder,
+  // reload the full original image with the Lo-Fi state set to off and
+  // optionally bypassing the cache.
+  void reloadIfLoFiOrPlaceholder(
+      ResourceFetcher*,
+      ReloadCachePolicy = ReloadCachePolicy::BypassCache);
 
   void didAddClient(ResourceClient*) override;
 
@@ -127,9 +135,6 @@ class CORE_EXPORT ImageResource final
   void responseReceived(const ResourceResponse&,
                         std::unique_ptr<WebDataConsumerHandle>) override;
   void finish(double finishTime = 0.0) override;
-
-  void onMemoryDump(WebMemoryDumpLevelOfDetail,
-                    WebProcessMemoryDump*) const override;
 
   // For compatibility, images keep loading even if there are HTTP errors.
   bool shouldIgnoreHTTPStatusCodeErrors() const override { return true; }
@@ -148,6 +153,13 @@ class CORE_EXPORT ImageResource final
   void onePartInMultipartReceived(const ResourceResponse&) final;
   void multipartDataReceived(const char*, size_t) final;
 
+  // Used by tests.
+  bool isPlaceholder() const { return m_isPlaceholder; }
+
+  bool shouldReloadBrokenPlaceholder() const {
+    return m_isPlaceholder && willPaintBrokenImage();
+  }
+
   DECLARE_VIRTUAL_TRACE();
 
  private:
@@ -159,17 +171,11 @@ class CORE_EXPORT ImageResource final
     FinishedParsingFirstPart,
   };
 
-  class ImageResourceFactory : public ResourceFactory {
-   public:
-    ImageResourceFactory() : ResourceFactory(Resource::Image) {}
+  class ImageResourceFactory;
 
-    Resource* create(const ResourceRequest& request,
-                     const ResourceLoaderOptions& options,
-                     const String&) const override {
-      return new ImageResource(request, options);
-    }
-  };
-  ImageResource(const ResourceRequest&, const ResourceLoaderOptions&);
+  ImageResource(const ResourceRequest&,
+                const ResourceLoaderOptions&,
+                bool isPlaceholder);
 
   bool hasClientsOrObservers() const override {
     return Resource::hasClientsOrObservers() || !m_observers.isEmpty() ||
@@ -195,6 +201,8 @@ class CORE_EXPORT ImageResource final
   void destroyDecodedDataIfPossible() override;
   void destroyDecodedDataForFailedRevalidation() override;
 
+  void flushImageIfNeeded(TimerBase*);
+
   float m_devicePixelRatioHeaderValue;
 
   Member<MultipartImageResourceParser> m_multipartParser;
@@ -204,6 +212,18 @@ class CORE_EXPORT ImageResource final
   bool m_hasDevicePixelRatioHeaderValue;
   HashCountedSet<ImageResourceObserver*> m_observers;
   HashCountedSet<ImageResourceObserver*> m_finishedObservers;
+
+  // Indicates if the ImageResource is currently scheduling a reload, e.g.
+  // because reloadIfLoFi() was called.
+  bool m_isSchedulingReload;
+
+  // Indicates if this ImageResource is either attempting to load a placeholder
+  // image, or is a (possibly broken) placeholder image.
+  bool m_isPlaceholder;
+
+  Timer<ImageResource> m_flushTimer;
+  double m_lastFlushTime = 0.;
+  Image::SizeAvailability m_sizeAvailable = Image::SizeUnavailable;
 };
 
 DEFINE_RESOURCE_TYPE_CASTS(Image);

@@ -24,7 +24,7 @@ fuzzer_test("brotli_fuzzer") {
     "brotli_fuzzer.cc",
   ]
   deps = [
-    "//third_party/brotli:brotli",
+    "//third_party/brotli:dec",
   ]
   libfuzzer_options = [ "max_len=1280" ]
 }
@@ -184,16 +184,6 @@ fuzzer_test("zlib_uncompress_fuzzer") {
   ]
 }
 
-fuzzer_test("sqlite3_prepare_v2_fuzzer") {
-  sources = [
-    "sqlite3_prepare_v2_fuzzer.cc",
-  ]
-  deps = [
-    "//third_party/sqlite",
-  ]
-  dict = "dicts/generated/sqlite3_prepare_v2_fuzzer.dict"
-}
-
 fuzzer_test("libxml_xml_read_memory_fuzzer") {
   sources = [
     "libxml_xml_read_memory_fuzzer.cc",
@@ -238,13 +228,21 @@ fuzzer_test("v8_regexp_parser_fuzzer") {
     "//v8:regexp_fuzzer",
   ]
   dict = "dicts/regexp.dict"
-  libfuzzer_options = [ "max_len=1024" ]
+  libfuzzer_options = [ "max_len=64" ]
 }
 
 fuzzer_test("v8_wasm_code_fuzzer") {
   sources = []
   deps = [
     "//v8:wasm_code_fuzzer",
+  ]
+  libfuzzer_options = [ "max_len=500" ]
+}
+
+fuzzer_test("v8_wasm_call_fuzzer") {
+  sources = []
+  deps = [
+    "//v8:wasm_call_fuzzer",
   ]
   libfuzzer_options = [ "max_len=500" ]
 }
@@ -420,13 +418,20 @@ fuzzer_test("angle_translator_fuzzer") {
   libfuzzer_options = [ "max_len=1000" ]
 }
 
-fuzzer_test("openssl_bio_string_fuzzer") {
+fuzzer_test("sha1_fuzzer") {
   sources = [
-    "openssl_bio_string_fuzzer.cc",
+    "sha1_fuzzer.cc",
   ]
   deps = [
-    "//crypto",
-    "//third_party/boringssl",
+    "//base",
   ]
-  libfuzzer_options = [ "max_len=512" ]
+}
+
+fuzzer_test("hash_fuzzer") {
+  sources = [
+    "hash_fuzzer.cc",
+  ]
+  deps = [
+    "//base",
+  ]
 }

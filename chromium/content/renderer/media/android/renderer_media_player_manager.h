@@ -16,14 +16,8 @@
 #include "url/gurl.h"
 
 namespace blink {
-class WebFrame;
+enum class WebRemotePlaybackAvailability;
 }
-
-namespace gfx {
-class RectF;
-}
-
-struct MediaPlayerHostMsg_Initialize_Params;
 
 namespace content {
 class WebMediaPlayerAndroid;
@@ -81,6 +75,9 @@ class RendererMediaPlayerManager :
   // Requests control of remote playback
   void RequestRemotePlaybackControl(int player_id) override;
 
+  // Requests stopping remote playback
+  void RequestRemotePlaybackStop(int player_id) override;
+
   // Requests the player to enter fullscreen.
   void EnterFullscreen(int player_id);
 
@@ -116,11 +113,13 @@ class RendererMediaPlayerManager :
       const std::string& remote_playback_message);
   void OnDisconnectedFromRemoteDevice(int player_id);
   void OnCancelledRemotePlaybackRequest(int player_id);
+  void OnRemotePlaybackStarted(int player_id);
   void OnDidExitFullscreen(int player_id);
   void OnDidEnterFullscreen(int player_id);
   void OnPlayerPlay(int player_id);
   void OnPlayerPause(int player_id);
-  void OnRemoteRouteAvailabilityChanged(int player_id, bool routes_available);
+  void OnRemoteRouteAvailabilityChanged(
+      int player_id, blink::WebRemotePlaybackAvailability availability);
 
   // Info for all available WebMediaPlayerAndroid on a page; kept so that
   // we can enumerate them to send updates about tab focus and visibility.

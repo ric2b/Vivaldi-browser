@@ -7,6 +7,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <set>
 #include <utility>
 
 #include "base/files/file_path.h"
@@ -134,11 +135,9 @@ class CacheStorageManagerTest : public testing::Test {
     run_loop->Quit();
   }
 
-  void StringsAndErrorCallback(base::RunLoop* run_loop,
-                               const std::vector<std::string>& strings,
-                               CacheStorageError error) {
+  void StringsCallback(base::RunLoop* run_loop,
+                       const std::vector<std::string>& strings) {
     callback_strings_ = strings;
-    callback_error_ = error;
     run_loop->Quit();
   }
 
@@ -196,14 +195,13 @@ class CacheStorageManagerTest : public testing::Test {
     return callback_bool_;
   }
 
-  bool Keys(const GURL& origin) {
+  size_t Keys(const GURL& origin) {
     base::RunLoop loop;
     cache_manager_->EnumerateCaches(
-        origin, base::Bind(&CacheStorageManagerTest::StringsAndErrorCallback,
+        origin, base::Bind(&CacheStorageManagerTest::StringsCallback,
                            base::Unretained(this), base::Unretained(&loop)));
     loop.Run();
-
-    return callback_error_ == CACHE_STORAGE_OK;
+    return callback_strings_.size();
   }
 
   bool StorageMatch(const GURL& origin,
@@ -497,22 +495,19 @@ TEST_P(CacheStorageManagerTestP, DeleteCacheReducesOriginSize) {
 }
 
 TEST_P(CacheStorageManagerTestP, EmptyKeys) {
-  EXPECT_TRUE(Keys(origin1_));
-  EXPECT_TRUE(callback_strings_.empty());
+  EXPECT_EQ(0u, Keys(origin1_));
 }
 
 TEST_P(CacheStorageManagerTestP, SomeKeys) {
   EXPECT_TRUE(Open(origin1_, "foo"));
   EXPECT_TRUE(Open(origin1_, "bar"));
   EXPECT_TRUE(Open(origin2_, "baz"));
-  EXPECT_TRUE(Keys(origin1_));
-  EXPECT_EQ(2u, callback_strings_.size());
+  EXPECT_EQ(2u, Keys(origin1_));
   std::vector<std::string> expected_keys;
   expected_keys.push_back("foo");
   expected_keys.push_back("bar");
   EXPECT_EQ(expected_keys, callback_strings_);
-  EXPECT_TRUE(Keys(origin2_));
-  EXPECT_EQ(1u, callback_strings_.size());
+  EXPECT_EQ(1u, Keys(origin2_));
   EXPECT_STREQ("baz", callback_strings_[0].c_str());
 }
 
@@ -521,8 +516,7 @@ TEST_P(CacheStorageManagerTestP, DeletedKeysGone) {
   EXPECT_TRUE(Open(origin1_, "bar"));
   EXPECT_TRUE(Open(origin2_, "baz"));
   EXPECT_TRUE(Delete(origin1_, "bar"));
-  EXPECT_TRUE(Keys(origin1_));
-  EXPECT_EQ(1u, callback_strings_.size());
+  EXPECT_EQ(1u, Keys(origin1_));
   EXPECT_STREQ("foo", callback_strings_[0].c_str());
 }
 
@@ -668,8 +662,7 @@ TEST_P(CacheStorageManagerTestP, Chinese) {
       std::move(callback_cache_handle_);
   EXPECT_TRUE(Open(origin1_, "你好"));
   EXPECT_EQ(callback_cache_handle_->value(), cache_handle->value());
-  EXPECT_TRUE(Keys(origin1_));
-  EXPECT_EQ(1u, callback_strings_.size());
+  EXPECT_EQ(1u, Keys(origin1_));
   EXPECT_STREQ("你好", callback_strings_[0].c_str());
 }
 
@@ -679,13 +672,11 @@ TEST_F(CacheStorageManagerTest, EmptyKey) {
       std::move(callback_cache_handle_);
   EXPECT_TRUE(Open(origin1_, ""));
   EXPECT_EQ(cache_handle->value(), callback_cache_handle_->value());
-  EXPECT_TRUE(Keys(origin1_));
-  EXPECT_EQ(1u, callback_strings_.size());
+  EXPECT_EQ(1u, Keys(origin1_));
   EXPECT_STREQ("", callback_strings_[0].c_str());
   EXPECT_TRUE(Has(origin1_, ""));
   EXPECT_TRUE(Delete(origin1_, ""));
-  EXPECT_TRUE(Keys(origin1_));
-  EXPECT_EQ(0u, callback_strings_.size());
+  EXPECT_EQ(0u, Keys(origin1_));
 }
 
 TEST_F(CacheStorageManagerTest, DataPersists) {
@@ -696,8 +687,7 @@ TEST_F(CacheStorageManagerTest, DataPersists) {
   EXPECT_TRUE(Delete(origin1_, "bar"));
   quota_manager_proxy_->SimulateQuotaManagerDestroyed();
   cache_manager_ = CacheStorageManager::Create(cache_manager_.get());
-  EXPECT_TRUE(Keys(origin1_));
-  EXPECT_EQ(2u, callback_strings_.size());
+  EXPECT_EQ(2u, Keys(origin1_));
   std::vector<std::string> expected_keys;
   expected_keys.push_back("foo");
   expected_keys.push_back("baz");
@@ -709,8 +699,7 @@ TEST_F(CacheStorageManagerMemoryOnlyTest, DataLostWhenMemoryOnly) {
   EXPECT_TRUE(Open(origin2_, "baz"));
   quota_manager_proxy_->SimulateQuotaManagerDestroyed();
   cache_manager_ = CacheStorageManager::Create(cache_manager_.get());
-  EXPECT_TRUE(Keys(origin1_));
-  EXPECT_EQ(0u, callback_strings_.size());
+  EXPECT_EQ(0u, Keys(origin1_));
 }
 
 TEST_F(CacheStorageManagerTest, BadCacheName) {
@@ -718,8 +707,7 @@ TEST_F(CacheStorageManagerTest, BadCacheName) {
   // escape the directory.
   const std::string bad_name = "../../../../../../../../../../../../../../foo";
   EXPECT_TRUE(Open(origin1_, bad_name));
-  EXPECT_TRUE(Keys(origin1_));
-  EXPECT_EQ(1u, callback_strings_.size());
+  EXPECT_EQ(1u, Keys(origin1_));
   EXPECT_STREQ(bad_name.c_str(), callback_strings_[0].c_str());
 }
 
@@ -728,8 +716,7 @@ TEST_F(CacheStorageManagerTest, BadOriginName) {
   // escape the directory.
   GURL bad_origin("http://../../../../../../../../../../../../../../foo");
   EXPECT_TRUE(Open(bad_origin, "foo"));
-  EXPECT_TRUE(Keys(bad_origin));
-  EXPECT_EQ(1u, callback_strings_.size());
+  EXPECT_EQ(1u, Keys(bad_origin));
   EXPECT_STREQ("foo", callback_strings_[0].c_str());
 }
 
@@ -766,8 +753,7 @@ TEST_P(CacheStorageManagerTestP, CacheWorksAfterDelete) {
   EXPECT_TRUE(CacheMatch(original_handle->value(), kBarURL));
 
   // The cache shouldn't be visible to subsequent storage operations.
-  EXPECT_TRUE(Keys(origin1_));
-  EXPECT_TRUE(callback_strings_.empty());
+  EXPECT_EQ(0u, Keys(origin1_));
 
   // Open a new cache with the same name, it should create a new cache, but not
   // interfere with the original cache.
@@ -939,7 +925,7 @@ TEST_P(CacheStorageManagerTestP, DeleteStorageAccessed) {
 
 TEST_P(CacheStorageManagerTestP, KeysStorageAccessed) {
   EXPECT_EQ(0, quota_manager_proxy_->notify_storage_accessed_count());
-  EXPECT_TRUE(Keys(origin1_));
+  EXPECT_EQ(0u, Keys(origin1_));
   EXPECT_EQ(1, quota_manager_proxy_->notify_storage_accessed_count());
 }
 
@@ -1072,198 +1058,6 @@ TEST_P(CacheStorageManagerTestP, StorageMatchAll_IgnoreVary) {
   EXPECT_TRUE(StorageMatchAllWithRequest(origin1_, request, match_params));
 }
 
-class CacheStorageMigrationTest : public CacheStorageManagerTest {
- protected:
-  CacheStorageMigrationTest() : cache1_("foo"), cache2_("bar") {}
-
-  void SetUp() override {
-    CacheStorageManagerTest::SetUp();
-
-    // Populate a cache, then move it to the "legacy" location
-    // so that tests can verify the results of migration.
-    legacy_path_ = CacheStorageManager::ConstructLegacyOriginPath(
-        cache_manager_->root_path(), origin1_);
-    new_path_ = CacheStorageManager::ConstructOriginPath(
-        cache_manager_->root_path(), origin1_);
-
-    ASSERT_FALSE(base::DirectoryExists(legacy_path_));
-    ASSERT_FALSE(base::DirectoryExists(new_path_));
-    ASSERT_TRUE(Open(origin1_, cache1_));
-    ASSERT_TRUE(Open(origin1_, cache2_));
-    callback_cache_handle_.reset();
-
-    // Let the caches shut down.
-    base::RunLoop().RunUntilIdle();
-
-    ASSERT_FALSE(base::DirectoryExists(legacy_path_));
-    ASSERT_TRUE(base::DirectoryExists(new_path_));
-
-    quota_manager_proxy_->SimulateQuotaManagerDestroyed();
-    cache_manager_ = CacheStorageManager::Create(cache_manager_.get());
-
-    ASSERT_TRUE(base::Move(new_path_, legacy_path_));
-    ASSERT_TRUE(base::DirectoryExists(legacy_path_));
-    ASSERT_FALSE(base::DirectoryExists(new_path_));
-  }
-
-  base::FilePath legacy_path_;
-  base::FilePath new_path_;
-
-  const std::string cache1_;
-  const std::string cache2_;
-
-  DISALLOW_COPY_AND_ASSIGN(CacheStorageMigrationTest);
-};
-
-TEST_F(CacheStorageMigrationTest, OpenCache) {
-  EXPECT_TRUE(Open(origin1_, cache1_));
-  EXPECT_FALSE(base::DirectoryExists(legacy_path_));
-  EXPECT_TRUE(base::DirectoryExists(new_path_));
-
-  EXPECT_TRUE(Keys(origin1_));
-  std::vector<std::string> expected_keys;
-  expected_keys.push_back(cache1_);
-  expected_keys.push_back(cache2_);
-  EXPECT_EQ(expected_keys, callback_strings_);
-}
-
-TEST_F(CacheStorageMigrationTest, DeleteCache) {
-  EXPECT_TRUE(Delete(origin1_, cache1_));
-  EXPECT_FALSE(base::DirectoryExists(legacy_path_));
-  EXPECT_TRUE(base::DirectoryExists(new_path_));
-
-  EXPECT_TRUE(Keys(origin1_));
-  std::vector<std::string> expected_keys;
-  expected_keys.push_back(cache2_);
-  EXPECT_EQ(expected_keys, callback_strings_);
-}
-
-TEST_F(CacheStorageMigrationTest, GetOriginUsage) {
-  EXPECT_EQ(0, GetOriginUsage(origin1_));
-  EXPECT_FALSE(base::DirectoryExists(legacy_path_));
-  EXPECT_TRUE(base::DirectoryExists(new_path_));
-}
-
-TEST_F(CacheStorageMigrationTest, MoveFailure) {
-  // Revert the migration.
-  ASSERT_TRUE(base::Move(legacy_path_, new_path_));
-  ASSERT_FALSE(base::DirectoryExists(legacy_path_));
-  ASSERT_TRUE(base::DirectoryExists(new_path_));
-
-  // Make a dummy legacy directory.
-  ASSERT_TRUE(base::CreateDirectory(legacy_path_));
-
-  // Ensure that migration doesn't stomp existing new directory,
-  // but does clean up old directory.
-  EXPECT_TRUE(Open(origin1_, cache1_));
-  EXPECT_FALSE(base::DirectoryExists(legacy_path_));
-  EXPECT_TRUE(base::DirectoryExists(new_path_));
-
-  EXPECT_TRUE(Keys(origin1_));
-  std::vector<std::string> expected_keys;
-  expected_keys.push_back(cache1_);
-  expected_keys.push_back(cache2_);
-  EXPECT_EQ(expected_keys, callback_strings_);
-}
-
-// Tests that legacy caches created via a hash of the cache name instead of a
-// random name are migrated and continue to function in a new world of random
-// cache names.
-class MigratedLegacyCacheDirectoryNameTest : public CacheStorageManagerTest {
- protected:
-  MigratedLegacyCacheDirectoryNameTest()
-      : legacy_cache_name_("foo"), stored_url_("http://example.com/foo") {}
-
-  void SetUp() override {
-    CacheStorageManagerTest::SetUp();
-
-    // Create a cache that is stored on disk with the legacy naming scheme (hash
-    // of the name) and without a directory name in the index.
-    base::FilePath origin_path = CacheStorageManager::ConstructOriginPath(
-        cache_manager_->root_path(), origin1_);
-
-    // Populate a legacy cache.
-    ASSERT_TRUE(Open(origin1_, legacy_cache_name_));
-    EXPECT_TRUE(CachePut(callback_cache_handle_->value(), stored_url_));
-    base::FilePath new_path = callback_cache_handle_->value()->path();
-
-    // Close the cache's backend so that the files can be moved.
-    callback_cache_handle_->value()->Close(base::Bind(&base::DoNothing));
-    base::RunLoop().RunUntilIdle();
-
-    // Legacy index files didn't have the cache directory, so remove it from the
-    // index.
-    base::FilePath index_path = origin_path.AppendASCII("index.txt");
-    std::string index_contents;
-    base::ReadFileToString(index_path, &index_contents);
-    CacheStorageIndex index;
-    ASSERT_TRUE(index.ParseFromString(index_contents));
-    ASSERT_EQ(1, index.cache_size());
-    index.mutable_cache(0)->clear_cache_dir();
-    ASSERT_TRUE(index.SerializeToString(&index_contents));
-    index.ParseFromString(index_contents);
-    ASSERT_EQ(index_contents.size(),
-              (uint32_t)base::WriteFile(index_path, index_contents.c_str(),
-                                        index_contents.size()));
-
-    // Move the cache to the legacy location.
-    legacy_path_ = origin_path.AppendASCII(HexedHash(legacy_cache_name_));
-    ASSERT_FALSE(base::DirectoryExists(legacy_path_));
-    ASSERT_TRUE(base::Move(new_path, legacy_path_));
-
-    // Create a new manager to reread the index file and force migration.
-    quota_manager_proxy_->SimulateQuotaManagerDestroyed();
-    cache_manager_ = CacheStorageManager::Create(cache_manager_.get());
-  }
-
-  static std::string HexedHash(const std::string& value) {
-    std::string value_hash = base::SHA1HashString(value);
-    std::string valued_hexed_hash = base::ToLowerASCII(
-        base::HexEncode(value_hash.c_str(), value_hash.length()));
-    return valued_hexed_hash;
-  }
-
-  base::FilePath legacy_path_;
-  const std::string legacy_cache_name_;
-  const GURL stored_url_;
-
-  DISALLOW_COPY_AND_ASSIGN(MigratedLegacyCacheDirectoryNameTest);
-};
-
-TEST_F(MigratedLegacyCacheDirectoryNameTest, LegacyCacheMigrated) {
-  EXPECT_TRUE(Open(origin1_, legacy_cache_name_));
-
-  // Verify that the cache migrated away from the legacy_path_ directory.
-  ASSERT_FALSE(base::DirectoryExists(legacy_path_));
-
-  // Verify that the existing entry still works.
-  EXPECT_TRUE(CacheMatch(callback_cache_handle_->value(), stored_url_));
-
-  // Verify that adding new entries works.
-  EXPECT_TRUE(CachePut(callback_cache_handle_->value(),
-                       GURL("http://example.com/foo2")));
-  EXPECT_TRUE(CacheMatch(callback_cache_handle_->value(),
-                         GURL("http://example.com/foo2")));
-}
-
-TEST_F(MigratedLegacyCacheDirectoryNameTest,
-       RandomDirectoryCacheSideBySideWithLegacy) {
-  EXPECT_TRUE(Open(origin1_, legacy_cache_name_));
-  EXPECT_TRUE(Open(origin1_, "bar"));
-  EXPECT_TRUE(CachePut(callback_cache_handle_->value(), stored_url_));
-  EXPECT_TRUE(CacheMatch(callback_cache_handle_->value(), stored_url_));
-}
-
-TEST_F(MigratedLegacyCacheDirectoryNameTest, DeleteLegacyCacheAndRecreateNew) {
-  EXPECT_TRUE(Delete(origin1_, legacy_cache_name_));
-  EXPECT_TRUE(Open(origin1_, legacy_cache_name_));
-  EXPECT_FALSE(CacheMatch(callback_cache_handle_->value(), stored_url_));
-  EXPECT_TRUE(CachePut(callback_cache_handle_->value(),
-                       GURL("http://example.com/foo2")));
-  EXPECT_TRUE(CacheMatch(callback_cache_handle_->value(),
-                         GURL("http://example.com/foo2")));
-}
-
 class CacheStorageQuotaClientTest : public CacheStorageManagerTest {
  protected:
   CacheStorageQuotaClientTest() {}
@@ -1340,6 +1134,7 @@ class CacheStorageQuotaClientTest : public CacheStorageManagerTest {
   int64_t callback_quota_usage_ = 0;
   std::set<GURL> callback_origins_;
 
+ private:
   DISALLOW_COPY_AND_ASSIGN(CacheStorageQuotaClientTest);
 };
 

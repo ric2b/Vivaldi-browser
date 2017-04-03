@@ -15,6 +15,7 @@
 #include "ash/common/system/system_notifier.h"
 #include "ash/common/system/tray/system_tray_delegate.h"
 #include "ash/common/system/tray/tray_constants.h"
+#include "ash/common/system/tray/tray_item_view.h"
 #include "ash/common/system/tray/tray_utils.h"
 #include "base/command_line.h"
 #include "base/logging.h"
@@ -22,7 +23,7 @@
 #include "base/time/time.h"
 #include "grit/ash_resources.h"
 #include "grit/ash_strings.h"
-#include "ui/accessibility/ax_view_state.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/message_center/message_center.h"
 #include "ui/message_center/notification.h"
@@ -90,16 +91,19 @@ void LogBatteryForNoCharger(TrayPower::NotificationState state,
 namespace tray {
 
 // This view is used only for the tray.
-class PowerTrayView : public views::ImageView {
+class PowerTrayView : public TrayItemView {
  public:
-  PowerTrayView() { UpdateImage(); }
+  explicit PowerTrayView(SystemTrayItem* owner) : TrayItemView(owner) {
+    CreateImageView();
+    UpdateImage();
+  }
 
   ~PowerTrayView() override {}
 
   // Overriden from views::View.
-  void GetAccessibleState(ui::AXViewState* state) override {
-    state->name = accessible_name_;
-    state->role = ui::AX_ROLE_BUTTON;
+  void GetAccessibleNodeData(ui::AXNodeData* node_data) override {
+    node_data->SetName(accessible_name_);
+    node_data->role = ui::AX_ROLE_BUTTON;
   }
 
   void UpdateStatus(bool battery_alert) {
@@ -117,7 +121,7 @@ class PowerTrayView : public views::ImageView {
     const PowerStatus::BatteryImageInfo info =
         PowerStatus::Get()->GetBatteryImageInfo(PowerStatus::ICON_LIGHT);
     if (info != previous_image_info_) {
-      SetImage(PowerStatus::Get()->GetBatteryImage(info));
+      image_view()->SetImage(PowerStatus::Get()->GetBatteryImage(info));
       previous_image_info_ = info;
     }
   }
@@ -163,7 +167,7 @@ views::View* TrayPower::CreateTrayView(LoginStatus status) {
   // there is a battery or not. So always create this, and adjust visibility as
   // necessary.
   CHECK(power_tray_ == NULL);
-  power_tray_ = new tray::PowerTrayView();
+  power_tray_ = new tray::PowerTrayView(this);
   power_tray_->UpdateStatus(false);
   return power_tray_;
 }

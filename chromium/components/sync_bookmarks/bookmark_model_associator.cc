@@ -18,19 +18,19 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/bookmarks/browser/bookmark_client.h"
 #include "components/bookmarks/browser/bookmark_model.h"
-#include "components/sync/api/sync_error.h"
-#include "components/sync/api/sync_merge_result.h"
 #include "components/sync/base/cryptographer.h"
 #include "components/sync/base/data_type_histogram.h"
-#include "components/sync/core/delete_journal.h"
-#include "components/sync/core/read_node.h"
-#include "components/sync/core/read_transaction.h"
-#include "components/sync/core/write_node.h"
-#include "components/sync/core/write_transaction.h"
-#include "components/sync/core_impl/syncapi_internal.h"
 #include "components/sync/driver/sync_client.h"
+#include "components/sync/engine/engine_util.h"
+#include "components/sync/model/sync_error.h"
+#include "components/sync/model/sync_merge_result.h"
+#include "components/sync/syncable/delete_journal.h"
 #include "components/sync/syncable/entry.h"
+#include "components/sync/syncable/read_node.h"
+#include "components/sync/syncable/read_transaction.h"
 #include "components/sync/syncable/syncable_write_transaction.h"
+#include "components/sync/syncable/write_node.h"
+#include "components/sync/syncable/write_transaction.h"
 #include "components/sync_bookmarks/bookmark_change_processor.h"
 #include "components/undo/bookmark_undo_service.h"
 #include "components/undo/bookmark_undo_utils.h"
@@ -74,7 +74,7 @@ class BookmarkNodeFinder {
   explicit BookmarkNodeFinder(const BookmarkNode* parent_node);
 
   // Finds the bookmark node that matches the given url, title and folder
-  // attribute. Returns the matching node if one exists; NULL otherwise.
+  // attribute. Returns the matching node if one exists; null otherwise.
   // If there are multiple matches then a node with ID matching |preferred_id|
   // is returned; otherwise the first matching node is returned.
   // If a matching node is found, it's removed for further matches.
@@ -340,7 +340,7 @@ int64_t BookmarkModelAssociator::GetSyncIdFromChromeId(const int64_t& node_id) {
 const BookmarkNode* BookmarkModelAssociator::GetChromeNodeFromSyncId(
     int64_t sync_id) {
   SyncIdToBookmarkNodeMap::const_iterator iter = id_map_inverse_.find(sync_id);
-  return iter == id_map_inverse_.end() ? NULL : iter->second;
+  return iter == id_map_inverse_.end() ? nullptr : iter->second;
 }
 
 bool BookmarkModelAssociator::InitSyncNodeFromChromeId(

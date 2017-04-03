@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef NET_SPDY_TEST_UTILS_H_
-#define NET_SPDY_TEST_UTILS_H_
+#ifndef NET_SPDY_SPDY_TEST_UTILS_H_
+#define NET_SPDY_SPDY_TEST_UTILS_H_
 
 #include <stddef.h>
 #include <stdint.h>
@@ -11,6 +11,7 @@
 #include <string>
 
 #include "base/strings/string_piece.h"
+#include "net/spdy/server_push_delegate.h"
 #include "net/spdy/spdy_bug_tracker.h"
 #include "net/spdy/spdy_header_block.h"
 #include "net/spdy/spdy_headers_handler_interface.h"
@@ -25,8 +26,8 @@ class HashValue;
 class TransportSecurityState;
 
 inline bool operator==(base::StringPiece x,
-                       const SpdyHeaderBlock::StringPieceProxy& y) {
-  return x == y.operator base::StringPiece();
+                       const SpdyHeaderBlock::ValueProxy& y) {
+  return x == y.as_string();
 }
 
 namespace test {
@@ -89,7 +90,22 @@ class TestHeadersHandler : public SpdyHeadersHandlerInterface {
   DISALLOW_COPY_AND_ASSIGN(TestHeadersHandler);
 };
 
+// A test implementation of ServerPushDelegate that caches all the pushed
+// request and provides a interface to cancel the push given url.
+class TestServerPushDelegate : public ServerPushDelegate {
+ public:
+  explicit TestServerPushDelegate();
+  ~TestServerPushDelegate() override;
+
+  void OnPush(std::unique_ptr<ServerPushHelper> push_helper) override;
+
+  bool CancelPush(GURL url);
+
+ private:
+  std::map<GURL, std::unique_ptr<ServerPushHelper>> push_helpers;
+};
+
 }  // namespace test
 }  // namespace net
 
-#endif  // NET_SPDY_TEST_UTILS_H_
+#endif  // NET_SPDY_SPDY_TEST_UTILS_H_

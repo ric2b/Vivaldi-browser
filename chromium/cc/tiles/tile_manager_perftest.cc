@@ -22,7 +22,6 @@
 #include "cc/test/fake_tile_manager_client.h"
 #include "cc/test/fake_tile_task_manager.h"
 #include "cc/test/test_layer_tree_host_base.h"
-#include "cc/test/test_shared_bitmap_manager.h"
 #include "cc/test/test_task_graph_runner.h"
 #include "cc/test/test_tile_priorities.h"
 #include "cc/tiles/tile.h"
@@ -39,9 +38,6 @@ static const int kTimeLimitMillis = 2000;
 static const int kWarmupRuns = 5;
 static const int kTimeCheckInterval = 10;
 
-base::LazyInstance<FakeTileTaskManagerImpl> g_fake_tile_task_manager =
-    LAZY_INSTANCE_INITIALIZER;
-
 class TileManagerPerfTest : public TestLayerTreeHostBase {
  public:
   TileManagerPerfTest()
@@ -53,7 +49,7 @@ class TileManagerPerfTest : public TestLayerTreeHostBase {
     host_impl()->SetVisible(true);
     host_impl()->InitializeRenderer(compositor_frame_sink());
     tile_manager()->SetTileTaskManagerForTesting(
-        g_fake_tile_task_manager.Pointer());
+        base::MakeUnique<FakeTileTaskManagerImpl>());
   }
 
   void SetupDefaultTreesWithFixedTileSize(const gfx::Size& layer_bounds,

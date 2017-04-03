@@ -22,13 +22,13 @@ class RietveldTest(LoggingTestCase):
                 'try_job_results': [
                     {
                         'builder': 'foo-builder',
-                        'buildnumber': 10,
+                        'buildnumber': None,
                         'result': -1
                     },
                     {
                         'builder': 'bar-builder',
                         'buildnumber': 50,
-                        'results': 0
+                        'result': 0
                     },
                 ],
             }),
@@ -48,6 +48,7 @@ class RietveldTest(LoggingTestCase):
                 'files': {
                     'some/path/foo.cc': {'status': 'M'},
                     'some/path/bar.html': {'status': 'M'},
+                    'some/path/deleted.html': {'status': 'D'},
                 }
             }),
             'https://codereview.chromium.org/api/11113333': 'my non-JSON contents',
@@ -83,28 +84,6 @@ class RietveldTest(LoggingTestCase):
         rietveld = Rietveld(self.mock_web())
         self.assertEqual(rietveld.latest_try_jobs(11112222, ('foo', 'bar')), [])
 
-    def test_filter_latest_jobs_empty(self):
-        rietveld = Rietveld(self.mock_web())
-        self.assertEqual(rietveld.filter_latest_jobs([]), [])
-
-    def test_filter_latest_jobs_higher_build_first(self):
-        rietveld = Rietveld(self.mock_web())
-        self.assertEqual(
-            rietveld.filter_latest_jobs([Build('foo', 5), Build('foo', 3), Build('bar', 5)]),
-            [Build('foo', 5), Build('bar', 5)])
-
-    def test_filter_latest_jobs_higher_build_last(self):
-        rietveld = Rietveld(self.mock_web())
-        self.assertEqual(
-            rietveld.filter_latest_jobs([Build('foo', 3), Build('bar', 5), Build('foo', 5)]),
-            [Build('bar', 5), Build('foo', 5)])
-
-    def test_filter_latest_jobs_no_build_number(self):
-        rietveld = Rietveld(self.mock_web())
-        self.assertEqual(
-            rietveld.filter_latest_jobs([Build('foo', 3), Build('bar')]),
-            [Build('foo', 3)])
-
     def test_changed_files(self):
         rietveld = Rietveld(self.mock_web())
         self.assertEqual(
@@ -114,3 +93,27 @@ class RietveldTest(LoggingTestCase):
     def test_changed_files_no_results(self):
         rietveld = Rietveld(self.mock_web())
         self.assertIsNone(rietveld.changed_files(11113333))
+
+    # Testing protected methods - pylint: disable=protected-access
+
+    def test_filter_latest_jobs_empty(self):
+        rietveld = Rietveld(self.mock_web())
+        self.assertEqual(rietveld._filter_latest_builds([]), [])
+
+    def test_filter_latest_jobs_higher_build_first(self):
+        rietveld = Rietveld(self.mock_web())
+        self.assertEqual(
+            rietveld._filter_latest_builds([Build('foo', 5), Build('foo', 3), Build('bar', 5)]),
+            [Build('bar', 5), Build('foo', 5)])
+
+    def test_filter_latest_jobs_higher_build_last(self):
+        rietveld = Rietveld(self.mock_web())
+        self.assertEqual(
+            rietveld._filter_latest_builds([Build('foo', 3), Build('bar', 5), Build('foo', 5)]),
+            [Build('bar', 5), Build('foo', 5)])
+
+    def test_filter_latest_jobs_no_build_number(self):
+        rietveld = Rietveld(self.mock_web())
+        self.assertEqual(
+            rietveld._filter_latest_builds([Build('foo', 3), Build('bar'), Build('bar')]),
+            [Build('bar'), Build('foo', 3)])

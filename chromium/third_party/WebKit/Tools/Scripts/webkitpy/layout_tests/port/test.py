@@ -103,9 +103,9 @@ class TestList(object):
 #
 # These numbers may need to be updated whenever we add or delete tests. This includes virtual tests.
 #
-TOTAL_TESTS = 114
-TOTAL_SKIPS = 26
-TOTAL_CRASHES = 80
+TOTAL_TESTS = 106
+TOTAL_SKIPS = 22
+TOTAL_CRASHES = 76
 UNEXPECTED_PASSES = 1
 UNEXPECTED_FAILURES = 26
 
@@ -117,7 +117,6 @@ def unit_test_list():
     tests.add('failures/expected/device_failure.html', device_failure=True)
     tests.add('failures/expected/timeout.html', timeout=True)
     tests.add('failures/expected/leak.html', leak=True)
-    tests.add('failures/expected/missing_text.html', expected_text=None)
     tests.add('failures/expected/needsrebaseline.html', actual_text='needsrebaseline text')
     tests.add('failures/expected/needsmanualrebaseline.html', actual_text='needsmanualrebaseline text')
     tests.add('failures/expected/image.html',
@@ -132,14 +131,6 @@ def unit_test_list():
               actual_image=None, expected_image=None,
               actual_checksum=None)
     tests.add('failures/expected/keyboard.html', keyboard=True)
-    tests.add('failures/expected/missing_check.html',
-              expected_image='missing_check-png')
-    tests.add('failures/expected/missing_image.html', expected_image=None)
-    tests.add('failures/expected/missing_audio.html', expected_audio=None,
-              actual_text=None, expected_text=None,
-              actual_image=None, expected_image=None,
-              actual_checksum=None)
-    tests.add('failures/expected/missing_text.html', expected_text=None)
     tests.add('failures/expected/newlines_leading.html',
               expected_text="\nfoo\n", actual_text="foo\n")
     tests.add('failures/expected/newlines_trailing.html',
@@ -293,10 +284,6 @@ Bug(test) failures/expected/needsmanualrebaseline.html [ NeedsManualRebaseline ]
 Bug(test) failures/expected/audio.html [ Failure ]
 Bug(test) failures/expected/image_checksum.html [ Failure ]
 Bug(test) failures/expected/mismatch.html [ Failure ]
-Bug(test) failures/expected/missing_check.html [ Missing Pass ]
-Bug(test) failures/expected/missing_image.html [ Missing Pass ]
-Bug(test) failures/expected/missing_audio.html [ Missing Pass ]
-Bug(test) failures/expected/missing_text.html [ Missing Pass ]
 Bug(test) failures/expected/newlines_leading.html [ Failure ]
 Bug(test) failures/expected/newlines_trailing.html [ Failure ]
 Bug(test) failures/expected/newlines_with_excess_CR.html [ Failure ]
@@ -372,7 +359,6 @@ class TestPort(Port):
         'mac10.11': ['test-mac-mac10.11'],
         'trusty': ['test-linux-trusty', 'test-win-win7'],
         'precise': ['test-linux-precise', 'test-linux-trusty', 'test-win-win7'],
-        'linux32': ['test-linux-x86', 'test-linux-precise', 'test-linux-trusty', 'test-win-win7'],
     }
 
     @classmethod
@@ -409,20 +395,18 @@ class TestPort(Port):
             'test-win-win10': 'win10',
             'test-mac-mac10.10': 'mac10.10',
             'test-mac-mac10.11': 'mac10.11',
-            'test-linux-x86': 'linux32',
             'test-linux-precise': 'precise',
             'test-linux-trusty': 'trusty',
         }
         self._version = version_map[self._name]
 
-        if self._operating_system == 'linux' and self._version != 'linux32':
+        if self._operating_system == 'linux':
             self._architecture = 'x86_64'
 
         self.all_systems = (('mac10.10', 'x86'),
                             ('mac10.11', 'x86'),
                             ('win7', 'x86'),
                             ('win10', 'x86'),
-                            ('linux32', 'x86'),
                             ('precise', 'x86_64'),
                             ('trusty', 'x86_64'))
 
@@ -433,7 +417,7 @@ class TestPort(Port):
         self.configuration_specifier_macros_dict = {
             'mac': ['mac10.10', 'mac10.11'],
             'win': ['win7', 'win10'],
-            'linux': ['linux32', 'precise', 'trusty']
+            'linux': ['precise', 'trusty']
         }
 
     def buildbot_archives_baselines(self):
@@ -523,7 +507,7 @@ class TestPort(Port):
         return "/usr/sbin/httpd"
 
     def path_to_apache_config_file(self):
-        return self._filesystem.join(self.layout_tests_dir(), 'http', 'conf', 'httpd.conf')
+        return self._filesystem.join(self.apache_config_directory(), 'httpd.conf')
 
     def path_to_generic_test_expectations_file(self):
         return self._generic_expectations_path

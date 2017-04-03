@@ -43,8 +43,12 @@ CSSStyleSheetResource* CSSStyleSheetResource::fetch(FetchRequest& request,
             WebURLRequest::FrameTypeNone);
   request.mutableResourceRequest().setRequestContext(
       WebURLRequest::RequestContextStyle);
-  return toCSSStyleSheetResource(
+  CSSStyleSheetResource* resource = toCSSStyleSheetResource(
       fetcher->requestResource(request, CSSStyleSheetResourceFactory()));
+  // TODO(kouhei): Dedupe this logic w/ ScriptResource::fetch
+  if (resource && !request.integrityMetadata().isEmpty())
+    resource->setIntegrityMetadata(request.integrityMetadata());
+  return resource;
 }
 
 CSSStyleSheetResource* CSSStyleSheetResource::createForTest(
@@ -73,6 +77,9 @@ void CSSStyleSheetResource::setParsedStyleSheetCache(
   m_parsedStyleSheetCache = newSheet;
   if (m_parsedStyleSheetCache)
     m_parsedStyleSheetCache->setReferencedFromResource(this);
+
+  // Updates the decoded size to take parsed stylesheet cache into account.
+  updateDecodedSize();
 }
 
 DEFINE_TRACE(CSSStyleSheetResource) {
@@ -92,21 +99,29 @@ void CSSStyleSheetResource::didAddClient(ResourceClient* c) {
     static_cast<StyleSheetResourceClient*>(c)->didAppendFirstData(this);
 
   // |c| might be removed in didAppendFirstData, so ensure it is still a client.
-  if (hasClient(c) && !isLoading())
+  if (hasClient(c) && !isLoading()) {
     static_cast<StyleSheetResourceClient*>(c)->setCSSStyleSheet(
         resourceRequest().url(), response().url(), encoding(), this);
+  }
 }
 
 const String CSSStyleSheetResource::sheetText(
     MIMETypeCheck mimeTypeCheck) const {
-  if (!data() || data()->isEmpty() || !canUseSheet(mimeTypeCheck))
+  if (!canUseSheet(mimeTypeCheck))
     return String();
 
-  if (!m_decodedSheetText.isNull())
-    return m_decodedSheetText;
+  // Use cached decoded sheet text when available
+  if (!m_decodedSheetText.isNull()) {
+    // We should have the decoded sheet text cached when the resource is fully
+    // loaded.
+    DCHECK_EQ(getStatus(), Resource::Cached);
 
-  // Don't cache the decoded text, regenerating is cheap and it can use quite a
-  // bit of memory
+    return m_decodedSheetText;
+  }
+
+  if (!data() || data()->isEmpty())
+    return String();
+
   return decodedText();
 }
 
@@ -121,10 +136,9 @@ void CSSStyleSheetResource::appendData(const char* data, size_t length) {
 }
 
 void CSSStyleSheetResource::checkNotify() {
-  // Decode the data to find out the encoding and keep the sheet text around
-  // during checkNotify()
+  // Decode the data to find out the encoding and cache the decoded sheet text.
   if (data())
-    m_decodedSheetText = decodedText();
+    setDecodedSheetText(decodedText());
 
   ResourceClientWalker<StyleSheetResourceClient> w(clients());
   while (StyleSheetResourceClient* c = w.next()) {
@@ -132,9 +146,13 @@ void CSSStyleSheetResource::checkNotify() {
     c->setCSSStyleSheet(resourceRequest().url(), response().url(), encoding(),
                         this);
   }
-  // Clear the decoded text as it is unlikely to be needed immediately again and
-  // is cheap to regenerate.
-  m_decodedSheetText = String();
+
+  // Clear raw bytes as now we have the full decoded sheet text.
+  // We wait for all LinkStyle::setCSSStyleSheet to run (at least once)
+  // as SubresourceIntegrity checks require raw bytes.
+  // Note that LinkStyle::setCSSStyleSheet can be called from didAddClient too,
+  // but is safe as we should have a cached ResourceIntegrityDisposition.
+  clearData();
 }
 
 void CSSStyleSheetResource::destroyDecodedDataIfPossible() {
@@ -142,7 +160,11 @@ void CSSStyleSheetResource::destroyDecodedDataIfPossible() {
     return;
 
   setParsedStyleSheetCache(nullptr);
-  setDecodedSize(0);
+}
+
+void CSSStyleSheetResource::destroyDecodedDataForFailedRevalidation() {
+  setDecodedSheetText(String());
+  destroyDecodedDataIfPossible();
 }
 
 bool CSSStyleSheetResource::canUseSheet(MIMETypeCheck mimeTypeCheck) const {
@@ -180,8 +202,6 @@ StyleSheetContents* CSSStyleSheetResource::restoreParsedStyleSheet(
   if (m_parsedStyleSheetCache->parserContext() != context)
     return nullptr;
 
-  didAccessDecodedData();
-
   return m_parsedStyleSheetCache;
 }
 
@@ -196,7 +216,19 @@ void CSSStyleSheetResource::saveParsedStyleSheet(StyleSheetContents* sheet) {
     return;
   }
   setParsedStyleSheetCache(sheet);
-  setDecodedSize(m_parsedStyleSheetCache->estimatedSizeInBytes());
+}
+
+void CSSStyleSheetResource::setDecodedSheetText(
+    const String& decodedSheetText) {
+  m_decodedSheetText = decodedSheetText;
+  updateDecodedSize();
+}
+
+void CSSStyleSheetResource::updateDecodedSize() {
+  size_t decodedSize = m_decodedSheetText.charactersSizeInBytes();
+  if (m_parsedStyleSheetCache)
+    decodedSize += m_parsedStyleSheetCache->estimatedSizeInBytes();
+  setDecodedSize(decodedSize);
 }
 
 }  // namespace blink

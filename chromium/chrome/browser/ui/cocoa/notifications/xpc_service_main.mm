@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #import <Foundation/Foundation.h>
+#include <xpc/xpc.h>
 
 #include "base/mac/scoped_nsobject.h"
 #import "chrome/browser/ui/cocoa/notifications/notification_service_delegate.h"
@@ -19,11 +20,6 @@ int main(int argc, const char* argv[]) {
 
     NSXPCListener* listener = [NSXPCListener serviceListener];
     listener.delegate = delegate.get();
-
-    // Keep the connection open forever since there is no xpc_transaction_end()
-    // TODO(miguelg): send xpc_transaction_end when no alerts are being
-    // displayed.
-    xpc_transaction_begin();
 
     [listener resume];
 

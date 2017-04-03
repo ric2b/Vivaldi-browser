@@ -31,9 +31,11 @@
 #include "gpu/command_buffer/service/context_group.h"
 #include "gpu/command_buffer/service/gl_context_virtual.h"
 #include "gpu/command_buffer/service/gles2_cmd_decoder.h"
+#include "gpu/command_buffer/service/gpu_switches.h"
 #include "gpu/command_buffer/service/image_manager.h"
 #include "gpu/command_buffer/service/mailbox_manager_impl.h"
 #include "gpu/command_buffer/service/memory_tracking.h"
+#include "gpu/command_buffer/service/service_utils.h"
 #include "gpu/command_buffer/service/sync_point_manager.h"
 #include "gpu/command_buffer/service/transfer_buffer_manager.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -54,6 +56,14 @@ namespace gpu {
 namespace {
 
 uint64_t g_next_command_buffer_id = 0;
+
+void InitializeGpuPreferencesForTestingFromCommandLine(
+    const base::CommandLine& command_line,
+    GpuPreferences* preferences) {
+  // Only initialize specific GpuPreferences members used for testing.
+  preferences->use_passthrough_cmd_decoder =
+      command_line.HasSwitch(switches::kUsePassthroughCmdDecoder);
+}
 
 class GpuMemoryBufferImpl : public gfx::GpuMemoryBuffer {
  public:
@@ -249,6 +259,9 @@ void GLManager::InitializeWithCommandLine(
 
   context_lost_allowed_ = options.context_lost_allowed;
 
+  InitializeGpuPreferencesForTestingFromCommandLine(command_line,
+                                                    &gpu_preferences_);
+
   gles2::MailboxManager* mailbox_manager = NULL;
   if (options.share_mailbox_manager) {
     mailbox_manager = options.share_mailbox_manager->mailbox_manager();
@@ -272,7 +285,8 @@ void GLManager::InitializeWithCommandLine(
   }
 
   gl::GLContext* real_gl_context = NULL;
-  if (options.virtual_manager) {
+  if (options.virtual_manager &&
+      !gpu_preferences_.use_passthrough_cmd_decoder) {
     real_gl_context = options.virtual_manager->context();
   }
 
@@ -295,6 +309,7 @@ void GLManager::InitializeWithCommandLine(
       options.image_factory != nullptr;
   attribs.offscreen_framebuffer_size = options.size;
   attribs.buffer_preserved = options.preserve_backbuffer;
+  attribs.bind_generates_resource = options.bind_generates_resource;
 
   if (!context_group) {
     GpuDriverBugWorkarounds gpu_driver_bug_workaround(&command_line);
@@ -325,16 +340,20 @@ void GLManager::InitializeWithCommandLine(
   if (base_context_) {
     context_ = scoped_refptr<gl::GLContext>(new gpu::GLContextVirtual(
         share_group_.get(), base_context_->get(), decoder_->AsWeakPtr()));
-    ASSERT_TRUE(context_->Initialize(surface_.get(), attribs.gpu_preference));
+    ASSERT_TRUE(context_->Initialize(
+        surface_.get(),
+        GenerateGLContextAttribs(attribs, context_group->gpu_preferences())));
   } else {
     if (real_gl_context) {
       context_ = scoped_refptr<gl::GLContext>(new gpu::GLContextVirtual(
           share_group_.get(), real_gl_context, decoder_->AsWeakPtr()));
-      ASSERT_TRUE(
-          context_->Initialize(surface_.get(), attribs.gpu_preference));
+      ASSERT_TRUE(context_->Initialize(
+          surface_.get(),
+          GenerateGLContextAttribs(attribs, context_group->gpu_preferences())));
     } else {
-      context_ = gl::init::CreateGLContext(share_group_.get(), surface_.get(),
-                                           attribs.gpu_preference);
+      context_ = gl::init::CreateGLContext(
+          share_group_.get(), surface_.get(),
+          GenerateGLContextAttribs(attribs, context_group->gpu_preferences()));
     }
   }
   ASSERT_TRUE(context_.get() != NULL) << "could not create GL context";
@@ -398,9 +417,9 @@ void GLManager::SetupBaseContext() {
     gfx::Size size(4, 4);
     base_surface_ = new scoped_refptr<gl::GLSurface>(
         gl::init::CreateOffscreenGLSurface(size));
-    gl::GpuPreference gpu_preference(gl::PreferDiscreteGpu);
     base_context_ = new scoped_refptr<gl::GLContext>(gl::init::CreateGLContext(
-        base_share_group_->get(), base_surface_->get(), gpu_preference));
+        base_share_group_->get(), base_surface_->get(),
+        gl::GLContextAttribs()));
     #endif
   }
   ++use_count_;

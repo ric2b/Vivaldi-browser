@@ -101,8 +101,27 @@ button {
 
 #braille-container {
   height: 35px;
+  overflow: hidden;
   position: relative;
   top: -35px;
+}
+
+#braille-container * {
+  border-spacing: 0;
+  color: #fff;
+}
+
+#braille-table-holder-outer {
+  display: flex;
+  height: 100%;
+  overflow: scroll;
+  padding-bottom: 17px;
+  padding-right: 17px;
+  width: 100%;
+}
+
+.braille-table-holder {
+  flex-grow: 1;
 }
 
 #braille-text {
@@ -272,6 +291,10 @@ button {
   font-weight: bold;
 }
 
+#tutorial_main h2:focus {
+  outline: none
+}
+
 #tutorial_main p,
 #tutorial_main a {
   display: block;
@@ -297,4 +320,20 @@ button {
   height: 2em;
   margin: 0 24px;
   width: 8em;
+}
+
+.highlighted-cell {
+  border: 1px solid white;
+}
+
+.unhighlighted-cell {
+  border: 1px solid black;
+}
+
+/*
+ * The html hidden attribute doesn't make elements not focusable by default.
+ * This rule ensures that elements that are hidden truly don't show up.
+ */
+*[hidden] {
+  display: none !important;
 }

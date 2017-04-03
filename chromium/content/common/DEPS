@@ -1,8 +1,10 @@
 include_rules = [
   "-storage/browser",
 
+  "+components/discardable_memory/common",
   "+device/base/synchronization",
-  "+services/shell/public/cpp",
+  "+services/service_manager/public/cpp",
+  "+services/video_capture/public/interfaces",
 
   # No inclusion of WebKit from the browser, other than strictly enum/POD,
   # header-only types, and some selected common code.
@@ -16,8 +18,10 @@ include_rules = [
   "+third_party/WebKit/public/platform/WebFocusType.h",
   "+third_party/WebKit/public/platform/WebGamepad.h",
   "+third_party/WebKit/public/platform/WebGamepads.h",
+  "+third_party/WebKit/public/platform/WebGestureEvent.h",
   "+third_party/WebKit/public/platform/WebHTTPBody.h",
   "+third_party/WebKit/public/platform/WebHistoryScrollRestorationType.h",
+  "+third_party/WebKit/public/platform/WebInputEvent.h",
   "+third_party/WebKit/public/platform/WebInsecureRequestPolicy.h",
   "+third_party/WebKit/public/platform/WebOriginTrialTokenStatus.h",
   "+third_party/WebKit/public/platform/WebPageVisibilityState.h",
@@ -36,6 +40,7 @@ include_rules = [
   "+third_party/WebKit/public/platform/modules/permissions/WebPermissionType.h",
   "+third_party/WebKit/public/platform/modules/push_messaging/WebPushError.h",
   "+third_party/WebKit/public/platform/modules/push_messaging/WebPushPermissionStatus.h",
+  "+third_party/WebKit/public/platform/modules/remoteplayback/WebRemotePlaybackAvailability.h",
   "+third_party/WebKit/public/platform/modules/screen_orientation/WebLockOrientationError.h",
   "+third_party/WebKit/public/platform/modules/screen_orientation/WebScreenOrientationLockType.h",
   "+third_party/WebKit/public/platform/modules/screen_orientation/WebScreenOrientationType.h",
@@ -55,7 +60,6 @@ include_rules = [
   "+third_party/WebKit/public/web/WebFindOptions.h",
   "+third_party/WebKit/public/web/WebFrameOwnerProperties.h",
   "+third_party/WebKit/public/web/WebFrameSerializerCacheControlPolicy.h",
-  "+third_party/WebKit/public/web/WebInputEvent.h",
   "+third_party/WebKit/public/web/WebMediaPlayerAction.h",
   "+third_party/WebKit/public/web/WebPluginAction.h",
   "+third_party/WebKit/public/web/WebPopupType.h",

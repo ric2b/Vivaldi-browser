@@ -29,7 +29,7 @@
 #include "bindings/core/v8/ScriptStreamer.h"
 #include "core/CoreExport.h"
 #include "core/fetch/ResourceOwner.h"
-#include "core/fetch/ScriptResource.h"
+#include "core/loader/resource/ScriptResource.h"
 #include "platform/MemoryCoordinator.h"
 #include "platform/heap/Handle.h"
 #include "wtf/Noncopyable.h"
@@ -101,7 +101,7 @@ class CORE_EXPORT PendingScript final
   PendingScript(Element*, ScriptResource*);
   PendingScript() = delete;
 
-  void prepareToSuspend() override;
+  void onMemoryStateChange(MemoryState) override;
 
   bool m_watchingForLoad;
   Member<Element> m_element;

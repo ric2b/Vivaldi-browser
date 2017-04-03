@@ -11,9 +11,11 @@
 #import "chrome/browser/ui/cocoa/location_bar/location_bar_view_mac.h"
 #import "chrome/browser/ui/cocoa/location_bar/location_icon_decoration.h"
 #import "chrome/browser/ui/cocoa/themed_window.h"
+#include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
 #include "skia/ext/skia_utils_mac.h"
 #import "ui/base/cocoa/nsview_additions.h"
+#include "ui/base/l10n/l10n_util_mac.h"
 #include "ui/base/material_design/material_design_controller.h"
 #include "ui/gfx/animation/tween.h"
 #include "ui/gfx/color_palette.h"
@@ -27,8 +29,8 @@
 
 namespace {
 
-// This is used to increase the right margin of this decoration.
-const CGFloat kRightSideMargin = 1.0;
+// This is used to increase the left padding of this decoration.
+const CGFloat kLeftSidePadding = 5.0;
 
 // Padding between the icon and label.
 CGFloat kIconLabelPadding = 4.0;
@@ -41,6 +43,7 @@ const CGFloat kRetinaBaselineOffset = 0.5;
 
 // The info-bubble point should look like it points to the bottom of the lock
 // icon. Determined with Pixie.app.
+const CGFloat kPageInfoBubblePointXOffset = 5.0;
 const CGFloat kPageInfoBubblePointYOffset = 6.0;
 
 // Minimum acceptable width for the ev bubble.
@@ -158,6 +161,7 @@ void SecurityStateBubbleDecoration::DrawInFrame(NSRect frame,
     NSRect image_rect = decoration_frame;
     image_rect.origin.y +=
         std::floor((NSHeight(decoration_frame) - image_size.height) / 2.0);
+    image_rect.origin.x += kLeftSidePadding;
     image_rect.size = image_size;
     [image_ drawInRect:image_rect
               fromRect:NSZeroRect  // Entire image
@@ -224,38 +228,22 @@ void SecurityStateBubbleDecoration::DrawInFrame(NSRect frame,
     [text drawInRect:text_rect];
 
     // Draw the divider.
-    NSBezierPath* line = [NSBezierPath bezierPath];
-    [line setLineWidth:line_width];
-    [line moveToPoint:NSMakePoint(NSMaxX(decoration_frame) - DividerPadding(),
-                                  NSMinY(decoration_frame))];
-    [line lineToPoint:NSMakePoint(NSMaxX(decoration_frame) - DividerPadding(),
-                                  NSMaxY(decoration_frame))];
+    if (state() == DecorationMouseState::NONE && !active()) {
+      NSBezierPath* line = [NSBezierPath bezierPath];
+      [line setLineWidth:line_width];
+      [line moveToPoint:NSMakePoint(NSMaxX(decoration_frame) - DividerPadding(),
+                                    NSMinY(decoration_frame))];
+      [line lineToPoint:NSMakePoint(NSMaxX(decoration_frame) - DividerPadding(),
+                                    NSMaxY(decoration_frame))];
 
-    NSColor* divider_color = GetDividerColor(in_dark_mode);
-    CGFloat divider_alpha =
-        [divider_color alphaComponent] * GetAnimationProgress();
-    divider_color = [divider_color colorWithAlphaComponent:divider_alpha];
-    [divider_color set];
-    [line stroke];
+      NSColor* divider_color = GetDividerColor(in_dark_mode);
+      CGFloat divider_alpha =
+          [divider_color alphaComponent] * GetAnimationProgress();
+      divider_color = [divider_color colorWithAlphaComponent:divider_alpha];
+      [divider_color set];
+      [line stroke];
+    }
   }
-}
-
-void SecurityStateBubbleDecoration::DrawWithBackgroundInFrame(
-    NSRect background_frame,
-    NSRect frame,
-    NSView* control_view) {
-  NSRect rect = NSInsetRect(background_frame, 0, 3);
-  rect.size.width -= kRightSideMargin;
-
-  CGFloat line_width = [control_view cr_lineWidth];
-  bool in_dark_mode = [[control_view window] inIncognitoModeWithSystemTheme];
-  // Only adjust the path rect by 1/2 the line width if it's going to be
-  // stroked (so that the stroke lines fall along pixel lines).
-  if (!in_dark_mode) {
-    rect = NSInsetRect(rect, line_width / 2., line_width / 2.);
-  }
-
-  DrawInFrame(frame, control_view);
 }
 
 // Pass mouse operations through to location icon.
@@ -286,8 +274,13 @@ bool SecurityStateBubbleDecoration::AcceptsMousePress() {
 
 NSPoint SecurityStateBubbleDecoration::GetBubblePointInFrame(NSRect frame) {
   NSRect image_rect = GetImageRectInFrame(frame);
-  return NSMakePoint(NSMidX(image_rect),
+  return NSMakePoint(NSMidX(image_rect) + kPageInfoBubblePointXOffset,
                      NSMaxY(image_rect) - kPageInfoBubblePointYOffset);
+}
+
+NSString* SecurityStateBubbleDecoration::GetToolTip() {
+  return [NSString stringWithFormat:@"%@. %@", full_label_.get(),
+                   l10n_util::GetNSStringWithFixup(IDS_TOOLTIP_LOCATION_ICON)];
 }
 
 //////////////////////////////////////////////////////////////////

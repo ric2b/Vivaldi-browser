@@ -22,7 +22,9 @@ import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
+import org.chromium.base.annotations.MainDex;
 import org.chromium.base.annotations.SuppressFBWarnings;
+import org.chromium.base.annotations.UsedByReflection;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.library_loader.Linker;
 import org.chromium.base.library_loader.ProcessInitException;
@@ -40,11 +42,13 @@ import java.util.concurrent.atomic.AtomicReference;
  * This class implements all of the functionality for {@link ChildProcessService} which owns an
  * object of {@link ChildProcessServiceImpl}.
  * It makes possible that WebAPK's ChildProcessService owns a ChildProcessServiceImpl object
- * and uses the same functionalities to create renderer process for WebAPKs when "--enable-webapk"
- * flag is turned on.
+ * and uses the same functionalities to create renderer process for WebAPKs when
+ * "--enable-improved-a2hs" flag is turned on.
  */
 @JNINamespace("content")
 @SuppressWarnings("SynchronizeOnNonFinalField")
+@MainDex
+@UsedByReflection("WebApkSandboxedProcessService")
 public class ChildProcessServiceImpl {
     private static final String MAIN_THREAD_NAME = "ChildProcessMain";
     private static final String TAG = "ChildProcessService";
@@ -65,8 +69,6 @@ public class ChildProcessServiceImpl {
 
     private static AtomicReference<Context> sContext = new AtomicReference<>(null);
     private boolean mLibraryInitialized = false;
-    // Becomes true once the service is bound. Access must synchronize around mMainThread.
-    private boolean mIsBound = false;
 
     /**
      * If >= 0 enables "validation of caller of {@link mBinder}'s methods". A RemoteException
@@ -131,6 +133,7 @@ public class ChildProcessServiceImpl {
      * @param context The application context.
      * @param hostContext The host context the library should be loaded with (i.e. Chrome).
      */
+    @UsedByReflection("WebApkSandboxedProcessService")
     public void create(final Context context, final Context hostContext) {
         mHostClassLoader = hostContext.getClassLoader();
         Log.i(TAG, "Creating new ChildProcessService pid=%d", Process.myPid());
@@ -158,11 +161,7 @@ public class ChildProcessServiceImpl {
                     Linker linker = null;
                     boolean requestedSharedRelro = false;
                     if (Linker.isUsed()) {
-                        synchronized (mMainThread) {
-                            while (!mIsBound) {
-                                mMainThread.wait();
-                            }
-                        }
+                        assert mLinkerParams != null;
                         linker = getLinker();
                         if (mLinkerParams.mWaitForSharedRelro) {
                             requestedSharedRelro = true;
@@ -269,34 +268,31 @@ public class ChildProcessServiceImpl {
      *        is thrown when an application with a uid other than
      *        {@link authorizedCallerUid} calls the service's methods.
      */
+    @UsedByReflection("WebApkSandboxedProcessService")
     public IBinder bind(Intent intent, int authorizedCallerUid) {
         mAuthorizedCallerUid = authorizedCallerUid;
         initializeParams(intent);
         return mBinder;
     }
 
-    void initializeParams(Intent intent) {
+    private void initializeParams(Intent intent) {
         synchronized (mMainThread) {
-            mCommandLineParams =
-                    intent.getStringArrayExtra(ChildProcessConstants.EXTRA_COMMAND_LINE);
             // mLinkerParams is never used if Linker.isUsed() returns false.
             // See onCreate().
             mLinkerParams = new ChromiumLinkerParams(intent);
             mLibraryProcessType = ChildProcessCreationParams.getLibraryProcessType(intent);
-            mIsBound = true;
             mMainThread.notifyAll();
         }
     }
 
-    void getServiceInfo(Bundle bundle) {
+    private void getServiceInfo(Bundle bundle) {
         // Required to unparcel FileDescriptorInfo.
         bundle.setClassLoader(mHostClassLoader);
         synchronized (mMainThread) {
-            // Allow the command line to be set via bind() intent or setupConnection, but
-            // the FD can only be transferred here.
             if (mCommandLineParams == null) {
                 mCommandLineParams =
                         bundle.getStringArray(ChildProcessConstants.EXTRA_COMMAND_LINE);
+                mMainThread.notifyAll();
             }
             // We must have received the command line by now
             assert mCommandLineParams != null;

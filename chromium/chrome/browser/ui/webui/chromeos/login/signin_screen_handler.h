@@ -140,6 +140,9 @@ class SigninScreenHandlerDelegate {
   // Notify the delegate when the sign-in UI is finished loading.
   virtual void OnSigninScreenReady() = 0;
 
+  // Notify the delegate when the GAIA UI is finished loading.
+  virtual void OnGaiaScreenReady() = 0;
+
   // Shows Enterprise Enrollment screen.
   virtual void ShowEnterpriseEnrollmentScreen() = 0;
 
@@ -355,6 +358,7 @@ class SigninScreenHandler
   void HandleRemoveUser(const AccountId& account_id);
   void HandleShowAddUser(const base::ListValue* args);
   void HandleToggleEnrollmentScreen();
+  void HandleToggleEnrollmentAd();
   void HandleToggleEnableDebuggingScreen();
   void HandleToggleKioskEnableScreen();
   void HandleToggleResetScreen();
@@ -377,6 +381,7 @@ class SigninScreenHandler
   void HandleHardlockPod(const std::string& user_id);
   void HandleLaunchKioskApp(const AccountId& app_account_id,
                             bool diagnostic_mode);
+  void HandleLaunchArcKioskApp(const AccountId& app_account_id);
   void HandleGetPublicSessionKeyboardLayouts(const AccountId& account_id,
                                              const std::string& locale);
   void HandleGetTouchViewState();
@@ -424,9 +429,6 @@ class SigninScreenHandler
 
   // input_method::ImeKeyboard::Observer implementation:
   void OnCapsLockChanged(bool enabled) override;
-
-  // Returns OobeUI object of NULL.
-  OobeUI* GetOobeUI() const;
 
   // Callback invoked after the feedback is finished.
   void OnFeedbackFinished();

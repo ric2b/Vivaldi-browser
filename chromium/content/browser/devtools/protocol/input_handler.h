@@ -16,10 +16,6 @@ namespace cc {
 class CompositorFrameMetadata;
 }
 
-namespace gfx {
-class Point;
-}
-
 namespace content {
 
 class RenderWidgetHostImpl;
@@ -97,6 +93,12 @@ class InputHandler {
                                 const int* duration,
                                 const int* tap_count,
                                 const std::string* gesture_source_type);
+
+  Response DispatchTouchEvent(
+      const std::string& type,
+      const std::vector<std::unique_ptr<base::DictionaryValue>>& touch_points,
+      const int* modifiers,
+      const double* timestamp);
 
  private:
   void SendSynthesizePinchGestureResponse(DevToolsCommandId command_id,

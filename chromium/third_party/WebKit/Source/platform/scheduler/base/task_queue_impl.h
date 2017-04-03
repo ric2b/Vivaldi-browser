@@ -16,6 +16,7 @@
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/trace_event_argument.h"
 #include "platform/scheduler/base/enqueue_order.h"
+#include "platform/scheduler/base/intrusive_heap.h"
 #include "public/platform/scheduler/base/task_queue.h"
 
 namespace blink {
@@ -121,6 +122,7 @@ class BLINK_PLATFORM_EXPORT TaskQueueImpl final : public TaskQueue {
   void SetQueueEnabled(bool enabled) override;
   bool IsQueueEnabled() const override;
   bool IsEmpty() const override;
+  size_t GetNumberOfPendingTasks() const override;
   bool HasPendingImmediateWork() const override;
   base::Optional<base::TimeTicks> GetNextScheduledWakeUp() override;
   void SetQueuePriority(QueuePriority priority) override;
@@ -131,7 +133,7 @@ class BLINK_PLATFORM_EXPORT TaskQueueImpl final : public TaskQueue {
   void SetTimeDomain(TimeDomain* time_domain) override;
   TimeDomain* GetTimeDomain() const override;
   void SetBlameContext(base::trace_event::BlameContext* blame_context) override;
-  void InsertFence() override;
+  void InsertFence(InsertFencePosition position) override;
   void RemoveFence() override;
   bool BlockedByFence() const override;
 
@@ -140,6 +142,7 @@ class BLINK_PLATFORM_EXPORT TaskQueueImpl final : public TaskQueue {
   bool MaybeUpdateImmediateWorkQueues();
 
   const char* GetName() const override;
+  QueueType GetQueueType() const override;
 
   void AsValueInto(base::trace_event::TracedValue* state) const;
 
@@ -176,6 +179,24 @@ class BLINK_PLATFORM_EXPORT TaskQueueImpl final : public TaskQueue {
   // |delayed_work_queue|. It also schedules the next wake up with the
   // TimeDomain. Must be called from the main thread.
   void WakeUpForDelayedWork(LazyNow* lazy_now);
+
+  base::TimeTicks scheduled_time_domain_wakeup() const {
+    return main_thread_only().scheduled_time_domain_wakeup;
+  }
+
+  void set_scheduled_time_domain_wakeup(
+      base::TimeTicks scheduled_time_domain_wakeup) {
+    main_thread_only().scheduled_time_domain_wakeup =
+        scheduled_time_domain_wakeup;
+  }
+
+  HeapHandle heap_handle() const { return main_thread_only().heap_handle; }
+
+  void set_heap_handle(HeapHandle heap_handle) {
+    main_thread_only().heap_handle = heap_handle;
+  }
+
+  EnqueueOrder GetFenceForTest() const;
 
  private:
   friend class WorkQueue;
@@ -215,9 +236,11 @@ class BLINK_PLATFORM_EXPORT TaskQueueImpl final : public TaskQueue {
     std::priority_queue<Task> delayed_incoming_queue;
     base::ObserverList<base::MessageLoop::TaskObserver> task_observers;
     size_t set_index;
+    HeapHandle heap_handle;
     bool is_enabled;
     base::trace_event::BlameContext* blame_context;  // Not owned.
     EnqueueOrder current_fence;
+    base::TimeTicks scheduled_time_domain_wakeup;
   };
 
   ~TaskQueueImpl() override;
@@ -277,6 +300,7 @@ class BLINK_PLATFORM_EXPORT TaskQueueImpl final : public TaskQueue {
     return any_thread_;
   }
 
+  const QueueType type_;
   const char* name_;
   const char* disabled_by_default_tracing_category_;
   const char* disabled_by_default_verbose_tracing_category_;

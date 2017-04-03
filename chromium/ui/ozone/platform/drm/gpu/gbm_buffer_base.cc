@@ -14,21 +14,36 @@ namespace ui {
 
 GbmBufferBase::GbmBufferBase(const scoped_refptr<GbmDevice>& drm,
                              gbm_bo* bo,
-                             gfx::BufferFormat format,
-                             gfx::BufferUsage usage)
+                             uint32_t format,
+                             uint32_t flags,
+                             uint64_t modifier,
+                             uint32_t addfb_flags)
     : drm_(drm), bo_(bo) {
-  if (usage == gfx::BufferUsage::SCANOUT) {
-    framebuffer_pixel_format_ = GetFourCCFormatForFramebuffer(format);
+  if (flags & GBM_BO_USE_SCANOUT) {
+    DCHECK(bo_);
+    // The framebuffer format might be different than the format:
+    // drm supports 24 bit color depth and formats with alpha will
+    // be converted to one without it.
+    framebuffer_pixel_format_ =
+        GetFourCCFormatForFramebuffer(GetBufferFormatFromFourCCFormat(format));
 
+    // TODO(dcastagna): Add multi-planar support.
     uint32_t handles[4] = {0};
     handles[0] = gbm_bo_get_handle(bo).u32;
     uint32_t strides[4] = {0};
     strides[0] = gbm_bo_get_stride(bo);
     uint32_t offsets[4] = {0};
+    uint64_t modifiers[4] = {0};
+    modifiers[0] = modifier;
 
+    // AddFramebuffer2 only considers the modifiers if addfb_flags has
+    // DRM_MODE_FB_MODIFIERS set. We only set that when we've created
+    // a bo with modifiers, otherwise, we rely on the "no modifiers"
+    // behavior doing the right thing.
     if (!drm_->AddFramebuffer2(gbm_bo_get_width(bo), gbm_bo_get_height(bo),
                                framebuffer_pixel_format_, handles, strides,
-                               offsets, &framebuffer_, 0)) {
+                               offsets, modifiers, &framebuffer_,
+                               addfb_flags)) {
       PLOG(ERROR) << "Failed to register buffer";
       return;
     }

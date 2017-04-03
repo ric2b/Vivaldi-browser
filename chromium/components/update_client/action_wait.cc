@@ -9,6 +9,7 @@
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "components/update_client/update_client_errors.h"
 #include "components/update_client/update_engine.h"
 
 namespace update_client {
@@ -37,16 +38,13 @@ void ActionWait::Run(UpdateContext* update_context, Callback callback) {
     // completed with an error.
     while (!update_context->queue.empty()) {
       auto* item = FindUpdateItemById(update_context->queue.front());
-      if (!item) {
-        item->error_category = static_cast<int>(ErrorCategory::kServiceError);
-        item->error_code = static_cast<int>(ServiceError::ERROR_WAIT);
-        ChangeItemState(item, CrxUpdateItem::State::kNoUpdate);
-      } else {
-        NOTREACHED();
-      }
+      DCHECK(item);
+      item->error_category = static_cast<int>(ErrorCategory::kServiceError);
+      item->error_code = static_cast<int>(ServiceError::SERVICE_WAIT_FAILED);
+      ChangeItemState(item, CrxUpdateItem::State::kNoUpdate);
       update_context->queue.pop();
     }
-    callback.Run(static_cast<int>(ServiceError::ERROR_WAIT));
+    callback.Run(Error::SERVICE_ERROR);
   }
 
   NotifyObservers(UpdateClient::Observer::Events::COMPONENT_WAIT,

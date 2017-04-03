@@ -16,7 +16,9 @@
 #include "build/build_config.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_paths_internal.h"
+#include "chrome/common/features.h"
 #include "media/cdm/cdm_paths.h"
+#include "ppapi/features/features.h"
 
 #if defined(OS_ANDROID)
 #include "base/android/path_utils.h"
@@ -69,6 +71,11 @@ const base::FilePath::CharType kFilepathSinglePrefExtensions[] =
 const base::FilePath::CharType kComponentUpdatedFlashHint[] =
     FILE_PATH_LITERAL("latest-component-updated-flash");
 #endif  // defined(OS_LINUX)
+
+#if defined(OS_CHROMEOS)
+const base::FilePath::CharType kChromeOSComponentFlash[] = FILE_PATH_LITERAL(
+    "/run/imageloader/PepperFlashPlayer/libpepflashplayer.so");
+#endif  // defined(OS_CHROMEOS)
 
 static base::LazyInstance<base::FilePath>
     g_invalid_specified_user_data_dir = LAZY_INSTANCE_INITIALIZER;
@@ -257,10 +264,11 @@ bool PathProvider(int key, base::FilePath* result) {
       cur = cur.Append(FILE_PATH_LITERAL("resources"));
 #endif
       break;
-    case chrome::DIR_INSPECTOR:
+    case chrome::DIR_INSPECTOR_DEBUG:
       if (!PathService::Get(chrome::DIR_RESOURCES, &cur))
         return false;
-      cur = cur.Append(FILE_PATH_LITERAL("inspector"));
+      cur = cur.Append(FILE_PATH_LITERAL("inspector"))
+               .Append(FILE_PATH_LITERAL("debug"));
       break;
     case chrome::DIR_APP_DICTIONARIES:
 #if defined(OS_POSIX)
@@ -372,7 +380,7 @@ bool PathProvider(int key, base::FilePath* result) {
 #endif
       cur = cur.Append(FILE_PATH_LITERAL("pnacl"));
       break;
-#if defined(WIDEVINE_CDM_AVAILABLE) && defined(ENABLE_PEPPER_CDMS)
+#if defined(WIDEVINE_CDM_AVAILABLE) && BUILDFLAG(ENABLE_PEPPER_CDMS)
 #if defined(WIDEVINE_CDM_IS_COMPONENT)
     case chrome::DIR_COMPONENT_WIDEVINE_CDM:
       if (!PathService::Get(chrome::DIR_USER_DATA, &cur))
@@ -390,7 +398,7 @@ bool PathProvider(int key, base::FilePath* result) {
           media::GetPlatformSpecificDirectory(kWidevineCdmBaseDirectory));
       cur = cur.AppendASCII(kWidevineCdmAdapterFileName);
       break;
-#endif  // defined(WIDEVINE_CDM_AVAILABLE) && defined(ENABLE_PEPPER_CDMS)
+#endif  // defined(WIDEVINE_CDM_AVAILABLE) && BUILDFLAG(ENABLE_PEPPER_CDMS)
     case chrome::FILE_RESOURCES_PACK:
 #if defined(OS_MACOSX)
       cur = base::mac::FrameworkBundlePath();
@@ -431,7 +439,7 @@ bool PathProvider(int key, base::FilePath* result) {
       cur = cur.Append(FILE_PATH_LITERAL("custom_wallpapers"));
       break;
 #endif
-#if defined(ENABLE_SUPERVISED_USERS)
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
 #if defined(OS_LINUX)
     case chrome::DIR_SUPERVISED_USERS_DEFAULT_APPS:
       if (!PathService::Get(chrome::DIR_STANDALONE_EXTERNAL_EXTENSIONS, &cur))
@@ -467,15 +475,6 @@ bool PathProvider(int key, base::FilePath* result) {
         return false;
       cur = cur.Append(FILE_PATH_LITERAL("chrome"));
       cur = cur.Append(FILE_PATH_LITERAL("test"));
-      cur = cur.Append(FILE_PATH_LITERAL("data"));
-      if (!base::PathExists(cur))  // We don't want to create this.
-        return false;
-      break;
-    case chrome::DIR_VIVALDI_TEST_DATA:
-      if (!PathService::Get(base::DIR_SOURCE_ROOT, &cur))
-        return false;
-      cur = cur.DirName();
-      cur = cur.Append(FILE_PATH_LITERAL("testdata"));
       cur = cur.Append(FILE_PATH_LITERAL("data"));
       if (!base::PathExists(cur))  // We don't want to create this.
         return false;
@@ -590,6 +589,12 @@ bool PathProvider(int key, base::FilePath* result) {
       break;
     }
 #endif  // defined(OS_LINUX)
+#if defined(OS_CHROMEOS)
+    case chrome::FILE_CHROME_OS_COMPONENT_FLASH:
+      cur = base::FilePath(kChromeOSComponentFlash);
+      create_dir = false;
+      break;
+#endif  // defined(OS_CHROMEOS)
 
     default:
       return false;

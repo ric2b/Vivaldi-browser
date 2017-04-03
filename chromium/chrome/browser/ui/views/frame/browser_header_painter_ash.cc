@@ -13,14 +13,10 @@
 #include "chrome/browser/ui/views/frame/browser_frame.h"
 #include "chrome/browser/ui/views/frame/browser_non_client_frame_view_ash.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
-#include "chrome/grit/theme_resources.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "third_party/skia/include/core/SkPaint.h"
 #include "third_party/skia/include/core/SkPath.h"
-#include "ui/base/material_design/material_design_controller.h"
-#include "ui/base/resource/resource_bundle.h"
-#include "ui/base/theme_provider.h"
 #include "ui/gfx/animation/slide_animation.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/rect.h"
@@ -69,15 +65,12 @@ void PaintFrameImagesInRoundRect(gfx::Canvas* canvas,
                                  int corner_radius,
                                  int image_inset_x) {
   SkPath frame_path = MakeRoundRectPath(bounds, corner_radius, corner_radius);
-  // If |paint| is using an unusual SkXfermode::Mode (this is the case while
+  // If |paint| is using an unusual SkBlendMode (this is the case while
   // crossfading), we must create a new canvas to overlay |frame_image| and
-  // |frame_overlay_image| using |normal_mode| and then paint the result
+  // |frame_overlay_image| using |kSrcOver| and then paint the result
   // using the unusual mode. We try to avoid this because creating a new
   // browser-width canvas is expensive.
-  SkXfermode::Mode normal_mode;
-  SkXfermode::AsMode(nullptr, &normal_mode);
-  bool fast_path = (frame_overlay_image.isNull() ||
-      SkXfermode::IsMode(paint.getXfermode(), normal_mode));
+  bool fast_path = (frame_overlay_image.isNull() || paint.isSrcOver());
   if (fast_path) {
     if (frame_image.isNull()) {
       canvas->DrawPath(frame_path, paint);
@@ -191,12 +184,6 @@ void BrowserHeaderPainterAsh::PaintHeader(gfx::Canvas* canvas, Mode mode) {
   PaintFrameImages(canvas, false);
   PaintFrameImages(canvas, true);
 
-  if (!ui::MaterialDesignController::IsModeMaterial() &&
-      !frame_->IsMaximized() &&
-      !frame_->IsFullscreen()) {
-    PaintHighlightForRestoredWindow(canvas);
-  }
-
   if (frame_->widget_delegate() &&
       frame_->widget_delegate()->ShouldShowWindowTitle()) {
     PaintTitleBar(canvas);
@@ -278,56 +265,12 @@ void BrowserHeaderPainterAsh::PaintFrameImages(gfx::Canvas* canvas,
   gfx::ImageSkia frame_overlay_image = view_->GetFrameOverlayImage(active);
 
   SkPaint paint;
-  paint.setXfermodeMode(SkXfermode::kPlus_Mode);
+  paint.setBlendMode(SkBlendMode::kPlus);
   paint.setAlpha(alpha);
   paint.setColor(SkColorSetA(view_->GetFrameColor(active), alpha));
   PaintFrameImagesInRoundRect(
       canvas, frame_image, frame_overlay_image, paint, GetPaintedBounds(),
       corner_radius, ash::HeaderPainterUtil::GetThemeBackgroundXInset());
-}
-
-void BrowserHeaderPainterAsh::PaintHighlightForRestoredWindow(
-    gfx::Canvas* canvas) {
-  ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
-  gfx::ImageSkia top_left_corner = *rb.GetImageSkiaNamed(
-      IDR_ASH_BROWSER_WINDOW_HEADER_SHADE_TOP_LEFT);
-  gfx::ImageSkia top_right_corner = *rb.GetImageSkiaNamed(
-      IDR_ASH_BROWSER_WINDOW_HEADER_SHADE_TOP_RIGHT);
-  gfx::ImageSkia top_edge = *rb.GetImageSkiaNamed(
-      IDR_ASH_BROWSER_WINDOW_HEADER_SHADE_TOP);
-  gfx::ImageSkia left_edge = *rb.GetImageSkiaNamed(
-      IDR_ASH_BROWSER_WINDOW_HEADER_SHADE_LEFT);
-  gfx::ImageSkia right_edge = *rb.GetImageSkiaNamed(
-      IDR_ASH_BROWSER_WINDOW_HEADER_SHADE_RIGHT);
-
-  int top_left_width = top_left_corner.width();
-  int top_left_height = top_left_corner.height();
-  canvas->DrawImageInt(top_left_corner, 0, 0);
-
-  int top_right_width = top_right_corner.width();
-  int top_right_height = top_right_corner.height();
-  canvas->DrawImageInt(top_right_corner,
-                       view_->width() - top_right_width,
-                       0);
-
-  canvas->TileImageInt(
-      top_edge,
-      top_left_width,
-      0,
-      view_->width() - top_left_width - top_right_width,
-      top_edge.height());
-
-  canvas->TileImageInt(left_edge,
-                       0,
-                       top_left_height,
-                       left_edge.width(),
-                       painted_height_ - top_left_height);
-
-  canvas->TileImageInt(right_edge,
-                       view_->width() - right_edge.width(),
-                       top_right_height,
-                       right_edge.width(),
-                       painted_height_ - top_right_height);
 }
 
 void BrowserHeaderPainterAsh::PaintTitleBar(gfx::Canvas* canvas) {

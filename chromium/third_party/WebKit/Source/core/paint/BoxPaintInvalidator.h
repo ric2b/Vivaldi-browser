@@ -31,11 +31,12 @@ class BoxPaintInvalidator {
   PaintInvalidationReason computePaintInvalidationReason();
 
   bool incrementallyInvalidatePaint();
-  void invalidatePaintRectClippedByOldAndNewBounds(const LayoutRect&);
 
-  bool needsToSavePreviousBoxSizes();
-  void savePreviousBoxSizesIfNeeded();
-  LayoutSize computePreviousBorderBoxSize(const LayoutSize& previousBoundsSize);
+  bool needsToSavePreviousBoxGeometries();
+  void savePreviousBoxGeometriesIfNeeded();
+  LayoutSize previousBorderBoxSize(const LayoutSize& previousVisualRectSize);
+  LayoutRect previousContentBoxRect();
+  LayoutRect previousLayoutOverflowRect();
 
   const LayoutBox& m_box;
   const PaintInvalidatorContext& m_context;

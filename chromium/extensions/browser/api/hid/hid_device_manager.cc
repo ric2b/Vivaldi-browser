@@ -15,7 +15,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "device/core/device_client.h"
+#include "device/base/device_client.h"
 #include "device/hid/hid_device_filter.h"
 #include "device/hid/hid_service.h"
 #include "extensions/browser/api/device_permissions_manager.h"
@@ -183,11 +183,11 @@ bool HidDeviceManager::HasPermission(const Extension* extension,
     return true;
   }
 
-  UsbDevicePermission::CheckParam usbParam(
-      device_info->vendor_id(), device_info->product_id(),
-      UsbDevicePermissionData::UNSPECIFIED_INTERFACE);
+  std::unique_ptr<UsbDevicePermission::CheckParam> usb_param =
+      UsbDevicePermission::CheckParam::ForHidDevice(
+          extension, device_info->vendor_id(), device_info->product_id());
   if (extension->permissions_data()->CheckAPIPermissionWithParam(
-          APIPermission::kUsbDevice, &usbParam)) {
+          APIPermission::kUsbDevice, usb_param.get())) {
     return true;
   }
 

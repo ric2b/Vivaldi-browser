@@ -52,11 +52,6 @@ void ProfileDestroyer::DestroyProfileWhenAppropriate(Profile* const profile) {
   // RenderProcessHosts in order to erase private data quickly, and
   // RenderProcessHostImpl::Release() avoids destroying RenderProcessHosts in
   // --single-process mode to avoid race conditions.
-  // TODO (gisli@vivaldi.com): We occasionally get !hosts.empty().  Needs
-  //                           investigation.
-  // We use two webcontents when replacing the contents in the tabstrip. This
-  // can be done better. Should remove the replaced one
-  // TODO: andre@vivaldi.com: Investigate.
   DCHECK(hosts.empty() || profile->IsOffTheRecord() ||
       content::RenderProcessHost::run_renderer_in_process()) << \
       "Profile still has " << hosts.size() << " hosts";

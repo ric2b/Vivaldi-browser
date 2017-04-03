@@ -33,10 +33,7 @@ namespace extensions {
 
 namespace {
 
-const char* kChildKinds[] = {
-  "functions",
-  "events"
-};
+const char* const kChildKinds[] = {"functions", "events"};
 
 std::unique_ptr<base::DictionaryValue> LoadSchemaDictionary(
     const std::string& name,
@@ -205,11 +202,6 @@ Feature::Availability ExtensionAPI::IsAvailable(const std::string& full_name,
                                  std::string("Unknown feature: ") + full_name);
   }
   return feature->IsAvailableToContext(extension, context, url);
-}
-
-bool ExtensionAPI::IsAvailableToWebUI(const std::string& name,
-                                      const GURL& url) {
-  return IsAvailable(name, NULL, Feature::WEBUI_CONTEXT, url).is_available();
 }
 
 base::StringPiece ExtensionAPI::GetSchemaStringPiece(

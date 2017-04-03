@@ -8,6 +8,7 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/files/file_enumerator.h"
 #include "base/files/file_proxy.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
@@ -22,7 +23,7 @@
 #include "base/threading/thread_restrictions.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
-#include "components/subresource_filter/core/browser/ruleset_distributor.h"
+#include "components/subresource_filter/core/browser/ruleset_service_delegate.h"
 #include "components/subresource_filter/core/browser/subresource_filter_constants.h"
 #include "components/subresource_filter/core/common/copying_file_stream.h"
 #include "components/subresource_filter/core/common/indexed_ruleset.h"
@@ -51,12 +52,18 @@ void RecordIndexAndWriteRulesetResult(
 }
 
 // Implements operations on a `sentinel file`, which is used as a safeguard to
-// prevent crash-looping if ruleset indexing crashes on start-up.
+// prevent crash-looping if ruleset indexing crashes right after start-up.
 //
 // The sentinel file is placed in the ruleset version directory just before
 // indexing commences, and removed afterwards. Therefore, if a sentinel file is
 // found on next start-up, it is an indication that the previous indexing
 // operation may have crashed, and indexing will not be attempted again.
+//
+// After the first failed indexing attempt, the sentinel file will not be
+// removed unless |RulesetIndexer::kIndexedFormatVersion| is incremented. It is
+// expected that by that time, either the indexing logic or the ruleset contents
+// will be fixed. The consumed disk space is negligible as no ruleset data will
+// be written to disk when indexing fails.
 //
 // Admittedly, this approach errs on the side of caution, and false positives
 // can happen. For example, the sentinel file may fail to be removed in case of
@@ -65,20 +72,22 @@ void RecordIndexAndWriteRulesetResult(
 // ruleset, and it is expected that version updates will be frequent enough.
 class SentinelFile {
  public:
-  static bool IsPresent(base::FilePath& path) { return base::PathExists(path); }
+  SentinelFile(base::FilePath& version_directory)
+      : path_(IndexedRulesetLocator::GetSentinelFilePath(version_directory)) {}
 
-  static bool Create(base::FilePath& path) {
-    return base::WriteFile(path, nullptr, 0) == 0;
-  }
+  bool IsPresent() { return base::PathExists(path_); }
+  bool Create() { return base::WriteFile(path_, nullptr, 0) == 0; }
+  bool Remove() { return base::DeleteFile(path_, false /* recursive */); }
 
-  static bool Remove(base::FilePath& path) {
-    return base::DeleteFile(path, false /* recursive */);
-  }
+ private:
+  base::FilePath path_;
+
+  DISALLOW_COPY_AND_ASSIGN(SentinelFile);
 };
 
 }  // namespace
 
-// UnindexedRulesetInfo ------------------------------------------------------
+// UnindexedRulesetInfo -------------------------------------------------------
 
 UnindexedRulesetInfo::UnindexedRulesetInfo() = default;
 UnindexedRulesetInfo::~UnindexedRulesetInfo() = default;
@@ -127,13 +136,72 @@ void IndexedRulesetVersion::SaveToPrefs(PrefService* local_state) const {
                          content_version);
 }
 
-base::FilePath IndexedRulesetVersion::GetSubdirectoryPathForVersion(
-    const base::FilePath& base_dir) const {
-  return base_dir.AppendASCII(base::IntToString(format_version))
-      .AppendASCII(content_version);
+// IndexedRulesetLocator ------------------------------------------------------
+
+// static
+base::FilePath IndexedRulesetLocator::GetSubdirectoryPathForVersion(
+    const base::FilePath& base_dir,
+    const IndexedRulesetVersion& version) {
+  return base_dir.AppendASCII(base::IntToString(version.format_version))
+      .AppendASCII(version.content_version);
 }
 
-// RulesetService ------------------------------------------------------------
+// static
+base::FilePath IndexedRulesetLocator::GetRulesetDataFilePath(
+    const base::FilePath& version_directory) {
+  return version_directory.Append(kRulesetDataFileName);
+}
+
+// static
+base::FilePath IndexedRulesetLocator::GetLicenseFilePath(
+    const base::FilePath& version_directory) {
+  return version_directory.Append(kLicenseFileName);
+}
+
+// static
+base::FilePath IndexedRulesetLocator::GetSentinelFilePath(
+    const base::FilePath& version_directory) {
+  return version_directory.Append(kSentinelFileName);
+}
+
+// static
+void IndexedRulesetLocator::DeleteObsoleteRulesets(
+    const base::FilePath& indexed_ruleset_base_dir,
+    const IndexedRulesetVersion& most_recent_version) {
+  base::FilePath current_format_dir(indexed_ruleset_base_dir.AppendASCII(
+      base::IntToString(IndexedRulesetVersion::CurrentFormatVersion())));
+
+  // First delete all directories containing rulesets of obsolete formats.
+  base::FileEnumerator format_dirs(indexed_ruleset_base_dir,
+                                   false /* recursive */,
+                                   base::FileEnumerator::DIRECTORIES);
+  for (base::FilePath format_dir = format_dirs.Next(); !format_dir.empty();
+       format_dir = format_dirs.Next()) {
+    if (format_dir != current_format_dir)
+      base::DeleteFile(format_dir, true /* recursive */);
+  }
+
+  base::FilePath most_recent_version_dir =
+      most_recent_version.IsValid()
+          ? IndexedRulesetLocator::GetSubdirectoryPathForVersion(
+                indexed_ruleset_base_dir, most_recent_version)
+          : base::FilePath();
+
+  // Then delete all indexed rulesets of the current format with obsolete
+  // content versions, except those with a sentinel file present.
+  base::FileEnumerator version_dirs(current_format_dir, false /* recursive */,
+                                    base::FileEnumerator::DIRECTORIES);
+  for (base::FilePath version_dir = version_dirs.Next(); !version_dir.empty();
+       version_dir = version_dirs.Next()) {
+    if (SentinelFile(version_dir).IsPresent())
+      continue;
+    if (version_dir == most_recent_version_dir)
+      continue;
+    base::DeleteFile(version_dir, true /* recursive */);
+  }
+}
+
+// RulesetService -------------------------------------------------------------
 
 // static
 decltype(&RulesetService::IndexRuleset) RulesetService::g_index_ruleset_func =
@@ -146,23 +214,37 @@ decltype(&base::ReplaceFile) RulesetService::g_replace_file_func =
 RulesetService::RulesetService(
     PrefService* local_state,
     scoped_refptr<base::SequencedTaskRunner> blocking_task_runner,
+    std::unique_ptr<RulesetServiceDelegate> delegate,
     const base::FilePath& indexed_ruleset_base_dir)
     : local_state_(local_state),
       blocking_task_runner_(blocking_task_runner),
+      delegate_(std::move(delegate)),
+      is_after_startup_(false),
       indexed_ruleset_base_dir_(indexed_ruleset_base_dir) {
+  DCHECK(delegate_);
   DCHECK_NE(local_state_->GetInitializationStatus(),
             PrefService::INITIALIZATION_STATUS_WAITING);
+
   IndexedRulesetVersion most_recently_indexed_version;
   most_recently_indexed_version.ReadFromPrefs(local_state_);
   if (most_recently_indexed_version.IsValid() &&
-      most_recently_indexed_version.IsCurrentFormatVersion())
+      most_recently_indexed_version.IsCurrentFormatVersion()) {
     OpenAndPublishRuleset(most_recently_indexed_version);
+  } else {
+    IndexedRulesetVersion().SaveToPrefs(local_state_);
+  }
+
+  delegate_->PostAfterStartupTask(
+      base::Bind(&RulesetService::InitializeAfterStartup, AsWeakPtr()));
 }
 
 RulesetService::~RulesetService() {}
 
 void RulesetService::IndexAndStoreAndPublishRulesetIfNeeded(
     const UnindexedRulesetInfo& unindexed_ruleset_info) {
+  if (unindexed_ruleset_info.content_version.empty())
+    return;
+
   // Trying to store a ruleset with the same version for a second time would not
   // only be futile, but would fail on Windows due to "File System Tunneling" as
   // long as the previously stored copy of the rules is still in use.
@@ -170,37 +252,20 @@ void RulesetService::IndexAndStoreAndPublishRulesetIfNeeded(
   most_recently_indexed_version.ReadFromPrefs(local_state_);
   if (most_recently_indexed_version.IsCurrentFormatVersion() &&
       most_recently_indexed_version.content_version ==
-          unindexed_ruleset_info.content_version)
+          unindexed_ruleset_info.content_version) {
     return;
+  }
+
+  // During start-up, retain information about the most recently supplied
+  // unindexed ruleset, to be processed after start-up is complete.
+  if (!is_after_startup_) {
+    queued_unindexed_ruleset_info_ = unindexed_ruleset_info;
+    return;
+  }
 
   IndexAndStoreRuleset(
       unindexed_ruleset_info,
       base::Bind(&RulesetService::OpenAndPublishRuleset, AsWeakPtr()));
-}
-
-void RulesetService::RegisterDistributor(
-    std::unique_ptr<RulesetDistributor> distributor) {
-  if (ruleset_data_ && ruleset_data_->IsValid())
-    distributor->PublishNewVersion(ruleset_data_->DuplicateFile());
-  distributors_.push_back(std::move(distributor));
-}
-
-// static
-base::FilePath RulesetService::GetRulesetDataFilePath(
-    const base::FilePath& version_directory) {
-  return version_directory.Append(kRulesetDataFileName);
-}
-
-// static
-base::FilePath RulesetService::GetLicenseFilePath(
-    const base::FilePath& version_directory) {
-  return version_directory.Append(kLicenseFileName);
-}
-
-// static
-base::FilePath RulesetService::GetSentinelFilePath(
-    const base::FilePath& version_directory) {
-  return version_directory.Append(kSentinelFileName);
 }
 
 // static
@@ -222,7 +287,8 @@ IndexedRulesetVersion RulesetService::IndexAndWriteRuleset(
       unindexed_ruleset_info.content_version,
       IndexedRulesetVersion::CurrentFormatVersion());
   base::FilePath indexed_ruleset_version_dir =
-      indexed_version.GetSubdirectoryPathForVersion(indexed_ruleset_base_dir);
+      IndexedRulesetLocator::GetSubdirectoryPathForVersion(
+          indexed_ruleset_base_dir, indexed_version);
 
   if (!base::CreateDirectory(indexed_ruleset_version_dir)) {
     RecordIndexAndWriteRulesetResult(
@@ -230,15 +296,14 @@ IndexedRulesetVersion RulesetService::IndexAndWriteRuleset(
     return IndexedRulesetVersion();
   }
 
-  base::FilePath sentinel_path(
-      GetSentinelFilePath(indexed_ruleset_version_dir));
-  if (SentinelFile::IsPresent(sentinel_path)) {
+  SentinelFile sentinel_file(indexed_ruleset_version_dir);
+  if (sentinel_file.IsPresent()) {
     RecordIndexAndWriteRulesetResult(
         IndexAndWriteRulesetResult::ABORTED_BECAUSE_SENTINEL_FILE_PRESENT);
     return IndexedRulesetVersion();
   }
 
-  if (!SentinelFile::Create(sentinel_path)) {
+  if (!sentinel_file.Create()) {
     RecordIndexAndWriteRulesetResult(
         IndexAndWriteRulesetResult::FAILED_CREATING_SENTINEL_FILE);
     return IndexedRulesetVersion();
@@ -258,7 +323,7 @@ IndexedRulesetVersion RulesetService::IndexAndWriteRuleset(
 
   // --- End of guarded section.
 
-  if (!SentinelFile::Remove(sentinel_path)) {
+  if (!sentinel_file.Remove()) {
     RecordIndexAndWriteRulesetResult(
         IndexAndWriteRulesetResult::FAILED_DELETING_SENTINEL_FILE);
     return IndexedRulesetVersion();
@@ -317,15 +382,17 @@ RulesetService::IndexAndWriteRulesetResult RulesetService::WriteRuleset(
 
   static_assert(sizeof(uint8_t) == sizeof(char), "Expected char = byte.");
   const int data_size_in_chars = base::checked_cast<int>(indexed_ruleset_size);
-  if (base::WriteFile(GetRulesetDataFilePath(scratch_dir.GetPath()),
-                      reinterpret_cast<const char*>(indexed_ruleset_data),
-                      data_size_in_chars) != data_size_in_chars) {
+  if (base::WriteFile(
+          IndexedRulesetLocator::GetRulesetDataFilePath(scratch_dir.GetPath()),
+          reinterpret_cast<const char*>(indexed_ruleset_data),
+          data_size_in_chars) != data_size_in_chars) {
     return IndexAndWriteRulesetResult::FAILED_WRITING_RULESET_DATA;
   }
 
   if (base::PathExists(license_source_path) &&
-      !base::CopyFile(license_source_path,
-                      GetLicenseFilePath(scratch_dir.GetPath()))) {
+      !base::CopyFile(
+          license_source_path,
+          IndexedRulesetLocator::GetLicenseFilePath(scratch_dir.GetPath()))) {
     return IndexAndWriteRulesetResult::FAILED_WRITING_LICENSE;
   }
 
@@ -356,11 +423,28 @@ RulesetService::IndexAndWriteRulesetResult RulesetService::WriteRuleset(
   return IndexAndWriteRulesetResult::SUCCESS;
 }
 
+void RulesetService::InitializeAfterStartup() {
+  is_after_startup_ = true;
+
+  IndexedRulesetVersion most_recently_indexed_version;
+  most_recently_indexed_version.ReadFromPrefs(local_state_);
+  blocking_task_runner_->PostTask(
+      FROM_HERE,
+      base::Bind(&IndexedRulesetLocator::DeleteObsoleteRulesets,
+                 indexed_ruleset_base_dir_, most_recently_indexed_version));
+
+  if (!queued_unindexed_ruleset_info_.content_version.empty()) {
+    IndexAndStoreRuleset(
+        queued_unindexed_ruleset_info_,
+        base::Bind(&RulesetService::OpenAndPublishRuleset, AsWeakPtr()));
+    queued_unindexed_ruleset_info_ = UnindexedRulesetInfo();
+  }
+}
+
 void RulesetService::IndexAndStoreRuleset(
     const UnindexedRulesetInfo& unindexed_ruleset_info,
     const WriteRulesetCallback& success_callback) {
-  if (unindexed_ruleset_info.content_version.empty())
-    return;
+  DCHECK(!unindexed_ruleset_info.content_version.empty());
   base::PostTaskAndReplyWithResult(
       blocking_task_runner_.get(), FROM_HERE,
       base::Bind(&RulesetService::IndexAndWriteRuleset,
@@ -386,8 +470,9 @@ void RulesetService::OpenAndPublishRuleset(
   // there are handles to it still open. Note that creating a new file at the
   // same path would still be impossible until after the last handle is closed.
   ruleset_data_->CreateOrOpen(
-      GetRulesetDataFilePath(
-          version.GetSubdirectoryPathForVersion(indexed_ruleset_base_dir_)),
+      IndexedRulesetLocator::GetRulesetDataFilePath(
+          IndexedRulesetLocator::GetSubdirectoryPathForVersion(
+              indexed_ruleset_base_dir_, version)),
       base::File::FLAG_OPEN | base::File::FLAG_READ |
           base::File::FLAG_SHARE_DELETE,
       base::Bind(&RulesetService::OnOpenedRuleset, AsWeakPtr()));
@@ -411,8 +496,7 @@ void RulesetService::OnOpenedRuleset(base::File::Error error) {
     return;
 
   DCHECK_EQ(error, base::File::Error::FILE_OK);
-  for (auto& distributor : distributors_)
-    distributor->PublishNewVersion(ruleset_data_->DuplicateFile());
+  delegate_->PublishNewRulesetVersion(ruleset_data_->DuplicateFile());
 }
 
 }  // namespace subresource_filter

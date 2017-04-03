@@ -80,7 +80,7 @@ define('media_router_bindings', [
       // Begin newly added properties, followed by the milestone they were
       // added.  The guard should be safe to remove N+2 milestones later.
       'for_display': route.forDisplay, // M47
-      'incognito': !!route.offTheRecord  // M50
+      'is_incognito': !!route.offTheRecord  // M50
     });
   }
 
@@ -265,13 +265,12 @@ define('media_router_bindings', [
    * updated.
    * @param {!string} sourceUrn
    * @param {!Array<!MediaSink>} sinks
-   * @param {Array<string>=} opt_origins
+   * @param {!Array<string>} origins
    */
   MediaRouter.prototype.onSinksReceived = function(sourceUrn, sinks,
-      opt_origins) {
-    // TODO(imcheng): Make origins required in M52+.
+      origins) {
     this.service_.onSinksReceived(sourceUrn, sinks.map(sinkToMojo_),
-        opt_origins || []);
+        origins);
   };
 
   /**
@@ -357,23 +356,17 @@ define('media_router_bindings', [
    * Called by the provider manager when the set of active routes
    * has been updated.
    * @param {!Array<MediaRoute>} routes The active set of media routes.
-   * @param {string=} opt_sourceUrn The sourceUrn associated with this route
-   *     query. This parameter is optional and can be empty.
-   * @param {Array<string>=} opt_joinableRouteIds The active set of joinable
-   *     media routes. This parameter is optional and can be empty.
+   * @param {string=} sourceUrn The sourceUrn associated with this route
+   *     query.
+   * @param {Array<string>=} joinableRouteIds The active set of joinable
+   *     media routes.
    */
   MediaRouter.prototype.onRoutesUpdated =
-      function(routes, opt_sourceUrn, opt_joinableRouteIds) {
-    // TODO(boetger): This check allows backward compatibility with the Cast SDK
-    // and can be removed when the Cast SDK is updated.
-    if (typeof(opt_sourceUrn) != 'string') {
-      opt_sourceUrn = '';
-    }
-
+      function(routes, sourceUrn = '', joinableRouteIds = []) {
     this.service_.onRoutesUpdated(
         routes.map(routeToMojo_),
-        opt_sourceUrn || '',
-        opt_joinableRouteIds || []);
+        sourceUrn,
+        joinableRouteIds);
   };
 
   /**
@@ -462,13 +455,6 @@ define('media_router_bindings', [
     this.sendRouteBinaryMessage = null;
 
     /**
-     * TODO(imcheng): Remove in M55 (crbug.com/626395).
-     * @type {function(string):
-     *     Promise.<{messages: Array.<RouteMessage>, error: boolean}>}
-     */
-    this.listenForRouteMessages = null;
-
-    /**
      * @type {function(string)}
      */
     this.startListeningForRouteMessages = null;
@@ -545,6 +531,10 @@ define('media_router_bindings', [
    * @param {!MediaRouterHandlers} handlers
    */
   MediaRouteProvider.prototype.setHandlers = function(handlers) {
+    // TODO(mfoltz): Remove when component that supports this method is
+    // rolled out to all Chrome channels in M56.
+    if (!handlers['onBeforeInvokeHandler'])
+      handlers['onBeforeInvokeHandler'] = () => {};
     this.handlers_ = handlers;
     var requiredHandlers = [
       'stopObservingMediaRoutes',
@@ -563,6 +553,7 @@ define('media_router_bindings', [
       'enableMdnsDiscovery',
       'updateMediaSinks',
       'searchSinks',
+      'onBeforeInvokeHandler'
     ];
     requiredHandlers.forEach(function(nextHandler) {
       if (handlers[nextHandler] === undefined) {
@@ -579,6 +570,7 @@ define('media_router_bindings', [
    */
   MediaRouteProvider.prototype.startObservingMediaSinks =
       function(sourceUrn) {
+    this.handlers_.onBeforeInvokeHandler();
     this.handlers_.startObservingMediaSinks(sourceUrn);
   };
 
@@ -588,6 +580,7 @@ define('media_router_bindings', [
    */
   MediaRouteProvider.prototype.stopObservingMediaSinks =
       function(sourceUrn) {
+    this.handlers_.onBeforeInvokeHandler();
     this.handlers_.stopObservingMediaSinks(sourceUrn);
   };
 
@@ -611,7 +604,8 @@ define('media_router_bindings', [
    */
   MediaRouteProvider.prototype.createRoute =
       function(sourceUrn, sinkId, presentationId, origin, tabId,
-          timeout, incognito) {
+               timeout, incognito) {
+    this.handlers_.onBeforeInvokeHandler();
     return this.handlers_.createRoute(
         sourceUrn, sinkId, presentationId, origin, tabId,
         Math.floor(timeout.microseconds / 1000), incognito)
@@ -642,6 +636,7 @@ define('media_router_bindings', [
   MediaRouteProvider.prototype.joinRoute =
       function(sourceUrn, presentationId, origin, tabId, timeout,
                incognito) {
+    this.handlers_.onBeforeInvokeHandler();
     return this.handlers_.joinRoute(
         sourceUrn, presentationId, origin, tabId,
         Math.floor(timeout.microseconds / 1000), incognito)
@@ -673,6 +668,7 @@ define('media_router_bindings', [
   MediaRouteProvider.prototype.connectRouteByRouteId =
       function(sourceUrn, routeId, presentationId, origin, tabId,
                timeout, incognito) {
+    this.handlers_.onBeforeInvokeHandler();
     return this.handlers_.connectRouteByRouteId(
         sourceUrn, routeId, presentationId, origin, tabId,
         Math.floor(timeout.microseconds / 1000), incognito)
@@ -692,20 +688,10 @@ define('media_router_bindings', [
    *    message and code if the operation failed.
    */
   MediaRouteProvider.prototype.terminateRoute = function(routeId) {
-    // TODO(crbug.com/627967): Remove code path that doesn't expect a Promise
-    // in M56.
-    var maybePromise = this.handlers_.terminateRoute(routeId);
-    var successResult = {
-        result_code: mediaRouterMojom.RouteRequestResultCode.OK
-    };
-    if (maybePromise) {
-      return maybePromise.then(
-        function() { return successResult; },
-        function(err) { return toErrorRouteResponse_(err); }
-      );
-    } else {
-      return Promise.resolve(successResult);
-    }
+    this.handlers_.onBeforeInvokeHandler();
+    return this.handlers_.terminateRoute(routeId).then(
+        () => ({result_code: mediaRouterMojom.RouteRequestResultCode.OK}),
+        (err) => toErrorRouteResponse_(err));
   };
 
   /**
@@ -716,7 +702,8 @@ define('media_router_bindings', [
    *    or false on failure.
    */
   MediaRouteProvider.prototype.sendRouteMessage = function(
-      routeId, message) {
+    routeId, message) {
+    this.handlers_.onBeforeInvokeHandler();
     return this.handlers_.sendRouteMessage(routeId, message)
         .then(function() {
           return {'sent': true};
@@ -733,7 +720,8 @@ define('media_router_bindings', [
    *    or false on failure.
    */
   MediaRouteProvider.prototype.sendRouteBinaryMessage = function(
-      routeId, data) {
+    routeId, data) {
+    this.handlers_.onBeforeInvokeHandler();
     return this.handlers_.sendRouteBinaryMessage(routeId, data)
         .then(function() {
           return {'sent': true};
@@ -748,34 +736,8 @@ define('media_router_bindings', [
    */
   MediaRouteProvider.prototype.startListeningForRouteMessages = function(
       routeId) {
-    if (this.handlers_.startListeningForRouteMessages) {
-      this.handlers_.startListeningForRouteMessages(routeId);
-    } else {
-      // Old API.
-      this.listenForRouteMessagesOld(routeId);
-    }
-  };
-
-
-  /**
-   * A hack to adapt new MR messaging API to old extension messaging API.
-   * TODO(imcheng): Remove in M55 (crbug.com/626395).
-   * @param {!string} routeId
-   */
-  MediaRouteProvider.prototype.listenForRouteMessagesOld = function(routeId) {
-    this.handlers_.listenForRouteMessages(routeId)
-        .then(function(messages) {
-          // If messages is empty, then stopListeningForRouteMessages has been
-          // called. We don't need to send it back to MR.
-          if (messages.length > 0) {
-            // Send the messages back to MR, and listen for next batch of
-            // messages.
-            this.mediaRouter_.onRouteMessagesReceived(routeId, messages);
-            this.listenForRouteMessagesOld(routeId);
-          }
-        }.bind(this), function() {
-          // Ignore rejections.
-        }.bind(this));
+    this.handlers_.onBeforeInvokeHandler();
+    this.handlers_.startListeningForRouteMessages(routeId);
   };
 
   /**
@@ -783,6 +745,7 @@ define('media_router_bindings', [
    */
   MediaRouteProvider.prototype.stopListeningForRouteMessages = function(
       routeId) {
+    this.handlers_.onBeforeInvokeHandler();
     this.handlers_.stopListeningForRouteMessages(routeId);
   };
 
@@ -802,6 +765,7 @@ define('media_router_bindings', [
    * @param {!string} sourceUrn
    */
   MediaRouteProvider.prototype.startObservingMediaRoutes = function(sourceUrn) {
+    this.handlers_.onBeforeInvokeHandler();
     this.handlers_.startObservingMediaRoutes(sourceUrn);
   };
 
@@ -811,6 +775,7 @@ define('media_router_bindings', [
    * @param {!string} sourceUrn
    */
   MediaRouteProvider.prototype.stopObservingMediaRoutes = function(sourceUrn) {
+    this.handlers_.onBeforeInvokeHandler();
     this.handlers_.stopObservingMediaRoutes(sourceUrn);
   };
 
@@ -818,6 +783,7 @@ define('media_router_bindings', [
    * Enables mDNS device discovery.
    */
   MediaRouteProvider.prototype.enableMdnsDiscovery = function() {
+    this.handlers_.onBeforeInvokeHandler();
     this.handlers_.enableMdnsDiscovery();
   };
 
@@ -826,6 +792,7 @@ define('media_router_bindings', [
    * @param {!string} sourceUrn
    */
   MediaRouteProvider.prototype.updateMediaSinks = function(sourceUrn) {
+    this.handlers_.onBeforeInvokeHandler();
     this.handlers_.updateMediaSinks(sourceUrn);
   };
 
@@ -850,6 +817,7 @@ define('media_router_bindings', [
     if (!this.handlers_.searchSinks) {
       return Promise.resolve({'sink_id': ''});
     }
+    this.handlers_.onBeforeInvokeHandler();
     return Promise.resolve({
       'sink_id': this.handlers_.searchSinks(sinkId, sourceUrn, searchCriteria)
     });
@@ -861,4 +829,3 @@ define('media_router_bindings', [
 
   return mediaRouter;
 });
-

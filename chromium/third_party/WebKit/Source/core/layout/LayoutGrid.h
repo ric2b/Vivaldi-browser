@@ -74,17 +74,17 @@ class LayoutGrid final : public LayoutBlock {
 
   typedef Vector<LayoutBox*, 1> GridCell;
   const GridCell& gridCell(int row, int column) const {
-    ASSERT_WITH_SECURITY_IMPLICATION(!m_gridIsDirty);
+    SECURITY_DCHECK(!m_gridIsDirty);
     return m_grid[row][column];
   }
 
   const Vector<LayoutBox*>& itemsOverflowingGridArea() const {
-    ASSERT_WITH_SECURITY_IMPLICATION(!m_gridIsDirty);
+    SECURITY_DCHECK(!m_gridIsDirty);
     return m_gridItemsOverflowingGridArea;
   }
 
   int paintIndexForGridItem(const LayoutBox* layoutBox) const {
-    ASSERT_WITH_SECURITY_IMPLICATION(!m_gridIsDirty);
+    SECURITY_DCHECK(!m_gridIsDirty);
     return m_gridItemsIndexesMap.get(layoutBox);
   }
 
@@ -124,6 +124,13 @@ class LayoutGrid final : public LayoutBlock {
       GridSizingData&,
       LayoutUnit& baseSizesWithoutMaximization,
       LayoutUnit& growthLimitsWithoutMaximization) const;
+  void computeFlexSizedTracksGrowth(
+      GridTrackSizingDirection,
+      Vector<GridTrack>&,
+      const Vector<size_t>& flexibleSizedTracksIndex,
+      double flexFraction,
+      Vector<LayoutUnit>& increments,
+      LayoutUnit& totalGrowth) const;
   LayoutUnit computeUsedBreadthOfMinLength(const GridTrackSize&,
                                            LayoutUnit maxBreadth) const;
   LayoutUnit computeUsedBreadthOfMaxLength(const GridTrackSize&,
@@ -175,8 +182,9 @@ class LayoutGrid final : public LayoutBlock {
 
   void layoutGridItems(GridSizingData&);
   void prepareChildForPositionedLayout(LayoutBox&);
-  void layoutPositionedObjects(bool relayoutChildren,
-                               PositionedLayoutBehavior = DefaultLayout);
+  void layoutPositionedObjects(
+      bool relayoutChildren,
+      PositionedLayoutBehavior = DefaultLayout) override;
   void offsetAndBreadthForPositionedChild(const LayoutBox&,
                                           GridTrackSizingDirection,
                                           LayoutUnit& offset,
@@ -300,6 +308,15 @@ class LayoutGrid final : public LayoutBlock {
   void updateAutoMarginsInColumnAxisIfNeeded(LayoutBox&);
   void updateAutoMarginsInRowAxisIfNeeded(LayoutBox&);
 
+  int baselinePosition(
+      FontBaseline,
+      bool firstLine,
+      LineDirectionMode,
+      LinePositionMode = PositionOnContainingLine) const override;
+  int firstLineBoxBaseline() const override;
+  int inlineBlockBaseline(LineDirectionMode) const override;
+  bool isInlineBaselineAlignedChild(const LayoutBox* child) const;
+
 #if ENABLE(ASSERT)
   bool tracksAreWiderThanMinTrackBreadth(GridTrackSizingDirection,
                                          GridSizingData&) const;
@@ -348,7 +365,7 @@ class LayoutGrid final : public LayoutBlock {
   size_t m_autoRepeatColumns{0};
   size_t m_autoRepeatRows{0};
 
-  bool m_hasAnyOrthogonalChild;
+  bool m_hasAnyOrthogonalChildren;
 
   std::unique_ptr<OrderedTrackIndexSet> m_autoRepeatEmptyColumns{nullptr};
   std::unique_ptr<OrderedTrackIndexSet> m_autoRepeatEmptyRows{nullptr};

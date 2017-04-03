@@ -108,9 +108,6 @@ class ParkThreadsScope final {
 
   bool parkThreads() {
     TRACE_EVENT0("blink_gc", "ThreadHeap::ParkThreadsScope");
-    const char* samplingState = TRACE_EVENT_GET_SAMPLING_STATE();
-    if (m_state->isMainThread())
-      TRACE_EVENT_SET_SAMPLING_STATE("blink_gc", "BlinkGCWaiting");
 
     // TODO(haraken): In an unlikely coincidence that two threads decide
     // to collect garbage at the same time, avoid doing two GCs in
@@ -126,8 +123,6 @@ class ParkThreadsScope final {
                                  50));
     timeToStopThreadsHistogram.count(timeForStoppingThreads);
 
-    if (m_state->isMainThread())
-      TRACE_EVENT_SET_NONCONST_SAMPLING_STATE(samplingState);
     return m_shouldResumeThreads;
   }
 
@@ -145,7 +140,7 @@ class ParkThreadsScope final {
 
 ThreadState::ThreadState(BlinkGC::ThreadHeapMode threadHeapMode)
     : m_thread(currentThread()),
-      m_persistentRegion(wrapUnique(new PersistentRegion())),
+      m_persistentRegion(makeUnique<PersistentRegion>()),
 #if OS(WIN) && COMPILER(MSVC)
       m_threadStackSize(0),
 #endif
@@ -159,6 +154,7 @@ ThreadState::ThreadState(BlinkGC::ThreadHeapMode threadHeapMode)
       m_sweepForbidden(false),
       m_noAllocationCount(0),
       m_gcForbiddenCount(0),
+      m_mixinsBeingConstructedCount(0),
       m_accumulatedSweepingTime(0),
       m_vectorBackingArenaIndex(BlinkGC::Vector1ArenaIndex),
       m_currentArenaAges(0),
@@ -1141,13 +1137,25 @@ void ThreadState::preSweep() {
 
 #if defined(ADDRESS_SANITIZER)
 void ThreadState::poisonAllHeaps() {
+  CrossThreadPersistentRegion::LockScope persistentLock(
+      ProcessHeap::crossThreadPersistentRegion());
   // Poisoning all unmarked objects in the other arenas.
   for (int i = 1; i < BlinkGC::NumberOfArenas; i++)
     m_arenas[i]->poisonArena();
+  // CrossThreadPersistents in unmarked objects may be accessed from other
+  // threads (e.g. in CrossThreadPersistentRegion::shouldTracePersistent) and
+  // that would be fine.
+  ProcessHeap::crossThreadPersistentRegion().unpoisonCrossThreadPersistents();
 }
 
 void ThreadState::poisonEagerArena() {
+  CrossThreadPersistentRegion::LockScope persistentLock(
+      ProcessHeap::crossThreadPersistentRegion());
   m_arenas[BlinkGC::EagerSweepArenaIndex]->poisonArena();
+  // CrossThreadPersistents in unmarked objects may be accessed from other
+  // threads (e.g. in CrossThreadPersistentRegion::shouldTracePersistent) and
+  // that would be fine.
+  ProcessHeap::crossThreadPersistentRegion().unpoisonCrossThreadPersistents();
 }
 #endif
 
@@ -1682,7 +1690,6 @@ void ThreadState::collectGarbage(BlinkGC::StackState stackState,
   TRACE_EVENT2("blink_gc,devtools.timeline", "BlinkGCMarking", "lazySweeping",
                gcType == BlinkGC::GCWithoutSweep, "gcReason",
                gcReasonString(reason));
-  TRACE_EVENT_SCOPED_SAMPLING_STATE("blink_gc", "BlinkGC");
   double startTime = WTF::currentTimeMS();
 
   if (gcType == BlinkGC::TakeSnapshot)

@@ -47,10 +47,8 @@ class BluetoothRemoteGATTCharacteristic final
       std::unique_ptr<WebBluetoothRemoteGATTCharacteristicInit>,
       BluetoothRemoteGATTService*);
 
-  // Interface required by CallbackPromiseAdapter.
-  using WebType = std::unique_ptr<WebBluetoothRemoteGATTCharacteristicInit>;
-  static BluetoothRemoteGATTCharacteristic* take(
-      ScriptPromiseResolver*,
+  static BluetoothRemoteGATTCharacteristic* create(
+      ExecutionContext*,
       std::unique_ptr<WebBluetoothRemoteGATTCharacteristicInit>,
       BluetoothRemoteGATTService*);
 
@@ -96,6 +94,12 @@ class BluetoothRemoteGATTCharacteristic final
                           RegisteredEventListener&) override;
 
  private:
+  friend class ReadValueCallback;
+  friend class WriteValueCallback;
+  friend class NotificationsCallback;
+
+  BluetoothRemoteGATTServer* gatt() { return m_service->device()->gatt(); }
+
   std::unique_ptr<WebBluetoothRemoteGATTCharacteristicInit> m_webCharacteristic;
   Member<BluetoothRemoteGATTService> m_service;
   bool m_stopped;

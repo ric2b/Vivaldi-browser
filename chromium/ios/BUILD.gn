@@ -28,7 +28,6 @@ group("all") {
     deps = [
       "//ios/chrome:ios_chrome_unittests",
       "//ios/chrome/app",
-      "//ios/chrome/browser",
       "//ios/chrome/common",
       "//ios/chrome/common/physical_web",
       "//ios/chrome/share_extension:packed_resources",
@@ -42,7 +41,7 @@ group("all") {
       "//ios/web:ios_web_inttests",
       "//ios/web:ios_web_unittests",
       "//ios/web/shell:ios_web_shell",
-      "//ios/web/shell/test:ios_web_shell_test_host",
+      "//ios/web/shell/test:ios_web_shell_egtests",
     ]
   }
 }

@@ -34,6 +34,7 @@
 <translation id="2148716181193084225">Heute</translation>
 <translation id="2226276347425096477">Kürzen Sie diesen Text auf max. <ph name="MAX_CHARACTERS" /> Zeichen. Zurzeit verwenden Sie <ph name="CURRENT_LENGTH" /> Zeichen.</translation>
 <translation id="2247351761944213033">Woche <ph name="WEEKNUMBER" />, <ph name="YEAR" /></translation>
+<translation id="2277199496770840904">Titel <ph name="NUMBER" /></translation>
 <translation id="2291999235780842123">Kästchen</translation>
 <translation id="2335594187091864976">Datums- und Uhrzeitauswahl</translation>
 <translation id="248395913932153421">Tag</translation>
@@ -116,7 +117,6 @@
 <translation id="5643186887447432888">Schaltfläche</translation>
 <translation id="5677946354068040947">weitere Optionen</translation>
 <translation id="57838592816432529">Stummschalten</translation>
-<translation id="583281660410589416">Unbekannt</translation>
 <translation id="5843503607508392247">Andere...</translation>
 <translation id="5860033963881614850">Aus</translation>
 <translation id="588258955323874662">Vollbild</translation>

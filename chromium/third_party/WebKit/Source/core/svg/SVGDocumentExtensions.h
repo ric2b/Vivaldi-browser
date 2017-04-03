@@ -32,11 +32,11 @@
 namespace blink {
 
 class Document;
-class LayoutSVGResourceContainer;
-class SubtreeLayoutScope;
-class SVGSVGElement;
-class SVGElement;
 class Element;
+class LayoutSVGResourceContainer;
+class SVGElement;
+class SVGSVGElement;
+class SubtreeLayoutScope;
 
 class SVGDocumentExtensions
     : public GarbageCollectedFinalized<SVGDocumentExtensions> {
@@ -85,16 +85,12 @@ class SVGDocumentExtensions
 
  private:
   Member<Document> m_document;
-  // For SVG 1.2 support this will need to be made more general.
   HeapHashSet<Member<SVGSVGElement>> m_timeContainers;
   using SVGElementSet = HeapHashSet<Member<SVGElement>>;
   SVGElementSet m_webAnimationsPendingSVGElements;
   HashMap<AtomicString, LayoutSVGResourceContainer*> m_resources;
   // Resources that are pending.
   HeapHashMap<AtomicString, Member<SVGPendingElements>> m_pendingResources;
-  // Resources that are pending and scheduled for removal.
-  HeapHashMap<AtomicString, Member<SVGPendingElements>>
-      m_pendingResourcesForRemoval;
   SVGResourcesCache m_resourcesCache;
   // Root SVG elements with relative length descendants.
   HeapHashSet<Member<SVGSVGElement>> m_relativeLengthSVGRoots;
@@ -117,14 +113,6 @@ class SVGDocumentExtensions
   SVGPendingElements* removePendingResource(const AtomicString& id);
 
   void serviceAnimations();
-
-  // The following two functions are used for scheduling a pending resource to
-  // be removed.
-  void markPendingResourcesForRemoval(const AtomicString&);
-  Element* removeElementFromPendingResourcesForRemoval(const AtomicString&);
-
- private:
-  SVGPendingElements* removePendingResourceForRemoval(const AtomicString&);
 };
 
 }  // namespace blink

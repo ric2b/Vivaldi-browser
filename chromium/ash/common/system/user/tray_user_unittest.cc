@@ -4,27 +4,34 @@
 
 #include <vector>
 
+#include "ash/common/material_design/material_design_controller.h"
 #include "ash/common/shell_delegate.h"
 #include "ash/common/system/tray/system_tray.h"
 #include "ash/common/system/tray/tray_constants.h"
 #include "ash/common/system/user/tray_user.h"
 #include "ash/common/system/user/tray_user_separator.h"
 #include "ash/common/system/user/user_view.h"
+#include "ash/common/test/test_session_state_delegate.h"
 #include "ash/common/wm_shell.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/ash_test_helper.h"
-#include "ash/test/test_session_state_delegate.h"
 #include "ash/test/test_shell_delegate.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/signin/core/account_id/account_id.h"
 #include "components/user_manager/user_info.h"
-#include "ui/accessibility/ax_view_state.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/gfx/animation/animation_container_element.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
 
 namespace ash {
+
+namespace {
+
+bool UseMd() {
+  return MaterialDesignController::IsSystemTrayMenuMaterial();
+}
 
 class TrayUserTest : public test::AshTestBase {
  public:
@@ -59,7 +66,7 @@ class TrayUserTest : public test::AshTestBase {
   std::vector<TrayUser*> tray_user_;
 
   // The separator between the tray users and the rest of the menu.
-  // Note: The item will get owned by the shelf.
+  // Note: The item will get owned by the shelf. Not used in Material Design.
   TrayUserSeparator* tray_user_separator_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(TrayUserTest);
@@ -86,9 +93,11 @@ void TrayUserTest::InitializeParameters(int users_logged_in,
     tray_user_.push_back(new TrayUser(tray_, i));
     tray_->AddTrayItem(tray_user_[i]);
   }
-  // We then add also the separator.
-  tray_user_separator_ = new TrayUserSeparator(tray_);
-  tray_->AddTrayItem(tray_user_separator_);
+  if (!UseMd()) {
+    // We then add also the separator.
+    tray_user_separator_ = new TrayUserSeparator(tray_);
+    tray_->AddTrayItem(tray_user_separator_);
+  }
 }
 
 void TrayUserTest::ShowTrayMenu(ui::test::EventGenerator* generator) {
@@ -113,6 +122,8 @@ void TrayUserTest::ClickUserItem(ui::test::EventGenerator* generator,
   generator->ClickLeftButton();
 }
 
+}  // namespace
+
 // Make sure that we show items for all users in the tray accordingly.
 TEST_F(TrayUserTest, CheckTrayItemSize) {
   InitializeParameters(1, false);
@@ -136,7 +147,8 @@ TEST_F(TrayUserTest, SingleUserModeDoesNotAllowAddingUser) {
 
   for (int i = 0; i < delegate()->GetMaximumNumberOfLoggedInUsers(); i++)
     EXPECT_EQ(TrayUser::HIDDEN, tray_user(i)->GetStateForTest());
-  EXPECT_FALSE(tray_user_separator()->separator_shown());
+  if (!UseMd())
+    EXPECT_FALSE(tray_user_separator()->separator_shown());
 
   ShowTrayMenu(&generator);
 
@@ -146,7 +158,8 @@ TEST_F(TrayUserTest, SingleUserModeDoesNotAllowAddingUser) {
   for (int i = 0; i < delegate()->GetMaximumNumberOfLoggedInUsers(); i++)
     EXPECT_EQ(i == 0 ? TrayUser::SHOWN : TrayUser::HIDDEN,
               tray_user(i)->GetStateForTest());
-  EXPECT_FALSE(tray_user_separator()->separator_shown());
+  if (!UseMd())
+    EXPECT_FALSE(tray_user_separator()->separator_shown());
   tray()->CloseSystemBubble();
 }
 
@@ -157,12 +170,12 @@ TEST_F(TrayUserTest, AccessibleLabelContainsSingleUserInfo) {
 
   views::View* view =
       tray_user(0)->user_view_for_test()->user_card_view_for_test();
-  ui::AXViewState state;
-  view->GetAccessibleState(&state);
+  ui::AXNodeData node_data;
+  view->GetAccessibleNodeData(&node_data);
   EXPECT_EQ(
       base::UTF8ToUTF16("Über tray Über tray Über tray Über tray First@tray"),
-      state.name);
-  EXPECT_EQ(ui::AX_ROLE_STATIC_TEXT, state.role);
+      node_data.GetString16Attribute(ui::AX_ATTR_NAME));
+  EXPECT_EQ(ui::AX_ROLE_STATIC_TEXT, node_data.role);
 }
 
 TEST_F(TrayUserTest, AccessibleLabelContainsMultiUserInfo) {
@@ -172,12 +185,12 @@ TEST_F(TrayUserTest, AccessibleLabelContainsMultiUserInfo) {
 
   views::View* view =
       tray_user(0)->user_view_for_test()->user_card_view_for_test();
-  ui::AXViewState state;
-  view->GetAccessibleState(&state);
+  ui::AXNodeData node_data;
+  view->GetAccessibleNodeData(&node_data);
   EXPECT_EQ(
       base::UTF8ToUTF16("Über tray Über tray Über tray Über tray First@tray"),
-      state.name);
-  EXPECT_EQ(ui::AX_ROLE_BUTTON, state.role);
+      node_data.GetString16Attribute(ui::AX_ATTR_NAME));
+  EXPECT_EQ(ui::AX_ROLE_BUTTON, node_data.role);
 }
 
 #if defined(OS_CHROMEOS)
@@ -185,7 +198,7 @@ TEST_F(TrayUserTest, AccessibleLabelContainsMultiUserInfo) {
 // will be one panel for each user plus one additional separator at the end.
 // Note: the mouse watcher (for automatic closing upon leave) cannot be tested
 // here since it does not work with the event system in unit tests.
-TEST_F(TrayUserTest, MutiUserModeDoesNotAllowToAddUser) {
+TEST_F(TrayUserTest, MultiUserModeDoesNotAllowToAddUser) {
   InitializeParameters(1, true);
 
   // Move the mouse over the status area and click to open the status menu.
@@ -202,7 +215,8 @@ TEST_F(TrayUserTest, MutiUserModeDoesNotAllowToAddUser) {
     EXPECT_FALSE(tray()->IsAnyBubbleVisible());
     for (int i = 0; i < max_users; i++)
       EXPECT_FALSE(tray_user(i)->GetStateForTest());
-    EXPECT_FALSE(tray_user_separator()->separator_shown());
+    if (!UseMd())
+      EXPECT_FALSE(tray_user_separator()->separator_shown());
     // After clicking on the tray the menu should get shown and for each logged
     // in user we should get a visible item. In addition, the separator should
     // show up when we reach more than one user.
@@ -216,7 +230,8 @@ TEST_F(TrayUserTest, MutiUserModeDoesNotAllowToAddUser) {
     }
 
     // Check the visibility of the separator.
-    EXPECT_EQ(j > 1 ? true : false, tray_user_separator()->separator_shown());
+    if (!UseMd())
+      EXPECT_EQ(j > 1 ? true : false, tray_user_separator()->separator_shown());
 
     // Move the mouse over the user item and it should hover.
     MoveOverUserItem(&generator, 0);
@@ -234,6 +249,7 @@ TEST_F(TrayUserTest, MutiUserModeDoesNotAllowToAddUser) {
 
     // Click the button again to see that the menu goes away.
     ClickUserItem(&generator, 0);
+    MoveOverUserItem(&generator, 0);
     EXPECT_EQ(TrayUser::HOVERED, tray_user(0)->GetStateForTest());
 
     // Close and check that everything is deleted.
@@ -245,7 +261,7 @@ TEST_F(TrayUserTest, MutiUserModeDoesNotAllowToAddUser) {
 }
 
 // Make sure that user changing gets properly executed.
-TEST_F(TrayUserTest, MutiUserModeButtonClicks) {
+TEST_F(TrayUserTest, MultiUserModeButtonClicks) {
   // Have two users.
   InitializeParameters(2, true);
   ui::test::EventGenerator& generator = GetEventGenerator();
@@ -256,10 +272,10 @@ TEST_F(TrayUserTest, MutiUserModeButtonClicks) {
   const user_manager::UserInfo* active_user = delegate()->GetActiveUserInfo();
   const user_manager::UserInfo* second_user = delegate()->GetUserInfo(1);
   EXPECT_EQ(active_user->GetAccountId(), second_user->GetAccountId());
-  // Since the name is capitalized, the email should be different then the
+  // Since the name is capitalized, the email should be different than the
   // user_id.
   EXPECT_NE(active_user->GetAccountId().GetUserEmail(),
-            second_user->GetEmail());
+            second_user->GetDisplayEmail());
   tray()->CloseSystemBubble();
 }
 

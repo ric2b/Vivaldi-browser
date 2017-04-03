@@ -16,30 +16,15 @@
 #include "base/id_map.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/weak_ptr.h"
 #include "content/browser/blob_storage/chrome_blob_storage_context.h"
+#include "content/common/indexed_db/indexed_db.mojom.h"
+#include "content/public/browser/browser_associated_interface.h"
 #include "content/public/browser/browser_message_filter.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "storage/browser/blob/blob_data_handle.h"
-#include "storage/browser/quota/quota_manager.h"
-#include "storage/common/quota/quota_status_code.h"
 #include "url/gurl.h"
 
-struct IndexedDBDatabaseMetadata;
-struct IndexedDBHostMsg_DatabaseCount_Params;
-struct IndexedDBHostMsg_DatabaseCreateIndex_Params;
-struct IndexedDBHostMsg_DatabaseCreateObjectStore_Params;
-struct IndexedDBHostMsg_DatabaseCreateTransaction_Params;
-struct IndexedDBHostMsg_DatabaseDeleteRange_Params;
-struct IndexedDBHostMsg_DatabaseGet_Params;
-struct IndexedDBHostMsg_DatabaseGetAll_Params;
 struct IndexedDBHostMsg_DatabaseObserve_Params;
-struct IndexedDBHostMsg_DatabaseOpenCursor_Params;
-struct IndexedDBHostMsg_DatabasePut_Params;
-struct IndexedDBHostMsg_DatabaseSetIndexKeys_Params;
-struct IndexedDBHostMsg_FactoryDeleteDatabase_Params;
-struct IndexedDBHostMsg_FactoryGetDatabaseNames_Params;
-struct IndexedDBHostMsg_FactoryOpen_Params;
 struct IndexedDBMsg_Observation;
 struct IndexedDBMsg_ObserverChanges;
 
@@ -49,18 +34,20 @@ class Origin;
 
 namespace content {
 class IndexedDBBlobInfo;
+class IndexedDBCallbacks;
 class IndexedDBConnection;
 class IndexedDBContextImpl;
 class IndexedDBCursor;
+class IndexedDBDatabaseCallbacks;
 class IndexedDBKey;
-class IndexedDBKeyPath;
-class IndexedDBKeyRange;
 class IndexedDBObservation;
 class IndexedDBObserverChanges;
-struct IndexedDBDatabaseMetadata;
 
 // Handles all IndexedDB related messages from a particular renderer process.
-class IndexedDBDispatcherHost : public BrowserMessageFilter {
+class IndexedDBDispatcherHost
+    : public BrowserMessageFilter,
+      public BrowserAssociatedInterface<::indexed_db::mojom::Factory>,
+      public ::indexed_db::mojom::Factory {
  public:
   // Only call the constructor from the UI thread.
   IndexedDBDispatcherHost(int ipc_process_id,
@@ -68,8 +55,6 @@ class IndexedDBDispatcherHost : public BrowserMessageFilter {
                           IndexedDBContextImpl* indexed_db_context,
                           ChromeBlobStorageContext* blob_storage_context);
 
-  static ::IndexedDBDatabaseMetadata ConvertMetadata(
-      const content::IndexedDBDatabaseMetadata& metadata);
   static IndexedDBMsg_ObserverChanges ConvertObserverChanges(
       std::unique_ptr<IndexedDBObserverChanges> changes);
   static IndexedDBMsg_Observation ConvertObservation(
@@ -89,16 +74,17 @@ class IndexedDBDispatcherHost : public BrowserMessageFilter {
   storage::BlobStorageContext* blob_storage_context() const {
     return blob_storage_context_->context();
   }
+  int ipc_process_id() const { return ipc_process_id_; }
 
   // IndexedDBCallbacks call these methods to add the results into the
   // applicable map.  See below for more details.
   int32_t Add(IndexedDBCursor* cursor);
-  int32_t Add(IndexedDBConnection* connection,
-              int32_t ipc_thread_id,
-              const url::Origin& origin);
 
-  void RegisterTransactionId(int64_t host_transaction_id,
+  bool RegisterTransactionId(int64_t host_transaction_id,
                              const url::Origin& origin);
+  bool GetTransactionSize(int64_t host_transaction_id,
+                          int64_t* transaction_size);
+  void AddToTransaction(int64_t host_transaction_id, int64_t value_length);
 
   IndexedDBCursor* GetCursorFromId(int32_t ipc_cursor_id);
 
@@ -114,6 +100,7 @@ class IndexedDBDispatcherHost : public BrowserMessageFilter {
   static uint32_t TransactionIdToProcessId(int64_t host_transaction_id);
 
   std::string HoldBlobData(const IndexedDBBlobInfo& blob_info);
+  void DropBlobData(const std::string& uuid);
 
   // True if the channel is closing/closed and outstanding requests
   // can be abandoned. Only access on IndexedDB thread.
@@ -126,9 +113,8 @@ class IndexedDBDispatcherHost : public BrowserMessageFilter {
 
   // Used in nested classes.
   typedef std::map<int64_t, int64_t> TransactionIDToDatabaseIDMap;
-  typedef std::map<int64_t, uint64_t> TransactionIDToSizeMap;
+  typedef std::map<int64_t, int64_t> TransactionIDToSizeMap;
   typedef std::map<int64_t, url::Origin> TransactionIDToOriginMap;
-  typedef std::map<int32_t, url::Origin> WebIDBObjectIDToOriginMap;
 
   // IDMap for RefCounted types
   template <typename RefCountedType>
@@ -160,90 +146,6 @@ class IndexedDBDispatcherHost : public BrowserMessageFilter {
     IDMap<scoped_refptr<RefCountedType>, IDMapOwnPointer> map_;
 
     DISALLOW_COPY_AND_ASSIGN(RefIDMap);
-  };
-
-  class DatabaseDispatcherHost {
-   public:
-    explicit DatabaseDispatcherHost(IndexedDBDispatcherHost* parent);
-    ~DatabaseDispatcherHost();
-
-    void CloseAll();
-    bool OnMessageReceived(const IPC::Message& message);
-
-    void OnCreateObjectStore(
-        const IndexedDBHostMsg_DatabaseCreateObjectStore_Params& params);
-    void OnDeleteObjectStore(int32_t ipc_database_id,
-                             int64_t transaction_id,
-                             int64_t object_store_id);
-    void OnRenameObjectStore(int32_t ipc_database_id,
-                             int64_t transaction_id,
-                             int64_t object_store_id,
-                             const base::string16& new_name);
-    void OnCreateTransaction(
-        const IndexedDBHostMsg_DatabaseCreateTransaction_Params&);
-    void OnClose(int32_t ipc_database_id);
-    void OnVersionChangeIgnored(int32_t ipc_database_id);
-    void OnDestroyed(int32_t ipc_database_id);
-
-    void OnObserve(const IndexedDBHostMsg_DatabaseObserve_Params&);
-    void OnUnobserve(int32_t ipc_database_id,
-                     const std::vector<int32_t>& observer_ids_to_remove);
-
-    void OnGet(const IndexedDBHostMsg_DatabaseGet_Params& params);
-    void OnGetAll(const IndexedDBHostMsg_DatabaseGetAll_Params& params);
-    // OnPutWrapper starts on the IO thread so that it can grab BlobDataHandles
-    // before posting to the IDB TaskRunner for the rest of the job.
-    void OnPutWrapper(const IndexedDBHostMsg_DatabasePut_Params& params);
-    void OnPut(const IndexedDBHostMsg_DatabasePut_Params& params,
-               std::vector<std::unique_ptr<storage::BlobDataHandle>> handles);
-    void OnSetIndexKeys(
-        const IndexedDBHostMsg_DatabaseSetIndexKeys_Params& params);
-    void OnSetIndexesReady(int32_t ipc_database_id,
-                           int64_t transaction_id,
-                           int64_t object_store_id,
-                           const std::vector<int64_t>& ids);
-    void OnOpenCursor(const IndexedDBHostMsg_DatabaseOpenCursor_Params& params);
-    void OnCount(const IndexedDBHostMsg_DatabaseCount_Params& params);
-    void OnDeleteRange(
-        const IndexedDBHostMsg_DatabaseDeleteRange_Params& params);
-    void OnClear(int32_t ipc_thread_id,
-                 int32_t ipc_callbacks_id,
-                 int32_t ipc_database_id,
-                 int64_t transaction_id,
-                 int64_t object_store_id);
-    void OnCreateIndex(
-        const IndexedDBHostMsg_DatabaseCreateIndex_Params& params);
-    void OnDeleteIndex(int32_t ipc_database_id,
-                       int64_t transaction_id,
-                       int64_t object_store_id,
-                       int64_t index_id);
-    void OnRenameIndex(int32_t ipc_database_id,
-                       int64_t transaction_id,
-                       int64_t object_store_id,
-                       int64_t index_id,
-                       const base::string16& new_name);
-
-    void OnAbort(int32_t ipc_database_id, int64_t transaction_id);
-    void OnCommit(int32_t ipc_database_id, int64_t transaction_id);
-    void OnGotUsageAndQuotaForCommit(int32_t ipc_database_id,
-                                     int64_t transaction_id,
-                                     storage::QuotaStatusCode status,
-                                     int64_t usage,
-                                     int64_t quota);
-
-    IndexedDBDispatcherHost* parent_;
-    IDMap<IndexedDBConnection, IDMapOwnPointer> map_;
-    WebIDBObjectIDToOriginMap database_origin_map_;
-    TransactionIDToSizeMap transaction_size_map_;
-    TransactionIDToOriginMap transaction_origin_map_;
-    TransactionIDToDatabaseIDMap transaction_database_map_;
-
-    // Weak pointers are used when an asynchronous quota request is made, in
-    // case the dispatcher is torn down before the response returns.
-    base::WeakPtrFactory<DatabaseDispatcherHost> weak_factory_;
-
-   private:
-    DISALLOW_COPY_AND_ASSIGN(DatabaseDispatcherHost);
   };
 
   class CursorDispatcherHost {
@@ -282,31 +184,47 @@ class IndexedDBDispatcherHost : public BrowserMessageFilter {
 
   // Helper templates.
   template <class ReturnType>
-  ReturnType* GetOrTerminateProcess(IDMap<ReturnType, IDMapOwnPointer>* map,
-                                    int32_t ipc_return_object_id);
-  template <class ReturnType>
   ReturnType* GetOrTerminateProcess(RefIDMap<ReturnType>* map,
                                     int32_t ipc_return_object_id);
 
   template <typename MapType>
   void DestroyObject(MapType* map, int32_t ipc_object_id);
 
+  // indexed_db::mojom::Factory implementation:
+  void GetDatabaseNames(
+      ::indexed_db::mojom::CallbacksAssociatedPtrInfo callbacks_info,
+      const url::Origin& origin) override;
+  void Open(int32_t worker_thread,
+            ::indexed_db::mojom::CallbacksAssociatedPtrInfo callbacks_info,
+            ::indexed_db::mojom::DatabaseCallbacksAssociatedPtrInfo
+                database_callbacks_info,
+            const url::Origin& origin,
+            const base::string16& name,
+            int64_t version,
+            int64_t transaction_id) override;
+  void DeleteDatabase(
+      ::indexed_db::mojom::CallbacksAssociatedPtrInfo callbacks_info,
+      const url::Origin& origin,
+      const base::string16& name) override;
+
+  void GetDatabaseNamesOnIDBThread(scoped_refptr<IndexedDBCallbacks> callbacks,
+                                   const url::Origin& origin);
+  void OpenOnIDBThread(
+      scoped_refptr<IndexedDBCallbacks> callbacks,
+      scoped_refptr<IndexedDBDatabaseCallbacks> database_callbacks,
+      const url::Origin& origin,
+      const base::string16& name,
+      int64_t version,
+      int64_t transaction_id);
+  void DeleteDatabaseOnIDBThread(scoped_refptr<IndexedDBCallbacks> callbacks,
+                                 const url::Origin& origin,
+                                 const base::string16& name);
+
   // Message processing. Most of the work is delegated to the dispatcher hosts
   // below.
-  void OnIDBFactoryGetDatabaseNames(
-      const IndexedDBHostMsg_FactoryGetDatabaseNames_Params& p);
-  void OnIDBFactoryOpen(const IndexedDBHostMsg_FactoryOpen_Params& p);
-
-  void OnIDBFactoryDeleteDatabase(
-      const IndexedDBHostMsg_FactoryDeleteDatabase_Params& p);
-
   void OnAckReceivedBlobs(const std::vector<std::string>& uuids);
-  void OnPutHelper(
-      const IndexedDBHostMsg_DatabasePut_Params& params,
-      std::vector<std::unique_ptr<storage::BlobDataHandle>> handles);
 
   void ResetDispatcherHosts();
-  void DropBlobData(const std::string& uuid);
 
   scoped_refptr<net::URLRequestContextGetter> request_context_getter_;
   scoped_refptr<IndexedDBContextImpl> indexed_db_context_;
@@ -321,7 +239,8 @@ class IndexedDBDispatcherHost : public BrowserMessageFilter {
 
   // Only access on IndexedDB thread.
   bool is_open_ = true;
-  std::unique_ptr<DatabaseDispatcherHost> database_dispatcher_host_;
+  TransactionIDToSizeMap transaction_size_map_;
+  TransactionIDToOriginMap transaction_origin_map_;
   std::unique_ptr<CursorDispatcherHost> cursor_dispatcher_host_;
 
   // Used to set file permissions for blob storage.

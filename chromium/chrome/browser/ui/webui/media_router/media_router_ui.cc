@@ -135,29 +135,7 @@ MediaRouterUI::UIMediaRoutesObserver::~UIMediaRoutesObserver() {}
 void MediaRouterUI::UIMediaRoutesObserver::OnRoutesUpdated(
     const std::vector<MediaRoute>& routes,
     const std::vector<MediaRoute::Id>& joinable_route_ids) {
-  std::vector<MediaRoute> routes_for_display;
-  std::vector<MediaRoute::Id> joinable_route_ids_for_display;
-  for (const MediaRoute& route : routes) {
-    if (route.for_display()) {
-#ifndef NDEBUG
-      for (const MediaRoute& existing_route : routes_for_display) {
-        if (existing_route.media_sink_id() == route.media_sink_id()) {
-          DVLOG(2) << "Received another route for display with the same sink"
-                   << " id as an existing route. " << route.media_route_id()
-                   << " has the same sink id as "
-                   << existing_route.media_sink_id() << ".";
-        }
-      }
-#endif
-      if (base::ContainsValue(joinable_route_ids, route.media_route_id())) {
-        joinable_route_ids_for_display.push_back(route.media_route_id());
-      }
-
-      routes_for_display.push_back(route);
-    }
-  }
-
-  callback_.Run(routes_for_display, joinable_route_ids_for_display);
+  callback_.Run(routes, joinable_route_ids);
 }
 
 MediaRouterUI::MediaRouterUI(content::WebUI* web_ui)
@@ -222,17 +200,20 @@ MediaRouterUI::~MediaRouterUI() {
 }
 
 void MediaRouterUI::InitWithDefaultMediaSource(
-    const base::WeakPtr<PresentationServiceDelegateImpl>& delegate) {
-  DCHECK(delegate);
+    content::WebContents* initiator,
+    PresentationServiceDelegateImpl* delegate) {
+  DCHECK(initiator);
   DCHECK(!presentation_service_delegate_);
   DCHECK(!query_result_manager_.get());
 
-  presentation_service_delegate_ = delegate;
-  presentation_service_delegate_->AddDefaultPresentationRequestObserver(this);
-  InitCommon(presentation_service_delegate_->web_contents());
-  if (presentation_service_delegate_->HasDefaultPresentationRequest()) {
-    OnDefaultPresentationChanged(
-        presentation_service_delegate_->GetDefaultPresentationRequest());
+  InitCommon(initiator);
+  if (delegate) {
+    presentation_service_delegate_ = delegate->GetWeakPtr();
+    presentation_service_delegate_->AddDefaultPresentationRequestObserver(this);
+  }
+
+  if (delegate && delegate->HasDefaultPresentationRequest()) {
+    OnDefaultPresentationChanged(delegate->GetDefaultPresentationRequest());
   } else {
     // Register for MediaRoute updates without a media source.
     routes_observer_.reset(new UIMediaRoutesObserver(
@@ -243,16 +224,17 @@ void MediaRouterUI::InitWithDefaultMediaSource(
 
 void MediaRouterUI::InitWithPresentationSessionRequest(
     content::WebContents* initiator,
-    const base::WeakPtr<PresentationServiceDelegateImpl>& delegate,
+    PresentationServiceDelegateImpl* delegate,
     std::unique_ptr<CreatePresentationConnectionRequest>
         create_session_request) {
   DCHECK(initiator);
+  DCHECK(delegate);
   DCHECK(create_session_request);
   DCHECK(!create_session_request_);
   DCHECK(!query_result_manager_);
 
   create_session_request_ = std::move(create_session_request);
-  presentation_service_delegate_ = delegate;
+  presentation_service_delegate_ = delegate->GetWeakPtr();
   InitCommon(initiator);
   OnDefaultPresentationChanged(create_session_request_->presentation_request());
 }
@@ -293,7 +275,12 @@ void MediaRouterUI::InitCommon(content::WebContents* initiator) {
     query_result_manager_->SetSourcesForCastMode(MediaCastMode::TAB_MIRROR,
                                                  {mirroring_source}, origin);
   }
+
   UpdateCastModes();
+
+  // Get the current list of media routes, so that the WebUI will have routes
+  // information at initialization.
+  OnRoutesUpdated(router_->GetCurrentRoutes(), std::vector<MediaRoute::Id>());
 }
 
 void MediaRouterUI::InitForTest(
@@ -343,6 +330,25 @@ void MediaRouterUI::UpdateCastModes() {
   cast_modes_ = query_result_manager_->GetSupportedCastModes();
   if (ui_initialized_) {
     handler_->UpdateCastModes(cast_modes_, GetPresentationRequestSourceName());
+  }
+}
+
+void MediaRouterUI::UpdateRoutesToCastModesMapping() {
+  std::unordered_map<MediaSource::Id, MediaCastMode> available_source_map;
+  for (const auto& cast_mode : cast_modes_) {
+    for (const auto& source :
+         query_result_manager_->GetSourcesForCastMode(cast_mode)) {
+      available_source_map.insert(std::make_pair(source.id(), cast_mode));
+    }
+  }
+
+  routes_and_cast_modes_.clear();
+  for (const auto& route : routes_) {
+    auto source_entry = available_source_map.find(route.media_source().id());
+    if (source_entry != available_source_map.end()) {
+      routes_and_cast_modes_.insert(
+          std::make_pair(route.media_route_id(), source_entry->second));
+    }
   }
 }
 
@@ -417,8 +423,6 @@ bool MediaRouterUI::SetRouteParameters(
   current_route_request_id_ = ++route_request_counter_;
   *origin = for_default_source ? presentation_request_->frame_url().GetOrigin()
                                : GURL(chrome::kChromeUIMediaRouterURL);
-  DCHECK(origin->is_valid());
-
   DVLOG(1) << "DoCreateRoute: origin: " << *origin;
 
   // There are 3 cases. In cases (1) and (3) the MediaRouterUI will need to be
@@ -526,28 +530,33 @@ void MediaRouterUI::SetIssue(const Issue* issue) {
 void MediaRouterUI::OnRoutesUpdated(
     const std::vector<MediaRoute>& routes,
     const std::vector<MediaRoute::Id>& joinable_route_ids) {
-  routes_ = routes;
-  joinable_route_ids_ = joinable_route_ids;
+  routes_.clear();
+  joinable_route_ids_.clear();
 
-  std::unordered_map<MediaSource::Id, MediaCastMode> available_source_map;
-  for (const auto& cast_mode : cast_modes_) {
-    for (const auto& source :
-         query_result_manager_->GetSourcesForCastMode(cast_mode)) {
-      available_source_map.insert(std::make_pair(source.id(), cast_mode));
+  for (const MediaRoute& route : routes) {
+    if (route.for_display()) {
+#ifndef NDEBUG
+      for (const MediaRoute& existing_route : routes_) {
+        if (existing_route.media_sink_id() == route.media_sink_id()) {
+          DVLOG(2) << "Received another route for display with the same sink"
+                   << " id as an existing route. " << route.media_route_id()
+                   << " has the same sink id as "
+                   << existing_route.media_sink_id() << ".";
+        }
+      }
+#endif
+      if (base::ContainsValue(joinable_route_ids, route.media_route_id())) {
+        joinable_route_ids_.push_back(route.media_route_id());
+      }
+
+      routes_.push_back(route);
     }
   }
-
-  current_cast_modes_.clear();
-  for (const auto& route : routes) {
-    auto source_entry = available_source_map.find(route.media_source().id());
-    if (source_entry != available_source_map.end()) {
-      current_cast_modes_.insert(
-          std::make_pair(route.media_route_id(), source_entry->second));
-    }
-  }
+  UpdateRoutesToCastModesMapping();
 
   if (ui_initialized_)
-    handler_->UpdateRoutes(routes_, joinable_route_ids_, current_cast_modes_);
+    handler_->UpdateRoutes(routes_, joinable_route_ids_,
+                           routes_and_cast_modes_);
 }
 
 void MediaRouterUI::OnRouteResponseReceived(

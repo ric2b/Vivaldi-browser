@@ -10,10 +10,10 @@
 #include "base/macros.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "mojo/public/interfaces/bindings/tests/versioning_test_service.mojom.h"
-#include "services/shell/public/c/main.h"
-#include "services/shell/public/cpp/interface_factory.h"
-#include "services/shell/public/cpp/service.h"
-#include "services/shell/public/cpp/service_runner.h"
+#include "services/service_manager/public/c/main.h"
+#include "services/service_manager/public/cpp/interface_factory.h"
+#include "services/service_manager/public/cpp/service.h"
+#include "services/service_manager/public/cpp/service_runner.h"
 
 namespace mojo {
 namespace test {
@@ -95,12 +95,12 @@ class HumanResourceDatabaseImpl : public HumanResourceDatabase {
 };
 
 class HumanResourceSystemServer
-    : public shell::Service,
+    : public service_manager::Service,
       public InterfaceFactory<HumanResourceDatabase> {
  public:
   HumanResourceSystemServer() {}
 
-  // shell::Service implementation.
+  // service_manager::Service implementation.
   bool OnConnect(Connection* connection) override {
     connection->AddInterface<HumanResourceDatabase>(this);
     return true;

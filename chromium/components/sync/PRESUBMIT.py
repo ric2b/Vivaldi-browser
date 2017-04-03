@@ -1,13 +1,15 @@
-# Copyright (c) 2016 The Chromium Authors. All rights reserved.
+# Copyright 2016 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-"""Presubmit script for sync
-This checks that ModelTypeInfo entries in model_type.cc follow conventions.
-See CheckModelTypeInfoMap or model_type.cc for more detail on the rules.
+"""Presubmit script for sync component.
+
+See http://dev.chromium.org/developers/how-tos/depottools/presubmit-scripts
+for more details about the presubmit API built into depot_tools.
 """
 
 import os
+import re
 
 # Some definitions don't follow all the conventions we want to enforce.
 # It's either difficult or impossible to fix this, so we ignore the problem(s).
@@ -24,6 +26,12 @@ GRANDFATHERED_MODEL_TYPES = [
   'SUPERVISED_USER_SHARED_SETTINGS',  # See previous.
   'PROXY_TABS',  # Doesn't have a root tag or notification type.
   'NIGORI']  # Model type string is 'encryption keys'.
+
+# Root tags are used as prefixes when creating storage keys, so certain strings
+# are blacklisted in order to prevent prefix collision.
+BLACKLISTED_ROOT_TAGS = [
+  '_mts_schema_descriptor'
+]
 
 # Number of distinct fields in a map entry; used to create
 # sets that check for uniqueness.
@@ -51,26 +59,7 @@ MODEL_TYPE_END_PATTERN = '^\};'
 PROTO_FILE_PATH = './protocol/sync.proto'
 MODEL_TYPE_FILE_NAME = 'model_type.cc'
 
-
-def CheckChangeOnUpload(input_api, output_api):
-  """Preupload check function required by presubmit convention.
-  See http://dev.chromium.org/developers/how-tos/depottools/presubmit-scripts
-  """
-  for f in input_api.AffectedFiles():
-    if(f.LocalPath().endswith(MODEL_TYPE_FILE_NAME)):
-      return CheckModelTypeInfoMap(input_api, output_api, f)
-  return []
-
-
-def CheckChangeOnCommit(input_api, output_api):
-  """Precommit check function required by presubmit convention.
-  See http://dev.chromium.org/developers/how-tos/depottools/presubmit-scripts
-  """
-  for f in input_api.AffectedFiles():
-    if f.LocalPath().endswith(MODEL_TYPE_FILE_NAME):
-      return CheckModelTypeInfoMap(input_api, output_api, f)
-  return []
-
+SYNC_SOURCE_FILES = (r'^components[\\/]sync[\\/].*\.(cc|h)$',)
 
 def CheckModelTypeInfoMap(input_api, output_api, model_type_file):
   """Checks the kModelTypeInfoMap in model_type.cc follows conventions.
@@ -113,6 +102,7 @@ def CheckModelTypeInfoMap(input_api, output_api, model_type_file):
     entry_problems.extend(
       CheckNotificationTypeMatchesProtoMessageName(
         output_api, map_entry, proto_field_definitions))
+    entry_problems.extend(CheckRootTagNotInBlackList(output_api, map_entry))
 
     if map_entry.model_type not in GRANDFATHERED_MODEL_TYPES:
       entry_problems.extend(
@@ -343,6 +333,20 @@ def CheckRootTagMatchesModelType(output_api, map_entry):
         map_entry.affected_lines)]
   return []
 
+def CheckRootTagNotInBlackList(output_api, map_entry):
+  """ Checks that map_entry's root isn't a blacklisted string.
+  Args:
+    output_api: presubmit_support OutputAPI instance
+    map_entry: ModelTypeEnumEntry object to check
+  Returns:
+    A list of PresubmitError objects for each violation
+  """
+  if map_entry.root_tag in BLACKLISTED_ROOT_TAGS:
+    return [FormatPresubmitError(
+        output_api,'root tag "%s" is a blacklisted root tag'
+        % (map_entry.root_tag), map_entry.affected_lines)]
+  return []
+
 
 def FieldNumberToPrototypeString(field_number):
   """Converts a field number enum reference to an EntitySpecifics string.
@@ -358,3 +362,25 @@ def FieldNumberToPrototypeString(field_number):
   return field_number.replace(FIELD_NUMBER_PREFIX, '').replace(
     'FieldNumber', 'Specifics').replace(
     'AppNotificationSpecifics', 'AppNotification')
+
+def CheckChangeLintsClean(input_api, output_api):
+  source_filter = lambda x: input_api.FilterSourceFile(
+    x, white_list=SYNC_SOURCE_FILES, black_list=None)
+
+  return input_api.canned_checks.CheckChangeLintsClean(
+      input_api, output_api, source_filter, lint_filters=[], verbose_level=1)
+
+def CheckChanges(input_api, output_api):
+  results = []
+  results += CheckChangeLintsClean(input_api, output_api)
+  results += input_api.canned_checks.CheckPatchFormatted(input_api, output_api)
+  for f in input_api.AffectedFiles():
+    if f.LocalPath().endswith(MODEL_TYPE_FILE_NAME):
+      return CheckModelTypeInfoMap(input_api, output_api, f)
+  return results
+
+def CheckChangeOnUpload(input_api, output_api):
+  return CheckChanges(input_api, output_api)
+
+def CheckChangeOnCommit(input_api, output_api):
+  return CheckChanges(input_api, output_api)

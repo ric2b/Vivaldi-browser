@@ -24,19 +24,18 @@
 #include "base/strings/string16.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
-#include "cc/input/top_controls_state.h"
+#include "cc/input/browser_controls_state.h"
 #include "cc/resources/shared_bitmap.h"
 #include "content/common/content_export.h"
-#include "content/common/drag_event_source_info.h"
 #include "content/common/frame_message_enums.h"
 #include "content/common/navigation_gesture.h"
 #include "content/common/page_message_enums.h"
 #include "content/common/view_message_enums.h"
+#include "content/public/common/browser_controls_state.h"
 #include "content/public/common/drop_data.h"
 #include "content/public/common/page_zoom.h"
 #include "content/public/common/referrer.h"
 #include "content/public/common/renderer_preferences.h"
-#include "content/public/common/top_controls_state.h"
 #include "content/public/common/web_preferences.h"
 #include "content/public/renderer/render_view.h"
 #include "content/renderer/render_frame_impl.h"
@@ -44,6 +43,7 @@
 #include "content/renderer/render_widget_owner_delegate.h"
 #include "content/renderer/stats_collection_observer.h"
 #include "ipc/ipc_platform_file.h"
+#include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
 #include "third_party/WebKit/public/web/WebAXObject.h"
 #include "third_party/WebKit/public/web/WebConsoleMessage.h"
@@ -52,7 +52,6 @@
 #include "third_party/WebKit/public/web/WebFrameWidget.h"
 #include "third_party/WebKit/public/web/WebHistoryItem.h"
 #include "third_party/WebKit/public/web/WebIconURL.h"
-#include "third_party/WebKit/public/web/WebInputEvent.h"
 #include "third_party/WebKit/public/web/WebNavigationType.h"
 #include "third_party/WebKit/public/web/WebNode.h"
 #include "third_party/WebKit/public/web/WebViewClient.h"
@@ -73,36 +72,19 @@
 #pragma warning(disable: 4250)
 #endif
 
-class SkBitmap;
-struct PP_NetAddress_Private;
-struct ViewMsg_StopFinding_Params;
-
-namespace base {
-class CommandLine;
-}
-
 namespace blink {
 class WebApplicationCacheHost;
-class WebApplicationCacheHostClient;
-class WebDOMMessageEvent;
 class WebDataSource;
 class WebDateTimeChooserCompletion;
-class WebDragData;
 class WebGestureEvent;
 class WebIconURL;
 class WebImage;
-class WebPeerConnection00Handler;
-class WebPeerConnection00HandlerClient;
 class WebMouseEvent;
-class WebPeerConnectionHandler;
-class WebPeerConnectionHandlerClient;
 class WebSpeechRecognizer;
 class WebStorageNamespace;
-class WebTouchEvent;
 class WebURLRequest;
 struct WebActiveWheelFlingParameters;
 struct WebDateTimeChooserParams;
-struct WebFileChooserParams;
 struct WebMediaPlayerAction;
 struct WebPluginAction;
 struct WebPoint;
@@ -116,28 +98,18 @@ class WebHitTestResult;
 namespace content {
 
 class HistoryController;
-class HistoryEntry;
-class PageState;
 class RenderViewImplTest;
 class RenderViewObserver;
 class RenderViewTest;
 class RendererDateTimePicker;
-class RendererWebColorChooserImpl;
 class SpeechRecognitionDispatcher;
-class WebPluginDelegateProxy;
 struct FaviconURL;
 struct FileChooserParams;
-struct FileChooserFileInfo;
-struct RenderViewImplParams;
 struct ResizeParams;
 
 namespace mojom {
 class CreateViewParams;
 }
-
-#if defined(OS_ANDROID)
-class WebMediaPlayerProxyAndroid;
-#endif
 
 //
 // RenderView is an object that manages a WebView object, and provides a
@@ -339,11 +311,6 @@ class CONTENT_EXPORT RenderViewImpl
   void setStatusText(const blink::WebString& text) override;
   void setMouseOverURL(const blink::WebURL& url) override;
   void setKeyboardFocusURL(const blink::WebURL& url) override;
-  void startDragging(blink::WebLocalFrame* frame,
-                     const blink::WebDragData& data,
-                     blink::WebDragOperationsMask mask,
-                     const blink::WebImage& image,
-                     const blink::WebPoint& imageOffset) override;
   bool acceptsLoadDrops() override;
   void focusNext() override;
   void focusPrevious() override;
@@ -406,15 +373,13 @@ class CONTENT_EXPORT RenderViewImpl
   void ClearEditCommands() override;
   const std::string& GetAcceptLanguages() const override;
 #if defined(OS_ANDROID)
-  void UpdateTopControlsState(TopControlsState constraints,
-                              TopControlsState current,
-                              bool animate) override;
+  void UpdateBrowserControlsState(BrowserControlsState constraints,
+                                  BrowserControlsState current,
+                                  bool animate) override;
 #endif
   void ConvertViewportToWindowViaWidget(blink::WebRect* rect) override;
   gfx::RectF ElementBoundsInWindow(const blink::WebElement& element) override;
   bool HasAddedInputHandler() const override;
-
-  gfx::Point ConvertWindowPointToViewport(const gfx::Point& point);
 
   bool uses_temporary_zoom_level() const { return uses_temporary_zoom_level_; }
 
@@ -495,7 +460,6 @@ class CONTENT_EXPORT RenderViewImpl
   FRIEND_TEST_ALL_PREFIXES(RenderViewTest, MacTestCmdUp);
 #endif
   FRIEND_TEST_ALL_PREFIXES(RenderViewImplTest, SetHistoryLengthAndOffset);
-  FRIEND_TEST_ALL_PREFIXES(RenderViewImplTest, ZoomLimit);
   FRIEND_TEST_ALL_PREFIXES(RenderViewImplTest, NavigateFrame);
   FRIEND_TEST_ALL_PREFIXES(RenderViewImplTest, BasicRenderFrame);
   FRIEND_TEST_ALL_PREFIXES(RenderViewImplTest, TextInputTypeWithPepper);
@@ -511,8 +475,6 @@ class CONTENT_EXPORT RenderViewImpl
   FRIEND_TEST_ALL_PREFIXES(RenderViewImplScaleFactorTest,
                            GetCompositionCharacterBoundsTest);
 
-  typedef std::map<GURL, double> HostZoomLevels;
-
   enum ErrorPageType {
     DNS_ERROR,
     HTTP_404,
@@ -526,11 +488,8 @@ class CONTENT_EXPORT RenderViewImpl
   void RenderWidgetFocusChangeComplete() override;
   bool DoesRenderWidgetHaveTouchEventHandlersAt(
       const gfx::Point& point) const override;
-  bool RenderWidgetWillHandleGestureEvent(
-      const blink::WebGestureEvent& event) override;
   bool RenderWidgetWillHandleMouseEvent(
       const blink::WebMouseEvent& event) override;
-  void RenderWidgetDidFlushPaint() override;
 
   // Old WebFrameClient implementations ----------------------------------------
 
@@ -562,7 +521,6 @@ class CONTENT_EXPORT RenderViewImpl
   void OnAllowBindings(int enabled_bindings_flags);
   void OnAllowScriptToClose(bool script_can_close);
   void OnCancelDownload(int32_t download_id);
-  void OnClearFocusedElement();
   void OnClosePage();
   void OnClose();
 
@@ -572,26 +530,6 @@ class CONTENT_EXPORT RenderViewImpl
   void OnDeterminePageLanguage();
   void OnDisableScrollbarsForSmallWindows(
       const gfx::Size& disable_scrollbars_size_limit);
-  void OnDragSourceEnded(const gfx::Point& client_point,
-                         const gfx::Point& screen_point,
-                         blink::WebDragOperation drag_operation);
-  void OnDragSourceSystemDragEnded();
-  void OnDragTargetDrop(const DropData& drop_data,
-                        const gfx::Point& client_pt,
-                        const gfx::Point& screen_pt,
-                        int key_modifiers);
-  // Real data that is dragged is not included at DragEnter time.
-  void OnDragTargetDragEnter(
-      const std::vector<DropData::Metadata>& drop_meta_data,
-      const gfx::Point& client_pt,
-      const gfx::Point& screen_pt,
-      blink::WebDragOperationsMask operations_allowed,
-      int key_modifiers);
-  void OnDragTargetDragLeave();
-  void OnDragTargetDragOver(const gfx::Point& client_pt,
-                            const gfx::Point& screen_pt,
-                            blink::WebDragOperationsMask operations_allowed,
-                            int key_modifiers);
   void OnEnablePreferredSizeChangedMode();
   void OnEnableAutoResize(const gfx::Size& min_size, const gfx::Size& max_size);
   void OnDisableAutoResize(const gfx::Size& new_size);
@@ -610,7 +548,6 @@ class CONTENT_EXPORT RenderViewImpl
   void OnSetInitialFocus(bool reverse);
   void OnSetRendererPrefs(const RendererPreferences& renderer_prefs);
   void OnSetWebUIProperty(const std::string& name, const std::string& value);
-  void OnSetZoomLevelForLoadingURL(const GURL& url, double zoom_level);
   void OnSuppressDialogsUntilSwapOut();
   void OnUpdateTargetURLAck();
   void OnUpdateWebPreferences(const WebPreferences& prefs);
@@ -618,11 +555,12 @@ class CONTENT_EXPORT RenderViewImpl
   void OnZoom(PageZoom zoom);
   void OnForceRedraw(const ui::LatencyInfo& latency_info);
   void OnSelectWordAroundCaret();
+  void OnAudioStateChanged(bool is_audio_playing);
 #if defined(OS_ANDROID)
   void OnUndoScrollFocusedEditableNodeIntoRect();
-  void OnUpdateTopControlsState(bool enable_hiding,
-                                bool enable_showing,
-                                bool animate);
+  void OnUpdateBrowserControlsState(bool enable_hiding,
+                                    bool enable_showing,
+                                    bool animate);
   void OnExtractSmartClipData(const gfx::Rect& rect);
 #elif defined(OS_MACOSX)
   void OnGetRenderedText();
@@ -698,6 +636,11 @@ class CONTENT_EXPORT RenderViewImpl
 
   void UpdateWebViewWithDeviceScaleFactor();
 
+  // Send the appropriate ack to be able discard this input event message.
+  void OnDiscardInputEvent(const blink::WebInputEvent* input_event,
+                           const ui::LatencyInfo& latency_info,
+                           InputEventDispatchType dispatch_type);
+
   // ---------------------------------------------------------------------------
   // ADDING NEW FUNCTIONS? Please keep private functions alphabetized and put
   // it in the same order in the .cc file as it was in the header.
@@ -707,8 +650,6 @@ class CONTENT_EXPORT RenderViewImpl
 
   WebPreferences webkit_preferences_;
   RendererPreferences renderer_preferences_;
-
-  HostZoomLevels host_zoom_levels_;
 
   // Whether content state (such as form state, scroll position and page
   // contents) should be sent to the browser immediately. This is normally
@@ -750,13 +691,7 @@ class CONTENT_EXPORT RenderViewImpl
   // messages to send when the next |nav_state_sync_timer_| fires.
   std::set<int> frames_with_pending_state_;
 
-  // Page IDs ------------------------------------------------------------------
-  // See documentation in RenderView.
-  int32_t page_id_;
-
-  // The next available page ID to use for this RenderView.  These IDs are
-  // specific to a given RenderView and the frames within it.
-  int32_t next_page_id_;
+  // History list --------------------------------------------------------------
 
   // The offset of the current item in the history list.
   int history_list_offset_;
@@ -808,16 +743,16 @@ class CONTENT_EXPORT RenderViewImpl
   bool uses_temporary_zoom_level_;
 
 #if defined(OS_ANDROID)
-  // Cache the old top controls state constraints. Used when updating
+  // Cache the old browser controls state constraints. Used when updating
   // current value only without altering the constraints.
-  TopControlsState top_controls_constraints_;
+  BrowserControlsState top_controls_constraints_;
 #endif
 
   // Whether or not Blink's viewport size should be shrunk by the height of the
   // URL-bar.
-  bool top_controls_shrink_blink_size_;
+  bool browser_controls_shrink_blink_size_;
 
-  // The height of the top controls.
+  // The height of the browser controls.
   float top_controls_height_;
 
   // View ----------------------------------------------------------------------
@@ -888,11 +823,6 @@ class CONTENT_EXPORT RenderViewImpl
   // All the registered observers.  We expect this list to be small, so vector
   // is fine.
   base::ObserverList<RenderViewObserver> observers_;
-
-  // This field stores drag/drop related info for the event that is currently
-  // being handled. If the current event results in starting a drag/drop
-  // session, this info is sent to the browser along with other drag/drop info.
-  DragEventSourceInfo possible_drag_event_info_;
 
   // NOTE: stats_collection_observer_ should be the last members because their
   // constructors call the AddObservers method of RenderViewImpl.

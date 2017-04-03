@@ -11,12 +11,13 @@
 #include "chrome/browser/download/download_stats.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/resource_controller.h"
-#include "content/public/browser/web_contents_delegate.h"
 
 #if defined(OS_ANDROID)
 #include "chrome/browser/android/download/download_controller_base.h"
 #include "content/public/browser/render_view_host.h"
 #endif
+
+#include "content/public/browser/web_contents_delegate.h"
 
 using content::BrowserThread;
 

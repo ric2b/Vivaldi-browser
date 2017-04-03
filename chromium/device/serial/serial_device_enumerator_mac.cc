@@ -17,7 +17,7 @@
 #include "base/files/file_util.h"
 #include "base/mac/scoped_cftyperef.h"
 #include "base/mac/scoped_ioobject.h"
-#include "base/metrics/sparse_histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/pattern.h"
 #include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
@@ -137,7 +137,7 @@ mojo::Array<serial::DeviceInfoPtr> GetDevicesNew() {
     mojo::String displayName;
     if (GetStringProperty(scoped_device.get(), CFSTR(kUSBProductString),
                           &displayName)) {
-      callout_info->display_name = displayName;
+      callout_info->display_name = displayName.PassStorage();
     }
 
     // Each serial device has two "paths" in /dev/ associated with it: a

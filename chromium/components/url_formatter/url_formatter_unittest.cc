@@ -190,6 +190,11 @@ const IDNTestCase idn_cases[] = {
   // Mixed script confusable
   // google with Armenian Small Letter Oh(U+0585)
   {"xn--gogle-lkg.com", L"g\x0585ogle.com", false},
+  {"xn--range-kkg.com", L"\x0585range.com", false},
+  {"xn--cucko-pkg.com", L"cucko\x0585.com", false},
+  // Latin 'o' in Armenian.
+  {"xn--o-ybcg0cu0cq.com",
+    L"o\x0585\x0580\x0574\x0578\x0582\x0566\x0568.com", false},
   // Hiragana HE(U+3078) mixed with Katakana
   {"xn--49jxi3as0d0fpc.com",
     L"\x30e2\x30d2\x30fc\x30c8\x3078\x30d6\x30f3.com", false},
@@ -284,6 +289,34 @@ const IDNTestCase idn_cases[] = {
   {"xn--ab-yod.com", L"a\x05f4" L"b.com", false},
   // Hebrew Gershayim with Arabic is disallowed.
   {"xn--5eb7h.eg", L"\x0628\x05f4.eg", false},
+
+  // Hyphens (http://unicode.org/cldr/utility/confusables.jsp?a=-)
+  // Hyphen-Minus (the only hyphen allowed)
+  // abc-def
+  {"abc-def.com", L"abc-def.com", true},
+  // Modifier Letter Minus Sign
+  {"xn--abcdef-5od.com", L"abc\x02d7" L"def.com", false},
+  // Hyphen
+  {"xn--abcdef-dg0c.com", L"abc\x2010" L"def.com", false},
+  // Non-Breaking Hyphen
+  // This is actually an invalid IDNA domain (U+2011 normalizes to U+2010), but
+  // it is included to ensure that we do not inadvertently allow this character
+  // to be displayed as Unicode.
+  {"xn--abcdef-kg0c.com", L"abc\x2011" L"def.com", false},
+  // Figure Dash
+  {"xn--abcdef-rg0c.com", L"abc\x2012" L"def.com", false},
+  // En Dash
+  {"xn--abcdef-yg0c.com", L"abc\x2013" L"def.com", false},
+  // Hyphen Bullet
+  {"xn--abcdef-kq0c.com", L"abc\x2043" L"def.com", false},
+  // Minus Sign
+  {"xn--abcdef-5d3c.com", L"abc\x2212" L"def.com", false},
+  // Heavy Minus Sign
+  {"xn--abcdef-kg1d.com", L"abc\x2796" L"def.com", false},
+  // Coptic Capital Letter Dialect-P Ni
+  {"xn--abcdef-yy8d.com", L"abc\x2cba" L"def.com", false},
+  // Small Em Dash
+  {"xn--abcdef-5g0c.com", L"abc\xfe58" L"def.com", false},
 
   // Custom dangerous patterns
   // Two Katakana-Hiragana combining mark in a row

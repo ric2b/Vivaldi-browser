@@ -10,8 +10,7 @@
 cr.exportPath('settings');
 
 /**
- * @typedef {{actionLinkText: (string|undefined),
- *            childUser: (boolean|undefined),
+ * @typedef {{childUser: (boolean|undefined),
  *            domain: (string|undefined),
  *            hasError: (boolean|undefined),
  *            hasUnrecoverableError: (boolean|undefined),
@@ -19,13 +18,29 @@ cr.exportPath('settings');
  *            setupCompleted: (boolean|undefined),
  *            setupInProgress: (boolean|undefined),
  *            signedIn: (boolean|undefined),
+ *            signedInUsername: (string|undefined),
  *            signinAllowed: (boolean|undefined),
+ *            statusAction: (!settings.StatusAction),
  *            statusText: (string|undefined),
  *            supervisedUser: (boolean|undefined),
  *            syncSystemEnabled: (boolean|undefined)}}
  * @see chrome/browser/ui/webui/settings/people_handler.cc
  */
 settings.SyncStatus;
+
+
+/**
+ * Must be kept in sync with the return values of getSyncErrorAction in
+ * chrome/browser/ui/webui/settings/people_handler.cc
+ * @enum {string}
+ */
+settings.StatusAction = {
+  NO_ACTION: 'noAction',                  // No action to take.
+  REAUTHENTICATE: 'reauthenticate',       // User needs to reauthenticate.
+  SIGNOUT_AND_SIGNIN: 'signOutAndSignIn', // User needs to sign out and sign in.
+  UPGRADE_CLIENT: 'upgradeClient',        // User needs to upgrade the client.
+  ENTER_PASSPHRASE: 'enterPassphrase',    // User needs to enter passphrase.
+};
 
 /**
  * The state of sync. This is the data structure sent back and forth between
@@ -109,6 +124,13 @@ cr.define('settings', function() {
     manageOtherPeople: function() {},
 </if>
 
+<if expr="chromeos">
+    /**
+     * Signs the user out.
+     */
+    attemptUserExit: function() {},
+</if>
+
     /**
      * Gets the current sync status.
      * @return {!Promise<!settings.SyncStatus>}
@@ -159,10 +181,7 @@ cr.define('settings', function() {
 <if expr="not chromeos">
     /** @override */
     startSignIn: function() {
-      // TODO(tommycli): Currently this is always false, but this will become
-      // a parameter once supervised users are implemented in MD Settings.
-      var creatingSupervisedUser = false;
-      chrome.send('SyncSetupStartSignIn', [creatingSupervisedUser]);
+      chrome.send('SyncSetupStartSignIn');
     },
 
     /** @override */
@@ -173,6 +192,12 @@ cr.define('settings', function() {
     /** @override */
     manageOtherPeople: function() {
       chrome.send('SyncSetupManageOtherPeople');
+    },
+</if>
+<if expr="chromeos">
+    /** @override */
+    attemptUserExit: function() {
+      return chrome.send('AttemptUserExit');
     },
 </if>
 

@@ -33,6 +33,7 @@
 #include "chrome/browser/prerender/prerender_manager.h"
 #include "chrome/browser/prerender/prerender_manager_factory.h"
 #include "chrome/browser/printing/print_view_manager_basic.h"
+#include "chrome/browser/printing/print_view_manager_common.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_android.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -81,8 +82,8 @@
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/user_metrics.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/browser_controls_state.h"
 #include "content/public/common/resource_request_body.h"
-#include "content/public/common/top_controls_state.h"
 #include "jni/Tab_jni.h"
 #include "net/base/escape.h"
 #include "skia/ext/image_operations.h"
@@ -669,10 +670,10 @@ bool TabAndroid::Print(JNIEnv* env, const JavaParamRef<jobject>& obj) {
   printing::PrintViewManagerBasic::CreateForWebContents(web_contents());
   printing::PrintViewManagerBasic* print_view_manager =
       printing::PrintViewManagerBasic::FromWebContents(web_contents());
-  if (print_view_manager == NULL)
+  if (!print_view_manager)
     return false;
 
-  print_view_manager->PrintNow();
+  print_view_manager->PrintNow(printing::GetFrameToPrint(web_contents()));
   return true;
 }
 
@@ -746,23 +747,23 @@ void TabAndroid::CreateHistoricalTab(JNIEnv* env,
   TabAndroid::CreateHistoricalTabFromContents(web_contents());
 }
 
-void TabAndroid::UpdateTopControlsState(JNIEnv* env,
-                                        const JavaParamRef<jobject>& obj,
-                                        jint constraints,
-                                        jint current,
-                                        jboolean animate) {
-  content::TopControlsState constraints_state =
-      static_cast<content::TopControlsState>(constraints);
-  content::TopControlsState current_state =
-      static_cast<content::TopControlsState>(current);
+void TabAndroid::UpdateBrowserControlsState(JNIEnv* env,
+                                            const JavaParamRef<jobject>& obj,
+                                            jint constraints,
+                                            jint current,
+                                            jboolean animate) {
+  content::BrowserControlsState constraints_state =
+      static_cast<content::BrowserControlsState>(constraints);
+  content::BrowserControlsState current_state =
+      static_cast<content::BrowserControlsState>(current);
   WebContents* sender = web_contents();
-  sender->Send(new ChromeViewMsg_UpdateTopControlsState(
+  sender->Send(new ChromeViewMsg_UpdateBrowserControlsState(
       sender->GetRoutingID(), constraints_state, current_state, animate));
 
   if (sender->ShowingInterstitialPage()) {
     content::RenderViewHost* interstitial_view_host =
         sender->GetInterstitialPage()->GetMainFrame()->GetRenderViewHost();
-    interstitial_view_host->Send(new ChromeViewMsg_UpdateTopControlsState(
+    interstitial_view_host->Send(new ChromeViewMsg_UpdateBrowserControlsState(
         interstitial_view_host->GetRoutingID(), constraints_state,
         current_state, animate));
   }

@@ -9,16 +9,9 @@
 #include <vector>
 
 #include "media/midi/midi_export.h"
+#include "media/midi/midi_service.mojom.h"
 
-namespace media {
 namespace midi {
-
-enum MidiPortState {
-  MIDI_PORT_DISCONNECTED,
-  MIDI_PORT_CONNECTED,
-  MIDI_PORT_OPENED,
-  MIDI_PORT_STATE_LAST = MIDI_PORT_OPENED,
-};
 
 struct MIDI_EXPORT MidiPortInfo final {
   MidiPortInfo();
@@ -26,7 +19,7 @@ struct MIDI_EXPORT MidiPortInfo final {
                const std::string& in_manufacturer,
                const std::string& in_name,
                const std::string& in_version,
-               MidiPortState in_state);
+               mojom::PortState in_state);
 
   MidiPortInfo(const MidiPortInfo& info);
   ~MidiPortInfo();
@@ -35,12 +28,11 @@ struct MIDI_EXPORT MidiPortInfo final {
   std::string manufacturer;
   std::string name;
   std::string version;
-  MidiPortState state;
+  mojom::PortState state;
 };
 
 using MidiPortInfoList = std::vector<MidiPortInfo>;
 
 }  // namespace midi
-}  // namespace media
 
 #endif  // MEDIA_MIDI_MIDI_PORT_INFO_H_

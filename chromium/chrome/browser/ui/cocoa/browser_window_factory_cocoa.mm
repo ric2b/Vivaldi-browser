@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/cocoa/browser_window_controller.h"
+
 #include "ui/cocoa/vivaldi_browser_window_cocoa.h"
 
 // Create the controller for the Browser, which handles loading the browser

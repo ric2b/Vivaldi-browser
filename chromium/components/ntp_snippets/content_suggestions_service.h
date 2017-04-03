@@ -19,20 +19,18 @@
 #include "components/history/core/browser/history_service.h"
 #include "components/history/core/browser/history_service_observer.h"
 #include "components/keyed_service/core/keyed_service.h"
+#include "components/ntp_snippets/callbacks.h"
 #include "components/ntp_snippets/category_factory.h"
 #include "components/ntp_snippets/category_status.h"
 #include "components/ntp_snippets/content_suggestions_provider.h"
 #include "components/ntp_snippets/user_classifier.h"
 
 class PrefService;
-
-namespace gfx {
-class Image;
-}  // namespace gfx
+class PrefRegistrySimple;
 
 namespace ntp_snippets {
 
-class NTPSnippetsService;
+class RemoteSuggestionsProvider;
 
 // Retrieves suggestions from a number of ContentSuggestionsProviders and serves
 // them grouped into categories. There can be at most one provider per category.
@@ -40,10 +38,6 @@ class ContentSuggestionsService : public KeyedService,
                                   public ContentSuggestionsProvider::Observer,
                                   public history::HistoryServiceObserver {
  public:
-  using ImageFetchedCallback = base::Callback<void(const gfx::Image&)>;
-  using DismissedSuggestionsCallback = base::Callback<void(
-      std::vector<ContentSuggestion> dismissed_suggestions)>;
-
   class Observer {
    public:
     // Fired every time the service receives a new set of data for the given
@@ -92,6 +86,8 @@ class ContentSuggestionsService : public KeyedService,
   // Inherited from KeyedService.
   void Shutdown() override;
 
+  static void RegisterProfilePrefs(PrefRegistrySimple* registry);
+
   State state() { return state_; }
 
   // Gets all categories for which a provider is registered. The categories
@@ -124,6 +120,20 @@ class ContentSuggestionsService : public KeyedService,
   // Dismisses the given |category|, if it exists.
   // This will not trigger an update through the observers.
   void DismissCategory(Category category);
+
+  // Restores all dismissed categories.
+  // This will not trigger an update through the observers.
+  void RestoreDismissedCategories();
+
+  // Returns whether |category| is dismissed.
+  bool IsCategoryDismissed(Category category) const;
+
+  // Fetches additional contents for the given |category|. If the fetch was
+  // completed, the given |callback| is called with the updated content.
+  // This includes new and old data.
+  void Fetch(const Category& category,
+             const std::set<std::string>& known_suggestion_ids,
+             const FetchDoneCallback& callback);
 
   // Observer accessors.
   void AddObserver(Observer* observer);
@@ -174,10 +184,14 @@ class ContentSuggestionsService : public KeyedService,
 
   CategoryFactory* category_factory() { return &category_factory_; }
 
-  // The reference to the NTPSnippetsService provider should only be set by the
-  // factory and only be used for scheduling, periodic fetching and debugging.
-  NTPSnippetsService* ntp_snippets_service() { return ntp_snippets_service_; }
-  void set_ntp_snippets_service(NTPSnippetsService* ntp_snippets_service) {
+  // The reference to the RemoteSuggestionsProvider provider should only be set
+  // by the factory and only be used for scheduling, periodic fetching and
+  // debugging.
+  RemoteSuggestionsProvider* ntp_snippets_service() {
+    return ntp_snippets_service_;
+  }
+  void set_ntp_snippets_service(
+      RemoteSuggestionsProvider* ntp_snippets_service) {
     ntp_snippets_service_ = ntp_snippets_service;
   }
 
@@ -208,9 +222,13 @@ class ContentSuggestionsService : public KeyedService,
 
   // Registers the given |provider| for the given |category|, unless it is
   // already registered. Returns true if the category was newly registered or
-  // false if it was present before.
-  bool RegisterCategoryIfRequired(ContentSuggestionsProvider* provider,
-                                  Category category);
+  // false if it is dismissed or was present before.
+  bool TryRegisterProviderForCategory(ContentSuggestionsProvider* provider,
+                                      Category category);
+  void RegisterCategory(Category category,
+                        ContentSuggestionsProvider* provider);
+  void UnregisterCategory(Category category,
+                          ContentSuggestionsProvider* provider);
 
   // Removes a suggestion from the local store |suggestions_by_category_|, if it
   // exists. Returns true if a suggestion was removed.
@@ -220,6 +238,12 @@ class ContentSuggestionsService : public KeyedService,
   void NotifyCategoryStatusChanged(Category category);
 
   void SortCategories();
+
+  // Re-enables a dismissed category, making querying its provider possible.
+  void RestoreDismissedCategory(Category category);
+
+  void RestoreDismissedCategoriesFromPrefs();
+  void StoreDismissedCategoriesToPrefs();
 
   // Whether the content suggestions feature is enabled.
   State state_;
@@ -236,6 +260,13 @@ class ContentSuggestionsService : public KeyedService,
   // |providers_|.
   std::map<Category, ContentSuggestionsProvider*, Category::CompareByID>
       providers_by_category_;
+
+  // All dismissed categories and their providers. These may be restored by
+  // RestoreDismissedCategories(). The provider can be null if the dismissed
+  // category has received no updates since initialisation.
+  // (see RestoreDismissedCategoriesFromPrefs())
+  std::map<Category, ContentSuggestionsProvider*, Category::CompareByID>
+      dismissed_providers_by_category_;
 
   // All current suggestion categories, in an order determined by the
   // |category_factory_|. This vector contains exactly the same categories as
@@ -259,9 +290,12 @@ class ContentSuggestionsService : public KeyedService,
   const std::vector<ContentSuggestion> no_suggestions_;
 
   // Keep a direct reference to this special provider to redirect scheduling,
-  // background fetching and debugging calls to it. If the NTPSnippetsService is
-  // loaded, it is also present in |providers_|, otherwise this is a nullptr.
-  NTPSnippetsService* ntp_snippets_service_;
+  // background fetching and debugging calls to it. If the
+  // RemoteSuggestionsProvider is loaded, it is also present in |providers_|,
+  // otherwise this is a nullptr.
+  RemoteSuggestionsProvider* ntp_snippets_service_;
+
+  PrefService* pref_service_;
 
   UserClassifier user_classifier_;
 

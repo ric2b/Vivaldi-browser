@@ -13,7 +13,6 @@
 #include "ash/common/wm_shell.h"
 #include "ash/mus/accessibility_delegate_mus.h"
 #include "ash/mus/context_menu_mus.h"
-#include "ash/mus/new_window_delegate_mus.h"
 #include "ash/mus/shelf_delegate_mus.h"
 #include "ash/mus/wallpaper_delegate_mus.h"
 #include "base/memory/ptr_util.h"
@@ -48,7 +47,7 @@ class SessionStateDelegateStub : public SessionStateDelegate {
   bool IsActiveUserSessionStarted() const override { return true; }
   bool CanLockScreen() const override { return true; }
   bool IsScreenLocked() const override { return screen_locked_; }
-  bool ShouldLockScreenBeforeSuspending() const override { return false; }
+  bool ShouldLockScreenAutomatically() const override { return false; }
   void LockScreen() override {
     screen_locked_ = true;
     NOTIMPLEMENTED();
@@ -58,7 +57,9 @@ class SessionStateDelegateStub : public SessionStateDelegate {
     screen_locked_ = false;
   }
   bool IsUserSessionBlocked() const override { return false; }
-  SessionState GetSessionState() const override { return SESSION_STATE_ACTIVE; }
+  session_manager::SessionState GetSessionState() const override {
+    return session_manager::SessionState::ACTIVE;
+  }
   const user_manager::UserInfo* GetUserInfo(UserIndex index) const override {
     return user_info_.get();
   }
@@ -108,20 +109,15 @@ class MediaDelegateStub : public MediaDelegate {
 
 }  // namespace
 
-ShellDelegateMus::ShellDelegateMus(shell::Connector* connector)
+ShellDelegateMus::ShellDelegateMus(service_manager::Connector* connector)
     : connector_(connector), app_list_presenter_(connector) {
   // |connector_| may be null in tests.
 }
 
 ShellDelegateMus::~ShellDelegateMus() {}
 
-::shell::Connector* ShellDelegateMus::GetShellConnector() const {
+service_manager::Connector* ShellDelegateMus::GetShellConnector() const {
   return connector_;
-}
-
-bool ShellDelegateMus::IsFirstRunAfterBoot() const {
-  NOTIMPLEMENTED();
-  return false;
 }
 
 bool ShellDelegateMus::IsIncognitoAllowed() const {
@@ -175,7 +171,7 @@ app_list::AppListPresenter* ShellDelegateMus::GetAppListPresenter() {
 }
 
 ShelfDelegate* ShellDelegateMus::CreateShelfDelegate(ShelfModel* model) {
-  return new ShelfDelegateMus(WmShell::Get()->shelf_model());
+  return new ShelfDelegateMus();
 }
 
 SystemTrayDelegate* ShellDelegateMus::CreateSystemTrayDelegate() {
@@ -189,7 +185,7 @@ SystemTrayDelegate* ShellDelegateMus::CreateSystemTrayDelegate() {
 }
 
 std::unique_ptr<WallpaperDelegate> ShellDelegateMus::CreateWallpaperDelegate() {
-  return base::MakeUnique<WallpaperDelegateMus>(connector_);
+  return base::MakeUnique<WallpaperDelegateMus>();
 }
 
 SessionStateDelegate* ShellDelegateMus::CreateSessionStateDelegate() {
@@ -200,10 +196,6 @@ SessionStateDelegate* ShellDelegateMus::CreateSessionStateDelegate() {
 
 AccessibilityDelegate* ShellDelegateMus::CreateAccessibilityDelegate() {
   return new AccessibilityDelegateMus(connector_);
-}
-
-NewWindowDelegate* ShellDelegateMus::CreateNewWindowDelegate() {
-  return new mus::NewWindowDelegateMus;
 }
 
 MediaDelegate* ShellDelegateMus::CreateMediaDelegate() {

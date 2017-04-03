@@ -43,15 +43,15 @@ bool CanImportURL(const GURL& url) {
   }
 
   // Check if |url| is about:blank.
-  if (url == GURL(url::kAboutBlankURL))
+  if (url == url::kAboutBlankURL)
     return true;
 
   // If |url| starts with chrome:// or about:, check if it's one of the URLs
   // that we support.
   if (url.SchemeIs(content::kChromeUIScheme) ||
       url.SchemeIs(url::kAboutScheme)) {
-    if (url.host() == chrome::kChromeUIUberHost ||
-        url.host() == chrome::kChromeUIAboutHost)
+    if (url.host_piece() == chrome::kChromeUIUberHost ||
+        url.host_piece() == chrome::kChromeUIAboutHost)
       return true;
 
     GURL fixed_url(url_formatter::FixupURL(url.spec(), std::string()));
@@ -61,7 +61,7 @@ bool CanImportURL(const GURL& url) {
     }
 
     for (int i = 0; i < chrome::kNumberOfChromeDebugURLs; ++i) {
-      if (fixed_url == GURL(chrome::kChromeDebugURLs[i]))
+      if (fixed_url == chrome::kChromeDebugURLs[i])
         return true;
     }
 

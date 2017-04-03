@@ -17,7 +17,7 @@
 #include "grit/ash_resources.h"
 #include "skia/ext/image_operations.h"
 #include "third_party/skia/include/core/SkPaint.h"
-#include "ui/accessibility/ax_view_state.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
@@ -29,6 +29,7 @@
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/image/image_skia_operations.h"
 #include "ui/gfx/skbitmap_operations.h"
+#include "ui/views/animation/ink_drop_impl.h"
 #include "ui/views/animation/square_ink_drop_ripple.h"
 #include "ui/views/controls/image_view.h"
 
@@ -50,7 +51,6 @@ const int kIndicatorCanvasScale = 5;
 // Shelf item ripple constants.
 const int kInkDropSmallSize = 48;
 const int kInkDropLargeSize = 60;
-const int kInkDropLargeCornerRadius = 4;
 
 // Padding from the edge of the shelf to the application icon when the shelf
 // is horizontally and vertically aligned, respectively.
@@ -121,7 +121,8 @@ class ShelfButtonAnimation : public gfx::AnimationDelegate {
       return;
     if (!animation_.is_animating())
       return;
-    FOR_EACH_OBSERVER(Observer, observers_, AnimationProgressed());
+    for (auto& observer : observers_)
+      observer.AnimationProgressed();
   }
 
   gfx::ThrobAnimation animation_;
@@ -394,9 +395,9 @@ bool ShelfButton::OnMouseDragged(const ui::MouseEvent& event) {
   return true;
 }
 
-void ShelfButton::GetAccessibleState(ui::AXViewState* state) {
-  state->role = ui::AX_ROLE_BUTTON;
-  state->name = shelf_view_->GetTitleForView(this);
+void ShelfButton::GetAccessibleNodeData(ui::AXNodeData* node_data) {
+  node_data->role = ui::AX_ROLE_BUTTON;
+  node_data->SetName(shelf_view_->GetTitleForView(this));
 }
 
 void ShelfButton::Layout() {
@@ -519,14 +520,17 @@ bool ShelfButton::ShouldEnterPushedState(const ui::Event& event) {
   return CustomButton::ShouldEnterPushedState(event);
 }
 
-bool ShelfButton::ShouldShowInkDropHighlight() const {
-  return false;
+std::unique_ptr<views::InkDrop> ShelfButton::CreateInkDrop() {
+  std::unique_ptr<views::InkDropImpl> ink_drop =
+      CustomButton::CreateDefaultInkDropImpl();
+  ink_drop->SetShowHighlightOnHover(false);
+  return std::move(ink_drop);
 }
 
 void ShelfButton::NotifyClick(const ui::Event& event) {
   CustomButton::NotifyClick(event);
   if (listener_)
-    listener_->ButtonPressed(this, event, ink_drop());
+    listener_->ButtonPressed(this, event, GetInkDrop());
 }
 
 void ShelfButton::UpdateState() {

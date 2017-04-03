@@ -39,10 +39,8 @@ SVGViewSpec::SVGViewSpec(SVGSVGElement* contextElement)
     //    SVGViewSpec.
     : SVGFitToViewBox(contextElement, PropertyMapPolicySkip),
       m_contextElement(contextElement),
-      m_transform(
-          SVGAnimatedTransformList::create(contextElement,
-                                           SVGNames::transformAttr,
-                                           SVGTransformList::create())) {
+      m_transform(SVGAnimatedTransformList::create(contextElement,
+                                                   SVGNames::transformAttr)) {
   ASSERT(m_contextElement);
 
   viewBox()->setReadOnly();
@@ -56,10 +54,6 @@ DEFINE_TRACE(SVGViewSpec) {
   visitor->trace(m_contextElement);
   visitor->trace(m_transform);
   SVGFitToViewBox::trace(visitor);
-}
-
-DEFINE_TRACE_WRAPPERS(SVGViewSpec) {
-  visitor->traceWrappers(m_contextElement);
 }
 
 bool SVGViewSpec::parseViewSpec(const String& spec) {
@@ -87,50 +81,45 @@ void SVGViewSpec::reset() {
   m_viewTargetString = emptyString();
 }
 
-void SVGViewSpec::detachContextElement() {
-  m_transform = nullptr;
-  clearViewBox();
-  clearPreserveAspectRatio();
-  m_contextElement = nullptr;
+namespace {
+
+enum ViewSpecFunctionType {
+  Unknown,
+  PreserveAspectRatio,
+  Transform,
+  ViewBox,
+  ViewTarget,
+  ZoomAndPan,
+};
+
+template <typename CharType>
+static ViewSpecFunctionType scanViewSpecFunction(const CharType*& ptr,
+                                                 const CharType* end) {
+  DCHECK_LT(ptr, end);
+  switch (*ptr) {
+    case 'v':
+      if (skipToken(ptr, end, "viewBox"))
+        return ViewBox;
+      if (skipToken(ptr, end, "viewTarget"))
+        return ViewTarget;
+      break;
+    case 'z':
+      if (skipToken(ptr, end, "zoomAndPan"))
+        return ZoomAndPan;
+      break;
+    case 'p':
+      if (skipToken(ptr, end, "preserveAspectRatio"))
+        return PreserveAspectRatio;
+      break;
+    case 't':
+      if (skipToken(ptr, end, "transform"))
+        return Transform;
+      break;
+  }
+  return Unknown;
 }
 
-SVGElement* SVGViewSpec::viewTarget() const {
-  if (!m_contextElement)
-    return nullptr;
-  Element* element = m_contextElement->treeScope().getElementById(
-      AtomicString(m_viewTargetString));
-  if (!element || !element->isSVGElement())
-    return nullptr;
-  return toSVGElement(element);
-}
-
-String SVGViewSpec::viewBoxString() const {
-  if (!viewBox())
-    return String();
-
-  return viewBox()->currentValue()->valueAsString();
-}
-
-String SVGViewSpec::preserveAspectRatioString() const {
-  if (!preserveAspectRatio())
-    return String();
-
-  return preserveAspectRatio()->baseValue()->valueAsString();
-}
-
-String SVGViewSpec::transformString() const {
-  if (!m_transform)
-    return String();
-
-  return m_transform->baseValue()->valueAsString();
-}
-
-void SVGViewSpec::setZoomAndPan(unsigned short,
-                                ExceptionState& exceptionState) {
-  // SVGViewSpec and all of its content is read-only.
-  exceptionState.throwDOMException(NoModificationAllowedError,
-                                   ExceptionMessages::readOnly());
-}
+}  // namespace
 
 template <typename CharType>
 bool SVGViewSpec::parseViewSpecInternal(const CharType* ptr,
@@ -138,16 +127,19 @@ bool SVGViewSpec::parseViewSpecInternal(const CharType* ptr,
   if (!skipToken(ptr, end, "svgView"))
     return false;
 
-  if (ptr >= end || *ptr != '(')
+  if (!skipExactly<CharType>(ptr, end, '('))
     return false;
-  ptr++;
 
   while (ptr < end && *ptr != ')') {
-    if (*ptr == 'v') {
-      if (skipToken(ptr, end, "viewBox")) {
-        if (ptr >= end || *ptr != '(')
-          return false;
-        ptr++;
+    ViewSpecFunctionType functionType = scanViewSpecFunction(ptr, end);
+    if (functionType == Unknown)
+      return false;
+
+    if (!skipExactly<CharType>(ptr, end, '('))
+      return false;
+
+    switch (functionType) {
+      case ViewBox: {
         float x = 0.0f;
         float y = 0.0f;
         float width = 0.0f;
@@ -157,64 +149,38 @@ bool SVGViewSpec::parseViewSpecInternal(const CharType* ptr,
               parseNumber(ptr, end, height, DisallowWhitespace)))
           return false;
         updateViewBox(FloatRect(x, y, width, height));
-        if (ptr >= end || *ptr != ')')
-          return false;
-        ptr++;
-      } else if (skipToken(ptr, end, "viewTarget")) {
-        if (ptr >= end || *ptr != '(')
-          return false;
-        const CharType* viewTargetStart = ++ptr;
-        while (ptr < end && *ptr != ')')
-          ptr++;
-        if (ptr >= end)
+        break;
+      }
+      case ViewTarget: {
+        const CharType* viewTargetStart = ptr;
+        skipUntil<CharType>(ptr, end, ')');
+        if (ptr == viewTargetStart)
           return false;
         m_viewTargetString = String(viewTargetStart, ptr - viewTargetStart);
-        ptr++;
-      } else
-        return false;
-    } else if (*ptr == 'z') {
-      if (!skipToken(ptr, end, "zoomAndPan"))
-        return false;
-      if (ptr >= end || *ptr != '(')
-        return false;
-      ptr++;
-      if (!parseZoomAndPan(ptr, end))
-        return false;
-      if (ptr >= end || *ptr != ')')
-        return false;
-      ptr++;
-    } else if (*ptr == 'p') {
-      if (!skipToken(ptr, end, "preserveAspectRatio"))
-        return false;
-      if (ptr >= end || *ptr != '(')
-        return false;
-      ptr++;
-      if (!preserveAspectRatio()->baseValue()->parse(ptr, end, false))
-        return false;
-      if (ptr >= end || *ptr != ')')
-        return false;
-      ptr++;
-    } else if (*ptr == 't') {
-      if (!skipToken(ptr, end, "transform"))
-        return false;
-      if (ptr >= end || *ptr != '(')
-        return false;
-      ptr++;
-      m_transform->baseValue()->parse(ptr, end);
-      if (ptr >= end || *ptr != ')')
-        return false;
-      ptr++;
-    } else
+        break;
+      }
+      case ZoomAndPan:
+        if (!parseZoomAndPan(ptr, end))
+          return false;
+        break;
+      case PreserveAspectRatio:
+        if (!preserveAspectRatio()->baseValue()->parse(ptr, end, false))
+          return false;
+        break;
+      case Transform:
+        m_transform->baseValue()->parse(ptr, end);
+        break;
+      default:
+        NOTREACHED();
+        break;
+    }
+
+    if (!skipExactly<CharType>(ptr, end, ')'))
       return false;
 
-    if (ptr < end && *ptr == ';')
-      ptr++;
+    skipExactly<CharType>(ptr, end, ';');
   }
-
-  if (ptr >= end || *ptr != ')')
-    return false;
-
-  return true;
+  return skipExactly<CharType>(ptr, end, ')');
 }
 
 }  // namespace blink

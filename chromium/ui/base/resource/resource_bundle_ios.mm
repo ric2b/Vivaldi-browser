@@ -44,17 +44,17 @@ base::FilePath GetResourcesPakFilePath(NSString* name, NSString* mac_locale) {
 
 void ResourceBundle::LoadCommonResources() {
   if (IsScaleFactorSupported(SCALE_FACTOR_100P)) {
-    AddDataPackFromPath(GetResourcesPakFilePath(@"vivaldi_100_percent", nil),
+    AddDataPackFromPath(GetResourcesPakFilePath(@"chrome_100_percent", nil),
                         SCALE_FACTOR_100P);
   }
 
   if (IsScaleFactorSupported(SCALE_FACTOR_200P)) {
-    AddDataPackFromPath(GetResourcesPakFilePath(@"vivaldi_200_percent", nil),
+    AddDataPackFromPath(GetResourcesPakFilePath(@"chrome_200_percent", nil),
                         SCALE_FACTOR_200P);
   }
 
   if (IsScaleFactorSupported(SCALE_FACTOR_300P)) {
-    AddDataPackFromPath(GetResourcesPakFilePath(@"vivaldi_300_percent", nil),
+    AddDataPackFromPath(GetResourcesPakFilePath(@"chrome_300_percent", nil),
                         SCALE_FACTOR_300P);
   }
 }

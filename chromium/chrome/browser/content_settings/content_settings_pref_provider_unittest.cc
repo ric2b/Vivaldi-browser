@@ -34,9 +34,9 @@
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/prefs/testing_pref_store.h"
-#include "components/syncable_prefs/pref_service_mock_factory.h"
-#include "components/syncable_prefs/pref_service_syncable.h"
-#include "components/syncable_prefs/testing_pref_service_syncable.h"
+#include "components/sync_preferences/pref_service_mock_factory.h"
+#include "components/sync_preferences/pref_service_syncable.h"
+#include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
@@ -132,6 +132,51 @@ TEST_F(PrefProviderTest, Observer) {
   pref_content_settings_provider.ShutdownOnUIThread();
 }
 
+// Tests that fullscreen and mouselock content settings are cleared.
+TEST_F(PrefProviderTest, DiscardObsoletePreferences) {
+  static const char kFullscreenPrefPath[] =
+      "profile.content_settings.exceptions.fullscreen";
+#if !defined(OS_ANDROID)
+  static const char kMouselockPrefPath[] =
+      "profile.content_settings.exceptions.mouselock";
+#endif
+  static const char kGeolocationPrefPath[] =
+      "profile.content_settings.exceptions.geolocation";
+  static const char kPattern[] = "[*.]example.com";
+
+  TestingProfile profile;
+  PrefService* prefs = profile.GetPrefs();
+
+  // Set some pref data. Each content setting type has the following value:
+  // {"[*.]example.com": {"setting": 1}}
+  base::DictionaryValue pref_data;
+  auto data_for_pattern = base::MakeUnique<base::DictionaryValue>();
+  data_for_pattern->SetInteger("setting", CONTENT_SETTING_ALLOW);
+  pref_data.SetWithoutPathExpansion(kPattern, std::move(data_for_pattern));
+  prefs->Set(kFullscreenPrefPath, pref_data);
+#if !defined(OS_ANDROID)
+  prefs->Set(kMouselockPrefPath, pref_data);
+#endif
+  prefs->Set(kGeolocationPrefPath, pref_data);
+
+  // Instantiate a new PrefProvider here, because we want to test the
+  // constructor's behavior after setting the above.
+  PrefProvider provider(prefs, false);
+  provider.ShutdownOnUIThread();
+
+  // Check that fullscreen and mouselock have been deleted.
+  EXPECT_FALSE(prefs->HasPrefPath(kFullscreenPrefPath));
+#if !defined(OS_ANDROID)
+  EXPECT_FALSE(prefs->HasPrefPath(kMouselockPrefPath));
+#endif
+  EXPECT_TRUE(prefs->HasPrefPath(kGeolocationPrefPath));
+  GURL primary_url("http://example.com/");
+  EXPECT_EQ(CONTENT_SETTING_ALLOW,
+            TestUtils::GetContentSetting(&provider, primary_url, primary_url,
+                                         CONTENT_SETTINGS_TYPE_GEOLOCATION,
+                                         std::string(), false));
+}
+
 // Test for regression in which the PrefProvider modified the user pref store
 // of the OTR unintentionally: http://crbug.com/74466.
 TEST_F(PrefProviderTest, Incognito) {
@@ -139,20 +184,20 @@ TEST_F(PrefProviderTest, Incognito) {
   OverlayUserPrefStore* otr_user_prefs =
       new OverlayUserPrefStore(user_prefs);
 
-  syncable_prefs::PrefServiceMockFactory factory;
+  sync_preferences::PrefServiceMockFactory factory;
   factory.set_user_prefs(make_scoped_refptr(user_prefs));
   scoped_refptr<user_prefs::PrefRegistrySyncable> registry(
       new user_prefs::PrefRegistrySyncable);
-  syncable_prefs::PrefServiceSyncable* regular_prefs =
+  sync_preferences::PrefServiceSyncable* regular_prefs =
       factory.CreateSyncable(registry.get()).release();
 
   chrome::RegisterUserProfilePrefs(registry.get());
 
-  syncable_prefs::PrefServiceMockFactory otr_factory;
+  sync_preferences::PrefServiceMockFactory otr_factory;
   otr_factory.set_user_prefs(make_scoped_refptr(otr_user_prefs));
   scoped_refptr<user_prefs::PrefRegistrySyncable> otr_registry(
       new user_prefs::PrefRegistrySyncable);
-  syncable_prefs::PrefServiceSyncable* otr_prefs =
+  sync_preferences::PrefServiceSyncable* otr_prefs =
       otr_factory.CreateSyncable(otr_registry.get()).release();
 
   chrome::RegisterUserProfilePrefs(otr_registry.get());
@@ -329,7 +374,7 @@ TEST_F(PrefProviderTest, ResourceIdentifier) {
 
 // http://crosbug.com/17760
 TEST_F(PrefProviderTest, Deadlock) {
-  syncable_prefs::TestingPrefServiceSyncable prefs;
+  sync_preferences::TestingPrefServiceSyncable prefs;
   PrefProvider::RegisterProfilePrefs(prefs.registry());
 
   // Chain of events: a preference changes, |PrefProvider| notices it, and reads
@@ -388,7 +433,7 @@ TEST_F(PrefProviderTest, LastUsage) {
 }
 
 TEST_F(PrefProviderTest, IncognitoInheritsValueMap) {
-  syncable_prefs::TestingPrefServiceSyncable prefs;
+  sync_preferences::TestingPrefServiceSyncable prefs;
   PrefProvider::RegisterProfilePrefs(prefs.registry());
 
   ContentSettingsPattern pattern_1 =
@@ -451,7 +496,7 @@ TEST_F(PrefProviderTest, IncognitoInheritsValueMap) {
 }
 
 TEST_F(PrefProviderTest, ClearAllContentSettingsRules) {
-  syncable_prefs::TestingPrefServiceSyncable prefs;
+  sync_preferences::TestingPrefServiceSyncable prefs;
   PrefProvider::RegisterProfilePrefs(prefs.registry());
 
   ContentSettingsPattern pattern =

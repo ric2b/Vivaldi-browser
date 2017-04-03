@@ -23,12 +23,12 @@
 #include "components/sync/base/extensions_activity.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/base/weak_handle.h"
-#include "components/sync/core/configure_reason.h"
-#include "components/sync/core/sync_manager.h"
 #include "components/sync/driver/backend_data_type_configurer.h"
 #include "components/sync/driver/glue/sync_backend_host.h"
+#include "components/sync/engine/configure_reason.h"
 #include "components/sync/engine/cycle/sync_cycle_snapshot.h"
 #include "components/sync/engine/cycle/type_debug_info_observer.h"
+#include "components/sync/engine/sync_manager.h"
 #include "components/sync/protocol/encryption.pb.h"
 #include "components/sync/protocol/sync_protocol_error.h"
 
@@ -75,14 +75,14 @@ class SyncBackendHostImpl : public SyncBackendHost, public InvalidationHandler {
   // SyncBackendHost implementation.
   void Initialize(
       SyncFrontend* frontend,
-      std::unique_ptr<base::Thread> sync_thread,
-      const scoped_refptr<base::SingleThreadTaskRunner>& db_thread,
-      const scoped_refptr<base::SingleThreadTaskRunner>& file_thread,
+      base::Thread* sync_thread,
       const WeakHandle<JsEventHandler>& event_handler,
       const GURL& service_url,
       const std::string& sync_user_agent,
       const SyncCredentials& credentials,
       bool delete_sync_data_folder,
+      bool enable_local_sync_backend,
+      const base::FilePath& local_sync_backend_folder,
       std::unique_ptr<SyncManagerFactory> sync_manager_factory,
       const WeakHandle<UnrecoverableErrorHandler>& unrecoverable_error_handler,
       const base::Closure& report_unrecoverable_error_function,
@@ -97,7 +97,7 @@ class SyncBackendHostImpl : public SyncBackendHost, public InvalidationHandler {
   bool SetDecryptionPassphrase(const std::string& passphrase) override
       WARN_UNUSED_RESULT;
   void StopSyncingForShutdown() override;
-  std::unique_ptr<base::Thread> Shutdown(ShutdownReason reason) override;
+  void Shutdown(ShutdownReason reason) override;
   void UnregisterInvalidationIds() override;
   ModelTypeSet ConfigureDataTypes(
       ConfigureReason reason,
@@ -126,7 +126,6 @@ class SyncBackendHostImpl : public SyncBackendHost, public InvalidationHandler {
   void DisableProtocolEventForwarding() override;
   void EnableDirectoryTypeDebugInfoForwarding() override;
   void DisableDirectoryTypeDebugInfoForwarding() override;
-  base::MessageLoop* GetSyncLoopForTesting() override;
   void RefreshTypesForTest(ModelTypeSet types) override;
   void ClearServerData(
       const SyncManager::ClearServerDataCallback& callback) override;
@@ -298,6 +297,9 @@ class SyncBackendHostImpl : public SyncBackendHost, public InvalidationHandler {
   scoped_refptr<base::SingleThreadTaskRunner> const frontend_task_runner_;
 
   SyncClient* const sync_client_;
+
+  // A pointer to the sync thread.
+  base::Thread* sync_thread_;
 
   // The UI thread's task runner.
   const scoped_refptr<base::SingleThreadTaskRunner> ui_thread_;

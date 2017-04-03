@@ -140,7 +140,7 @@ TextTrack* TextTrackList::getTrackById(const AtomicString& id) {
 }
 
 void TextTrackList::invalidateTrackIndexesAfterTrack(TextTrack* track) {
-  HeapVector<Member<TextTrack>>* tracks = nullptr;
+  HeapVector<TraceWrapperMember<TextTrack>>* tracks = nullptr;
 
   if (track->trackType() == TextTrack::TrackElement) {
     tracks = &m_elementTracks;
@@ -168,13 +168,13 @@ void TextTrackList::invalidateTrackIndexesAfterTrack(TextTrack* track) {
 
 void TextTrackList::append(TextTrack* track) {
   if (track->trackType() == TextTrack::AddTrack) {
-    m_addTrackTracks.append(track);
+    m_addTrackTracks.append(TraceWrapperMember<TextTrack>(this, track));
   } else if (track->trackType() == TextTrack::TrackElement) {
     // Insert tracks added for <track> element in tree order.
     size_t index = static_cast<LoadableTextTrack*>(track)->trackElementIndex();
-    m_elementTracks.insert(index, track);
+    m_elementTracks.insert(index, TraceWrapperMember<TextTrack>(this, track));
   } else if (track->trackType() == TextTrack::InBand) {
-    m_inbandTracks.append(track);
+    m_inbandTracks.append(TraceWrapperMember<TextTrack>(this, track));
   } else {
     NOTREACHED();
   }
@@ -188,7 +188,7 @@ void TextTrackList::append(TextTrack* track) {
 }
 
 void TextTrackList::remove(TextTrack* track) {
-  HeapVector<Member<TextTrack>>* tracks = nullptr;
+  HeapVector<TraceWrapperMember<TextTrack>>* tracks = nullptr;
 
   if (track->trackType() == TextTrack::TrackElement) {
     tracks = &m_elementTracks;
@@ -222,7 +222,7 @@ void TextTrackList::removeAllInbandTracks() {
 }
 
 bool TextTrackList::contains(TextTrack* track) const {
-  const HeapVector<Member<TextTrack>>* tracks = nullptr;
+  const HeapVector<TraceWrapperMember<TextTrack>>* tracks = nullptr;
 
   if (track->trackType() == TextTrack::TrackElement)
     tracks = &m_elementTracks;
@@ -312,4 +312,5 @@ DEFINE_TRACE_WRAPPERS(TextTrackList) {
     visitor->traceWrappers(track);
   for (auto track : m_inbandTracks)
     visitor->traceWrappers(track);
+  EventTargetWithInlineData::traceWrappers(visitor);
 }

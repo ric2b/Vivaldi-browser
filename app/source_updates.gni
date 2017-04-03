@@ -69,6 +69,20 @@ foreach(
         },
       ],
       [
+        "//chrome/browser:resources",
+        "//vivaldi/app/resources/browser/vivaldi_browser_resources.grd",
+        {
+          have_strings_flag = false
+        },
+      ],
+      [
+        "//chrome/browser/resources:options_resources",
+        "//vivaldi/app/resources/options_resources/vivaldi_browser_options.grd",
+        {
+          have_strings_flag = false
+        },
+      ],
+      [
         "//chrome/renderer:resources",
         "//vivaldi/app/resources/renderer/vivaldi_renderer_resources.grd",
         {
@@ -85,6 +99,13 @@ foreach(
       [
         "//chrome/app/theme:chrome_unscaled_resources",
         "//vivaldi/app/resources/theme/vivaldi_unscaled_resources.grd",
+        {
+          have_strings_flag = false
+        },
+      ],
+      [
+        "//components/resources:components_resources",
+        "//vivaldi/app/resources/components_resources/vivaldi_components.grd",
         {
           have_strings_flag = false
         },

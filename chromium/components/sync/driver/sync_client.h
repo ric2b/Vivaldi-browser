@@ -11,9 +11,9 @@
 #include "base/memory/weak_ptr.h"
 #include "components/sync/base/extensions_activity.h"
 #include "components/sync/base/model_type.h"
-#include "components/sync/core/shared_model_type_processor.h"
 #include "components/sync/driver/sync_api_component_factory.h"
 #include "components/sync/engine/model_safe_worker.h"
+#include "components/sync/model/model_type_sync_bridge.h"
 
 class BookmarkUndoService;
 class PrefService;
@@ -94,18 +94,17 @@ class SyncClient {
   virtual base::WeakPtr<SyncableService> GetSyncableServiceForType(
       ModelType type) = 0;
 
-  // Returns a weak pointer to the ModelTypeService specified by |type|. Weak
+  // Returns a weak pointer to the ModelTypeSyncBridge specified by |type|. Weak
   // pointer may be unset if service is already destroyed.
   // Note: Should only be dereferenced from the model type thread.
-  virtual base::WeakPtr<ModelTypeService> GetModelTypeServiceForType(
+  virtual base::WeakPtr<ModelTypeSyncBridge> GetSyncBridgeForModelType(
       ModelType type) = 0;
 
   // Creates and returns a new ModelSafeWorker for the group, or null if one
   // cannot be created.
   // TODO(maxbogue): Move this inside SyncApiComponentFactory.
   virtual scoped_refptr<ModelSafeWorker> CreateModelWorkerForGroup(
-      ModelSafeGroup group,
-      WorkerLoopDestructionObserver* observer) = 0;
+      ModelSafeGroup group) = 0;
 
   // Returns the current SyncApiComponentFactory instance.
   virtual SyncApiComponentFactory* GetSyncApiComponentFactory() = 0;

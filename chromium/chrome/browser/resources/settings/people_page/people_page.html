@@ -26,6 +26,7 @@
 <link rel="import" href="/people_page/users_page.html">
 </if>
 <if expr="not chromeos">
+<link rel="import" href="/people_page/import_data_dialog.html">
 <link rel="import" href="/people_page/manage_profile.html">
 </if>
 
@@ -55,12 +56,21 @@
        --iron-icon-fill-color: var(--google-green-700);
       }
 
-      iron-icon[icon='settings:sync-problem'] {
+      #sync-status[actionable] iron-icon[icon='settings:sync-problem'] {
        --iron-icon-fill-color: var(--settings-error-color);
       }
 
-      .settings-box .sync-error {
+      #sync-status:not([actionable]) .subpage-arrow {
+        display: none;
+      }
+
+      .settings-box[actionable] .sync-error {
         color: var(--settings-error-color);
+      }
+
+      #easy-unlock .start {
+        /* Use padding to ensure taller content looks correct. */
+        padding: 11px 0;
       }
 
       .icon-container {
@@ -84,40 +94,45 @@
     <settings-animated-pages id="pages" section="people">
       <neon-animatable route-path="default">
         <div id="picture-subpage-trigger" class="settings-box first two-line">
-          <div id="profile-icon" on-tap="onPictureTap_" actionable
-              style="background-image: [[getIconImageset_(profileIconUrl_)]]">
-          </div>
+          <template is="dom-if" if="[[syncStatus]]">
+            <div id="profile-icon" on-tap="onPictureTap_" actionable
+                style="background-image: [[getIconImageset_(profileIconUrl_)]]">
+            </div>
 <if expr="not chromeos">
-          <div class="middle two-line" on-tap="onProfileNameTap_" actionable>
+            <div class="middle two-line" on-tap="onProfileNameTap_" actionable>
 </if>
 <if expr="chromeos">
-          <div class="middle two-line" on-tap="onPictureTap_" actionable>
+            <div class="middle two-line" on-tap="onPictureTap_" actionable>
 </if>
-            <span class="flex" id="profile-name">
-              [[profileName_]]
-            </span>
-            <button class="icon-arrow-right" is="paper-icon-button-light">
-            </button>
-          </div>
+              <div class="flex">
+                <span id="profile-name">[[profileName_]]</span>
+                <div class="secondary" hidden="[[!syncStatus.signedIn]]">
+                  [[syncStatus.signedInUsername]]
+                </div>
+              </div>
+              <button class="subpage-arrow" is="paper-icon-button-light">
+              </button>
+            </div>
 <if expr="not chromeos">
-          <template is="dom-if" if="[[showSignin_(syncStatus)]]">
-            <span class="secondary-action">
-              <paper-button class="primary-button" on-tap="onSigninTap_"
-                  disabled="[[syncStatus.setupInProgress]]">
-                $i18n{syncSignin}
-              </paper-button>
-            </span>
-          </template>
-          <template is="dom-if" if="[[syncStatus.signedIn]]">
-            <span class="secondary-action">
-              <paper-button id="disconnectButton" class="secondary-button"
-                  on-tap="onDisconnectTap_"
-                  disabled="[[syncStatus.setupInProgress]]">
-                $i18n{syncDisconnect}
-              </paper-button>
-            </span>
-          </template>
+            <template is="dom-if" if="[[showSignin_(syncStatus)]]">
+              <span class="secondary-action">
+                <paper-button class="primary-button" on-tap="onSigninTap_"
+                    disabled="[[syncStatus.setupInProgress]]">
+                  $i18n{syncSignin}
+                </paper-button>
+              </span>
+            </template>
+            <template is="dom-if" if="[[syncStatus.signedIn]]">
+              <span class="secondary-action">
+                <paper-button id="disconnectButton" class="secondary-button"
+                    on-tap="onDisconnectTap_"
+                    disabled="[[syncStatus.setupInProgress]]">
+                  $i18n{syncDisconnect}
+                </paper-button>
+              </span>
+            </template>
 </if>
+          </template>
         </div>
         <div class="settings-box two-line"
             hidden="[[!showSignin_(syncStatus)]]">
@@ -145,23 +160,19 @@
         <template is="dom-if"
             if="[[isAdvancedSyncSettingsVisible_(syncStatus)]]">
           <div class="settings-box two-line" on-tap="onSyncTap_"
-              id="customize-sync" actionable$="[[!syncStatus.managed]]">
+              id="sync-status" actionable$="[[isSyncStatusActionable_(
+              syncStatus)]]">
             <div class="icon-container">
               <iron-icon id="sync-icon" icon$="[[getSyncIcon_(syncStatus)]]">
               </iron-icon>
             </div>
             <div class="middle">
               <div>$i18n{sync}</div>
-              <div class="secondary" hidden="[[syncStatus.hasError]]">
-                [[syncStatus.statusText]]
-              </div>
-              <div class="secondary sync-error"
-                  hidden="[[!syncStatus.hasError]]">
+              <div class$="secondary [[getSyncStatusTextClass_(syncStatus)]]">
                 [[syncStatus.statusText]]
               </div>
             </div>
-            <button class="icon-arrow-right" is="paper-icon-button-light">
-            </button>
+            <button class="subpage-arrow" is="paper-icon-button-light"></button>
           </div>
         </template>
 
@@ -190,19 +201,20 @@
         <template is="dom-if" if="[[quickUnlockEnabled_]]">
           <div class="settings-box two-line" actionable
                on-tap="onConfigureLockTap_">
-            <div class="middle">
-              <div>$i18n{lockScreenTitle}</div>
+            <div class="start">
+              $i18n{lockScreenTitle}
               <div class="secondary">
                 [[getPasswordState_(hasPin,
                                     prefs.settings.enable_screen_lock.value)]]
               </div>
             </div>
+            <button class="subpage-arrow" is="paper-icon-button-light"></button>
           </div>
         </template>
 
         <template is="dom-if" if="[[easyUnlockAllowed_]]">
-          <div class="settings-box">
-            <div class="middle">
+          <div id="easy-unlock" class="settings-box two-line">
+            <div class="start">
               <div>$i18n{easyUnlockSectionTitle}</div>
               <div class="secondary">
                 <template is="dom-if" if="[[!easyUnlockEnabled_]]">
@@ -211,7 +223,7 @@
                 <template is="dom-if" if="[[easyUnlockEnabled_]]">
                   $i18n{easyUnlockDescription}
                 </template>
-                <a target="_blank" href$="$i18n{easyUnlockLearnMoreURL}">
+                <a target="_blank" href="$i18n{easyUnlockLearnMoreURL}">
                   $i18n{learnMore}
                 </a>
                 <template is="dom-if" if="[[easyUnlockEnabled_]]">
@@ -244,14 +256,17 @@
 </if>
 
         <div id="manage-other-people-subpage-trigger"
-            class="settings-box two-line" on-tap="onManageOtherPeople_"
-            actionable>
-          <div class="start">
-            $i18n{manageOtherPeople}
-            <div class="secondary">$i18n{manageOtherPeopleDescription}</div>
-          </div>
-          <button class="icon-arrow-right" is="paper-icon-button-light"></button>
+            class="settings-box" on-tap="onManageOtherPeople_" actionable>
+          <div class="start">$i18n{manageOtherPeople}</div>
+          <button class="subpage-arrow" is="paper-icon-button-light"></button>
         </div>
+
+<if expr="not chromeos">
+        <div class="settings-box" on-tap="onImportDataTap_" actionable>
+          <div class="start">$i18n{importTitle}</div>
+          <button class="subpage-arrow" is="paper-icon-button-light"></button>
+        </div>
+</if>
 
         <template is="dom-if" if=[[profileManagesSupervisedUsers_]]>
           <div id="manageSupervisedUsersContainer" class="settings-box two-line"
@@ -269,7 +284,7 @@
       <template is="dom-if" route-path="/syncSetup"
           no-search$="[[!isAdvancedSyncSettingsVisible_(syncStatus)]]">
         <settings-subpage
-            associated-control="[[$$('#customize-sync')]]"
+            associated-control="[[$$('#sync-status')]]"
             page-title="$i18n{syncPageTitle}"
             no-search$="[[!isAdvancedSyncSettingsVisible_(syncStatus)]]">
           <settings-sync-page></settings-sync-page>
@@ -313,7 +328,8 @@
 </if>
     </settings-animated-pages>
 
-    <dialog is="cr-dialog" id="disconnectDialog" on-close="onDisconnectClosed_">
+    <dialog is="cr-dialog" id="disconnectDialog" on-close="onDisconnectClosed_"
+        ignore-popstate>
       <div class="title">$i18n{syncDisconnectTitle}</div>
       <div class="body">
         <div inner-h-t-m-l="[[getDisconnectExplanationHtml_(syncStatus.domain)]]">
@@ -338,6 +354,12 @@
         </paper-button>
       </div>
     </dialog>
+
+    <template is="dom-if" if="[[showImportDataDialog_]]" restamp>
+      <settings-import-data-dialog prefs="{{prefs}}"
+          on-close="onImportDataDialogClosed_">
+      </settings-import-data-dialog>
+    </template>
 
 <if expr="chromeos">
     <template is="dom-if" if="[[easyUnlockEnabled_]]">

@@ -2,11 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "services/shell/public/c/main.h"
-#include "services/shell/public/cpp/service_runner.h"
-#include "services/video_capture/video_capture_service.h"
+#include "services/service_manager/public/c/main.h"
+#include "services/service_manager/public/cpp/service_runner.h"
+#include "services/video_capture/service_impl.h"
 
 MojoResult ServiceMain(MojoHandle service_request_handle) {
-  return shell::ServiceRunner(new video_capture::VideoCaptureService)
+  return service_manager::ServiceRunner(new video_capture::ServiceImpl())
       .Run(service_request_handle);
 }

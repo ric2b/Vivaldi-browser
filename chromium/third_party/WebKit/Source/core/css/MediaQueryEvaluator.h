@@ -39,6 +39,7 @@ class MediaQueryExp;
 class MediaQueryResult;
 class MediaQuerySet;
 class MediaValues;
+class MediaValuesInitialViewport;
 
 using MediaQueryResultList = HeapVector<Member<MediaQueryResult>>;
 
@@ -60,18 +61,13 @@ class CORE_EXPORT MediaQueryEvaluator final
  public:
   static void init();
 
-  // Creates evaluator which evaluates only simple media queries
-  // Evaluator returns true for "all", and returns value of \mediaFeatureResult
-  // for any media features.
-
-  explicit MediaQueryEvaluator(bool mediaFeatureResult = false);
+  // Creates evaluator which evaluates to true for all media queries.
+  MediaQueryEvaluator() {}
 
   // Creates evaluator which evaluates only simple media queries
-  // Evaluator returns true for acceptedMediaType and returns value of
-  // \mediafeatureResult for any media features.
-
-  MediaQueryEvaluator(const char* acceptedMediaType,
-                      bool mediaFeatureResult = false);
+  // Evaluator returns true for acceptedMediaType and returns true for any media
+  // features.
+  MediaQueryEvaluator(const char* acceptedMediaType);
 
   // Creates evaluator which evaluates full media queries.
   explicit MediaQueryEvaluator(LocalFrame*);
@@ -80,19 +76,21 @@ class CORE_EXPORT MediaQueryEvaluator final
   // values.
   explicit MediaQueryEvaluator(const MediaValues&);
 
+  explicit MediaQueryEvaluator(MediaValuesInitialViewport*);
+
   ~MediaQueryEvaluator();
 
   bool mediaTypeMatch(const String& mediaTypeToMatch) const;
 
   // Evaluates a list of media queries.
   bool eval(const MediaQuerySet*,
-            MediaQueryResultList* viewportDependent = 0,
-            MediaQueryResultList* deviceDependent = 0) const;
+            MediaQueryResultList* viewportDependent = nullptr,
+            MediaQueryResultList* deviceDependent = nullptr) const;
 
   // Evaluates media query.
   bool eval(const MediaQuery*,
-            MediaQueryResultList* viewportDependent = 0,
-            MediaQueryResultList* deviceDependent = 0) const;
+            MediaQueryResultList* viewportDependent = nullptr,
+            MediaQueryResultList* deviceDependent = nullptr) const;
 
   // Evaluates media query subexpression, ie "and (media-feature: value)" part.
   bool eval(const MediaQueryExp*) const;
@@ -103,7 +101,6 @@ class CORE_EXPORT MediaQueryEvaluator final
   const String mediaType() const;
 
   String m_mediaType;
-  bool m_expectedResult;
   Member<MediaValues> m_mediaValues;
 };
 

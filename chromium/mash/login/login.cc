@@ -7,19 +7,25 @@
 #include <map>
 #include <memory>
 
-#include "ash/public/interfaces/container.mojom.h"
+#include "ash/public/cpp/shell_window_ids.h"
 #include "base/guid.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "mash/init/public/interfaces/init.mojom.h"
 #include "mash/login/public/interfaces/login.mojom.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
-#include "services/shell/public/cpp/connector.h"
-#include "services/shell/public/cpp/service.h"
+#include "services/service_manager/public/cpp/connector.h"
+#include "services/service_manager/public/cpp/interface_factory.h"
+#include "services/service_manager/public/cpp/interface_registry.h"
+#include "services/service_manager/public/cpp/service.h"
+#include "services/service_manager/public/cpp/service_context.h"
 #include "services/tracing/public/cpp/provider.h"
 #include "services/ui/public/cpp/property_type_converters.h"
+#include "services/ui/public/interfaces/constants.mojom.h"
 #include "services/ui/public/interfaces/user_access_manager.mojom.h"
+#include "services/ui/public/interfaces/window_manager.mojom.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/mus/aura_init.h"
@@ -36,8 +42,8 @@ class Login;
 class UI : public views::WidgetDelegateView,
            public views::ButtonListener {
  public:
-  static void Show(shell::Connector* connector,
-                   const shell::Identity& identity,
+  static void Show(service_manager::Connector* connector,
+                   const service_manager::Identity& identity,
                    Login* login) {
     UI* ui = new UI(login, connector);
     ui->StartWindowManager(identity);
@@ -48,19 +54,19 @@ class UI : public views::WidgetDelegateView,
     params.delegate = ui;
 
     std::map<std::string, std::vector<uint8_t>> properties;
-    properties[ash::mojom::kWindowContainer_Property] =
+    properties[ui::mojom::WindowManager::kInitialContainerId_Property] =
         mojo::ConvertTo<std::vector<uint8_t>>(
-            static_cast<int32_t>(ash::mojom::Container::LOGIN_WINDOWS));
+            ash::kShellWindowId_LockScreenContainer);
     ui::Window* window =
-        views::WindowManagerConnection::Get()->NewWindow(properties);
+        views::WindowManagerConnection::Get()->NewTopLevelWindow(properties);
     params.native_widget = new views::NativeWidgetMus(
-        widget, window, ui::mojom::SurfaceType::DEFAULT);
+        widget, window, ui::mojom::CompositorFrameSinkType::DEFAULT);
     widget->Init(params);
     widget->Show();
   }
 
  private:
-  UI(Login* login, shell::Connector* connector)
+  UI(Login* login, service_manager::Connector* connector)
       : login_(login),
         connector_(connector),
         user_id_1_("00000000-0000-4000-8000-000000000000"),
@@ -109,8 +115,8 @@ class UI : public views::WidgetDelegateView,
   // Overridden from views::ButtonListener:
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;
 
-  void StartWindowManager(const shell::Identity& identity) {
-    mash_wm_connection_ = connector_->Connect("service:ash");
+  void StartWindowManager(const service_manager::Identity& identity) {
+    mash_wm_connection_ = connector_->Connect("ash");
     mash_wm_connection_->SetConnectionLostClosure(
         base::Bind(&UI::StartWindowManager, base::Unretained(this), identity));
     window_manager_connection_ =
@@ -118,19 +124,19 @@ class UI : public views::WidgetDelegateView,
   }
 
   Login* login_;
-  shell::Connector* connector_;
+  service_manager::Connector* connector_;
   const std::string user_id_1_;
   const std::string user_id_2_;
   views::MdTextButton* login_button_1_;
   views::MdTextButton* login_button_2_;
-  std::unique_ptr<shell::Connection> mash_wm_connection_;
+  std::unique_ptr<service_manager::Connection> mash_wm_connection_;
   std::unique_ptr<views::WindowManagerConnection> window_manager_connection_;
 
   DISALLOW_COPY_AND_ASSIGN(UI);
 };
 
-class Login : public shell::Service,
-              public shell::InterfaceFactory<mojom::Login>,
+class Login : public service_manager::Service,
+              public service_manager::InterfaceFactory<mojom::Login>,
               public mojom::Login {
  public:
    Login() {}
@@ -139,45 +145,46 @@ class Login : public shell::Service,
   void LoginAs(const std::string& user_id) {
     user_access_manager_->SetActiveUser(user_id);
     mash::init::mojom::InitPtr init;
-    connector()->ConnectToInterface("service:mash_init", &init);
-    init->StartService("service:mash_session", user_id);
+    context()->connector()->ConnectToInterface("mash_init", &init);
+    init->StartService("mash_session", user_id);
   }
 
  private:
-  // shell::Service:
-  void OnStart(const shell::Identity& identity) override {
-    identity_ = identity;
-    tracing_.Initialize(connector(), identity.name());
+  // service_manager::Service:
+  void OnStart() override {
+    tracing_.Initialize(context()->connector(), context()->identity().name());
 
-    aura_init_.reset(
-        new views::AuraInit(connector(), "views_mus_resources.pak"));
+    aura_init_ = base::MakeUnique<views::AuraInit>(
+        context()->connector(), context()->identity(),
+        "views_mus_resources.pak");
 
-    connector()->ConnectToInterface("service:ui", &user_access_manager_);
-    user_access_manager_->SetActiveUser(identity.user_id());
+    context()->connector()->ConnectToInterface(ui::mojom::kServiceName,
+                                               &user_access_manager_);
+    user_access_manager_->SetActiveUser(context()->identity().user_id());
   }
-  bool OnConnect(const shell::Identity& remote_identity,
-                 shell::InterfaceRegistry* registry) override {
+
+  bool OnConnect(const service_manager::ServiceInfo& remote_info,
+                 service_manager::InterfaceRegistry* registry) override {
     registry->AddInterface<mojom::Login>(this);
     return true;
   }
 
-  // shell::InterfaceFactory<mojom::Login>:
-  void Create(const shell::Identity& remote_identity,
+  // service_manager::InterfaceFactory<mojom::Login>:
+  void Create(const service_manager::Identity& remote_identity,
               mojom::LoginRequest request) override {
     bindings_.AddBinding(this, std::move(request));
   }
 
   // mojom::Login:
   void ShowLoginUI() override {
-    UI::Show(connector(), identity_, this);
+    UI::Show(context()->connector(), context()->identity(), this);
   }
   void SwitchUser() override {
-    UI::Show(connector(), identity_, this);
+    UI::Show(context()->connector(), context()->identity(), this);
   }
 
   void StartWindowManager();
 
-  shell::Identity identity_;
   tracing::Provider tracing_;
   std::unique_ptr<views::AuraInit> aura_init_;
   mojo::BindingSet<mojom::Login> bindings_;
@@ -200,7 +207,7 @@ void UI::ButtonPressed(views::Button* sender, const ui::Event& event) {
 
 }  // namespace
 
-shell::Service* CreateLogin() {
+service_manager::Service* CreateLogin() {
   return new Login;
 }
 

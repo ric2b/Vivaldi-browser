@@ -10,7 +10,7 @@
 
 namespace cc {
 
-class AnimationEvents;
+class MutatorEvents;
 
 // Channel used to send commands to and receive commands from ProxyMain.
 // The ChannelImpl implementation creates and owns ProxyImpl on receiving the
@@ -19,10 +19,10 @@ class AnimationEvents;
 class CC_EXPORT ChannelImpl {
  public:
   // Interface for commands sent to ProxyMain
-  virtual void DidCompleteSwapBuffers() = 0;
+  virtual void DidReceiveCompositorFrameAck() = 0;
   virtual void BeginMainFrameNotExpectedSoon() = 0;
   virtual void DidCommitAndDrawFrame() = 0;
-  virtual void SetAnimationEvents(std::unique_ptr<AnimationEvents> queue) = 0;
+  virtual void SetAnimationEvents(std::unique_ptr<MutatorEvents> queue) = 0;
   virtual void DidLoseCompositorFrameSink() = 0;
   virtual void RequestNewCompositorFrameSink() = 0;
   virtual void DidInitializeCompositorFrameSink(bool success) = 0;

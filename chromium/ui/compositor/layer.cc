@@ -71,9 +71,6 @@ class Layer::LayerMirror : public LayerDelegate, LayerObserver {
   }
   void OnDelegatedFrameDamage(const gfx::Rect& damage_rect_in_dip) override {}
   void OnDeviceScaleFactorChanged(float device_scale_factor) override {}
-  base::Closure PrepareForLayerBoundsChange() override {
-    return base::Closure();
-  }
 
   // LayerObserver:
   void LayerDestroyed(Layer* layer) override {
@@ -135,7 +132,8 @@ Layer::Layer(LayerType type)
 }
 
 Layer::~Layer() {
-  FOR_EACH_OBSERVER(LayerObserver, observer_list_, LayerDestroyed(this));
+  for (auto& observer : observer_list_)
+    observer.LayerDestroyed(this);
 
   // Destroying the animator may cause observers to use the layer (and
   // indirectly the WebLayer). Destroy the animator first so that the WebLayer
@@ -183,7 +181,7 @@ std::unique_ptr<Layer> Layer::Clone() const {
     clone->SetAlphaShape(base::MakeUnique<SkRegion>(*alpha_shape_));
 
   // cc::Layer state.
-  if (surface_layer_ && !surface_layer_->surface_id().is_null()) {
+  if (surface_layer_ && surface_layer_->surface_id().is_valid()) {
     clone->SetShowSurface(
         surface_layer_->surface_id(),
         surface_layer_->satisfy_callback(),
@@ -916,7 +914,9 @@ class LayerDebugInfo : public base::trace_event::ConvertableToTraceFormat {
   void AppendAsTraceFormat(std::string* out) const override {
     base::DictionaryValue dictionary;
     dictionary.SetString("layer_name", name_);
-    base::JSONWriter::Write(dictionary, out);
+    std::string tmp;
+    base::JSONWriter::Write(dictionary, &tmp);
+    out->append(tmp);
   }
 
  private:
@@ -929,6 +929,7 @@ Layer::TakeDebugInfo(cc::Layer* layer) {
 }
 
 void Layer::didUpdateMainThreadScrollingReasons() {}
+void Layer::didChangeScrollbarsHidden(bool) {}
 
 void Layer::CollectAnimators(
     std::vector<scoped_refptr<LayerAnimator>>* animators) {
@@ -987,18 +988,16 @@ void Layer::SetBoundsFromAnimation(const gfx::Rect& bounds) {
     return;
 
   base::Closure closure;
-  if (delegate_)
-    closure = delegate_->PrepareForLayerBoundsChange();
-  bool was_move = bounds_.size() == bounds.size();
+  const gfx::Rect old_bounds = bounds_;
   bounds_ = bounds;
 
   RecomputeDrawsContentAndUVRect();
   RecomputePosition();
 
-  if (!closure.is_null())
-    closure.Run();
+  if (delegate_)
+    delegate_->OnLayerBoundsChanged(old_bounds);
 
-  if (was_move) {
+  if (bounds.size() == old_bounds.size()) {
     // Don't schedule a draw if we're invisible. We'll schedule one
     // automatically when we get visible.
     if (IsDrawn())

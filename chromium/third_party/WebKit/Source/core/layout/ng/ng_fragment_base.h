@@ -7,6 +7,7 @@
 
 #include "core/CoreExport.h"
 #include "core/layout/ng/ng_physical_constraint_space.h"
+#include "core/layout/ng/ng_physical_fragment_base.h"
 #include "core/layout/ng/ng_writing_mode.h"
 #include "core/layout/ng/ng_units.h"
 #include "platform/LayoutUnit.h"
@@ -15,14 +16,14 @@
 
 namespace blink {
 
-class NGPhysicalFragmentBase;
-
 class CORE_EXPORT NGFragmentBase : public GarbageCollected<NGFragmentBase> {
  public:
   NGWritingMode WritingMode() const {
     return static_cast<NGWritingMode>(writing_mode_);
   }
-  NGDirection Direction() const { return static_cast<NGDirection>(direction_); }
+  TextDirection Direction() const {
+    return static_cast<TextDirection>(direction_);
+  }
 
   // Returns the border-box size.
   LayoutUnit InlineSize() const;
@@ -36,7 +37,7 @@ class CORE_EXPORT NGFragmentBase : public GarbageCollected<NGFragmentBase> {
   LayoutUnit InlineOffset() const;
   LayoutUnit BlockOffset() const;
 
-  NGMarginStrut MarginStrut() const;
+  NGPhysicalFragmentBase::NGFragmentType Type() const;
 
   NGPhysicalFragmentBase* PhysicalFragment() const {
     return physical_fragment_;
@@ -46,7 +47,7 @@ class CORE_EXPORT NGFragmentBase : public GarbageCollected<NGFragmentBase> {
 
  protected:
   NGFragmentBase(NGWritingMode writing_mode,
-                 NGDirection direction,
+                 TextDirection direction,
                  NGPhysicalFragmentBase* physical_fragment)
       : physical_fragment_(physical_fragment),
         writing_mode_(writing_mode),

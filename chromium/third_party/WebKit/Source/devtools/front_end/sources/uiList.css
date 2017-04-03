@@ -5,69 +5,84 @@
  */
 
 .list-item {
-    padding: 0 8px 0 0;
+    padding: 3px 8px 3px 20px;
     position: relative;
     min-height: 18px;
-    white-space: nowrap;
-    line-height: 20px;
+    line-height: 15px;
+    display: flex;
+    flex-wrap: wrap;
 }
 
-.list-item:not(:last-child) {
-    border-bottom: 1px solid #eee;
+.list-item:not(.label) {
+    border-top: 1px solid #efefef;
+}
+
+.label + .list-item {
+    border-top: 0;
 }
 
 .list-item:not(.ignore-hover):hover {
     background-color: #eee;
 }
 
-.list-item > .title {
-    word-wrap: break-word;
-    white-space: normal;
-    margin-left: 17px;
+.list-item > .title,
+.list-item > .subtitle {
+    text-overflow: ellipsis;
+    overflow: hidden;
+    white-space: nowrap;
 }
 
 .list-item > .subtitle {
-    margin-left: 5px;
     color: #888;
-    text-overflow: ellipsis;
-    overflow: hidden;
-    float: right;
+    margin-left: auto;
+    padding: 0 10px 0 10px;
 }
 
 .list-item > .subtitle a {
     color: inherit;
 }
 
-.list-item.label {
-    text-align: center;
+.list-item.label::before {
+    content: " ";
+    width: 100%;
+    border-top: 1px solid #d8d8d8;
+    margin-top: 8px;
+    position: absolute;
+    z-index: -1;
+    left: 0;
 }
 
-.list-item.label .title,
-.list-item.label .subtitle {
-    font-style: italic;
+.list-item.label .title {
     font-weight: bold;
     color: #999;
+    background-color: white;
+    margin-left: -5px;
+    padding: 0 5px;
 }
 
-.list-item.dimmed {
+.list-item.dimmed-item div {
     opacity: 0.6;
     font-style: italic;
 }
 
-.list-item.selected::before {
-    background-image: url(Images/smallIcons.png);
-    background-size: 190px 30px;
-    background-position: -180px 0;
-    content: "";
+.list-item > .selected-icon {
     position: absolute;
     top: 5px;
     left: 4px;
-    width: 10px;
-    height: 10px;
 }
 
-@media (-webkit-min-device-pixel-ratio: 1.1) {
-.list-item.selected::before {
-    background-image: url(Images/smallIcons_2x.png);
+.list-item.dimmed-item .action {
+    opacity: 1;
+    font-style: initial;
 }
-} /* media */
+
+.list-item .action-link {
+    color: rgb(48, 57, 66);
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.list-item:hover .action-link {
+    color: rgb(17, 85, 204);
+}
+

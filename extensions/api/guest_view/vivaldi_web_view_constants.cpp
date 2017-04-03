@@ -12,6 +12,7 @@ const char kEventTargetURLChanged[] = "webViewPrivate.onTargetURLChanged";
 const char kEventCreateSearch[] = "webViewPrivate.onCreateSearch";
 const char kEventMediaStateChanged[] = "webViewPrivate.onMediaStateChanged";
 const char kEventPasteAndGo[] = "webViewPrivate.onPasteAndGo";
+const char kEventSimpleAction[] = "webViewPrivate.onSimpleAction";
 const char kEventWebContentsDiscarded[] =
     "webViewPrivate.onWebcontentsDiscarded";
 const char kEventOnFullscreen[] = "webViewPrivate.onFullscreen";
@@ -20,6 +21,11 @@ const char kEventContentBlocked[] = "webViewPrivate.onContentBlocked";
 const char kNewSearchName[] = "Name";
 const char kNewSearchUrl[] = "Url";
 const char kClipBoardText[] = "clipBoardText";
+const char kPasteTarget[] = "pasteTarget";  // url, search
+const char kModifiers[] = "modifiers";
+const char kGenCommand[] = "command";
+const char kGenText[] = "text";
+const char kGenUrl[] = "url";
 
 const char kLoadedBytes[] = "loadedBytes";
 const char kLoadedElements[] = "loadedElements";

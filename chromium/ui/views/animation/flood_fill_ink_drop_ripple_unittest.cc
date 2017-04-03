@@ -5,7 +5,9 @@
 #include "ui/views/animation/flood_fill_ink_drop_ripple.h"
 
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/point.h"
+#include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/views/animation/test/flood_fill_ink_drop_ripple_test_api.h"
 
@@ -13,15 +15,17 @@ namespace views {
 namespace test {
 
 TEST(FloodFillInkDropRippleTest, TransformedCenterPointForIrregularClipBounds) {
-  const gfx::Rect clip_bounds(8, 9, 32, 32);
+  const gfx::Size host_size(48, 50);
+  const gfx::Insets clip_insets(9, 8);
   const gfx::Point requested_center_point(25, 24);
 
-  // |expected_center_point| is in the |clip_bounds| coordinate space.
+  // |expected_center_point| is in the coordinate space of ripple's clip bounds
+  // defined by |clip_insets|.
   const gfx::Point expected_center_point(
-      requested_center_point.x() - clip_bounds.x(),
-      requested_center_point.y() - clip_bounds.y());
+      requested_center_point.x() - clip_insets.left(),
+      requested_center_point.y() - clip_insets.top());
 
-  FloodFillInkDropRipple ripple(clip_bounds, requested_center_point,
+  FloodFillInkDropRipple ripple(host_size, clip_insets, requested_center_point,
                                 SK_ColorWHITE, 0.175f);
   FloodFillInkDropRippleTestApi test_api(&ripple);
 
@@ -33,12 +37,13 @@ TEST(FloodFillInkDropRippleTest, TransformedCenterPointForIrregularClipBounds) {
 
 TEST(FloodFillInkDropRippleTest, MaxDistanceToCorners) {
   const float kAbsError = 0.01f;
+  const gfx::Size host_size(70, 130);
   // Rect with the following corners in clockwise order starting at the origin:
   // (10, 30), (60, 30), (10, 100), (60, 100)
-  const gfx::Rect clip_bounds(10, 30, 50, 70);
+  const gfx::Insets clip_insets(30, 10);
 
-  FloodFillInkDropRipple ripple(clip_bounds, gfx::Point(), SK_ColorWHITE,
-                                0.175f);
+  FloodFillInkDropRipple ripple(host_size, clip_insets, gfx::Point(),
+                                SK_ColorWHITE, 0.175f);
   FloodFillInkDropRippleTestApi test_api(&ripple);
 
   // Interior points
@@ -60,6 +65,46 @@ TEST(FloodFillInkDropRippleTest, MaxDistanceToCorners) {
               kAbsError);
   EXPECT_NEAR(101.24f, test_api.MaxDistanceToCorners(gfx::Point(5, 115)),
               kAbsError);
+}
+
+// Verifies that both going directly from HIDDEN to ACTIVATED state and going
+// through PENDING to ACTIVAED state lead to the same final opacity and
+// transform values.
+TEST(FloodFillInkDropRippleTest, ActivatedFinalState) {
+  const float kAbsError = 0.01f;
+
+  const gfx::Size host_size(100, 50);
+  const gfx::Point center_point(host_size.width() / 2, host_size.height() / 2);
+  const SkColor color = SK_ColorWHITE;
+  const float visible_opacity = 0.7f;
+
+  FloodFillInkDropRipple ripple(host_size, center_point, color,
+                                visible_opacity);
+  FloodFillInkDropRippleTestApi test_api(&ripple);
+
+  // Go to ACTIVATED state directly.
+  ripple.AnimateToState(InkDropState::ACTIVATED);
+  test_api.CompleteAnimations();
+  const float activated_opacity = test_api.GetCurrentOpacity();
+  const gfx::Transform activated_transform =
+      test_api.GetPaintedLayerTransform();
+
+  // Reset state.
+  ripple.AnimateToState(InkDropState::HIDDEN);
+  test_api.CompleteAnimations();
+
+  // Go to ACTIVATED state through PENDING state.
+  ripple.AnimateToState(InkDropState::ACTION_PENDING);
+  ripple.AnimateToState(InkDropState::ACTIVATED);
+  test_api.CompleteAnimations();
+  const float pending_activated_opacity = test_api.GetCurrentOpacity();
+  const gfx::Transform pending_activated_transform =
+      test_api.GetPaintedLayerTransform();
+
+  // Compare opacity and transform values.
+  EXPECT_NEAR(activated_opacity, pending_activated_opacity, kAbsError);
+  EXPECT_TRUE(
+      activated_transform.ApproximatelyEqual(pending_activated_transform));
 }
 
 }  // namespace test

@@ -55,7 +55,7 @@ class PLATFORM_EXPORT ScrollbarThemeClient {
   virtual void invalidate() = 0;
   virtual void invalidateRect(const IntRect&) = 0;
 
-  virtual ScrollbarOverlayStyle getScrollbarOverlayStyle() const = 0;
+  virtual ScrollbarOverlayColorTheme getScrollbarOverlayColorTheme() const = 0;
   virtual void getTickmarks(Vector<IntRect>&) const = 0;
   virtual bool isScrollableAreaActive() const = 0;
 
@@ -77,7 +77,7 @@ class PLATFORM_EXPORT ScrollbarThemeClient {
   virtual ScrollbarPart hoveredPart() const = 0;
 
   virtual void styleChanged() = 0;
-  virtual void visibilityChanged() = 0;
+  virtual void setScrollbarsHidden(bool) = 0;
 
   virtual bool enabled() const = 0;
   virtual void setEnabled(bool) = 0;

@@ -143,17 +143,6 @@ class ASH_EXPORT RootWindowController : public ShellObserver {
   aura::Window* GetContainer(int container_id);
   const aura::Window* GetContainer(int container_id) const;
 
-  // Show shelf view if it was created hidden (before session has started).
-  // TODO(jamescook): Eliminate this and handle show via Shelf.
-  void ShowShelf();
-
-  // Creates the shelf for this root window and notifies observers.
-  void CreateShelf();
-
-  // Called when the login status changes after login (such as lock/unlock).
-  // TODO(oshima): Investigate if we can merge this and |OnLoginStateChanged|.
-  void UpdateAfterLoginStatusChange(LoginStatus status);
-
   // Called when the brightness/grayscale animation from white to the login
   // wallpaper image has started.  Starts |boot_splash_screen_|'s hiding
   // animation (if the screen is non-NULL).
@@ -204,16 +193,15 @@ class ASH_EXPORT RootWindowController : public ShellObserver {
   explicit RootWindowController(AshWindowTreeHost* host);
   enum RootWindowType { PRIMARY, SECONDARY };
 
-  // Initializes the RootWindowController.  |is_primary| is true if
-  // the controller is for primary display.  |first_run_after_boot| is
-  // set to true only for primary root window after boot.
-  void Init(RootWindowType root_window_type, bool first_run_after_boot);
+  // Initializes the RootWindowController based on |root_window_type|.
+  void Init(RootWindowType root_window_type);
 
   void InitLayoutManagers();
 
   // Initializes |system_wallpaper_| and possibly also |boot_splash_screen_|.
-  // |is_first_run_after_boot| determines the wallpaper's initial color.
-  void CreateSystemWallpaper(bool is_first_run_after_boot);
+  // The initial color is determined by the |root_window_type| and whether or
+  // not this is the first boot.
+  void CreateSystemWallpaper(RootWindowType root_window_type);
 
   // Enables projection touch HUD.
   void EnableTouchHudProjection();
@@ -239,13 +227,6 @@ class ASH_EXPORT RootWindowController : public ShellObserver {
   // of the RootWindowController so that it is safe for observers to be added
   // to it during construction of the shelf widget and status tray.
   std::unique_ptr<WmShelfAura> wm_shelf_aura_;
-
-  // An invisible/empty window used as a event target for
-  // |MouseCursorEventFilter| before a user logs in.
-  // (crbug.com/266987)
-  // Its container is |LockScreenWallpaperContainer| and
-  // this must be deleted before the container is deleted.
-  std::unique_ptr<aura::Window> mouse_event_target_;
 
   std::unique_ptr<SystemWallpaperController> system_wallpaper_;
 

@@ -79,6 +79,10 @@ public final class Policies {
         String[] stringArray() default {};
     }
 
+    private Policies() {
+        throw new AssertionError("Policies is a non-instantiable class");
+    }
+
     /** Parses the annotations to extract usable information as {@link PolicyData} objects. */
     private static Map<String, PolicyData> fromItems(Item[] items) {
         Map<String, PolicyData> result = new HashMap<>();
@@ -134,8 +138,13 @@ public final class Policies {
     public static class RegistrationHook implements PreTestHook {
         @Override
         public void run(Context targetContext, Method testMethod) {
-            final Bundle policyBundle = PolicyData.asBundle(getPolicies(testMethod).values());
-            AbstractAppRestrictionsProvider.setTestRestrictions(policyBundle);
+            Map<String, PolicyData> policyMap = getPolicies(testMethod);
+            if (policyMap.isEmpty()) {
+                AbstractAppRestrictionsProvider.setTestRestrictions(null);
+            } else {
+                final Bundle policyBundle = PolicyData.asBundle(policyMap.values());
+                AbstractAppRestrictionsProvider.setTestRestrictions(policyBundle);
+            }
         }
     }
 }

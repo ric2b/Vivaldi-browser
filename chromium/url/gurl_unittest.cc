@@ -5,15 +5,13 @@
 #include <stddef.h>
 
 #include "base/macros.h"
+#include "base/strings/utf_string_conversions.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 #include "url/url_canon.h"
 #include "url/url_test_utils.h"
 
 namespace url {
-
-using test_utils::WStringToUTF16;
-using test_utils::ConvertUTF8ToUTF16;
 
 namespace {
 
@@ -67,11 +65,11 @@ TEST(GURLTest, Types) {
 // the parser is already tested and works, so we are mostly interested if the
 // object does the right thing with the results.
 TEST(GURLTest, Components) {
-  GURL empty_url(WStringToUTF16(L""));
+  GURL empty_url(base::UTF8ToUTF16(""));
   EXPECT_TRUE(empty_url.is_empty());
   EXPECT_FALSE(empty_url.is_valid());
 
-  GURL url(WStringToUTF16(L"http://user:pass@google.com:99/foo;bar?q=a#ref"));
+  GURL url(base::UTF8ToUTF16("http://user:pass@google.com:99/foo;bar?q=a#ref"));
   EXPECT_FALSE(url.is_empty());
   EXPECT_TRUE(url.is_valid());
   EXPECT_TRUE(url.SchemeIs("http"));
@@ -116,7 +114,8 @@ TEST(GURLTest, Empty) {
 }
 
 TEST(GURLTest, Copy) {
-  GURL url(WStringToUTF16(L"http://user:pass@google.com:99/foo;bar?q=a#ref"));
+  GURL url(base::UTF8ToUTF16(
+      "http://user:pass@google.com:99/foo;bar?q=a#ref"));
 
   GURL url2(url);
   EXPECT_TRUE(url2.is_valid());
@@ -149,7 +148,8 @@ TEST(GURLTest, Copy) {
 }
 
 TEST(GURLTest, Assign) {
-  GURL url(WStringToUTF16(L"http://user:pass@google.com:99/foo;bar?q=a#ref"));
+  GURL url(base::UTF8ToUTF16(
+      "http://user:pass@google.com:99/foo;bar?q=a#ref"));
 
   GURL url2;
   url2 = url;
@@ -191,7 +191,8 @@ TEST(GURLTest, SelfAssign) {
 }
 
 TEST(GURLTest, CopyFileSystem) {
-  GURL url(WStringToUTF16(L"filesystem:https://user:pass@google.com:99/t/foo;bar?q=a#ref"));
+  GURL url(base::UTF8ToUTF16(
+      "filesystem:https://user:pass@google.com:99/t/foo;bar?q=a#ref"));
 
   GURL url2(url);
   EXPECT_TRUE(url2.is_valid());
@@ -313,9 +314,9 @@ TEST(GURLTest, Resolve) {
     EXPECT_EQ(output.SchemeIsFileSystem(), output.inner_url() != NULL);
 
     // Wide code path.
-    GURL inputw(ConvertUTF8ToUTF16(resolve_cases[i].base));
+    GURL inputw(base::UTF8ToUTF16(resolve_cases[i].base));
     GURL outputw =
-        input.Resolve(ConvertUTF8ToUTF16(resolve_cases[i].relative));
+        input.Resolve(base::UTF8ToUTF16(resolve_cases[i].relative));
     EXPECT_EQ(resolve_cases[i].expected_valid, outputw.is_valid()) << i;
     EXPECT_EQ(resolve_cases[i].expected, outputw.spec()) << i;
     EXPECT_EQ(outputw.SchemeIsFileSystem(), outputw.inner_url() != NULL);
@@ -677,10 +678,40 @@ TEST(GURLTest, SchemeIsWSOrWSS) {
   EXPECT_FALSE(GURL("http://bar/").SchemeIsWSOrWSS());
 }
 
+TEST(GURLTest, SchemeIsCryptographic) {
+  EXPECT_TRUE(GURL("https://foo.bar.com/").SchemeIsCryptographic());
+  EXPECT_TRUE(GURL("HTTPS://foo.bar.com/").SchemeIsCryptographic());
+  EXPECT_TRUE(GURL("HtTpS://foo.bar.com/").SchemeIsCryptographic());
+
+  EXPECT_TRUE(GURL("wss://foo.bar.com/").SchemeIsCryptographic());
+  EXPECT_TRUE(GURL("WSS://foo.bar.com/").SchemeIsCryptographic());
+  EXPECT_TRUE(GURL("WsS://foo.bar.com/").SchemeIsCryptographic());
+
+  EXPECT_TRUE(GURL("https-so://foo.bar.com/").SchemeIsCryptographic());
+  EXPECT_TRUE(GURL("HTTPS-SO://foo.bar.com/").SchemeIsCryptographic());
+  EXPECT_TRUE(GURL("HtTpS-So://foo.bar.com/").SchemeIsCryptographic());
+
+  EXPECT_FALSE(GURL("http://foo.bar.com/").SchemeIsCryptographic());
+  EXPECT_FALSE(GURL("ws://foo.bar.com/").SchemeIsCryptographic());
+  EXPECT_FALSE(GURL("http-so://foo.bar.com/").SchemeIsCryptographic());
+}
+
 TEST(GURLTest, SchemeIsBlob) {
   EXPECT_TRUE(GURL("BLOB://BAR/").SchemeIsBlob());
   EXPECT_TRUE(GURL("blob://bar/").SchemeIsBlob());
   EXPECT_FALSE(GURL("http://bar/").SchemeIsBlob());
+}
+
+TEST(GURLTest, SchemeIsSuborigin) {
+  EXPECT_TRUE(GURL("http-so://foo.bar.com/").SchemeIsSuborigin());
+  EXPECT_TRUE(GURL("HTTP-SO://foo.bar.com/").SchemeIsSuborigin());
+  EXPECT_TRUE(GURL("HtTp-So://foo.bar.com/").SchemeIsSuborigin());
+  EXPECT_FALSE(GURL("http://foo.bar.com/").SchemeIsSuborigin());
+
+  EXPECT_TRUE(GURL("https-so://foo.bar.com/").SchemeIsSuborigin());
+  EXPECT_TRUE(GURL("HTTPS-SO://foo.bar.com/").SchemeIsSuborigin());
+  EXPECT_TRUE(GURL("HtTpS-So://foo.bar.com/").SchemeIsSuborigin());
+  EXPECT_FALSE(GURL("https://foo.bar.com/").SchemeIsSuborigin());
 }
 
 TEST(GURLTest, ContentAndPathForNonStandardURLs) {

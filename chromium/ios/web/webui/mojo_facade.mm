@@ -15,7 +15,7 @@
 #import "ios/web/public/web_state/js/crw_js_injection_evaluator.h"
 #include "ios/web/public/web_thread.h"
 #include "mojo/public/cpp/system/core.h"
-#include "services/shell/public/interfaces/interface_provider.mojom.h"
+#include "services/service_manager/public/interfaces/interface_provider.mojom.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -34,8 +34,9 @@ std::unique_ptr<base::Value> ValueFromInteger(IntegerT handle) {
 
 }  // namespace
 
-MojoFacade::MojoFacade(shell::mojom::InterfaceProvider* interface_provider,
-                       id<CRWJSInjectionEvaluator> script_evaluator)
+MojoFacade::MojoFacade(
+    service_manager::mojom::InterfaceProvider* interface_provider,
+    id<CRWJSInjectionEvaluator> script_evaluator)
     : interface_provider_(interface_provider),
       script_evaluator_(script_evaluator) {
   DCHECK_CURRENTLY_ON(WebThread::UI);

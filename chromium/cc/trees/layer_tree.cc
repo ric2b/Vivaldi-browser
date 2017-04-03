@@ -6,46 +6,24 @@
 
 #include "base/auto_reset.h"
 #include "base/time/time.h"
-#include "cc/animation/animation_host.h"
 #include "cc/input/page_scale_animation.h"
 #include "cc/layers/heads_up_display_layer.h"
 #include "cc/layers/heads_up_display_layer_impl.h"
 #include "cc/layers/layer.h"
-#include "cc/layers/layer_proto_converter.h"
 #include "cc/proto/gfx_conversions.h"
 #include "cc/proto/layer_tree.pb.h"
 #include "cc/trees/layer_tree_host.h"
 #include "cc/trees/layer_tree_host_common.h"
 #include "cc/trees/layer_tree_impl.h"
+#include "cc/trees/mutator_host.h"
 #include "cc/trees/property_tree_builder.h"
 
 namespace cc {
 
-namespace {
-
-Layer* UpdateAndGetLayer(Layer* current_layer,
-                         int layer_id,
-                         LayerTree* layer_tree) {
-  if (layer_id == Layer::INVALID_ID) {
-    if (current_layer)
-      current_layer->SetLayerTreeHost(nullptr);
-
-    return nullptr;
-  }
-  Layer* layer = layer_tree->LayerById(layer_id);
-  DCHECK(layer);
-  if (current_layer && current_layer != layer)
-    current_layer->SetLayerTreeHost(nullptr);
-
-  return layer;
-}
-
-}  // namespace
-
 LayerTree::Inputs::Inputs()
     : top_controls_height(0.f),
       top_controls_shown_ratio(0.f),
-      top_controls_shrink_blink_size(false),
+      browser_controls_shrink_blink_size(false),
       bottom_controls_height(0.f),
       device_scale_factor(1.f),
       painted_device_scale_factor(1.f),
@@ -59,20 +37,19 @@ LayerTree::Inputs::Inputs()
 
 LayerTree::Inputs::~Inputs() = default;
 
-LayerTree::LayerTree(std::unique_ptr<AnimationHost> animation_host,
-                     LayerTreeHost* layer_tree_host)
+LayerTree::LayerTree(MutatorHost* mutator_host, LayerTreeHost* layer_tree_host)
     : needs_full_tree_sync_(true),
       needs_meta_info_recomputation_(true),
       in_paint_layer_contents_(false),
-      animation_host_(std::move(animation_host)),
+      mutator_host_(mutator_host),
       layer_tree_host_(layer_tree_host) {
-  DCHECK(animation_host_);
+  DCHECK(mutator_host_);
   DCHECK(layer_tree_host_);
-  animation_host_->SetMutatorHostClient(this);
+  mutator_host_->SetMutatorHostClient(this);
 }
 
 LayerTree::~LayerTree() {
-  animation_host_->SetMutatorHostClient(nullptr);
+  mutator_host_->SetMutatorHostClient(nullptr);
 
   // We must clear any pointers into the layer tree prior to destroying it.
   RegisterViewportLayers(nullptr, nullptr, nullptr, nullptr);
@@ -158,17 +135,17 @@ void LayerTree::SetViewportSize(const gfx::Size& device_viewport_size) {
   SetNeedsCommit();
 }
 
-void LayerTree::SetTopControlsHeight(float height, bool shrink) {
+void LayerTree::SetBrowserControlsHeight(float height, bool shrink) {
   if (inputs_.top_controls_height == height &&
-      inputs_.top_controls_shrink_blink_size == shrink)
+      inputs_.browser_controls_shrink_blink_size == shrink)
     return;
 
   inputs_.top_controls_height = height;
-  inputs_.top_controls_shrink_blink_size = shrink;
+  inputs_.browser_controls_shrink_blink_size = shrink;
   SetNeedsCommit();
 }
 
-void LayerTree::SetTopControlsShownRatio(float ratio) {
+void LayerTree::SetBrowserControlsShownRatio(float ratio) {
   if (inputs_.top_controls_shown_ratio == ratio)
     return;
 
@@ -243,8 +220,8 @@ void LayerTree::RegisterLayer(Layer* layer) {
   DCHECK(!in_paint_layer_contents_);
   layer_id_map_[layer->id()] = layer;
   if (layer->element_id()) {
-    animation_host_->RegisterElement(layer->element_id(),
-                                     ElementListType::ACTIVE);
+    mutator_host_->RegisterElement(layer->element_id(),
+                                   ElementListType::ACTIVE);
   }
 }
 
@@ -252,8 +229,8 @@ void LayerTree::UnregisterLayer(Layer* layer) {
   DCHECK(LayerById(layer->id()));
   DCHECK(!in_paint_layer_contents_);
   if (layer->element_id()) {
-    animation_host_->UnregisterElement(layer->element_id(),
-                                       ElementListType::ACTIVE);
+    mutator_host_->UnregisterElement(layer->element_id(),
+                                     ElementListType::ACTIVE);
   }
   RemoveLayerShouldPushProperties(layer);
   layer_id_map_.erase(layer->id());
@@ -343,7 +320,8 @@ void LayerTree::SetPropertyTreesNeedRebuild() {
   layer_tree_host_->SetNeedsUpdateLayers();
 }
 
-void LayerTree::PushPropertiesTo(LayerTreeImpl* tree_impl) {
+void LayerTree::PushPropertiesTo(LayerTreeImpl* tree_impl,
+                                 float unapplied_page_scale_delta) {
   tree_impl->set_needs_full_tree_sync(needs_full_tree_sync_);
   needs_full_tree_sync_ = false;
 
@@ -400,15 +378,16 @@ void LayerTree::PushPropertiesTo(LayerTreeImpl* tree_impl) {
   // Setting property trees must happen before pushing the page scale.
   tree_impl->SetPropertyTrees(&property_trees_);
 
-  tree_impl->PushPageScaleFromMainThread(inputs_.page_scale_factor,
-                                         inputs_.min_page_scale_factor,
-                                         inputs_.max_page_scale_factor);
+  tree_impl->PushPageScaleFromMainThread(
+      inputs_.page_scale_factor * unapplied_page_scale_delta,
+      inputs_.min_page_scale_factor, inputs_.max_page_scale_factor);
 
-  tree_impl->set_top_controls_shrink_blink_size(
-      inputs_.top_controls_shrink_blink_size);
+  tree_impl->set_browser_controls_shrink_blink_size(
+      inputs_.browser_controls_shrink_blink_size);
   tree_impl->set_top_controls_height(inputs_.top_controls_height);
   tree_impl->set_bottom_controls_height(inputs_.bottom_controls_height);
-  tree_impl->PushTopControlsFromMainThread(inputs_.top_controls_shown_ratio);
+  tree_impl->PushBrowserControlsFromMainThread(
+      inputs_.top_controls_shown_ratio);
   tree_impl->elastic_overscroll()->PushFromMainThread(elastic_overscroll_);
   if (tree_impl->IsActiveTree())
     tree_impl->elastic_overscroll()->PushPendingToActive();
@@ -428,10 +407,8 @@ void LayerTree::PushPropertiesTo(LayerTreeImpl* tree_impl) {
   tree_impl->set_has_ever_been_drawn(false);
 }
 
-void LayerTree::ToProtobuf(proto::LayerTree* proto, bool inputs_only) {
+void LayerTree::ToProtobuf(proto::LayerTree* proto) {
   TRACE_EVENT0("cc.remote", "LayerProtoConverter::SerializeLayerHierarchy");
-
-  // LayerTree::Inputs Serialization -----------------------------------------
 
   // TODO(khushalsagar): Why walk the tree twice? Why not serialize properties
   // for dirty layers as you serialize the hierarchy?
@@ -455,8 +432,8 @@ void LayerTree::ToProtobuf(proto::LayerTree* proto, bool inputs_only) {
           ? inputs_.outer_viewport_scroll_layer->id()
           : Layer::INVALID_ID);
 
-  // Top Controls ignored. They are not supported.
-  DCHECK(!inputs_.top_controls_shrink_blink_size);
+  // Browser Controls ignored. They are not supported.
+  DCHECK(!inputs_.browser_controls_shrink_blink_size);
 
   proto->set_device_scale_factor(inputs_.device_scale_factor);
   proto->set_painted_device_scale_factor(inputs_.painted_device_scale_factor);
@@ -480,95 +457,6 @@ void LayerTree::ToProtobuf(proto::LayerTree* proto, bool inputs_only) {
   proto->set_touch_end_or_cancel_event_listener_properties(
       static_cast<uint32_t>(
           event_listener_properties(EventListenerClass::kTouchEndOrCancel)));
-
-  if (inputs_only)
-    return;
-  // ----------------------------------------------------------------------
-
-  for (auto* layer : layers_that_should_push_properties_) {
-    proto->add_layers_that_should_push_properties(layer->id());
-  }
-  proto->set_in_paint_layer_contents(in_paint_layer_contents());
-
-  proto->set_needs_full_tree_sync(needs_full_tree_sync_);
-  proto->set_needs_meta_info_recomputation(needs_meta_info_recomputation_);
-  proto->set_hud_layer_id(hud_layer_ ? hud_layer_->id() : Layer::INVALID_ID);
-
-  property_trees_.ToProtobuf(proto->mutable_property_trees());
-  Vector2dFToProto(elastic_overscroll_, proto->mutable_elastic_overscroll());
-}
-
-void LayerTree::FromProtobuf(const proto::LayerTree& proto) {
-  // Layer hierarchy.
-  scoped_refptr<Layer> new_root_layer;
-  if (proto.has_root_layer())
-    new_root_layer = LayerProtoConverter::DeserializeLayerHierarchy(
-        inputs_.root_layer, proto.root_layer(), layer_tree_host_);
-  if (inputs_.root_layer != new_root_layer) {
-    inputs_.root_layer = new_root_layer;
-  }
-
-  for (auto layer_id : proto.layers_that_should_push_properties()) {
-    AddLayerShouldPushProperties(layer_id_map_[layer_id]);
-  }
-  in_paint_layer_contents_ = proto.in_paint_layer_contents();
-
-  needs_full_tree_sync_ = proto.needs_full_tree_sync();
-  needs_meta_info_recomputation_ = proto.needs_meta_info_recomputation();
-
-  inputs_.overscroll_elasticity_layer =
-      UpdateAndGetLayer(inputs_.overscroll_elasticity_layer.get(),
-                        proto.overscroll_elasticity_layer_id(), this);
-  inputs_.page_scale_layer = UpdateAndGetLayer(
-      inputs_.page_scale_layer.get(), proto.page_scale_layer_id(), this);
-  inputs_.inner_viewport_scroll_layer =
-      UpdateAndGetLayer(inputs_.inner_viewport_scroll_layer.get(),
-                        proto.inner_viewport_scroll_layer_id(), this);
-  inputs_.outer_viewport_scroll_layer =
-      UpdateAndGetLayer(inputs_.outer_viewport_scroll_layer.get(),
-                        proto.outer_viewport_scroll_layer_id(), this);
-
-  inputs_.device_viewport_size = ProtoToSize(proto.device_viewport_size());
-  inputs_.device_scale_factor = proto.device_scale_factor();
-  inputs_.painted_device_scale_factor = proto.painted_device_scale_factor();
-  inputs_.page_scale_factor = proto.page_scale_factor();
-  inputs_.min_page_scale_factor = proto.min_page_scale_factor();
-  inputs_.max_page_scale_factor = proto.max_page_scale_factor();
-  inputs_.background_color = proto.background_color();
-  inputs_.has_transparent_background = proto.has_transparent_background();
-  inputs_.have_scroll_event_handlers = proto.have_scroll_event_handlers();
-  inputs_.event_listener_properties[static_cast<size_t>(
-      EventListenerClass::kMouseWheel)] =
-      static_cast<EventListenerProperties>(
-          proto.wheel_event_listener_properties());
-  inputs_.event_listener_properties[static_cast<size_t>(
-      EventListenerClass::kTouchStartOrMove)] =
-      static_cast<EventListenerProperties>(
-          proto.touch_start_or_move_event_listener_properties());
-  inputs_.event_listener_properties[static_cast<size_t>(
-      EventListenerClass::kTouchEndOrCancel)] =
-      static_cast<EventListenerProperties>(
-          proto.touch_end_or_cancel_event_listener_properties());
-
-  hud_layer_ = static_cast<HeadsUpDisplayLayer*>(
-      UpdateAndGetLayer(hud_layer_.get(), proto.hud_layer_id(), this));
-
-  LayerSelectionFromProtobuf(&inputs_.selection, proto.selection());
-  elastic_overscroll_ = ProtoToVector2dF(proto.elastic_overscroll());
-
-  // It is required to create new PropertyTrees before deserializing it.
-  property_trees_ = PropertyTrees();
-  property_trees_.FromProtobuf(proto.property_trees());
-
-  // Forcefully override the sequence number of all layers in the tree to have
-  // a valid sequence number. Changing the sequence number for a layer does not
-  // need a commit, so the value will become out of date for layers that are not
-  // updated for other reasons. All layers that at this point are part of the
-  // layer tree are valid, so it is OK that they have a valid sequence number.
-  int seq_num = property_trees_.sequence_number;
-  LayerTreeHostCommon::CallFunctionForEveryLayer(this, [seq_num](Layer* layer) {
-    layer->set_property_tree_sequence_number(seq_num);
-  });
 }
 
 Layer* LayerTree::LayerByElementId(ElementId element_id) const {
@@ -583,13 +471,13 @@ void LayerTree::RegisterElement(ElementId element_id,
     element_layers_map_[layer->element_id()] = layer;
   }
 
-  animation_host_->RegisterElement(element_id, list_type);
+  mutator_host_->RegisterElement(element_id, list_type);
 }
 
 void LayerTree::UnregisterElement(ElementId element_id,
                                   ElementListType list_type,
                                   Layer* layer) {
-  animation_host_->UnregisterElement(element_id, list_type);
+  mutator_host_->UnregisterElement(element_id, list_type);
 
   if (layer->element_id()) {
     element_layers_map_.erase(layer->element_id());

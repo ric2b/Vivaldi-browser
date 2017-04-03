@@ -21,7 +21,7 @@
 #include "chrome/browser/ui/views/omnibox/omnibox_view_views.h"
 #include "components/prefs/pref_member.h"
 #include "components/search_engines/template_url_service_observer.h"
-#include "components/security_state/security_state_model.h"
+#include "components/security_state/core/security_state.h"
 #include "components/zoom/zoom_event_manager_observer.h"
 #include "ui/gfx/animation/animation_delegate.h"
 #include "ui/gfx/animation/slide_animation.h"
@@ -97,8 +97,7 @@ class LocationBarView : public LocationBar,
     virtual void ShowWebsiteSettings(
         content::WebContents* web_contents,
         const GURL& virtual_url,
-        const security_state::SecurityStateModel::SecurityInfo&
-            security_info) = 0;
+        const security_state::SecurityInfo& security_info) = 0;
 
    protected:
     virtual ~Delegate() {}
@@ -144,7 +143,7 @@ class LocationBarView : public LocationBar,
   // Returns the color to be used for security text in the context of
   // |security_level|.
   SkColor GetSecureTextColor(
-      security_state::SecurityStateModel::SecurityLevel security_level) const;
+      security_state::SecurityLevel security_level) const;
 
   // Returns the delegate.
   Delegate* delegate() const { return delegate_; }
@@ -243,7 +242,7 @@ class LocationBarView : public LocationBar,
 
   // views::View:
   bool HasFocus() const override;
-  void GetAccessibleState(ui::AXViewState* state) override;
+  void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
   gfx::Size GetPreferredSize() const override;
   void Layout() override;
   void OnNativeThemeChanged(const ui::NativeTheme* theme) override;
@@ -258,12 +257,12 @@ class LocationBarView : public LocationBar,
   void OnDefaultZoomLevelChanged() override;
 
  private:
-  typedef std::vector<ContentSettingImageView*> ContentSettingViews;
+  using ContentSettingViews = std::vector<ContentSettingImageView*>;
 
   friend class PageActionImageView;
   friend class PageActionWithBadgeView;
-  typedef std::vector<ExtensionAction*> PageActions;
-  typedef std::vector<PageActionWithBadgeView*> PageActionViews;
+  using PageActions = std::vector<ExtensionAction*>;
+  using PageActionViews = std::vector<std::unique_ptr<PageActionWithBadgeView>>;
 
   // Helper for GetMinimumWidth().  Calculates the incremental minimum width
   // |view| should add to the trailing width after the omnibox.

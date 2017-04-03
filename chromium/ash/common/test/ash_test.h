@@ -8,7 +8,7 @@
 #include <memory>
 #include <string>
 
-#include "ash/common/shell_window_ids.h"
+#include "ash/public/cpp/shell_window_ids.h"
 #include "base/macros.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/display/manager/display_layout.h"
@@ -20,11 +20,20 @@ namespace display {
 class Display;
 }
 
+namespace views {
+class WidgetDelegate;
+}
+
 namespace ash {
 
 class AshTestImpl;
+class SystemTray;
 class WmShelf;
 class WmWindow;
+
+namespace test {
+class TestSystemTrayDelegate;
+}
 
 // Wraps a WmWindow calling WmWindow::Destroy() from the destructor. WmWindow is
 // owned by the corresponding window implementation. The only way to delete
@@ -49,8 +58,8 @@ class WindowOwner {
 // ash/common and run in both mus and aura.
 //
 // The implementation of AshTestImpl that is used depends upon gn targets. To
-// use the aura backend depend on "//ash:ash_with_aura_test_support." The mus
-// backend is not provided as a separate link target.
+// use the aura backend depend on "//ash/test:ash_with_aura_test_support." The
+// mus backend is not provided as a separate link target.
 class AshTest : public testing::Test {
  public:
   AshTest();
@@ -58,6 +67,11 @@ class AshTest : public testing::Test {
 
   // Returns the WmShelf for the primary display.
   static WmShelf* GetPrimaryShelf();
+
+  // Returns the system tray on the primary display.
+  static SystemTray* GetPrimarySystemTray();
+
+  static test::TestSystemTrayDelegate* GetSystemTrayDelegate();
 
   bool SupportsMultipleDisplays() const;
 
@@ -88,6 +102,13 @@ class AshTest : public testing::Test {
       WmWindow* parent,
       const gfx::Rect& bounds = gfx::Rect(),
       int shell_window_id = kShellWindowId_Invalid);
+
+  // Creates and shows a widget. See ash/public/cpp/shell_window_ids.h for
+  // values for |container_id|.
+  static std::unique_ptr<views::Widget> CreateTestWidget(
+      const gfx::Rect& bounds,
+      views::WidgetDelegate* delegate = nullptr,
+      int container_id = kShellWindowId_DefaultContainer);
 
   // Returns the Display for the secondary display. It's assumed there are two
   // displays.

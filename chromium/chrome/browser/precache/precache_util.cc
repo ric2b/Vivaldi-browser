@@ -4,12 +4,17 @@
 
 #include "chrome/browser/precache/precache_util.h"
 
+#include <string>
+#include <vector>
+
+#include "base/metrics/field_trial.h"
 #include "base/time/time.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
 #include "chrome/browser/precache/precache_manager_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "components/data_use_measurement/content/data_use_measurement.h"
+#include "components/data_use_measurement/content/content_url_request_classifier.h"
 #include "components/precache/content/precache_manager.h"
 #include "content/public/browser/browser_thread.h"
 #include "net/url_request/url_request.h"
@@ -20,6 +25,9 @@ class HttpResponseInfo;
 }
 
 namespace {
+
+const char kPrecacheSynthetic15D[] = "PrecacheSynthetic15D";
+const char kPrecacheSynthetic1D[] = "PrecacheSynthetic1D";
 
 void UpdatePrecacheMetricsAndStateOnUIThread(const GURL& url,
                                              const GURL& referrer,
@@ -42,7 +50,8 @@ void UpdatePrecacheMetricsAndStateOnUIThread(const GURL& url,
     return;
 
   precache_manager->UpdatePrecacheMetricsAndState(
-      url, referrer, latency, fetch_time, info, size, is_user_traffic);
+      url, referrer, latency, fetch_time, info, size, is_user_traffic,
+      base::Bind(&precache::RegisterPrecacheSyntheticFieldTrial));
 }
 
 }  // namespace
@@ -64,13 +73,31 @@ void UpdatePrecacheMetricsAndState(const net::URLRequest* request,
   // precaching is allowed.
   content::BrowserThread::PostTask(
       content::BrowserThread::UI, FROM_HERE,
-      base::Bind(
-          &UpdatePrecacheMetricsAndStateOnUIThread, request->url(),
-          GURL(request->referrer()), latency, base::Time::Now(),
-          request->response_info(), received_content_length,
-          data_use_measurement::DataUseMeasurement::IsUserInitiatedRequest(
-              *request),
-          profile_id));
+      base::Bind(&UpdatePrecacheMetricsAndStateOnUIThread, request->url(),
+                 GURL(request->referrer()), latency, base::Time::Now(),
+                 request->response_info(), received_content_length,
+                 data_use_measurement::IsUserRequest(*request), profile_id));
+}
+
+// |last_precache_time| is the last time precache task was run.
+void RegisterPrecacheSyntheticFieldTrial(base::Time last_precache_time) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+  std::vector<uint32_t> groups;
+  base::TimeDelta time_ago = base::Time::Now() - last_precache_time;
+  // Look up the current group name (e.g. Control or Enabled).
+  std::string group_name =
+      base::FieldTrialList::FindFullName(kPrecacheFieldTrialName);
+  // group_name should only be empty if the Precache trial does not exist.
+  if (!group_name.empty()) {
+    // Register matching synthetic trials for 15-day and 1-day candidates.
+    if (time_ago <= base::TimeDelta::FromDays(15))
+      ChromeMetricsServiceAccessor::RegisterSyntheticFieldTrial(
+          kPrecacheSynthetic15D, group_name);
+    if (time_ago <= base::TimeDelta::FromDays(1))
+      ChromeMetricsServiceAccessor::RegisterSyntheticFieldTrial(
+          kPrecacheSynthetic1D, group_name);
+  }
 }
 
 }  // namespace precache

@@ -185,23 +185,21 @@ Compositor::Compositor(ui::ContextFactory* context_factory,
 
   base::TimeTicks before_create = base::TimeTicks::Now();
 
+  animation_host_ = cc::AnimationHost::CreateMainInstance();
+
   cc::LayerTreeHostInProcess::InitParams params;
   params.client = this;
-  params.shared_bitmap_manager = context_factory_->GetSharedBitmapManager();
-  params.gpu_memory_buffer_manager =
-      context_factory_->GetGpuMemoryBufferManager();
   params.task_graph_runner = context_factory_->GetTaskGraphRunner();
   params.settings = &settings;
   params.main_task_runner = task_runner_;
-  params.animation_host = cc::AnimationHost::CreateMainInstance();
+  params.mutator_host = animation_host_.get();
   host_ = cc::LayerTreeHostInProcess::CreateSingleThreaded(this, &params);
   UMA_HISTOGRAM_TIMES("GPU.CreateBrowserCompositor",
                       base::TimeTicks::Now() - before_create);
 
   animation_timeline_ =
       cc::AnimationTimeline::Create(cc::AnimationIdProvider::NextTimelineId());
-  host_->GetLayerTree()->animation_host()->AddAnimationTimeline(
-      animation_timeline_.get());
+  animation_host_->AddAnimationTimeline(animation_timeline_.get());
 
   host_->GetLayerTree()->SetRootLayer(root_web_layer_);
   host_->SetFrameSinkId(frame_sink_id_);
@@ -214,18 +212,17 @@ Compositor::~Compositor() {
   CancelCompositorLock();
   DCHECK(!compositor_lock_);
 
-  FOR_EACH_OBSERVER(CompositorObserver, observer_list_,
-                    OnCompositingShuttingDown(this));
+  for (auto& observer : observer_list_)
+    observer.OnCompositingShuttingDown(this);
 
-  FOR_EACH_OBSERVER(CompositorAnimationObserver, animation_observer_list_,
-                    OnCompositingShuttingDown(this));
+  for (auto& observer : animation_observer_list_)
+    observer.OnCompositingShuttingDown(this);
 
   if (root_layer_)
     root_layer_->ResetCompositor();
 
   if (animation_timeline_)
-    host_->GetLayerTree()->animation_host()->RemoveAnimationTimeline(
-        animation_timeline_.get());
+    animation_host_->RemoveAnimationTimeline(animation_timeline_.get());
 
   // Stop all outstanding draws before telling the ContextFactory to tear
   // down any contexts that the |host_| may rely upon.
@@ -234,7 +231,7 @@ Compositor::~Compositor() {
   context_factory_->RemoveCompositor(this);
   auto* manager = context_factory_->GetSurfaceManager();
   for (auto& client : child_frame_sinks_) {
-    DCHECK(!client.is_null());
+    DCHECK(client.is_valid());
     manager->UnregisterFrameSinkHierarchy(frame_sink_id_, client);
   }
   manager->InvalidateFrameSinkId(frame_sink_id_);
@@ -249,7 +246,7 @@ void Compositor::AddFrameSink(const cc::FrameSinkId& frame_sink_id) {
 void Compositor::RemoveFrameSink(const cc::FrameSinkId& frame_sink_id) {
   auto it = child_frame_sinks_.find(frame_sink_id);
   DCHECK(it != child_frame_sinks_.end());
-  DCHECK(!it->is_null());
+  DCHECK(it->is_valid());
   context_factory_->GetSurfaceManager()->UnregisterFrameSinkHierarchy(
       frame_sink_id_, *it);
   child_frame_sinks_.erase(it);
@@ -295,7 +292,8 @@ void Compositor::ScheduleFullRedraw() {
   // will also commit.  This should probably just redraw the screen
   // from damage and not commit.  ScheduleDraw/ScheduleRedraw need
   // better names.
-  host_->SetNeedsRedraw();
+  host_->SetNeedsRedrawRect(
+      gfx::Rect(host_->GetLayerTree()->device_viewport_size()));
   host_->SetNeedsCommit();
 }
 
@@ -406,7 +404,6 @@ void Compositor::SetWindow(ui::Window* window) {
 }
 
 ui::Window* Compositor::window() const {
-  DCHECK(window_);
   return window_;
 }
 #endif
@@ -443,9 +440,8 @@ bool Compositor::HasAnimationObserver(
 }
 
 void Compositor::BeginMainFrame(const cc::BeginFrameArgs& args) {
-  FOR_EACH_OBSERVER(CompositorAnimationObserver,
-                    animation_observer_list_,
-                    OnAnimationStep(args.frame_time));
+  for (auto& observer : animation_observer_list_)
+    observer.OnAnimationStep(args.frame_time);
   if (animation_observer_list_.might_have_observers())
     host_->SetNeedsAnimate();
 }
@@ -472,8 +468,6 @@ void Compositor::RequestNewCompositorFrameSink() {
     context_factory_->CreateCompositorFrameSink(weak_ptr_factory_.GetWeakPtr());
 }
 
-void Compositor::DidInitializeCompositorFrameSink() {}
-
 void Compositor::DidFailToInitializeCompositorFrameSink() {
   // The CompositorFrameSink should already be bound/initialized before being
   // given to
@@ -483,29 +477,19 @@ void Compositor::DidFailToInitializeCompositorFrameSink() {
 
 void Compositor::DidCommit() {
   DCHECK(!IsLocked());
-  FOR_EACH_OBSERVER(CompositorObserver,
-                    observer_list_,
-                    OnCompositingDidCommit(this));
+  for (auto& observer : observer_list_)
+    observer.OnCompositingDidCommit(this);
 }
 
-void Compositor::DidCommitAndDrawFrame() {
+void Compositor::DidReceiveCompositorFrameAck() {
+  for (auto& observer : observer_list_)
+    observer.OnCompositingEnded(this);
 }
 
-void Compositor::DidCompleteSwapBuffers() {
-  FOR_EACH_OBSERVER(CompositorObserver, observer_list_,
-                    OnCompositingEnded(this));
-}
-
-void Compositor::DidPostSwapBuffers() {
+void Compositor::DidSubmitCompositorFrame() {
   base::TimeTicks start_time = base::TimeTicks::Now();
-  FOR_EACH_OBSERVER(CompositorObserver, observer_list_,
-                    OnCompositingStarted(this, start_time));
-}
-
-void Compositor::DidAbortSwapBuffers() {
-  FOR_EACH_OBSERVER(CompositorObserver,
-                    observer_list_,
-                    OnCompositingAborted(this));
+  for (auto& observer : observer_list_)
+    observer.OnCompositingStarted(this, start_time);
 }
 
 void Compositor::SetOutputIsSecure(bool output_is_secure) {
@@ -529,9 +513,8 @@ scoped_refptr<CompositorLock> Compositor::GetCompositorLock() {
   if (!compositor_lock_) {
     compositor_lock_ = new CompositorLock(this);
     host_->SetDeferCommits(true);
-    FOR_EACH_OBSERVER(CompositorObserver,
-                      observer_list_,
-                      OnCompositingLockStateChanged(this));
+    for (auto& observer : observer_list_)
+      observer.OnCompositingLockStateChanged(this);
   }
   return compositor_lock_;
 }
@@ -540,9 +523,8 @@ void Compositor::UnlockCompositor() {
   DCHECK(compositor_lock_);
   compositor_lock_ = NULL;
   host_->SetDeferCommits(false);
-  FOR_EACH_OBSERVER(CompositorObserver,
-                    observer_list_,
-                    OnCompositingLockStateChanged(this));
+  for (auto& observer : observer_list_)
+    observer.OnCompositingLockStateChanged(this);
 }
 
 void Compositor::CancelCompositorLock() {

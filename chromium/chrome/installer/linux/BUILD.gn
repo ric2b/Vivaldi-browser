@@ -90,9 +90,9 @@ copy("common_packaging_files") {
     "common/rpmrepo.cron",
     "common/symlinks.include",
     "common/variables.include",
-    "common/vivaldi/vivaldi.info",
     "common/wrapper",
-    "common/xfce-helper.template",
+    "//vivaldi/installer/linux/common/vivaldi.info",
+    "//vivaldi/installer/linux/common/xfce-helper.template",
   ]
 
   if (is_chrome_branded) {
@@ -162,7 +162,7 @@ if (!is_chromeos) {
       "rpm/build.sh",
       "rpm/expected_deps_i386",
       "rpm/expected_deps_x86_64",
-      "rpm/vivaldi.spec.template",
+      "//vivaldi/installer/linux/rpm/vivaldi.spec.template",
     ]
     outputs = [
       "$root_out_dir/installer/rpm/{{source_file_part}}",
@@ -216,6 +216,9 @@ group("installer_deps") {
   if (!is_chromeos) {
     public_deps += [ ":rpm_packaging_files" ]
   }
+  if (use_custom_libcxx) {
+    public_deps += [ "//buildtools/third_party/libc++" ]
+  }
 }
 
 # Creates .deb and .rpm (RPM for non-ChromeOS only) installer packages.
@@ -262,8 +265,8 @@ template("linux_package") {
     ]
   }
 
-  if (is_asan) {
-    packaging_files_binaries += [ "$root_out_dir/lib/libc++.so" ]
+  if (use_custom_libcxx) {
+    packaging_files_binaries += [ "$root_out_dir/libc++.so" ]
   }
 
   deb_target_name = "${target_name}_deb"

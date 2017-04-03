@@ -52,6 +52,7 @@
 #include "components/google/core/browser/google_util.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/prefs/pref_service.h"
+#include "components/safe_browsing_db/safe_browsing_prefs.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/download_item.h"
 #include "content/public/browser/page_navigator.h"
@@ -176,9 +177,9 @@ class DownloadSBClient
         total_type_(total_type),
         dangerous_type_(dangerous_type) {
     Profile* profile = Profile::FromBrowserContext(item.GetBrowserContext());
-    is_extended_reporting_ = profile &&
-                             profile->GetPrefs()->GetBoolean(
-                                 prefs::kSafeBrowsingExtendedReportingEnabled);
+    extended_reporting_level_ =
+        profile ? GetExtendedReportingLevel(*profile->GetPrefs())
+                : SBER_LEVEL_OFF;
   }
 
   virtual void StartCheck() = 0;
@@ -226,7 +227,7 @@ class DownloadSBClient
     hit_report.threat_source = safe_browsing::ThreatSource::LOCAL_PVER3;
     // TODO(nparker) Populate hit_report.population_id once Pver4 is used here.
     hit_report.post_data = post_data;
-    hit_report.is_extended_reporting = is_extended_reporting_;
+    hit_report.extended_reporting_level = extended_reporting_level_;
     hit_report.is_metrics_reporting_active =
         ChromeMetricsServiceAccessor::IsMetricsAndCrashReportingEnabled();
 
@@ -249,7 +250,7 @@ class DownloadSBClient
  private:
   const SBStatsType total_type_;
   const SBStatsType dangerous_type_;
-  bool is_extended_reporting_;
+  ExtendedReportingLevel extended_reporting_level_;
 
   DISALLOW_COPY_AND_ASSIGN(DownloadSBClient);
 };
@@ -353,9 +354,8 @@ class DownloadProtectionService::CheckClientDownloadRequest
     if (item_->GetBrowserContext()) {
       Profile* profile =
           Profile::FromBrowserContext(item_->GetBrowserContext());
-      is_extended_reporting_ = profile &&
-             profile->GetPrefs()->GetBoolean(
-                 prefs::kSafeBrowsingExtendedReportingEnabled);
+      is_extended_reporting_ =
+          profile && IsExtendedReportingEnabled(*profile->GetPrefs());
       is_incognito_ = item_->GetBrowserContext()->IsOffTheRecord();
     }
 
@@ -802,7 +802,7 @@ class DownloadProtectionService::CheckClientDownloadRequest
     // We currently sample 1% whitelisted downloads from users who opted
     // in extended reporting and are not in incognito mode.
     return service_ && is_extended_reporting_ && !is_incognito_ &&
-        base::RandDouble() < service_->whitelist_sample_rate();
+           base::RandDouble() < service_->whitelist_sample_rate();
   }
 
   void CheckWhitelists() {
@@ -946,8 +946,8 @@ class DownloadProtectionService::CheckClientDownloadRequest
 
     ClientDownloadRequest request;
     auto population = is_extended_reporting_
-        ? ChromeUserPopulation::EXTENDED_REPORTING
-        : ChromeUserPopulation::SAFE_BROWSING;
+                          ? ChromeUserPopulation::EXTENDED_REPORTING
+                          : ChromeUserPopulation::SAFE_BROWSING;
     request.mutable_population()->set_user_population(population);
 
     request.set_url(SanitizeUrl(item_->GetUrlChain().back()));
@@ -1238,8 +1238,7 @@ class DownloadProtectionService::PPAPIDownloadRequest
             GetSupportedFilePath(default_file_path, alternate_extensions)),
         weakptr_factory_(this) {
     DCHECK(profile);
-    is_extended_reporting_ = profile->GetPrefs()->GetBoolean(
-        prefs::kSafeBrowsingExtendedReportingEnabled);
+    is_extended_reporting_ = IsExtendedReportingEnabled(*profile->GetPrefs());
   }
 
   ~PPAPIDownloadRequest() override {
@@ -1328,8 +1327,8 @@ class DownloadProtectionService::PPAPIDownloadRequest
 
     ClientDownloadRequest request;
     auto population = is_extended_reporting_
-        ? ChromeUserPopulation::EXTENDED_REPORTING
-        : ChromeUserPopulation::SAFE_BROWSING;
+                          ? ChromeUserPopulation::EXTENDED_REPORTING
+                          : ChromeUserPopulation::SAFE_BROWSING;
     request.mutable_population()->set_user_population(population);
     request.set_download_type(ClientDownloadRequest::PPAPI_SAVE_REQUEST);
     ClientDownloadRequest::Resource* resource = request.add_resources();

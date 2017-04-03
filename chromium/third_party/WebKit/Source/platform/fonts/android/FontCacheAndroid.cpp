@@ -39,6 +39,41 @@
 
 namespace blink {
 
+static AtomicString defaultFontFamily(SkFontMgr* fontManager) {
+  // Pass nullptr to get the default typeface. The default typeface in Android
+  // is "sans-serif" if exists, or the first entry in fonts.xml.
+  sk_sp<SkTypeface> typeface(
+      fontManager->legacyCreateTypeface(nullptr, SkFontStyle()));
+  if (typeface) {
+    SkString familyName;
+    typeface->getFamilyName(&familyName);
+    if (familyName.size())
+      return toAtomicString(familyName);
+  }
+
+  // Some devices do not return the default typeface. There's not much we can
+  // do here, use "Arial", the value LayoutTheme uses for CSS system font
+  // keywords such as "menu".
+  NOTREACHED();
+  return "Arial";
+}
+
+static AtomicString defaultFontFamily() {
+  if (SkFontMgr* fontManager = FontCache::fontCache()->fontManager())
+    return defaultFontFamily(fontManager);
+  sk_sp<SkFontMgr> fm(SkFontMgr::RefDefault());
+  return defaultFontFamily(fm.get());
+}
+
+// static
+const AtomicString& FontCache::systemFontFamily() {
+  DEFINE_STATIC_LOCAL(AtomicString, systemFontFamily, (defaultFontFamily()));
+  return systemFontFamily;
+}
+
+// static
+void FontCache::setSystemFontFamily(const AtomicString&) {}
+
 PassRefPtr<SimpleFontData> FontCache::fallbackFontForCharacter(
     const FontDescription& fontDescription,
     UChar32 c,

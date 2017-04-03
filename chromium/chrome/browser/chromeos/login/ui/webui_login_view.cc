@@ -19,6 +19,7 @@
 #include "base/values.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_util.h"
+#include "chrome/browser/chromeos/app_mode/kiosk_app_manager.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host_impl.h"
 #include "chrome/browser/chromeos/login/ui/proxy_settings_dialog.h"
 #include "chrome/browser/chromeos/login/ui/webui_login_display.h"
@@ -50,7 +51,7 @@
 #include "content/public/browser/web_ui.h"
 #include "content/public/common/renderer_preferences.h"
 #include "extensions/browser/view_type_utils.h"
-#include "third_party/WebKit/public/web/WebInputEvent.h"
+#include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/views/controls/webview/webview.h"
@@ -70,6 +71,8 @@ namespace {
 const char kAccelNameCancel[] = "cancel";
 const char kAccelNameEnableDebugging[] = "debugging";
 const char kAccelNameEnrollment[] = "enrollment";
+// TODO(rsorokin): Remove custom Active Directory shortcut for the launch.
+const char kAccelNameEnrollmentAd[] = "enrollment_ad";
 const char kAccelNameKioskEnable[] = "kiosk_enable";
 const char kAccelNameVersion[] = "version";
 const char kAccelNameReset[] = "reset";
@@ -172,12 +175,7 @@ class WebUILoginView::StatusAreaFocusTraversable
 
 // WebUILoginView public: ------------------------------------------------------
 
-WebUILoginView::WebUILoginView()
-    : webui_login_(NULL),
-      is_hidden_(false),
-      webui_visible_(false),
-      should_emit_login_prompt_visible_(true),
-      forward_keyboard_event_(true) {
+WebUILoginView::WebUILoginView() {
   registrar_.Add(this,
                  chrome::NOTIFICATION_LOGIN_OR_LOCK_WEBUI_VISIBLE,
                  content::NotificationService::AllSources());
@@ -190,9 +188,14 @@ WebUILoginView::WebUILoginView()
   accel_map_[ui::Accelerator(ui::VKEY_E,
                              ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN)] =
       kAccelNameEnrollment;
-  accel_map_[ui::Accelerator(ui::VKEY_K,
-                             ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN)] =
-      kAccelNameKioskEnable;
+  accel_map_[ui::Accelerator(
+      ui::VKEY_A, ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN | ui::EF_SHIFT_DOWN)] =
+      kAccelNameEnrollmentAd;
+  if (KioskAppManager::IsConsumerKioskEnabled()) {
+    accel_map_[ui::Accelerator(ui::VKEY_K,
+                               ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN)] =
+        kAccelNameKioskEnable;
+  }
   accel_map_[ui::Accelerator(ui::VKEY_V, ui::EF_ALT_DOWN)] =
       kAccelNameVersion;
   accel_map_[ui::Accelerator(ui::VKEY_R,
@@ -233,9 +236,8 @@ WebUILoginView::WebUILoginView()
 }
 
 WebUILoginView::~WebUILoginView() {
-  FOR_EACH_OBSERVER(web_modal::ModalDialogHostObserver,
-                    observer_list_,
-                    OnHostDestroying());
+  for (auto& observer : observer_list_)
+    observer.OnHostDestroying();
 
   if (!chrome::IsRunningInMash() &&
       ash::Shell::GetInstance()->HasPrimaryStatusArea()) {
@@ -382,6 +384,10 @@ content::WebContents* WebUILoginView::GetWebContents() {
   return webui_login_->web_contents();
 }
 
+OobeUI* WebUILoginView::GetOobeUI() {
+  return static_cast<OobeUI*>(GetWebUI()->GetController());
+}
+
 void WebUILoginView::OpenProxySettings() {
   const NetworkState* network =
       NetworkHandler::Get()->network_state_handler()->DefaultNetwork();
@@ -426,7 +432,7 @@ void WebUILoginView::SetUIEnabled(bool enabled) {
 
   // We disable the UI to prevent user from interracting with UI elements,
   // particullary with the system tray menu. However, in case if the system tray
-  // bubble is opened at this point, it remains opened and interactictive even
+  // bubble is opened at this point, it remains opened and interactive even
   // after SystemTray::SetEnabled(false) call, which can be dangerous
   // (http://crbug.com/497080). Close the menu to fix it. Calling
   // SystemTray::SetEnabled(false) guarantees, that the menu will not be opened
@@ -443,9 +449,8 @@ void WebUILoginView::Layout() {
   DCHECK(webui_login_);
   webui_login_->SetBoundsRect(bounds());
 
-  FOR_EACH_OBSERVER(web_modal::ModalDialogHostObserver,
-                    observer_list_,
-                    OnPositionRequiresUpdate());
+  for (auto& observer : observer_list_)
+    observer.OnPositionRequiresUpdate();
 }
 
 void WebUILoginView::OnLocaleChanged() {
@@ -607,7 +612,7 @@ void WebUILoginView::OnLoginPromptVisible() {
     VLOG(1) << "Login WebUI >> not emitting signal, hidden: " << is_hidden_;
     return;
   }
-  TRACE_EVENT0("chromeos", "WebUILoginView::OnLoginPromoptVisible");
+  TRACE_EVENT0("chromeos", "WebUILoginView::OnLoginPromptVisible");
   if (should_emit_login_prompt_visible_) {
     VLOG(1) << "Login WebUI >> login-prompt-visible";
     chromeos::DBusThreadManager::Get()->GetSessionManagerClient()->

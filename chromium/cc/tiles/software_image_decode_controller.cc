@@ -28,6 +28,9 @@
 #include "third_party/skia/include/core/SkPixmap.h"
 #include "ui/gfx/skia_util.h"
 
+using base::trace_event::MemoryAllocatorDump;
+using base::trace_event::MemoryDumpLevelOfDetail;
+
 namespace cc {
 namespace {
 
@@ -104,7 +107,8 @@ class ImageDecodeTaskImpl : public TileTask {
                  "software", "source_prepare_tiles_id",
                  tracing_info_.prepare_tiles_id);
     devtools_instrumentation::ScopedImageDecodeTask image_decode_task(
-        image_.image().get());
+        image_.image().get(),
+        devtools_instrumentation::ScopedImageDecodeTask::SOFTWARE);
     controller_->DecodeImage(image_key_, image_);
   }
 
@@ -213,7 +217,7 @@ bool SoftwareImageDecodeController::GetTaskForImageAndRef(
   // will be decoded at raster time which is when it will be temporarily put in
   // the cache.
   ImageKey key = ImageKey::FromDrawImage(image);
-  TRACE_EVENT1("disabled-by-default-cc.debug",
+  TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("cc.debug"),
                "SoftwareImageDecodeController::GetTaskForImageAndRef", "key",
                key.ToString());
 
@@ -287,7 +291,7 @@ bool SoftwareImageDecodeController::GetTaskForImageAndRef(
 }
 
 void SoftwareImageDecodeController::RefImage(const ImageKey& key) {
-  TRACE_EVENT1("disabled-by-default-cc.debug",
+  TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("cc.debug"),
                "SoftwareImageDecodeController::RefImage", "key",
                key.ToString());
   lock_.AssertAcquired();
@@ -306,7 +310,7 @@ void SoftwareImageDecodeController::UnrefImage(const DrawImage& image) {
   //       it yet (or failed to decode it).
   //   2b. Unlock the image but keep it in list.
   const ImageKey& key = ImageKey::FromDrawImage(image);
-  TRACE_EVENT1("disabled-by-default-cc.debug",
+  TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("cc.debug"),
                "SoftwareImageDecodeController::UnrefImage", "key",
                key.ToString());
 
@@ -395,7 +399,7 @@ std::unique_ptr<SoftwareImageDecodeController::DecodedImage>
 SoftwareImageDecodeController::DecodeImageInternal(
     const ImageKey& key,
     const DrawImage& draw_image) {
-  TRACE_EVENT1("disabled-by-default-cc.debug",
+  TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("cc.debug"),
                "SoftwareImageDecodeController::DecodeImageInternal", "key",
                key.ToString());
   sk_sp<const SkImage> image = draw_image.image();
@@ -420,7 +424,7 @@ SoftwareImageDecodeController::DecodeImageInternal(
 DecodedDrawImage SoftwareImageDecodeController::GetDecodedImageForDraw(
     const DrawImage& draw_image) {
   ImageKey key = ImageKey::FromDrawImage(draw_image);
-  TRACE_EVENT1("disabled-by-default-cc.debug",
+  TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("cc.debug"),
                "SoftwareImageDecodeController::GetDecodedImageForDraw", "key",
                key.ToString());
   // If the target size is empty, we can skip this image draw.
@@ -433,7 +437,7 @@ DecodedDrawImage SoftwareImageDecodeController::GetDecodedImageForDraw(
 DecodedDrawImage SoftwareImageDecodeController::GetDecodedImageForDrawInternal(
     const ImageKey& key,
     const DrawImage& draw_image) {
-  TRACE_EVENT1("disabled-by-default-cc.debug",
+  TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("cc.debug"),
                "SoftwareImageDecodeController::GetDecodedImageForDrawInternal",
                "key", key.ToString());
   base::AutoLock lock(lock_);
@@ -533,7 +537,7 @@ SoftwareImageDecodeController::GetOriginalImageDecode(
       CreateImageInfo(image->width(), image->height(), format_);
   std::unique_ptr<base::DiscardableMemory> decoded_pixels;
   {
-    TRACE_EVENT0("disabled-by-default-cc.debug",
+    TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("cc.debug"),
                  "SoftwareImageDecodeController::GetOriginalImageDecode - "
                  "allocate decoded pixels");
     decoded_pixels =
@@ -542,7 +546,7 @@ SoftwareImageDecodeController::GetOriginalImageDecode(
                                               decoded_info.height());
   }
   {
-    TRACE_EVENT0("disabled-by-default-cc.debug",
+    TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("cc.debug"),
                  "SoftwareImageDecodeController::GetOriginalImageDecode - "
                  "read pixels");
     bool result = image->readPixels(decoded_info, decoded_pixels->data(),
@@ -587,16 +591,20 @@ SoftwareImageDecodeController::GetSubrectImageDecode(
       key.target_size().width(), key.target_size().height(), format_);
   std::unique_ptr<base::DiscardableMemory> subrect_pixels;
   {
-    TRACE_EVENT0("disabled-by-default-cc.debug",
+    TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("cc.debug"),
                  "SoftwareImageDecodeController::GetSubrectImageDecode - "
                  "allocate subrect pixels");
+    // TODO(vmpstr): This is using checked math to diagnose a problem reported
+    // in crbug.com/662217. If this is causing crashes, then it should be fixed
+    // elsewhere by skipping images that are too large.
+    base::CheckedNumeric<size_t> byte_size = subrect_info.minRowBytes();
+    byte_size *= subrect_info.height();
     subrect_pixels =
         base::DiscardableMemoryAllocator::GetInstance()
-            ->AllocateLockedDiscardableMemory(subrect_info.minRowBytes() *
-                                              subrect_info.height());
+            ->AllocateLockedDiscardableMemory(byte_size.ValueOrDie());
   }
   {
-    TRACE_EVENT0("disabled-by-default-cc.debug",
+    TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("cc.debug"),
                  "SoftwareImageDecodeController::GetOriginalImageDecode - "
                  "read pixels");
     bool result = decoded_draw_image.image()->readPixels(
@@ -651,7 +659,7 @@ SoftwareImageDecodeController::GetScaledImageDecode(
   std::unique_ptr<base::DiscardableMemory> scaled_pixels;
   {
     TRACE_EVENT0(
-        "disabled-by-default-cc.debug",
+        TRACE_DISABLED_BY_DEFAULT("cc.debug"),
         "SoftwareImageDecodeController::ScaleImage - allocate scaled pixels");
     scaled_pixels = base::DiscardableMemoryAllocator::GetInstance()
                         ->AllocateLockedDiscardableMemory(
@@ -662,7 +670,7 @@ SoftwareImageDecodeController::GetScaledImageDecode(
   DCHECK(key.filter_quality() == kHigh_SkFilterQuality ||
          key.filter_quality() == kMedium_SkFilterQuality);
   {
-    TRACE_EVENT0("disabled-by-default-cc.debug",
+    TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("cc.debug"),
                  "SoftwareImageDecodeController::ScaleImage - scale pixels");
     bool result =
         decoded_pixmap.scalePixels(scaled_pixmap, key.filter_quality());
@@ -678,7 +686,7 @@ SoftwareImageDecodeController::GetScaledImageDecode(
 void SoftwareImageDecodeController::DrawWithImageFinished(
     const DrawImage& image,
     const DecodedDrawImage& decoded_image) {
-  TRACE_EVENT1("disabled-by-default-cc.debug",
+  TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("cc.debug"),
                "SoftwareImageDecodeController::DrawWithImageFinished", "key",
                ImageKey::FromDrawImage(image).ToString());
   ImageKey key = ImageKey::FromDrawImage(image);
@@ -693,7 +701,7 @@ void SoftwareImageDecodeController::DrawWithImageFinished(
 }
 
 void SoftwareImageDecodeController::RefAtRasterImage(const ImageKey& key) {
-  TRACE_EVENT1("disabled-by-default-cc.debug",
+  TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("cc.debug"),
                "SoftwareImageDecodeController::RefAtRasterImage", "key",
                key.ToString());
   DCHECK(at_raster_decoded_images_.Peek(key) !=
@@ -702,7 +710,7 @@ void SoftwareImageDecodeController::RefAtRasterImage(const ImageKey& key) {
 }
 
 void SoftwareImageDecodeController::UnrefAtRasterImage(const ImageKey& key) {
-  TRACE_EVENT1("disabled-by-default-cc.debug",
+  TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("cc.debug"),
                "SoftwareImageDecodeController::UnrefAtRasterImage", "key",
                key.ToString());
   base::AutoLock lock(lock_);
@@ -777,9 +785,18 @@ bool SoftwareImageDecodeController::OnMemoryDump(
     base::trace_event::ProcessMemoryDump* pmd) {
   base::AutoLock lock(lock_);
 
-  // Dump each of our caches.
-  DumpImageMemoryForCache(decoded_images_, "cached", pmd);
-  DumpImageMemoryForCache(at_raster_decoded_images_, "at_raster", pmd);
+  if (args.level_of_detail == MemoryDumpLevelOfDetail::BACKGROUND) {
+    std::string dump_name =
+        base::StringPrintf("cc/image_memory/controller_0x%" PRIXPTR,
+                           reinterpret_cast<uintptr_t>(this));
+    MemoryAllocatorDump* dump = pmd->CreateAllocatorDump(dump_name);
+    dump->AddScalar("locked_size", MemoryAllocatorDump::kUnitsBytes,
+                    locked_images_budget_.GetCurrentUsageSafe());
+  } else {
+    // Dump each of our caches.
+    DumpImageMemoryForCache(decoded_images_, "cached", pmd);
+    DumpImageMemoryForCache(at_raster_decoded_images_, "at_raster", pmd);
+  }
 
   // Memory dump can't fail, always return true.
   return true;
@@ -796,13 +813,14 @@ void SoftwareImageDecodeController::DumpImageMemoryForCache(
         "cc/image_memory/controller_0x%" PRIXPTR "/%s/image_%" PRIu64 "_id_%d",
         reinterpret_cast<uintptr_t>(this), cache_name,
         image_pair.second->tracing_id(), image_pair.first.image_id());
-    base::trace_event::MemoryAllocatorDump* dump =
+    // CreateMemoryAllocatorDump will automatically add tracking values for the
+    // total size. If locked, we also add a "locked_size" below.
+    MemoryAllocatorDump* dump =
         image_pair.second->memory()->CreateMemoryAllocatorDump(
             dump_name.c_str(), pmd);
     DCHECK(dump);
     if (image_pair.second->is_locked()) {
-      dump->AddScalar("locked_size",
-                      base::trace_event::MemoryAllocatorDump::kUnitsBytes,
+      dump->AddScalar("locked_size", MemoryAllocatorDump::kUnitsBytes,
                       image_pair.first.locked_bytes());
     }
   }

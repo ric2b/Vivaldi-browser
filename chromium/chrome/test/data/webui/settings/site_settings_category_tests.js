@@ -130,10 +130,6 @@ cr.define('site_settings_category', function() {
 
           // A quick testing note on a few special categories...
 
-          // Full Screen is not a top-level category, and only appears as a
-          // permission under Site Details. Therefore it has no Category Desc
-          // that can be tested for.
-
           // The USB Devices category has no global toggle -- and therefore no
           // Category Desc (and has a special way of storing its data).
 
@@ -143,11 +139,8 @@ cr.define('site_settings_category', function() {
 
           // Test category text ids and descriptions for those categories that
           // have those.
-          if (category != settings.ContentSettingsTypes.FULLSCREEN &&
-              category != settings.ContentSettingsTypes.USB_DEVICES &&
+          if (category != settings.ContentSettingsTypes.USB_DEVICES &&
               category != settings.ContentSettingsTypes.ZOOM_LEVELS) {
-            assertNotEquals('', testElement.computeCategoryTextId(category));
-
             assertNotEquals('', testElement.computeCategoryDesc(
                 category, settings.PermissionValues.ALLOW, true));
             assertNotEquals('', testElement.computeCategoryDesc(
@@ -171,12 +164,6 @@ cr.define('site_settings_category', function() {
                   category, settings.PermissionValues.SESSION_ONLY, false));
             }
           }
-
-          // All categories have an icon and a title.
-          assertNotEquals(
-              '', testElement.computeIconForContentCategory(category));
-          assertNotEquals(
-              '', testElement.computeTitleForContentCategory(category));
         }
       });
 

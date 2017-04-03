@@ -128,6 +128,7 @@ LocationBarViewMac::LocationBarViewMac(AutocompleteTextField* field,
       should_animate_secure_verbose_(false),
       should_animate_nonsecure_verbose_(false),
       is_width_available_for_security_verbose_(false),
+      security_level_(security_state::NONE),
       weak_ptr_factory_(this) {
   ScopedVector<ContentSettingImageModel> models =
       ContentSettingImageModel::GenerateContentSettingImageModels();
@@ -150,45 +151,36 @@ LocationBarViewMac::LocationBarViewMac(AutocompleteTextField* field,
       !browser->SupportsWindowFeature(Browser::FEATURE_TABSTRIP)];
 
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-
-  if (command_line->HasSwitch(switches::kMaterialSecurityVerbose)) {
-    std::string security_verbose_flag =
-        command_line->GetSwitchValueASCII(switches::kMaterialSecurityVerbose);
-    should_show_secure_verbose_ =
-        security_verbose_flag ==
-            switches::kMaterialSecurityVerboseShowAllAnimated ||
-        security_verbose_flag ==
-            switches::kMaterialSecurityVerboseShowAllNonAnimated;
-
-    should_show_nonsecure_verbose_ = true;
-
-    should_show_nonsecure_verbose_ =
-        security_verbose_flag ==
-            switches::kMaterialSecurityVerboseShowAllAnimated ||
-        security_verbose_flag ==
-            switches::kMaterialSecurityVerboseShowNonSecureAnimated;
-    should_animate_secure_verbose_ = should_show_nonsecure_verbose_;
+  std::string security_chip;
+  if (command_line->HasSwitch(switches::kSecurityChip)) {
+    security_chip = command_line->GetSwitchValueASCII(switches::kSecurityChip);
   } else if (base::FeatureList::IsEnabled(features::kSecurityChip)) {
-    // Visibility value.
-    std::string security_chip = variations::GetVariationParamValueByFeature(
+    security_chip = variations::GetVariationParamValueByFeature(
         features::kSecurityChip, kSecurityChipFeatureVisibilityParam);
-    if (security_chip == switches::kSecurityChipShowNonSecureOnly) {
-      should_show_nonsecure_verbose_ = true;
-    } else if (security_chip == switches::kSecurityChipShowAll) {
-      should_show_secure_verbose_ = true;
-      should_show_nonsecure_verbose_ = true;
-    }
+  }
 
-    // Animation value.
-    std::string security_chip_animation =
+  if (security_chip == switches::kSecurityChipShowNonSecureOnly) {
+    should_show_nonsecure_verbose_ = true;
+  } else if (security_chip == switches::kSecurityChipShowAll) {
+    should_show_secure_verbose_ = true;
+    should_show_nonsecure_verbose_ = true;
+  }
+
+  std::string security_chip_animation;
+  if (command_line->HasSwitch(switches::kSecurityChipAnimation)) {
+    security_chip_animation =
         command_line->GetSwitchValueASCII(switches::kSecurityChipAnimation);
-    if (security_chip_animation ==
-        switches::kSecurityChipAnimationNonSecureOnly) {
-      should_animate_nonsecure_verbose_ = true;
-    } else if (security_chip_animation == switches::kSecurityChipAnimationAll) {
-      should_animate_secure_verbose_ = true;
-      should_animate_nonsecure_verbose_ = true;
-    }
+  } else if (base::FeatureList::IsEnabled(features::kSecurityChip)) {
+    security_chip_animation = variations::GetVariationParamValueByFeature(
+        features::kSecurityChip, kSecurityChipFeatureAnimationParam);
+  }
+
+  if (security_chip_animation ==
+      switches::kSecurityChipAnimationNonSecureOnly) {
+    should_animate_nonsecure_verbose_ = true;
+  } else if (security_chip_animation == switches::kSecurityChipAnimationAll) {
+    should_animate_secure_verbose_ = true;
+    should_animate_nonsecure_verbose_ = true;
   }
 
   // Sets images for the decorations, and performs a layout. This call ensures
@@ -426,30 +418,20 @@ bool LocationBarViewMac::IsStarEnabled() const {
          !IsBookmarkStarHiddenByExtension();
 }
 
-NSPoint LocationBarViewMac::GetBookmarkBubblePoint() const {
-  DCHECK(IsStarEnabled());
-  return [field_ bubblePointForDecoration:star_decoration_.get()];
+NSPoint LocationBarViewMac::GetBubblePointForDecoration(
+    LocationBarDecoration* decoration) const {
+  if (decoration == star_decoration_.get())
+    DCHECK(IsStarEnabled());
+
+  return [field_ bubblePointForDecoration:decoration];
 }
 
 NSPoint LocationBarViewMac::GetSaveCreditCardBubblePoint() const {
   return [field_ bubblePointForDecoration:save_credit_card_decoration_.get()];
 }
 
-NSPoint LocationBarViewMac::GetTranslateBubblePoint() const {
-  return [field_ bubblePointForDecoration:translate_decoration_.get()];
-}
-
-NSPoint LocationBarViewMac::GetManagePasswordsBubblePoint() const {
-  return [field_ bubblePointForDecoration:manage_passwords_decoration_.get()];
-}
-
 NSPoint LocationBarViewMac::GetPageInfoBubblePoint() const {
-  if (security_state_bubble_decoration_->IsVisible()) {
-    return [field_
-        bubblePointForDecoration:security_state_bubble_decoration_.get()];
-  } else {
-    return [field_ bubblePointForDecoration:location_icon_decoration_.get()];
-  }
+  return [field_ bubblePointForDecoration:GetPageInfoDecoration()];
 }
 
 void LocationBarViewMac::OnDecorationsChanged() {
@@ -511,6 +493,14 @@ void LocationBarViewMac::Layout() {
   }
 
   const bool is_keyword_hint = omnibox_view_->model()->is_keyword_hint();
+
+  // This is true for EV certificate since the certificate should be
+  // displayed, even if the width is narrow.
+  CGFloat available_width =
+      [cell availableWidthInFrame:[[cell controlView] frame]];
+  is_width_available_for_security_verbose_ =
+      available_width >= kMinURLWidth || ShouldShowEVBubble();
+
   if (!keyword.empty() && !is_keyword_hint) {
     // Switch from location icon to keyword mode.
     location_icon_decoration_->SetVisible(false);
@@ -532,14 +522,8 @@ void LocationBarViewMac::Layout() {
     base::string16 label(GetToolbarModel()->GetEVCertName());
     security_state_bubble_decoration_->SetFullLabel(
         base::SysUTF16ToNSString(label));
-
-    // This is true for EV certificate since the certificate should be
-    // displayed, even if the width is narrow.
-    is_width_available_for_security_verbose_ = true;
-  } else if (ShouldShowSecurityState()) {
-    CGFloat available_width =
-        [cell availableWidthInFrame:[[cell controlView] frame]];
-    is_width_available_for_security_verbose_ = available_width >= kMinURLWidth;
+  } else if (ShouldShowSecurityState() ||
+             security_state_bubble_decoration_->AnimatingOut()) {
     bool is_security_state_visible =
         is_width_available_for_security_verbose_ ||
         security_state_bubble_decoration_->AnimatingOut();
@@ -630,13 +614,14 @@ void LocationBarViewMac::Update(const WebContents* contents) {
   UpdateSaveCreditCardIcon();
   UpdateTranslateDecoration();
   UpdateZoomDecoration(/*default_zoom_changed=*/false);
-  UpdateSecurityState(contents);
   RefreshPageActionDecorations();
   RefreshContentSettingsDecorations();
-  if (contents)
+  if (contents) {
     omnibox_view_->OnTabChanged(contents);
-  else
+    UpdateSecurityState(contents);
+  } else {
     omnibox_view_->Update();
+  }
 
   OnChanged();
 }
@@ -704,7 +689,7 @@ WebContents* LocationBarViewMac::GetWebContents() {
 
 bool LocationBarViewMac::ShouldShowEVBubble() const {
   return GetToolbarModel()->GetSecurityLevel(false) ==
-         security_state::SecurityStateModel::EV_SECURE;
+         security_state::EV_SECURE;
 }
 
 bool LocationBarViewMac::ShouldShowSecurityState() const {
@@ -713,19 +698,28 @@ bool LocationBarViewMac::ShouldShowSecurityState() const {
     return false;
   }
 
-  security_state::SecurityStateModel::SecurityLevel security =
+  security_state::SecurityLevel security =
       GetToolbarModel()->GetSecurityLevel(false);
-  if (security == security_state::SecurityStateModel::EV_SECURE)
+
+  if (security == security_state::EV_SECURE)
     return true;
-  else if (security == security_state::SecurityStateModel::SECURE)
+  else if (security == security_state::SECURE)
     return should_show_secure_verbose_;
 
   return should_show_nonsecure_verbose_ &&
-         security == security_state::SecurityStateModel::DANGEROUS;
+         (security == security_state::DANGEROUS ||
+          security == security_state::HTTP_SHOW_WARNING);
 }
 
 bool LocationBarViewMac::IsLocationBarDark() const {
   return [[field_ window] inIncognitoModeWithSystemTheme];
+}
+
+LocationBarDecoration* LocationBarViewMac::GetPageInfoDecoration() const {
+  if (security_state_bubble_decoration_->IsVisible())
+    return security_state_bubble_decoration_.get();
+
+  return location_icon_decoration_.get();
 }
 
 NSImage* LocationBarViewMac::GetKeywordImage(const base::string16& keyword) {
@@ -753,11 +747,13 @@ SkColor LocationBarViewMac::GetLocationBarIconColor() const {
   if (ShouldShowEVBubble())
     return gfx::kGoogleGreen700;
 
-  security_state::SecurityStateModel::SecurityLevel security_level =
+  security_state::SecurityLevel security_level =
       GetToolbarModel()->GetSecurityLevel(false);
 
-  if (security_level == security_state::SecurityStateModel::NONE)
+  if (security_level == security_state::NONE ||
+      security_level == security_state::HTTP_SHOW_WARNING) {
     return gfx::kChromeIconGrey;
+  }
 
   NSColor* srgb_color =
       OmniboxViewMac::GetSecureTextColor(security_level, in_dark_mode);
@@ -901,43 +897,49 @@ bool LocationBarViewMac::UpdateZoomDecoration(bool default_zoom_changed) {
 }
 
 void LocationBarViewMac::UpdateSecurityState(bool tab_changed) {
-  if (!ShouldShowSecurityState())
-    return;
-
-  security_state::SecurityStateModel::SecurityLevel new_security_level =
-      GetToolbarModel()->GetSecurityLevel(false);
-  bool is_new_level_secure = IsSecureConnection(new_security_level);
-  bool is_secure_to_secure =
-      is_new_level_secure && IsSecureConnection(security_level_);
-  bool is_new_security_level =
-      security_level_ != new_security_level && !is_secure_to_secure;
-  security_level_ = new_security_level;
+  using SecurityLevel = security_state::SecurityLevel;
+  SecurityLevel new_security_level = GetToolbarModel()->GetSecurityLevel(false);
 
   // If there's enough space, but the secure state decoration had animated
   // out, animate it back in. Otherwise, if the security state has changed,
   // animate the decoration if animation is enabled and the state changed is
   // not from a tab switch.
-  if (is_width_available_for_security_verbose_) {
-    bool is_animated =
-        (is_new_level_secure && should_animate_secure_verbose_) ||
-        (!is_new_level_secure && should_animate_nonsecure_verbose_);
-
+  if (ShouldShowSecurityState() && is_width_available_for_security_verbose_) {
+    bool is_secure_to_secure = IsSecureConnection(new_security_level) &&
+                               IsSecureConnection(security_level_);
+    bool is_new_security_level =
+        security_level_ != new_security_level && !is_secure_to_secure;
     if (!tab_changed && security_state_bubble_decoration_->HasAnimatedOut())
       security_state_bubble_decoration_->AnimateIn(false);
-    else if (!is_animated || tab_changed)
+    else if (tab_changed || !CanAnimateSecurityLevel(new_security_level))
       security_state_bubble_decoration_->ShowWithoutAnimation();
     else if (is_new_security_level)
       security_state_bubble_decoration_->AnimateIn();
-  } else {
-    // Animate the decoration out if there's not enough space.
+  } else if (!is_width_available_for_security_verbose_ ||
+             CanAnimateSecurityLevel(security_level_)) {
     security_state_bubble_decoration_->AnimateOut();
+  }
+
+  security_level_ = new_security_level;
+}
+
+bool LocationBarViewMac::CanAnimateSecurityLevel(
+    security_state::SecurityLevel level) const {
+  using SecurityLevel = security_state::SecurityLevel;
+  if (IsSecureConnection(level)) {
+    return should_animate_secure_verbose_;
+  } else if (security_level_ == SecurityLevel::DANGEROUS ||
+             security_level_ == SecurityLevel::HTTP_SHOW_WARNING) {
+    return should_animate_nonsecure_verbose_;
+  } else {
+    return false;
   }
 }
 
 bool LocationBarViewMac::IsSecureConnection(
-    security_state::SecurityStateModel::SecurityLevel level) const {
-  return level == security_state::SecurityStateModel::SECURE ||
-         level == security_state::SecurityStateModel::EV_SECURE;
+    security_state::SecurityLevel level) const {
+  return level == security_state::SECURE ||
+         level == security_state::EV_SECURE;
 }
 
 void LocationBarViewMac::UpdateAccessibilityViewPosition(

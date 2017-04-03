@@ -50,11 +50,11 @@ const base::FilePath::CharType kDeviceLocalAccountComponentPolicy[] =
 const base::FilePath::CharType kDeviceDisplayProfileDirectory[] =
     FILE_PATH_LITERAL("/var/cache/display_profiles");
 
-const base::FilePath::CharType kDeviceColorProfileDirectory[] =
-    FILE_PATH_LITERAL("/usr/share/color/icc");
-
 const base::FilePath::CharType kDeviceExtensionLocalCache[] =
     FILE_PATH_LITERAL("/var/cache/external_cache");
+
+const base::FilePath::CharType kSigninProfileComponentPolicy[] =
+    FILE_PATH_LITERAL("/var/cache/signin_profile_component_policy");
 
 bool PathProvider(int key, base::FilePath* result) {
   switch (key) {
@@ -91,11 +91,11 @@ bool PathProvider(int key, base::FilePath* result) {
     case DIR_DEVICE_DISPLAY_PROFILES:
       *result = base::FilePath(kDeviceDisplayProfileDirectory);
       break;
-    case DIR_DEVICE_COLOR_CALIBRATION_PROFILES:
-      *result = base::FilePath(kDeviceColorProfileDirectory);
-      break;
     case DIR_DEVICE_EXTENSION_LOCAL_CACHE:
       *result = base::FilePath(kDeviceExtensionLocalCache);
+      break;
+    case DIR_SIGNIN_PROFILE_COMPONENT_POLICY:
+      *result = base::FilePath(kSigninProfileComponentPolicy);
       break;
     default:
       return false;
@@ -146,6 +146,9 @@ void RegisterStubPathOverrides(const base::FilePath& stubs_dir) {
   PathService::Override(
       DIR_DEVICE_EXTENSION_LOCAL_CACHE,
       parent.AppendASCII("stub_device_local_extension_cache"));
+  PathService::Override(
+      DIR_SIGNIN_PROFILE_COMPONENT_POLICY,
+      parent.AppendASCII("stub_signin_profile_component_policy"));
 }
 
 }  // namespace chromeos

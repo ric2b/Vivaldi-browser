@@ -7,7 +7,7 @@
 #include "core/dom/Text.h"
 #include "core/editing/EditingTestBase.h"
 #include "core/editing/VisiblePosition.h"
-#include "core/html/HTMLTextFormControlElement.h"
+#include "core/html/TextControlElement.h"
 #include "core/layout/LayoutTextFragment.h"
 #include "core/layout/line/InlineTextBox.h"
 #include <ostream>  // NOLINT
@@ -204,7 +204,7 @@ TEST_F(VisibleUnitsTest, canonicalPositionOfWithHTMLHtmlElement) {
   Node* two = document().querySelector("#two");
   Node* three = document().querySelector("#three");
   Node* four = document().querySelector("#four");
-  Element* html = document().createElement("html", ASSERT_NO_EXCEPTION);
+  Element* html = document().createElement("html");
   // Move two, three and four into second html element.
   html->appendChild(two);
   html->appendChild(three);
@@ -748,7 +748,7 @@ TEST_F(VisibleUnitsTest, isEndOfEditableOrNonEditableContentWithInput) {
   const char* bodyContent = "<input id=sample value=ab>cde";
   setBodyContent(bodyContent);
 
-  Node* text = toHTMLTextFormControlElement(document().getElementById("sample"))
+  Node* text = toTextControlElement(document().getElementById("sample"))
                    ->innerEditorElement()
                    ->firstChild();
 
@@ -1036,7 +1036,7 @@ TEST_F(VisibleUnitsTest, isVisuallyEquivalentCandidateWithHTMLHtmlElement) {
   Node* two = document().querySelector("#two");
   Node* three = document().querySelector("#three");
   Node* four = document().querySelector("#four");
-  Element* html = document().createElement("html", ASSERT_NO_EXCEPTION);
+  Element* html = document().createElement("html");
   // Move two, three and four into second html element.
   html->appendChild(two);
   html->appendChild(three);
@@ -1838,12 +1838,10 @@ TEST_F(VisibleUnitsTest, startOfParagraph) {
   root->setInnerHTML(
       "<style>* { display:inline-table; }</style><body "
       "contenteditable=true><svg><svg><foreignObject>abc<svg></svg></"
-      "foreignObject></svg></svg></body>",
-      ASSERT_NO_EXCEPTION);
+      "foreignObject></svg></svg></body>");
   Element* oldBody = document().body();
   root->setInnerHTML(
-      "<body contenteditable=true><svg><foreignObject><style>def</style>",
-      ASSERT_NO_EXCEPTION);
+      "<body contenteditable=true><svg><foreignObject><style>def</style>");
   DCHECK_NE(oldBody, document().body());
   Node* foreignObject = document().body()->firstChild()->firstChild();
   foreignObject->insertBefore(oldBody, foreignObject->firstChild());

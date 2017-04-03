@@ -6,6 +6,7 @@
 
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 
 class TestToolbarActionsBarBubbleDelegate::DelegateImpl
     : public ToolbarActionsBarBubbleDelegate {
@@ -28,6 +29,13 @@ class TestToolbarActionsBarBubbleDelegate::DelegateImpl
   base::string16 GetDismissButtonText() override { return parent_->dismiss_; }
   base::string16 GetLearnMoreButtonText() override {
     return parent_->learn_more_;
+  }
+  std::unique_ptr<ToolbarActionsBarBubbleDelegate::ExtraViewInfo>
+  GetExtraViewInfo() override {
+    if (parent_->info_)
+      return base::MakeUnique<ToolbarActionsBarBubbleDelegate::ExtraViewInfo>(
+          *parent_->info_);
+    return nullptr;
   }
   std::string GetAnchorActionId() override { return std::string(); }
   void OnBubbleShown() override {
@@ -52,8 +60,7 @@ TestToolbarActionsBarBubbleDelegate::TestToolbarActionsBarBubbleDelegate(
       heading_(heading),
       body_(body),
       action_(action),
-      close_on_deactivate_(true) {
-}
+      close_on_deactivate_(true) {}
 
 TestToolbarActionsBarBubbleDelegate::~TestToolbarActionsBarBubbleDelegate() {
   // If the bubble didn't close, it means that it still owns the DelegateImpl,

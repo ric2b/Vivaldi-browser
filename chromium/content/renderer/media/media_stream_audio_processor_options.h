@@ -26,8 +26,6 @@ class TypingDetection;
 
 namespace content {
 
-class RTCMediaConstraints;
-
 using webrtc::AudioProcessing;
 
 // A helper class to parse audio constraints from a blink::WebMediaConstraints
@@ -162,8 +160,9 @@ void StopEchoCancellationDump(AudioProcessing* audio_processing);
 
 void EnableAutomaticGainControl(AudioProcessing* audio_processing);
 
-void GetAecStats(webrtc::EchoCancellation* echo_cancellation,
-                 webrtc::AudioProcessorInterface::AudioProcessorStats* stats);
+void GetAudioProcessingStats(
+    AudioProcessing* audio_processing,
+    webrtc::AudioProcessorInterface::AudioProcessorStats* stats);
 
 // Returns the array geometry from the media constraints if existing and
 // otherwise that provided by the input device.

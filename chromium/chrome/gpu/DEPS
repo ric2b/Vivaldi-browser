@@ -1,4 +1,5 @@
 include_rules = [
+  "+chrome/common",
   "+components/arc/common",
   "+components/metrics",
   "+content/public/gpu",
@@ -6,5 +7,5 @@ include_rules = [
   "+media/base/video_frame.h",
   "+media/gpu",
   "+mojo/edk/embedder",
-  "+services/shell/public/cpp",
+  "+services/service_manager/public/cpp",
 ]

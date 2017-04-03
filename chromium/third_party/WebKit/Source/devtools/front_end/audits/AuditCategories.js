@@ -29,49 +29,41 @@
  */
 
 /**
- * @constructor
- * @extends {WebInspector.AuditCategoryImpl}
+ * @unrestricted
  */
-WebInspector.AuditCategories.PagePerformance = function() {
-    WebInspector.AuditCategoryImpl.call(this, WebInspector.AuditCategories.PagePerformance.AuditCategoryName);
-}
+Audits.AuditCategories.PagePerformance = class extends Audits.AuditCategoryImpl {
+  constructor() {
+    super(Audits.AuditCategories.PagePerformance.AuditCategoryName);
+  }
 
-WebInspector.AuditCategories.PagePerformance.AuditCategoryName = WebInspector.UIString("Web Page Performance");
+  initialize() {
+    this.addRule(new Audits.AuditRules.UnusedCssRule(), Audits.AuditRule.Severity.Warning);
+    this.addRule(new Audits.AuditRules.CssInHeadRule(), Audits.AuditRule.Severity.Severe);
+    this.addRule(new Audits.AuditRules.StylesScriptsOrderRule(), Audits.AuditRule.Severity.Severe);
+  }
+};
 
-WebInspector.AuditCategories.PagePerformance.prototype = {
-    initialize: function()
-    {
-        this.addRule(new WebInspector.AuditRules.UnusedCssRule(), WebInspector.AuditRule.Severity.Warning);
-        this.addRule(new WebInspector.AuditRules.CssInHeadRule(), WebInspector.AuditRule.Severity.Severe);
-        this.addRule(new WebInspector.AuditRules.StylesScriptsOrderRule(), WebInspector.AuditRule.Severity.Severe);
-    },
-
-    __proto__: WebInspector.AuditCategoryImpl.prototype
-}
+Audits.AuditCategories.PagePerformance.AuditCategoryName = Common.UIString('Web Page Performance');
 
 /**
- * @constructor
- * @extends {WebInspector.AuditCategoryImpl}
+ * @unrestricted
  */
-WebInspector.AuditCategories.NetworkUtilization = function() {
-    WebInspector.AuditCategoryImpl.call(this, WebInspector.AuditCategories.NetworkUtilization.AuditCategoryName);
-}
+Audits.AuditCategories.NetworkUtilization = class extends Audits.AuditCategoryImpl {
+  constructor() {
+    super(Audits.AuditCategories.NetworkUtilization.AuditCategoryName);
+  }
 
-WebInspector.AuditCategories.NetworkUtilization.AuditCategoryName = WebInspector.UIString("Network Utilization");
+  initialize() {
+    this.addRule(new Audits.AuditRules.GzipRule(), Audits.AuditRule.Severity.Severe);
+    this.addRule(new Audits.AuditRules.ImageDimensionsRule(), Audits.AuditRule.Severity.Warning);
+    this.addRule(new Audits.AuditRules.CookieSizeRule(400), Audits.AuditRule.Severity.Warning);
+    this.addRule(new Audits.AuditRules.StaticCookielessRule(5), Audits.AuditRule.Severity.Warning);
+    this.addRule(new Audits.AuditRules.CombineJsResourcesRule(2), Audits.AuditRule.Severity.Severe);
+    this.addRule(new Audits.AuditRules.CombineCssResourcesRule(2), Audits.AuditRule.Severity.Severe);
+    this.addRule(new Audits.AuditRules.MinimizeDnsLookupsRule(4), Audits.AuditRule.Severity.Warning);
+    this.addRule(new Audits.AuditRules.ParallelizeDownloadRule(4, 10, 0.5), Audits.AuditRule.Severity.Warning);
+    this.addRule(new Audits.AuditRules.BrowserCacheControlRule(), Audits.AuditRule.Severity.Severe);
+  }
+};
 
-WebInspector.AuditCategories.NetworkUtilization.prototype = {
-    initialize: function()
-    {
-        this.addRule(new WebInspector.AuditRules.GzipRule(), WebInspector.AuditRule.Severity.Severe);
-        this.addRule(new WebInspector.AuditRules.ImageDimensionsRule(), WebInspector.AuditRule.Severity.Warning);
-        this.addRule(new WebInspector.AuditRules.CookieSizeRule(400), WebInspector.AuditRule.Severity.Warning);
-        this.addRule(new WebInspector.AuditRules.StaticCookielessRule(5), WebInspector.AuditRule.Severity.Warning);
-        this.addRule(new WebInspector.AuditRules.CombineJsResourcesRule(2), WebInspector.AuditRule.Severity.Severe);
-        this.addRule(new WebInspector.AuditRules.CombineCssResourcesRule(2), WebInspector.AuditRule.Severity.Severe);
-        this.addRule(new WebInspector.AuditRules.MinimizeDnsLookupsRule(4), WebInspector.AuditRule.Severity.Warning);
-        this.addRule(new WebInspector.AuditRules.ParallelizeDownloadRule(4, 10, 0.5), WebInspector.AuditRule.Severity.Warning);
-        this.addRule(new WebInspector.AuditRules.BrowserCacheControlRule(), WebInspector.AuditRule.Severity.Severe);
-    },
-
-    __proto__: WebInspector.AuditCategoryImpl.prototype
-}
+Audits.AuditCategories.NetworkUtilization.AuditCategoryName = Common.UIString('Network Utilization');

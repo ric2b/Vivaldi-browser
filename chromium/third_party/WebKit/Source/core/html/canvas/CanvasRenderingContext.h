@@ -32,6 +32,7 @@
 #include "core/layout/HitTestCanvasResult.h"
 #include "core/offscreencanvas/OffscreenCanvas.h"
 #include "third_party/skia/include/core/SkColorSpace.h"
+#include "third_party/skia/include/core/SkImageInfo.h"
 #include "wtf/HashSet.h"
 #include "wtf/Noncopyable.h"
 #include "wtf/text/StringHash.h"
@@ -85,9 +86,13 @@ class CORE_EXPORT CanvasRenderingContext
   CanvasColorSpace colorSpace() const { return m_colorSpace; };
   WTF::String colorSpaceAsString() const;
   sk_sp<SkColorSpace> skColorSpace() const;
+  SkColorType colorType() const;
 
   virtual PassRefPtr<Image> getImage(AccelerationHint,
                                      SnapshotReason) const = 0;
+  virtual ImageData* toImageData(SnapshotReason reason) const {
+    return nullptr;
+  }
   virtual ContextType getContextType() const = 0;
   virtual bool isAccelerated() const { return false; }
   virtual bool shouldAntialias() const { return false; }
@@ -160,9 +165,7 @@ class CORE_EXPORT CanvasRenderingContext
 
   // OffscreenCanvas-specific methods
   OffscreenCanvas* getOffscreenCanvas() const { return m_offscreenCanvas; }
-  virtual ImageBitmap* transferToImageBitmap(ExceptionState&) {
-    return nullptr;
-  }
+  virtual ImageBitmap* transferToImageBitmap(ScriptState*) { return nullptr; }
 
   bool wouldTaintOrigin(CanvasImageSource*, SecurityOrigin* = nullptr);
   void didMoveToNewDocument(Document*);

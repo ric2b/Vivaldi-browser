@@ -5,7 +5,6 @@
 #include "modules/payments/PaymentResponse.h"
 
 #include "bindings/core/v8/ExceptionStatePlaceholder.h"
-#include "bindings/core/v8/JSONValuesForV8.h"
 #include "bindings/core/v8/V8ObjectBuilder.h"
 #include "modules/payments/PaymentAddress.h"
 #include "modules/payments/PaymentCompleter.h"
@@ -13,8 +12,9 @@
 
 namespace blink {
 
-PaymentResponse::PaymentResponse(mojom::blink::PaymentResponsePtr response,
-                                 PaymentCompleter* paymentCompleter)
+PaymentResponse::PaymentResponse(
+    payments::mojom::blink::PaymentResponsePtr response,
+    PaymentCompleter* paymentCompleter)
     : m_methodName(response->method_name),
       m_stringifiedDetails(response->stringified_details),
       m_shippingAddress(
@@ -42,20 +42,10 @@ ScriptValue PaymentResponse::toJSONForBinding(ScriptState* scriptState) const {
   else
     result.addNull("shippingAddress");
 
-  if (shippingOption().isNull())
-    result.addNull("shippingOption");
-  else
-    result.addString("shippingOption", shippingOption());
-
-  if (payerEmail().isNull())
-    result.addNull("payerEmail");
-  else
-    result.addString("payerEmail", payerEmail());
-
-  if (payerPhone().isNull())
-    result.addNull("payerPhone");
-  else
-    result.addString("payerPhone", payerPhone());
+  result.addStringOrNull("shippingOption", shippingOption())
+      .addStringOrNull("payerName", payerName())
+      .addStringOrNull("payerEmail", payerEmail())
+      .addStringOrNull("payerPhone", payerPhone());
 
   return result.scriptValue();
 }
@@ -63,8 +53,8 @@ ScriptValue PaymentResponse::toJSONForBinding(ScriptState* scriptState) const {
 ScriptValue PaymentResponse::details(ScriptState* scriptState,
                                      ExceptionState& exceptionState) const {
   return ScriptValue(
-      scriptState,
-      fromJSONString(scriptState, m_stringifiedDetails, exceptionState));
+      scriptState, fromJSONString(scriptState->isolate(), m_stringifiedDetails,
+                                  exceptionState));
 }
 
 ScriptPromise PaymentResponse::complete(ScriptState* scriptState,

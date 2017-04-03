@@ -144,38 +144,39 @@ void CompositingInputsUpdater::updateRecursive(PaintLayer* layer,
 
   if (updateType == ForceUpdate) {
     PaintLayer::AncestorDependentCompositingInputs properties;
-    PaintLayer::RareAncestorDependentCompositingInputs rareProperties;
 
     if (!layer->isRootLayer()) {
       if (!RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
-        properties.clippedAbsoluteBoundingBox =
+        properties.unclippedAbsoluteBoundingBox =
             enclosingIntRect(m_geometryMap.absoluteRect(
                 FloatRect(layer->boundingBoxForCompositingOverlapTest())));
         // FIXME: Setting the absBounds to 1x1 instead of 0x0 makes very little
         // sense, but removing this code will make JSGameBench sad.
         // See https://codereview.chromium.org/13912020/
-        if (properties.clippedAbsoluteBoundingBox.isEmpty())
-          properties.clippedAbsoluteBoundingBox.setSize(IntSize(1, 1));
+        if (properties.unclippedAbsoluteBoundingBox.isEmpty())
+          properties.unclippedAbsoluteBoundingBox.setSize(IntSize(1, 1));
 
         IntRect clipRect =
             pixelSnappedIntRect(layer->clipper()
                                     .backgroundClipRect(ClipRectsContext(
                                         m_rootLayer, AbsoluteClipRects))
                                     .rect());
+        properties.clippedAbsoluteBoundingBox =
+            properties.unclippedAbsoluteBoundingBox;
         properties.clippedAbsoluteBoundingBox.intersect(clipRect);
       }
 
       const PaintLayer* parent = layer->parent();
-      rareProperties.opacityAncestor =
+      properties.opacityAncestor =
           parent->isTransparent() ? parent : parent->opacityAncestor();
-      rareProperties.transformAncestor =
+      properties.transformAncestor =
           parent->transform() ? parent : parent->transformAncestor();
-      rareProperties.filterAncestor = parent->hasFilterInducingProperty()
-                                          ? parent
-                                          : parent->filterAncestor();
+      properties.filterAncestor = parent->hasFilterInducingProperty()
+                                      ? parent
+                                      : parent->filterAncestor();
       bool layerIsFixedPosition =
           layer->layoutObject()->style()->position() == FixedPosition;
-      rareProperties.nearestFixedPositionLayer =
+      properties.nearestFixedPositionLayer =
           layerIsFixedPosition ? layer : parent->nearestFixedPositionLayer();
 
       if (info.hasAncestorWithClipRelatedProperty) {
@@ -196,7 +197,7 @@ void CompositingInputsUpdater::updateRecursive(PaintLayer* layer,
                   ? properties.clippingContainer->enclosingLayer()
                   : layer->compositor()->rootLayer();
           if (hasClippedStackingAncestor(layer, clippingLayer))
-            rareProperties.clipParent = clippingLayer;
+            properties.clipParent = clippingLayer;
         }
       }
 
@@ -206,22 +207,21 @@ void CompositingInputsUpdater::updateRecursive(PaintLayer* layer,
         const PaintLayer* parentLayerOnContainingBlockChain =
             findParentLayerOnContainingBlockChain(containingBlock);
 
-        rareProperties.ancestorScrollingLayer =
+        properties.ancestorScrollingLayer =
             parentLayerOnContainingBlockChain->ancestorScrollingLayer();
         if (parentLayerOnContainingBlockChain->scrollsOverflow())
-          rareProperties.ancestorScrollingLayer =
-              parentLayerOnContainingBlockChain;
+          properties.ancestorScrollingLayer = parentLayerOnContainingBlockChain;
 
         if (layer->stackingNode()->isStacked() &&
-            rareProperties.ancestorScrollingLayer &&
+            properties.ancestorScrollingLayer &&
             !info.ancestorStackingContext->layoutObject()->isDescendantOf(
-                rareProperties.ancestorScrollingLayer->layoutObject()))
-          rareProperties.scrollParent = rareProperties.ancestorScrollingLayer;
+                properties.ancestorScrollingLayer->layoutObject()))
+          properties.scrollParent = properties.ancestorScrollingLayer;
       }
     }
 
     layer->updateAncestorDependentCompositingInputs(
-        properties, rareProperties, info.hasAncestorWithClipPath);
+        properties, info.hasAncestorWithClipPath);
   }
 
   if (layer->stackingNode()->isStackingContext())

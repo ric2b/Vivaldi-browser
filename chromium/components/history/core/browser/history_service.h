@@ -34,7 +34,7 @@
 #include "components/history/core/browser/keyword_id.h"
 #include "components/history/core/browser/typed_url_syncable_service.h"
 #include "components/keyed_service/core/keyed_service.h"
-#include "components/sync/api/syncable_service.h"
+#include "components/sync/model/syncable_service.h"
 #include "sql/init_status.h"
 #include "ui/base/page_transition_types.h"
 
@@ -170,8 +170,7 @@ class HistoryService : public syncer::SyncableService, public KeyedService {
 
   // Searces visists
   // Note: Virtual needed for mocking.
-  virtual void VisitSearch(const std::string& text_query,
-                           const QueryOptions& options,
+  virtual void VisitSearch(const QueryOptions& options,
                            const Visit::VisitsCallback& callback) const;
 
   // Gets the counts and most recent visit date of URLs that belong to |origins|
@@ -574,6 +573,7 @@ class HistoryService : public syncer::SyncableService, public KeyedService {
   friend class ::HistoryQuickProviderTest;
   friend class HistoryServiceTest;
   friend class ::HistoryURLProvider;
+  friend class HQPPerfTestOnePopularURL;
   friend class ::InMemoryURLIndexTest;
   friend class ::SyncBookmarkDataTypeControllerTest;
   friend class ::TestingProfile;

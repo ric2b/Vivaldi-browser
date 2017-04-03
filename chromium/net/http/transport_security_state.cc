@@ -392,7 +392,6 @@ class HuffmanDecoder {
 // data.
 struct PreloadResult {
   uint32_t pinset_id;
-  uint32_t domain_id;
   // hostname_offset contains the number of bytes from the start of the given
   // hostname where the name of the matching entry starts.
   size_t hostname_offset;
@@ -524,8 +523,12 @@ bool DecodeHSTSPreloadRaw(const std::string& search_hostname,
         tmp.pkp_include_subdomains = tmp.sts_include_subdomains;
 
         if (tmp.has_pins) {
+          // TODO(estark): This can be removed once the preload list
+          // format no longer includes |domain_id|.
+          // https://crbug.com/661206
+          uint32_t unused_domain_id;
           if (!reader.Read(4, &tmp.pinset_id) ||
-              !reader.Read(9, &tmp.domain_id) ||
+              !reader.Read(9, &unused_domain_id) ||
               (!tmp.sts_include_subdomains &&
                !reader.Next(&tmp.pkp_include_subdomains))) {
             return false;
@@ -681,6 +684,7 @@ bool SerializeExpectStapleReport(const HostPortPair& host_port_pair,
                                  const SSLInfo& ssl_info,
                                  const std::string& ocsp_response,
                                  std::string* out_serialized_report) {
+  DCHECK(ssl_info.is_issued_by_known_root);
   base::DictionaryValue report;
   report.SetString("date-time", TimeToISO8601(base::Time::Now()));
   report.SetString("hostname", host_port_pair.host());
@@ -699,12 +703,11 @@ bool SerializeExpectStapleReport(const HostPortPair& host_port_pair,
                      SerializeExpectStapleRevocationStatus(
                          ssl_info.ocsp_result.revocation_status));
   }
-  if (ssl_info.is_issued_by_known_root) {
-    report.Set("served-certificate-chain",
-               GetPEMEncodedChainAsList(ssl_info.unverified_cert.get()));
-    report.Set("validated-certificate-chain",
-               GetPEMEncodedChainAsList(ssl_info.cert.get()));
-  }
+
+  report.Set("served-certificate-chain",
+             GetPEMEncodedChainAsList(ssl_info.unverified_cert.get()));
+  report.Set("validated-certificate-chain",
+             GetPEMEncodedChainAsList(ssl_info.cert.get()));
 
   if (!base::JSONWriter::Write(report, out_serialized_report))
     return false;
@@ -778,10 +781,6 @@ TransportSecurityState::PKPStatus TransportSecurityState::CheckPublicKeyPins(
   if (!is_issued_by_known_root)
     return pin_validity;
 
-  if (pin_validity == PKPStatus::VIOLATED) {
-    LOG(ERROR) << *pinning_failure_log;
-    ReportUMAOnPinFailure(host_port_pair.host());
-  }
   UMA_HISTOGRAM_BOOLEAN("Net.PublicKeyPinSuccess",
                         pin_validity == PKPStatus::OK);
   return pin_validity;
@@ -792,8 +791,10 @@ void TransportSecurityState::CheckExpectStaple(
     const SSLInfo& ssl_info,
     const std::string& ocsp_response) {
   DCHECK(CalledOnValidThread());
-  if (!enable_static_expect_staple_ || !report_sender_)
+  if (!enable_static_expect_staple_ || !report_sender_ ||
+      !ssl_info.is_issued_by_known_root) {
     return;
+  }
 
   // Determine if the host is on the Expect-Staple preload list. If the build is
   // not timely (i.e. the preload list is not fresh), this will fail and return
@@ -814,7 +815,9 @@ void TransportSecurityState::CheckExpectStaple(
     return;
   }
   report_sender_->Send(expect_staple_state.report_uri,
-                       "application/json; charset=utf-8", serialized_report);
+                       "application/json; charset=utf-8", serialized_report,
+                       base::Closure(),
+                       base::Bind(RecordUMAForHPKPReportFailure));
 }
 
 bool TransportSecurityState::HasPublicKeyPins(const std::string& host) {
@@ -919,8 +922,6 @@ void TransportSecurityState::SetReportSender(
     TransportSecurityState::ReportSenderInterface* report_sender) {
   DCHECK(CalledOnValidThread());
   report_sender_ = report_sender;
-  if (report_sender_)
-    report_sender_->SetErrorCallback(base::Bind(RecordUMAForHPKPReportFailure));
 }
 
 void TransportSecurityState::SetExpectCTReporter(
@@ -1073,7 +1074,8 @@ TransportSecurityState::CheckPinsAndMaybeSendReport(
           base::TimeDelta::FromMinutes(kTimeToRememberHPKPReportsMins));
 
   report_sender_->Send(pkp_state.report_uri, "application/json; charset=utf-8",
-                       serialized_report);
+                       serialized_report, base::Closure(),
+                       base::Bind(RecordUMAForHPKPReportFailure));
   return PKPStatus::VIOLATED;
 }
 
@@ -1349,20 +1351,6 @@ void TransportSecurityState::ProcessExpectCTHeader(
 
   expect_ct_reporter_->OnExpectCTFailed(host_port_pair, state.report_uri,
                                         ssl_info);
-}
-
-// static
-void TransportSecurityState::ReportUMAOnPinFailure(const std::string& host) {
-  PreloadResult result;
-  if (!DecodeHSTSPreload(host, &result) ||
-      !result.has_pins) {
-    return;
-  }
-
-  DCHECK(result.domain_id != DOMAIN_NOT_PINNED);
-
-  UMA_HISTOGRAM_SPARSE_SLOWLY(
-      "Net.PublicKeyPinFailureDomain", result.domain_id);
 }
 
 // static

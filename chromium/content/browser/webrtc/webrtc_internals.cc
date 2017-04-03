@@ -50,19 +50,19 @@ static base::ListValue* EnsureLogList(base::DictionaryValue* dict) {
 }  // namespace
 
 WebRTCInternals::PendingUpdate::PendingUpdate(
-    const std::string& command,
+    const char* command,
     std::unique_ptr<base::Value> value)
     : command_(command), value_(std::move(value)) {}
 
 WebRTCInternals::PendingUpdate::PendingUpdate(PendingUpdate&& other)
-    : command_(std::move(other.command_)),
+    : command_(other.command_),
       value_(std::move(other.value_)) {}
 
 WebRTCInternals::PendingUpdate::~PendingUpdate() {
   DCHECK(thread_checker_.CalledOnValidThread());
 }
 
-const std::string& WebRTCInternals::PendingUpdate::command() const {
+const char* WebRTCInternals::PendingUpdate::command() const {
   DCHECK(thread_checker_.CalledOnValidThread());
   return command_;
 }
@@ -79,6 +79,7 @@ WebRTCInternals::WebRTCInternals(int aggregate_updates_ms,
     : audio_debug_recordings_(false),
       event_log_recordings_(false),
       selecting_event_log_(false),
+      num_open_connections_(0),
       should_block_power_saving_(should_block_power_saving),
       aggregate_updates_ms_(aggregate_updates_ms),
       weak_factory_(this) {
@@ -127,11 +128,13 @@ void WebRTCInternals::OnAddPeerConnection(int render_process_id,
   dict->SetString("rtcConfiguration", rtc_configuration);
   dict->SetString("constraints", constraints);
   dict->SetString("url", url);
+  dict->SetBoolean("isOpen", true);
 
   if (observers_.might_have_observers())
     SendUpdate("addPeerConnection", dict->CreateDeepCopy());
 
   peer_connection_data_.Append(std::move(dict));
+  ++num_open_connections_;
   CreateOrReleasePowerSaveBlocker();
 
   if (render_process_id_set_.insert(render_process_id).second) {
@@ -155,8 +158,8 @@ void WebRTCInternals::OnRemovePeerConnection(ProcessId pid, int lid) {
     if (this_pid != static_cast<int>(pid) || this_lid != lid)
       continue;
 
+    MaybeClosePeerConnection(dict);
     peer_connection_data_.Remove(i, NULL);
-    CreateOrReleasePowerSaveBlocker();
 
     if (observers_.might_have_observers()) {
       std::unique_ptr<base::DictionaryValue> id(new base::DictionaryValue());
@@ -182,6 +185,10 @@ void WebRTCInternals::OnUpdatePeerConnection(
 
     if (this_pid != static_cast<int>(pid) || this_lid != lid)
       continue;
+
+    if (type == "stop") {
+      MaybeClosePeerConnection(record);
+    }
 
     // Append the update to the end of the log.
     base::ListValue* log = EnsureLogList(record);
@@ -376,7 +383,7 @@ const base::FilePath& WebRTCInternals::GetEventLogFilePath() const {
   return event_log_recordings_file_path_;
 }
 
-void WebRTCInternals::SendUpdate(const string& command,
+void WebRTCInternals::SendUpdate(const char* command,
                                  std::unique_ptr<base::Value> value) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DCHECK(observers_.might_have_observers());
@@ -502,16 +509,29 @@ void WebRTCInternals::EnableEventLogRecordingsOnAllRenderProcessHosts() {
 }
 #endif
 
+void WebRTCInternals::MaybeClosePeerConnection(base::DictionaryValue* record) {
+  bool is_open;
+  bool did_read = record->GetBoolean("isOpen", &is_open);
+  DCHECK(did_read);
+  if (!is_open)
+    return;
+
+  record->SetBoolean("isOpen", false);
+  --num_open_connections_;
+  DCHECK_GE(num_open_connections_, 0);
+  CreateOrReleasePowerSaveBlocker();
+}
+
 void WebRTCInternals::CreateOrReleasePowerSaveBlocker() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (!should_block_power_saving_)
     return;
 
-  if (peer_connection_data_.empty() && power_save_blocker_) {
+  if (num_open_connections_ == 0 && power_save_blocker_) {
     DVLOG(1) << ("Releasing the block on application suspension since no "
                  "PeerConnections are active anymore.");
     power_save_blocker_.reset();
-  } else if (!peer_connection_data_.empty() && !power_save_blocker_) {
+  } else if (num_open_connections_ != 0 && !power_save_blocker_) {
     DVLOG(1) << ("Preventing the application from being suspended while one or "
                  "more PeerConnections are active.");
     power_save_blocker_.reset(new device::PowerSaveBlocker(
@@ -527,9 +547,8 @@ void WebRTCInternals::ProcessPendingUpdates() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   while (!pending_updates_.empty()) {
     const auto& update = pending_updates_.front();
-    FOR_EACH_OBSERVER(WebRTCInternalsUIObserver,
-                      observers_,
-                      OnUpdate(update.command(), update.value()));
+    for (auto& observer : observers_)
+      observer.OnUpdate(update.command(), update.value());
     pending_updates_.pop();
   }
 }

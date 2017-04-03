@@ -18,10 +18,6 @@ const base::Feature kOffliningRecentPagesFeature {
    "OfflineRecentPages", base::FEATURE_DISABLED_BY_DEFAULT
 };
 
-const base::Feature kOfflinePagesBackgroundLoadingFeature {
-   "OfflinePagesBackgroundLoading", base::FEATURE_DISABLED_BY_DEFAULT
-};
-
 const base::Feature kOfflinePagesCTFeature {
    "OfflinePagesCT", base::FEATURE_ENABLED_BY_DEFAULT
 };
@@ -29,8 +25,15 @@ const base::Feature kOfflinePagesCTFeature {
 const base::Feature kOfflinePagesSharingFeature{
     "OfflinePagesSharing", base::FEATURE_DISABLED_BY_DEFAULT};
 
+const base::Feature kOfflinePagesSvelteConcurrentLoadingFeature{
+    "OfflinePagesSvelteConcurrentLoading", base::FEATURE_DISABLED_BY_DEFAULT};
+
 const base::Feature kBackgroundLoaderForDownloadsFeature{
     "BackgroundLoadingForDownloads", base::FEATURE_ENABLED_BY_DEFAULT};
+
+const base::Feature kOfflinePagesAsyncDownloadFeature {
+   "OfflinePagesAsyncDownload", base::FEATURE_DISABLED_BY_DEFAULT
+};
 
 bool IsOfflineBookmarksEnabled() {
   return base::FeatureList::IsEnabled(kOfflineBookmarksFeature);
@@ -40,8 +43,9 @@ bool IsOffliningRecentPagesEnabled() {
   return  base::FeatureList::IsEnabled(kOffliningRecentPagesFeature);
 }
 
-bool IsOfflinePagesBackgroundLoadingEnabled() {
-  return base::FeatureList::IsEnabled(kOfflinePagesBackgroundLoadingFeature);
+bool IsOfflinePagesSvelteConcurrentLoadingEnabled() {
+  return base::FeatureList::IsEnabled(
+      kOfflinePagesSvelteConcurrentLoadingFeature);
 }
 
 bool IsOfflinePagesCTEnabled() {
@@ -54,6 +58,10 @@ bool IsOfflinePagesSharingEnabled() {
 
 bool IsBackgroundLoaderForDownloadsEnabled() {
   return base::FeatureList::IsEnabled(kBackgroundLoaderForDownloadsFeature);
+}
+
+bool IsOfflinePagesAsyncDownloadEnabled() {
+  return base::FeatureList::IsEnabled(kOfflinePagesAsyncDownloadFeature);
 }
 
 }  // namespace offline_pages

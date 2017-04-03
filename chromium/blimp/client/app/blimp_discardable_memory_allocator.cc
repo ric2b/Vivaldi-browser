@@ -6,7 +6,6 @@
 
 #include "base/macros.h"
 #include "base/memory/discardable_memory.h"
-#include "base/stl_util.h"
 #include "base/trace_event/memory_allocator_dump.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/process_memory_dump.h"
@@ -33,6 +32,7 @@ class BlimpDiscardableMemoryAllocator::DiscardableMemoryChunkImpl
         allocator_(allocator) {}
 
   ~DiscardableMemoryChunkImpl() override {
+    DCHECK(allocator_);  // Required for EXPECT_DCHECK_DEATH().
     base::AutoLock lock(allocator_->lock_);
     // Either the memory is discarded or the memory chunk is unlocked.
     DCHECK(data_ || !is_locked_);
@@ -94,6 +94,13 @@ class BlimpDiscardableMemoryAllocator::DiscardableMemoryChunkImpl
     data_.reset();
   }
 
+#if DCHECK_IS_ON()
+  void DetachForDebug() {
+    allocator_->lock_.AssertAcquired();
+    allocator_ = nullptr;
+  }
+#endif  // DCHECK_IS_ON()
+
  private:
   bool is_locked_;
   size_t size_;
@@ -117,7 +124,13 @@ BlimpDiscardableMemoryAllocator::BlimpDiscardableMemoryAllocator(
 
 BlimpDiscardableMemoryAllocator::~BlimpDiscardableMemoryAllocator() {
   DCHECK_EQ(0, locked_chunks_);
-  base::STLDeleteElements(&live_unlocked_chunks_);
+// DCHECK_EQ(0u, live_unlocked_chunks_.size());
+#if DCHECK_IS_ON()
+  base::AutoLock lock(lock_);
+  for (auto unlocked_chunk : live_unlocked_chunks_) {
+    unlocked_chunk->DetachForDebug();
+  }
+#endif  // DCHECK_IS_ON()
 }
 
 std::unique_ptr<base::DiscardableMemory>

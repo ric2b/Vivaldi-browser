@@ -33,7 +33,7 @@ class Insets;
 class Size;
 }
 
-namespace shell {
+namespace service_manager {
 class Connector;
 }
 
@@ -63,10 +63,10 @@ class WindowTreeClient : public mojom::WindowTreeClient,
   ~WindowTreeClient() override;
 
   // Establishes the connection by way of the WindowTreeFactory.
-  void ConnectViaWindowTreeFactory(shell::Connector* connector);
+  void ConnectViaWindowTreeFactory(service_manager::Connector* connector);
 
   // Establishes the connection by way of WindowManagerWindowTreeFactory.
-  void ConnectAsWindowManager(shell::Connector* connector);
+  void ConnectAsWindowManager(service_manager::Connector* connector);
 
   // Wait for OnEmbed(), returning when done.
   void WaitForEmbed();
@@ -128,10 +128,11 @@ class WindowTreeClient : public mojom::WindowTreeClient,
 
   void RequestClose(Window* window);
 
-  void AttachSurface(Id window_id,
-                     mojom::SurfaceType type,
-                     mojo::InterfaceRequest<mojom::Surface> surface,
-                     mojom::SurfaceClientPtr client);
+  void AttachCompositorFrameSink(
+      Id window_id,
+      mojom::CompositorFrameSinkType type,
+      cc::mojom::MojoCompositorFrameSinkRequest compositor_frame_sink,
+      cc::mojom::MojoCompositorFrameSinkClientPtr client);
 
   // Sets the input capture to |window| without notifying the server.
   void LocalSetCapture(Window* window);
@@ -246,8 +247,8 @@ class WindowTreeClient : public mojom::WindowTreeClient,
 
   static Id server_id(const Window* window) { return window->server_id(); }
 
-  Window* BuildWindowTree(const mojo::Array<mojom::WindowDataPtr>& windows,
-                          Window* initial_parent);
+  void BuildWindowTree(const mojo::Array<mojom::WindowDataPtr>& windows,
+                       Window* initial_parent);
 
   Window* NewWindowImpl(NewWindowType type,
                         const Window::SharedProperties* properties);
@@ -328,6 +329,10 @@ class WindowTreeClient : public mojom::WindowTreeClient,
   void OnWindowFocused(Id focused_window_id) override;
   void OnWindowPredefinedCursorChanged(Id window_id,
                                        mojom::Cursor cursor) override;
+  void OnWindowSurfaceChanged(Id window_id,
+                              const cc::SurfaceId& surface_id,
+                              const gfx::Size& frame_size,
+                              float device_scale_factor) override;
   void OnDragDropStart(
       mojo::Map<mojo::String, mojo::Array<uint8_t>> mime_data) override;
   void OnDragEnter(Id window_id,
@@ -361,6 +366,7 @@ class WindowTreeClient : public mojom::WindowTreeClient,
                          mojom::WindowDataPtr root_data,
                          bool parent_drawn) override;
   void WmDisplayRemoved(int64_t display_id) override;
+  void WmDisplayModified(const display::Display& display) override;
   void WmSetBounds(uint32_t change_id,
                    Id window_id,
                    const gfx::Rect& transit_bounds) override;

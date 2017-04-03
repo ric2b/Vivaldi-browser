@@ -7,17 +7,17 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "chrome/browser/chromeos/arc/arc_auth_service.h"
-#include "chrome/browser/chromeos/arc/arc_boot_error_notification.h"
-#include "chrome/browser/chromeos/arc/arc_downloads_watcher_service.h"
-#include "chrome/browser/chromeos/arc/arc_enterprise_reporting_service.h"
-#include "chrome/browser/chromeos/arc/arc_policy_bridge.h"
-#include "chrome/browser/chromeos/arc/arc_print_service.h"
-#include "chrome/browser/chromeos/arc/arc_process_service.h"
-#include "chrome/browser/chromeos/arc/arc_settings_service.h"
-#include "chrome/browser/chromeos/arc/arc_tts_service.h"
-#include "chrome/browser/chromeos/arc/arc_wallpaper_service.h"
-#include "chrome/browser/chromeos/arc/gpu_arc_video_service_host.h"
-#include "components/arc/arc_bridge_service.h"
+#include "chrome/browser/chromeos/arc/downloads_watcher/arc_downloads_watcher_service.h"
+#include "chrome/browser/chromeos/arc/enterprise/arc_enterprise_reporting_service.h"
+#include "chrome/browser/chromeos/arc/fileapi/arc_content_file_system_service.h"
+#include "chrome/browser/chromeos/arc/intent_helper/arc_settings_service.h"
+#include "chrome/browser/chromeos/arc/notification/arc_boot_error_notification.h"
+#include "chrome/browser/chromeos/arc/policy/arc_policy_bridge.h"
+#include "chrome/browser/chromeos/arc/print/arc_print_service.h"
+#include "chrome/browser/chromeos/arc/process/arc_process_service.h"
+#include "chrome/browser/chromeos/arc/tts/arc_tts_service.h"
+#include "chrome/browser/chromeos/arc/video/gpu_arc_video_service_host.h"
+#include "chrome/browser/chromeos/arc/wallpaper/arc_wallpaper_service.h"
 #include "components/arc/intent_helper/arc_intent_helper_bridge.h"
 #include "content/public/browser/browser_thread.h"
 
@@ -35,6 +35,9 @@ void ArcServiceLauncher::Initialize() {
       arc_service_manager_->arc_bridge_service()));
   arc_service_manager_->AddService(base::MakeUnique<ArcBootErrorNotification>(
       arc_service_manager_->arc_bridge_service()));
+  arc_service_manager_->AddService(
+      base::MakeUnique<ArcContentFileSystemService>(
+          arc_service_manager_->arc_bridge_service()));
   arc_service_manager_->AddService(base::MakeUnique<ArcDownloadsWatcherService>(
       arc_service_manager_->arc_bridge_service()));
   arc_service_manager_->AddService(
@@ -63,7 +66,6 @@ void ArcServiceLauncher::Initialize() {
 void ArcServiceLauncher::Shutdown() {
   DCHECK(arc_service_manager_);
   arc_service_manager_->Shutdown();
-  arc_service_manager_->arc_bridge_service()->Shutdown();
 }
 
 }  // namespace arc

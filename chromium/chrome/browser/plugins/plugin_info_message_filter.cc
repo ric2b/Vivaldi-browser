@@ -28,6 +28,7 @@
 #include "chrome/browser/ui/browser_otr_state.h"
 #include "chrome/common/chrome_content_client.h"
 #include "chrome/common/chrome_features.h"
+#include "chrome/common/features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/render_messages.h"
 #include "components/component_updater/component_updater_service.h"
@@ -40,12 +41,14 @@
 #include "content/public/browser/plugin_service.h"
 #include "content/public/browser/plugin_service_filter.h"
 #include "content/public/common/content_constants.h"
+#include "extensions/features/features.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
+#include "ppapi/features/features.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 #include "widevine_cdm_version.h"  // In SHARED_INTERMEDIATE_DIR.
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "components/guest_view/browser/guest_view_base.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/guest_view/web_view/web_view_renderer_state.h"
@@ -63,7 +66,7 @@ using content::WebPluginInfo;
 
 namespace {
 
-#if defined(ENABLE_PEPPER_CDMS)
+#if BUILDFLAG(ENABLE_PEPPER_CDMS)
 
 enum PluginAvailabilityStatusForUMA {
   PLUGIN_NOT_REGISTERED,
@@ -84,7 +87,7 @@ static void SendPluginAvailabilityUMA(const std::string& mime_type,
 #endif  // defined(WIDEVINE_CDM_AVAILABLE)
 }
 
-#endif  // defined(ENABLE_PEPPER_CDMS)
+#endif  // BUILDFLAG(ENABLE_PEPPER_CDMS)
 
 // Report usage metrics for Silverlight and Flash plugin instantiations to the
 // RAPPOR service.
@@ -116,7 +119,7 @@ void ReportMetrics(const std::string& mime_type,
   }
 }
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 // Returns whether a request from a plugin to load |resource| from a renderer
 // with process id |process_id| is a request for an internal resource by an app
 // listed in |accessible_resources| in its manifest.
@@ -146,7 +149,7 @@ bool IsPluginLoadingAccessibleResourceInWebView(
   return renderer_state->GetOwnerInfo(process_id, nullptr, &owner_extension) &&
          owner_extension == extension_id;
 }
-#endif  // defined(ENABLE_EXTENSIONS)
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
 }  // namespace
 
@@ -154,7 +157,7 @@ PluginInfoMessageFilter::Context::Context(int render_process_id,
                                           Profile* profile)
     : render_process_id_(render_process_id),
       resource_context_(profile->GetResourceContext()),
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
       extension_registry_(extensions::ExtensionRegistry::Get(profile)),
 #endif
       host_content_settings_map_(HostContentSettingsMapFactory::GetForProfile(
@@ -187,7 +190,7 @@ bool PluginInfoMessageFilter::OnMessageReceived(const IPC::Message& message) {
   IPC_BEGIN_MESSAGE_MAP(PluginInfoMessageFilter, message)
     IPC_MESSAGE_HANDLER_DELAY_REPLY(ChromeViewHostMsg_GetPluginInfo,
                                     OnGetPluginInfo)
-#if defined(ENABLE_PEPPER_CDMS)
+#if BUILDFLAG(ENABLE_PEPPER_CDMS)
     IPC_MESSAGE_HANDLER(
         ChromeViewHostMsg_IsInternalPluginAvailableForMimeType,
         OnIsInternalPluginAvailableForMimeType)
@@ -240,8 +243,10 @@ void PluginInfoMessageFilter::PluginsLoaded(
                                  params.main_frame_origin, params.mime_type,
                                  &output->status, &output->plugin,
                                  &output->actual_mime_type, &plugin_metadata)) {
-    context_.DecidePluginStatus(params, output->plugin, plugin_metadata.get(),
-                                &output->status);
+    context_.DecidePluginStatus(
+        params.url, params.main_frame_origin, output->plugin,
+        plugin_metadata->GetSecurityStatus(output->plugin),
+        plugin_metadata->identifier(), &output->status);
   }
 
   if (output->status == ChromeViewHostMsg_GetPluginInfo_Status::kNotFound) {
@@ -261,7 +266,7 @@ void PluginInfoMessageFilter::PluginsLoaded(
   }
 }
 
-#if defined(ENABLE_PEPPER_CDMS)
+#if BUILDFLAG(ENABLE_PEPPER_CDMS)
 
 void PluginInfoMessageFilter::OnIsInternalPluginAvailableForMimeType(
     const std::string& mime_type,
@@ -297,17 +302,16 @@ void PluginInfoMessageFilter::OnIsInternalPluginAvailableForMimeType(
       mime_type, is_plugin_disabled ? PLUGIN_DISABLED : PLUGIN_NOT_REGISTERED);
 }
 
-#endif  // defined(ENABLE_PEPPER_CDMS)
+#endif  // BUILDFLAG(ENABLE_PEPPER_CDMS)
 
 void PluginInfoMessageFilter::Context::DecidePluginStatus(
-    const GetPluginInfo_Params& params,
+    const GURL& url,
+    const url::Origin& main_frame_origin,
     const WebPluginInfo& plugin,
-    const PluginMetadata* plugin_metadata,
+    PluginMetadata::SecurityStatus security_status,
+    const std::string& plugin_identifier,
     ChromeViewHostMsg_GetPluginInfo_Status* status) const {
-  PluginMetadata::SecurityStatus plugin_status =
-      plugin_metadata->GetSecurityStatus(plugin);
-
-  if (plugin_status == PluginMetadata::SECURITY_STATUS_FULLY_TRUSTED) {
+  if (security_status == PluginMetadata::SECURITY_STATUS_FULLY_TRUSTED) {
     *status = ChromeViewHostMsg_GetPluginInfo_Status::kAllowed;
     return;
   }
@@ -318,9 +322,9 @@ void PluginInfoMessageFilter::Context::DecidePluginStatus(
   // Check plugin content settings. The primary URL is the top origin URL and
   // the secondary URL is the plugin URL.
   PluginUtils::GetPluginContentSetting(
-      host_content_settings_map_, plugin, params.main_frame_origin, params.url,
-      plugin_metadata->identifier(), &plugin_setting,
-      &uses_default_content_setting, &is_managed);
+      host_content_settings_map_, plugin, main_frame_origin, url,
+      plugin_identifier, &plugin_setting, &uses_default_content_setting,
+      &is_managed);
 
   // TODO(tommycli): Remove once we deprecate the plugin ASK policy.
   bool legacy_ask_user = plugin_setting == CONTENT_SETTING_ASK;
@@ -331,9 +335,19 @@ void PluginInfoMessageFilter::Context::DecidePluginStatus(
   DCHECK(plugin_setting != CONTENT_SETTING_DEFAULT);
   DCHECK(plugin_setting != CONTENT_SETTING_ASK);
 
-#if defined(ENABLE_PLUGIN_INSTALLATION)
+  if (*status ==
+      ChromeViewHostMsg_GetPluginInfo_Status::kFlashHiddenPreferHtml) {
+    if (plugin_setting == CONTENT_SETTING_BLOCK) {
+      *status = is_managed && !legacy_ask_user
+                    ? ChromeViewHostMsg_GetPluginInfo_Status::kBlockedByPolicy
+                    : ChromeViewHostMsg_GetPluginInfo_Status::kBlockedNoLoading;
+    }
+    return;
+  }
+
+#if BUILDFLAG(ENABLE_PLUGIN_INSTALLATION)
   // Check if the plugin is outdated.
-  if (plugin_status == PluginMetadata::SECURITY_STATUS_OUT_OF_DATE &&
+  if (security_status == PluginMetadata::SECURITY_STATUS_OUT_OF_DATE &&
       !allow_outdated_plugins_.GetValue()) {
     if (allow_outdated_plugins_.IsManaged()) {
       *status = ChromeViewHostMsg_GetPluginInfo_Status::kOutdatedDisallowed;
@@ -353,17 +367,17 @@ void PluginInfoMessageFilter::Context::DecidePluginStatus(
     return;
   }
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   // If an app has explicitly made internal resources available by listing them
   // in |accessible_resources| in the manifest, then allow them to be loaded by
   // plugins inside a guest-view.
-  if (params.url.SchemeIs(extensions::kExtensionScheme) && !is_managed &&
+  if (url.SchemeIs(extensions::kExtensionScheme) && !is_managed &&
       plugin_setting == CONTENT_SETTING_BLOCK &&
-      IsPluginLoadingAccessibleResourceInWebView(
-          extension_registry_, render_process_id_, params.url)) {
+      IsPluginLoadingAccessibleResourceInWebView(extension_registry_,
+                                                 render_process_id_, url)) {
     plugin_setting = CONTENT_SETTING_ALLOW;
   }
-#endif  // defined(ENABLE_EXTENSIONS)
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
   if (plugin_setting == CONTENT_SETTING_DETECT_IMPORTANT_CONTENT ||
       (plugin_setting == CONTENT_SETTING_ALLOW &&
@@ -378,13 +392,11 @@ void PluginInfoMessageFilter::Context::DecidePluginStatus(
                   : ChromeViewHostMsg_GetPluginInfo_Status::kBlocked;
   }
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   // Allow an embedder of <webview> to block a plugin from being loaded inside
   // the guest. In order to do this, set the status to 'Unauthorized' here,
   // and update the status as appropriate depending on the response from the
   // embedder.
-  // TODO:(andre@vivaldi.com) If we want load on demand plugins set unauthorized
-  //                          and enable plugin later.
   if (*status == ChromeViewHostMsg_GetPluginInfo_Status::kAllowed ||
       *status == ChromeViewHostMsg_GetPluginInfo_Status::kBlocked ||
       *status ==
@@ -454,6 +466,10 @@ bool PluginInfoMessageFilter::Context::FindEnabledPlugin(
       // via chrome://plugins. That should be fine since chrome://plugins is
       // going away, but we should verify before launching HBD.
       *status = ChromeViewHostMsg_GetPluginInfo_Status::kFlashHiddenPreferHtml;
+
+      // In the Prefer HTML case, the plugin is actually enabled, but hidden.
+      // It will still be blocked in the body of DecidePluginStatus.
+      enabled = true;
     }
   }
 
@@ -474,6 +490,12 @@ void PluginInfoMessageFilter::ComponentPluginLookupDone(
   if (cus_plugin_info) {
     output->status =
         ChromeViewHostMsg_GetPluginInfo_Status::kComponentUpdateRequired;
+#if defined(OS_LINUX)
+    if (cus_plugin_info->version != base::Version("0")) {
+      output->status =
+          ChromeViewHostMsg_GetPluginInfo_Status::kRestartRequired;
+    }
+#endif  // defined(OS_LINUX)
     plugin_metadata.reset(new PluginMetadata(
         cus_plugin_info->id, cus_plugin_info->name, false, GURL(), GURL(),
         base::ASCIIToUTF16(cus_plugin_info->id), std::string()));

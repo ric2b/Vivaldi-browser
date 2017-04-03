@@ -19,9 +19,8 @@
 
 namespace cc {
 
-class AnimationEvents;
+class MutatorEvents;
 class BeginFrameSource;
-class ContextProvider;
 class LayerTreeHostInProcess;
 class LayerTreeHostSingleThreadClient;
 
@@ -57,16 +56,16 @@ class CC_EXPORT SingleThreadProxy : public Proxy,
   void SetMutator(std::unique_ptr<LayerTreeMutator> mutator) override;
   bool SupportsImplScrolling() const override;
   bool MainFrameWillHappenForTesting() override;
-  void UpdateTopControlsState(TopControlsState constraints,
-                              TopControlsState current,
-                              bool animate) override;
+  void UpdateBrowserControlsState(BrowserControlsState constraints,
+                                  BrowserControlsState current,
+                                  bool animate) override;
 
   // SchedulerClient implementation
   void WillBeginImplFrame(const BeginFrameArgs& args) override;
   void DidFinishImplFrame() override;
   void ScheduledActionSendBeginMainFrame(const BeginFrameArgs& args) override;
-  DrawResult ScheduledActionDrawAndSwapIfPossible() override;
-  DrawResult ScheduledActionDrawAndSwapForced() override;
+  DrawResult ScheduledActionDrawIfPossible() override;
+  DrawResult ScheduledActionDrawForced() override;
   void ScheduledActionCommit() override;
   void ScheduledActionActivateSyncTree() override;
   void ScheduledActionBeginCompositorFrameSinkCreation() override;
@@ -77,7 +76,7 @@ class CC_EXPORT SingleThreadProxy : public Proxy,
   // LayerTreeHostImplClient implementation
   void DidLoseCompositorFrameSinkOnImplThread() override;
   void SetBeginFrameSource(BeginFrameSource* source) override;
-  void DidSwapBuffersCompleteOnImplThread() override;
+  void DidReceiveCompositorFrameAckOnImplThread() override;
   void OnCanDrawStateChanged(bool can_draw) override;
   void NotifyReadyToActivate() override;
   void NotifyReadyToDraw() override;
@@ -87,7 +86,7 @@ class CC_EXPORT SingleThreadProxy : public Proxy,
   void SetNeedsCommitOnImplThread() override;
   void SetVideoNeedsBeginFrames(bool needs_begin_frames) override;
   void PostAnimationEventsToMainThreadOnImplThread(
-      std::unique_ptr<AnimationEvents> events) override;
+      std::unique_ptr<MutatorEvents> events) override;
   bool IsInsideDraw() override;
   void RenewTreePriority() override {}
   void PostDelayedAnimationTaskOnImplThread(const base::Closure& task,
@@ -123,7 +122,7 @@ class CC_EXPORT SingleThreadProxy : public Proxy,
 
   // Accessed on main thread only.
   LayerTreeHostInProcess* layer_tree_host_;
-  LayerTreeHostSingleThreadClient* client_;
+  LayerTreeHostSingleThreadClient* single_thread_client_;
 
   TaskRunnerProvider* task_runner_provider_;
 

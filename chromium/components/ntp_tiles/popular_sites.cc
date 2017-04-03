@@ -33,6 +33,10 @@
 #include "net/base/load_flags.h"
 #include "net/http/http_status_code.h"
 
+#if defined(OS_IOS)
+#include "components/ntp_tiles/country_code_ios.h"
+#endif
+
 using net::URLFetcher;
 using variations::VariationsService;
 
@@ -48,8 +52,6 @@ const char kPopularSitesLocalFilename[] = "suggested_sites.json";
 const int kPopularSitesRedownloadIntervalHours = 24;
 
 const char kPopularSitesLastDownloadPref[] = "popular_sites_last_download";
-const char kPopularSitesCountryPref[] = "popular_sites_country";
-const char kPopularSitesVersionPref[] = "popular_sites_version";
 const char kPopularSitesURLPref[] = "popular_sites_url";
 
 GURL GetPopularSitesURL(const std::string& country,
@@ -120,6 +122,11 @@ std::string GetCountryToUse(const PrefService* prefs,
 
   if (country_code.empty() && variations_service)
     country_code = variations_service->GetStoredPermanentCountry();
+
+#if defined(OS_IOS)
+  if (country_code.empty())
+    country_code = GetDeviceCountryCode();
+#endif
 
   if (country_code.empty())
     country_code = kPopularSitesDefaultCountryCode;
@@ -256,10 +263,6 @@ void PopularSites::RegisterProfilePrefs(
 
   user_prefs->RegisterInt64Pref(kPopularSitesLastDownloadPref, 0);
   user_prefs->RegisterStringPref(kPopularSitesURLPref, std::string());
-
-  // TODO(sfiera): remove these obsolete preferences.
-  user_prefs->RegisterStringPref(kPopularSitesCountryPref, std::string());
-  user_prefs->RegisterStringPref(kPopularSitesVersionPref, std::string());
 }
 
 void PopularSites::OnReadFileDone(std::unique_ptr<std::string> data,
@@ -279,7 +282,6 @@ void PopularSites::OnReadFileDone(std::unique_ptr<std::string> data,
 
 void PopularSites::FetchPopularSites() {
   fetcher_ = URLFetcher::Create(pending_url_, URLFetcher::GET, this);
-  // TODO(sfiera): Count the downloaded bytes of icons fetched by popular sites.
   data_use_measurement::DataUseUserData::AttachToFetcher(
       fetcher_.get(), data_use_measurement::DataUseUserData::NTP_TILES);
   fetcher_->SetRequestContext(download_context_);

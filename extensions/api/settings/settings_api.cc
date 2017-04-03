@@ -11,10 +11,12 @@
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/pref_names.h"
-#include "components/prefs/pref_service.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
+#include "components/pref_registry/pref_registry_syncable.h"
+#include "components/prefs/pref_service.h"
+#include "components/safe_browsing_db/safe_browsing_prefs.h"
 #include "content/public/browser/web_ui.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extensions_browser_client.h"
@@ -69,6 +71,8 @@ struct PrefsMapping kPrefsValues[] {
 
   // Wait until a restored tab is activated before loading the page.
   { vivaldiprefs::kDeferredTabLoadingAfterRestore, booleanPreftype },
+  // Always load restored pinned tabs.
+  { vivaldiprefs::kAlwaysLoadPinnedTabAfterRestore, booleanPreftype },
 
   // Startup preferences:
   // An integer pref. Holds one of several values:
@@ -297,6 +301,8 @@ void VivaldiSettingsApiNotificationFactory::RegisterProfilePrefs(
   registry->RegisterInt64Pref(vivaldiprefs::kVivaldiLastTopSitesVacuumDate, 0);
 
   registry->RegisterBooleanPref(vivaldiprefs::kDeferredTabLoadingAfterRestore,
+                                true);
+  registry->RegisterBooleanPref(vivaldiprefs::kAlwaysLoadPinnedTabAfterRestore,
                                 true);
 
   registry->RegisterIntegerPref(

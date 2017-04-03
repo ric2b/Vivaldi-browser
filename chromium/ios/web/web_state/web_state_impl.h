@@ -223,6 +223,7 @@ class WebStateImpl : public WebState, public NavigationManagerDelegate {
   UIView* GetView() override;
   BrowserState* GetBrowserState() const override;
   void OpenURL(const WebState::OpenURLParams& params) override;
+  void Stop() override;
   const NavigationManager* GetNavigationManager() const override;
   NavigationManager* GetNavigationManager() override;
   CRWJSInjectionReceiver* GetJSInjectionReceiver() const override;
@@ -251,7 +252,7 @@ class WebStateImpl : public WebState, public NavigationManagerDelegate {
                     uint32_t max_bitmap_size,
                     bool bypass_cache,
                     const ImageDownloadCallback& callback) override;
-  shell::InterfaceRegistry* GetMojoInterfaceRegistry() override;
+  service_manager::InterfaceRegistry* GetMojoInterfaceRegistry() override;
   base::WeakPtr<WebState> AsWeakPtr() override;
 
   // Adds |interstitial|'s view to the web controller's content view.
@@ -273,10 +274,10 @@ class WebStateImpl : public WebState, public NavigationManagerDelegate {
                            const DialogClosedCallback& callback);
 
   // Cancels all dialogs associated with this web_state.
-  void CancelActiveAndPendingDialogs();
+  void CancelDialogs();
 
   // NavigationManagerDelegate:
-  void NavigateToPendingEntry() override;
+  void GoToIndex(int index) override;
   void LoadURLWithParams(const NavigationManager::WebLoadParams&) override;
   void OnNavigationItemsPruned(size_t pruned_item_count) override;
   void OnNavigationItemChanged() override;
@@ -366,7 +367,7 @@ class WebStateImpl : public WebState, public NavigationManagerDelegate {
   base::WeakPtrFactory<WebState> weak_factory_;
 
   // Mojo interface registry for this WebState.
-  std::unique_ptr<shell::InterfaceRegistry> mojo_interface_registry_;
+  std::unique_ptr<service_manager::InterfaceRegistry> mojo_interface_registry_;
 
   DISALLOW_COPY_AND_ASSIGN(WebStateImpl);
 };

@@ -47,6 +47,9 @@
 
 namespace blink {
 
+class FreePagePool;
+class OrphanedPagePool;
+
 class PLATFORM_EXPORT HeapAllocHooks {
  public:
   // TODO(hajimehoshi): Pass a type name of the allocated object.
@@ -93,7 +96,7 @@ class ObjectAliveTrait<T, false> {
   STATIC_ONLY(ObjectAliveTrait);
 
  public:
-  static bool isHeapObjectAlive(T* object) {
+  static bool isHeapObjectAlive(const T* object) {
     static_assert(sizeof(T), "T must be fully defined");
     return HeapObjectHeader::fromPayload(object)->isMarked();
   }
@@ -105,7 +108,7 @@ class ObjectAliveTrait<T, true> {
 
  public:
   NO_SANITIZE_ADDRESS
-  static bool isHeapObjectAlive(T* object) {
+  static bool isHeapObjectAlive(const T* object) {
     static_assert(sizeof(T), "T must be fully defined");
     return object->isHeapObjectAlive();
   }
@@ -120,7 +123,6 @@ class PLATFORM_EXPORT ProcessHeap {
 
   static CrossThreadPersistentRegion& crossThreadPersistentRegion();
 
-  static bool isLowEndDevice() { return s_isLowEndDevice; }
   static void increaseTotalAllocatedObjectSize(size_t delta) {
     atomicAdd(&s_totalAllocatedObjectSize, static_cast<long>(delta));
   }
@@ -152,7 +154,6 @@ class PLATFORM_EXPORT ProcessHeap {
 
  private:
   static bool s_shutdownComplete;
-  static bool s_isLowEndDevice;
   static size_t s_totalAllocatedSpace;
   static size_t s_totalAllocatedObjectSize;
   static size_t s_totalMarkedObjectSize;
@@ -238,7 +239,7 @@ class PLATFORM_EXPORT ThreadHeap {
 #endif
 
   template <typename T>
-  static inline bool isHeapObjectAlive(T* object) {
+  static inline bool isHeapObjectAlive(const T* object) {
     static_assert(sizeof(T), "T must be fully defined");
     // The strongification of collections relies on the fact that once a
     // collection has been strongified, there is no way that it can contain
@@ -267,10 +268,6 @@ class PLATFORM_EXPORT ThreadHeap {
   template <typename T>
   static inline bool isHeapObjectAlive(const UntracedMember<T>& member) {
     return isHeapObjectAlive(member.get());
-  }
-  template <typename T>
-  static inline bool isHeapObjectAlive(const T*& ptr) {
-    return isHeapObjectAlive(ptr);
   }
 
   StackFrameDepth& stackFrameDepth() { return m_stackFrameDepth; }

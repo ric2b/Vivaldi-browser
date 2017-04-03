@@ -4,14 +4,12 @@
 
 #include "net/quic/chromium/crypto/proof_source_chromium.h"
 
-#include <openssl/digest.h>
-#include <openssl/evp.h>
-#include <openssl/rsa.h>
-
 #include "base/strings/string_number_conversions.h"
 #include "crypto/openssl_util.h"
 #include "net/quic/core/crypto/crypto_protocol.h"
-#include "net/ssl/scoped_openssl_types.h"
+#include "third_party/boringssl/src/include/openssl/digest.h"
+#include "third_party/boringssl/src/include/openssl/evp.h"
+#include "third_party/boringssl/src/include/openssl/rsa.h"
 
 using std::string;
 using std::vector;
@@ -79,57 +77,43 @@ bool ProofSourceChromium::Initialize(const base::FilePath& cert_path,
   return true;
 }
 
-bool ProofSourceChromium::GetProof(const IPAddress& server_ip,
-                                   const string& hostname,
-                                   const string& server_config,
-                                   QuicVersion quic_version,
-                                   base::StringPiece chlo_hash,
-                                   scoped_refptr<ProofSource::Chain>* out_chain,
-                                   string* out_signature,
-                                   string* out_leaf_cert_sct) {
+bool ProofSourceChromium::GetProof(
+    const IPAddress& server_ip,
+    const string& hostname,
+    const string& server_config,
+    QuicVersion quic_version,
+    base::StringPiece chlo_hash,
+    const QuicTagVector& /* connection_options */,
+    scoped_refptr<ProofSource::Chain>* out_chain,
+    string* out_signature,
+    string* out_leaf_cert_sct) {
   DCHECK(private_key_.get()) << " this: " << this;
 
   crypto::OpenSSLErrStackTracer err_tracer(FROM_HERE);
-  crypto::ScopedEVP_MD_CTX sign_context(EVP_MD_CTX_create());
+  bssl::ScopedEVP_MD_CTX sign_context;
   EVP_PKEY_CTX* pkey_ctx;
 
-  if (quic_version > QUIC_VERSION_30) {
-    uint32_t len = chlo_hash.length();
-    if (!EVP_DigestSignInit(sign_context.get(), &pkey_ctx, EVP_sha256(),
-                            nullptr, private_key_->key()) ||
-        !EVP_PKEY_CTX_set_rsa_padding(pkey_ctx, RSA_PKCS1_PSS_PADDING) ||
-        !EVP_PKEY_CTX_set_rsa_pss_saltlen(pkey_ctx, -1) ||
-        !EVP_DigestSignUpdate(
-            sign_context.get(),
-            reinterpret_cast<const uint8_t*>(kProofSignatureLabel),
-            sizeof(kProofSignatureLabel)) ||
-        !EVP_DigestSignUpdate(sign_context.get(),
-                              reinterpret_cast<const uint8_t*>(&len),
-                              sizeof(len)) ||
-        !EVP_DigestSignUpdate(
-            sign_context.get(),
-            reinterpret_cast<const uint8_t*>(chlo_hash.data()), len) ||
-        !EVP_DigestSignUpdate(
-            sign_context.get(),
-            reinterpret_cast<const uint8_t*>(server_config.data()),
-            server_config.size())) {
-      return false;
-    }
-  } else if (!EVP_DigestSignInit(sign_context.get(), &pkey_ctx, EVP_sha256(),
-                                 nullptr, private_key_->key()) ||
-             !EVP_PKEY_CTX_set_rsa_padding(pkey_ctx, RSA_PKCS1_PSS_PADDING) ||
-             !EVP_PKEY_CTX_set_rsa_pss_saltlen(pkey_ctx, -1) ||
-             !EVP_DigestSignUpdate(
-                 sign_context.get(),
-                 reinterpret_cast<const uint8_t*>(kProofSignatureLabelOld),
-                 sizeof(kProofSignatureLabelOld)) ||
-             !EVP_DigestSignUpdate(
-                 sign_context.get(),
-                 reinterpret_cast<const uint8_t*>(server_config.data()),
-                 server_config.size())) {
+  uint32_t len_tmp = chlo_hash.length();
+  if (!EVP_DigestSignInit(sign_context.get(), &pkey_ctx, EVP_sha256(), nullptr,
+                          private_key_->key()) ||
+      !EVP_PKEY_CTX_set_rsa_padding(pkey_ctx, RSA_PKCS1_PSS_PADDING) ||
+      !EVP_PKEY_CTX_set_rsa_pss_saltlen(pkey_ctx, -1) ||
+      !EVP_DigestSignUpdate(
+          sign_context.get(),
+          reinterpret_cast<const uint8_t*>(kProofSignatureLabel),
+          sizeof(kProofSignatureLabel)) ||
+      !EVP_DigestSignUpdate(sign_context.get(),
+                            reinterpret_cast<const uint8_t*>(&len_tmp),
+                            sizeof(len_tmp)) ||
+      !EVP_DigestSignUpdate(sign_context.get(),
+                            reinterpret_cast<const uint8_t*>(chlo_hash.data()),
+                            len_tmp) ||
+      !EVP_DigestSignUpdate(
+          sign_context.get(),
+          reinterpret_cast<const uint8_t*>(server_config.data()),
+          server_config.size())) {
     return false;
   }
-
   // Determine the maximum length of the signature.
   size_t len = 0;
   if (!EVP_DigestSignFinal(sign_context.get(), nullptr, &len)) {
@@ -155,14 +139,16 @@ void ProofSourceChromium::GetProof(const IPAddress& server_ip,
                                    const std::string& server_config,
                                    QuicVersion quic_version,
                                    base::StringPiece chlo_hash,
+                                   const QuicTagVector& connection_options,
                                    std::unique_ptr<Callback> callback) {
   // As a transitional implementation, just call the synchronous version of
   // GetProof, then invoke the callback with the results and destroy it.
   scoped_refptr<ProofSource::Chain> chain;
   string signature;
   string leaf_cert_sct;
-  const bool ok = GetProof(server_ip, hostname, server_config, quic_version,
-                           chlo_hash, &chain, &signature, &leaf_cert_sct);
+  const bool ok =
+      GetProof(server_ip, hostname, server_config, quic_version, chlo_hash,
+               connection_options, &chain, &signature, &leaf_cert_sct);
   callback->Run(ok, chain, signature, leaf_cert_sct, nullptr /* details */);
 }
 

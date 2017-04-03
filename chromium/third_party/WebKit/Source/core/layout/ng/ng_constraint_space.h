@@ -6,6 +6,7 @@
 #define NGConstraintSpace_h
 
 #include "core/CoreExport.h"
+#include "core/layout/ng/ng_macros.h"
 #include "core/layout/ng/ng_physical_constraint_space.h"
 #include "core/layout/ng/ng_writing_mode.h"
 #include "platform/heap/Handle.h"
@@ -14,6 +15,7 @@
 
 namespace blink {
 
+class ComputedStyle;
 class LayoutBox;
 class NGFragment;
 class NGLayoutOpportunityIterator;
@@ -25,71 +27,69 @@ class NGLayoutOpportunityIterator;
 class CORE_EXPORT NGConstraintSpace final
     : public GarbageCollected<NGConstraintSpace> {
  public:
-  // Constructs a constraint space with a new backing NGPhysicalConstraintSpace.
-  // The size will be used for both for the physical constraint space's
-  // container size and this constraint space's Size().
-  NGConstraintSpace(NGWritingMode, NGDirection, NGLogicalSize);
-
   // Constructs a constraint space based on an existing backing
   // NGPhysicalConstraintSpace. Sets this constraint space's size to the
-  // physical constraint space's container size, converted to logical
+  // physical constraint space's available size, converted to logical
   // coordinates.
-  // TODO(layout-ng): Do we need this constructor?
-  NGConstraintSpace(NGWritingMode, NGDirection, NGPhysicalConstraintSpace*);
-
-  // Constructs a constraint space with a different NGWritingMode and
-  // NGDirection that's otherwise identical.
-  NGConstraintSpace(NGWritingMode, NGDirection, const NGConstraintSpace*);
-
-  // Constructs a derived constraint space sharing the same backing
-  // NGPhysicalConstraintSpace, NGWritingMode and NGDirection. Primarily for use
-  // by NGLayoutOpportunityIterator.
-  NGConstraintSpace(const NGConstraintSpace& other,
-                    NGLogicalOffset,
-                    NGLogicalSize);
-
-  // Constructs a derived constraint space that shares the exclusions of the
-  // input constraint space, but has a different container size, writing mode
-  // and direction. Sets the offset to zero. For use by layout algorithms
-  // to use as the basis to find layout opportunities for children.
-  NGConstraintSpace(NGWritingMode,
-                    NGDirection,
-                    const NGConstraintSpace& other,
-                    NGLogicalSize);
+  NGConstraintSpace(NGWritingMode, TextDirection, NGPhysicalConstraintSpace*);
 
   // This should live on NGBox or another layout bridge and probably take a root
   // NGConstraintSpace or a NGPhysicalConstraintSpace.
   static NGConstraintSpace* CreateFromLayoutObject(const LayoutBox&);
 
-  NGPhysicalConstraintSpace* PhysicalSpace() const { return physical_space_; }
+  // Mutable Getters.
+  // TODO(layout-dev): remove const constraint from MutablePhysicalSpace method
+  NGPhysicalConstraintSpace* MutablePhysicalSpace() const {
+    return physical_space_;
+  }
 
-  NGDirection Direction() const { return static_cast<NGDirection>(direction_); }
+  // Read-only Getters.
+  const NGPhysicalConstraintSpace* PhysicalSpace() const {
+    return physical_space_;
+  }
+
+  const Vector<std::unique_ptr<const NGExclusion>>& Exclusions() const {
+    WRITING_MODE_IGNORED(
+        "Exclusions are stored directly in physical constraint space.");
+    return PhysicalSpace()->Exclusions();
+  }
+
+  TextDirection Direction() const {
+    return static_cast<TextDirection>(direction_);
+  }
 
   NGWritingMode WritingMode() const {
     return static_cast<NGWritingMode>(writing_mode_);
   }
 
-  // Size of the container. Used for the following three cases:
-  // 1) Percentage resolution.
-  // 2) Resolving absolute positions of children.
-  // 3) Defining the threshold that triggers the presence of a scrollbar. Only
-  //    applies if the corresponding scrollbarTrigger flag has been set for the
-  //    direction.
-  NGLogicalSize ContainerSize() const;
+  // Adds the exclusion in the physical constraint space.
+  void AddExclusion(const NGExclusion& exclusion) const;
+  const NGExclusion* LastLeftFloatExclusion() const;
+  const NGExclusion* LastRightFloatExclusion() const;
+
+  // The size to use for percentage resolution.
+  // See: https://drafts.csswg.org/css-sizing/#percentage-sizing
+  NGLogicalSize PercentageResolutionSize() const;
+
+  // The available space size.
+  // See: https://drafts.csswg.org/css-sizing/#available
+  NGLogicalSize AvailableSize() const;
 
   // Offset relative to the root constraint space.
   NGLogicalOffset Offset() const { return offset_; }
+  void SetOffset(const NGLogicalOffset& offset) { offset_ = offset; }
 
   // Returns the effective size of the constraint space. Equal to the
-  // ContainerSize() for the root constraint space but derived constraint spaces
+  // AvailableSize() for the root constraint space but derived constraint spaces
   // return the size of the layout opportunity.
   virtual NGLogicalSize Size() const { return size_; }
+  void SetSize(const NGLogicalSize& size) { size_ = size; }
 
   // Whether the current constraint space is for the newly established
   // Formatting Context.
-  bool IsNewFormattingContext() const { return is_new_fc_; }
+  bool IsNewFormattingContext() const;
 
-  // Whether exceeding the containerSize triggers the presence of a scrollbar
+  // Whether exceeding the AvailableSize() triggers the presence of a scrollbar
   // for the indicated direction.
   // If exceeded the current layout should be aborted and invoked again with a
   // constraint space modified to reserve space for a scrollbar.
@@ -123,9 +123,9 @@ class CORE_EXPORT NGConstraintSpace final
   void SetOverflowTriggersScrollbar(bool inlineTriggers, bool blockTriggers);
   void SetFixedSize(bool inlineFixed, bool blockFixed);
   void SetFragmentationType(NGFragmentationType);
-  // TODO(layout-ng): Add m_isNewFc flag to ComputedStyle and use it instead of
-  // the function below.
-  void SetIsNewFormattingContext(bool is_new_fc) { is_new_fc_ = is_new_fc; }
+  void SetIsNewFormattingContext(bool is_new_fc);
+
+  NGConstraintSpace* ChildSpace(const ComputedStyle* style) const;
 
   String ToString() const;
 
@@ -135,9 +135,6 @@ class CORE_EXPORT NGConstraintSpace final
   NGLogicalSize size_;
   unsigned writing_mode_ : 3;
   unsigned direction_ : 1;
-  // Whether the current constraint space is for the newly established
-  // formatting Context
-  bool is_new_fc_ : 1;
 };
 
 inline std::ostream& operator<<(std::ostream& stream,

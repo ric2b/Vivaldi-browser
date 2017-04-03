@@ -429,6 +429,36 @@ TEST_F(SecurityOriginTest, CreateFromTuple) {
   }
 }
 
+TEST_F(SecurityOriginTest, CreateFromTupleWithSuborigin) {
+  struct TestCase {
+    const char* scheme;
+    const char* host;
+    unsigned short port;
+    const char* suborigin;
+    const char* origin;
+  } cases[] = {
+      {"http", "example.com", 80, "", "http://example.com"},
+      {"http", "example.com", 81, "", "http://example.com:81"},
+      {"https", "example.com", 443, "", "https://example.com"},
+      {"https", "example.com", 444, "", "https://example.com:444"},
+      {"file", "", 0, "", "file://"},
+      {"file", "example.com", 0, "", "file://"},
+      {"http", "example.com", 80, "foobar", "http-so://foobar.example.com"},
+      {"http", "example.com", 81, "foobar", "http-so://foobar.example.com:81"},
+      {"https", "example.com", 443, "foobar", "https-so://foobar.example.com"},
+      {"https", "example.com", 444, "foobar",
+       "https-so://foobar.example.com:444"},
+      {"file", "", 0, "foobar", "file://"},
+      {"file", "example.com", 0, "foobar", "file://"},
+  };
+
+  for (const auto& test : cases) {
+    RefPtr<SecurityOrigin> origin = SecurityOrigin::create(
+        test.scheme, test.host, test.port, test.suborigin);
+    EXPECT_EQ(test.origin, origin->toString()) << test.origin;
+  }
+}
+
 TEST_F(SecurityOriginTest, UniquenessPropagatesToBlobUrls) {
   struct TestCase {
     const char* url;
@@ -470,6 +500,32 @@ TEST_F(SecurityOriginTest, UniqueOriginIsSameSchemeHostPort) {
       SecurityOrigin::createUnique()->isSameSchemeHostPort(uniqueOrigin.get()));
   EXPECT_FALSE(tupleOrigin->isSameSchemeHostPort(uniqueOrigin.get()));
   EXPECT_FALSE(uniqueOrigin->isSameSchemeHostPort(tupleOrigin.get()));
+}
+
+TEST_F(SecurityOriginTest, CanonicalizeHost) {
+  struct TestCase {
+    const char* host;
+    const char* canonicalOutput;
+    bool expectedSuccess;
+  } cases[] = {
+      {"", "", true},
+      {"example.test", "example.test", true},
+      {"EXAMPLE.TEST", "example.test", true},
+      {"eXaMpLe.TeSt/path", "example.test%2Fpath", false},
+      {",", "%2C", true},
+      {"💩", "xn--ls8h", true},
+      {"[]", "[]", false},
+      {"%yo", "%25yo", false},
+  };
+
+  for (const TestCase& test : cases) {
+    SCOPED_TRACE(testing::Message() << "raw host: '" << test.host << "'");
+    String host = String::fromUTF8(test.host);
+    bool success = false;
+    String canonicalHost = SecurityOrigin::canonicalizeHost(host, &success);
+    EXPECT_EQ(test.canonicalOutput, canonicalHost);
+    EXPECT_EQ(test.expectedSuccess, success);
+  }
 }
 
 }  // namespace blink

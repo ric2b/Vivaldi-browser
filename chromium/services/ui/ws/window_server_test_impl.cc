@@ -6,7 +6,7 @@
 
 #include "services/ui/public/interfaces/window_tree.mojom.h"
 #include "services/ui/ws/server_window.h"
-#include "services/ui/ws/server_window_surface_manager.h"
+#include "services/ui/ws/server_window_compositor_frame_sink_manager.h"
 #include "services/ui/ws/window_server.h"
 #include "services/ui/ws/window_tree.h"
 
@@ -16,9 +16,11 @@ namespace ws {
 namespace {
 
 bool WindowHasValidFrame(const ServerWindow* window) {
-  const ServerWindowSurfaceManager* manager = window->surface_manager();
+  const ServerWindowCompositorFrameSinkManager* manager =
+      window->compositor_frame_sink_manager();
   return manager &&
-         !manager->GetDefaultSurface()->last_submitted_frame_size().IsEmpty();
+         !manager->GetLatestFrameSize(mojom::CompositorFrameSinkType::DEFAULT)
+              .IsEmpty();
 }
 
 }  // namespace
@@ -42,10 +44,9 @@ void WindowServerTestImpl::OnWindowPaint(
 }
 
 void WindowServerTestImpl::EnsureClientHasDrawnWindow(
-    const mojo::String& client_name,
+    const std::string& client_name,
     const EnsureClientHasDrawnWindowCallback& callback) {
-  std::string name = client_name.To<std::string>();
-  WindowTree* tree = window_server_->GetTreeWithClientName(name);
+  WindowTree* tree = window_server_->GetTreeWithClientName(client_name);
   if (tree) {
     for (const ServerWindow* window : tree->roots()) {
       if (WindowHasValidFrame(window)) {
@@ -57,7 +58,7 @@ void WindowServerTestImpl::EnsureClientHasDrawnWindow(
 
   window_server_->SetPaintCallback(
       base::Bind(&WindowServerTestImpl::OnWindowPaint, base::Unretained(this),
-                 name, std::move(callback)));
+                 client_name, std::move(callback)));
 }
 
 }  // namespace ws

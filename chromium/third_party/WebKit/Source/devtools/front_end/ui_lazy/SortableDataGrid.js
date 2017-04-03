@@ -1,187 +1,172 @@
 // Copyright 2014 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
-
 /**
- * @constructor
- * @extends {WebInspector.ViewportDataGrid}
- * @param {!Array.<!WebInspector.DataGrid.ColumnDescriptor>} columnsArray
- * @param {function(!WebInspector.DataGridNode, string, string, string)=} editCallback
- * @param {function(!WebInspector.DataGridNode)=} deleteCallback
- * @param {function()=} refreshCallback
- * @param {function(!WebInspector.ContextMenu, !WebInspector.DataGridNode)=} contextMenuCallback
+ * @unrestricted
  */
-WebInspector.SortableDataGrid = function(columnsArray, editCallback, deleteCallback, refreshCallback, contextMenuCallback)
-{
-    WebInspector.ViewportDataGrid.call(this, columnsArray, editCallback, deleteCallback, refreshCallback, contextMenuCallback);
-    /** @type {!WebInspector.SortableDataGrid.NodeComparator} */
-    this._sortingFunction = WebInspector.SortableDataGrid.TrivialComparator;
-    this.setRootNode(new WebInspector.SortableDataGridNode());
-}
+UI.SortableDataGrid = class extends UI.ViewportDataGrid {
+  /**
+   * @param {!Array<!UI.DataGrid.ColumnDescriptor>} columnsArray
+   * @param {function(!UI.DataGridNode, string, string, string)=} editCallback
+   * @param {function(!UI.DataGridNode)=} deleteCallback
+   * @param {function()=} refreshCallback
+   */
+  constructor(columnsArray, editCallback, deleteCallback, refreshCallback) {
+    super(columnsArray, editCallback, deleteCallback, refreshCallback);
+    /** @type {!UI.SortableDataGrid.NodeComparator} */
+    this._sortingFunction = UI.SortableDataGrid.TrivialComparator;
+    this.setRootNode(new UI.SortableDataGridNode());
+  }
 
-/** @typedef {function(!WebInspector.DataGridNode, !WebInspector.DataGridNode):number} */
-WebInspector.SortableDataGrid.NodeComparator;
-
-/**
- * @param {!WebInspector.DataGridNode} a
- * @param {!WebInspector.DataGridNode} b
- * @return {number}
- */
-WebInspector.SortableDataGrid.TrivialComparator = function(a, b)
-{
+  /**
+   * @param {!UI.DataGridNode} a
+   * @param {!UI.DataGridNode} b
+   * @return {number}
+   */
+  static TrivialComparator(a, b) {
     return 0;
-}
+  }
 
-/**
- * @param {string} columnIdentifier
- * @param {!WebInspector.DataGridNode} a
- * @param {!WebInspector.DataGridNode} b
- * @return {number}
- */
-WebInspector.SortableDataGrid.NumericComparator = function(columnIdentifier, a, b)
-{
-    var aValue = a.data[columnIdentifier];
-    var bValue = b.data[columnIdentifier];
+  /**
+   * @param {string} columnId
+   * @param {!UI.DataGridNode} a
+   * @param {!UI.DataGridNode} b
+   * @return {number}
+   */
+  static NumericComparator(columnId, a, b) {
+    var aValue = a.data[columnId];
+    var bValue = b.data[columnId];
     var aNumber = Number(aValue instanceof Node ? aValue.textContent : aValue);
     var bNumber = Number(bValue instanceof Node ? bValue.textContent : bValue);
     return aNumber < bNumber ? -1 : (aNumber > bNumber ? 1 : 0);
-}
+  }
 
-/**
- * @param {string} columnIdentifier
- * @param {!WebInspector.DataGridNode} a
- * @param {!WebInspector.DataGridNode} b
- * @return {number}
- */
-WebInspector.SortableDataGrid.StringComparator = function(columnIdentifier, a, b)
-{
-    var aValue = a.data[columnIdentifier];
-    var bValue = b.data[columnIdentifier];
+  /**
+   * @param {string} columnId
+   * @param {!UI.DataGridNode} a
+   * @param {!UI.DataGridNode} b
+   * @return {number}
+   */
+  static StringComparator(columnId, a, b) {
+    var aValue = a.data[columnId];
+    var bValue = b.data[columnId];
     var aString = aValue instanceof Node ? aValue.textContent : String(aValue);
     var bString = bValue instanceof Node ? bValue.textContent : String(bValue);
     return aString < bString ? -1 : (aString > bString ? 1 : 0);
-}
+  }
 
-/**
- * @param {!WebInspector.SortableDataGrid.NodeComparator} comparator
- * @param {boolean} reverseMode
- * @param {!WebInspector.DataGridNode} a
- * @param {!WebInspector.DataGridNode} b
- * @return {number}
- */
-WebInspector.SortableDataGrid.Comparator = function(comparator, reverseMode, a, b)
-{
+  /**
+   * @param {!UI.SortableDataGrid.NodeComparator} comparator
+   * @param {boolean} reverseMode
+   * @param {!UI.DataGridNode} a
+   * @param {!UI.DataGridNode} b
+   * @return {number}
+   */
+  static Comparator(comparator, reverseMode, a, b) {
     return reverseMode ? comparator(b, a) : comparator(a, b);
-}
+  }
 
-/**
- * @param {!Array.<string>} columnNames
- * @param {!Array.<string>} values
- * @return {?WebInspector.SortableDataGrid}
- */
-WebInspector.SortableDataGrid.create = function(columnNames, values)
-{
+  /**
+   * @param {!Array.<string>} columnNames
+   * @param {!Array.<string>} values
+   * @return {?UI.SortableDataGrid}
+   */
+  static create(columnNames, values) {
     var numColumns = columnNames.length;
     if (!numColumns)
-        return null;
+      return null;
 
-    var columns = [];
+    var columns = /** @type {!Array<!UI.DataGrid.ColumnDescriptor>} */ ([]);
     for (var i = 0; i < columnNames.length; ++i)
-        columns.push({ title: columnNames[i], width: columnNames[i].length, sortable: true });
+      columns.push({id: String(i), title: columnNames[i], width: columnNames[i].length, sortable: true});
 
     var nodes = [];
     for (var i = 0; i < values.length / numColumns; ++i) {
-        var data = {};
-        for (var j = 0; j < columnNames.length; ++j)
-            data[j] = values[numColumns * i + j];
+      var data = {};
+      for (var j = 0; j < columnNames.length; ++j)
+        data[j] = values[numColumns * i + j];
 
-        var node = new WebInspector.SortableDataGridNode(data);
-        node.selectable = false;
-        nodes.push(node);
+      var node = new UI.SortableDataGridNode(data);
+      node.selectable = false;
+      nodes.push(node);
     }
 
-    var dataGrid = new WebInspector.SortableDataGrid(columns);
+    var dataGrid = new UI.SortableDataGrid(columns);
     var length = nodes.length;
     var rootNode = dataGrid.rootNode();
     for (var i = 0; i < length; ++i)
-        rootNode.appendChild(nodes[i]);
+      rootNode.appendChild(nodes[i]);
 
-    dataGrid.addEventListener(WebInspector.DataGrid.Events.SortingChanged, sortDataGrid);
+    dataGrid.addEventListener(UI.DataGrid.Events.SortingChanged, sortDataGrid);
 
-    function sortDataGrid()
-    {
-        var nodes = dataGrid.rootNode().children;
-        var sortColumnIdentifier = dataGrid.sortColumnIdentifier();
-        if (!sortColumnIdentifier)
-            return;
+    function sortDataGrid() {
+      var nodes = dataGrid.rootNode().children;
+      var sortColumnId = dataGrid.sortColumnId();
+      if (!sortColumnId)
+        return;
 
-        var columnIsNumeric = true;
-        for (var i = 0; i < nodes.length; i++) {
-            var value = nodes[i].data[sortColumnIdentifier];
-            if (isNaN(value instanceof Node ? value.textContent : value)) {
-                columnIsNumeric = false;
-                break;
-            }
+      var columnIsNumeric = true;
+      for (var i = 0; i < nodes.length; i++) {
+        var value = nodes[i].data[sortColumnId];
+        if (isNaN(value instanceof Node ? value.textContent : value)) {
+          columnIsNumeric = false;
+          break;
         }
+      }
 
-        var comparator = columnIsNumeric ? WebInspector.SortableDataGrid.NumericComparator : WebInspector.SortableDataGrid.StringComparator;
-        dataGrid.sortNodes(comparator.bind(null, sortColumnIdentifier), !dataGrid.isSortOrderAscending());
+      var comparator = columnIsNumeric ? UI.SortableDataGrid.NumericComparator : UI.SortableDataGrid.StringComparator;
+      dataGrid.sortNodes(comparator.bind(null, sortColumnId), !dataGrid.isSortOrderAscending());
     }
     return dataGrid;
-}
+  }
 
-WebInspector.SortableDataGrid.prototype = {
-    /**
-     * @param {!WebInspector.DataGridNode} node
-     */
-    insertChild: function(node)
-    {
-        var root = /** @type {!WebInspector.SortableDataGridNode} */ (this.rootNode());
-        root.insertChildOrdered(node);
-    },
+  /**
+   * @param {!UI.DataGridNode} node
+   */
+  insertChild(node) {
+    var root = /** @type {!UI.SortableDataGridNode} */ (this.rootNode());
+    root.insertChildOrdered(node);
+  }
 
-    /**
-     * @param {!WebInspector.SortableDataGrid.NodeComparator} comparator
-     * @param {boolean} reverseMode
-     */
-    sortNodes: function(comparator, reverseMode)
-    {
-        this._sortingFunction = WebInspector.SortableDataGrid.Comparator.bind(null, comparator, reverseMode);
-        this._rootNode._sortChildren(reverseMode);
-        this.scheduleUpdateStructure();
-    },
+  /**
+   * @param {!UI.SortableDataGrid.NodeComparator} comparator
+   * @param {boolean} reverseMode
+   */
+  sortNodes(comparator, reverseMode) {
+    this._sortingFunction = UI.SortableDataGrid.Comparator.bind(null, comparator, reverseMode);
+    this._rootNode._sortChildren(reverseMode);
+    this.scheduleUpdateStructure();
+  }
+};
 
-    __proto__: WebInspector.ViewportDataGrid.prototype
-}
+/** @typedef {function(!UI.DataGridNode, !UI.DataGridNode):number} */
+UI.SortableDataGrid.NodeComparator;
+
 
 /**
- * @constructor
- * @extends {WebInspector.ViewportDataGridNode}
- * @param {?Object.<string, *>=} data
- * @param {boolean=} hasChildren
+ * @unrestricted
  */
-WebInspector.SortableDataGridNode = function(data, hasChildren)
-{
-    WebInspector.ViewportDataGridNode.call(this, data, hasChildren);
-}
+UI.SortableDataGridNode = class extends UI.ViewportDataGridNode {
+  /**
+   * @param {?Object.<string, *>=} data
+   * @param {boolean=} hasChildren
+   */
+  constructor(data, hasChildren) {
+    super(data, hasChildren);
+  }
 
-WebInspector.SortableDataGridNode.prototype = {
-    /**
-     * @param {!WebInspector.DataGridNode} node
-     */
-    insertChildOrdered: function(node)
-    {
-        this.insertChild(node, this.children.upperBound(node, this.dataGrid._sortingFunction));
-    },
+  /**
+   * @param {!UI.DataGridNode} node
+   */
+  insertChildOrdered(node) {
+    this.insertChild(node, this.children.upperBound(node, this.dataGrid._sortingFunction));
+  }
 
-    _sortChildren: function()
-    {
-        this.children.sort(this.dataGrid._sortingFunction);
-        for (var i = 0; i < this.children.length; ++i)
-            this.children[i].recalculateSiblings(i);
-        for (var child of this.children)
-            child._sortChildren();
-    },
-
-    __proto__: WebInspector.ViewportDataGridNode.prototype
-}
+  _sortChildren() {
+    this.children.sort(this.dataGrid._sortingFunction);
+    for (var i = 0; i < this.children.length; ++i)
+      this.children[i].recalculateSiblings(i);
+    for (var child of this.children)
+      child._sortChildren();
+  }
+};

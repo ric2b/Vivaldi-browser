@@ -6,6 +6,7 @@
 
 #include "base/macros.h"
 #include "base/run_loop.h"
+#include "chrome/browser/extensions/extension_action.h"
 #include "chrome/browser/extensions/extension_action_manager.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
 #include "chrome/browser/sessions/session_tab_helper.h"
@@ -30,10 +31,6 @@ class PageActionImageViewInteractiveUITest : public ExtensionBrowserTest {
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
     ExtensionBrowserTest::SetUpCommandLine(command_line);
-    // We need to disable Media Router since having Media Router enabled will
-    // result in auto-enabling the redesign and breaking the test.
-    disable_media_router_.reset(new extensions::FeatureSwitch::ScopedOverride(
-        extensions::FeatureSwitch::media_router(), false));
     // Testing page action-specific UI means we need to disable the redesign.
     disable_redesign_.reset(new extensions::FeatureSwitch::ScopedOverride(
         extensions::FeatureSwitch::extension_action_redesign(), false));
@@ -41,8 +38,6 @@ class PageActionImageViewInteractiveUITest : public ExtensionBrowserTest {
 
  private:
   std::unique_ptr<extensions::FeatureSwitch::ScopedOverride> disable_redesign_;
-  std::unique_ptr<extensions::FeatureSwitch::ScopedOverride>
-      disable_media_router_;
 
   DISALLOW_COPY_AND_ASSIGN(PageActionImageViewInteractiveUITest);
 };
@@ -124,8 +119,8 @@ IN_PROC_BROWSER_TEST_F(PageActionImageViewInteractiveUITest,
 
   // We need to resize the expected icon to be the size of the page action
   // button for comparison purposes.
-  const gfx::Size size(extension_misc::EXTENSION_ICON_ACTION,
-                       extension_misc::EXTENSION_ICON_ACTION);
+  const gfx::Size size(ExtensionAction::ActionIconSize(),
+                       ExtensionAction::ActionIconSize());
   gfx::ImageSkia bg(new BlankImageSource(size), size);
   expected_icon =
       gfx::ImageSkiaOperations::CreateSuperimposedImage(bg, expected_icon);

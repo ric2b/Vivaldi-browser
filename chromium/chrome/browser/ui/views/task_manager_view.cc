@@ -39,6 +39,7 @@
 #include "ash/resources/grit/ash_resources.h"     // nogncheck
 #include "ash/wm/window_properties.h"             // nogncheck
 #include "ash/wm/window_util.h"                   // nogncheck
+#include "chrome/browser/ui/ash/ash_util.h"       // nogncheck
 #include "chrome/browser/ui/ash/property_util.h"  // nogncheck
 
 #include "ash/shell.h"
@@ -80,7 +81,7 @@ task_manager::TaskManagerTableModel* TaskManagerView::Show(Browser* browser) {
   // NOTE(jarle@vivaldi): Do not call ash::wm::GetActiveWindow unless we have a 
   // valid Shell instance, otherwise it will terminate the process via
   // Shell::GetPrimaryRootWindow. [VB-10963]
-  if (!window && ash::Shell::HasInstance())
+  if (!chrome::IsRunningInMash() && !window && ash::Shell::HasInstance())
     window = ash::wm::GetActiveWindow();
 #endif
 
@@ -334,9 +335,9 @@ void TaskManagerView::Init() {
   AddChildView(tab_table_parent_);
 
   SetLayoutManager(new views::FillLayout());
-  SetBorder(views::Border::CreateEmptyBorder(views::kPanelVertMargin,
-                                             views::kButtonHEdgeMarginNew, 0,
-                                             views::kButtonHEdgeMarginNew));
+  SetBorder(views::CreateEmptyBorder(views::kPanelVertMargin,
+                                     views::kButtonHEdgeMarginNew, 0,
+                                     views::kButtonHEdgeMarginNew));
 
   table_model_->RetrieveSavedColumnsSettingsAndUpdateTable();
 

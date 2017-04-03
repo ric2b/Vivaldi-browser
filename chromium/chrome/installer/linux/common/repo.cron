@@ -19,16 +19,15 @@
 
 @@include@@apt.include
 
-# Check for presence of future key and add if missing
-install_future_key
-
 ## MAIN ##
 DEFAULTS_FILE="/etc/default/@@PACKAGE@@"
 if [ -r "$DEFAULTS_FILE" ]; then
   . "$DEFAULTS_FILE"
 fi
 
+remove_old_key
 install_key
+install_future_key
 
 if [ "$repo_add_once" = "true" ]; then
   create_sources_lists

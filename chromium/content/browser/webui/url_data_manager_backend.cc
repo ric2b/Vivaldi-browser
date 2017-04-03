@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/debug/alias.h"
 #include "base/lazy_instance.h"
@@ -40,7 +41,8 @@
 #include "content/public/common/url_constants.h"
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
-#include "net/filter/filter.h"
+#include "net/filter/gzip_source_stream.h"
+#include "net/filter/source_stream.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_status_code.h"
 #include "net/log/net_log_util.h"
@@ -50,8 +52,6 @@
 #include "net/url_request/url_request_job.h"
 #include "net/url_request/url_request_job_factory.h"
 #include "url/url_util.h"
-
-#include "app/vivaldi_apptools.h"
 
 namespace content {
 
@@ -144,7 +144,7 @@ class URLRequestChromeJob : public net::URLRequestJob {
   bool GetMimeType(std::string* mime_type) const override;
   int GetResponseCode() const override;
   void GetResponseInfo(net::HttpResponseInfo* info) override;
-  std::unique_ptr<net::Filter> SetupFilter() const override;
+  std::unique_ptr<net::SourceStream> SetUpSourceStream() override;
 
   // Used to notify that the requested data's |mime_type| is ready.
   void MimeTypeAvailable(const std::string& mime_type);
@@ -394,8 +394,12 @@ void URLRequestChromeJob::GetResponseInfo(net::HttpResponseInfo* info) {
     info->headers->AddHeader("Content-Encoding: gzip");
 }
 
-std::unique_ptr<net::Filter> URLRequestChromeJob::SetupFilter() const {
-  return is_gzipped_ ? net::Filter::GZipFactory() : nullptr;
+std::unique_ptr<net::SourceStream> URLRequestChromeJob::SetUpSourceStream() {
+  std::unique_ptr<net::SourceStream> source =
+      net::URLRequestJob::SetUpSourceStream();
+  return is_gzipped_ ? net::GzipSourceStream::Create(
+                           std::move(source), net::SourceStream::TYPE_GZIP)
+                     : std::move(source);
 }
 
 void URLRequestChromeJob::MimeTypeAvailable(const std::string& mime_type) {
@@ -556,13 +560,13 @@ class ChromeProtocolHandler
 
     // Next check for chrome://histograms/, which uses its own job type.
     if (request->url().SchemeIs(kChromeUIScheme) &&
-        request->url().host() == kChromeUIHistogramHost) {
+        request->url().host_piece() == kChromeUIHistogramHost) {
       return new HistogramInternalsRequestJob(request, network_delegate);
     }
 
     // Check for chrome://network-error/, which uses its own job type.
     if (request->url().SchemeIs(kChromeUIScheme) &&
-        request->url().host() == kChromeUINetworkErrorHost) {
+        request->url().host_piece() == kChromeUINetworkErrorHost) {
       // Get the error code passed in via the request URL path.
       std::basic_string<char> error_code_string =
           request->url().path().substr(1);
@@ -576,6 +580,13 @@ class ChromeProtocolHandler
                                              error_code);
         }
       }
+    }
+
+    // Check for chrome://dino which is an alias for chrome://network-error/-106
+    if (request->url().SchemeIs(kChromeUIScheme) &&
+        request->url().host() == kChromeUIDinoHost) {
+      return new net::URLRequestErrorJob(request, network_delegate,
+                                         net::Error::ERR_INTERNET_DISCONNECTED);
     }
 
     // Fall back to using a custom handler
@@ -707,9 +718,9 @@ bool URLDataManagerBackend::StartRequest(const net::URLRequest* request,
   }
 
   // Forward along the request to the data source.
-  base::MessageLoop* target_message_loop =
-      source->source()->MessageLoopForRequestPath(path);
-  if (!target_message_loop) {
+  scoped_refptr<base::SingleThreadTaskRunner> target_runner =
+      source->source()->TaskRunnerForRequestPath(path);
+  if (!target_runner) {
     job->MimeTypeAvailable(source->source()->GetMimeType(path));
     // Eliminate potentially dangling pointer to avoid future use.
     job = nullptr;
@@ -725,13 +736,13 @@ bool URLDataManagerBackend::StartRequest(const net::URLRequest* request,
     // is guaranteed because request for mime type is placed in the
     // message loop before request for data. And correspondingly their
     // replies are put on the IO thread in the same order.
-    target_message_loop->task_runner()->PostTask(
+    target_runner->PostTask(
         FROM_HERE, base::Bind(&GetMimeTypeOnUI, base::RetainedRef(source), path,
                               job->AsWeakPtr()));
 
     // The DataSource wants StartDataRequest to be called on a specific thread,
     // usually the UI thread, for this path.
-    target_message_loop->task_runner()->PostTask(
+    target_runner->PostTask(
         FROM_HERE, base::Bind(&URLDataManagerBackend::CallStartRequest,
                               base::RetainedRef(source), path, child_id,
                               wc_getter, request_id));

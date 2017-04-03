@@ -1,99 +1,88 @@
 // Copyright 2016 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
-
 /**
- * @extends {WebInspector.VBox}
- * @param {!WebInspector.InspectedPagePlaceholder} inspectedPagePlaceholder
- * @constructor
+ * @unrestricted
  */
-WebInspector.DeviceModeWrapper = function(inspectedPagePlaceholder)
-{
-    WebInspector.VBox.call(this);
-    WebInspector.DeviceModeView._wrapperInstance = this;
+Emulation.DeviceModeWrapper = class extends UI.VBox {
+  /**
+   * @param {!Emulation.InspectedPagePlaceholder} inspectedPagePlaceholder
+   */
+  constructor(inspectedPagePlaceholder) {
+    super();
+    Emulation.DeviceModeView._wrapperInstance = this;
     this._inspectedPagePlaceholder = inspectedPagePlaceholder;
-    /** @type {?WebInspector.DeviceModeView} */
+    /** @type {?Emulation.DeviceModeView} */
     this._deviceModeView = null;
-    this._toggleDeviceModeAction = WebInspector.actionRegistry.action("emulation.toggle-device-mode");
-    this._showDeviceModeSetting = WebInspector.settings.createSetting("emulation.showDeviceMode", false);
+    this._toggleDeviceModeAction = UI.actionRegistry.action('emulation.toggle-device-mode');
+    this._showDeviceModeSetting = Common.settings.createSetting('emulation.showDeviceMode', false);
     this._showDeviceModeSetting.addChangeListener(this._update.bind(this, false));
     this._update(true);
-}
+  }
 
-/** @type {!WebInspector.DeviceModeWrapper} */
-WebInspector.DeviceModeView._wrapperInstance;
+  _toggleDeviceMode() {
+    this._showDeviceModeSetting.set(!this._showDeviceModeSetting.get());
+  }
 
-WebInspector.DeviceModeWrapper.prototype = {
-    _toggleDeviceMode: function()
-    {
-        this._showDeviceModeSetting.set(!this._showDeviceModeSetting.get());
-    },
+  /**
+   * @return {boolean}
+   */
+  _captureScreenshot() {
+    if (!this._deviceModeView)
+      return false;
+    this._deviceModeView.captureScreenshot();
+    return true;
+  }
 
-    /**
-     * @return {boolean}
-     */
-    _captureScreenshot: function()
-    {
-        if (!this._deviceModeView)
-            return false;
-        this._deviceModeView.captureScreenshot();
-        return true;
-    },
+  /**
+   * @param {boolean} force
+   */
+  _update(force) {
+    this._toggleDeviceModeAction.setToggled(this._showDeviceModeSetting.get());
+    if (!force) {
+      var showing = this._deviceModeView && this._deviceModeView.isShowing();
+      if (this._showDeviceModeSetting.get() === showing)
+        return;
+    }
 
-    /**
-     * @param {boolean} force
-     */
-    _update: function(force)
-    {
-        this._toggleDeviceModeAction.setToggled(this._showDeviceModeSetting.get());
-        if (!force) {
-            var showing = this._deviceModeView && this._deviceModeView.isShowing();
-            if (this._showDeviceModeSetting.get() === showing)
-                return;
-        }
+    if (this._showDeviceModeSetting.get()) {
+      if (!this._deviceModeView)
+        this._deviceModeView = new Emulation.DeviceModeView();
+      this._deviceModeView.show(this.element);
+      this._inspectedPagePlaceholder.clearMinimumSizeAndMargins();
+      this._inspectedPagePlaceholder.show(this._deviceModeView.element);
+    } else {
+      if (this._deviceModeView)
+        this._deviceModeView.detach();
+      this._inspectedPagePlaceholder.restoreMinimumSizeAndMargins();
+      this._inspectedPagePlaceholder.show(this.element);
+    }
+  }
+};
 
-        if (this._showDeviceModeSetting.get()) {
-            if (!this._deviceModeView)
-                this._deviceModeView = new WebInspector.DeviceModeView();
-            this._deviceModeView.show(this.element);
-            this._inspectedPagePlaceholder.clearMinimumSizeAndMargins();
-            this._inspectedPagePlaceholder.show(this._deviceModeView.element);
-        } else {
-            if (this._deviceModeView)
-                this._deviceModeView.detach();
-            this._inspectedPagePlaceholder.restoreMinimumSizeAndMargins();
-            this._inspectedPagePlaceholder.show(this.element);
-        }
-    },
-
-    __proto__: WebInspector.VBox.prototype
-}
+/** @type {!Emulation.DeviceModeWrapper} */
+Emulation.DeviceModeView._wrapperInstance;
 
 /**
- * @constructor
- * @implements {WebInspector.ActionDelegate}
+ * @implements {UI.ActionDelegate}
+ * @unrestricted
  */
-WebInspector.DeviceModeWrapper.ActionDelegate = function()
-{
-}
-
-WebInspector.DeviceModeWrapper.ActionDelegate.prototype = {
-    /**
-     * @override
-     * @param {!WebInspector.Context} context
-     * @param {string} actionId
-     * @return {boolean}
-     */
-    handleAction: function(context, actionId)
-    {
-        if (WebInspector.DeviceModeView._wrapperInstance) {
-            if (actionId === "emulation.toggle-device-mode") {
-                WebInspector.DeviceModeView._wrapperInstance._toggleDeviceMode();
-                return true;
-            }
-            if (actionId === "emulation.capture-screenshot")
-                return WebInspector.DeviceModeView._wrapperInstance._captureScreenshot();
-        }
-        return false;
+Emulation.DeviceModeWrapper.ActionDelegate = class {
+  /**
+   * @override
+   * @param {!UI.Context} context
+   * @param {string} actionId
+   * @return {boolean}
+   */
+  handleAction(context, actionId) {
+    if (Emulation.DeviceModeView._wrapperInstance) {
+      if (actionId === 'emulation.toggle-device-mode') {
+        Emulation.DeviceModeView._wrapperInstance._toggleDeviceMode();
+        return true;
+      }
+      if (actionId === 'emulation.capture-screenshot')
+        return Emulation.DeviceModeView._wrapperInstance._captureScreenshot();
     }
-}
+    return false;
+  }
+};

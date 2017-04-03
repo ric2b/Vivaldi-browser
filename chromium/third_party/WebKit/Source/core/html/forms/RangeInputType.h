@@ -50,6 +50,7 @@ class RangeInputType final : public InputType, public InputTypeView {
  private:
   RangeInputType(HTMLInputElement&);
   InputTypeView* createView() override;
+  ValueMode valueMode() const override;
   void countUsage() override;
   const AtomicString& formControlType() const override;
   double valueAsDouble() const override;
@@ -70,10 +71,7 @@ class RangeInputType final : public InputType, public InputTypeView {
   void sanitizeValueInResponseToMinOrMaxAttributeChange() override;
   void stepAttributeChanged() override;
   void warnIfValueIsInvalid(const String&) const override;
-  void setValue(const String&,
-                bool valueChanged,
-                TextFieldEventBehavior) override;
-  String fallbackValue() const override;
+  void didSetValue(const String&, bool valueChanged) override;
   String sanitizeValue(const String& proposedValue) const override;
   bool shouldRespectListAttribute() override;
   void disabledAttributeChanged() override;

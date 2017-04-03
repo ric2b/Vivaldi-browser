@@ -896,7 +896,7 @@ should be able to be added at any place in this file.
   <owner>dmazzoni@chromium.org</owner>
   <description>
     Metric recorded when the user toggles Chrome OS High Contrast mode with the
-    keyboard accelerator (Ctrl+Alt+H).
+    keyboard accelerator.
   </description>
 </action>
 
@@ -994,6 +994,38 @@ should be able to be added at any place in this file.
 <action name="AcceptedKeywordHint">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+</action>
+
+<action name="Accessibility.ChromeVox.Jump">
+  <owner>dmazzoni@chromium.org</owner>
+  <description>
+    A Chrome OS user with spoken feedback enabled has executed any jump action,
+    like jumping to the next heading on a web page.
+  </description>
+</action>
+
+<action name="Accessibility.ChromeVox.Navigate">
+  <owner>dmazzoni@chromium.org</owner>
+  <description>
+    A Chrome OS user with spoken feedback enabled has executed any navigation
+    action, like navigating to the next object on the screen.
+  </description>
+</action>
+
+<action name="Accessibility.ChromeVox.ToggleNextOff">
+  <owner>dmazzoni@chromium.org</owner>
+  <description>
+    A Chrome OS user with spoken feedback enabled manually toggles ChromeVox
+    Next off.
+  </description>
+</action>
+
+<action name="Accessibility.ChromeVox.ToggleNextOn">
+  <owner>dmazzoni@chromium.org</owner>
+  <description>
+    A Chrome OS user with spoken feedback enabled manually toggles ChromeVox
+    Next on.
+  </description>
 </action>
 
 <action name="ActionBox.ClickButton">
@@ -3582,11 +3614,13 @@ should be able to be added at any place in this file.
 <action name="Destination_MostVisited">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>No longer recorded.</obsolete>
 </action>
 
 <action name="Destination_MostVisited_OpenURL">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>No longer recorded.</obsolete>
 </action>
 
 <action name="Destination_Sessions">
@@ -9766,8 +9800,33 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="MobileReceivedExternalIntent">
-  <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
-  <description>Please enter the description of this user action.</description>
+  <owner>mariakhomenko@chromium.org</owner>
+  <owner>tedchoc@chromium.org</owner>
+  <description>
+    A VIEW intent was received by the tabbed mode activity.  This will combine
+    intents sent by external application as well as Chrome itself.  This does
+    not cover all intent types handled by Chrome.  Use
+    MobileTabbedModeViewIntentFromApp and MobileTabbedModeViewIntentFromChrome
+    for a complete picture.
+  </description>
+</action>
+
+<action name="MobileReceivedExternalIntent.App">
+  <owner>mariakhomenko@chromium.org</owner>
+  <owner>tedchoc@chromium.org</owner>
+  <description>
+    A VIEW intent was received by the tabbed mode activity from an external
+    application.
+  </description>
+</action>
+
+<action name="MobileReceivedExternalIntent.Chrome">
+  <owner>mariakhomenko@chromium.org</owner>
+  <owner>tedchoc@chromium.org</owner>
+  <description>
+    A VIEW intent was received by the tabbed mode activity from Chrome.  This is
+    only recorded for intent types that are also allowed from external apps.
+  </description>
 </action>
 
 <action name="MobileRendererCrashed">
@@ -9853,6 +9912,23 @@ should be able to be added at any place in this file.
 <action name="MobileTabSwitched">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+</action>
+
+<action name="MobileTabbedModeViewIntentFromApp">
+  <owner>mariakhomenko@chromium.org</owner>
+  <owner>tedchoc@chromium.org</owner>
+  <description>
+    A VIEW intent was received by the tabbed mode activity from an external
+    application.
+  </description>
+</action>
+
+<action name="MobileTabbedModeViewIntentFromChrome">
+  <owner>mariakhomenko@chromium.org</owner>
+  <owner>tedchoc@chromium.org</owner>
+  <description>
+    A VIEW intent was received by the tabbed mode activity from Chrome.
+  </description>
 </action>
 
 <action name="MobileToolbarBack">
@@ -9958,86 +10034,103 @@ should be able to be added at any place in this file.
 <action name="MostVisited0">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>No longer recorded.</obsolete>
 </action>
 
 <action name="MostVisited1">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>No longer recorded.</obsolete>
 </action>
 
 <action name="MostVisited2">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>No longer recorded.</obsolete>
 </action>
 
 <action name="MostVisited3">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>No longer recorded.</obsolete>
 </action>
 
 <action name="MostVisited4">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>No longer recorded.</obsolete>
 </action>
 
 <action name="MostVisited5">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>No longer recorded.</obsolete>
 </action>
 
 <action name="MostVisited6">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>No longer recorded.</obsolete>
 </action>
 
 <action name="MostVisited7">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>No longer recorded.</obsolete>
 </action>
 
 <action name="MostVisited8">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>No longer recorded.</obsolete>
 </action>
 
 <action name="MostVisited9">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>No longer recorded.</obsolete>
 </action>
 
 <action name="MostVisitedReordered">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>No longer recorded.</obsolete>
 </action>
 
 <action name="MostVisited_BlacklistCleared">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>No longer recorded.</obsolete>
 </action>
 
 <action name="MostVisited_Clicked">
-  <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
-  <description>Please enter the description of this user action.</description>
+  <owner>sfiera@chromium.org</owner>
+  <owner>treib@chromium.org</owner>
+  <description>An NTP tile was clicked. Desktop only.</description>
 </action>
 
 <action name="MostVisited_UrlBlacklisted">
-  <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
-  <description>Please enter the description of this user action.</description>
+  <owner>sfiera@chromium.org</owner>
+  <owner>treib@chromium.org</owner>
+  <description>An NTP tile was blacklisted. iOS only.</description>
 </action>
 
 <action name="MostVisited_UrlPinned">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>No longer recorded.</obsolete>
 </action>
 
 <action name="MostVisited_UrlRemoved">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>No longer recorded.</obsolete>
 </action>
 
 <action name="MostVisited_UrlUnpinned">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>No longer recorded.</obsolete>
 </action>
 
 <action name="Mouse_Down">
@@ -10262,6 +10355,15 @@ should be able to be added at any place in this file.
 <action name="NewTab">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+</action>
+
+<action name="NewTabPage_ContentSuggestions_ArticlesUsage">
+  <owner>markusheintz@chromium.org</owner>
+  <description>
+    Counts the usage of the &quot;Articles for you&quot; section on the New Tab
+    Page. Examples for &quot;Articles for You&quot; usage are: A user opening an
+    article suggestion or a user viewing the articles suggestions section.
+  </description>
 </action>
 
 <action name="NewTabPage_ReopenTab">
@@ -11105,11 +11207,9 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Options_DefaultFullScreenSettingChanged">
-  <owner>lshang@chromium.org</owner>
-  <description>
-    Recorded when the default value for the Full Screen content setting is
-    changed by the user.
-  </description>
+  <owner>mgiuca@chromium.org</owner>
+  <description>Was used for changing fullscreen settings.</description>
+  <obsolete>Deprecated as of 2016-10. These settings no longer exist.</obsolete>
 </action>
 
 <action name="Options_DefaultGeolocationSettingChanged">
@@ -11177,8 +11277,9 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Options_DefaultMouseLockSettingChanged">
-  <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
-  <description>Please enter the description of this user action.</description>
+  <owner>mgiuca@chromium.org</owner>
+  <description>Was used for changing mouse lock settings.</description>
+  <obsolete>Deprecated as of 2016-10. These settings no longer exist.</obsolete>
 </action>
 
 <action name="Options_DefaultMultipleAutomaticDLSettingChange">
@@ -13005,6 +13106,15 @@ should be able to be added at any place in this file.
   <description>A Physical Web URL was selected.</description>
 </action>
 
+<action name="PhysicalWeb.WebUI.ListViewUrlSelected">
+  <owner>cco3@chromium.org</owner>
+  <owner>mattreynolds@chromium.org</owner>
+  <owner>mmocny@chromium.org</owner>
+  <description>
+    The user tapped an URL in the Physical Web list view.
+  </description>
+</action>
+
 <action name="PhysicalWeb.WebUI.Open">
   <owner>cco3@chromium.org</owner>
   <owner>mattreynolds@chromium.org</owner>
@@ -13526,6 +13636,16 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
+<action name="ScreenOrientationChange">
+  <owner>avayvod@chromium.org</owner>
+  <owner>mlamouri@chromium.org</owner>
+  <owner>zqzhang@chromium.org</owner>
+  <description>
+    The use rotates the device triggering a screen orientation change. This
+    action is Android-specific.
+  </description>
+</action>
+
 <action name="Screenshot_Annotate">
   <owner>derat@chromium.org</owner>
   <owner>jdufault@chromium.org</owner>
@@ -13685,6 +13805,14 @@ should be able to be added at any place in this file.
   <description>The Windows Settings app became focused.</description>
 </action>
 
+<action name="SettingsAppMonitor.CheckItOut">
+  <owner>grt@chromium.org</owner>
+  <owner>pmonette@chromium.org</owner>
+  <description>
+    The user clicked the &quot;Check it out&quot; button in the Edge promo.
+  </description>
+</action>
+
 <action name="SettingsAppMonitor.ChooserInvoked">
   <owner>grt@chromium.org</owner>
   <description>
@@ -13713,6 +13841,20 @@ should be able to be added at any place in this file.
   <description>
     The user selected a different browser from the Windows Settings app's
     browser chooser.
+  </description>
+</action>
+
+<action name="SettingsAppMonitor.PromoFocused">
+  <owner>grt@chromium.org</owner>
+  <owner>pmonette@chromium.org</owner>
+  <description>The Edge promo became focused.</description>
+</action>
+
+<action name="SettingsAppMonitor.SwitchAnyway">
+  <owner>grt@chromium.org</owner>
+  <owner>pmonette@chromium.org</owner>
+  <description>
+    The user clicked the &quot;Switch Anyway&quot; button in the Edge promo.
   </description>
 </action>
 
@@ -15647,6 +15789,14 @@ should be able to be added at any place in this file.
   <owner>tbarzic@google.com</owner>
   <description>
     Tracks Chrome Webstore Gallery Widget app being launched.
+  </description>
+</action>
+
+<action name="Win10WelcomePage_SetAsDefaultBrowser">
+  <owner>pmonette@chromium.org</owner>
+  <description>
+    The user clicked &quot;Open Windows Settings&quot; in the Win10 version of
+    the Welcome page.
   </description>
 </action>
 

@@ -79,12 +79,6 @@ class TestTouchEvent : public ui::TouchEvent {
 
 const int kAllButtonMask = ui::EF_LEFT_MOUSE_BUTTON | ui::EF_RIGHT_MOUSE_BUTTON;
 
-void ConvertToPenPointerEvent(ui::MouseEvent* event) {
-  auto details = event->pointer_details();
-  details.pointer_type = ui::EventPointerType::POINTER_TYPE_PEN;
-  event->set_pointer_details(details);
-}
-
 }  // namespace
 
 EventGeneratorDelegate* EventGenerator::default_delegate = NULL;
@@ -267,11 +261,22 @@ void EventGenerator::MoveMouseToCenterOf(EventTarget* window) {
 }
 
 void EventGenerator::EnterPenPointerMode() {
-  pen_pointer_mode_ = true;
+  touch_pointer_details_.pointer_type = ui::EventPointerType::POINTER_TYPE_PEN;
 }
 
 void EventGenerator::ExitPenPointerMode() {
-  pen_pointer_mode_ = false;
+  touch_pointer_details_.pointer_type =
+      ui::EventPointerType::POINTER_TYPE_TOUCH;
+}
+
+void EventGenerator::SetTouchRadius(float x, float y) {
+  touch_pointer_details_.radius_x = x;
+  touch_pointer_details_.radius_y = y;
+}
+
+void EventGenerator::SetTouchTilt(float x, float y) {
+  touch_pointer_details_.tilt_x = x;
+  touch_pointer_details_.tilt_y = y;
 }
 
 void EventGenerator::PressTouch() {
@@ -550,6 +555,22 @@ void EventGenerator::ScrollSequence(const gfx::Point& start,
   Dispatch(&fling_start);
 }
 
+void EventGenerator::GenerateTrackpadRest() {
+  int num_fingers = 2;
+  ui::ScrollEvent scroll(ui::ET_SCROLL, current_location_,
+                         ui::EventTimeForNow(), 0, 0, 0, 0, 0, num_fingers,
+                         EventMomentumPhase::MAY_BEGIN);
+  Dispatch(&scroll);
+}
+
+void EventGenerator::CancelTrackpadRest() {
+  int num_fingers = 2;
+  ui::ScrollEvent scroll(ui::ET_SCROLL, current_location_,
+                         ui::EventTimeForNow(), 0, 0, 0, 0, 0, num_fingers,
+                         EventMomentumPhase::END);
+  Dispatch(&scroll);
+}
+
 void EventGenerator::PressKey(ui::KeyboardCode key_code, int flags) {
   DispatchKeyEvent(true, key_code, flags);
 }
@@ -569,6 +590,9 @@ void EventGenerator::Init(gfx::NativeWindow root_window,
   if (window_context)
     current_location_ = delegate()->CenterOfWindow(window_context);
   current_target_ = delegate()->GetTargetAt(current_location_);
+  touch_pointer_details_ =
+      PointerDetails(ui::EventPointerType::POINTER_TYPE_TOUCH, 1.0, 1.0,
+                     std::numeric_limits<float>::quiet_NaN(), 0.0, 0.0);
 }
 
 void EventGenerator::DispatchKeyEvent(bool is_press,
@@ -644,8 +668,10 @@ gfx::Point EventGenerator::CenterOfWindow(const EventTarget* window) const {
 }
 
 void EventGenerator::DoDispatchEvent(ui::Event* event, bool async) {
-  if (pen_pointer_mode_ && event->IsMouseEvent())
-    ConvertToPenPointerEvent(static_cast<ui::MouseEvent*>(event));
+  if (event->IsTouchEvent()) {
+    static_cast<ui::TouchEvent*>(event)->set_pointer_details(
+        touch_pointer_details_);
+  }
 
   if (async) {
     std::unique_ptr<ui::Event> pending_event = ui::Event::Clone(*event);

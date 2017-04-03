@@ -16,11 +16,11 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/session_manager_client.h"
-#include "chromeos/login/user_names.h"
 #include "chromeos/login_event_recorder.h"
 #include "chromeos/settings/cros_settings_names.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/core/account_id/account_id.h"
+#include "components/user_manager/user_names.h"
 #include "google_apis/gaia/gaia_auth_util.h"
 #include "net/cookies/cookie_monster.h"
 #include "net/cookies/cookie_store.h"
@@ -163,7 +163,7 @@ void LoginPerformer::DoPerformLogin(const UserContext& user_context,
 
 void LoginPerformer::LoginAsSupervisedUser(const UserContext& user_context) {
   DCHECK_EQ(
-      chromeos::login::kSupervisedUserDomain,
+      user_manager::kSupervisedUserDomain,
       gaia::ExtractDomainName(user_context.GetAccountId().GetUserEmail()));
 
   user_context_ = user_context;
@@ -237,6 +237,14 @@ void LoginPerformer::LoginAsKioskAccount(const AccountId& app_account_id,
       FROM_HERE,
       base::Bind(&Authenticator::LoginAsKioskAccount, authenticator_.get(),
                  app_account_id, use_guest_mount));
+}
+
+void LoginPerformer::LoginAsArcKioskAccount(
+    const AccountId& arc_app_account_id) {
+  EnsureAuthenticator();
+  task_runner_->PostTask(FROM_HERE,
+                         base::Bind(&Authenticator::LoginAsArcKioskAccount,
+                                    authenticator_.get(), arc_app_account_id));
 }
 
 void LoginPerformer::RecoverEncryptedData(const std::string& old_password) {

@@ -28,7 +28,9 @@ group("core_shim") {
 
 group("core") {
   visibility = [
-    "//blimp/client/*",
+    ":core_shim",
+    "//blimp/client/app:*",  # TODO(nyquist): Remove this. See crbug/651964.
+    "//blimp/client/test",
     "//blimp/test/*",
   ]
 
@@ -39,6 +41,7 @@ group("core") {
     "//blimp/client/core/feedback",
     "//blimp/client/core/geolocation",
     "//blimp/client/core/render_widget",
+    "//blimp/client/core/resources",
     "//blimp/client/core/session",
     "//blimp/client/core/settings",
     "//blimp/client/core/switches",
@@ -50,6 +53,7 @@ group("dummy_core") {
 
   deps = [
     "//blimp/client/core/context:dummy",
+    "//blimp/client/core/resources:dummy",
   ]
 }
 
@@ -64,6 +68,7 @@ group("unit_tests") {
     "//blimp/client/core/geolocation:unit_tests",
     "//blimp/client/core/render_widget:unit_tests",
     "//blimp/client/core/session:unit_tests",
+    "//blimp/client/core/settings:unit_tests",
   ]
 }
 
@@ -88,8 +93,9 @@ if (is_android) {
 
   java_group("core_java") {
     visibility = [
-      "//blimp/client/*",
-      "//blimp:blimp_unittests_java_deps",
+      ":core_shim_java",
+      "//blimp/client:blimp_unittests_java_deps",
+      "//blimp/client/app:*",  # TODO(nyquist): Remove this. See crbug/651964.
     ]
 
     deps = [

@@ -14,6 +14,10 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
+#ifdef VIVALDI_BUILD
+#define GOOGLE_CHROME_BUILD
+#endif  // VIVALDI_BUILD
+
 namespace {
 
 using testing::_;

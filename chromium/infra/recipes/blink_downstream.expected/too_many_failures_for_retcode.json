@@ -136,7 +136,7 @@
       "--platform",
       "linux-amd64",
       "--dest-directory",
-      "[SLAVE_BUILD]/cipd",
+      "[START_DIR]/cipd",
       "--json-output",
       "/path/to/tmp/json"
     ],
@@ -146,7 +146,7 @@
       "@@@STEP_NEST_LEVEL@1@@@",
       "@@@STEP_TEXT@cipd instance_id: 40-chars-fake-of-the-package-instance_id@@@",
       "@@@STEP_LOG_LINE@json.output@{@@@",
-      "@@@STEP_LOG_LINE@json.output@  \"executable\": \"[SLAVE_BUILD]/cipd/cipd\", @@@",
+      "@@@STEP_LOG_LINE@json.output@  \"executable\": \"[START_DIR]/cipd/cipd\", @@@",
       "@@@STEP_LOG_LINE@json.output@  \"instance_id\": \"40-chars-fake-of-the-package-instance_id\"@@@",
       "@@@STEP_LOG_LINE@json.output@}@@@",
       "@@@STEP_LOG_END@json.output@@@"
@@ -154,7 +154,7 @@
   },
   {
     "cmd": [
-      "[SLAVE_BUILD]/cipd/cipd",
+      "[START_DIR]/cipd/cipd",
       "ensure",
       "--root",
       "[CACHE]/cipd/goma",
@@ -311,7 +311,7 @@
       "--target",
       "Release",
       "-o",
-      "[SLAVE_BUILD]/layout-test-results",
+      "[START_DIR]/layout-test-results",
       "--build-dir",
       "[BUILDER_CACHE]/V8_Blink_Linux_64/src/out",
       "--json-test-results",
@@ -342,7 +342,7 @@
       "-u",
       "RECIPE_PACKAGE_REPO[build]/scripts/slave/chromium/archive_layout_test_results.py",
       "--results-dir",
-      "[SLAVE_BUILD]/layout-test-results",
+      "[START_DIR]/layout-test-results",
       "--build-dir",
       "[BUILDER_CACHE]/V8_Blink_Linux_64/src/out",
       "--build-number",
@@ -352,7 +352,9 @@
       "--gs-bucket",
       "gs://chromium-layout-test-archives",
       "--staging-dir",
-      "[CACHE]/chrome_staging"
+      "[CACHE]/chrome_staging",
+      "--slave-utils-gsutil-py-path",
+      "RECIPE_PACKAGE_REPO[depot_tools]/gsutil.py"
     ],
     "cwd": "[BUILDER_CACHE]/V8_Blink_Linux_64",
     "name": "archive_webkit_tests_results",
@@ -536,7 +538,7 @@
       "--target",
       "Release",
       "-o",
-      "[SLAVE_BUILD]/layout-test-results",
+      "[START_DIR]/layout-test-results",
       "--build-dir",
       "[BUILDER_CACHE]/V8_Blink_Linux_64/src/out",
       "--json-test-results",
@@ -576,6 +578,23 @@
       "@@@STEP_TEXT@<br/>failures:<br/>bad/failing78.html<br/>bad/failing46.html<br/>bad/failing101.html<br/>bad/totally-bad-probably.html<br/>bad/failing70.html<br/>bad/failing17.html<br/>bad/failing82.html<br/>bad/failing120.html<br/>bad/failing73.html<br/>bad/failing112.html<br/>bad/failing114.html<br/>bad/failing99.html<br/>bad/failing121.html<br/>bad/failing108.html<br/>bad/failing76.html<br/>bad/failing50.html<br/>bad/failing23.html<br/>bad/failing104.html<br/>bad/failing93.html<br/>bad/failing67.html<br/>bad/failing124.html<br/>bad/failing53.html<br/>bad/failing69.html<br/>bad/failing117.html<br/>bad/failing34.html<br/>bad/failing51.html<br/>bad/failing80.html<br/>bad/failing20.html<br/>bad/failing107.html<br/>bad/failing56.html<br/>bad/failing68.html<br/>bad/failing71.html<br/>bad/failing77.html<br/>bad/failing39.html<br/>bad/failing92.html<br/>bad/failing90.html<br/>bad/failing89.html<br/>bad/failing122.html<br/>bad/failing105.html<br/>tricky/totally-maybe-not-awesome.html<br/>bad/failing36.html<br/>bad/failing44.html<br/>bad/failing21.html<br/>bad/failing85.html<br/>bad/failing42.html<br/>bad/failing55.html<br/>bad/failing9.html<br/>bad/failing15.html<br/>bad/failing65.html<br/>bad/failing118.html<br/>bad/failing95.html<br/>bad/failing45.html<br/>bad/failing66.html<br/>bad/failing26.html<br/>bad/failing35.html<br/>bad/failing74.html<br/>bad/failing109.html<br/>bad/failing97.html<br/>bad/failing58.html<br/>bad/failing37.html<br/>bad/failing11.html<br/>bad/failing111.html<br/>bad/failing86.html<br/>bad/failing30.html<br/>bad/failing54.html<br/>bad/failing38.html<br/>bad/failing13.html<br/>bad/failing63.html<br/>bad/failing116.html<br/>bad/failing41.html<br/>bad/failing18.html<br/>bad/failing84.html<br/>bad/failing2.html<br/>bad/failing28.html<br/>bad/failing33.html<br/>bad/failing106.html<br/>bad/failing48.html<br/>bad/failing0.html<br/>bad/failing4.html<br/>bad/failing64.html<br/>bad/failing47.html<br/>bad/failing27.html<br/>bad/failing25.html<br/>bad/failing8.html<br/>bad/failing100.html<br/>bad/failing102.html<br/>bad/failing123.html<br/>bad/failing88.html<br/>bad/failing61.html<br/>bad/failing79.html<br/>bad/failing43.html<br/>bad/failing57.html<br/>bad/failing16.html<br/>bad/failing96.html<br/>bad/failing94.html<br/>bad/failing119.html<br/>bad/failing113.html<br/>bad/failing72.html<br/>bad/failing1.html<br/>bad/failing103.html<br/>bad/failing110.html<br/>bad/failing32.html<br/>bad/failing12.html<br/>bad/failing10.html<br/>bad/failing40.html<br/>bad/failing5.html<br/>bad/failing75.html<br/>bad/failing98.html<br/>bad/failing115.html<br/>bad/failing49.html<br/>bad/failing6.html<br/>bad/failing19.html<br/>bad/failing87.html<br/>bad/failing59.html<br/>bad/failing22.html<br/>bad/failing24.html<br/>bad/failing3.html<br/>bad/failing91.html<br/>bad/failing60.html<br/>bad/failing81.html<br/>bad/failing83.html<br/>bad/failing62.html<br/>bad/failing52.html<br/>bad/failing29.html<br/>bad/failing31.html<br/>bad/failing7.html<br/>bad/failing14.html<br/>@@@",
       "@@@STEP_FAILURE@@@"
     ]
+  },
+  {
+    "cmd": [
+      "python",
+      "-u",
+      "RECIPE_PACKAGE_REPO[build]/scripts/slave/chromium/archive_layout_test_retry_summary.py",
+      "--retry-summary-json",
+      "{\"failures\": [\"bad/failing0.html\", \"bad/failing1.html\", \"bad/failing10.html\", \"bad/failing100.html\", \"bad/failing101.html\", \"bad/failing102.html\", \"bad/failing103.html\", \"bad/failing104.html\", \"bad/failing105.html\", \"bad/failing106.html\", \"bad/failing107.html\", \"bad/failing108.html\", \"bad/failing109.html\", \"bad/failing11.html\", \"bad/failing110.html\", \"bad/failing111.html\", \"bad/failing112.html\", \"bad/failing113.html\", \"bad/failing114.html\", \"bad/failing115.html\", \"bad/failing116.html\", \"bad/failing117.html\", \"bad/failing118.html\", \"bad/failing119.html\", \"bad/failing12.html\", \"bad/failing120.html\", \"bad/failing121.html\", \"bad/failing122.html\", \"bad/failing123.html\", \"bad/failing124.html\", \"bad/failing13.html\", \"bad/failing14.html\", \"bad/failing15.html\", \"bad/failing16.html\", \"bad/failing17.html\", \"bad/failing18.html\", \"bad/failing19.html\", \"bad/failing2.html\", \"bad/failing20.html\", \"bad/failing21.html\", \"bad/failing22.html\", \"bad/failing23.html\", \"bad/failing24.html\", \"bad/failing25.html\", \"bad/failing26.html\", \"bad/failing27.html\", \"bad/failing28.html\", \"bad/failing29.html\", \"bad/failing3.html\", \"bad/failing30.html\", \"bad/failing31.html\", \"bad/failing32.html\", \"bad/failing33.html\", \"bad/failing34.html\", \"bad/failing35.html\", \"bad/failing36.html\", \"bad/failing37.html\", \"bad/failing38.html\", \"bad/failing39.html\", \"bad/failing4.html\", \"bad/failing40.html\", \"bad/failing41.html\", \"bad/failing42.html\", \"bad/failing43.html\", \"bad/failing44.html\", \"bad/failing45.html\", \"bad/failing46.html\", \"bad/failing47.html\", \"bad/failing48.html\", \"bad/failing49.html\", \"bad/failing5.html\", \"bad/failing50.html\", \"bad/failing51.html\", \"bad/failing52.html\", \"bad/failing53.html\", \"bad/failing54.html\", \"bad/failing55.html\", \"bad/failing56.html\", \"bad/failing57.html\", \"bad/failing58.html\", \"bad/failing59.html\", \"bad/failing6.html\", \"bad/failing60.html\", \"bad/failing61.html\", \"bad/failing62.html\", \"bad/failing63.html\", \"bad/failing64.html\", \"bad/failing65.html\", \"bad/failing66.html\", \"bad/failing67.html\", \"bad/failing68.html\", \"bad/failing69.html\", \"bad/failing7.html\", \"bad/failing70.html\", \"bad/failing71.html\", \"bad/failing72.html\", \"bad/failing73.html\", \"bad/failing74.html\", \"bad/failing75.html\", \"bad/failing76.html\", \"bad/failing77.html\", \"bad/failing78.html\", \"bad/failing79.html\", \"bad/failing8.html\", \"bad/failing80.html\", \"bad/failing81.html\", \"bad/failing82.html\", \"bad/failing83.html\", \"bad/failing84.html\", \"bad/failing85.html\", \"bad/failing86.html\", \"bad/failing87.html\", \"bad/failing88.html\", \"bad/failing89.html\", \"bad/failing9.html\", \"bad/failing90.html\", \"bad/failing91.html\", \"bad/failing92.html\", \"bad/failing93.html\", \"bad/failing94.html\", \"bad/failing95.html\", \"bad/failing96.html\", \"bad/failing97.html\", \"bad/failing98.html\", \"bad/failing99.html\", \"bad/totally-bad-probably.html\", \"tricky/totally-maybe-not-awesome.html\"], \"ignored\": []}",
+      "--build-number",
+      "571",
+      "--builder-name",
+      "V8-Blink Linux 64",
+      "--gs-bucket",
+      "gs://chromium-layout-test-archives"
+    ],
+    "cwd": "[BUILDER_CACHE]/V8_Blink_Linux_64",
+    "name": "archive_retry_summary"
   },
   {
     "name": "$result",

@@ -1,6 +1,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//extensions/features/features.gni")
 import("//testing/test.gni")
 import("//tools/grit/grit_rule.gni")
 import("//tools/grit/repack.gni")
@@ -107,6 +108,8 @@ static_library("test_support") {
     "test/background_page_watcher.h",
     "test/extension_test_message_listener.cc",
     "test/extension_test_message_listener.h",
+    "test/extension_test_notification_observer.cc",
+    "test/extension_test_notification_observer.h",
     "test/result_catcher.cc",
     "test/result_catcher.h",
     "test/test_content_utility_client.cc",
@@ -130,9 +133,9 @@ static_library("test_support") {
     "//content/public/common",
     "//content/test:test_support",
     "//extensions/browser",
+    "//extensions/browser/api:api_registration",
     "//extensions/common",
     "//extensions/common/api",
-    "//extensions/common/api:api_registration",
     "//extensions/test:extensions_features",
     "//net:test_support",
     "//testing/gmock",
@@ -207,7 +210,6 @@ test("extensions_unittests") {
     "//extensions/renderer:unit_tests",
     "//extensions/shell:unit_tests",
     "//extensions/utility:unit_tests",
-    "//mojo/edk/system",
     "//mojo/edk/test:test_support",
     "//ui/gl:test_support",
   ]
@@ -280,7 +282,7 @@ source_set("chrome_extensions_browsertests") {
     "//components/resources",
     "//components/strings",
     "//components/sync",
-    "//components/sync:test_support_sync_api",
+    "//components/sync:test_support_model",
     "//components/translate/core/common",
     "//crypto:platform",
     "//crypto:test_support",
@@ -305,7 +307,7 @@ source_set("chrome_extensions_browsertests") {
     "//third_party/libaddressinput",
     "//third_party/libjingle",
     "//third_party/webrtc/modules/desktop_capture",
-    "//third_party/widevine/cdm:version_h",
+    "//third_party/widevine/cdm:headers",
     "//ui/accessibility:test_support",
     "//ui/base:test_support",
     "//ui/compositor:test_support",

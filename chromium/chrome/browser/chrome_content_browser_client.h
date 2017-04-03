@@ -17,6 +17,8 @@
 #include "base/memory/weak_ptr.h"
 #include "build/build_config.h"
 #include "content/public/browser/content_browser_client.h"
+#include "extensions/features/features.h"
+#include "media/media_features.h"
 
 class ChromeContentBrowserClientParts;
 
@@ -93,8 +95,13 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
                     const GURL& url) override;
   bool ShouldAllowOpenURL(content::SiteInstance* site_instance,
                           const GURL& url) override;
-  void OverrideOpenURLParams(content::SiteInstance* site_instance,
-                             content::OpenURLParams* params) override;
+  void OverrideNavigationParams(content::SiteInstance* site_instance,
+                                ui::PageTransition* transition,
+                                bool* is_renderer_initiated,
+                                content::Referrer* referrer) override;
+  bool ShouldFrameShareParentSiteInstanceDespiteTopDocumentIsolation(
+      const GURL& url,
+      content::SiteInstance* parent_site_instance) override;
   bool IsSuitableHost(content::RenderProcessHost* process_host,
                       const GURL& site_url) override;
   bool MayReuseHost(content::RenderProcessHost* process_host) override;
@@ -108,7 +115,7 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
       const GURL& current_url,
       const GURL& new_url) override;
   bool ShouldSwapProcessesForRedirect(
-      content::ResourceContext* resource_context,
+      content::BrowserContext* browser_context,
       const GURL& current_url,
       const GURL& new_url) override;
   bool ShouldAssignSiteForURL(const GURL& url) override;
@@ -162,7 +169,7 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
       content::BrowserContext* browser_context,
       const url::Origin& requesting_origin,
       const url::Origin& embedding_origin) override;
-  std::string GetWebBluetoothBlacklist() override;
+  std::string GetWebBluetoothBlocklist() override;
   net::URLRequestContext* OverrideRequestContextForURL(
       const GURL& url,
       content::ResourceContext* context) override;
@@ -184,11 +191,6 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
       content::WebContents* web_contents,
       net::SSLCertRequestInfo* cert_request_info,
       std::unique_ptr<content::ClientCertificateDelegate> delegate) override;
-  void AddCertificate(net::CertificateMimeType cert_type,
-                      const void* cert_data,
-                      size_t cert_size,
-                      int render_process_id,
-                      int render_frame_id) override;
   content::MediaObserver* GetMediaObserver() override;
   content::PlatformNotificationService* GetPlatformNotificationService()
       override;
@@ -276,24 +278,21 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
       content::FileDescriptorInfo* mappings) override;
 #endif  // defined(OS_ANDROID)
 #if defined(OS_WIN)
-  const wchar_t* GetResourceDllName() override;
   bool PreSpawnRenderer(sandbox::TargetPolicy* policy) override;
   base::string16 GetAppContainerSidForSandboxType(
       int sandbox_type) const override;
-  bool IsWin32kLockdownEnabledForMimeType(
-      const std::string& mime_type) const override;
 #endif
   void ExposeInterfacesToRenderer(
-      shell::InterfaceRegistry* registry,
+      service_manager::InterfaceRegistry* registry,
       content::RenderProcessHost* render_process_host) override;
   void ExposeInterfacesToMediaService(
-      shell::InterfaceRegistry* registry,
+      service_manager::InterfaceRegistry* registry,
       content::RenderFrameHost* render_frame_host) override;
   void RegisterRenderFrameMojoInterfaces(
-      shell::InterfaceRegistry* registry,
+      service_manager::InterfaceRegistry* registry,
       content::RenderFrameHost* render_frame_host) override;
   void ExposeInterfacesToGpuProcess(
-      shell::InterfaceRegistry* registry,
+      service_manager::InterfaceRegistry* registry,
       content::GpuProcessHost* render_process_host) override;
   void RegisterInProcessServices(StaticServiceMap* services) override;
   void RegisterOutOfProcessServices(
@@ -306,12 +305,19 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
       override;
   content::PresentationServiceDelegate* GetPresentationServiceDelegate(
       content::WebContents* web_contents) override;
-
   void RecordURLMetric(const std::string& metric, const GURL& url) override;
   ScopedVector<content::NavigationThrottle> CreateThrottlesForNavigation(
       content::NavigationHandle* handle) override;
   std::unique_ptr<content::NavigationUIData> GetNavigationUIData(
       content::NavigationHandle* navigation_handle) override;
+  std::unique_ptr<content::MemoryCoordinatorDelegate>
+  GetMemoryCoordinatorDelegate() override;
+
+#if BUILDFLAG(ENABLE_MEDIA_REMOTING)
+  void CreateMediaRemoter(content::RenderFrameHost* render_frame_host,
+                          media::mojom::RemotingSourcePtr source,
+                          media::mojom::RemoterRequest request) final;
+#endif  // BUILDFLAG(ENABLE_MEDIA_REMOTING)
 
  private:
   friend class DisableWebRtcEncryptionFlagTest;
@@ -330,7 +336,7 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
       base::Callback<void(bool)> callback,
       bool allow);
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   void GuestPermissionRequestHelper(
       const GURL& url,
       const std::vector<std::pair<int, int> >& render_frames,

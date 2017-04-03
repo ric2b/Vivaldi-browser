@@ -95,18 +95,6 @@ class BuildSettings {
     exec_script_whitelist_ = std::move(list);
   }
 
-  // When set (the default), code should perform normal validation of inputs
-  // and structures, like undefined or possibly incorrectly used things. For
-  // some interrogation commands, we don't care about this and actually want
-  // to allow the user to check the structure of the build to solve their
-  // problem, and these checks are undesirable.
-  bool check_for_bad_items() const {
-    return check_for_bad_items_;
-  }
-  void set_check_for_bad_items(bool c) {
-    check_for_bad_items_ = c;
-  }
-
   // <Vivaldi>
   bool RegisterPathMap(const std::string &prefix,
                        const std::string &map_to_path);
@@ -131,12 +119,10 @@ class BuildSettings {
 
   std::unique_ptr<std::set<SourceFile>> exec_script_whitelist_;
 
-  bool check_for_bad_items_;
-
   // <Vivaldi>
   struct path_mapper {
-  	std::string prefix; // "//foo/" always coded as "foo"
-  	std::string actual_path; // relative to root_path_, empty means root_path_
+    std::string prefix; // "//foo/" always coded as "foo"
+    std::string actual_path; // relative to root_path_, empty means root_path_
   };
 
   static std::vector<path_mapper> path_map_;

@@ -27,13 +27,15 @@ Za več informacij o zasebnosti si oglejte Googlov pravilnik o zasebnosti (http:
 <translation id="1654128982815600832">Omogočanje oddaljenih povezav za ta računalnik ...</translation>
 <translation id="170207782578677537">Računalnika ni bilo mogoče registrirati.</translation>
 <translation id="1704090719919187045">Nastavitve gostitelja za Oddaljeno povezovanje s Chromom</translation>
+<translation id="1730409684442507495">• Izboljšana kakovost slike namizja, odzivnost in poraba energije akumulatorja.
+• Izboljšana odzivnost dejanj klika in vlečenja.
+• Izboljšanih več učinkov animacije uporabniškega vmesnika.</translation>
 <translation id="174018511426417793">Nimate registriranih računalnikov. Če želite omogočiti oddaljene povezave z računalnikom, vanj namestite Oddaljeno namizje za Chrome in kliknite »<ph name="BUTTON_NAME" />«.</translation>
 <translation id="1742469581923031760">Vzpostavljanje povezave ...</translation>
 <translation id="1770394049404108959">Ne morem odpreti aplikacije.</translation>
 <translation id="177096447311351977">IP kanala za odjemalca: <ph name="CLIENT_GAIA_IDENTIFIER" /> ip='<ph name="CLIENT_IP_ADDRESS_AND_PORT" />' host_ip='<ph name="HOST_IP_ADDRESS_AND_PORT" />' channel='<ph name="CHANNEL_TYPE" />' connection='<ph name="CONNECTION_TYPE" />'.</translation>
 <translation id="1779766957982586368">Zapre okno</translation>
 <translation id="1841799852846221389">Onemogočanje oddaljenih povezav za ta računalnik ...</translation>
-<translation id="189172778771606813">Zapri predal za krmarjenje</translation>
 <translation id="1897488610212723051">Izbriši</translation>
 <translation id="195619862187186579">Postavitve tipkovnice</translation>
 <translation id="1996161829609978754">Chrome prenaša namestitveni program za gostitelja Oddaljenega povezovanja s Chromom. Po končanem prenosu zaženite namestitveni program, preden nadaljujete.</translation>
@@ -74,7 +76,6 @@ Za več informacij o zasebnosti si oglejte Googlov pravilnik o zasebnosti (http:
 <translation id="2699970397166997657">Oddaljeno povezovanje s Chromom</translation>
 <translation id="2747641796667576127">Posodobitve programske opreme se običajno izvedejo samodejno, vendar v redkih primerih posodobitev ni uspešna. Posodabljanje naj bi trajalo samo nekaj minut in se lahko izvaja, medtem ko ste s svojim računalnikom povezani oddaljeno.</translation>
 <translation id="2841013758207633010">Čas</translation>
-<translation id="2851674870054673688">Ko je koda vnesena, se seja skupne rabe začne.</translation>
 <translation id="2851754573186462851">Chromium App Streaming</translation>
 <translation id="2855866366045322178">brez povezave</translation>
 <translation id="2888969873284818612">Prišlo je do napake v omrežju. Ko bo naprava spet dosegljiva, bo aplikacija znova zagnana.</translation>
@@ -114,6 +115,7 @@ Za več informacij o zasebnosti si oglejte Googlov pravilnik o zasebnosti (http:
 povezovanje s Chromom</translation>
 <translation id="3870154837782082782">Google Inc.</translation>
 <translation id="3884839335308961732">Če želite dovoliti dostop prek Oddaljenega namizja za Chrome, spodaj potrdite račun in PIN.</translation>
+<translation id="3897092660631435901">Meni</translation>
 <translation id="3905196214175737742">Neveljavna domena lastnika gostitelja.</translation>
 <translation id="3908017899227008678">Skrči na ustrezno velikost</translation>
 <translation id="3931191050278863510">Gostitelj se je ustavil.</translation>
@@ -126,6 +128,7 @@ povezovanje s Chromom</translation>
 <translation id="409800995205263688">OPOMBA: Nastavitve na podlagi pravilnika dovoljujejo povezave samo med računalniki v vašem omrežju.</translation>
 <translation id="4155497795971509630">Ni nekaterih zahtevanih delov. Preverite, ali imate najnovejšo različico programske opreme in poskusite znova.</translation>
 <translation id="4156740505453712750">Če želite zaščititi dostop do tega računalnika, izberite vsaj <ph name="BOLD_START" />šestmestni<ph name="BOLD_END" /> PIN. Ta bo zahtevan pri povezovanju z drugega mesta.</translation>
+<translation id="4156741816461781891">Prijavljen kot <ph name="EMAIL_ADDRESS" />.</translation>
 <translation id="4176825807642096119">Koda za dostop</translation>
 <translation id="4207623512727273241">Zaženite namestitveni program, preden nadaljujete.</translation>
 <translation id="4227991223508142681">Orodje za pripravljanje gostitelja</translation>
@@ -166,7 +169,6 @@ namizje za Chrome</translation>
 <translation id="5070121137485264635">Oddaljeni gostitelj zahteva, da previte pristnost na spletnem mestu tretje osebe. Če želite nadaljevati, morate Oddaljenemu namizju za Chrome dodeliti dodatna dovoljenja za dostop do tega naslova:</translation>
 <translation id="507204348399810022">Ali ste prepričani, da želite onemogočiti oddaljene povezave z gostiteljem <ph name="HOSTNAME" />?</translation>
 <translation id="5156271271724754543">V polji vnesite isto kodo PIN.</translation>
-<translation id="5168917394043976756">Odpri predal za krmarjenje</translation>
 <translation id="5170982930780719864">Neveljaven ID gostitelja.</translation>
 <translation id="518094545883702183">Te informacije uporabljamo samo za diagnosticiranje težave, ki ste jo prijavili, na voljo so samo osebi, ki preučuje vašo prijavo, in hranimo jih največ 30 dni.</translation>
 <translation id="5222676887888702881">Odjava</translation>
@@ -209,10 +211,6 @@ namizje za Chrome</translation>
 <translation id="6304318647555713317">Odjemalec</translation>
 <translation id="6381670701864002291">Nekaj drugega.</translation>
 <translation id="6398765197997659313">Izhod iz celozaslonskega načina</translation>
-<translation id="6408143143164565232">• Poslušanje zvoka iz računalnikov s sistemom Windows ali Linux.
-• Odstranjevanje neželenih povezav z dolgim pritiskom imena računalnika.
-• Učinkovitejša povečava/pomanjšava z vlečenjem s prsti in pomikanje z dvema prstoma.
-• Novi zaslon za pomoč in povratne informacije.</translation>
 <translation id="6441316101718669559">Integracija namizja v tem okolju ni podprta. Aplikacijo lahko še vedno uporabljate, vendar bo uporabniška izkušnja okrnjena.</translation>
 <translation id="652218476070540101">PIN za ta računalnik se posodablja ...</translation>
 <translation id="6527303717912515753">Skupna raba</translation>
@@ -225,6 +223,7 @@ namizje za Chrome</translation>
 <translation id="6640610550128933069">nazadnje povezan v splet: <ph name="DATE" /></translation>
 <translation id="6668065415969892472">PIN je posodobljen.</translation>
 <translation id="6681800064886881394">Copyright 2013 Google Inc. Vse pravice pridržane.</translation>
+<translation id="6705482892455291412">Ko uporabnik vnese kodo, boste pozvani, da sprejmete povezavo in začnete sejo skupne rabe.</translation>
 <translation id="6746493157771801606">Počisti zgodovino</translation>
 <translation id="6748108480210050150">Od</translation>
 <translation id="677755392401385740">Gostitelj zagnan za uporabnika: <ph name="HOST_USERNAME" />.</translation>
@@ -301,6 +300,7 @@ namizje za Chrome</translation>
 <translation id="9188433529406846933">Pooblasti</translation>
 <translation id="9213184081240281106">Neveljavna konfiguracija gostitelja.</translation>
 <translation id="951991426597076286">Zavrni</translation>
+<translation id="962733587145768554">V pogovornem polju povezave izberite »<ph name="SHARE" />«, če želite dokončati postopek.</translation>
 <translation id="979100198331752041">Oddaljeno namizje za Chrome pri gostitelju <ph name="HOSTNAME" /> je zastarelo in ga je treba posodobiti.</translation>
 <translation id="985602178874221306">Ustvarjalci Chromiuma</translation>
 <translation id="992215271654996353"><ph name="HOSTNAME" /> (nazadnje s povezavo: <ph name="DATE_OR_TIME" />)</translation>

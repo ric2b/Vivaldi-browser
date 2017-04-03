@@ -143,13 +143,15 @@ sk_sp<SkColorSpace> ColorSpace::ToSkColorSpace() const {
   // Unspecified color spaces are represented as nullptr SkColorSpaces.
   if (*this == gfx::ColorSpace())
     return nullptr;
+  if (*this == gfx::ColorSpace::CreateSRGB())
+    return SkColorSpace::MakeNamed(SkColorSpace::kSRGB_Named);
 
   // TODO(crbug.com/634102): Support more than just ICC profile based color
   // spaces. The DCHECK here is to ensure that callers that expect a valid
   // result are notified of this incomplete functionality.
   std::vector<char> icc_data = gfx::ICCProfile::FromColorSpace(*this).GetData();
   sk_sp<SkColorSpace> result =
-      SkColorSpace::NewICC(icc_data.data(), icc_data.size());
+      SkColorSpace::MakeICC(icc_data.data(), icc_data.size());
   DCHECK(result);
   return result;
 }
@@ -158,6 +160,10 @@ ColorSpace ColorSpace::FromSkColorSpace(
     const sk_sp<SkColorSpace>& sk_color_space) {
   if (!sk_color_space)
     return gfx::ColorSpace();
+  if (SkColorSpace::Equals(
+          sk_color_space.get(),
+          SkColorSpace::MakeNamed(SkColorSpace::kSRGB_Named).get()))
+    return gfx::ColorSpace::CreateSRGB();
 
   // TODO(crbug.com/634102): Add conversion to gfx::ColorSpace.
   return gfx::ColorSpace();

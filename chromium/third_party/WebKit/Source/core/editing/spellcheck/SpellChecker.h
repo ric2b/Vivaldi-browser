@@ -66,11 +66,9 @@ class CORE_EXPORT SpellChecker final : public GarbageCollected<SpellChecker> {
   void advanceToNextMisspelling(bool startBeforeSelection = false);
   void showSpellingGuessPanel();
   void didBeginEditing(Element*);
-  void clearMisspellingsAndBadGrammarForMovingParagraphs(
-      const VisibleSelection&);
-  void markMisspellingsAndBadGrammarForMovingParagraphs(
-      const VisibleSelection&);
-  void respondToChangedSelection(const VisibleSelection& oldSelection,
+  void clearMisspellingsForMovingParagraphs(const VisibleSelection&);
+  void markMisspellingsForMovingParagraphs(const VisibleSelection&);
+  void respondToChangedSelection(const Position& oldSelectionStart,
                                  FrameSelection::SetSelectionOptions);
   void replaceMisspelledRange(const String&);
   void removeSpellingMarkers();
@@ -120,10 +118,10 @@ class CORE_EXPORT SpellChecker final : public GarbageCollected<SpellChecker> {
 
   void removeMarkers(const VisibleSelection&, DocumentMarker::MarkerTypes);
 
-  void markMisspellingsAndBadGrammar(const VisibleSelection&);
-  void chunkAndMarkAllMisspellingsAndBadGrammar(
+  void markMisspellingsInternal(const VisibleSelection&);
+  void chunkAndMarkAllMisspellings(
       const TextCheckingParagraph& fullParagraphToCheck);
-  void spellCheckOldSelection(const VisibleSelection& oldSelection,
+  void spellCheckOldSelection(const Position& oldSelectionStart,
                               const VisibleSelection& newAdjacentWords);
 
   Member<LocalFrame> m_frame;

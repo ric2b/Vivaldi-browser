@@ -3,16 +3,24 @@
  * found in the LICENSE file. */
 
 html {
-  background-color: rgba(255, 255, 255, 0.2);
+  background-color: rgba(255, 255, 255, 0);
 }
 
-.ui-button {
-  background: white;
-  border-radius: 6px;
-  overflow: hidden;
+#ui {
+  --scaleFactor: 4;
+  left: 0;
   position: absolute;
-  text-align: center;
-  vertical-align: middle;
+  top: 0;
+  transform: scale(0.25, 0.25);
+  transform-origin: left top;
+  width: 400%;
+}
+
+/* This class manages the position of elements on the texture page.
+ * Each UI element should have a bounding div of this class. */
+.ui-element {
+  float: left;
+  margin: 2px;
 }
 
 .webvr-message-box {
@@ -20,16 +28,11 @@ html {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  position: absolute;
 }
 
-/* Permanent security warning for WebVR. This uses a fixed-size absolutely
- * positioned DIV, the rectangle must match kWebVrWarningPermanentRect
- * in vr_shell.cc for use as a GL textured quad. */
+/* Permanent security warning for WebVR. */
 #webvr-not-secure-permanent {
   height: 128px;
-  left: 0;
-  top: 0;
   width: 512px;
 }
 
@@ -65,13 +68,9 @@ html {
   white-space: nowrap;
 }
 
-/* Transient security warning for WebVR. This uses a fixed-size absolutely
- * positioned DIV, the rectangle must match kWebVrWarningTransientRect
- * in vr_shell.cc for use as a GL textured quad. */
+/* Transient security warning for WebVR. */
 #webvr-not-secure-transient {
   height: 256px;
-  left: 0;
-  top: 128px;
   width: 512px;
 }
 
@@ -90,7 +89,115 @@ html {
   line-height: 1.4;
   max-height: 210px;
   min-height: 160px;
+  overflow: hidden;
   padding: 20px;
   text-align: center;
   width: 512px;
+}
+
+.round-button .button {
+  background-color: #eee;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: contain;
+  border-radius: 50%;
+  height: 96px;
+  margin: auto auto;
+  opacity: 0.8;
+  transition: opacity 150ms ease-in-out;
+  width: 96px;
+}
+
+.round-button .caption {
+  color: white;
+  font-size: 24px;
+  max-width: 192px;
+  opacity: 0;
+  overflow: hidden;
+  text-align: center;
+  transition: opacity 150ms ease-in-out;
+  white-space: nowrap;
+}
+
+#back .button {
+  background-image: url(../../../../ui/webui/resources/images/vr_back.svg);
+}
+
+#reload .button {
+  background-image: url(../../../../ui/webui/resources/images/vr_reload.svg);
+}
+
+#forward .button {
+  background-image: url(../../../../ui/webui/resources/images/vr_back.svg);
+  transform: scaleX(-1);
+}
+
+#reload-ui-button {
+  background-color: #555;
+  color: white;
+  font-size: 24px;
+  padding: 12px;
+}
+
+#omni-container {
+  --tranX: 0;
+  --tranY: -0.65;
+  --tranZ: -1.2;
+}
+
+#omni {
+  align-items: center;
+  background-color: rgba(255, 255, 255, 0.9);
+  border-radius: 100px;
+  box-sizing: border-box;
+  display: flex;
+  height: 104px;
+  justify-content: center;
+  margin-bottom: 60px;
+  margin-top: 0;
+  opacity: 1;
+  transition: opacity 500ms ease, margin-top 500ms ease;
+  white-space: nowrap;
+  width: 512px;
+}
+
+#omni-content {
+  align-items: center;
+  display: flex;
+  max-width: 448px;
+}
+
+#omni .connection-security {
+  height: 50px;
+  margin-right: 10px;
+  width: 50px;
+}
+
+#omni #url {
+  color: #252525;
+  font-size: 34px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+#omni #path {
+  color: #868686;
+}
+
+#omni.hide {
+  margin-bottom: 0;
+  margin-top: 60px;
+  opacity: 0;
+}
+
+#omni.loading {
+  border: 4px solid rgb(86, 203, 255);
+}
+
+#omni.idle {
+  background-color: #ececec;
+}
+
+#omni.idle #domain {
+  color: black;
 }

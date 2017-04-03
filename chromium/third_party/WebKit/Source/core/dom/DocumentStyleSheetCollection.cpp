@@ -29,13 +29,13 @@
 #include "core/dom/DocumentStyleSheetCollection.h"
 
 #include "core/css/resolver/StyleResolver.h"
+#include "core/css/resolver/ViewportStyleResolver.h"
 #include "core/dom/Document.h"
 #include "core/dom/DocumentStyleSheetCollector.h"
 #include "core/dom/ProcessingInstruction.h"
 #include "core/dom/StyleChangeReason.h"
 #include "core/dom/StyleEngine.h"
 #include "core/dom/StyleSheetCandidate.h"
-#include "platform/RuntimeEnabledFeatures.h"
 
 namespace blink {
 
@@ -110,7 +110,7 @@ void DocumentStyleSheetCollection::updateActiveStyleSheets(
   } else if (StyleResolver* styleResolver = engine.resolver()) {
     if (change.styleResolverUpdateType != Additive) {
       DCHECK_EQ(change.styleResolverUpdateType, Reset);
-      styleResolver->resetAuthorStyle(treeScope());
+      engine.resetAuthorStyle(treeScope());
       engine.removeFontFaceRules(change.fontFaceRulesToRemove);
       styleResolver->removePendingAuthorStyleSheets(m_activeAuthorStyleSheets);
       styleResolver->lazyAppendAuthorStyleSheets(
@@ -130,9 +130,22 @@ void DocumentStyleSheetCollection::updateActiveStyleSheets(
   collection->dispose();
 }
 
-DEFINE_TRACE_WRAPPERS(DocumentStyleSheetCollection) {
-  for (auto sheet : m_styleSheetsForStyleSheetList) {
-    visitor->traceWrappers(sheet);
+void DocumentStyleSheetCollection::collectViewportRules(
+    ViewportStyleResolver& viewportResolver) {
+  for (Node* node : m_styleSheetCandidateNodes) {
+    StyleSheetCandidate candidate(*node);
+
+    if (candidate.isImport())
+      continue;
+    StyleSheet* sheet = candidate.sheet();
+    if (!sheet)
+      continue;
+    if (!candidate.canBeActivated(
+            document().styleEngine().preferredStylesheetSetName()))
+      continue;
+    viewportResolver.collectViewportRulesFromAuthorSheet(
+        *toCSSStyleSheet(sheet));
   }
 }
+
 }  // namespace blink

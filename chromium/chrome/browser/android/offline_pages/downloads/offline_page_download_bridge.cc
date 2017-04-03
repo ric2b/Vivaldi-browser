@@ -11,6 +11,7 @@
 #include "base/guid.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/metrics/histogram_macros.h"
 #include "chrome/browser/android/offline_pages/downloads/offline_page_infobar_delegate.h"
 #include "chrome/browser/android/offline_pages/downloads/offline_page_notification_bridge.h"
 #include "chrome/browser/android/offline_pages/offline_page_mhtml_archiver.h"
@@ -57,20 +58,6 @@ content::WebContents* GetWebContentsFromJavaTab(
   return tab->web_contents();
 }
 
-// TODO(dewittj): Move to Download UI Adapter.
-OfflinePageModel* GetOfflinePageModelFromJavaTab(
-    const ScopedJavaGlobalRef<jobject>& j_tab_ref) {
-  content::WebContents* web_contents = GetWebContentsFromJavaTab(j_tab_ref);
-  if (!web_contents)
-    return nullptr;
-
-  Profile* profile =
-      Profile::FromBrowserContext(web_contents->GetBrowserContext())
-          ->GetOriginalProfile();
-
-  return OfflinePageModelFactory::GetForBrowserContext(profile);
-}
-
 void SavePageIfNotNavigatedAway(const GURL& original_url,
                                 const ScopedJavaGlobalRef<jobject>& j_tab_ref) {
   content::WebContents* web_contents = GetWebContentsFromJavaTab(j_tab_ref);
@@ -113,7 +100,7 @@ void SavePageIfNotNavigatedAway(const GURL& original_url,
       offline_pages::RequestCoordinator* request_coordinator =
           offline_pages::RequestCoordinatorFactory::GetForBrowserContext(
               web_contents->GetBrowserContext());
-      request_coordinator->EnableForOffliner(request_id);
+      request_coordinator->EnableForOffliner(request_id, client_id);
     }
     return;
   }
@@ -123,57 +110,22 @@ void SavePageIfNotNavigatedAway(const GURL& original_url,
   notification_bridge.ShowDownloadingToast();
 }
 
-void OnDeletePagesForInfoBar(const GURL& original_url,
-                             const ScopedJavaGlobalRef<jobject>& j_tab_ref,
-                             DeletePageResult result) {
-  SavePageIfNotNavigatedAway(original_url, j_tab_ref);
-}
-
-void DeletePagesForOverwrite(const GURL& original_url,
-                             const ScopedJavaGlobalRef<jobject>& j_tab_ref,
-                             const MultipleOfflinePageItemResult& pages) {
-  OfflinePageModel* model = GetOfflinePageModelFromJavaTab(j_tab_ref);
-  if (!model)
-    return;
-
-  std::vector<int64_t> offline_ids;
-  for (auto& page : pages) {
-    if (page.client_id.name_space == kDownloadNamespace ||
-        page.client_id.name_space == kAsyncNamespace) {
-      offline_ids.emplace_back(page.offline_id);
-    }
-  }
-
-  model->DeletePagesByOfflineId(
-      offline_ids, base::Bind(
-          &OnDeletePagesForInfoBar, original_url, j_tab_ref));
-}
-
-void OnInfoBarAction(const GURL& original_url,
-                     const ScopedJavaGlobalRef<jobject>& j_tab_ref,
-                     OfflinePageInfoBarDelegate::Action action) {
-  switch (action) {
-    case OfflinePageInfoBarDelegate::Action::CREATE_NEW:
-      SavePageIfNotNavigatedAway(original_url, j_tab_ref);
-      break;
-    case OfflinePageInfoBarDelegate::Action::OVERWRITE:
-      OfflinePageModel* offline_page_model =
-          GetOfflinePageModelFromJavaTab(j_tab_ref);
-      if (!offline_page_model)
-        return;
-
-      offline_page_model->GetPagesByOnlineURL(
-          original_url,
-          base::Bind(&DeletePagesForOverwrite, original_url, j_tab_ref));
-      break;
-  }
-}
-
 void RequestQueueDuplicateCheckDone(
     const GURL& original_url,
     const ScopedJavaGlobalRef<jobject>& j_tab_ref,
-    bool has_duplicates) {
+    bool has_duplicates,
+    const base::Time& latest_request_time) {
   if (has_duplicates) {
+    base::TimeDelta time_since_most_recent_duplicate =
+        base::Time::Now() - latest_request_time;
+    // Using CUSTOM_COUNTS instead of time-oriented histogram to record
+    // samples in seconds rather than milliseconds.
+    UMA_HISTOGRAM_CUSTOM_COUNTS(
+        "OfflinePages.DownloadRequestTimeSinceDuplicateRequested",
+        time_since_most_recent_duplicate.InSeconds(),
+        base::TimeDelta::FromSeconds(1).InSeconds(),
+        base::TimeDelta::FromDays(7).InSeconds(), 50);
+
     // TODO(fgorski): Additionally we could update existing request's expiration
     // period, as it is still important. Alternative would be to actually take a
     // snapshot on the spot, but that would only work if the page is loaded
@@ -189,15 +141,25 @@ void RequestQueueDuplicateCheckDone(
 
 void ModelDuplicateCheckDone(const GURL& original_url,
                              const ScopedJavaGlobalRef<jobject>& j_tab_ref,
-                             const std::string& downloads_label,
-                             bool has_duplicates) {
+                             bool has_duplicates,
+                             const base::Time& latest_saved_time) {
   content::WebContents* web_contents = GetWebContentsFromJavaTab(j_tab_ref);
   if (!web_contents)
     return;
 
   if (has_duplicates) {
+    base::TimeDelta time_since_most_recent_duplicate =
+        base::Time::Now() - latest_saved_time;
+    // Using CUSTOM_COUNTS instead of time-oriented histogram to record
+    // samples in seconds rather than milliseconds.
+    UMA_HISTOGRAM_CUSTOM_COUNTS(
+        "OfflinePages.DownloadRequestTimeSinceDuplicateSaved",
+        time_since_most_recent_duplicate.InSeconds(),
+        base::TimeDelta::FromSeconds(1).InSeconds(),
+        base::TimeDelta::FromDays(7).InSeconds(), 50);
+
     OfflinePageInfoBarDelegate::Create(
-        base::Bind(&OnInfoBarAction, original_url, j_tab_ref), downloads_label,
+        base::Bind(&SavePageIfNotNavigatedAway, original_url, j_tab_ref),
         original_url, web_contents);
     return;
   }
@@ -363,9 +325,7 @@ jlong OfflinePageDownloadBridge::GetOfflineIdByGuid(
 void OfflinePageDownloadBridge::StartDownload(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj,
-    const JavaParamRef<jobject>& j_tab,
-    const JavaParamRef<jstring>& j_downloads_label) {
-  std::string downloads_label = ConvertJavaStringToUTF8(env, j_downloads_label);
+    const JavaParamRef<jobject>& j_tab) {
   TabAndroid* tab = TabAndroid::GetNativeTab(env, j_tab);
   if (!tab)
     return;
@@ -380,7 +340,7 @@ void OfflinePageDownloadBridge::StartDownload(
 
   OfflinePageUtils::CheckExistenceOfPagesWithURL(
       tab->GetProfile()->GetOriginalProfile(), kDownloadNamespace, url,
-      base::Bind(&ModelDuplicateCheckDone, url, j_tab_ref, downloads_label));
+      base::Bind(&ModelDuplicateCheckDone, url, j_tab_ref));
 }
 
 void OfflinePageDownloadBridge::CancelDownload(

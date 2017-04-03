@@ -48,7 +48,6 @@
 namespace extensions {
 
 using v8_helpers::ToV8String;
-using v8_helpers::IsEmptyOrUndefied;
 
 namespace {
 
@@ -167,7 +166,7 @@ void DispatchOnConnectToScriptContext(
       script_context->module_system()->CallModuleMethod(
           "messaging", "dispatchOnConnect", arraysize(arguments), arguments);
 
-  if (!IsEmptyOrUndefied(retval)) {
+  if (!retval.IsEmpty() && !retval->IsUndefined()) {
     CHECK(retval->IsBoolean());
     bool used = retval.As<v8::Boolean>()->Value();
     *port_created |= used;
@@ -204,7 +203,8 @@ void DeliverMessageToScriptContext(const Message& message,
   std::unique_ptr<blink::WebScopedWindowFocusAllowedIndicator>
       allow_window_focus;
   if (message.user_gesture) {
-    web_user_gesture.reset(new blink::WebScopedUserGesture);
+    web_user_gesture.reset(
+        new blink::WebScopedUserGesture(script_context->web_frame()));
 
     if (script_context->web_frame()) {
       blink::WebDocument document = script_context->web_frame()->document();
@@ -213,7 +213,7 @@ void DeliverMessageToScriptContext(const Message& message,
     }
   }
 
-  script_context->module_system()->CallModuleMethod(
+  script_context->module_system()->CallModuleMethodSafe(
       "messaging", "dispatchOnMessage", &arguments);
 }
 
@@ -240,7 +240,7 @@ void DispatchOnDisconnectToScriptContext(int global_port_id,
     arguments.push_back(v8::Null(isolate));
   }
 
-  script_context->module_system()->CallModuleMethod(
+  script_context->module_system()->CallModuleMethodSafe(
       "messaging", "dispatchOnDisconnect", &arguments);
 }
 

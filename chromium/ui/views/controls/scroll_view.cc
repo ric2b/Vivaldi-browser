@@ -12,6 +12,7 @@
 #include "ui/native_theme/native_theme.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
+#include "ui/views/controls/focus_ring.h"
 #include "ui/views/style/platform_style.h"
 #include "ui/views/widget/widget.h"
 
@@ -37,7 +38,7 @@ class ScrollViewWithBorder : public views::ScrollView {
 
   // View overrides;
   void OnNativeThemeChanged(const ui::NativeTheme* theme) override {
-    SetBorder(Border::CreateSolidBorder(
+    SetBorder(CreateSolidBorder(
         1,
         theme->GetSystemColor(ui::NativeTheme::kColorId_UnfocusedBorderColor)));
   }
@@ -266,11 +267,23 @@ void ScrollView::SetVerticalScrollBar(ScrollBar* vert_sb) {
   vert_sb_ = vert_sb;
 }
 
+void ScrollView::SetHasFocusRing(bool has_focus_ring) {
+  if (has_focus_ring == (focus_ring_ != nullptr))
+    return;
+  if (has_focus_ring) {
+    focus_ring_ = FocusRing::Install(this);
+  } else {
+    FocusRing::Uninstall(this);
+    focus_ring_ = nullptr;
+  }
+  SchedulePaint();
+}
+
 gfx::Size ScrollView::GetPreferredSize() const {
   if (!is_bounded())
     return View::GetPreferredSize();
 
-  gfx::Size size = contents()->GetPreferredSize();
+  gfx::Size size = contents_->GetPreferredSize();
   size.SetToMax(gfx::Size(size.width(), min_height_));
   size.SetToMin(gfx::Size(size.width(), max_height_));
   gfx::Insets insets = GetInsets();
@@ -284,21 +297,23 @@ int ScrollView::GetHeightForWidth(int width) const {
 
   gfx::Insets insets = GetInsets();
   width = std::max(0, width - insets.width());
-  int height = contents()->GetHeightForWidth(width) + insets.height();
+  int height = contents_->GetHeightForWidth(width) + insets.height();
   return std::min(std::max(height, min_height_), max_height_);
 }
 
 void ScrollView::Layout() {
+  if (focus_ring_)
+    focus_ring_->Layout();
+
   gfx::Rect available_rect = GetContentsBounds();
   if (is_bounded()) {
     int content_width = available_rect.width();
-    int content_height = contents()->GetHeightForWidth(content_width);
+    int content_height = contents_->GetHeightForWidth(content_width);
     if (content_height > height()) {
       content_width = std::max(content_width - GetScrollBarWidth(), 0);
-      content_height = contents()->GetHeightForWidth(content_width);
+      content_height = contents_->GetHeightForWidth(content_width);
     }
-    if (contents()->bounds().size() != gfx::Size(content_width, content_height))
-      contents()->SetBounds(0, 0, content_width, content_height);
+    contents_->SetSize(gfx::Size(content_width, content_height));
   }
 
   // Most views will want to auto-fit the available space. Most of them want to
@@ -440,25 +455,22 @@ bool ScrollView::OnMouseWheel(const ui::MouseWheelEvent& e) {
   return processed;
 }
 
-void ScrollView::OnMouseEntered(const ui::MouseEvent& event) {
-  if (horiz_sb_)
-    horiz_sb_->OnMouseEnteredScrollView(event);
-  if (vert_sb_)
-    vert_sb_->OnMouseEnteredScrollView(event);
-}
-
-void ScrollView::OnMouseExited(const ui::MouseEvent& event) {
-  if (horiz_sb_)
-    horiz_sb_->OnMouseExitedScrollView(event);
-  if (vert_sb_)
-    vert_sb_->OnMouseExitedScrollView(event);
-}
-
 void ScrollView::OnScrollEvent(ui::ScrollEvent* event) {
 #if defined(OS_MACOSX)
+  if (!contents_)
+    return;
+
   // TODO(tapted): Send |event| to a cc::InputHandler. For now, there's nothing
   // to do because Widget::OnScrollEvent() will automatically process an
   // unhandled ScrollEvent as a MouseWheelEvent.
+
+  // A direction might not be known when the event stream starts, notify both
+  // scrollbars that they may be about scroll, or that they may need to cancel
+  // UI feedback once the scrolling direction is known.
+  if (horiz_sb_)
+    horiz_sb_->ObserveScrollEvent(*event);
+  if (vert_sb_)
+    vert_sb_->ObserveScrollEvent(*event);
 #endif
 }
 

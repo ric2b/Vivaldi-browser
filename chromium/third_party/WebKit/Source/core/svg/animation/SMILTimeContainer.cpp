@@ -71,11 +71,9 @@ SMILTimeContainer::~SMILTimeContainer() {
 void SMILTimeContainer::schedule(SVGSMILElement* animation,
                                  SVGElement* target,
                                  const QualifiedName& attributeName) {
-  ASSERT(animation->timeContainer() == this);
-  ASSERT(target);
-  ASSERT(animation->hasValidAttributeName());
-  ASSERT(animation->hasValidAttributeType());
-  ASSERT(animation->inActiveDocument());
+  DCHECK_EQ(animation->timeContainer(), this);
+  DCHECK(target);
+  DCHECK(animation->hasValidTarget());
 
 #if ENABLE(ASSERT)
   ASSERT(!m_preventScheduledAnimationsChanges);
@@ -299,8 +297,7 @@ void SMILTimeContainer::scheduleAnimationPolicyTimer() {
 }
 
 void SMILTimeContainer::cancelAnimationPolicyTimer() {
-  if (m_animationPolicyOnceTimer.isActive())
-    m_animationPolicyOnceTimer.stop();
+  m_animationPolicyOnceTimer.stop();
 }
 
 void SMILTimeContainer::animationPolicyTimerFired(TimerBase*) {
@@ -458,10 +455,8 @@ SMILTime SMILTimeContainer::updateAnimations(double elapsed, bool seekToTime) {
     AnimationsVector sandwich;
     for (const auto& itAnimation : scheduledAnimationsInSameGroup) {
       SVGSMILElement* animation = itAnimation.get();
-      ASSERT(animation->timeContainer() == this);
-      ASSERT(animation->targetElement());
-      ASSERT(animation->hasValidAttributeName());
-      ASSERT(animation->hasValidAttributeType());
+      DCHECK_EQ(animation->timeContainer(), this);
+      DCHECK(animation->hasValidTarget());
 
       // This will calculate the contribution from the animation and update
       // timing.

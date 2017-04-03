@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//testing/libfuzzer/fuzzer_test.gni")
 import("//third_party/WebKit/Source/bindings/bindings.gni")
 import("//third_party/WebKit/Source/bindings/scripts/scripts.gni")
 import("//third_party/WebKit/Source/core/core.gni")
@@ -30,6 +31,8 @@ generated_core_dictionary_files = [
   "$blink_core_output_dir/dom/DOMPointInit.h",
   "$blink_core_output_dir/dom/DOMMatrixInit.cpp",
   "$blink_core_output_dir/dom/DOMMatrixInit.h",
+  "$blink_core_output_dir/dom/ElementCreationOptions.cpp",
+  "$blink_core_output_dir/dom/ElementCreationOptions.h",
   "$blink_core_output_dir/dom/ElementDefinitionOptions.cpp",
   "$blink_core_output_dir/dom/ElementDefinitionOptions.h",
   "$blink_core_output_dir/dom/ElementRegistrationOptions.cpp",
@@ -120,8 +123,8 @@ generated_core_dictionary_files = [
   "$blink_core_output_dir/imagebitmap/ImageBitmapOptions.h",
   "$blink_core_output_dir/input/InputDeviceCapabilitiesInit.cpp",
   "$blink_core_output_dir/input/InputDeviceCapabilitiesInit.h",
-  "$blink_core_output_dir/page/EventSourceInit.cpp",
-  "$blink_core_output_dir/page/EventSourceInit.h",
+  "$blink_core_output_dir/offscreencanvas/ImageEncodeOptions.cpp",
+  "$blink_core_output_dir/offscreencanvas/ImageEncodeOptions.h",
   "$blink_core_output_dir/page/scrolling/ScrollStateInit.cpp",
   "$blink_core_output_dir/page/scrolling/ScrollStateInit.h",
   "$blink_core_output_dir/timing/PerformanceObserverInit.cpp",
@@ -179,6 +182,8 @@ bindings_core_generated_union_type_files = [
   "$bindings_core_v8_output_dir/StringOrArrayBufferOrArrayBufferView.h",
   "$bindings_core_v8_output_dir/StringOrCSSVariableReferenceValue.cpp",
   "$bindings_core_v8_output_dir/StringOrCSSVariableReferenceValue.h",
+  "$bindings_core_v8_output_dir/StringOrDictionary.cpp",
+  "$bindings_core_v8_output_dir/StringOrDictionary.h",
   "$bindings_core_v8_output_dir/StringOrFloat.cpp",
   "$bindings_core_v8_output_dir/StringOrFloat.h",
   "$bindings_core_v8_output_dir/USVStringOrURLSearchParams.cpp",
@@ -301,5 +306,16 @@ source_set("testing") {
     "//skia",
     "//third_party/WebKit/Source/wtf",
     "//v8",
+  ]
+}
+
+fuzzer_test("v8_serialized_script_value_fuzzer") {
+  sources = [
+    "serialization/SerializedScriptValueFuzzer.cpp",
+  ]
+  seed_corpus = "serialization/fuzz_corpus"
+  deps = [
+    "//third_party/WebKit/Source/core",
+    "//third_party/WebKit/Source/platform:blink_fuzzer_test_support",
   ]
 }

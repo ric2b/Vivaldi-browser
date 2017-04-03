@@ -27,13 +27,15 @@
 <translation id="1654128982815600832">正在啟用這台電腦的遠端連線...</translation>
 <translation id="170207782578677537">無法註冊這台電腦。</translation>
 <translation id="1704090719919187045">Chromoting 主機偏好設定</translation>
+<translation id="1730409684442507495">• 改善桌面圖片畫質、加快回應速度，並降低耗電量。
+• 加快點選拖曳操作的回應速度。
+• 改善多項使用者介面動畫效果。</translation>
 <translation id="174018511426417793">您尚未註冊任何電腦。如要為電腦啟用遠端連線，請在電腦上安裝 Chrome 遠端桌面，然後按一下 [<ph name="BUTTON_NAME" />]。</translation>
 <translation id="1742469581923031760">連線中...</translation>
 <translation id="1770394049404108959">我無法開啟應用程式。</translation>
 <translation id="177096447311351977">用戶端版本 IP：<ph name="CLIENT_GAIA_IDENTIFIER" /> ip='<ph name="CLIENT_IP_ADDRESS_AND_PORT" />' host_ip='<ph name="HOST_IP_ADDRESS_AND_PORT" />' channel='<ph name="CHANNEL_TYPE" />' connection='<ph name="CONNECTION_TYPE" />'。</translation>
 <translation id="1779766957982586368">關閉視窗</translation>
 <translation id="1841799852846221389">正在停用這台電腦的遠端連線...</translation>
-<translation id="189172778771606813">關閉導覽匣</translation>
 <translation id="1897488610212723051">刪除</translation>
 <translation id="195619862187186579">鍵盤配置</translation>
 <translation id="1996161829609978754">Chrome 正在下載 Chromoting 主機安裝程式。下載完成後，請先執行安裝程式，然後再繼續操作。</translation>
@@ -74,7 +76,6 @@
 <translation id="2699970397166997657">Chromoting</translation>
 <translation id="2747641796667576127">系統通常會自動執行軟體更新，但在極少數情況下，更新可能會失敗。更新軟體的時間應該僅需數分鐘，而且可透過從遠端連線至電腦的方式完成。</translation>
 <translation id="2841013758207633010">時間</translation>
-<translation id="2851674870054673688">對方輸入存取碼之後，共用工作階段即會開始。</translation>
 <translation id="2851754573186462851">Chromium 應用程式串流</translation>
 <translation id="2855866366045322178">離線</translation>
 <translation id="2888969873284818612">發生網路錯誤。系統將在您的裝置恢復網路連線後重新啟動應用程式。</translation>
@@ -114,6 +115,7 @@
 主機</translation>
 <translation id="3870154837782082782">Google Inc.</translation>
 <translation id="3884839335308961732">請在下方確認您的帳戶和 PIN，以便授予 Chrome 遠端桌面存取權限。</translation>
+<translation id="3897092660631435901">選單</translation>
 <translation id="3905196214175737742">主機擁有者網域無效。</translation>
 <translation id="3908017899227008678">縮小以符合視窗大小</translation>
 <translation id="3931191050278863510">主機已停止。</translation>
@@ -126,6 +128,7 @@
 <translation id="409800995205263688">注意：政策設定僅允許您網路中的電腦相互連線。</translation>
 <translation id="4155497795971509630">找不到部分必要元件。請確認您已安裝最新版本的軟體，然後再試一次。</translation>
 <translation id="4156740505453712750">如要保護這台電腦，避免不明人士入侵，請選擇一個<ph name="BOLD_START" />至少 6 位數<ph name="BOLD_END" />的 PIN。當使用者從其他位置連線時，必須先輸入這個 PIN 驗證身分。</translation>
+<translation id="4156741816461781891">目前登入的帳戶是 <ph name="EMAIL_ADDRESS" />。</translation>
 <translation id="4176825807642096119">存取碼</translation>
 <translation id="4207623512727273241">請先執行安裝程式，然後再繼續操作。</translation>
 <translation id="4227991223508142681">主機帳戶管理公用程式</translation>
@@ -166,7 +169,6 @@
 <translation id="5070121137485264635">遠端主機要求您向第三方網站進行驗證。如要繼續，您必須授予額外權限，讓 Chrome 遠端桌面能夠存取這個位址：</translation>
 <translation id="507204348399810022">您確定要停用與「<ph name="HOSTNAME" />」之間的遠端連線嗎？</translation>
 <translation id="5156271271724754543">請在兩個方塊中輸入相同的 PIN。</translation>
-<translation id="5168917394043976756">開啟導覽匣</translation>
 <translation id="5170982930780719864">主機 ID 無效。</translation>
 <translation id="518094545883702183">這些資訊只會用於診斷您所回報的問題，並且僅供相關調查人員存取。此外，系統會在 30 天後刪除這些資訊。</translation>
 <translation id="5222676887888702881">登出</translation>
@@ -209,10 +211,6 @@
 <translation id="6304318647555713317">用戶端</translation>
 <translation id="6381670701864002291">其他。</translation>
 <translation id="6398765197997659313">退出全螢幕模式</translation>
-<translation id="6408143143164565232">• 聽取 Windows 或 Linux 電腦的音訊。
-• 長按特定電腦名稱即可移除不需要的連線。
-• 雙指撥動縮放與雙指捲動操作更順暢。
-• 更新「說明與意見回饋」畫面。</translation>
 <translation id="6441316101718669559">這個平台不支援桌面整合。您仍然可以使用該應用程式，但使用者體驗可能不如預期。</translation>
 <translation id="652218476070540101">正在更新這台電腦的 PIN...</translation>
 <translation id="6527303717912515753">分享</translation>
@@ -225,6 +223,7 @@
 <translation id="6640610550128933069">上次上線時間：<ph name="DATE" /></translation>
 <translation id="6668065415969892472">您的 PIN 已更新。</translation>
 <translation id="6681800064886881394">Copyright 2013 Google Inc. 保留所有權利。</translation>
+<translation id="6705482892455291412">對方輸入存取碼後，系統會提示你接受連線，展開共用工作階段。</translation>
 <translation id="6746493157771801606">清除紀錄</translation>
 <translation id="6748108480210050150">寄件者</translation>
 <translation id="677755392401385740">已為下列使用者啟動主機：<ph name="HOST_USERNAME" />。</translation>
@@ -301,6 +300,7 @@
 <translation id="9188433529406846933">授權</translation>
 <translation id="9213184081240281106">主機設定無效。</translation>
 <translation id="951991426597076286">拒絕</translation>
+<translation id="962733587145768554">如要完成程序，請在連線對話方塊中選取 [<ph name="SHARE" />]。</translation>
 <translation id="979100198331752041"><ph name="HOSTNAME" /> 上的 Chrome 遠端桌面版本過舊，必須更新。</translation>
 <translation id="985602178874221306">The Chromium Authors</translation>
 <translation id="992215271654996353"><ph name="HOSTNAME" /> (上次上線時間：<ph name="DATE_OR_TIME" />)</translation>

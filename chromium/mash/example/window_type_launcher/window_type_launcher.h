@@ -10,18 +10,18 @@
 #include "base/macros.h"
 #include "mash/public/interfaces/launchable.mojom.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
-#include "services/shell/public/cpp/service.h"
+#include "services/service_manager/public/cpp/interface_factory.h"
+#include "services/service_manager/public/cpp/service.h"
 
 namespace views {
 class AuraInit;
 class Widget;
-class WindowManagerConnection;
 }
 
 class WindowTypeLauncher
-    : public shell::Service,
+    : public service_manager::Service,
       public mash::mojom::Launchable,
-      public shell::InterfaceFactory<mash::mojom::Launchable> {
+      public service_manager::InterfaceFactory<mash::mojom::Launchable> {
  public:
   WindowTypeLauncher();
   ~WindowTypeLauncher() override;
@@ -29,23 +29,22 @@ class WindowTypeLauncher
   void RemoveWindow(views::Widget* window);
 
  private:
-  // shell::Service:
-  void OnStart(const shell::Identity& identity) override;
-  bool OnConnect(const shell::Identity& remote_identity,
-                 shell::InterfaceRegistry* registry) override;
+  // service_manager::Service:
+  void OnStart() override;
+  bool OnConnect(const service_manager::ServiceInfo& remote_info,
+                 service_manager::InterfaceRegistry* registry) override;
 
   // mash::mojom::Launchable:
   void Launch(uint32_t what, mash::mojom::LaunchMode how) override;
 
-  // shell::InterfaceFactory<mash::mojom::Launchable>:
-  void Create(const shell::Identity& remote_identity,
+  // service_manager::InterfaceFactory<mash::mojom::Launchable>:
+  void Create(const service_manager::Identity& remote_identity,
               mash::mojom::LaunchableRequest request) override;
 
   mojo::BindingSet<mash::mojom::Launchable> bindings_;
   std::vector<views::Widget*> windows_;
 
   std::unique_ptr<views::AuraInit> aura_init_;
-  std::unique_ptr<views::WindowManagerConnection> window_manager_connection_;
 
   DISALLOW_COPY_AND_ASSIGN(WindowTypeLauncher);
 };

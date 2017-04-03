@@ -34,6 +34,7 @@
 <translation id="2148716181193084225">오늘</translation>
 <translation id="2226276347425096477">이 텍스트를 <ph name="MAX_CHARACTERS" />자 이하로 줄이세요(현재 <ph name="CURRENT_LENGTH" />자 사용 중).</translation>
 <translation id="2247351761944213033"><ph name="YEAR" />, <ph name="WEEKNUMBER" />번째 주</translation>
+<translation id="2277199496770840904"><ph name="NUMBER" />번 트랙</translation>
 <translation id="2291999235780842123">체크박스</translation>
 <translation id="2335594187091864976">날짜 및 시간 선택기</translation>
 <translation id="248395913932153421">일</translation>
@@ -116,7 +117,6 @@
 <translation id="5643186887447432888">버튼</translation>
 <translation id="5677946354068040947">옵션 더보기</translation>
 <translation id="57838592816432529">음소거</translation>
-<translation id="583281660410589416">알 수 없음</translation>
 <translation id="5843503607508392247">다른 시간...</translation>
 <translation id="5860033963881614850">사용 안함</translation>
 <translation id="588258955323874662">전체화면</translation>

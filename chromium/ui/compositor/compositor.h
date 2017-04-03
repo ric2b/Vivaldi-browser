@@ -33,19 +33,17 @@
 #include "ui/gfx/native_widget_types.h"
 
 namespace base {
-class RunLoop;
 class SingleThreadTaskRunner;
 }
 
 namespace cc {
+class AnimationHost;
 class AnimationTimeline;
 class ContextProvider;
 class Layer;
 class LayerTreeDebugState;
 class LayerTreeHost;
 class RendererSettings;
-class SharedBitmapManager;
-class SurfaceIdAllocator;
 class SurfaceManager;
 class TaskGraphRunner;
 }
@@ -58,7 +56,6 @@ class Size;
 
 namespace gpu {
 class GpuMemoryBufferManager;
-struct Mailbox;
 }
 
 namespace ui {
@@ -68,7 +65,6 @@ class CompositorVSyncManager;
 class LatencyInfo;
 class Layer;
 class Reflector;
-class Texture;
 
 #if defined(USE_AURA)
 class Window;
@@ -125,9 +121,6 @@ class COMPOSITOR_EXPORT ContextFactory {
   // Returns the OpenGL target to use for image textures.
   virtual uint32_t GetImageTextureTarget(gfx::BufferFormat format,
                                          gfx::BufferUsage usage) = 0;
-
-  // Gets the shared bitmap manager for software mode.
-  virtual cc::SharedBitmapManager* GetSharedBitmapManager() = 0;
 
   // Gets the GPU memory buffer manager.
   virtual gpu::GpuMemoryBufferManager* GetGpuMemoryBufferManager() = 0;
@@ -360,17 +353,17 @@ class COMPOSITOR_EXPORT Compositor
                            float page_scale,
                            float top_controls_delta) override {}
   void RequestNewCompositorFrameSink() override;
-  void DidInitializeCompositorFrameSink() override;
+  void DidInitializeCompositorFrameSink() override {}
   void DidFailToInitializeCompositorFrameSink() override;
   void WillCommit() override {}
   void DidCommit() override;
-  void DidCommitAndDrawFrame() override;
-  void DidCompleteSwapBuffers() override;
+  void DidCommitAndDrawFrame() override {}
+  void DidReceiveCompositorFrameAck() override;
   void DidCompletePageScaleAnimation() override {}
 
   // cc::LayerTreeHostSingleThreadClient implementation.
-  void DidPostSwapBuffers() override;
-  void DidAbortSwapBuffers() override;
+  void DidSubmitCompositorFrame() override;
+  void DidLoseCompositorFrameSink() override {}
 
   bool IsLocked() { return compositor_lock_ != NULL; }
 
@@ -416,6 +409,7 @@ class COMPOSITOR_EXPORT Compositor
   bool compositor_frame_sink_requested_;
   const cc::FrameSinkId frame_sink_id_;
   scoped_refptr<cc::Layer> root_web_layer_;
+  std::unique_ptr<cc::AnimationHost> animation_host_;
   std::unique_ptr<cc::LayerTreeHost> host_;
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
 

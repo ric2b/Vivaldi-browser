@@ -15,10 +15,11 @@
 #include "base/threading/thread_checker.h"
 #include "components/sync/base/cryptographer.h"
 #include "components/sync/base/model_type.h"
-#include "components/sync/core/non_blocking_sync_common.h"
-#include "components/sync/core/sync_encryption_handler.h"
 #include "components/sync/engine/commit_queue.h"
+#include "components/sync/engine/non_blocking_sync_common.h"
+#include "components/sync/engine/sync_encryption_handler.h"
 #include "components/sync/engine_impl/commit_contributor.h"
+#include "components/sync/engine_impl/cycle/data_type_debug_info_emitter.h"
 #include "components/sync/engine_impl/nudge_handler.h"
 #include "components/sync/engine_impl/update_handler.h"
 #include "components/sync/protocol/model_type_state.pb.h"
@@ -59,9 +60,11 @@ class ModelTypeWorker : public UpdateHandler,
  public:
   ModelTypeWorker(ModelType type,
                   const sync_pb::ModelTypeState& initial_state,
+                  bool trigger_initial_sync,
                   std::unique_ptr<Cryptographer> cryptographer,
                   NudgeHandler* nudge_handler,
-                  std::unique_ptr<ModelTypeProcessor> model_type_processor);
+                  std::unique_ptr<ModelTypeProcessor> model_type_processor,
+                  DataTypeDebugInfoEmitter* debug_info_emitter);
   ~ModelTypeWorker() override;
 
   ModelType GetModelType() const;
@@ -88,8 +91,16 @@ class ModelTypeWorker : public UpdateHandler,
   std::unique_ptr<CommitContribution> GetContribution(
       size_t max_entries) override;
 
+  // An alternative way to drive sending data to the processor, that should be
+  // called when a new encryption mechanism is ready.
+  void EncryptionAcceptedApplyUpdates();
+
   // Callback for when our contribution gets a response.
   void OnCommitResponse(CommitResponseDataList* response_list);
+
+  // If migration the directory encounters an error partway through, we need to
+  // clear the update data that has been added so far.
+  void AbortMigration();
 
   base::WeakPtr<ModelTypeWorker> AsWeakPtr();
 
@@ -109,6 +120,10 @@ class ModelTypeWorker : public UpdateHandler,
   // settings in a good state.
   bool CanCommitItems() const;
 
+  // Returns true if this type should stop communicating because of outstanding
+  // encryption issues and must wait for keys to be updated.
+  bool BlockForEncryption() const;
+
   // Takes |commit_entity| populated from fields of WorkerEntityTracker and
   // adjusts some fields before committing to server. Adjustments include
   // generating client-assigned ID, encrypting data, etc.
@@ -119,6 +134,17 @@ class ModelTypeWorker : public UpdateHandler,
   // it to the processor for application. Will forward any new encryption
   // keys to the processor to trigger re-encryption if necessary.
   void OnCryptographerUpdated();
+
+  // Updates the encryption key name stored in |model_type_state_| if it differs
+  // from the default encryption key name in |cryptographer_|. Returns whether
+  // an update occured.
+  bool UpdateEncryptionKeyName();
+
+  // Iterates through all elements in |entities_| and tries to decrypt anything
+  // that has encrypted data. Also updates |has_encrypted_updates_| to reflect
+  // whether anything in |entities_| was not decryptable by |cryptographer_|.
+  // Should only be called during a GetUpdates cycle.
+  void DecryptedStoredEntities();
 
   // Attempts to decrypt the given specifics and return them in the |out|
   // parameter. Assumes cryptographer_->CanDecrypt(specifics) returned true.
@@ -143,6 +169,7 @@ class ModelTypeWorker : public UpdateHandler,
   WorkerEntityTracker* GetOrCreateEntityTracker(const EntityData& data);
 
   ModelType type_;
+  DataTypeDebugInfoEmitter* debug_info_emitter_;
 
   // State that applies to the entire model type.
   sync_pb::ModelTypeState model_type_state_;
@@ -152,7 +179,7 @@ class ModelTypeWorker : public UpdateHandler,
 
   // A private copy of the most recent cryptographer known to sync.
   // Initialized at construction time and updated with UpdateCryptographer().
-  // NULL if encryption is not enabled for this type.
+  // null if encryption is not enabled for this type.
   std::unique_ptr<Cryptographer> cryptographer_;
 
   // Interface used to access and send nudges to the sync scheduler. Not owned.
@@ -172,6 +199,9 @@ class ModelTypeWorker : public UpdateHandler,
   // Accumulates all the updates from a single GetUpdates cycle in memory so
   // they can all be sent to the processor at once.
   UpdateResponseDataList pending_updates_;
+
+  // Whether there are outstanding encrypted updates in |entities_|.
+  bool has_encrypted_updates_ = false;
 
   base::ThreadChecker thread_checker_;
   base::WeakPtrFactory<ModelTypeWorker> weak_ptr_factory_;

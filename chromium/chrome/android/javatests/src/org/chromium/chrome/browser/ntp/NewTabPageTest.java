@@ -4,7 +4,8 @@
 
 package org.chromium.chrome.browser.ntp;
 
-import android.os.Environment;
+import android.graphics.Canvas;
+import android.test.UiThreadTest;
 import android.test.suitebuilder.annotation.LargeTest;
 import android.test.suitebuilder.annotation.MediumTest;
 import android.test.suitebuilder.annotation.SmallTest;
@@ -13,6 +14,7 @@ import android.view.View;
 import android.view.ViewGroup;
 
 import org.chromium.base.ThreadUtils;
+import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.DisabledTest;
@@ -30,7 +32,6 @@ import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.chrome.test.util.NewTabPageTestUtils;
 import org.chromium.chrome.test.util.OmniboxTestUtils;
 import org.chromium.chrome.test.util.RenderUtils.ViewRenderer;
-import org.chromium.content.browser.test.util.CallbackHelper;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
 import org.chromium.content.browser.test.util.KeyUtils;
@@ -66,42 +67,10 @@ public class NewTabPageTest extends ChromeTabbedActivityTestBase {
     private FakeMostVisitedSites mFakeMostVisitedSites;
     private EmbeddedTestServer mTestServer;
 
-    @MediumTest
-    @Feature({"NewTabPage", "RenderTest"})
-    @CommandLineFlags.Add("enable-features=NTPSnippets")
-    public void testRender() throws IOException, InterruptedException {
-        ViewRenderer viewRenderer = new ViewRenderer(getActivity(),
-                "chrome/test/data/android/render_tests", "NewTabPageTest");
-        viewRenderer.renderAndCompare(mMostVisitedLayout, "most_visited");
-        viewRenderer.renderAndCompare(mFakebox, "fakebox");
-        viewRenderer.renderAndCompare(mNtp.getView().getRootView(), "new_tab_page");
-
-        // Scroll to search bar
-        final NewTabPageRecyclerView recyclerView = (NewTabPageRecyclerView)
-                mNtp.getNewTabPageView().findViewById(R.id.ntp_scrollview);
-
-        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
-            @Override
-            public void run() {
-                recyclerView.smoothScrollBy(0, mFakebox.getTop());
-            }
-        });
-
-        CriteriaHelper.pollUiThread(new Criteria(){
-            @Override
-            public boolean isSatisfied() {
-                return recyclerView.computeVerticalScrollOffset() == mFakebox.getTop();
-            }
-        });
-
-        viewRenderer.renderAndCompare(mNtp.getView().getRootView(), "new_tab_page_scrolled");
-    }
-
     @Override
     protected void setUp() throws Exception {
-        mTestServer = EmbeddedTestServer.createAndStartFileServer(
-                getInstrumentation().getContext(), Environment.getExternalStorageDirectory());
-        mFakeMostVisitedUrls = new String[] { mTestServer.getURL(TEST_PAGE) };
+        mTestServer = EmbeddedTestServer.createAndStartServer(getInstrumentation().getContext());
+        mFakeMostVisitedUrls = new String[] {mTestServer.getURL(TEST_PAGE)};
         super.setUp();
     }
 
@@ -122,10 +91,9 @@ public class NewTabPageTest extends ChromeTabbedActivityTestBase {
                 public void run() {
                     // Create FakeMostVisitedSites after starting the activity, since it depends on
                     // native code.
-                    mFakeMostVisitedSites =
-                            new FakeMostVisitedSites(mTab.getProfile(), FAKE_MOST_VISITED_TITLES,
-                                    mFakeMostVisitedUrls, FAKE_MOST_VISITED_WHITELIST_ICON_PATHS,
-                                    FAKE_MOST_VISITED_SOURCES);
+                    mFakeMostVisitedSites = new FakeMostVisitedSites(mTab.getProfile(),
+                            FAKE_MOST_VISITED_TITLES, mFakeMostVisitedUrls,
+                            FAKE_MOST_VISITED_WHITELIST_ICON_PATHS, FAKE_MOST_VISITED_SOURCES);
                 }
             });
         } catch (Throwable t) {
@@ -141,6 +109,74 @@ public class NewTabPageTest extends ChromeTabbedActivityTestBase {
         mFakebox = mNtp.getView().findViewById(R.id.search_box);
         mMostVisitedLayout = (ViewGroup) mNtp.getView().findViewById(R.id.most_visited_layout);
         assertEquals(mFakeMostVisitedUrls.length, mMostVisitedLayout.getChildCount());
+    }
+
+    @MediumTest
+    @Feature({"NewTabPage", "RenderTest"})
+    @CommandLineFlags.Add("enable-features=NTPSnippets")
+    public void testRender() throws IOException, InterruptedException {
+        ViewRenderer viewRenderer = new ViewRenderer(getActivity(),
+                "chrome/test/data/android/render_tests", "NewTabPageTest");
+        viewRenderer.renderAndCompare(mMostVisitedLayout, "most_visited");
+        viewRenderer.renderAndCompare(mFakebox, "fakebox");
+        viewRenderer.renderAndCompare(mNtp.getView().getRootView(), "new_tab_page");
+
+        // Scroll to search bar
+        final NewTabPageRecyclerView recyclerView =
+                (NewTabPageRecyclerView) mNtp.getNewTabPageView().getWrapperView();
+
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                recyclerView.smoothScrollBy(0, mFakebox.getTop());
+            }
+        });
+
+        CriteriaHelper.pollUiThread(new Criteria(){
+            @Override
+            public boolean isSatisfied() {
+                return recyclerView.computeVerticalScrollOffset() == mFakebox.getTop();
+            }
+        });
+
+        viewRenderer.renderAndCompare(mNtp.getView().getRootView(), "new_tab_page_scrolled");
+    }
+
+    @MediumTest
+    @Feature({"NewTabPage"})
+    @CommandLineFlags.Add("enable-features=NTPSnippets")
+    @UiThreadTest
+    public void testThumbnailInvalidations() {
+        captureThumbnail();
+        assertFalse(mNtp.shouldCaptureThumbnail());
+
+        // Check that we invalidate the thumbnail when the Recycler View is updated.
+        NewTabPageRecyclerView recyclerView =
+                (NewTabPageRecyclerView) mNtp.getNewTabPageView().getWrapperView();
+
+        recyclerView.getAdapter().notifyDataSetChanged();
+        assertThumbnailInvalidAndRecapture();
+
+        recyclerView.getAdapter().notifyItemChanged(0);
+        assertThumbnailInvalidAndRecapture();
+
+        recyclerView.getAdapter().notifyItemInserted(0);
+        assertThumbnailInvalidAndRecapture();
+
+        recyclerView.getAdapter().notifyItemMoved(0, 1);
+        assertThumbnailInvalidAndRecapture();
+
+        recyclerView.getAdapter().notifyItemRangeChanged(0, 1);
+        assertThumbnailInvalidAndRecapture();
+
+        recyclerView.getAdapter().notifyItemRangeInserted(0, 1);
+        assertThumbnailInvalidAndRecapture();
+
+        recyclerView.getAdapter().notifyItemRangeRemoved(0, 1);
+        assertThumbnailInvalidAndRecapture();
+
+        recyclerView.getAdapter().notifyItemRemoved(0);
+        assertThumbnailInvalidAndRecapture();
     }
 
     /**
@@ -214,7 +250,7 @@ public class NewTabPageTest extends ChromeTabbedActivityTestBase {
     @Feature({"NewTabPage"})
     public void testOpenMostVisitedItemInNewTab() throws InterruptedException {
         invokeContextMenuAndOpenInANewTab(mMostVisitedLayout.getChildAt(0),
-                NewTabPage.ID_OPEN_IN_NEW_TAB, false, mFakeMostVisitedUrls[0]);
+                ContextMenuManager.ID_OPEN_IN_NEW_TAB, false, mFakeMostVisitedUrls[0]);
     }
 
     /**
@@ -224,7 +260,7 @@ public class NewTabPageTest extends ChromeTabbedActivityTestBase {
     @Feature({"NewTabPage"})
     public void testOpenMostVisitedItemInIncognitoTab() throws InterruptedException {
         invokeContextMenuAndOpenInANewTab(mMostVisitedLayout.getChildAt(0),
-                NewTabPage.ID_OPEN_IN_INCOGNITO_TAB, true, mFakeMostVisitedUrls[0]);
+                ContextMenuManager.ID_OPEN_IN_INCOGNITO_TAB, true, mFakeMostVisitedUrls[0]);
     }
 
     /**
@@ -240,8 +276,8 @@ public class NewTabPageTest extends ChromeTabbedActivityTestBase {
         assertEquals(1, views.size());
 
         TestTouchUtils.longClickView(getInstrumentation(), mostVisitedItem);
-        assertTrue(getInstrumentation().invokeContextMenuAction(getActivity(),
-                NewTabPage.ID_REMOVE, 0));
+        assertTrue(getInstrumentation().invokeContextMenuAction(
+                getActivity(), ContextMenuManager.ID_REMOVE, 0));
 
         assertTrue(mFakeMostVisitedSites.isUrlBlacklisted(mFakeMostVisitedUrls[0]));
     }
@@ -329,6 +365,34 @@ public class NewTabPageTest extends ChromeTabbedActivityTestBase {
         } finally {
             webServer.shutdown();
         }
+    }
+
+    /**
+     * Tests setting whether the search provider has a logo.
+     */
+    @SmallTest
+    @Feature({"NewTabPage"})
+    @CommandLineFlags.Add("disable-features=NTPSnippets") // Exercise the old ui.
+    @UiThreadTest
+    public void testSetSearchProviderHasLogo() {
+        NewTabPageView ntpView = mNtp.getNewTabPageView();
+        View logoView = ntpView.findViewById(R.id.search_provider_logo);
+        assertEquals(View.VISIBLE, logoView.getVisibility());
+        ntpView.setSearchProviderHasLogo(false);
+        assertEquals(View.GONE, logoView.getVisibility());
+        ntpView.setSearchProviderHasLogo(true);
+        assertEquals(View.VISIBLE, logoView.getVisibility());
+    }
+
+    private void assertThumbnailInvalidAndRecapture() {
+        assertTrue(mNtp.shouldCaptureThumbnail());
+        captureThumbnail();
+        assertFalse(mNtp.shouldCaptureThumbnail());
+    }
+
+    private void captureThumbnail() {
+        Canvas canvas = new Canvas();
+        mNtp.captureThumbnail(canvas);
     }
 
     private boolean getUrlFocusAnimatonsDisabled() {

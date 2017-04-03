@@ -1,7 +1,8 @@
 /*
  * Copyright (C) 1999 Lars Knoll (knoll@kde.org)
  *           (C) 1999 Antti Koivisto (koivisto@kde.org)
- * Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008, 2009 Apple Inc. All rights reserved.
+ * Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008, 2009 Apple Inc.
+ *               All rights reserved.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -147,7 +148,6 @@ class CORE_EXPORT LayoutInline : public LayoutBoxModelObject {
 
   void absoluteRects(Vector<IntRect>&,
                      const LayoutPoint& accumulatedOffset) const final;
-  void absoluteQuads(Vector<FloatQuad>&) const override;
   FloatRect localBoundingBoxRectForAccessibility() const final;
 
   LayoutSize offsetFromContainer(const LayoutObject*) const final;
@@ -182,8 +182,8 @@ class CORE_EXPORT LayoutInline : public LayoutBoxModelObject {
   void addOutlineRects(Vector<LayoutRect>&,
                        const LayoutPoint& additionalOffset,
                        IncludeBlockVisualOverflowOrNot) const final;
-  // The following methods are called from the container if it has already added outline rects for line boxes
-  // and/or children of this LayoutInline.
+  // The following methods are called from the container if it has already added
+  // outline rects for line boxes and/or children of this LayoutInline.
   void addOutlineRectsForChildrenAndContinuations(
       Vector<LayoutRect>&,
       const LayoutPoint& additionalOffset,
@@ -211,6 +211,8 @@ class CORE_EXPORT LayoutInline : public LayoutBoxModelObject {
                            const HitTestLocation& locationInContainer,
                            const LayoutPoint& accumulatedOffset);
 
+  LayoutPoint firstLineBoxTopLeft() const;
+
   const char* name() const override { return "LayoutInline"; }
 
   LayoutRect debugRect() const override;
@@ -224,6 +226,8 @@ class CORE_EXPORT LayoutInline : public LayoutBoxModelObject {
                                const LayoutPoint& layerOffset) const override;
 
   void invalidateDisplayItemClients(PaintInvalidationReason) const override;
+
+  void absoluteQuadsForSelf(Vector<FloatQuad>& quads) const override;
 
  private:
   LayoutObjectChildList* virtualChildren() final { return children(); }
@@ -239,7 +243,8 @@ class CORE_EXPORT LayoutInline : public LayoutBoxModelObject {
   InlineBox* culledInlineFirstLineBox() const;
   InlineBox* culledInlineLastLineBox() const;
 
-  // For visualOverflowRect() only, to get bounding box of visual overflow of line boxes.
+  // For visualOverflowRect() only, to get bounding box of visual overflow of
+  // line boxes.
   LayoutRect linesVisualOverflowBoundingBox() const;
 
   template <typename GeneratorContext>
@@ -282,11 +287,12 @@ class CORE_EXPORT LayoutInline : public LayoutBoxModelObject {
   LayoutUnit offsetWidth() const final { return linesBoundingBox().width(); }
   LayoutUnit offsetHeight() const final { return linesBoundingBox().height(); }
 
-  LayoutRect absoluteClippedOverflowRect() const override;
+  LayoutRect absoluteVisualRect() const override;
 
-  // This method differs from visualOverflowRect in that it doesn't include the rects
-  // for culled inline boxes, which aren't necessary for paint invalidation.
-  LayoutRect localOverflowRectForPaintInvalidation() const override;
+  // This method differs from visualOverflowRect in that it doesn't include the
+  // rects for culled inline boxes, which aren't necessary for paint
+  // invalidation.
+  LayoutRect localVisualRect() const override;
 
   bool mapToVisualRectInAncestorSpace(
       const LayoutBoxModelObject* ancestor,
@@ -310,7 +316,8 @@ class CORE_EXPORT LayoutInline : public LayoutBoxModelObject {
         markingBehaviour == MarkContainerChain);
   }
 
-  // TODO(leviw): This should probably be an int. We don't snap equivalent lines to different heights.
+  // TODO(leviw): This should probably be an int. We don't snap equivalent lines
+  // to different heights.
   LayoutUnit lineHeight(
       bool firstLine,
       LineDirectionMode,
@@ -335,8 +342,9 @@ class CORE_EXPORT LayoutInline : public LayoutBoxModelObject {
   LayoutBoxModelObject* continuationBefore(LayoutObject* beforeChild);
 
   LayoutObjectChildList m_children;
-  LineBoxList
-      m_lineBoxes;  // All of the line boxes created for this inline flow.  For example, <i>Hello<br>world.</i> will have two <i> line boxes.
+  // All of the line boxes created for this inline flow. For example,
+  // <i>Hello<br>world.</i> will have two <i> line boxes.
+  LineBoxList m_lineBoxes;
 };
 
 DEFINE_LAYOUT_OBJECT_TYPE_CASTS(LayoutInline, isLayoutInline());

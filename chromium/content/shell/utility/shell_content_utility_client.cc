@@ -14,7 +14,7 @@
 #include "content/public/test/test_service.mojom.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "mojo/public/cpp/system/buffer.h"
-#include "services/shell/public/cpp/interface_registry.h"
+#include "services/service_manager/public/cpp/interface_registry.h"
 
 namespace content {
 
@@ -66,9 +66,8 @@ class TestServiceImpl : public mojom::TestService {
   DISALLOW_COPY_AND_ASSIGN(TestServiceImpl);
 };
 
-std::unique_ptr<shell::Service> CreateTestService(
-    const base::Closure& quit_closure) {
-  return std::unique_ptr<shell::Service>(new TestService);
+std::unique_ptr<service_manager::Service> CreateTestService() {
+  return std::unique_ptr<service_manager::Service>(new TestService);
 }
 
 }  // namespace
@@ -83,7 +82,7 @@ void ShellContentUtilityClient::RegisterServices(StaticServiceMap* services) {
 }
 
 void ShellContentUtilityClient::ExposeInterfacesToBrowser(
-    shell::InterfaceRegistry* registry) {
+    service_manager::InterfaceRegistry* registry) {
   registry->AddInterface(base::Bind(&TestServiceImpl::Create));
 }
 

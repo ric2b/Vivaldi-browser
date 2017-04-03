@@ -9,7 +9,8 @@ import android.test.suitebuilder.annotation.MediumTest;
 import android.view.Surface;
 
 import org.chromium.base.ThreadUtils;
-import org.chromium.content.browser.test.util.CallbackHelper;
+import org.chromium.base.test.util.CallbackHelper;
+import org.chromium.base.test.util.Feature;
 import org.chromium.content_public.common.ScreenOrientationValues;
 import org.chromium.content_shell_apk.ContentShellTestBase;
 import org.chromium.ui.display.DisplayAndroid;
@@ -35,6 +36,9 @@ public class ScreenOrientationListenerTest extends ContentShellTestBase {
             mLastOrientation = rotation;
             notifyCalled();
         }
+
+        @Override
+        public void onDIPScaleChanged(float dipScale) {}
 
         public int getLastRotation() {
             return mLastOrientation;
@@ -158,6 +162,7 @@ public class ScreenOrientationListenerTest extends ContentShellTestBase {
     }
 
     @MediumTest
+    @Feature({"ScreenOrientation"})
     public void testOrientationChanges() throws Exception {
         int rotation = lockOrientationAndWait(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
         assertEquals(orientationToRotation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE), rotation);
@@ -224,7 +229,7 @@ public class ScreenOrientationListenerTest extends ContentShellTestBase {
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
-                ScreenOrientationProvider.lockOrientation((byte) orientationValue);
+                ScreenOrientationProvider.lockOrientation(null, (byte) orientationValue);
             }
         });
         mCallbackHelper.waitForCallback(callCount);
@@ -232,6 +237,7 @@ public class ScreenOrientationListenerTest extends ContentShellTestBase {
     }
 
     @MediumTest
+    @Feature({"ScreenOrientation"})
     public void testBasicValues() throws Exception {
         int rotation = lockOrientationValueAndWait(ScreenOrientationValues.LANDSCAPE_PRIMARY);
         assertEquals(

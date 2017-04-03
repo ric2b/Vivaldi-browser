@@ -9,7 +9,6 @@ import static org.chromium.base.test.util.Restriction.RESTRICTION_TYPE_NON_LOW_E
 import android.content.DialogInterface;
 import android.content.pm.ActivityInfo;
 import android.os.Debug;
-import android.os.Environment;
 import android.os.SystemClock;
 import android.test.suitebuilder.annotation.LargeTest;
 import android.test.suitebuilder.annotation.MediumTest;
@@ -21,6 +20,7 @@ import android.view.View;
 
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.annotations.SuppressFBWarnings;
+import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
@@ -60,9 +60,9 @@ import org.chromium.chrome.test.util.MenuUtils;
 import org.chromium.chrome.test.util.NewTabPageTestUtils;
 import org.chromium.chrome.test.util.OverviewModeBehaviorWatcher;
 import org.chromium.content.browser.ContentViewCore;
-import org.chromium.content.browser.test.util.CallbackHelper;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
+import org.chromium.content.browser.test.util.DOMUtils;
 import org.chromium.content.browser.test.util.JavaScriptUtils;
 import org.chromium.content.browser.test.util.UiUtils;
 import org.chromium.content.common.ContentSwitches;
@@ -142,8 +142,7 @@ public class TabsTest extends ChromeTabbedActivityTestBase {
     @CommandLineFlags.Add(ContentSwitches.DISABLE_POPUP_BLOCKING)
     @RetryOnFailure
     public void testSpawnPopupOnBackgroundTab() throws InterruptedException, TimeoutException {
-        mTestServer = EmbeddedTestServer.createAndStartFileServer(
-                getInstrumentation().getContext(), Environment.getExternalStorageDirectory());
+        mTestServer = EmbeddedTestServer.createAndStartServer(getInstrumentation().getContext());
         loadUrl(mTestServer.getURL(TEST_FILE_PATH));
         final Tab tab = getActivity().getActivityTab();
 
@@ -171,8 +170,7 @@ public class TabsTest extends ChromeTabbedActivityTestBase {
     @MediumTest
     @RetryOnFailure
     public void testAlertDialogDoesNotChangeActiveModel() throws InterruptedException {
-        mTestServer = EmbeddedTestServer.createAndStartFileServer(
-                getInstrumentation().getContext(), Environment.getExternalStorageDirectory());
+        mTestServer = EmbeddedTestServer.createAndStartServer(getInstrumentation().getContext());
         newIncognitoTabFromMenu();
         loadUrl(mTestServer.getURL(TEST_FILE_PATH));
         final Tab tab = getActivity().getActivityTab();
@@ -230,8 +228,7 @@ public class TabsTest extends ChromeTabbedActivityTestBase {
      */
     @DisabledTest
     public void testOpenAndCloseNewTabButton() throws InterruptedException {
-        mTestServer = EmbeddedTestServer.createAndStartFileServer(
-                getInstrumentation().getContext(), Environment.getExternalStorageDirectory());
+        mTestServer = EmbeddedTestServer.createAndStartServer(getInstrumentation().getContext());
         startMainActivityWithURL(mTestServer.getURL(TEST_FILE_PATH));
         getInstrumentation().runOnMainSync(new Runnable() {
             @Override
@@ -281,6 +278,59 @@ public class TabsTest extends ChromeTabbedActivityTestBase {
         });
     }
 
+    private void assertWaitForKeyboardStatus(final boolean show) throws InterruptedException {
+        CriteriaHelper.pollUiThread(new Criteria() {
+            @Override
+            public boolean isSatisfied() {
+                updateFailureReason("expected keyboard show: " + show);
+                return show
+                        == org.chromium.ui.UiUtils.isKeyboardShowing(
+                                   getActivity(), getActivity().getTabsView());
+            }
+        });
+    }
+
+    /**
+     * Verify that opening a new tab, switching to an existing tab and closing current tab hide
+     * keyboard.
+     */
+    @LargeTest
+    @Restriction(ChromeRestriction.RESTRICTION_TYPE_TABLET)
+    @Feature({"Android-TabSwitcher"})
+    @RetryOnFailure
+    public void testHideKeyboard() throws Exception {
+        mTestServer = EmbeddedTestServer.createAndStartServer(getInstrumentation().getContext());
+
+        // Open a new tab(The 1st tab) and click node.
+        ChromeTabUtils.fullyLoadUrlInNewTab(
+                getInstrumentation(), getActivity(), mTestServer.getURL(TEST_FILE_PATH), false);
+        assertEquals("Failed to click node.", true,
+                DOMUtils.clickNode(
+                        this, getActivity().getActivityTab().getContentViewCore(), "input_text"));
+        assertWaitForKeyboardStatus(true);
+
+        // Open a new tab(the 2nd tab).
+        ChromeTabUtils.fullyLoadUrlInNewTab(
+                getInstrumentation(), getActivity(), mTestServer.getURL(TEST_FILE_PATH), false);
+        assertWaitForKeyboardStatus(false);
+
+        // Click node in the 2nd tab.
+        DOMUtils.clickNode(this, getActivity().getActivityTab().getContentViewCore(), "input_text");
+        assertWaitForKeyboardStatus(true);
+
+        // Switch to the 1st tab.
+        ChromeTabUtils.switchTabInCurrentTabModel(getActivity(), 1);
+        assertWaitForKeyboardStatus(false);
+
+        // Click node in the 1st tab.
+        DOMUtils.clickNode(this, getActivity().getActivityTab().getContentViewCore(), "input_text");
+        assertWaitForKeyboardStatus(true);
+
+        // Close current tab(the 1st tab).
+        ChromeTabUtils.closeCurrentTab(getInstrumentation(), getActivity());
+        assertWaitForKeyboardStatus(false);
+    }
+
     /**
      * Verify that opening a new tab and navigating immediately sets a size on the newly created
      * renderer. https://crbug.com/434477.
@@ -316,7 +366,7 @@ public class TabsTest extends ChromeTabbedActivityTestBase {
 
         assertEquals(expectedWidth, innerWidth);
 
-        // Height can be affected by top controls so just make sure it's non-0.
+        // Height can be affected by browser controls so just make sure it's non-0.
         assertTrue("innerHeight was not set by page load time", innerHeight > 0);
     }
 
@@ -478,8 +528,7 @@ public class TabsTest extends ChromeTabbedActivityTestBase {
      */
     @FlakyTest
     public void testOpenManyTabsInBursts() throws InterruptedException {
-        mTestServer = EmbeddedTestServer.createAndStartFileServer(
-                getInstrumentation().getContext(), Environment.getExternalStorageDirectory());
+        mTestServer = EmbeddedTestServer.createAndStartServer(getInstrumentation().getContext());
         final int burstSize = 5;
         final String url = mTestServer.getURL(TEST_PAGE_FILE_PATH);
         final int startCount = getActivity().getCurrentTabModel().getCount();
@@ -507,8 +556,7 @@ public class TabsTest extends ChromeTabbedActivityTestBase {
      * tab loads when selected.
      */
     private void openAndVerifyManyTestTabs(final int num) throws InterruptedException {
-        mTestServer = EmbeddedTestServer.createAndStartFileServer(
-                getInstrumentation().getContext(), Environment.getExternalStorageDirectory());
+        mTestServer = EmbeddedTestServer.createAndStartServer(getInstrumentation().getContext());
         final String url = mTestServer.getURL(TEST_PAGE_FILE_PATH);
         int startCount = getActivity().getCurrentTabModel().getCount();
         loadUrlInManyNewTabs(url, num);
@@ -966,8 +1014,7 @@ public class TabsTest extends ChromeTabbedActivityTestBase {
     @Feature({"Android-TabSwitcher", "Main"})
     @RetryOnFailure
     public void testCloseTabPortrait() throws InterruptedException {
-        mTestServer = EmbeddedTestServer.createAndStartFileServer(
-                getInstrumentation().getContext(), Environment.getExternalStorageDirectory());
+        mTestServer = EmbeddedTestServer.createAndStartServer(getInstrumentation().getContext());
         startMainActivityWithURL(mTestServer.getURL("/chrome/test/data/android/test.html"));
 
         getActivity().setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
@@ -992,8 +1039,7 @@ public class TabsTest extends ChromeTabbedActivityTestBase {
     @Restriction({ChromeRestriction.RESTRICTION_TYPE_PHONE, RESTRICTION_TYPE_NON_LOW_END_DEVICE})
     @RetryOnFailure
     public void testCloseTabLandscape() throws InterruptedException {
-        mTestServer = EmbeddedTestServer.createAndStartFileServer(
-                getInstrumentation().getContext(), Environment.getExternalStorageDirectory());
+        mTestServer = EmbeddedTestServer.createAndStartServer(getInstrumentation().getContext());
         startMainActivityWithURL(mTestServer.getURL("/chrome/test/data/android/test.html"));
 
         getActivity().setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
@@ -1170,8 +1216,7 @@ public class TabsTest extends ChromeTabbedActivityTestBase {
     @Feature({"Android-TabSwitcher"})
     @RetryOnFailure
     public void testCloseTabDuringFling() throws InterruptedException {
-        mTestServer = EmbeddedTestServer.createAndStartFileServer(
-                getInstrumentation().getContext(), Environment.getExternalStorageDirectory());
+        mTestServer = EmbeddedTestServer.createAndStartServer(getInstrumentation().getContext());
         loadUrlInNewTab(mTestServer.getURL(
                 "/chrome/test/data/android/tabstest/text_page.html"));
         getInstrumentation().runOnMainSync(new Runnable() {
@@ -1192,8 +1237,7 @@ public class TabsTest extends ChromeTabbedActivityTestBase {
      */
     @FlakyTest
     public void testQuickSwitchBetweenTabAndSwitcherMode() throws InterruptedException {
-        mTestServer = EmbeddedTestServer.createAndStartFileServer(
-                getInstrumentation().getContext(), Environment.getExternalStorageDirectory());
+        mTestServer = EmbeddedTestServer.createAndStartServer(getInstrumentation().getContext());
         final String[] urls = {
                 mTestServer.getURL("/chrome/test/data/android/navigate/one.html"),
                 mTestServer.getURL("/chrome/test/data/android/navigate/two.html"),

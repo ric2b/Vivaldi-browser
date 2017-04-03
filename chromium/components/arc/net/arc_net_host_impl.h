@@ -15,7 +15,6 @@
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
 #include "chromeos/network/network_state_handler_observer.h"
-#include "components/arc/arc_bridge_service.h"
 #include "components/arc/arc_service.h"
 #include "components/arc/common/net.mojom.h"
 #include "components/arc/instance_holder.h"
@@ -81,6 +80,7 @@ class ArcNetHostImpl : public ArcService,
 
   // Overridden from ArcBridgeService::InterfaceObserver<mojom::NetInstance>:
   void OnInstanceReady() override;
+  void OnInstanceClosed() override;
 
  private:
   void DefaultNetworkSuccessCallback(const std::string& service_path,
@@ -95,20 +95,24 @@ class ArcNetHostImpl : public ArcService,
   bool GetNetworkPathFromGuid(const std::string& guid, std::string* path);
 
   void CreateNetworkSuccessCallback(
-      const arc::mojom::NetHost::CreateNetworkCallback& mojo_callback,
+      const mojom::NetHost::CreateNetworkCallback& mojo_callback,
       const std::string& service_path,
       const std::string& guid);
 
   void CreateNetworkFailureCallback(
-      const arc::mojom::NetHost::CreateNetworkCallback& mojo_callback,
+      const mojom::NetHost::CreateNetworkCallback& mojo_callback,
       const std::string& error_name,
       std::unique_ptr<base::DictionaryValue> error_data);
+
+  // True if the chrome::NetworkStateHandler is currently being observed for
+  // state changes.
+  bool observing_network_state_ = false;
 
   std::string cached_service_path_;
   std::string cached_guid_;
 
   base::ThreadChecker thread_checker_;
-  mojo::Binding<arc::mojom::NetHost> binding_;
+  mojo::Binding<mojom::NetHost> binding_;
   base::WeakPtrFactory<ArcNetHostImpl> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(ArcNetHostImpl);

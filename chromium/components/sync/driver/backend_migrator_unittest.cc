@@ -6,16 +6,17 @@
 
 #include <memory>
 
+#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/tracked_objects.h"
 #include "components/sync/base/model_type_test_util.h"
-#include "components/sync/core/test/test_user_share.h"
-#include "components/sync/core/write_transaction.h"
 #include "components/sync/driver/data_type_manager_mock.h"
 #include "components/sync/driver/fake_sync_service.h"
 #include "components/sync/protocol/sync.pb.h"
 #include "components/sync/syncable/directory.h"
+#include "components/sync/syncable/test_user_share.h"
+#include "components/sync/syncable/write_transaction.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -39,9 +40,9 @@ class SyncBackendMigratorTest : public testing::Test {
     preferred_types_.Put(PREFERENCES);
     preferred_types_.Put(AUTOFILL);
 
-    migrator_.reset(new BackendMigrator("Profile0",
-                                        test_user_share_.user_share(),
-                                        service(), manager(), base::Closure()));
+    migrator_ = base::MakeUnique<BackendMigrator>(
+        "Profile0", test_user_share_.user_share(), service(), manager(),
+        base::Closure());
     SetUnsyncedTypes(ModelTypeSet());
   }
 

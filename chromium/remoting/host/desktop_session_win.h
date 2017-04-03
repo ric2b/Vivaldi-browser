@@ -14,7 +14,7 @@
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "base/win/scoped_handle.h"
-#include "ipc/ipc_platform_file.h"
+#include "ipc/ipc_channel_handle.h"
 #include "remoting/host/desktop_session.h"
 #include "remoting/host/win/wts_terminal_observer.h"
 #include "remoting/host/worker_process_ipc_delegate.h"
@@ -99,7 +99,7 @@ class DesktopSessionWin
 
  private:
   // ChromotingDesktopDaemonMsg_DesktopAttached handler.
-  void OnDesktopSessionAgentAttached(IPC::PlatformFileForTransit desktop_pipe);
+  void OnDesktopSessionAgentAttached(const IPC::ChannelHandle& desktop_pipe);
 
   // Requests the desktop process to crash.
   void CrashDesktopProcess(const tracked_objects::Location& location);
@@ -130,6 +130,10 @@ class DesktopSessionWin
   base::OneShotTimer session_attach_timer_;
 
   base::Time last_timestamp_;
+
+  // The id of the current desktop session being remoted or UINT32_MAX if no
+  // session exists.
+  int session_id_ = UINT32_MAX;
 
   DISALLOW_COPY_AND_ASSIGN(DesktopSessionWin);
 };

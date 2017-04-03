@@ -11,20 +11,19 @@
 #include "components/leveldb/public/interfaces/leveldb.mojom.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "services/file/public/interfaces/file_system.mojom.h"
-#include "services/shell/public/cpp/interface_factory.h"
-#include "services/shell/public/cpp/service.h"
+#include "services/service_manager/public/cpp/interface_factory.h"
+#include "services/service_manager/public/cpp/service.h"
 
 namespace file {
 
-std::unique_ptr<shell::Service> CreateFileService(
+std::unique_ptr<service_manager::Service> CreateFileService(
     scoped_refptr<base::SingleThreadTaskRunner> file_service_runner,
-    scoped_refptr<base::SingleThreadTaskRunner> leveldb_service_runner,
-    const base::Closure& quit_closure);
+    scoped_refptr<base::SingleThreadTaskRunner> leveldb_service_runner);
 
 class FileService
-    : public shell::Service,
-      public shell::InterfaceFactory<mojom::FileSystem>,
-      public shell::InterfaceFactory<leveldb::mojom::LevelDBService> {
+    : public service_manager::Service,
+      public service_manager::InterfaceFactory<mojom::FileSystem>,
+      public service_manager::InterfaceFactory<leveldb::mojom::LevelDBService> {
  public:
   FileService(
       scoped_refptr<base::SingleThreadTaskRunner> file_service_runner,
@@ -33,16 +32,16 @@ class FileService
 
  private:
   // |Service| override:
-  void OnStart(const shell::Identity& identity) override;
-  bool OnConnect(const shell::Identity& remote_identity,
-                 shell::InterfaceRegistry* registry) override;
+  void OnStart() override;
+  bool OnConnect(const service_manager::ServiceInfo& remote_info,
+                 service_manager::InterfaceRegistry* registry) override;
 
   // |InterfaceFactory<mojom::FileSystem>| implementation:
-  void Create(const shell::Identity& remote_identity,
+  void Create(const service_manager::Identity& remote_identity,
               mojom::FileSystemRequest request) override;
 
   // |InterfaceFactory<LevelDBService>| implementation:
-  void Create(const shell::Identity& remote_identity,
+  void Create(const service_manager::Identity& remote_identity,
               leveldb::mojom::LevelDBServiceRequest request) override;
 
   void OnLevelDBServiceError();

@@ -301,8 +301,9 @@ IN_PROC_BROWSER_TEST_F(FindInPageControllerTest, FindInPageFormsTextAreas) {
 
 // Verify search for text within special URLs such as chrome:history,
 // chrome://downloads, data directory
-#if defined(OS_WIN) || defined(OS_MACOSX)
-// Disabled due to crbug.com/175711 and http://crbug.com/419987
+#if defined(OS_MACOSX) || defined(OS_WIN)
+// Disabled on Mac due to http://crbug.com/419987
+// Disabled on Win due to http://crbug.com/661013
 #define MAYBE_SearchWithinSpecialURL \
         DISABLED_SearchWithinSpecialURL
 #else
@@ -406,8 +407,13 @@ IN_PROC_BROWSER_TEST_F(FindInPageControllerTest, SpanAndListsSearchable) {
                                       kFwd, kIgnoreCase, NULL, NULL));
 }
 
+#if defined(OS_WIN)
+#define MAYBE_LargePage DISABLED_LargePage
+#else
+#define MAYBE_LargePage LargePage
+#endif
 // Find in a very large page.
-IN_PROC_BROWSER_TEST_F(FindInPageControllerTest, LargePage) {
+IN_PROC_BROWSER_TEST_F(FindInPageControllerTest, MAYBE_LargePage) {
   WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
   ui_test_utils::NavigateToURL(browser(), GetURL("largepage.html"));

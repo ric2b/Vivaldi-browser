@@ -7,7 +7,7 @@
       has_right_mousebutton_down_(false),
       eat_next_right_mouseup_(false),
       current_host_(NULL),
-      gesture_state_(GestureStateNone),
+      gesture_recording_(false),
       media_state_(TabAlertState::NONE),
       is_visible_(false),
       is_fullscreen_(false),

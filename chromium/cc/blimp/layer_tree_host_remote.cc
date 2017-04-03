@@ -5,18 +5,23 @@
 #include "cc/blimp/layer_tree_host_remote.h"
 
 #include "base/atomic_sequence_num.h"
+#include "base/auto_reset.h"
 #include "base/memory/ptr_util.h"
-#include "cc/animation/animation_host.h"
 #include "cc/blimp/compositor_proto_state.h"
+#include "cc/blimp/engine_picture_cache.h"
+#include "cc/blimp/picture_data_conversions.h"
 #include "cc/blimp/remote_compositor_bridge.h"
 #include "cc/output/begin_frame_args.h"
 #include "cc/output/compositor_frame_sink.h"
 #include "cc/proto/compositor_message.pb.h"
+#include "cc/proto/gfx_conversions.h"
 #include "cc/proto/layer_tree_host.pb.h"
 #include "cc/trees/layer_tree.h"
 #include "cc/trees/layer_tree_host_client.h"
 #include "cc/trees/layer_tree_host_common.h"
+#include "cc/trees/mutator_host.h"
 #include "cc/trees/task_runner_provider.h"
+#include "ui/gfx/geometry/scroll_offset.h"
 
 namespace cc {
 namespace {
@@ -25,6 +30,31 @@ namespace {
 base::TimeDelta kDefaultFrameInterval = base::TimeDelta::FromMilliseconds(16);
 
 static base::StaticAtomicSequenceNumber s_layer_tree_host_sequence_number;
+
+bool ShouldUpdateLayer(Layer* layer) {
+  // If the embedder has marked the layer as non-drawable.
+  if (!layer->DrawsContent())
+    return false;
+
+  // If the layer bounds are empty.
+  if (layer->bounds().IsEmpty())
+    return false;
+
+  // If the layer is transparent and has no background filters applied.
+  // See EffectTree::UpdateIsDrawn for the logic details.
+  // A few things have been ignored:
+  // 1) We don't support threaded animations at the moment, so the opacity can
+  //    not change on the client.
+  // 2) This does not account for layer hiding its subtree, but that is never
+  //    used by the renderer.
+  // 3) Also updates a transparent layer's subtree when it will be skipped while
+  //    drawing on the client.
+  if (layer->opacity() == 0.f && layer->background_filters().IsEmpty())
+    return false;
+
+  return true;
+}
+
 }  // namespace
 
 LayerTreeHostRemote::InitParams::InitParams() = default;
@@ -34,8 +64,7 @@ LayerTreeHostRemote::InitParams::~InitParams() = default;
 LayerTreeHostRemote::LayerTreeHostRemote(InitParams* params)
     : LayerTreeHostRemote(
           params,
-          base::MakeUnique<LayerTree>(std::move(params->animation_host),
-                                      this)) {}
+          base::MakeUnique<LayerTree>(params->mutator_host, this)) {}
 
 LayerTreeHostRemote::LayerTreeHostRemote(InitParams* params,
                                          std::unique_ptr<LayerTree> layer_tree)
@@ -46,6 +75,7 @@ LayerTreeHostRemote::LayerTreeHostRemote(InitParams* params,
           TaskRunnerProvider::Create(std::move(params->main_task_runner),
                                      nullptr)),
       remote_compositor_bridge_(std::move(params->remote_compositor_bridge)),
+      engine_picture_cache_(std::move(params->engine_picture_cache)),
       settings_(*params->settings),
       layer_tree_(std::move(layer_tree)),
       weak_factory_(this) {
@@ -53,6 +83,7 @@ LayerTreeHostRemote::LayerTreeHostRemote(InitParams* params,
   DCHECK(remote_compositor_bridge_);
   DCHECK(client_);
   remote_compositor_bridge_->BindToClient(this);
+  layer_tree_->set_engine_picture_cache(engine_picture_cache_.get());
 }
 
 LayerTreeHostRemote::~LayerTreeHostRemote() = default;
@@ -157,7 +188,11 @@ bool LayerTreeHostRemote::BeginMainFrameRequested() const {
 }
 
 bool LayerTreeHostRemote::CommitRequested() const {
-  return requested_pipeline_stage_for_next_frame_ == FramePipelineStage::COMMIT;
+  // We report that a commit is in progress when synchronizing scroll and scale
+  // updates because in threaded mode, scroll/scale synchronization from the
+  // impl thread happens only during the main frame.
+  return synchronizing_client_updates_ ||
+         requested_pipeline_stage_for_next_frame_ == FramePipelineStage::COMMIT;
 }
 
 void LayerTreeHostRemote::SetDeferCommits(bool defer_commits) {
@@ -175,12 +210,6 @@ void LayerTreeHostRemote::Composite(base::TimeTicks frame_begin_time) {
                << " does not support single-thread since it is out of process";
 }
 
-void LayerTreeHostRemote::SetNeedsRedraw() {
-  // The engine shouldn't need to care about draws. CompositorFrames are never
-  // used here.
-  NOTREACHED();
-}
-
 void LayerTreeHostRemote::SetNeedsRedrawRect(const gfx::Rect& damage_rect) {
   // The engine shouldn't need to care about draws. CompositorFrames are never
   // used here.
@@ -193,7 +222,7 @@ void LayerTreeHostRemote::SetNextCommitForcesRedraw() {
   // Ideally the engine shouldn't need to care about draw requests at all. The
   // compositor that produces CompositorFrames is on the client and draw
   // requests should be made directly to it on the client itself.
-  NOTREACHED();
+  NOTIMPLEMENTED();
 }
 
 void LayerTreeHostRemote::NotifyInputThrottledUntilCommit() {
@@ -211,10 +240,11 @@ void LayerTreeHostRemote::NotifyInputThrottledUntilCommit() {
   NOTIMPLEMENTED();
 }
 
-void LayerTreeHostRemote::UpdateTopControlsState(TopControlsState constraints,
-                                                 TopControlsState current,
-                                                 bool animate) {
-  NOTREACHED() << "Using TopControls animations is not supported";
+void LayerTreeHostRemote::UpdateBrowserControlsState(
+    BrowserControlsState constraints,
+    BrowserControlsState current,
+    bool animate) {
+  NOTREACHED() << "Using BrowserControls animations is not supported";
 }
 
 const base::WeakPtr<InputHandler>& LayerTreeHostRemote::GetInputHandler()
@@ -231,8 +261,9 @@ void LayerTreeHostRemote::DidStopFlinging() {
 
 void LayerTreeHostRemote::SetDebugState(
     const LayerTreeDebugState& debug_state) {
-  // TODO(khushalsagar): Figure out if we need to send these to the client.
-  NOTREACHED();
+  // If any debugging needs to be enabled, ideally it should be using the
+  // compositor on the client directly. But the setup code will always set this
+  // on initialization, even if the settings end up being a no-op.
 }
 
 const LayerTreeDebugState& LayerTreeHostRemote::GetDebugState() const {
@@ -345,7 +376,6 @@ void LayerTreeHostRemote::BeginMainFrame() {
   // We don't run any animations on the layer because threaded animations are
   // disabled.
   // TODO(khushalsagar): Revisit this when adding support for animations.
-  DCHECK(!layer_tree_->animation_host()->needs_push_properties());
   client_->UpdateLayerTreeHost();
 
   current_pipeline_stage_ = FramePipelineStage::UPDATE_LAYERS;
@@ -357,6 +387,8 @@ void LayerTreeHostRemote::BeginMainFrame() {
     // layers. See crbug.com/650885.
     LayerTreeHostCommon::CallFunctionForEveryLayer(
         layer_tree_.get(), [&layer_list](Layer* layer) {
+          if (!ShouldUpdateLayer(layer))
+            return;
           layer->SavePaintProperties();
           layer_list.push_back(layer);
         });
@@ -404,8 +436,57 @@ void LayerTreeHostRemote::BeginMainFrame() {
   // being used for. Consider migrating clients to understand/cope with the fact
   // that there is no actual compositing happening here.
   task_runner_provider_->MainThreadTaskRunner()->PostTask(
-      FROM_HERE, base::Bind(&LayerTreeHostRemote::DispatchDrawAndSwapCallbacks,
-                            weak_factory_.GetWeakPtr()));
+      FROM_HERE,
+      base::Bind(&LayerTreeHostRemote::DispatchDrawAndSubmitCallbacks,
+                 weak_factory_.GetWeakPtr()));
+}
+
+void LayerTreeHostRemote::ApplyStateUpdateFromClient(
+    const proto::ClientStateUpdate& client_state_update) {
+  DCHECK(!synchronizing_client_updates_);
+  base::AutoReset<bool> synchronizing_updates(&synchronizing_client_updates_,
+                                              true);
+
+  gfx::Vector2dF inner_viewport_delta;
+  for (int i = 0; i < client_state_update.scroll_updates_size(); ++i) {
+    const proto::ScrollUpdate& scroll_update =
+        client_state_update.scroll_updates(i);
+    int layer_id = scroll_update.layer_id();
+    Layer* layer = layer_tree_->LayerById(layer_id);
+    gfx::Vector2dF scroll_delta =
+        ProtoToVector2dF(scroll_update.scroll_delta());
+
+    if (!layer)
+      continue;
+
+    if (layer == layer_tree_->inner_viewport_scroll_layer()) {
+      inner_viewport_delta = scroll_delta;
+    } else {
+      layer->SetScrollOffsetFromImplSide(
+          gfx::ScrollOffsetWithDelta(layer->scroll_offset(), scroll_delta));
+      SetNeedsUpdateLayers();
+    }
+  }
+
+  if (!inner_viewport_delta.IsZero()) {
+    layer_tree_->inner_viewport_scroll_layer()->SetScrollOffsetFromImplSide(
+        gfx::ScrollOffsetWithDelta(
+            layer_tree_->inner_viewport_scroll_layer()->scroll_offset(),
+            inner_viewport_delta));
+  }
+
+  float page_scale_delta = 1.0f;
+  if (client_state_update.has_page_scale_delta()) {
+    page_scale_delta = client_state_update.page_scale_delta();
+    layer_tree_->SetPageScaleFromImplSide(layer_tree_->page_scale_factor() *
+                                          page_scale_delta);
+  }
+
+  if (!inner_viewport_delta.IsZero() || page_scale_delta != 1.0f) {
+    client_->ApplyViewportDeltas(inner_viewport_delta, gfx::Vector2dF(),
+                                 gfx::Vector2dF(), page_scale_delta, 0.0f);
+    SetNeedsUpdateLayers();
+  }
 }
 
 void LayerTreeHostRemote::MainFrameComplete() {
@@ -419,27 +500,36 @@ void LayerTreeHostRemote::MainFrameComplete() {
   client_->DidBeginMainFrame();
 }
 
-void LayerTreeHostRemote::DispatchDrawAndSwapCallbacks() {
+void LayerTreeHostRemote::DispatchDrawAndSubmitCallbacks() {
   client_->DidCommitAndDrawFrame();
-  client_->DidCompleteSwapBuffers();
+  client_->DidReceiveCompositorFrameAck();
+}
+
+void LayerTreeHostRemote::SetTaskRunnerProviderForTesting(
+    std::unique_ptr<TaskRunnerProvider> task_runner_provider) {
+  task_runner_provider_ = std::move(task_runner_provider);
 }
 
 void LayerTreeHostRemote::SerializeCurrentState(
     proto::LayerTreeHost* layer_tree_host_proto) {
-  // We need to serialize only the inputs received from the embedder.
-  const bool inputs_only = true;
-
   // Serialize the LayerTree.
-  layer_tree_->ToProtobuf(layer_tree_host_proto->mutable_layer_tree(),
-                          inputs_only);
+  layer_tree_->ToProtobuf(layer_tree_host_proto->mutable_layer_tree());
 
   // Serialize the dirty layers.
-  for (auto* layer : layer_tree_->LayersThatShouldPushProperties())
-    layer->ToLayerPropertiesProto(
-        layer_tree_host_proto->mutable_layer_updates(), inputs_only);
-  layer_tree_->LayersThatShouldPushProperties().clear();
+  std::unordered_set<Layer*> layers_need_push_properties;
+  layers_need_push_properties.swap(
+      layer_tree_->LayersThatShouldPushProperties());
 
-  // TODO(khushalsagar): Deal with picture caching.
+  for (auto* layer : layers_need_push_properties) {
+    proto::LayerProperties* layer_properties =
+        layer_tree_host_proto->mutable_layer_updates()->add_layers();
+    layer->ToLayerPropertiesProto(layer_properties);
+  }
+
+  std::vector<PictureData> pictures =
+      engine_picture_cache_->CalculateCacheUpdateAndFlush();
+  proto::PictureDataVectorToSkPicturesProto(
+      pictures, layer_tree_host_proto->mutable_pictures());
 }
 
 }  // namespace cc

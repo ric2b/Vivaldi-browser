@@ -30,7 +30,6 @@ class Message;
 namespace cc {
 class BeginFrameSource;
 class CompositorFrame;
-class CompositorFrameAck;
 class ContextProvider;
 }
 
@@ -49,6 +48,8 @@ class RendererCompositorFrameSink
       std::unique_ptr<cc::BeginFrameSource> begin_frame_source,
       scoped_refptr<cc::ContextProvider> context_provider,
       scoped_refptr<cc::ContextProvider> worker_context_provider,
+      gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
+      cc::SharedBitmapManager* shared_bitmap_manager,
       scoped_refptr<FrameSwapMessageQueue> swap_frame_message_queue);
   RendererCompositorFrameSink(
       int32_t routing_id,
@@ -61,7 +62,7 @@ class RendererCompositorFrameSink
   // cc::CompositorFrameSink implementation.
   bool BindToClient(cc::CompositorFrameSinkClient* client) override;
   void DetachFromClient() override;
-  void SwapBuffers(cc::CompositorFrame frame) override;
+  void SubmitCompositorFrame(cc::CompositorFrame frame) override;
 
  protected:
   uint32_t compositor_frame_sink_id_;

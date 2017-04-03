@@ -7,9 +7,9 @@
 
 #include "bindings/core/v8/ScriptValue.h"
 #include "bindings/core/v8/ScriptWrappable.h"
+#include "components/payments/payment_request.mojom-blink.h"
 #include "modules/ModulesExport.h"
 #include "platform/heap/Handle.h"
-#include "public/platform/modules/payments/payment_request.mojom-blink.h"
 #include "wtf/Noncopyable.h"
 #include "wtf/Vector.h"
 #include "wtf/text/WTFString.h"
@@ -23,7 +23,7 @@ class MODULES_EXPORT PaymentAddress final
   WTF_MAKE_NONCOPYABLE(PaymentAddress);
 
  public:
-  explicit PaymentAddress(mojom::blink::PaymentAddressPtr);
+  explicit PaymentAddress(payments::mojom::blink::PaymentAddressPtr);
   virtual ~PaymentAddress();
 
   ScriptValue toJSONForBinding(ScriptState*) const;
@@ -38,7 +38,6 @@ class MODULES_EXPORT PaymentAddress final
   const String& languageCode() const { return m_languageCode; }
   const String& organization() const { return m_organization; }
   const String& recipient() const { return m_recipient; }
-  const String careOf() const { return WTF::emptyString(); }
   const String& phone() const { return m_phone; }
 
   DEFINE_INLINE_TRACE() {}

@@ -171,7 +171,7 @@ void CanvasRenderingContext2DTest::SetUp() {
   m_dummyPageHolder = DummyPageHolder::create(IntSize(800, 600), &pageClients);
   m_document = &m_dummyPageHolder->document();
   m_document->documentElement()->setInnerHTML(
-      "<body><canvas id='c'></canvas></body>", ASSERT_NO_EXCEPTION);
+      "<body><canvas id='c'></canvas></body>");
   m_document->view()->updateAllLifecyclePhases();
   m_canvasElement = toHTMLCanvasElement(m_document->getElementById("c"));
 
@@ -210,8 +210,9 @@ PassRefPtr<Canvas2DLayerBridge> CanvasRenderingContext2DTest::makeBridge(
     std::unique_ptr<FakeWebGraphicsContext3DProvider> provider,
     const IntSize& size,
     Canvas2DLayerBridge::AccelerationMode accelerationMode) {
-  return adoptRef(new Canvas2DLayerBridge(
-      std::move(provider), size, 0, NonOpaque, accelerationMode, nullptr));
+  return adoptRef(new Canvas2DLayerBridge(std::move(provider), size, 0,
+                                          NonOpaque, accelerationMode, nullptr,
+                                          kN32_SkColorType));
 }
 
 //============================================================================
@@ -312,11 +313,12 @@ class MockSurfaceFactory : public RecordingImageBufferFallbackSurfaceFactory {
   std::unique_ptr<ImageBufferSurface> createSurface(
       const IntSize& size,
       OpacityMode mode,
-      sk_sp<SkColorSpace> colorSpace) override {
+      sk_sp<SkColorSpace> colorSpace,
+      SkColorType colorType) override {
     EXPECT_EQ(ExpectFallback, m_expectation);
     m_didFallback = true;
     return wrapUnique(new UnacceleratedImageBufferSurface(
-        size, mode, InitializeImagePixels, colorSpace));
+        size, mode, InitializeImagePixels, colorSpace, colorType));
   }
 
   ~MockSurfaceFactory() override {
@@ -586,7 +588,7 @@ TEST_F(CanvasRenderingContext2DTest, NoLayerPromotionUnderImageSizeRatioLimit) {
   IntSize sourceSize(
       10, 10 * ExpensiveCanvasHeuristicParameters::ExpensiveImageSizeRatio);
   std::unique_ptr<UnacceleratedImageBufferSurface> sourceSurface =
-      wrapUnique(new UnacceleratedImageBufferSurface(sourceSize, NonOpaque));
+      makeUnique<UnacceleratedImageBufferSurface>(sourceSize, NonOpaque);
   sourceCanvas->createImageBufferUsingSurfaceForTesting(
       std::move(sourceSurface));
 
@@ -622,7 +624,7 @@ TEST_F(CanvasRenderingContext2DTest, LayerPromotionOverImageSizeRatioLimit) {
   IntSize sourceSize(
       10, 10 * ExpensiveCanvasHeuristicParameters::ExpensiveImageSizeRatio + 1);
   std::unique_ptr<UnacceleratedImageBufferSurface> sourceSurface =
-      wrapUnique(new UnacceleratedImageBufferSurface(sourceSize, NonOpaque));
+      makeUnique<UnacceleratedImageBufferSurface>(sourceSize, NonOpaque);
   sourceCanvas->createImageBufferUsingSurfaceForTesting(
       std::move(sourceSurface));
 

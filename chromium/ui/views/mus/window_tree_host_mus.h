@@ -6,33 +6,23 @@
 #define UI_VIEWS_MUS_WINDOW_TREE_HOST_MUS_H_
 
 #include "base/macros.h"
-#include "services/shell/public/cpp/connector.h"
+#include "services/service_manager/public/cpp/connector.h"
 #include "ui/aura/window_tree_host_platform.h"
 #include "ui/views/mus/mus_export.h"
-
-class SkBitmap;
 
 namespace ui {
 class Window;
 }
 
-namespace shell {
-class Connector;
-}
-
 namespace views {
 
-class InputMethodMus;
 class NativeWidgetMus;
-class PlatformWindowMus;
 
 class VIEWS_MUS_EXPORT WindowTreeHostMus : public aura::WindowTreeHostPlatform {
  public:
   WindowTreeHostMus(NativeWidgetMus* native_widget, ui::Window* window);
   ~WindowTreeHostMus() override;
   NativeWidgetMus* native_widget() { return native_widget_; }
-
-  void InitInputMethod(shell::Connector* connector);
 
  private:
   // aura::WindowTreeHostPlatform:
@@ -43,7 +33,6 @@ class VIEWS_MUS_EXPORT WindowTreeHostMus : public aura::WindowTreeHostPlatform {
   gfx::ICCProfile GetICCProfileForCurrentDisplay() override;
 
   NativeWidgetMus* native_widget_;
-  std::unique_ptr<InputMethodMus> input_method_;
 
   DISALLOW_COPY_AND_ASSIGN(WindowTreeHostMus);
 };

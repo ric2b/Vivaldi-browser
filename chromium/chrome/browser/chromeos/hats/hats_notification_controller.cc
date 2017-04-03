@@ -10,6 +10,7 @@
 #include "base/feature_list.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/hats/hats_dialog.h"
+#include "chrome/browser/chromeos/hats/hats_finch_helper.h"
 #include "chrome/browser/chromeos/login/startup_utils.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
@@ -162,6 +163,11 @@ bool HatsNotificationController::ShouldShowSurveyToProfile(Profile* profile) {
   // In an enterprise enrolled device, the user can never be the owner, hence
   // only check for ownership on a non enrolled device.
   if (!is_enterprise_enrolled && !ProfileHelper::IsOwnerProfile(profile))
+    return false;
+
+  // Call finch helper only after all the profile checks are complete.
+  HatsFinchHelper hats_finch_helper(profile);
+  if (!hats_finch_helper.IsDeviceSelectedForCurrentCycle())
     return false;
 
   int threshold_days = IsGoogleUser(profile->GetProfileUserName())

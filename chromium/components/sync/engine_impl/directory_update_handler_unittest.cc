@@ -14,10 +14,10 @@
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "components/sync/base/attachment_id_proto.h"
-#include "components/sync/core/test/test_entry_factory.h"
 #include "components/sync/engine_impl/cycle/directory_type_debug_info_emitter.h"
 #include "components/sync/engine_impl/cycle/status_controller.h"
 #include "components/sync/engine_impl/syncer_proto_util.h"
+#include "components/sync/engine_impl/test_entry_factory.h"
 #include "components/sync/protocol/sync.pb.h"
 #include "components/sync/syncable/directory.h"
 #include "components/sync/syncable/entry.h"
@@ -477,7 +477,7 @@ class DirectoryUpdateHandlerApplyUpdateTest : public ::testing::Test {
 
   void SetUp() override {
     dir_maker_.SetUp();
-    entry_factory_.reset(new TestEntryFactory(directory()));
+    entry_factory_ = base::MakeUnique<TestEntryFactory>(directory());
 
     update_handler_map_.insert(std::make_pair(
         BOOKMARKS,
@@ -736,7 +736,7 @@ TEST_F(DirectoryUpdateHandlerApplyUpdateTest, BookmarkFolderLoop) {
   // Item 'Y' is child of 'X'.
   entry_factory()->CreateUnsyncedItem(TestIdFactory::MakeServer("Y"),
                                       TestIdFactory::MakeServer("X"), "Y", true,
-                                      BOOKMARKS, NULL);
+                                      BOOKMARKS, nullptr);
 
   // If the server's update were applied, we would have X be a child of Y, and Y
   // as a child of X.  That's a directory loop.  The UpdateApplicator should
@@ -819,7 +819,7 @@ TEST_F(DirectoryUpdateHandlerApplyUpdateTest,
   // Create a local child of the server-deleted directory.
   entry_factory()->CreateUnsyncedItem(TestIdFactory::MakeServer("child"),
                                       TestIdFactory::MakeServer("parent"),
-                                      "child", false, BOOKMARKS, NULL);
+                                      "child", false, BOOKMARKS, nullptr);
 
   // The server's request to delete the directory must be ignored, otherwise our
   // unsynced new child would be orphaned.  This is a hierarchy conflict.

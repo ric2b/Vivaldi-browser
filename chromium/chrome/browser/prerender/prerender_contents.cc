@@ -46,11 +46,9 @@
 #include "ui/gfx/geometry/size.h"
 
 using content::BrowserThread;
-using content::DownloadItem;
 using content::OpenURLParams;
 using content::RenderViewHost;
 using content::ResourceRedirectDetails;
-using content::ResourceType;
 using content::SessionStorageNamespace;
 using content::WebContents;
 
@@ -186,19 +184,7 @@ class PrerenderContents::WebContentsDelegateImpl
   PrerenderContents* prerender_contents_;
 };
 
-void PrerenderContents::Observer::OnPrerenderStopLoading(
-    PrerenderContents* contents) {
-}
-
-void PrerenderContents::Observer::OnPrerenderDomContentLoaded(
-    PrerenderContents* contents) {
-}
-
-PrerenderContents::Observer::Observer() {
-}
-
-PrerenderContents::Observer::~Observer() {
-}
+PrerenderContents::Observer::~Observer() {}
 
 PrerenderContents::PrerenderContents(
     PrerenderManager* prerender_manager,
@@ -467,21 +453,24 @@ WebContents* PrerenderContents::CreateWebContents(
 
 void PrerenderContents::NotifyPrerenderStart() {
   DCHECK_EQ(FINAL_STATUS_MAX, final_status_);
-  FOR_EACH_OBSERVER(Observer, observer_list_, OnPrerenderStart(this));
+  for (Observer& observer : observer_list_)
+    observer.OnPrerenderStart(this);
 }
 
 void PrerenderContents::NotifyPrerenderStopLoading() {
-  FOR_EACH_OBSERVER(Observer, observer_list_, OnPrerenderStopLoading(this));
+  for (Observer& observer : observer_list_)
+    observer.OnPrerenderStopLoading(this);
 }
 
 void PrerenderContents::NotifyPrerenderDomContentLoaded() {
-  FOR_EACH_OBSERVER(Observer, observer_list_,
-                    OnPrerenderDomContentLoaded(this));
+  for (Observer& observer : observer_list_)
+    observer.OnPrerenderDomContentLoaded(this);
 }
 
 void PrerenderContents::NotifyPrerenderStop() {
   DCHECK_NE(FINAL_STATUS_MAX, final_status_);
-  FOR_EACH_OBSERVER(Observer, observer_list_, OnPrerenderStop(this));
+  for (Observer& observer : observer_list_)
+    observer.OnPrerenderStop(this);
   observer_list_.Clear();
 }
 
@@ -541,6 +530,11 @@ bool PrerenderContents::Matches(
 }
 
 void PrerenderContents::RenderProcessGone(base::TerminationStatus status) {
+  if (status == base::TERMINATION_STATUS_STILL_RUNNING) {
+    // The renderer process is being killed because of the browser/test
+    // shutdown, before the termination notification is received.
+    Destroy(FINAL_STATUS_APP_TERMINATING);
+  }
   Destroy(FINAL_STATUS_RENDERER_CRASHED);
 }
 

@@ -15,10 +15,6 @@
 #include "base/observer_list.h"
 #include "services/ui/public/cpp/window_tree_client_observer.h"
 
-namespace shell {
-class Connector;
-}
-
 namespace ui {
 class WindowTreeClient;
 }
@@ -81,7 +77,6 @@ class WmShellMus : public WmShell, public ui::WindowTreeClientObserver {
                                 const gfx::Insets& insets) override;
   bool IsPinned() override;
   void SetPinnedWindow(WmWindow* window) override;
-  bool CanShowWindowForUser(WmWindow* window) override;
   void LockCursor() override;
   void UnlockCursor() override;
   bool IsMouseEventsEnabled() override;
@@ -113,6 +108,7 @@ class WmShellMus : public WmShell, public ui::WindowTreeClientObserver {
   void AddPointerWatcher(views::PointerWatcher* watcher,
                          views::PointerWatcherEventTypes events) override;
   void RemovePointerWatcher(views::PointerWatcher* watcher) override;
+  void RequestShutdown() override;
   bool IsTouchDown() override;
 #if defined(OS_CHROMEOS)
   void ToggleIgnoreExternalKeyboard() override;

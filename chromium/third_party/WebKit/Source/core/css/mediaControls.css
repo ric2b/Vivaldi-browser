@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2009 Apple Inc.  All rights reserved.
- * Copyright (C) 2009 Google Inc.
+ * Copyright (C) 2015 Google Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,7 +33,7 @@ audio:not([controls]) {
 
 audio {
     width: 300px;
-    height: 30px;
+    height: 32px;
 }
 
 audio::-webkit-media-controls,
@@ -44,26 +44,20 @@ video::-webkit-media-controls {
     direction: ltr;
     display: flex;
     flex-direction: column;
-    font-family: Arial, Helvetica, sans-serif;
+    font-family: Segoe, "Helvetica Neue", Roboto, Arial, Helvetica, sans-serif;
     justify-content: flex-end;
     align-items: center;
 }
 
 audio::-webkit-media-controls-enclosure, video::-webkit-media-controls-enclosure {
     width: 100%;
-    max-width: 800px;
-    height: 30px;
+    height: 32px;
     flex-shrink: 0;
     bottom: 0;
     text-indent: 0;
     padding: 0;
+    margin: 0;
     box-sizing: border-box;
-}
-
-video::-webkit-media-controls-enclosure {
-    padding: 0px 5px 5px 5px;
-    height: 35px;
-    flex-shrink: 0;
 }
 
 audio::-webkit-media-controls-panel, video::-webkit-media-controls-panel {
@@ -81,11 +75,16 @@ audio::-webkit-media-controls-panel, video::-webkit-media-controls-panel {
     overflow: hidden;
     text-align: right;
     bottom: auto;
-    height: 30px;
-    background-color: rgba(20, 20, 20, 0.8);
-    border-radius: 5px;
+    height: 32px;
+    min-width: 48px;
+    line-height: 32px;
+    background-color: #fafafa;
     /* The duration is also specified in MediaControlElements.cpp and LayoutTests/media/media-controls.js */
     transition: opacity 0.3s;
+
+    font-size: 12px;
+    font-weight: normal;  /* Make sure that we don't inherit non-defaults. */
+    font-style: normal;
 }
 
 audio:-webkit-full-page-media, video:-webkit-full-page-media {
@@ -102,13 +101,11 @@ audio::-webkit-media-controls-mute-button, video::-webkit-media-controls-mute-bu
     -webkit-appearance: media-mute-button;
     display: flex;
     flex: none;
-    border: none;
     box-sizing: border-box;
-    width: 35px;
-    height: 30px;
-    line-height: 30px;
-    margin: 0 6px 0 0;
-    padding: 0;
+    width: 32px;
+    height: 32px;
+    padding: 0px;
+    border-width: 0px;
     background-color: initial;
     color: inherit;
 }
@@ -126,6 +123,8 @@ video::-webkit-media-controls-overlay-enclosure {
     flex: 1 1;
     min-height: 0;
     width: 100%;
+    /* prevent disambiguation zooms with the panel */
+    margin-bottom: 10px;
     text-indent: 0;
     box-sizing: border-box;
     overflow: hidden;
@@ -135,15 +134,13 @@ video::-webkit-media-controls-overlay-play-button {
     -webkit-appearance: media-overlay-play-button;
     display: flex;
     position: absolute;
-    top: 50%;
-    left: 50%;
-    margin-left: -40px;
-    margin-top: -40px;
-    border: none;
-    box-sizing: border-box;
+    top: 0;
+    left: 0;
+    margin: 0;
+    border-width: 0px;
     background-color: transparent;
-    width: 80px;
-    height: 80px;
+    width: 100%;
+    height: 100%;
     padding: 0;
 }
 
@@ -151,30 +148,27 @@ video::-internal-media-controls-overlay-cast-button {
     -webkit-appearance: -internal-media-overlay-cast-off-button;
     display: flex;
     position: absolute;
-    top: 5%;
-    left: 5%;
+    top: 8px;
+    left: 8px;
     margin-left: 0px;
     margin-top: 0px;
-    border: none;
-    box-sizing: border-box;
+    border-width: 0px;
     background-color: transparent;
-    width: 30px;
-    height: 30px;
+    width: 32px;
+    height: 32px;
     padding: 0;
+    transition: opacity 0.3s;
 }
 
 audio::-webkit-media-controls-play-button, video::-webkit-media-controls-play-button {
     -webkit-appearance: media-play-button;
     display: flex;
     flex: none;
-    border: none;
     box-sizing: border-box;
-    width: 30px;
-    height: 30px;
-    line-height: 30px;
-    margin-left: 9px;
-    margin-right: 9px;
-    padding: 0;
+    width: 32px;
+    height: 32px;
+    padding: 0px;
+    border-width: 0px;
     background-color: initial;
     color: inherit;
 }
@@ -187,11 +181,34 @@ audio::-webkit-media-controls-timeline-container, video::-webkit-media-controls-
     justify-content: flex-end;
     flex: 1 1;
     -webkit-user-select: none;
-    height: 16px;
+    height: 48px;
+    padding: 0;
     min-width: 0;
 }
 
-audio::-webkit-media-controls-current-time-display, video::-webkit-media-controls-current-time-display,
+audio::-webkit-media-controls-current-time-display, video::-webkit-media-controls-current-time-display {
+    -webkit-appearance: media-current-time-display;
+    -webkit-user-select: none;
+    flex: none;
+    display: flex;
+    border: none;
+    cursor: default;
+
+    height: 32px;
+
+    /* text runs right to the edge of the container */
+    padding: 0;
+
+    color: #5a5a5a;
+
+    letter-spacing: normal;
+    word-spacing: normal;
+    text-transform: none;
+    text-indent: 0;
+    text-shadow: none;
+    text-decoration: none;
+}
+
 audio::-webkit-media-controls-time-remaining-display, video::-webkit-media-controls-time-remaining-display {
     -webkit-appearance: media-current-time-display;
     -webkit-user-select: none;
@@ -200,15 +217,13 @@ audio::-webkit-media-controls-time-remaining-display, video::-webkit-media-contr
     border: none;
     cursor: default;
 
-    height: 30px;
-    margin: 0 9px 0 0;
-    padding: 0;
+    height: 32px;
 
-    line-height: 30px;
-    font-size: 13px;
-    font-weight: bold;
-    font-style: normal;
-    color: white;
+    /* text runs right to the edge of the container, plus a little on
+     * the left to pad the leading "/" */
+    padding: 0 0 0 4px;
+
+    color: #5a5a5a;
 
     letter-spacing: normal;
     word-spacing: normal;
@@ -222,9 +237,13 @@ audio::-webkit-media-controls-timeline, video::-webkit-media-controls-timeline {
     -webkit-appearance: media-slider;
     display: flex;
     flex: 1 1 auto;
-    height: 8px;
-    margin: 0 15px 0 0;
+    height: 2px;
+
+    /* Leave 6px on either side for the thumb.  Use margin so that
+     * the slider doesn't extend into it.  We also add 12px border.
+     */
     padding: 0;
+    margin: 0 18px 0 18px;
     background-color: transparent;
     min-width: 25px;
     border: initial;
@@ -238,12 +257,16 @@ audio::-webkit-media-controls-volume-slider, video::-webkit-media-controls-volum
      * and be aesthetically pleasing.
      */
     flex: 1 1.9 auto;
-    height: 8px;
+    height: 2px;
     max-width: 70px;
-    margin: 0 15px 0 0;
+    /* Leave room for the thumb, which has 6px radius.  Use margin rather
+     * than padding so that the slider doesn't extend into it.  We also
+     * leave an addition 12px margin.
+     */
     padding: 0;
+    margin: 0 18px 0 18px;
     background-color: transparent;
-    min-width: 15px;
+    min-width: 25px;
     border: initial;
     color: inherit;
 }
@@ -257,35 +280,35 @@ input[type="range" i]::-webkit-media-slider-container {
     align-items: center;
     flex-direction: row; /* This property is updated by C++ code. */
     box-sizing: border-box;
-    height: 100%;
+    /** this positions the slider thumb for both time and volume. */
+    height: 2px;
     width: 100%;
-    border: 1px solid rgba(230, 230, 230, 0.35);
-    border-radius: 4px;
     background-color: transparent; /* Background drawing is managed by C++ code to draw ranges. */
 }
 
 /* The negative right margin causes the track to overflow its container. */
 input[type="range" i]::-webkit-media-slider-container > div {
-    margin-right: -14px;
+    margin-right: -18px;  /* box is 36px wide, get to the middle */
+    margin-left:  -18px;
 }
 
 input[type="range" i]::-webkit-media-slider-thumb {
-    margin-left: -7px;
-    margin-right: -7px;
+    box-sizing: border-box;
+    width: 48px;
+    height: 48px;
+    padding: 0px;
 }
 
 audio::-webkit-media-controls-fullscreen-button, video::-webkit-media-controls-fullscreen-button {
     -webkit-appearance: media-enter-fullscreen-button;
     display: flex;
     flex: none;
-    border: none;
+    overflow: hidden;
     box-sizing: border-box;
-    width: 30px;
-    height: 30px;
-    line-height: 30px;
-    margin-left: -5px;
-    margin-right: 9px;
-    padding: 0;
+    width: 32px;
+    height: 32px;
+    padding: 0px;
+    border-width: 0px;
     background-color: initial;
     color: inherit;
 }
@@ -294,14 +317,13 @@ audio::-internal-media-controls-cast-button, video::-internal-media-controls-cas
     -webkit-appearance: -internal-media-cast-off-button;
     display: flex;
     flex: none;
-    border: none;
     box-sizing: border-box;
-    width: 30px;
-    height: 30px;
-    line-height: 30px;
-    margin-left: -5px;
-    margin-right: 9px;
-    padding: 0;
+    width: 32px;
+    height: 32px;
+    padding: 0px;
+    border-width: 0px;
+    margin-left: 0px;
+    margin-right: 0px;
     background-color: initial;
     color: inherit;
 }
@@ -314,14 +336,13 @@ video::-webkit-media-controls-toggle-closed-captions-button {
     -webkit-appearance: media-toggle-closed-captions-button;
     display: flex;
     flex: none;
-    border: none;
     box-sizing: border-box;
-    width: 30px;
-    height: 30px;
-    line-height: 30px;
-    margin-left: -5px;
-    margin-right: 9px;
-    padding: 0;
+    width: 32px;
+    height: 32px;
+    padding: 0px;
+    border-width: 0px;
+    margin-left: 0px;
+    margin-right: 0px;
     background-color: initial;
     color: inherit;
 }
@@ -338,50 +359,35 @@ audio::-webkit-media-controls-fullscreen-volume-max-button, video::-webkit-media
     display: none;
 }
 
-video::-webkit-scrollbar {
-    width: 12px;
-}
-
-video::-webkit-scrollbar-track {
-    box-shadow: inset 0 0 6px rgba(20, 20, 20, 0.3);
-    border-radius: 10px;
-}
-
-video::-webkit-scrollbar-thumb {
-    border-radius: 10px;
-    background-color: rgba(80, 80, 80, 0.8);
-    box-shadow: inset 0 0 6px rgba(20, 20, 20, 0.5);
-}
-
-video::-internal-media-controls-text-track-list {
+video::-internal-media-controls-text-track-list, video::-internal-media-controls-overflow-menu-list, audio::-internal-media-controls-overflow-menu-list {
     position: absolute;
-    bottom: 35px;
-    right: 5px;
-    background: rgba(20, 20, 20, 0.8);
+    bottom: 4px;
+    right: 4px;
+    background-color: #fafafa;
     max-width: 50%;
     max-height: 250px;
-    border-radius: 5px;
+    min-width: 150px;
     overflow-x: hidden;
     overflow-y: auto;
-    text-overflow: ellipsis;
-    margin-bottom: 5px;
     white-space: nowrap;
-    padding-top: 10px;
-    font-weight: bold;
-    font-size: 13px;
+    font-size: 14px;
+    border-radius: 1px;
+    box-shadow: 0 8px 20px 1px rgba(0, 0, 0, 0.14),
+                0 3px 28px 2px rgba(0, 0, 0, 0.12),
+                0 5px 10px -3px rgba(0, 0, 0, 0.4);
 }
 
 video::-internal-media-controls-text-track-list-item {
     display: block;
-    color: white;
-    padding: 4px 30px 4px 10px;
-    border-bottom: 1px solid #555;
+    color: #424242;
     text-align: start;
-    line-height: 30px;
+    line-height: 40px;
+    padding-right: 16px;
+    text-overflow: ellipsis;
 }
 
-video::-internal-media-controls-text-track-list-item:hover {
-    background-color: rgba(105, 105, 105, 0.8);
+video::-internal-media-controls-text-track-list-item:hover, video::-internal-media-controls-overflow-menu-list-item:hover, audio::-internal-media-controls-overflow-menu-list-item:hover {
+    background-color: #e0e0e0;
 }
 
 video::-internal-media-controls-text-track-list-item-input {
@@ -390,8 +396,9 @@ video::-internal-media-controls-text-track-list-item-input {
     left: 0;
     vertical-align: middle;
     margin: 0 5px 0 0;
-    width: 25px;
-    height: 25px;
+    width: 16px;
+    height: 16px;
+    margin-left: 12px;
 }
 
 video::-internal-media-controls-text-track-list-item-input:checked {
@@ -400,18 +407,55 @@ video::-internal-media-controls-text-track-list-item-input:checked {
 
 video::-internal-media-controls-text-track-list-kind-captions {
     -webkit-appearance: -internal-media-closed-captions-icon;
-    height: 24px;
-    width: 24px;
+    height: 20px;
+    width: 20px;
     margin-left: 10px;
     vertical-align: middle;
 }
 
 video::-internal-media-controls-text-track-list-kind-subtitles {
     -webkit-appearance: -internal-media-subtitles-icon;
-    height: 24px;
-    width: 24px;
+    height: 20px;
+    width: 20px;
     margin-left: 10px;
     vertical-align: middle;
+}
+
+video::-internal-media-controls-overflow-button, audio::-internal-media-controls-overflow-button {
+    -webkit-appearance: -internal-media-overflow-button;
+    display: flex;
+    flex: none;
+    box-sizing: border-box;
+    width: 32px;
+    height: 32px;
+    padding: 0px;
+    border-width: 0px;
+    margin-left: 0px;
+    margin-right: 0px;
+    background-color: initial;
+    color: inherit;
+}
+
+video::-internal-media-controls-download-button, audio::-internal-media-controls-download-button {
+    -webkit-appearance: -internal-media-download-button;
+    display: flex;
+    flex: none;
+    box-sizing: border-box;
+    width: 32px;
+    height: 32px;
+    padding: 0px;
+    border-width: 0px;
+    margin-left: 0px;
+    margin-right: 0px;
+    background-color: initial;
+    color: inherit;
+}
+
+video::-internal-media-controls-overflow-menu-list-item, audio::-internal-media-controls-overflow-menu-list-item {
+    display: block;
+    color: #424242;
+    line-height: 40px;
+    padding-left: 28px;
 }
 
 video::-webkit-media-text-track-container {

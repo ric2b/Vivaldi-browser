@@ -27,7 +27,6 @@
 
 #include "bindings/core/v8/ScriptSourceCode.h"
 #include "core/dom/Element.h"
-#include "core/fetch/ScriptResource.h"
 #include "core/frame/SubresourceIntegrity.h"
 #include "platform/SharedBuffer.h"
 #include "wtf/CurrentTime.h"
@@ -149,22 +148,22 @@ void PendingScript::notifyFinished(Resource* resource) {
     // resource has empty integrity metadata.
     if (!integrityAttr.isEmpty() &&
         !scriptResource->integrityMetadata().isEmpty()) {
-      ScriptIntegrityDisposition disposition =
+      ResourceIntegrityDisposition disposition =
           scriptResource->integrityDisposition();
-      if (disposition == ScriptIntegrityDisposition::Failed) {
+      if (disposition == ResourceIntegrityDisposition::Failed) {
         // TODO(jww): This should probably also generate a console
         // message identical to the one produced by
         // CheckSubresourceIntegrity below. See https://crbug.com/585267.
         m_integrityFailure = true;
-      } else if (disposition == ScriptIntegrityDisposition::NotChecked &&
+      } else if (disposition == ResourceIntegrityDisposition::NotChecked &&
                  resource->resourceBuffer()) {
         m_integrityFailure = !SubresourceIntegrity::CheckSubresourceIntegrity(
             scriptResource->integrityMetadata(), *m_element,
             resource->resourceBuffer()->data(),
             resource->resourceBuffer()->size(), resource->url(), *resource);
         scriptResource->setIntegrityDisposition(
-            m_integrityFailure ? ScriptIntegrityDisposition::Failed
-                               : ScriptIntegrityDisposition::Passed);
+            m_integrityFailure ? ResourceIntegrityDisposition::Failed
+                               : ResourceIntegrityDisposition::Passed);
       }
     }
   }
@@ -222,10 +221,13 @@ bool PendingScript::errorOccurred() const {
   return false;
 }
 
-void PendingScript::prepareToSuspend() {
+void PendingScript::onMemoryStateChange(MemoryState state) {
+  if (state != MemoryState::SUSPENDED)
+    return;
   if (!m_streamer)
     return;
   m_streamer->cancel();
+  m_streamer = nullptr;
 }
 
 }  // namespace blink

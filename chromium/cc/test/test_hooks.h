@@ -14,10 +14,6 @@ namespace cc {
 
 class CompositorFrame;
 
-namespace proto {
-class CompositorMessageToImpl;
-}
-
 // Used by test stubs to notify the test when something interesting happens.
 class TestHooks : public AnimationDelegate {
  public:
@@ -93,7 +89,7 @@ class TestHooks : public AnimationDelegate {
   virtual void WillCommit() {}
   virtual void DidCommit() {}
   virtual void DidCommitAndDrawFrame() {}
-  virtual void DidCompleteSwapBuffers() {}
+  virtual void DidReceiveCompositorFrameAck() {}
   virtual void ScheduleComposite() {}
   virtual void DidActivateSyncTree() {}
 
@@ -113,7 +109,11 @@ class TestHooks : public AnimationDelegate {
                                std::unique_ptr<AnimationCurve> curve) override {
   }
 
+  // OutputSurface indirections to the LayerTreeTest, that can be further
+  // overridden.
   virtual void RequestNewCompositorFrameSink() = 0;
+  virtual std::unique_ptr<OutputSurface> CreateDisplayOutputSurfaceOnThread(
+      scoped_refptr<ContextProvider> compositor_context_provider) = 0;
 };
 
 }  // namespace cc

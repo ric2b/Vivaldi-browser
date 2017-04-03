@@ -7,9 +7,6 @@ package org.chromium.chrome.browser.ntp.snippets;
 import android.graphics.BitmapFactory;
 import android.test.suitebuilder.annotation.MediumTest;
 import android.util.TypedValue;
-import android.view.ContextMenu;
-import android.view.Menu;
-import android.view.MenuItem.OnMenuItemClickListener;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
@@ -23,15 +20,18 @@ import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.favicon.FaviconHelper.FaviconImageCallback;
 import org.chromium.chrome.browser.favicon.FaviconHelper.IconAvailabilityCallback;
 import org.chromium.chrome.browser.favicon.LargeIconBridge.LargeIconCallback;
+import org.chromium.chrome.browser.ntp.ContextMenuManager;
 import org.chromium.chrome.browser.ntp.LogoBridge.LogoObserver;
 import org.chromium.chrome.browser.ntp.MostVisitedItem;
+import org.chromium.chrome.browser.ntp.NewTabPage.DestructionObserver;
 import org.chromium.chrome.browser.ntp.NewTabPageView.NewTabPageManager;
 import org.chromium.chrome.browser.ntp.UiConfig;
 import org.chromium.chrome.browser.ntp.cards.NewTabPageAdapter;
 import org.chromium.chrome.browser.ntp.cards.NewTabPageRecyclerView;
 import org.chromium.chrome.browser.ntp.cards.SuggestionsCategoryInfo;
+import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
 import org.chromium.chrome.browser.profiles.MostVisitedSites.MostVisitedURLsObserver;
-import org.chromium.chrome.browser.signin.SigninManager.SignInStateObserver;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.test.ChromeActivityTestCaseBase;
 import org.chromium.chrome.test.util.RenderUtils.ViewRenderer;
 
@@ -78,7 +78,8 @@ public class ArticleSnippetsTest extends ChromeActivityTestCaseBase<ChromeActivi
                 View aboveTheFold = new View(getActivity());
 
                 mRecyclerView.setAboveTheFoldView(aboveTheFold);
-                mAdapter = NewTabPageAdapter.create(mNtpManager, aboveTheFold, mUiConfig);
+                mAdapter = new NewTabPageAdapter(mNtpManager, aboveTheFold, mUiConfig,
+                        OfflinePageBridge.getForProfile(Profile.getLastUsedProfile()));
                 mRecyclerView.setAdapter(mAdapter);
             }
         });
@@ -175,7 +176,8 @@ public class ArticleSnippetsTest extends ChromeActivityTestCaseBase<ChromeActivi
 
         mSnippetsSource.setInfoForCategory(KnownCategories.ARTICLES,
                 new SuggestionsCategoryInfo(KnownCategories.ARTICLES, "Section Title",
-                        ContentSuggestionsCardLayout.FULL_CARD, false, true));
+                        ContentSuggestionsCardLayout.FULL_CARD, false, true, false, true,
+                        "No suggestions"));
         mSnippetsSource.setStatusForCategory(KnownCategories.ARTICLES,
                 CategoryStatus.AVAILABLE);
         mSnippetsSource.setSuggestionsForCategory(KnownCategories.ARTICLES,
@@ -200,6 +202,10 @@ public class ArticleSnippetsTest extends ChromeActivityTestCaseBase<ChromeActivi
      * A NewTabPageManager to initialize our Adapter.
      */
     private class MockNewTabPageManager implements NewTabPageManager {
+        // TODO(dgn): provide a RecyclerView if we need to test the context menu.
+        private ContextMenuManager mContextMenuManager =
+                new ContextMenuManager(this, getActivity(), null);
+
         @Override
         public void getLocalFaviconImageForURL(
                 final String url, int size, final FaviconImageCallback faviconCallback) {
@@ -217,17 +223,12 @@ public class ArticleSnippetsTest extends ChromeActivityTestCaseBase<ChromeActivi
         }
 
         @Override
-        public void openMostVisitedItem(MostVisitedItem item) {
+        public void removeMostVisitedItem(MostVisitedItem item) {
             throw new UnsupportedOperationException();
         }
 
         @Override
-        public void onCreateContextMenu(ContextMenu menu, OnMenuItemClickListener listener) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public boolean onMenuItemClick(int menuId, MostVisitedItem item) {
+        public void openMostVisitedItem(int windowDisposition, MostVisitedItem item) {
             throw new UnsupportedOperationException();
         }
 
@@ -333,16 +334,6 @@ public class ArticleSnippetsTest extends ChromeActivityTestCaseBase<ChromeActivi
         }
 
         @Override
-        public void addContextMenuCloseCallback(Callback<Menu> callback) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public void removeContextMenuCloseCallback(Callback<Menu> callback) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
         public void onLearnMoreClicked() {
             throw new UnsupportedOperationException();
         }
@@ -353,16 +344,16 @@ public class ArticleSnippetsTest extends ChromeActivityTestCaseBase<ChromeActivi
         }
 
         @Override
-        public void registerSignInStateObserver(SignInStateObserver signInStateObserver) {}
-
-        @Override
-        public void closeContextMenu() {
-            throw new UnsupportedOperationException();
-        }
+        public void addDestructionObserver(DestructionObserver destructionObserver) {}
 
         @Override
         public boolean isCurrentPage() {
             return true;
+        }
+
+        @Override
+        public ContextMenuManager getContextMenuManager() {
+            return mContextMenuManager;
         }
     }
 }

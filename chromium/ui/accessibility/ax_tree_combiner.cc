@@ -82,6 +82,7 @@ bool IsNodeIdIntListAttribute(AXIntListAttribute attr) {
     // add a new attribute without explicitly considering whether it's
     // a node id attribute or not.
     case AX_INT_LIST_ATTRIBUTE_NONE:
+    case AX_ATTR_LINE_BREAKS:
     case AX_ATTR_MARKER_TYPES:
     case AX_ATTR_MARKER_STARTS:
     case AX_ATTR_MARKER_ENDS:
@@ -167,12 +168,6 @@ int32_t AXTreeCombiner::MapId(int32_t tree_id, int32_t node_id) {
 }
 
 void AXTreeCombiner::ProcessTree(const AXTreeUpdate* tree) {
-  // The root of each tree may contain a transform that needs to apply
-  // to all of its descendants.
-  gfx::Transform old_transform = transform_;
-  if (!tree->nodes.empty() && tree->nodes[0].transform)
-    transform_.ConcatTransform(*tree->nodes[0].transform);
-
   int32_t tree_id = tree->tree_data.tree_id;
   for (size_t i = 0; i < tree->nodes.size(); ++i) {
     AXNodeData node = tree->nodes[i];
@@ -185,9 +180,9 @@ void AXTreeCombiner::ProcessTree(const AXTreeUpdate* tree) {
     for (size_t j = 0; j < node.child_ids.size(); ++j)
       node.child_ids[j] = MapId(tree_id, node.child_ids[j]);
 
-    // Reset the offset container ID because we make all bounding boxes
-    // absolute.
-    node.offset_container_id = -1;
+    // Map the container id.
+    if (node.offset_container_id > 0)
+      node.offset_container_id = MapId(tree_id, node.offset_container_id);
 
     // Map other int attributes that refer to node IDs, and remove the
     // AX_ATTR_CHILD_TREE_ID attribute.
@@ -209,10 +204,6 @@ void AXTreeCombiner::ProcessTree(const AXTreeUpdate* tree) {
           attr.second[k] = MapId(tree_id, attr.second[k]);
       }
     }
-
-    // Apply the transformation to the object's bounds to put it in
-    // the coordinate space of the root frame.
-    transform_.TransformRect(&node.location);
 
     // See if this node has a child tree. As a sanity check make sure the
     // child tree lists this tree as its parent tree id.
@@ -236,9 +227,6 @@ void AXTreeCombiner::ProcessTree(const AXTreeUpdate* tree) {
     if (child_tree)
       ProcessTree(child_tree);
   }
-
-  // Reset the transform.
-  transform_ = old_transform;
 }
 
 }  // namespace ui

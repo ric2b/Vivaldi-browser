@@ -32,6 +32,8 @@ namespace {
 // In this case we will time out, to avoid renderer hang forever waiting for
 // device authorization (http://crbug/615589). This will result in "no audio".
 const int64_t kMaxAuthorizationTimeoutMs = 1000;
+#elif defined(OS_MACOSX)
+const int64_t kMaxAuthorizationTimeoutMs = 2000;
 #else
 const int64_t kMaxAuthorizationTimeoutMs = 0;  // No timeout.
 #endif  // defined(OS_WIN)
@@ -70,6 +72,8 @@ scoped_refptr<media::SwitchableAudioRendererSink> NewMixableSink(
     const std::string& device_id,
     const url::Origin& security_origin) {
   RenderThreadImpl* render_thread = RenderThreadImpl::current();
+  DCHECK(render_thread) << "RenderThreadImpl is not instantiated, or "
+                        << "GetOutputDeviceInfo() is called on a wrong thread ";
   return scoped_refptr<media::AudioRendererMixerInput>(
       render_thread->GetAudioRendererMixerManager()->CreateInput(
           render_frame_id, session_id, device_id, security_origin,

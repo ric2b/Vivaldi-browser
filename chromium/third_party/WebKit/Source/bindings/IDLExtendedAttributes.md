@@ -20,7 +20,7 @@ Blink IDL also does not support certain recent features of the Web IDL grammar:
 Semantically, only certain extended attributes allow lists. Similarly, only certain extended attributes allow string literals.
 
 Extended attributes either take no value, take a required value, or take an optional value.
-In the following explanations, _(i)_, _(m)_, _(s)_, _(a)_, _(p)_, _(c)_, and _(d)_ mean that a given extended attribute can be specified on interfaces, methods, special operations, attributes, parameters, constants, and dictionaries, respectively. For example, _(a,p)_ means that the IDL attribute can be specified on attributes and parameters.
+In the following explanations, _(i)_, _(m)_, _(s)_, _(a)_, _(p)_, _(c)_, _(d)_, and _(f)_ mean that a given extended attribute can be specified on interfaces, methods, special operations, attributes, parameters, constants, dictionaries, and callback functions respectively. For example, _(a,p)_ means that the IDL attribute can be specified on attributes and parameters.
 
 *** note
 These restrictions are not enforced by the parser: extended attributes used in unsupported contexts will simply be ignored.
@@ -304,7 +304,7 @@ Standard: [HTMLConstructor](https://html.spec.whatwg.org/multipage/dom.html#html
 
 Summary: HTML Elements have special constructor behavior. Interface object of given interface with the `[HTMLConstructor]` attribute will have specific behavior when called.
 
-Usage: Must take no arguments, and must not appear on anything other than an interface. It much appear once on an interface, and the interface cannot be annotated with `[Constructor]` or `[NoInterfaceObject]` extended attributes. It must not be used on a callback interface.
+Usage: Must take no arguments, and must not appear on anything other than an interface. It must appear once on an interface, and the interface cannot be annotated with `[Constructor]` or `[NoInterfaceObject]` extended attributes. It must not be used on a callback interface.
 
 ### [NamedConstructor] _(i)_
 
@@ -439,31 +439,22 @@ Standard: [SecureContext](https://heycam.github.io/webidl/#SecureContext)
 
 Summary: Interfaces and interface members with a `SecureContext` attribute are exposed only inside ["Secure Contexts"](https://w3c.github.io/webappsec-secure-contexts/).
 
-### [TreatNullAs] _(a,p)_, [TreatUndefinedAs] _(a,p)_
+### [TreatNullAs] _(a,p)_
 
-Standard: [TreatNullAs](http://heycam.github.io/webidl/#TreatNullAs)
+Standard: [TreatNullAs](https://heycam.github.io/webidl/#TreatNullAs)
 
-`[TreatUndefinedAs]` has been been removed from the spec.
+Summary: `[TreatNullAs=EmptyString]` indicates that a JavaScript null is converted to `""` instead of `"null"`.
 
-Summary: They control the behavior when a JavaScript null or undefined is passed to a DOMString attribute or parameter.
-
-Implementation: **Non-standard:** Web IDL specifies the EmptyString identifier for both these extended attributes, and `Null` and `Missing` for `TreatUndefinedAs`. Blink uses the `NullString` identifier instead of `EmptyString` which yields a Blink null string, corresponding to JavaScript `null`, for which both `String::IsEmpty()` and `String::IsNull()` return true, instead of the empty string `""`, which is empty but not `null`. This is for performance reasons; see [Strings in Blink](https://docs.google.com/a/google.com/document/d/1kOCUlJdh2WJMJGDf-WoEQhmnjKLaOYRbiHz5TiGJl14/edit) for reference. It also does not implement `TreatUndefinedAs=Null` or `TreatUndefinedAs=Missing`.
-
-Further, both extended attributes are both overloaded for indexed setters and named setters, in which case they take a method name (?), though this usage is rare.
-
-Usage: The possible usage is `[TreatNullAs=NullString]` or `[TreatNullAs=NullString, TreatUndefinedAs=NullString]`. They can be specified on DOMString attributes or DOMString parameters only:
+Usage: Can be specified on DOMString attributes or DOMString parameters only:
 
 ```webidl
-[TreatNullAs=NullString] attribute DOMString str;
-void func([TreatNullAs=NullString, TreatUndefinedAs=NullString] DOMString str);
+[TreatNullAs=EmptyString] attribute DOMString str;
+void func([TreatNullAs=Emptytring] DOMString str);
 ```
 
-`[TreatNullAs=NullString]` indicates that if a JavaScript null is passed to the attribute or parameter, then it is converted to a Blink null string, for which both String::IsEmpty() and String::IsNull() will return true. Without `[TreatNullAs=NullString]`, a JavaScript null is converted to a Blink string "null".
-`[TreatNullAs=NullString]` in Blink corresponds to `[TreatNullAs=EmptyString]` in the Web IDL spec. Unless the spec specifies `[TreatNullAs=EmptyString]`, you should not specify `[TreatNullAs=NullString]` in Blink.
+Implementation: Given `[TreatNullAs=EmptyString]`, a JavaScript null is converted to a Blink empty string, for which `String::IsEmpty()` returns true, but `String::IsNull()` return false.
 
-`[TreatUndefinedAs=NullString]` indicates that if a JavaScript undefined is passed to the attribute or parameter, then it is converted to a Blink null string, for which both String::IsEmpty() and String::IsNull() will return true. Without `[TreatUndefinedAs=NullString]`, a JavaScript undefined is converted to a Blink string "undefined".
-
-`[TreatUndefinedAs=NullString]` in Blink corresponds to `[TreatUndefinedAs=EmptyString]` in the Web IDL spec. Unless the spec specifies `[TreatUndefinedAs=EmptyString]`, you should not specify `[TreatUndefinedAs=NullString]` in Blink.
+**Non-standard:** Blink also supports the `NullString` identifier. Given `[TreatNullAs=NullString]`, a JavaScript null is converted to a Blink null string, for which both `String::IsEmpty()` and `String::IsNull()` return true. This is for performance reasons; see [Strings in Blink](https://docs.google.com/a/google.com/document/d/1kOCUlJdh2WJMJGDf-WoEQhmnjKLaOYRbiHz5TiGJl14/edit) for reference. Unless the spec specifies `[TreatNullAs=EmptyString]`, you should not specify `[TreatNullAs=NullString]` in Blink. Care must be taken to not treat null and empty strings differently, as they would be indistinguishable when using `[TreatNullAs=EmptyString]`.
 
 ### [Unforgeable] _(m,a)_
 
@@ -686,7 +677,7 @@ PassRefPtr<XXX> XXX::create(ScriptExecutionContext* context, ScriptState* state,
 
 You can retrieve document or frame from ScriptExecutionContext.
 
-### [Custom] _(i, m, s, a)_
+### [Custom] _(i, m, s, a, f)_
 
 Summary: They allow you to write bindings code manually as you like: full bindings for methods and attributes, certain functions for interfaces.
 
@@ -788,6 +779,19 @@ interface YYY {  // special operations with identifiers
     [Custom] getter Node namedItem(DOMString name);
 }
 ```
+
+`[Custom]` may also be specified on callback functions:
+
+```webidl
+[Custom] callback SomeCallback = void ();
+interface XXX {
+    void func(SomeCallback callback);
+};
+```
+
+When`[Custom]` is specified on a callback function, the code generator doesn't
+generate bindings for the callback function. The binding layer uses a
+`ScriptValue` instead.
 
 #### [Custom=PropertyQuery|PropertyEnumerator] _(s)_
 
@@ -1513,13 +1517,40 @@ Without `[NoImplHeader]`, the IDL compiler assumes that there is XXX.h in the im
 
 These extended attributes are _temporary_ and are only in use while some change is in progress. Unless you are involved with the change, you can generally ignore them, and should not use them.
 
-### [ExperimentalCallbackFunction]
-
-Summary: `[ExperimentalCallbackFunction]` on a callback function is a flag to collect callback functions. Currently the code generator doesn't generate bindings for IDL callback functions (instead, it just uses `ScriptValue`). While generating bindings for callback functions, to change existing code which uses callback functions until the generated bindings are stabilized is undesirable. To implement bindings generation for IDL callback functions incrementally, [ExperimentalCallbackFunction] extended attribute is added. The code generator keeps using ScriptValue for IDL callback functions which don't have this extended attribute.
-
 ### [LegacyTreatAsPartialInterface] _(i)_
 
 Summary: `[LegacyTreatAsPartialInterface]` on an interface that is the target of an `implements` statement means that the interface is treated as a partial interface, meaning members are accessed via static member functions in a separate class, rather than as instance methods on the instance object `*impl` or class methods on the C++ class implementing the (main) interface. This is legacy from original implementation of `implements`, and is being removed ([Bug 360435](https://crbug.com/360435), nbarth@).
+
+
+### [CachedAccessor] _(a)_
+
+Summary: Caches the accessor result in a private property (not directly accesible from JS). Improves accessor reads (getter) at the expense of extra memory and manual invalidation which should be trivial in most cases.
+
+
+*** note
+* The getter cannot have any side effects since calls to the getter will be replaced by a cheap property load.
+* It uses a **push approach**, so updates must be _pushed_ every single time, it **DOES NOT** invalidate/update the cache automatically.
+* Despite being cached, the getter can still be called on certain circumstances, consistency is a must.
+* The cache **MUST** be initialized before using it. There's no default value like _undefined_ or a _hole_.
+***
+
+
+Usage: `[CachedAccessor]` takes no arguments, can be specified on attributes.
+
+```webidl
+interface HTMLFoo {
+    [CachedAccessor] readonly attribute Bar bar;
+};
+```
+
+
+Register the required property in V8PrivateProperty.h.
+To update the cached value (e.g. for HTMLFoo.bar) proceed as follows:
+
+```c++
+V8PrivateProperty::getHTMLFooBarCachedAccessor().set(context, object, newValue);
+```
+
 
 ## Discouraged Blink-specific IDL Extended Attributes
 

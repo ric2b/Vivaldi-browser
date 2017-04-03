@@ -38,26 +38,6 @@ using base::TimeDelta;
 namespace ssl_errors {
 namespace {
 
-// Describes the result of getting network time and if it was
-// unavailable, why it was unavailable. This enum is being histogrammed
-// so do not reorder or remove values.
-enum NetworkClockState {
-  // The clock state relative to network time is unknown because the
-  // NetworkTimeTracker has no information from the network.
-  NETWORK_CLOCK_STATE_UNKNOWN_NO_SYNC = 0,
-  // The clock state relative to network time is unknown because the
-  // user's clock has fallen out of sync with the latest information
-  // from the network (due to e.g. suspend/resume).
-  NETWORK_CLOCK_STATE_UNKNOWN_SYNC_LOST,
-  // The clock is "close enough" to the network time.
-  NETWORK_CLOCK_STATE_OK,
-  // The clock is in the past relative to network time.
-  NETWORK_CLOCK_STATE_CLOCK_IN_PAST,
-  // The clock is in the future relative to network time.
-  NETWORK_CLOCK_STATE_CLOCK_IN_FUTURE,
-  NETWORK_CLOCK_STATE_MAX
-};
-
 // Events for UMA. Do not reorder or change!
 enum SSLInterstitialCause {
   CLOCK_PAST,
@@ -93,7 +73,7 @@ std::vector<HostnameTokens> GetTokenizedDNSNames(
   for (const auto& dns_name : dns_names) {
     HostnameTokens dns_name_token_single;
     if (dns_name.empty() || dns_name.find('\0') != std::string::npos ||
-        !(IsHostNameKnownTLD(dns_name))) {
+        !(HostNameHasKnownTLD(dns_name))) {
       dns_name_token_single.push_back(std::string());
     } else {
       dns_name_token_single = Tokenize(dns_name);
@@ -168,7 +148,7 @@ void RecordUMAStatistics(bool overridable,
     }
     case ssl_errors::ErrorInfo::CERT_COMMON_NAME_INVALID: {
       std::string host_name = request_url.host();
-      if (IsHostNameKnownTLD(host_name)) {
+      if (HostNameHasKnownTLD(host_name)) {
         HostnameTokens host_name_tokens = Tokenize(host_name);
         if (IsWWWSubDomainMatch(request_url, cert))
           RecordSSLInterstitialCause(overridable, WWW_SUBDOMAIN_MATCH);
@@ -243,8 +223,17 @@ ClockState GetClockState(
     case network_time::NetworkTimeTracker::NETWORK_TIME_SYNC_LOST:
       network_state = NETWORK_CLOCK_STATE_UNKNOWN_SYNC_LOST;
       break;
-    case network_time::NetworkTimeTracker::NETWORK_TIME_NO_SYNC:
-      network_state = NETWORK_CLOCK_STATE_UNKNOWN_NO_SYNC;
+    case network_time::NetworkTimeTracker::NETWORK_TIME_NO_SYNC_ATTEMPT:
+      network_state = NETWORK_CLOCK_STATE_UNKNOWN_NO_SYNC_ATTEMPT;
+      break;
+    case network_time::NetworkTimeTracker::NETWORK_TIME_NO_SUCCESSFUL_SYNC:
+      network_state = NETWORK_CLOCK_STATE_UNKNOWN_NO_SUCCESSFUL_SYNC;
+      break;
+    case network_time::NetworkTimeTracker::NETWORK_TIME_FIRST_SYNC_PENDING:
+      network_state = NETWORK_CLOCK_STATE_UNKNOWN_FIRST_SYNC_PENDING;
+      break;
+    case network_time::NetworkTimeTracker::NETWORK_TIME_SUBSEQUENT_SYNC_PENDING:
+      network_state = NETWORK_CLOCK_STATE_UNKNOWN_SUBSEQUENT_SYNC_PENDING;
       break;
   }
 
@@ -258,14 +247,17 @@ ClockState GetClockState(
     build_time_state = CLOCK_STATE_FUTURE;
   }
 
-  UMA_HISTOGRAM_ENUMERATION("interstitial.ssl.clockstate.network2",
-                            network_time_result, NETWORK_CLOCK_STATE_MAX);
+  UMA_HISTOGRAM_ENUMERATION("interstitial.ssl.clockstate.network3",
+                            network_state, NETWORK_CLOCK_STATE_MAX);
   UMA_HISTOGRAM_ENUMERATION("interstitial.ssl.clockstate.build_time",
                             build_time_state, CLOCK_STATE_MAX);
 
   switch (network_state) {
-    case NETWORK_CLOCK_STATE_UNKNOWN_NO_SYNC:
     case NETWORK_CLOCK_STATE_UNKNOWN_SYNC_LOST:
+    case NETWORK_CLOCK_STATE_UNKNOWN_NO_SYNC_ATTEMPT:
+    case NETWORK_CLOCK_STATE_UNKNOWN_NO_SUCCESSFUL_SYNC:
+    case NETWORK_CLOCK_STATE_UNKNOWN_FIRST_SYNC_PENDING:
+    case NETWORK_CLOCK_STATE_UNKNOWN_SUBSEQUENT_SYNC_PENDING:
       return build_time_state;
     case NETWORK_CLOCK_STATE_OK:
       return CLOCK_STATE_OK;
@@ -286,13 +278,10 @@ void SetBuildTimeForTesting(const base::Time& testing_time) {
   g_testing_build_time.Get() = testing_time;
 }
 
-bool IsHostNameKnownTLD(const std::string& host_name) {
-  size_t tld_length = net::registry_controlled_domains::GetRegistryLength(
+bool HostNameHasKnownTLD(const std::string& host_name) {
+  return net::registry_controlled_domains::HostHasRegistryControlledDomain(
       host_name, net::registry_controlled_domains::EXCLUDE_UNKNOWN_REGISTRIES,
       net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES);
-  if (tld_length == 0 || tld_length == std::string::npos)
-    return false;
-  return true;
 }
 
 HostnameTokens Tokenize(const std::string& name) {
@@ -305,12 +294,12 @@ bool GetWWWSubDomainMatch(const GURL& request_url,
                           std::string* www_match_host_name) {
   const std::string& host_name = request_url.host();
 
-  if (IsHostNameKnownTLD(host_name)) {
+  if (HostNameHasKnownTLD(host_name)) {
     // Need to account for all possible domains given in the SSL certificate.
     for (const auto& dns_name : dns_names) {
       if (dns_name.empty() || dns_name.find('\0') != std::string::npos ||
           dns_name.length() == host_name.length() ||
-          !IsHostNameKnownTLD(dns_name)) {
+          !HostNameHasKnownTLD(dns_name)) {
         continue;
       } else if (dns_name.length() > host_name.length()) {
         if (url_formatter::StripWWW(base::ASCIIToUTF16(dns_name)) ==
@@ -401,7 +390,7 @@ bool IsSubDomainOutsideWildcard(const GURL& request_url,
   for (const auto& dns_name : dns_names) {
     if (dns_name.length() < 2 || dns_name.length() >= host_name.length() ||
         dns_name.find('\0') != std::string::npos ||
-        !IsHostNameKnownTLD(dns_name) || dns_name[0] != '*' ||
+        !HostNameHasKnownTLD(dns_name) || dns_name[0] != '*' ||
         dns_name[1] != '.') {
       continue;
     }

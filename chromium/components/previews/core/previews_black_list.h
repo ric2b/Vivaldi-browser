@@ -15,7 +15,10 @@
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/optional.h"
 #include "base/threading/thread_checker.h"
+#include "base/time/time.h"
+#include "components/previews/core/previews_experiments.h"
 #include "components/previews/core/previews_opt_out_store.h"
 
 class GURL;
@@ -26,6 +29,28 @@ class Clock;
 
 namespace previews {
 class PreviewsBlackListItem;
+
+enum class PreviewsEligibilityReason {
+  // The preview navigation was allowed.
+  ALLOWED = 0,
+  // The black list was not initialized.
+  BLACKLIST_UNAVAILABLE = 1,
+  // The black list has not loaded from disk yet.
+  BLACKLIST_DATA_NOT_LOADED = 2,
+  // The user has opted out of a preview recently.
+  USER_RECENTLY_OPTED_OUT = 3,
+  // The user has opted out of previews often, and is no longer shown previews
+  // on any host.
+  USER_BLACKLISTED = 4,
+  // The user has opted out of previews on a specific host often, and was not
+  // not shown a previews on that host.
+  HOST_BLACKLISTED = 5,
+  // The network quality estimate is not available.
+  NETWORK_QUALITY_UNAVAILABLE = 6,
+  // The network was fast enough to not warrant previews.
+  NETWORK_NOT_SLOW = 7,
+  LAST = 8,
+};
 
 // Manages the state of black listed domains for the previews experiment. Loads
 // the stored black list from |opt_out_store| and manages an in memory black
@@ -55,9 +80,10 @@ class PreviewsBlackList {
   void AddPreviewNavigation(const GURL& url, bool opt_out, PreviewsType type);
 
   // Synchronously determines if |host_name| should be allowed to show previews.
-  // If the black list has loaded yet, this will always return false. |type| is
-  // not used to make this decision.
-  bool IsLoadedAndAllowed(const GURL& url, PreviewsType type) const;
+  // Returns the reason the blacklist disallowed the preview, or
+  // PreviewsEligibilityReason::ALLOWED if the preview is allowed.
+  PreviewsEligibilityReason IsLoadedAndAllowed(const GURL& url,
+                                               PreviewsType type) const;
 
   // Asynchronously deletes all entries in the in-memory black list. Informs
   // the backing store to delete entries between |begin_time| and |end_time|,
@@ -65,27 +91,32 @@ class PreviewsBlackList {
   // passed in a null store, resets all history in the in-memory black list.
   void ClearBlackList(base::Time begin_time, base::Time end_time);
 
+  // Returns a new PreviewsBlackListItem representing |host_name|. Adds the new
+  // item to |black_list_item_map|.
+  static PreviewsBlackListItem* GetOrCreateBlackListItemForMap(
+      BlackListItemMap* black_list_item_map,
+      const std::string& host_name);
+
+  // Returns a new PreviewsBlackListItem for the host indifferent black list
+  // that does not consider host name when determining eligibility.
+  static std::unique_ptr<PreviewsBlackListItem>
+  CreateHostIndifferentBlackListItem();
+
  private:
   // Synchronous version of AddPreviewNavigation method.
   void AddPreviewNavigationSync(const GURL& host_name,
                                 bool opt_out,
                                 PreviewsType type);
 
-  // Returns the PreviewsBlackListItem representing |host_name|. If there is no
-  // item for |host_name|, returns null.
-  PreviewsBlackListItem* GetBlackListItem(const std::string& host_name) const;
-
   // Synchronous version of ClearBlackList method.
   void ClearBlackListSync(base::Time begin_time, base::Time end_time);
 
-  // Returns a new PreviewsBlackListItem representing |host_name|. Adds the new
-  // item to the in-memory map.
-  PreviewsBlackListItem* CreateBlackListItem(const std::string& host_name);
-
   // Callback passed to the backing store when loading black list information.
-  // Moves the returned map into the in-memory black list and runs any
-  // outstanding tasks.
-  void LoadBlackListDone(std::unique_ptr<BlackListItemMap> black_list_item_map);
+  // Moves the |black_list_item_map| and |host_indifferent_black_list_item| into
+  // the in-memory black list and runs any outstanding tasks.
+  void LoadBlackListDone(
+      std::unique_ptr<BlackListItemMap> black_list_item_map,
+      std::unique_ptr<PreviewsBlackListItem> host_indifferent_black_list_item);
 
   // Called while waiting for the black list to be loaded from the backing
   // store.
@@ -93,15 +124,17 @@ class PreviewsBlackList {
   // completed. Maintains the order that tasks were called in.
   void QueuePendingTask(base::Closure callback);
 
-  // Evicts one entry from the in-memory black list based on recency of a hosts
-  // most recent opt out time.
-  void EvictOldestOptOut();
-
   // Map maintaining the in-memory black list.
   std::unique_ptr<BlackListItemMap> black_list_item_map_;
 
+  // Host indifferent opt out history.
+  std::unique_ptr<PreviewsBlackListItem> host_indifferent_black_list_item_;
+
   // Whether the black list is done being loaded from the backing store.
   bool loaded_;
+
+  // The time of the last opt out for this session.
+  base::Optional<base::Time> last_opt_out_time_;
 
   // The backing store of the black list information.
   std::unique_ptr<PreviewsOptOutStore> opt_out_store_;

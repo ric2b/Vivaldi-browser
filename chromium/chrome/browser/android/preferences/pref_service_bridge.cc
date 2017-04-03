@@ -8,6 +8,8 @@
 #include <stddef.h>
 
 #include <memory>
+#include <set>
+#include <string>
 #include <vector>
 
 #include "base/android/build_info.h"
@@ -20,6 +22,7 @@
 #include "base/files/file_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/scoped_observer.h"
+#include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
@@ -52,6 +55,7 @@
 #include "components/metrics/metrics_pref_names.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/prefs/pref_service.h"
+#include "components/safe_browsing_db/safe_browsing_prefs.h"
 #include "components/signin/core/common/signin_pref_names.h"
 #include "components/strings/grit/components_locale_settings.h"
 #include "components/translate/core/browser/translate_prefs.h"
@@ -60,6 +64,7 @@
 #include "components/web_resource/web_resource_pref_names.h"
 #include "content/public/browser/browser_thread.h"
 #include "jni/PrefServiceBridge_jni.h"
+#include "third_party/icu/source/common/unicode/uloc.h"
 #include "ui/base/l10n/l10n_util.h"
 
 using base::android::AttachCurrentThread;
@@ -309,26 +314,30 @@ static jboolean GetSearchSuggestManaged(JNIEnv* env,
   return GetPrefService()->IsManagedPreference(prefs::kSearchSuggestEnabled);
 }
 
+static jboolean IsScoutExtendedReportingActive(
+    JNIEnv* env, const JavaParamRef<jobject>& obj) {
+  return safe_browsing::IsScout(*GetPrefService());
+}
+
 static jboolean GetSafeBrowsingExtendedReportingEnabled(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj) {
-  return GetPrefService()->GetBoolean(
-      prefs::kSafeBrowsingExtendedReportingEnabled);
+  return safe_browsing::IsExtendedReportingEnabled(*GetPrefService());
 }
 
 static void SetSafeBrowsingExtendedReportingEnabled(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj,
     jboolean enabled) {
-  GetPrefService()->SetBoolean(prefs::kSafeBrowsingExtendedReportingEnabled,
-                               enabled);
+  safe_browsing::SetExtendedReportingPref(GetPrefService(), enabled);
 }
 
 static jboolean GetSafeBrowsingExtendedReportingManaged(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj) {
-  return GetPrefService()->IsManagedPreference(
-      prefs::kSafeBrowsingExtendedReportingEnabled);
+  PrefService* pref_service = GetPrefService();
+  return pref_service->IsManagedPreference(
+      safe_browsing::GetExtendedReportingPrefName(*pref_service));
 }
 
 static jboolean GetSafeBrowsingEnabled(JNIEnv* env,
@@ -433,25 +442,6 @@ static jboolean GetIncognitoModeManaged(JNIEnv* env,
                                         const JavaParamRef<jobject>& obj) {
   return GetPrefService()->IsManagedPreference(
       prefs::kIncognitoModeAvailability);
-}
-
-static jboolean GetFullscreenManaged(JNIEnv* env,
-                                     const JavaParamRef<jobject>& obj) {
-  return IsContentSettingManaged(CONTENT_SETTINGS_TYPE_FULLSCREEN);
-}
-
-static jboolean GetFullscreenAllowed(JNIEnv* env,
-                                     const JavaParamRef<jobject>& obj) {
-  // In the simplified fullscreen case, fullscreen is always allowed.
-  // TODO(mgiuca): Remove this pref once all data associated with it is deleted
-  // (https://crbug.com/591896).
-  if (base::FeatureList::IsEnabled(features::kSimplifiedFullscreenUI))
-    return true;
-
-  HostContentSettingsMap* content_settings =
-      HostContentSettingsMapFactory::GetForProfile(GetOriginalProfile());
-  return content_settings->GetDefaultContentSetting(
-      CONTENT_SETTINGS_TYPE_FULLSCREEN, NULL) == CONTENT_SETTING_ALLOW;
 }
 
 static jboolean IsMetricsReportingEnabled(JNIEnv* env,
@@ -657,7 +647,7 @@ static void ClearBrowsingData(
     filter_builder->AddRegisterableDomain(domain);
   }
 
-  if (!excluding_domains.empty()) {
+  if (!excluding_domains.empty() || !ignoring_domains.empty()) {
     ImportantSitesUtil::RecordBlacklistedAndIgnoredImportantSites(
         GetOriginalProfile(), excluding_domains, excluding_domain_reasons,
         ignoring_domains, ignoring_domain_reasons);
@@ -877,16 +867,6 @@ static void SetMicEnabled(JNIEnv* env,
   host_content_settings_map->SetDefaultContentSetting(
       CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC,
       allow ? CONTENT_SETTING_ASK : CONTENT_SETTING_BLOCK);
-}
-
-static void SetFullscreenAllowed(JNIEnv* env,
-                                 const JavaParamRef<jobject>& obj,
-                                 jboolean allow) {
-  HostContentSettingsMap* host_content_settings_map =
-      HostContentSettingsMapFactory::GetForProfile(GetOriginalProfile());
-  host_content_settings_map->SetDefaultContentSetting(
-      CONTENT_SETTINGS_TYPE_FULLSCREEN,
-      allow ? CONTENT_SETTING_ALLOW : CONTENT_SETTING_ASK);
 }
 
 static void SetNotificationsEnabled(JNIEnv* env,
@@ -1144,42 +1124,78 @@ bool PrefServiceBridge::RegisterPrefServiceBridge(JNIEnv* env) {
 // This logic should be kept in sync with prependToAcceptLanguagesIfNecessary in
 // chrome/android/java/src/org/chromium/chrome/browser/
 //     physicalweb/PwsClientImpl.java
+// Input |locales| is a comma separated locale representation that consists of
+// language tags (BCP47 compliant format). Each language tag contains a language
+// code and a country code or a language code only.
 void PrefServiceBridge::PrependToAcceptLanguagesIfNecessary(
-    const std::string& locale,
+    const std::string& locales,
     std::string* accept_languages) {
-  if (locale.size() != 5u || locale[2] != '_')  // not well-formed
-    return;
+  std::vector<std::string> locale_list =
+      base::SplitString(locales + "," + *accept_languages, ",",
+                        base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
 
-  std::string language(locale.substr(0, 2));
-  std::string region(locale.substr(3, 2));
+  std::set<std::string> seen_tags;
+  std::vector<std::pair<std::string, std::string>> unique_locale_list;
+  for (const std::string& locale_str : locale_list) {
+    char locale_ID[ULOC_FULLNAME_CAPACITY] = {};
+    char language_code_buffer[ULOC_LANG_CAPACITY] = {};
+    char country_code_buffer[ULOC_COUNTRY_CAPACITY] = {};
 
-  // Java mostly follows ISO-639-1 and ICU, except for the following three.
-  // See documentation on java.util.Locale constructor for more.
-  if (language == "iw") {
-    language = "he";
-  } else if (language == "ji") {
-    language = "yi";
-  } else if (language == "in") {
-    language = "id";
-  }
-
-  std::string language_region(language + "-" + region);
-
-  if (accept_languages->find(language_region) == std::string::npos) {
-    std::vector<std::string> parts;
-    parts.push_back(language_region);
-    // If language is not in the accept languages list, also add language code.
-    // This will work with the IDS_ACCEPT_LANGUAGE localized strings bundled
-    // with Chrome but may fail on arbitrary lists of language tags due to
-    // differences in case and whitespace.
-    if (accept_languages->find(language + ",") == std::string::npos &&
-        !std::equal(language.rbegin(), language.rend(),
-                    accept_languages->rbegin())) {
-      parts.push_back(language);
+    UErrorCode error = U_ZERO_ERROR;
+    uloc_forLanguageTag(locale_str.c_str(), locale_ID, ULOC_FULLNAME_CAPACITY,
+                        nullptr, &error);
+    if (U_FAILURE(error)) {
+      LOG(ERROR) << "Ignoring invalid locale representation " << locale_str;
+      continue;
     }
-    parts.push_back(*accept_languages);
-    *accept_languages = base::JoinString(parts, ",");
+
+    error = U_ZERO_ERROR;
+    uloc_getLanguage(locale_ID, language_code_buffer, ULOC_LANG_CAPACITY,
+                     &error);
+    if (U_FAILURE(error)) {
+      LOG(ERROR) << "Ignoring invalid locale representation " << locale_str;
+      continue;
+    }
+
+    error = U_ZERO_ERROR;
+    uloc_getCountry(locale_ID, country_code_buffer, ULOC_COUNTRY_CAPACITY,
+                    &error);
+    if (U_FAILURE(error)) {
+      LOG(ERROR) << "Ignoring invalid locale representation " << locale_str;
+      continue;
+    }
+
+    std::string language_code(language_code_buffer);
+    std::string country_code(country_code_buffer);
+    std::string language_tag(language_code + "-" + country_code);
+
+    if (seen_tags.find(language_tag) != seen_tags.end())
+      continue;
+
+    seen_tags.insert(language_tag);
+    unique_locale_list.push_back(std::make_pair(language_code, country_code));
   }
+
+  // If language is not in the accept languages list, also add language
+  // code. A language code should only be inserted after the last
+  // languageTag that contains that language.
+  // This will work with the IDS_ACCEPT_LANGUAGE localized strings bundled
+  // with Chrome but may fail on arbitrary lists of language tags due to
+  // differences in case and whitespace.
+  std::set<std::string> seen_languages;
+  std::vector<std::string> output_list;
+  for (auto it = unique_locale_list.rbegin(); it != unique_locale_list.rend();
+       ++it) {
+    if (seen_languages.find(it->first) == seen_languages.end()) {
+      output_list.push_back(it->first);
+      seen_languages.insert(it->first);
+    }
+    if (!it->second.empty())
+      output_list.push_back(it->first + "-" + it->second);
+  }
+
+  std::reverse(output_list.begin(), output_list.end());
+  *accept_languages = base::JoinString(output_list, ",");
 }
 
 // static

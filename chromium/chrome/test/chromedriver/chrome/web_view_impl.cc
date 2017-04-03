@@ -402,9 +402,11 @@ Status WebViewImpl::DispatchKeyEvents(const std::list<KeyEvent>& events) {
     params.SetInteger("nativeVirtualKeyCode", it->key_code);
     params.SetInteger("windowsVirtualKeyCode", it->key_code);
     ui::DomCode dom_code = ui::UsLayoutKeyboardCodeToDomCode(it->key_code);
-    std::string key = ui::KeycodeConverter::DomCodeToCodeString(dom_code);
-    if (!key.empty())
-      params.SetString("key", key);
+    std::string code = ui::KeycodeConverter::DomCodeToCodeString(dom_code);
+    if (!code.empty())
+      params.SetString("code", code);
+    if (!it->key.empty())
+      params.SetString("key", it->key);
     Status status = client_->SendCommand("Input.dispatchKeyEvent", params);
     if (status.IsError())
       return status;

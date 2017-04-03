@@ -50,7 +50,6 @@ SpdyHttpStream::SpdyHttpStream(const base::WeakPtr<SpdySession>& spdy_session,
       more_read_data_pending_(false),
       direct_(direct),
       was_alpn_negotiated_(false),
-      negotiated_protocol_(kProtoUnknown),
       weak_factory_(this) {
   DCHECK(spdy_session_.get());
 }
@@ -120,6 +119,14 @@ int SpdyHttpStream::ReadResponseHeaders(const CompletionCallback& callback) {
 
 int SpdyHttpStream::ReadResponseBody(
     IOBuffer* buf, int buf_len, const CompletionCallback& callback) {
+  // Invalidate HttpRequestInfo pointer. This is to allow the stream to be
+  // shared across multiple transactions which might require this
+  // stream to outlive the request_'s owner.
+  // Only allowed when Reading of response body starts. It is safe to reset it
+  // at this point since request_->upload_data_stream is also not needed
+  // anymore.
+  request_info_ = nullptr;
+
   if (stream_.get())
     CHECK(!stream_->IsIdle());
 
@@ -323,11 +330,10 @@ SpdyResponseHeadersStatus SpdyHttpStream::OnResponseHeadersUpdated(
   // Don't store the SSLInfo in the response here, HttpNetworkTransaction
   // will take care of that part.
   response_info_->was_alpn_negotiated = was_alpn_negotiated_;
-  response_info_->alpn_negotiated_protocol =
-      SSLClientSocket::NextProtoToString(negotiated_protocol_);
   response_info_->request_time = stream_->GetRequestTime();
-  response_info_->connection_info =
-      HttpResponseInfo::ConnectionInfoFromNextProto(kProtoHTTP2);
+  response_info_->connection_info = HttpResponseInfo::CONNECTION_INFO_HTTP2;
+  response_info_->alpn_negotiated_protocol =
+      HttpResponseInfo::ConnectionInfoToString(response_info_->connection_info);
   response_info_->vary_data
       .Init(*request_info_, *response_info_->headers.get());
 
@@ -367,7 +373,7 @@ void SpdyHttpStream::OnTrailers(const SpdyHeaderBlock& trailers) {}
 
 void SpdyHttpStream::OnClose(int status) {
   // Cancel any pending reads from the upload data stream.
-  if (request_info_->upload_data_stream)
+  if (request_info_ && request_info_->upload_data_stream)
     request_info_->upload_data_stream->Reset();
 
   if (stream_.get()) {
@@ -443,7 +449,6 @@ void SpdyHttpStream::InitializeStreamHelper() {
   stream_->SetDelegate(this);
   stream_->GetSSLInfo(&ssl_info_);
   was_alpn_negotiated_ = stream_->WasNpnNegotiated();
-  negotiated_protocol_ = stream_->GetNegotiatedProtocol();
 }
 
 void SpdyHttpStream::ResetStreamInternal() {
@@ -594,6 +599,9 @@ bool SpdyHttpStream::GetRemoteEndpoint(IPEndPoint* endpoint) {
 Error SpdyHttpStream::GetTokenBindingSignature(crypto::ECPrivateKey* key,
                                                TokenBindingType tb_type,
                                                std::vector<uint8_t>* out) {
+  if (stream_closed_)
+    return ERR_CONNECTION_CLOSED;
+
   return spdy_session_->GetTokenBindingSignature(key, tb_type, out);
 }
 

@@ -27,6 +27,8 @@
 #ifndef ElementShadow_h
 #define ElementShadow_h
 
+#include "bindings/core/v8/ScriptWrappable.h"
+#include "bindings/core/v8/TraceWrapperMember.h"
 #include "core/CoreExport.h"
 #include "core/dom/shadow/ShadowRoot.h"
 #include "platform/heap/Handle.h"
@@ -37,7 +39,8 @@ namespace blink {
 class ElementShadowV0;
 
 class CORE_EXPORT ElementShadow final
-    : public GarbageCollectedFinalized<ElementShadow> {
+    : public GarbageCollectedFinalized<ElementShadow>,
+      public TraceWrapperBase {
   WTF_MAKE_NONCOPYABLE(ElementShadow);
 
  public:
@@ -88,8 +91,8 @@ class CORE_EXPORT ElementShadow final
   void appendShadowRoot(ShadowRoot&);
   void distribute();
 
-  Member<ElementShadowV0> m_elementShadowV0;
-  Member<ShadowRoot> m_shadowRoot;
+  TraceWrapperMember<ElementShadowV0> m_elementShadowV0;
+  TraceWrapperMember<ShadowRoot> m_shadowRoot;
   bool m_needsDistributionRecalc;
 };
 

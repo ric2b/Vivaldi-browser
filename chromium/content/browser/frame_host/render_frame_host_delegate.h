@@ -33,6 +33,11 @@ class Message;
 
 namespace device {
 class GeolocationServiceContext;
+class WakeLockServiceContext;
+}
+
+namespace gfx {
+class Rect;
 }
 
 namespace content {
@@ -40,13 +45,12 @@ class FrameTreeNode;
 class InterstitialPage;
 class PageState;
 class RenderFrameHost;
-class WakeLockServiceContext;
+class RenderFrameHostImpl;
 class WebContents;
 struct AXEventNotificationDetails;
 struct AXLocationChangeNotificationDetails;
 struct ContextMenuParams;
 struct FileChooserParams;
-struct TransitionLayerData;
 
 // An interface implemented by an object interested in knowing about the state
 // of the RenderFrameHost.
@@ -67,10 +71,10 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   virtual const GURL& GetMainFrameLastCommittedURL() const;
 
   // A message was added to to the console.
-  virtual bool AddMessageToConsole(int32_t level,
-                                   const base::string16& message,
-                                   int32_t line_no,
-                                   const base::string16& source_id);
+  virtual bool DidAddMessageToConsole(int32_t level,
+                                      const base::string16& message,
+                                      int32_t line_no,
+                                      const base::string16& source_id);
 
   // Informs the delegate whenever a RenderFrameHost is created.
   virtual void RenderFrameCreated(RenderFrameHost* render_frame_host) {}
@@ -118,7 +122,6 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   // The page's title was changed and should be updated. Only called for the
   // top-level frame.
   virtual void UpdateTitle(RenderFrameHost* render_frame_host,
-                           int32_t page_id,
                            const base::string16& title,
                            base::i18n::TextDirection title_direction) {}
 
@@ -168,7 +171,7 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   virtual device::GeolocationServiceContext* GetGeolocationServiceContext();
 
   // Gets the WakeLockServiceContext associated with this delegate.
-  virtual WakeLockServiceContext* GetWakeLockServiceContext();
+  virtual device::WakeLockServiceContext* GetWakeLockServiceContext();
 
   // Notification that the frame wants to go into fullscreen mode.
   // |origin| represents the origin of the frame that requests fullscreen.
@@ -208,6 +211,14 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   // applies, returns null.
   virtual std::unique_ptr<WebUIImpl> CreateWebUIForRenderFrameHost(
       const GURL& url);
+
+  // Called by |frame| to notify that it has received an update on focused
+  // element. |bounds_in_root_view| is the rectangle containing the element that
+  // is focused and is with respect to root frame's RenderWidgetHost's
+  // coordinate space.
+  virtual void OnFocusedElementChangedInFrame(
+      RenderFrameHostImpl* frame,
+      const gfx::Rect& bounds_in_root_view) {}
 
  protected:
   virtual ~RenderFrameHostDelegate() {}

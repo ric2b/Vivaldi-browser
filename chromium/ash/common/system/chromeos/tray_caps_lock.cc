@@ -4,29 +4,37 @@
 
 #include "ash/common/system/chromeos/tray_caps_lock.h"
 
+#include "ash/common/accessibility_delegate.h"
 #include "ash/common/material_design/material_design_controller.h"
 #include "ash/common/system/tray/actionable_view.h"
-#include "ash/common/system/tray/fixed_sized_image_view.h"
 #include "ash/common/system/tray/system_tray_delegate.h"
 #include "ash/common/system/tray/tray_constants.h"
+#include "ash/common/system/tray/tray_popup_item_style.h"
+#include "ash/common/system/tray/tray_popup_utils.h"
+#include "ash/common/system/tray/tri_view.h"
 #include "ash/common/wm_shell.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "base/sys_info.h"
 #include "grit/ash_resources.h"
 #include "grit/ash_strings.h"
-#include "ui/accessibility/ax_view_state.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/base/ime/chromeos/ime_keyboard.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/paint_vector_icon.h"
+#include "ui/views/border.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/layout/box_layout.h"
+#include "ui/views/layout/fill_layout.h"
 #include "ui/views/widget/widget.h"
 
 namespace ash {
 namespace {
+
+// Padding used to position the caption in the caps lock default view row.
+const int kCaptionRightPadding = 6;
 
 bool CapsLockIsEnabled() {
   chromeos::input_method::InputMethodManager* ime =
@@ -40,30 +48,31 @@ bool CapsLockIsEnabled() {
 class CapsLockDefaultView : public ActionableView {
  public:
   CapsLockDefaultView()
-      : ActionableView(nullptr),
-        text_label_(new views::Label),
-        shortcut_label_(new views::Label) {
-    SetLayoutManager(new views::BoxLayout(views::BoxLayout::kHorizontal,
-                                          kTrayPopupPaddingHorizontal, 0,
-                                          kTrayPopupPaddingBetweenItems));
+      : ActionableView(nullptr, TrayPopupInkDropStyle::FILL_BOUNDS),
+        image_(TrayPopupUtils::CreateMainImageView()),
+        text_label_(TrayPopupUtils::CreateDefaultLabel()),
+        shortcut_label_(TrayPopupUtils::CreateDefaultLabel()) {
+    shortcut_label_->SetEnabled(false);
 
-    FixedSizedImageView* image =
-        new FixedSizedImageView(0, GetTrayConstant(TRAY_POPUP_ITEM_HEIGHT));
+    TriView* tri_view(TrayPopupUtils::CreateDefaultRowView());
+    SetLayoutManager(new views::FillLayout);
+    AddChildView(tri_view);
+
     if (MaterialDesignController::UseMaterialDesignSystemIcons()) {
-      image->SetImage(
-          gfx::CreateVectorIcon(kSystemMenuCapsLockIcon, kMenuIconColor));
+      image_->SetEnabled(enabled());
+      UpdateStyle();
+      SetInkDropMode(InkDropHostView::InkDropMode::ON);
     } else {
       ui::ResourceBundle& bundle = ui::ResourceBundle::GetSharedInstance();
-      image->SetImage(bundle.GetImageNamed(IDR_AURA_UBER_TRAY_CAPS_LOCK_DARK)
-                          .ToImageSkia());
+      image_->SetImage(bundle.GetImageNamed(IDR_AURA_UBER_TRAY_CAPS_LOCK_DARK)
+                           .ToImageSkia());
     }
-    AddChildView(image);
-
-    text_label_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-    AddChildView(text_label_);
-
-    shortcut_label_->SetEnabled(false);
-    AddChildView(shortcut_label_);
+    tri_view->AddView(TriView::Container::START, image_);
+    tri_view->AddView(TriView::Container::CENTER, text_label_);
+    tri_view->AddView(TriView::Container::END, shortcut_label_);
+    tri_view->SetContainerBorder(
+        TriView::Container::END,
+        views::CreateEmptyBorder(0, 0, 0, kCaptionRightPadding));
   }
 
   ~CapsLockDefaultView() override {}
@@ -92,30 +101,36 @@ class CapsLockDefaultView : public ActionableView {
     }
     shortcut_label_->SetText(bundle.GetLocalizedString(shortcut_string_id));
 
+    UpdateStyle();
     Layout();
   }
 
+  // ActionableView:
+  void OnNativeThemeChanged(const ui::NativeTheme* theme) override {
+    ActionableView::OnNativeThemeChanged(theme);
+    UpdateStyle();
+  }
+
  private:
-  // Overridden from views::View:
-  void Layout() override {
-    views::View::Layout();
-
-    // Align the shortcut text with the right end
-    const int old_x = shortcut_label_->x();
-    const int new_x =
-        width() - shortcut_label_->width() - kTrayPopupPaddingHorizontal;
-    shortcut_label_->SetX(new_x);
-    const gfx::Size text_size = text_label_->size();
-    text_label_->SetSize(
-        gfx::Size(text_size.width() + new_x - old_x, text_size.height()));
+  void GetAccessibleNodeData(ui::AXNodeData* node_data) override {
+    node_data->role = ui::AX_ROLE_BUTTON;
+    node_data->SetName(text_label_->text());
   }
 
-  void GetAccessibleState(ui::AXViewState* state) override {
-    state->role = ui::AX_ROLE_BUTTON;
-    state->name = text_label_->text();
+  // Update the Text theme and style based on the current theme.
+  void UpdateStyle() {
+    TrayPopupItemStyle default_view_style(
+        GetNativeTheme(), TrayPopupItemStyle::FontStyle::DEFAULT_VIEW_LABEL);
+    // Set image and label styles for Material Design Caps Lock default view.
+    image_->SetImage(gfx::CreateVectorIcon(kSystemMenuCapsLockIcon,
+                                           default_view_style.GetIconColor()));
+    default_view_style.SetupLabel(text_label_);
+    TrayPopupItemStyle caption_style(GetNativeTheme(),
+                                     TrayPopupItemStyle::FontStyle::CAPTION);
+    caption_style.SetupLabel(shortcut_label_);
   }
 
-  // Overridden from ActionableView:
+  // ActionableView:
   bool PerformAction(const ui::Event& event) override {
     chromeos::input_method::ImeKeyboard* keyboard =
         chromeos::input_method::InputMethodManager::Get()->GetImeKeyboard();
@@ -129,7 +144,13 @@ class CapsLockDefaultView : public ActionableView {
     return true;
   }
 
+  // It contains the image represents the Caps Lock.
+  views::ImageView* image_;
+
+  // It indicates whether the Caps Lock is on or off.
   views::Label* text_label_;
+
+  // It indicates the shortcut can be used to turn on or turn off Caps Lock.
   views::Label* shortcut_label_;
 
   DISALLOW_COPY_AND_ASSIGN(CapsLockDefaultView);
@@ -156,6 +177,10 @@ TrayCapsLock::~TrayCapsLock() {
 
 void TrayCapsLock::OnCapsLockChanged(bool enabled) {
   caps_lock_enabled_ = enabled;
+
+  // Send an a11y alert.
+  WmShell::Get()->accessibility_delegate()->TriggerAccessibilityAlert(
+      enabled ? A11Y_ALERT_CAPS_ON : A11Y_ALERT_CAPS_OFF);
 
   if (tray_view())
     tray_view()->SetVisible(caps_lock_enabled_);
@@ -213,7 +238,8 @@ views::View* TrayCapsLock::CreateDetailedView(LoginStatus status) {
       WmShell::Get()->system_tray_delegate()->IsSearchKeyMappedToCapsLock()
           ? IDS_ASH_STATUS_TRAY_CAPS_LOCK_CANCEL_BY_SEARCH
           : IDS_ASH_STATUS_TRAY_CAPS_LOCK_CANCEL_BY_ALT_SEARCH;
-  views::Label* label = new views::Label(bundle.GetLocalizedString(string_id));
+  views::Label* label = TrayPopupUtils::CreateDefaultLabel();
+  label->SetText(bundle.GetLocalizedString(string_id));
   label->SetMultiLine(true);
   label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   detailed_->AddChildView(label);

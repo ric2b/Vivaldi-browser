@@ -12,7 +12,6 @@
 #include "base/bind.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "base/memory/scoped_vector.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/net/disk_cache_dir_policy_handler.h"
@@ -46,10 +45,12 @@
 #include "components/prefs/pref_value_map.h"
 #include "components/search_engines/default_search_policy_handler.h"
 #include "components/signin/core/common/signin_pref_names.h"
+#include "components/spellcheck/spellcheck_build_features.h"
 #include "components/ssl_config/ssl_config_prefs.h"
 #include "components/sync/driver/sync_policy_handler.h"
 #include "components/translate/core/common/translate_pref_names.h"
 #include "components/variations/pref_names.h"
+#include "extensions/features/features.h"
 
 #if BUILDFLAG(ANDROID_JAVA_UI)
 #include "chrome/browser/search/contextual_search_policy_handler_android.h"
@@ -71,7 +72,7 @@
 #include "chrome/browser/download/download_dir_policy_handler.h"
 #endif
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "chrome/browser/extensions/api/messaging/native_messaging_policy_handler.h"
 #include "chrome/browser/extensions/extension_management_constants.h"
 #include "chrome/browser/extensions/policy_handlers.h"
@@ -79,7 +80,11 @@
 #include "extensions/common/manifest.h"
 #endif
 
-#if defined(ENABLE_SPELLCHECK)
+#if defined(ENABLE_PLUGINS)
+#include "chrome/browser/plugins/plugin_policy_handler.h"
+#endif
+
+#if BUILDFLAG(ENABLE_SPELLCHECK)
 #include "components/spellcheck/browser/pref_names.h"
 #endif
 
@@ -138,15 +143,6 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
   { key::kApplicationLocaleValue,
     prefs::kApplicationLocale,
     base::Value::TYPE_STRING },
-  { key::kDisabledPlugins,
-    prefs::kPluginsDisabledPlugins,
-    base::Value::TYPE_LIST },
-  { key::kDisabledPluginsExceptions,
-    prefs::kPluginsDisabledPluginsExceptions,
-    base::Value::TYPE_LIST },
-  { key::kEnabledPlugins,
-    prefs::kPluginsEnabledPlugins,
-    base::Value::TYPE_LIST },
   { key::kAlwaysOpenPdfExternally,
     prefs::kPluginsAlwaysOpenPdfExternally,
     base::Value::TYPE_BOOLEAN },
@@ -370,11 +366,11 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
     prefs::kComponentUpdatesEnabled,
     base::Value::TYPE_BOOLEAN },
 
-#if defined(ENABLE_SPELLCHECK)
+#if BUILDFLAG(ENABLE_SPELLCHECK)
   { key::kSpellCheckServiceEnabled,
     spellcheck::prefs::kSpellCheckUseSpellingService,
     base::Value::TYPE_BOOLEAN },
-#endif  // defined(ENABLE_SPELLCHECK)
+#endif  // BUILDFLAG(ENABLE_SPELLCHECK)
 
   { key::kDisableScreenshots,
     prefs::kDisableScreenshots,
@@ -423,11 +419,11 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
   { key::kFullscreenAllowed,
     prefs::kFullscreenAllowed,
     base::Value::TYPE_BOOLEAN },
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   { key::kFullscreenAllowed,
     extensions::pref_names::kAppFullscreenAllowed,
     base::Value::TYPE_BOOLEAN },
-#endif  // defined(ENABLE_EXTENSIONS)
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 #endif  // !defined(OS_MACOSX)
 
 #if defined(OS_CHROMEOS)
@@ -542,6 +538,9 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
   { key::kReportArcStatusEnabled,
     prefs::kReportArcStatusEnabled,
     base::Value::TYPE_BOOLEAN },
+  { key::kNativePrinters,
+    prefs::kRecommendedNativePrinters,
+    base::Value::TYPE_LIST },
 #endif  // defined(OS_CHROMEOS)
 
 // Metrics reporting is controlled by a platform specific policy for ChromeOS
@@ -608,7 +607,16 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
     base::Value::TYPE_BOOLEAN },
 
 #if defined(OS_CHROMEOS)
+  { key::kNetworkThrottlingEnabled,
+    prefs::kNetworkThrottlingEnabled,
+    base::Value::TYPE_DICTIONARY },
+
   { key::kAllowScreenLock, prefs::kAllowScreenLock, base::Value::TYPE_BOOLEAN },
+
+  { key::kQuickUnlockModeWhitelist, prefs::kQuickUnlockModeWhitelist,
+    base::Value::TYPE_LIST },
+  { key::kQuickUnlockTimeout, prefs::kQuickUnlockTimeout,
+    base::Value::TYPE_INTEGER },
 #endif
 };
 
@@ -683,24 +691,27 @@ class ForceYouTubeSafetyModePolicyHandler : public TypeCheckingPolicyHandler {
   DISALLOW_COPY_AND_ASSIGN(ForceYouTubeSafetyModePolicyHandler);
 };
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 void GetExtensionAllowedTypesMap(
-    ScopedVector<StringMappingListPolicyHandler::MappingEntry>* result) {
+    std::vector<std::unique_ptr<StringMappingListPolicyHandler::MappingEntry>>*
+        result) {
   // Mapping from extension type names to Manifest::Type.
   for (size_t index = 0;
        index < extensions::schema_constants::kAllowedTypesMapSize;
        ++index) {
     const extensions::schema_constants::AllowedTypesMapEntry& entry =
         extensions::schema_constants::kAllowedTypesMap[index];
-    result->push_back(new StringMappingListPolicyHandler::MappingEntry(
-        entry.name, std::unique_ptr<base::Value>(
-                        new base::FundamentalValue(entry.manifest_type))));
+    result->push_back(
+        base::MakeUnique<StringMappingListPolicyHandler::MappingEntry>(
+            entry.name, std::unique_ptr<base::Value>(
+                            new base::FundamentalValue(entry.manifest_type))));
   }
 }
 #endif
 
 void GetDeprecatedFeaturesMap(
-    ScopedVector<StringMappingListPolicyHandler::MappingEntry>* result) {
+    std::vector<std::unique_ptr<StringMappingListPolicyHandler::MappingEntry>>*
+        result) {
   // Maps feature tags as specified in policy to the corresponding switch to
   // re-enable them.
 }
@@ -762,7 +773,7 @@ std::unique_ptr<ConfigurationPolicyHandlerList> BuildHandlerList(
       prefs::kEnableDeprecatedWebPlatformFeatures,
       base::Bind(GetDeprecatedFeaturesMap)));
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   handlers->AddHandler(base::MakeUnique<extensions::ExtensionListPolicyHandler>(
       key::kExtensionInstallWhitelist,
       extensions::pref_names::kInstallAllowList, false));
@@ -819,80 +830,60 @@ std::unique_ptr<ConfigurationPolicyHandlerList> BuildHandlerList(
   handlers->AddHandler(
       base::MakeUnique<LoginScreenPowerManagementPolicyHandler>(chrome_schema));
 
-  ScopedVector<ConfigurationPolicyHandler>
+  std::vector<std::unique_ptr<ConfigurationPolicyHandler>>
       power_management_idle_legacy_policies;
   power_management_idle_legacy_policies.push_back(
-      new IntRangePolicyHandler(key::kScreenDimDelayAC,
-                                prefs::kPowerAcScreenDimDelayMs,
-                                0,
-                                INT_MAX,
-                                true));
+      base::MakeUnique<IntRangePolicyHandler>(key::kScreenDimDelayAC,
+                                              prefs::kPowerAcScreenDimDelayMs,
+                                              0, INT_MAX, true));
   power_management_idle_legacy_policies.push_back(
-      new IntRangePolicyHandler(key::kScreenOffDelayAC,
-                                prefs::kPowerAcScreenOffDelayMs,
-                                0,
-                                INT_MAX,
-                                true));
+      base::MakeUnique<IntRangePolicyHandler>(key::kScreenOffDelayAC,
+                                              prefs::kPowerAcScreenOffDelayMs,
+                                              0, INT_MAX, true));
   power_management_idle_legacy_policies.push_back(
-      new IntRangePolicyHandler(key::kIdleWarningDelayAC,
-                                prefs::kPowerAcIdleWarningDelayMs,
-                                0,
-                                INT_MAX,
-                                true));
-  power_management_idle_legacy_policies.push_back(new IntRangePolicyHandler(
-      key::kIdleDelayAC, prefs::kPowerAcIdleDelayMs, 0, INT_MAX, true));
+      base::MakeUnique<IntRangePolicyHandler>(key::kIdleWarningDelayAC,
+                                              prefs::kPowerAcIdleWarningDelayMs,
+                                              0, INT_MAX, true));
   power_management_idle_legacy_policies.push_back(
-      new IntRangePolicyHandler(key::kScreenDimDelayBattery,
-                                prefs::kPowerBatteryScreenDimDelayMs,
-                                0,
-                                INT_MAX,
-                                true));
+      base::MakeUnique<IntRangePolicyHandler>(
+          key::kIdleDelayAC, prefs::kPowerAcIdleDelayMs, 0, INT_MAX, true));
   power_management_idle_legacy_policies.push_back(
-      new IntRangePolicyHandler(key::kScreenOffDelayBattery,
-                                prefs::kPowerBatteryScreenOffDelayMs,
-                                0,
-                                INT_MAX,
-                                true));
+      base::MakeUnique<IntRangePolicyHandler>(
+          key::kScreenDimDelayBattery, prefs::kPowerBatteryScreenDimDelayMs, 0,
+          INT_MAX, true));
   power_management_idle_legacy_policies.push_back(
-      new IntRangePolicyHandler(key::kIdleWarningDelayBattery,
-                                prefs::kPowerBatteryIdleWarningDelayMs,
-                                0,
-                                INT_MAX,
-                                true));
+      base::MakeUnique<IntRangePolicyHandler>(
+          key::kScreenOffDelayBattery, prefs::kPowerBatteryScreenOffDelayMs, 0,
+          INT_MAX, true));
   power_management_idle_legacy_policies.push_back(
-      new IntRangePolicyHandler(key::kIdleDelayBattery,
-                                prefs::kPowerBatteryIdleDelayMs,
-                                0,
-                                INT_MAX,
-                                true));
-  power_management_idle_legacy_policies.push_back(new IntRangePolicyHandler(
-      key::kIdleActionAC,
-      prefs::kPowerAcIdleAction,
-      chromeos::PowerPolicyController::ACTION_SUSPEND,
-      chromeos::PowerPolicyController::ACTION_DO_NOTHING,
-      false));
-  power_management_idle_legacy_policies.push_back(new IntRangePolicyHandler(
-      key::kIdleActionBattery,
-      prefs::kPowerBatteryIdleAction,
-      chromeos::PowerPolicyController::ACTION_SUSPEND,
-      chromeos::PowerPolicyController::ACTION_DO_NOTHING,
-      false));
+      base::MakeUnique<IntRangePolicyHandler>(
+          key::kIdleWarningDelayBattery, prefs::kPowerBatteryIdleWarningDelayMs,
+          0, INT_MAX, true));
   power_management_idle_legacy_policies.push_back(
-      new DeprecatedIdleActionHandler());
+      base::MakeUnique<IntRangePolicyHandler>(key::kIdleDelayBattery,
+                                              prefs::kPowerBatteryIdleDelayMs,
+                                              0, INT_MAX, true));
+  power_management_idle_legacy_policies.push_back(
+      base::MakeUnique<IntRangePolicyHandler>(
+          key::kIdleActionAC, prefs::kPowerAcIdleAction,
+          chromeos::PowerPolicyController::ACTION_SUSPEND,
+          chromeos::PowerPolicyController::ACTION_DO_NOTHING, false));
+  power_management_idle_legacy_policies.push_back(
+      base::MakeUnique<IntRangePolicyHandler>(
+          key::kIdleActionBattery, prefs::kPowerBatteryIdleAction,
+          chromeos::PowerPolicyController::ACTION_SUSPEND,
+          chromeos::PowerPolicyController::ACTION_DO_NOTHING, false));
+  power_management_idle_legacy_policies.push_back(
+      base::MakeUnique<DeprecatedIdleActionHandler>());
 
-  ScopedVector<ConfigurationPolicyHandler> screen_lock_legacy_policies;
-  screen_lock_legacy_policies.push_back(
-      new IntRangePolicyHandler(key::kScreenLockDelayAC,
-                                prefs::kPowerAcScreenLockDelayMs,
-                                0,
-                                INT_MAX,
-                                true));
-  screen_lock_legacy_policies.push_back(
-      new IntRangePolicyHandler(key::kScreenLockDelayBattery,
-                                prefs::kPowerBatteryScreenLockDelayMs,
-                                0,
-                                INT_MAX,
-                                true));
+  std::vector<std::unique_ptr<ConfigurationPolicyHandler>>
+      screen_lock_legacy_policies;
+  screen_lock_legacy_policies.push_back(base::MakeUnique<IntRangePolicyHandler>(
+      key::kScreenLockDelayAC, prefs::kPowerAcScreenLockDelayMs, 0, INT_MAX,
+      true));
+  screen_lock_legacy_policies.push_back(base::MakeUnique<IntRangePolicyHandler>(
+      key::kScreenLockDelayBattery, prefs::kPowerBatteryScreenLockDelayMs, 0,
+      INT_MAX, true));
 
   handlers->AddHandler(base::MakeUnique<IntRangePolicyHandler>(
       key::kSAMLOfflineSigninTimeLimit, prefs::kSAMLOfflineSigninTimeLimit, -1,
@@ -934,6 +925,10 @@ std::unique_ptr<ConfigurationPolicyHandlerList> BuildHandlerList(
       base::MakeUnique<chromeos::KeyPermissionsPolicyHandler>(chrome_schema));
   handlers->AddHandler(base::WrapUnique(new DefaultGeolocationPolicyHandler()));
 #endif  // defined(OS_CHROMEOS)
+
+#if defined(ENABLE_PLUGINS)
+  handlers->AddHandler(base::MakeUnique<PluginPolicyHandler>());
+#endif  // defined(ENABLE_PLUGINS)
 
   return handlers;
 }

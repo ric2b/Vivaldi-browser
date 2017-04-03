@@ -12,6 +12,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/profiler/scoped_tracker.h"
 #include "base/strings/string_util.h"
+#include "components/metrics/proto/translate_event.pb.h"
 #include "components/translate/core/browser/proto/translate_ranker_model.pb.h"
 #include "components/translate/core/browser/translate_download_manager.h"
 #include "components/translate/core/browser/translate_prefs.h"
@@ -65,14 +66,6 @@ GURL GetTranslateRankerURL() {
                   : kTranslateRankerModelURL);
 }
 
-bool IsQueryEnabled() {
-  return base::FeatureList::IsEnabled(kTranslateRankerQuery);
-}
-
-bool IsEnforcementEnabled() {
-  return base::FeatureList::IsEnabled(kTranslateRankerEnforcement);
-}
-
 void ReportModelStatus(ModelStatus model_status) {
   UMA_HISTOGRAM_ENUMERATION("Translate.Ranker.Model.Status", model_status,
                             MODEL_STATUS_MAX);
@@ -86,11 +79,29 @@ const base::Feature kTranslateRankerQuery{"TranslateRankerQuery",
 const base::Feature kTranslateRankerEnforcement{
     "TranslateRankerEnforcement", base::FEATURE_DISABLED_BY_DEFAULT};
 
+const base::Feature kTranslateRankerLogging{"TranslateRankerLogging",
+                                            base::FEATURE_DISABLED_BY_DEFAULT};
+
 TranslateRanker::~TranslateRanker() {}
 
 // static
 bool TranslateRanker::IsEnabled() {
   return IsQueryEnabled() || IsEnforcementEnabled();
+}
+
+// static
+bool TranslateRanker::IsLoggingEnabled() {
+  return base::FeatureList::IsEnabled(kTranslateRankerLogging);
+}
+
+// static
+bool TranslateRanker::IsQueryEnabled() {
+  return base::FeatureList::IsEnabled(kTranslateRankerQuery);
+}
+
+// static
+bool TranslateRanker::IsEnforcementEnabled() {
+  return base::FeatureList::IsEnabled(kTranslateRankerEnforcement);
 }
 
 // static
@@ -169,9 +180,7 @@ bool TranslateRanker::ShouldOfferTranslation(
 
   UMA_HISTOGRAM_BOOLEAN("Translate.Ranker.QueryResult", result);
 
-  // If enforcement is enabled, return the real result; otherwise, return the
-  // default.
-  return IsEnforcementEnabled() ? result : kDefaultResponse;
+  return result;
 }
 
 TranslateRanker::TranslateRanker() {}
@@ -280,6 +289,20 @@ void TranslateRanker::ParseModel(int /* id */,
   ReportModelStatus(MODEL_STATUS_OK);
   model_ = std::move(new_model);
   model_fetcher_.reset();
+}
+
+void TranslateRanker::FlushTranslateEvents(
+    std::vector<metrics::TranslateEventProto>* translate_events) {
+  if (IsLoggingEnabled()) {
+    translate_events->swap(translate_events_cache_);
+    translate_events_cache_.clear();
+  }
+}
+
+void TranslateRanker::RecordTranslateEvent(
+    const metrics::TranslateEventProto& translate_event) {
+  if (IsLoggingEnabled())
+    translate_events_cache_.push_back(translate_event);
 }
 
 }  // namespace translate

@@ -17,7 +17,10 @@ const char kChromeUICreditsURL[] = "chrome://credits/";
 const char kChromeUIFlagsURL[] = "chrome://flags/";
 const char kChromeUIHistoryURL[] = "chrome://history/";
 const char kChromeUINewTabURL[] = "chrome://newtab/";
+const char kChromeUIOfflineURL[] = "chrome://offline/";
 const char kChromeUIPhysicalWebURL[] = "chrome://physical-web/";
+const char kChromeUIPopularSitesInternalsURL[] =
+    "chrome://popular-sites-internals/";
 const char kChromeUISettingsURL[] = "chrome://settings/";
 const char kChromeUITermsURL[] = "chrome://terms/";
 const char kChromeUIVersionURL[] = "chrome://version/";
@@ -36,8 +39,10 @@ const char kChromeUIHistoryFrameHost[] = "history-frame";
 const char kChromeUIHistoryHost[] = "history";
 const char kChromeUINetExportHost[] = "net-export";
 const char kChromeUINewTabHost[] = "newtab";
+const char kChromeUIOfflineHost[] = "offline";
 const char kChromeUIOmahaHost[] = "omaha";
 const char kChromeUIPhysicalWebHost[] = "physical-web";
+const char kChromeUIPopularSitesInternalsHost[] = "popular-sites-internals";
 const char kChromeUIPolicyHost[] = "policy";
 const char kChromeUISignInInternalsHost[] = "signin-internals";
 const char kChromeUISyncInternalsHost[] = "sync-internals";
@@ -48,11 +53,12 @@ const char kChromeUIVersionHost[] = "version";
 // These hosts will also be suggested by BuiltinProvider.
 // 'histograms' is chrome WebUI on iOS, content WebUI on other platforms.
 const char* const kChromeHostURLs[] = {
-    kChromeUIBookmarksHost,   kChromeUIChromeURLsHost,
-    kChromeUICreditsHost,     kChromeUIFlagsHost,
-    kChromeUIHistogramHost,   kChromeUINetExportHost,
-    kChromeUINewTabHost,      kChromeUISyncInternalsHost,
-    kChromeUIPhysicalWebHost, kChromeUITermsHost,
+    kChromeUIBookmarksHost,             kChromeUIChromeURLsHost,
+    kChromeUICreditsHost,               kChromeUIFlagsHost,
+    kChromeUIHistogramHost,             kChromeUINetExportHost,
+    kChromeUINewTabHost,                kChromeUISignInInternalsHost,
+    kChromeUISyncInternalsHost,         kChromeUIPhysicalWebHost,
+    kChromeUIPopularSitesInternalsHost, kChromeUITermsHost,
     kChromeUIVersionHost,
 };
 const size_t kNumberOfChromeHostURLs = arraysize(kChromeHostURLs);

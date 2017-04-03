@@ -11,9 +11,7 @@
 
 namespace blink {
 
-class ComputedStyle;
 class LayoutInline;
-class LayoutObject;
 
 class LineLayoutInline : public LineLayoutBoxModel {
  public:
@@ -22,7 +20,7 @@ class LineLayoutInline : public LineLayoutBoxModel {
 
   explicit LineLayoutInline(const LineLayoutItem& item)
       : LineLayoutBoxModel(item) {
-    ASSERT_WITH_SECURITY_IMPLICATION(!item || item.isLayoutInline());
+    SECURITY_DCHECK(!item || item.isLayoutInline());
   }
 
   explicit LineLayoutInline(std::nullptr_t) : LineLayoutBoxModel(nullptr) {}

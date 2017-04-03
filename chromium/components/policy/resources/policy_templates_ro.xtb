@@ -19,6 +19,9 @@
       Dacă această politică este dezactivată sau nu este configurată, cookie-urile setate de furnizorul de identitate sunt transferate în profilul utilizatorului doar la prima sa conectare pe un dispozitiv.
 
       Această politică afectează doar utilizatorii ale căror domenii corespund cu domeniul de înregistrare al dispozitivului. Pentru ceilalți utilizatori, cookie-urile setate de furnizorul de identitate sunt transferate în profilurile acestora doar la prima conectare pe un dispozitiv.</translation>
+<translation id="1029536946382325801">Dacă este activată, utilizatorul poate folosi hardware-ul de pe dispozitivele Chrome pentru a-și atesta la distanță identitatea către autoritatea de certificare pentru confidențialitate prin API-ul Enterprise Platform Keys chrome.enterprise.platformKeys.challengeUserKey().
+
+          Dacă este dezactivată sau dacă nu este configurată, apelurile către API nu vor reuși și vor genera un cod de eroare.</translation>
 <translation id="1040446814317236570">Activează eliminarea unor părți din adresele URL pentru PAC (pentru https://)</translation>
 <translation id="1044878202534415707">Raportează statisticile privind hardware-ul cum ar fi utilizarea CPU/RAM.
 
@@ -54,6 +57,24 @@
 <translation id="1152117524387175066">Raportează starea comutatorului modului pentru dezvoltatori al dispozitivului la pornire.
 
       Dacă politica este dezactivată, starea comutatorului modului pentru dezvoltatori nu va fi raportată.</translation>
+<translation id="1156080716265314451">Configurează o listă de imprimante.
+
+      Această politică permite administratorilor să ofere utilizatorilor configurații ale imprimantelor.
+
+      <ph name="PRINTER_DISPLAY_NAME" /> și <ph name="PRINTER_DESCRIPTION" /> sunt șiruri fără formă care
+      pot fi personalizate pentru a selecta mai ușor o imprimantă. <ph name="PRINTER_MANUFACTURER" /> și <ph name="PRINTER_MODEL" /> trebuie să corespundă uneia dintre imprimantele <ph name="PRODUCT_NAME" />
+      acceptate.  <ph name="PRINTER_URI" /> trebuie să fie o adresă care poate fi accesată
+      de pe computerul unui client, inclusiv <ph name="URI_SCHEME" />,
+      <ph name="URI_PORT" /> și <ph name="URI_QUEUE" />.  <ph name="PRINTER_UUID" /> este opțional.  Dacă este specificat, acesta este folosit pentru
+      a elimina imprimantele dublură <ph name="ZEROCONF_DISCOVERY" />.
+
+      Configurarea imprimantei este finalizată odată cu prima folosire a unei imprimante.  PPD-urile nu
+      sunt descărcate înainte de folosirea imprimantei.  După aceea, PPD-urile folosite des
+      sunt stocate în memoria cache.
+
+      Această politică nu afectează opțiunea utilizatorilor de a configura imprimantele pe
+      dispozitive individuale.  Este menită să fie suplimentară pentru
+      configurarea imprimantelor de către utilizatori individuali.</translation>
 <translation id="1160939557934457296">Dezactivați continuarea navigării de pe pagina de avertisment Navigare sigură</translation>
 <translation id="1198465924256827162">Frecvența de trimitere a informațiilor privind starea dispozitivului, în milisecunde.
 
@@ -156,7 +177,6 @@
       nu pot folosi ARC.</translation>
 <translation id="1561424797596341174">Suprascrieri de politici pentru versiunile de depanare ale gazdei de acces la distanță</translation>
 <translation id="1583248206450240930">Utilizează <ph name="PRODUCT_FRAME_NAME" /> în mod prestabilit</translation>
-<translation id="1606958238518590302">Când această politică este activată, utilizatorii nu pot scrie nimic pe dispozitivele de stocare externe.</translation>
 <translation id="1608755754295374538">Adresele URL cărora li se va acorda acces automat la dispozitivele de capturare a conținutului audio</translation>
 <translation id="1617235075406854669">Permite ștergerea istoricului browserului și a istoricului descărcărilor</translation>
 <translation id="1617384279878333801">Activează adăugarea persoanelor în managerul de profiluri</translation>
@@ -215,15 +235,6 @@
       Dacă această politică nu este configurată sau este setată la „tls1.2”, atunci <ph name="PRODUCT_NAME" /> nu mai efectuează această revenire. Reține că astfel nu se dezactivează compatibilitatea pentru versiunile TLS mai vechi, ci doar se stabilește dacă <ph name="PRODUCT_NAME" /> va ocoli serverele cu erori care nu pot negocia corect versiunile.
 
       În caz contrar, dacă trebuie menținută compatibilitatea cu un server cu erori, politica poate fi setată la „tls1”. Aceasta este o măsură temporară, iar problemele de pe server trebuie să fie remediate rapid.</translation>
-<translation id="1861037019115362154">Specifică o listă de pluginuri dezactivate în <ph name="PRODUCT_NAME" /> și nu le permite utilizatorilor să modifice această setare.
-
-      Pentru a găsi secvențe de caractere arbitrare, pot fi folosite metacaracterele „*” și „?”. „*” corespunde unui număr arbitrar de caractere, în timp ce „?” specifică un caracter opțional unic, adică înlocuiește zero caractere sau un singur caracter. Caracterul escape este „\”, astfel încât pentru a obține caracterele „*”, „?” și „\” în sine, puteți adăuga caracterul „\” în fața acestora.
-
-      Dacă activați această setare, lista specificată de pluginuri nu este niciodată utilizată în <ph name="PRODUCT_NAME" />. Pluginurile sunt marcate ca dezactivate în „about:plugins”, iar utilizatorii nu le pot activa.
-
-      Rețineți că această politică poate fi înlocuită de EnabledPlugins și DisabledPluginsExceptions.
-
-      Dacă această politică este lăsată nesetată, utilizatorul poate folosi orice plugin instalat în sistem, cu excepția pluginurilor codificate incompatibile, învechite sau periculoase.</translation>
 <translation id="1864269674877167562">Dacă această politică este configurată ca un șir necompletat sau nu este configurată, <ph name="PRODUCT_OS_NAME" /> nu va afișa opțiunea de completare automată în timpul procesului de conectare a utilizatorului.
       Dacă această politică este configurată ca un șir care reprezintă un nume de domeniu, <ph name="PRODUCT_OS_NAME" /> va afișa opțiunea de completare automată în timp ce utilizatorul se conectează. Astfel, utilizatorul poate introduce doar numele său de utilizator, fără extensia numelui de domeniu. Utilizatorul va putea să suprascrie extensia numelui de domeniu.</translation>
 <translation id="1865417998205858223">Permisiunile privind certificatele</translation>
@@ -346,13 +357,6 @@
 
       Conținutul listei „Adrese URL care se deschid la pornire” este ignorat, cu excepția cazului în care selectezi „Deschide o listă cu adrese URL” în „Acțiune la pornire”.</translation>
 <translation id="2337466621458842053">Vă permite să setați o listă de modele pentru adresele URL care specifică site-urile care au permisiunea să afișeze imagini. Dacă această politică rămâne nesetată, valoarea prestabilită la nivel global va fi folosită pentru toate site-urile, fie din politica „DefaultImagesSetting”, în cazul în care politica este setată, fie din configurația personală a utilizatorului, în caz contrar.</translation>
-<translation id="2359612025446382967">Dacă această politică este dezactivată, <ph name="PRODUCT_OS_NAME" /> va dezactiva conexiunea Bluetooth, iar utilizatorul nu o va putea reactiva.
-
-      Dacă această politică este activată sau nu este configurată, utilizatorul va putea activa sau dezactiva conexiunea Bluetooth după cum dorește.
-
-      Dacă această politică este configurată, utilizatorul nu o poate modifica sau ignora.
-
-      După ce conexiunea Bluetooth este activată, dispozitivul trebuie repornit pentru ca modificările să aibă efect (nu este necesar să repornești dispozitivul când dezactivezi conexiunea Bluetooth).</translation>
 <translation id="2366415278352956652">Activează proiecția</translation>
 <translation id="2372547058085956601">Stabilește intervalul de inactivitate până la conectarea automată la o sesiune publică.
 
@@ -450,6 +454,7 @@
       Dacă această setare nu este configurată, utilizatorul poate alege să folosească sau nu această funcție.
 
       Această setare a fost eliminată din <ph name="PRODUCT_NAME" /> versiunea 29 și din versiunile ulterioare.</translation>
+<translation id="2432116014157020512">Introducerea parolei este necesară o dată la o săptămână (168 de ore).</translation>
 <translation id="2436445024487698630">Permite conectarea la <ph name="PRODUCT_NAME" /></translation>
 <translation id="243972079416668391">Specificați acțiunea de urmat după trecerea intervalului de inactivitate dacă se utilizează o sursă de c.a.
 
@@ -504,6 +509,13 @@
           Adresa URL pentru rezultatele instantanee de la Google poate fi specificată ca: <ph name="GOOGLE_INSTANT_SEARCH_URL" />.
 
            Această politică este urmată numai dacă politica „DefaultSearchProviderEnabled” este activată.</translation>
+<translation id="2569647487017692047">Dacă această politică este dezactivată, <ph name="PRODUCT_OS_NAME" /> va dezactiva conexiunea Bluetooth, iar utilizatorul nu o va putea reactiva.
+
+      Dacă această politică este activată sau nu este configurată, utilizatorul va putea activa sau dezactiva conexiunea Bluetooth după cum dorește.
+
+      Dacă această politică este configurată, utilizatorul nu o poate modifica sau ignora.
+
+      După ce conexiunea Bluetooth este activată, utilizatorul trebuie să se deconecteze și să se conecteze din nou pentru ca modificările să aibă efect (nu este necesar când dezactivezi conexiunea Bluetooth).</translation>
 <translation id="2571066091915960923">Activează sau dezactivează serverul proxy pentru comprimarea datelor și împiedică utilizatorii să modifice această setare.
 
       Dacă activați sau dezactivați această setare, utilizatorii nu o pot modifica sau înlocui.
@@ -620,6 +632,15 @@
 <translation id="2884728160143956392">Permite cookie-uri de sesiune pe aceste site-uri</translation>
 <translation id="2893546967669465276">Trimite jurnalele de sistem serverului de gestionare</translation>
 <translation id="2899002520262095963">Aplicațiile Android pot folosi configurațiile rețelei și certificatele CA stabilite prin această politică, dar nu au acces la anumite opțiuni de configurare.</translation>
+<translation id="2901399514673504930">Dispozitivele de stocare externe sunt tratate ca „numai în citire”.
+
+      Această politică se aplică numai când politica ExternalStorageDisabled este dezactivată sau nu este configurată.
+
+      Când această politică este activată, utilizatorii nu pot scrie nimic pe dispozitivele de stocare externe.
+
+      Dacă setarea este dezactivată sau nu este configurată, utilizatorii pot crea și modifica fișierele dispozitivelor de stocare externe pe care se poate scrie.
+
+      Actualizarea dinamică a acestei politici este acceptată în M56 sau versiunile ulterioare.</translation>
 <translation id="2906874737073861391">Lista extensiilor din pachetul de aplicații</translation>
 <translation id="2908277604670530363">Numărul maxim de conexiuni simultane la serverul proxy</translation>
 <translation id="2948087343485265211">Indică dacă activitatea audio afectează gestionarea consumului de energie.
@@ -664,9 +685,6 @@
           Această politică este opțională. Dacă nu este setată, nu se va efectua înlocuirea termenilor de căutare.
 
           Această politică este respectată doar dacă este activată politica „DefaultSearchProviderEnabled”.</translation>
-<translation id="3067188277482006117">Dacă este activată, utilizatorul poate folosi hardware-ul de pe dispozitivele Chrome pentru a-și atesta la distanță identitatea către autoritatea de certificare pentru confidențialitate prin intermediul API-ului Enterprise Platform Keys chrome.enterprise.platformKeysPrivate.challengeUserKey().
-
-          Dacă este dezactivată sau dacă nu este configurată, apelurile către API nu vor reuși și vor genera un cod de eroare.</translation>
 <translation id="3069958900488014740">Îți permite să dezactivezi optimizarea pentru WPAD (Web Proxy Auto-Discovery) în <ph name="PRODUCT_NAME" />.
 
       Dacă această politică este dezactivată, optimizarea pentru WPAD este, de asemenea, dezactivată, iar <ph name="PRODUCT_NAME" /> va aștepta mai mult timp un răspuns de la serverele WPAD bazate pe DNS. Dacă politica nu este configurată sau este activată, optimizarea pentru WPAD este activată.
@@ -781,6 +799,7 @@
 <translation id="3322902067538988734">Dacă această politică este activată, utilizatorul trebuie să se conecteze la <ph name="PRODUCT_NAME" /> cu profilul său înainte de a folosi browserul. Iar politica BrowserGuestModeEnabled va fi în mod prestabilit dezactivată.
 
       Dacă această politică este dezactivată sau nu este configurată, utilizatorul poate folosi browserul fără să se conecteze la <ph name="PRODUCT_NAME" />.</translation>
+<translation id="3347687541825006165">Setează frecvența cu care un utilizator trebuie să introducă parola pentru a folosi deblocarea rapidă.</translation>
 <translation id="3381968327636295719">Utilizează în mod prestabilit browserul gazdă</translation>
 <translation id="3417418267404583991">Dacă această politică este activată sau nu este configurată, <ph name="PRODUCT_OS_NAME" /> va permite invitaților să se conecteze. Conectările invitaților sunt sesiuni de utilizator anonime și nu necesită o parolă.
 
@@ -973,6 +992,9 @@
 
       Dacă această politică este activată, se vor trimite pachete de monitorizare din rețea (numite și <ph name="HEARTBEATS_TERM" />).
       Dacă politica este dezactivată sau nu este configurată, nu se vor trimite pachete.</translation>
+<translation id="3963602271515417124">Dacă este activată, atestarea la distanță este permisă pentru dispozitiv. De asemenea, un certificat va fi generat și încărcat automat pe Serverul de gestionare a dispozitivelor.
+
+          Dacă este dezactivată sau dacă nu este configurată, nu se va genera niciun certificat, iar apelurile către API pentru extensia enterprise.platformKeys nu vor reuși.</translation>
 <translation id="3964909636571393861">Permite accesul la o listă de adrese URL</translation>
 <translation id="3965339130942650562">Timp limită până când este executată deconectarea utilizatorului inactiv</translation>
 <translation id="3967075520570946456">Activează afișarea paginii de întâmpinare la prima lansare a browserului după upgrade-ul sistemului de operare.</translation>
@@ -1019,6 +1041,17 @@
 
           Dacă politica nu este configurată, va fi folosită politica „AllowCookies”, iar utilizatorul o va putea schimba.</translation>
 <translation id="4103289232974211388">Redirecționează către furnizorul de identitate SAML după confirmarea utilizatorului</translation>
+<translation id="4103941930938018145">Această politică este învechită. Folosește <ph name="DEFAULT_PLUGINS_SETTING_POLICY" /> ca să controlezi disponibilitatea pluginului Flash și <ph name="ALWAYS_OPEN_PDF_EXTERNALLY_POLICY" /> ca să controlezi dacă vizualizatorul PDF integrat trebuie folosit pentru deschiderea fișierelor PDF.
+
+      Specifică o listă de pluginuri care sunt dezactivate în <ph name="PRODUCT_NAME" /> și împiedică utilizatorii să modifice această setare.
+
+      Metacaracterele „*” și „?” pot fi folosite pentru a corespunde unor secvențe de caractere arbitrare. „*” corespunde unui număr arbitrar de caractere, iar „?” corespunde unui singur caracter opțional, adică unui caracter sau niciunuia. Pentru a folosi chiar caracterele „*”, „?” sau „\”, poți insera un caracter „\” în fața lor, numit și caracter escape.
+
+      Dacă activezi setarea, pluginurile din lista specificată nu sunt folosite niciodată în <ph name="PRODUCT_NAME" />. Pluginurile sunt marcate ca dezactivate în „about:plugins”, iar utilizatorii nu le pot activa.
+
+      Reține că această politică poate fi înlocuită de EnabledPlugins și DisabledPluginsExceptions.
+
+      Dacă politica nu este configurată, utilizatorul poate folosi orice plugin instalat în sistem, cu excepția pluginurilor codificate incompatibile, învechite sau periculoase.</translation>
 <translation id="410478022164847452">Specifică intervalul de timp fără intervenția utilizatorului după care se ia măsura pentru inactivitate la funcționarea pe c.a.
 
           Dacă politica este setată, aceasta specifică intervalul de timp în care utilizatorul trebuie să rămână inactiv înainte ca <ph name="PRODUCT_OS_NAME" /> să ia măsura pentru inactivitate, care poate fi configurată separat.
@@ -1077,6 +1110,7 @@
 <translation id="4372704773119750918">Nu permite ca utilizatorul întreprindere să facă parte din profilul multiplu (principal sau secundar)</translation>
 <translation id="4377599627073874279">Permite tuturor site-urilor să afișeze toate imaginile</translation>
 <translation id="4389091865841123886">Configurați atestarea la distanță cu mecanismul TPM.</translation>
+<translation id="4397469093966511008">Dacă dezactivezi această politică, utilizatorii nu vor mai putea trimite unele informații de sistem și conținutul paginii la serverele Google. Dacă această setare este activată sau nu este configurată, utilizatorii au permisiunea să trimită unele informații de sistem și conținutul paginii la Navigarea sigură pentru detectarea aplicațiilor și a site-urilor periculoase.</translation>
 <translation id="4423597592074154136">Specifică manual setările proxy</translation>
 <translation id="4429220551923452215">Activează sau dezactivează comanda rapidă pentru aplicații din bara de marcaje.
 
@@ -1265,6 +1299,12 @@
 
       Dacă politica nu este configurată sau dacă este dezactivată, modul pentru dezvoltatori va fi în continuare disponibil pe dispozitiv.</translation>
 <translation id="5208240613060747912">Vă permite să setați o listă de modele pentru adresele URL ce specifică site-urile care nu au permisiunea să afișeze notificări. Dacă această politică nu este setată, valoarea prestabilită la nivel global va fi folosită pentru toate site-urile, fie din politica „DefaultNotificationsSetting”, în cazul în care aceasta este setată, fie din configurația personală a utilizatorului, în caz contrar.</translation>
+<translation id="5209594095390052164">Permite activarea sau dezactivarea limitării rețelei.
+      Se aplică tuturor utilizatorilor și tuturor interfețelor de pe acest dispozitiv. După ce este configurată,
+      limitarea se aplică până când politica este modificată pentru a o dezactiva.
+
+      Dacă este dezactivată, nu există limitare.
+      Dacă este activată, sistemul este limitat la cotele de încărcare și de descărcare specificate (în KB/s)</translation>
 <translation id="5219844027738217407">În cazul aplicațiilor Android, această politică afectează numai microfonul. Când politica este activată, microfonul este dezactivat pentru toate aplicațiile Android, fără excepții.</translation>
 <translation id="5226033722357981948">Specifică dacă instrumentul de găsire de pluginuri ar trebui dezactivat</translation>
 <translation id="523505283826916779">Setări de accesibilitate</translation>
@@ -1332,12 +1372,18 @@
 <translation id="5469484020713359236">Vă permite să setați o listă cu modele pentru adresele URL ce specifică site-urile care nu sunt autorizate să seteze cookie-uri. Dacă această politică nu este setată, valoarea prestabilită la nivel global va fi folosită pentru toate site-urile, fie din politica „DefaultCookiesSetting”, în cazul în care este setată, fie din configurația personală a utilizatorului, în caz contrar.</translation>
 <translation id="5469825884154817306">Blochează imagini de pe aceste site-uri</translation>
 <translation id="5475361623548884387">Activează printarea</translation>
-<translation id="5496487987837463732">Dacă dezactivezi această politică, utilizatorii nu vor mai putea trimite informații la serverele Google despre erorile de securitate pe care le întâmpină. Dacă această setare este activată sau nu este configurată, utilizatorii au permisiunea să trimită informații atunci când întâmpină o eroare SSL sau primesc un avertisment de la Navigarea sigură.</translation>
 <translation id="5499375345075963939">Această politică este activă numai în modul Vânzare.
 
       Dacă valoarea acestei politici este configurată și diferă de 0, atunci utilizatorul demonstrativ conectat în prezent va fi deconectat automat după o perioadă de inactivitate specificată.
 
       Valoarea pentru politică trebuie specificată în milisecunde.</translation>
+<translation id="5506213378070007377">Informațiile despre starea Android sunt trimise la 
+      server.
+
+      Dacă politica este dezactivată, informațiile despre stare nu vor fi raportate.
+      Dacă politica este activată sau nu este configurată, informațiile despre stare vor fi raportate.
+
+      Politica se aplică numai dacă sunt activate aplicațiile Android.</translation>
 <translation id="5511702823008968136">Activează bara de marcaje</translation>
 <translation id="5512418063782665071">Adresa URL a paginii de pornire</translation>
 <translation id="5523812257194833591">O sesiune publică pentru conectare automată după un interval de inactivitate.
@@ -1389,6 +1435,11 @@
           Dacă această setare este activată, gazda de acces la distanță compară numele utilizatorului local (cu care este asociată gazda) și numele contului Google înregistrat ca proprietar al gazdei (adică „johndoe” dacă proprietarul gazdei este Contul Google „johndoe@example.com”). Gazda de acces la distanță nu va porni dacă numele proprietarului gazdei este diferit de numele utilizatorului local cu care este asociată gazda. Politica RemoteAccessHostMatchUsername trebuie să fie folosită împreună cu politica RemoteAccessHostDomain pentru a impune și asocierea Contului Google cu un anumit domeniu (adică „example.com”).
 
           Dacă această setare este dezactivată sau nu este configurată, gazda de acces poate fi asociată oricărui utilizator local.</translation>
+<translation id="5694594914843889579">Dacă această politică este activată, stocarea externă nu va fi disponibilă în browserul de fișiere.
+
+      Această politică afectează toate tipurile de suporturi de stocare. De exemplu: unități flash USB, hard diskuri externe, carduri SD și alte carduri de memorie, stocarea optică etc. Stocarea internă nu este afectată. Prin urmare, fișierele salvate în dosarul Descărcări pot fi în continuare accesate. Nici Google Drive nu este afectat de această politică.
+
+      Dacă această setare este dezactivată sau nu este configurată, utilizatorii pot folosi pe dispozitivele lor toate tipurile de dispozitive de stocare externe acceptate.</translation>
 <translation id="5697306356229823047">Raportează utilizatorii dispozitivului</translation>
 <translation id="570062449808736508">Când această politică este setată la un șir completat, WebView va citi restricțiile privind adresele URL de la furnizorul de conținut cu numele de autoritate indicat.</translation>
 <translation id="5703863730741917647">Specificați acțiunea de urmat după trecerea intervalului de inactivitate.
@@ -1418,6 +1469,19 @@
           Dacă politica nu este setată, se utilizează un interval de timp prestabilit.
 
           Valoarea politicii trebuie să fie specificată în milisecunde.</translation>
+<translation id="5783595563813359339">Această politică este învechită. Folosește <ph name="DEFAULT_PLUGINS_SETTING_POLICY" /> ca să controlezi disponibilitatea pluginului Flash și <ph name="ALWAYS_OPEN_PDF_EXTERNALLY_POLICY" /> ca să controlezi dacă vizualizatorul PDF integrat trebuie folosit pentru deschiderea fișierelor PDF.
+
+      Specifică o listă de pluginuri pe care utilizatorul le poate activa sau dezactiva în <ph name="PRODUCT_NAME" />.
+
+      Metacaracterele „*” și „?” pot fi folosite pentru a corespunde unor secvențe de caractere arbitrare. „*” corespunde unui număr arbitrar de caractere, iar „?” corespunde unui singur caracter opțional, adică unui caracter sau niciunuia. Pentru a folosi chiar caracterele „*”, „?” sau „\”, poți insera un caracter „\” în fața lor, numit și caracter escape.
+
+      Dacă activezi setarea, pluginurile din lista specificată pot fi folosite în <ph name="PRODUCT_NAME" />. Utilizatorii pot activa sau dezactiva pluginurile în „about:plugins”, chiar dacă pluginul corespunde și unui șablon din DisabledPlugins. De asemenea, utilizatorii pot activa și dezactiva pluginurile care nu corespund niciunui șablon din DisabledPlugins, DisabledPluginsExceptions și EnabledPlugins.
+
+      Scopul acestei politici este să permită trecerea strictă a pluginurilor în lista neagră, în cazul în care lista „DisabledPlugins” conține intrări cu metacaractere, cum ar fi „*” pentru dezactivarea tuturor pluginurilor sau „*Java*” pentru dezactivarea tuturor pluginurilor Java, dar administratorul dorește să activeze anumite versiuni, cum ar fi „IcedTea Java 2.3”. Aceste versiuni pot fi specificate în această politică.
+
+      Reține că atât numele pluginului, cât și numele grupului de pluginuri trebuie să fie excluse. Fiecare grup de pluginuri este afișat într-o secțiune separată în about:plugins; fiecare secțiune poate avea unul sau mai multe pluginuri. De exemplu, pluginul „Shockwave Flash” aparține grupului „Adobe Flash Player” și ambele nume trebuie să corespundă cu intrări din lista de excepții, dacă acel plugin trebuie exclus din lista neagră.
+
+      Dacă politica nu este configurată, pluginurile care corespund șabloanelor din „DisabledPlugins” vor fi dezactivate și blocate, iar utilizatorul nu le va putea activa.</translation>
 <translation id="5795001131770861387">Activează compatibilitatea cu HTTP/0.9 pentru porturile care nu sunt prestabilite</translation>
 <translation id="5809728392451418079">Setați numele afișat pentru conturile locale de pe gadget</translation>
 <translation id="5814301096961727113">Setați starea prestabilită de feedback vocal pe ecranul de conectare.</translation>
@@ -1483,13 +1547,6 @@
 
       Dacă politica nu este configurată sau este dezactivată, <ph name="PRODUCT_NAME" /> nu va efectua verificări de revocare online în <ph name="PRODUCT_NAME" /> versiunea 19 și în versiunile ulterioare.</translation>
 <translation id="5966615072639944554">Extensii cărora li se permite să utilizeze API-ul de atestare la distanță</translation>
-<translation id="5974970919245996815">Informațiile de raportare despre starea Android sunt trimise înapoi
-      la server.
-
-      Dacă politica este dezactivată, informațiile nu vor fi raportate.
-      Dacă politica este activată sau nu este configurată, informațiile vor fi raportate.
-
-      Politica se aplică numai dacă sunt activate aplicațiile Android.</translation>
 <translation id="5983708779415553259">Comportamentul prestabilit pentru site-urile care nu sunt incluse în niciun pachet de conținut</translation>
 <translation id="5997543603646547632">Utilizați în mod prestabilit formatul de 24 de ore</translation>
 <translation id="6009903244351574348">Permiteți ca <ph name="PRODUCT_FRAME_NAME" /> să gestioneze tipurile de conținut enumerate. Dacă această politică nu este setată, programul de redare prestabilit va fi folosit pentru toate site-urile așa cum se specifică în politica „ChromeFrameRendererSettings”.</translation>
@@ -1508,16 +1565,20 @@
 
       Dacă această politică este dezactivată, accelerarea hardware va fi dezactivată.</translation>
 <translation id="6074963268421707432">Nu permite niciunui site să afișeze notificări pe desktop</translation>
-<translation id="6076008833763548615">Dezactivați conectarea dispozitivelor de stocare externe.
-
-      Dacă această politică este activată, stocarea externă nu va fi disponibilă în browserul de fișiere.
-
-      Această politică afectează toate tipurile de suporturi de stocare. De exemplu: unități flash USB, hard diskuri externe, carduri de memorie SD și de alt tip, stocarea optică etc. Stocarea internă nu este afectată. Prin urmare, fișierele salvate în dosarul Descărcare pot fi în continuare accesate. Nici Disc Google nu este afectat de această politică.
-
-      Dacă această setare este dezactivată sau nu este configurată, atunci utilizatorii pot folosi toate tipurile acceptate de dispozitive de stocare externe.</translation>
 <translation id="6076099373507468537">Definește lista de dispozitive USB care pot fi detașate de driverul kernel pentru a fi folosite prin API-ul chrome.usb direct într-o aplicație web. Pentru a se identifica un anumit hardware, intrările sunt perechi formate din Identificatorul furnizorului USB și Identificatorul produsului USB.
 
       Dacă această politică nu este configurată, lista de dispozitive USB detașabile este necompletată.</translation>
+<translation id="608377055310226486">Această politică este învechită. Folosește <ph name="DEFAULT_PLUGINS_SETTING_POLICY" />  ca să controlezi disponibilitatea pluginului Flash și <ph name="ALWAYS_OPEN_PDF_EXTERNALLY_POLICY" /> ca să controlezi dacă vizualizatorul PDF integrat trebuie folosit pentru deschiderea fișierelor PDF.
+
+      Specifică o listă de pluginuri care sunt activate în <ph name="PRODUCT_NAME" /> și împiedică utilizatorii să modifice această setare.
+
+      Metacaracterele „*” și „?” pot fi folosite pentru a corespunde unor secvențe de caractere arbitrare. „*” corespunde unui număr arbitrar de caractere, iar „?” corespunde unui singur caracter opțional, adică unui caracter sau niciunuia. Pentru a folosi chiar caracterele „*”, „?” sau „\”, poți insera un caracter „\” în fața lor, numit și caracter escape.
+
+      Pluginurile din lista specificată sunt folosite întotdeauna în <ph name="PRODUCT_NAME" /> dacă acestea sunt instalate. Pluginurile sunt marcate ca activate în „about:plugins”, iar utilizatorii nu le pot dezactiva.
+
+      Reține că această politică înlocuiește DisabledPlugins și DisabledPluginsExceptions.
+
+      Dacă politica nu este configurată, utilizatorul poate dezactiva oricare plugin instalat în sistem.</translation>
 <translation id="6093156968240188330">Permite utilizatorilor la distanță să interacționeze cu ferestrele cu privilegii superioare din sesiunile de asistență la distanță</translation>
 <translation id="6095999036251797924">Indică intervalul de timp fără intervenția utilizatorului după care ecranul este blocat atunci când dispozitivul funcționează pe c.a. sau pe baterie.
 
@@ -1549,6 +1610,12 @@
 <translation id="6155936611791017817">Setați cursorul mare pe ecranul de conectare ca stare prestabilită</translation>
 <translation id="6157537876488211233">Lista de valori separate prin virgulă a regulilor de ocolire a proxy-ului</translation>
 <translation id="6158324314836466367">Numele magazinului web pentru întreprinderi (politică învechită)</translation>
+<translation id="6166832345529129545">Controlează ce moduri pentru deblocare rapidă pot fi configurate și folosite.
+      Această setare adaugă pe lista albă modurile pentru deblocare rapidă permise care pot fi configurate și folosite pentru a debloca ecranul. Valoarea este o listă de șiruri, iar fiecare dintre acestea trebuie să fie unul dintre următoarele: „toate”, „PIN”. Dacă opțiunea „toate” este selectată, vor fi disponibile toate modurile rapide acceptate. În caz contrar, vor fi disponibile doar modurile din listă.
+
+      Dacă setarea este configurată, modurile pentru deblocare rapidă de tipuri neincluse în listă nu pot fi configurate sau folosite.
+
+      Dacă setarea nu este configurată, modul „PIN” va fi activat, iar toate celelalte moduri vor fi dezactivate.</translation>
 <translation id="6167074305866468481">Avertisment: compatibilitatea cu SSLv3 va fi eliminată complet pentru <ph name="PRODUCT_NAME" /> după versiunea 43 (în jurul lunii iulie 2015), iar această politică va fi eliminată concomitent.
 
       Dacă această politică nu este configurată, <ph name="PRODUCT_NAME" /> va folosi o versiune minimă prestabilită, care pentru <ph name="PRODUCT_NAME" /> 39 este SSLv3, iar pentru versiunile ulterioare este TLS 1.0.
@@ -1611,6 +1678,7 @@
 <translation id="6392973646875039351">Activează funcția de Completare automată din <ph name="PRODUCT_NAME" /> și permite utilizatorilor să completeze în mod automat formularele web folosind informațiile stocate anterior, cum ar fi informațiile adresei fizice sau ale cardului de credit. Dacă dezactivați această setare, Completarea automată va fi inaccesibilă pentru utilizatori. Dacă activați această setare sau nu configurați o valoare, Completarea automată va rămâne sub controlul utilizatorului. Acest lucru va permite utilizatorilor să configureze profiluri pentru Completarea automată și să activeze sau să dezactiveze funcția Completare automată după cum doresc.</translation>
 <translation id="6394350458541421998">Această politică a fost retrasă începând cu <ph name="PRODUCT_OS_NAME" /> versiunea 29. Utilizați, în schimb, politica PresentationScreenDimDelayScale.</translation>
 <translation id="6401669939808766804">Deconectați utilizatorul</translation>
+<translation id="6413263121045928260">Introducerea parolei este necesară în fiecare zi (24 de ore).</translation>
 <translation id="6417861582779909667">Vă permite să setați o listă cu modele pentru adresele URL ce specifică site-urile care nu sunt autorizate să seteze cookie-uri. Dacă această politică este lăsată nesetată, valoarea prestabilită la nivel global va fi folosită pentru toate site-urile, din politica „DefaultCookiesSetting” în cazul în care este setată sau din configurația personală a utilizatorului, în caz contrar.</translation>
 <translation id="6467433935902485842">Vă permite să setați o listă cu modele pentru adresele URL ce specifică site-urile care nu au permisiunea de a rula pluginuri. Dacă această politică este lăsată nesetată, valoarea prestabilită la nivel global va fi folosită pentru toate site-urile, fie din politica „DefaultPluginsSetting”, în cazul în care aceasta este setată, fie din configurația personală a utilizatorului, în caz contrar.</translation>
 <translation id="6473334971332473690">Permite ca funcția Smart Lock să fie folosită pe dispozitivele <ph name="PRODUCT_OS_NAME" />.
@@ -1810,6 +1878,7 @@
           asociate unui domeniu Active Directory.</translation>
 <translation id="7063895219334505671">Permite ferestre pop-up de pe aceste site-uri</translation>
 <translation id="706669471845501145">Permite site-urilor să afișeze notificări pe desktop</translation>
+<translation id="7072406291414141328">Activează limitarea lățimii de bandă a rețelei</translation>
 <translation id="7079519252486108041">Blochează ferestrele pop-up de pe aceste site-uri</translation>
 <translation id="7091198954851103976">Rulează întotdeauna pluginuri care necesită autorizare</translation>
 <translation id="7106631983877564505">Activează blocarea când dispozitivele <ph name="PRODUCT_OS_NAME" /> ajung să fie inactive sau suspendate.
@@ -1862,9 +1931,6 @@ nu poate fi stabilit de utilizator din setările browserului.
 <translation id="7132877481099023201">Adresele URL cărora li se va acorda acces automat la dispozitivele de capturare a conținutului video</translation>
 <translation id="7167436895080860385">Permite utilizatorilor să afișeze parolele în managerul de parole (s-a renunțat la dezvoltare)</translation>
 <translation id="7173856672248996428">Profil efemer</translation>
-<translation id="7187256234726597551">Dacă această politică este activată, atestarea la distanță este permisă pentru dispozitiv. De asemenea, un certificat va fi generat și încărcat în mod automat pe Serverul de gestionare a dispozitivelor.
-
-          Dacă această politică nu este activată sau configurată, nu se va genera niciun certificat și apelurile către API-ul pentru extensia enterprise.platformKeysPrivate nu vor reuși.</translation>
 <translation id="718956142899066210">Tipuri de conexiune permise pentru actualizări</translation>
 <translation id="7194407337890404814">Numele furnizorului de căutare prestabilit</translation>
 <translation id="7195064223823777550">Specificați ce se întâmplă atunci când utilizatorul închide capacul.
@@ -1986,6 +2052,7 @@ nu poate fi stabilit de utilizator din setările browserului.
 
       Dacă această politică nu este setată, se va utiliza dimensiunea prestabilită, iar utilizatorul o va putea modifica folosind parametrul --disk-cache-size.</translation>
 <translation id="7604169113182304895">Aplicațiile Android pot alege în mod voluntar să respecte această listă. Nu le poți forța să o respecte.</translation>
+<translation id="7611372873040492235">Introducerea parolei este necesară o dată la 12 ore.</translation>
 <translation id="7612157962821894603">Marcaje la nivel de sistem de aplicat când pornește <ph name="PRODUCT_NAME" /></translation>
 <translation id="7614663184588396421">Lista schemelor de protocol dezactivate</translation>
 <translation id="7625444193696794922">Specifică un canal de lansare la care ar trebui să fie blocat acest dispozitiv.</translation>
@@ -2140,12 +2207,16 @@ nu poate fi stabilit de utilizator din setările browserului.
           asociate unui domeniu Active Directory.</translation>
 <translation id="7937766917976512374">Permiteți sau refuzați preluarea conținutului video</translation>
 <translation id="7941975817681987555">Nu anticipa acțiunile în rețea pentru nicio conexiune la rețea</translation>
+<translation id="7942429005743031780">Această politică specifică extensiile cărora li se permite să folosească API-ul Enterprise Platform Keys chrome.enterprise.platformKeys.challengeUserKey() pentru atestarea la distanță. Extensiile trebuie să fie adăugate în această listă pentru a folosi API-ul.
+
+          Dacă o extensie nu este în listă sau dacă lista nu este configurată, apelul către API nu va reuși și va genera un cod de eroare.</translation>
 <translation id="7953256619080733119">Gazde pentru excepții adăugate manual ale utilizatorilor gestionați</translation>
 <translation id="7971839631300653352">SSL 3.0</translation>
 <translation id="7974114691960514888">Această politică nu mai este acceptată. Permite utilizarea de servere STUN și de retransmisie în cazul conectării la un client la distanță. Dacă această setare este activată, atunci acest computer poate să descopere computere gazdă la distanță și să se conecteze la acestea, chiar dacă există un firewall. Dacă această setare este dezactivată, iar conexiunile UDP de ieșire sunt filtrate de firewall, atunci acest computer se poate conecta numai la computerele gazdă aflate în rețeaua locală.</translation>
 <translation id="7986374692540430898">Nu poți forța aplicațiile Android să folosească un proxy. Un subset al setărilor de proxy este pus la dispoziția aplicațiilor Android, pe care acestea pot alege în mod voluntar să îl respecte. Pentru detalii suplimentare, consultă politica <ph name="PROXY_MODE_POLICY" />.</translation>
 <translation id="802147957407376460">Rotește ecranul la 0 grade</translation>
 <translation id="8044493735196713914">Raportați modul de pornire al dispozitivului</translation>
+<translation id="8050080920415773384">Printare nativă</translation>
 <translation id="8059164285174960932">Adresa URL de unde clienții cu acces la distanță își pot obține indicativul de autentificare</translation>
 <translation id="8071636581296916773">Activează folosirea serverelor de transmisie când clienții la distanță încearcă să stabilească o conexiune cu acest computer.
 
@@ -2215,9 +2286,6 @@ nu poate fi stabilit de utilizator din setările browserului.
 
       Dacă această politică nu este setată, nu vor exista excepții de la lista neagră din politica „URLBlacklist”.</translation>
 <translation id="8176035528522326671">Permiteți ca utilizatorul din companie să fie doar utilizatorul principal într-o sesiune cu mai multe profiluri (comportamentul prestabilit pentru utilizatorii gestionați de companie)</translation>
-<translation id="8197918588508433925">Această politică specifică extensiile cărora li se permite să utilizeze API-ul Enterprise Platform Keys chrome.enterprise.platformKeysPrivate.challengeUserKey() pentru atestarea la distanță. Extensiile trebuie să fie adăugate în această listă pentru a utiliza API-ul.
-
-          Dacă o extensie nu este în listă sau dacă lista nu este configurată, apelul către API nu va reuși și va genera un cod de eroare.</translation>
 <translation id="8214600119442850823">Configurează managerul de parole.</translation>
 <translation id="8244525275280476362">Întârzierea maximă la preluare după invalidarea unei politici</translation>
 <translation id="8256688113167012935">Controlează numele de cont afișat de <ph name="PRODUCT_OS_NAME" /> pe ecranul de pornire pentru contul local corespondent de pe gadget.
@@ -2311,17 +2379,6 @@ nu poate fi stabilit de utilizator din setările browserului.
           Pentru exemple de șabloane, accesează https://www.chromium.org/developers/how-tos/chrome-frame-getting-started.</translation>
 <translation id="8493645415242333585">Dezactivează salvarea istoricului browserului</translation>
 <translation id="8499172469244085141">Setări prestabilite (utilizatorii le pot ignora)</translation>
-<translation id="8501011084242226370">Specifică o listă de pluginuri pe care utilizatorul le poate activa sau dezactiva în <ph name="PRODUCT_NAME" />.
-
-      Metacaracterele „*” și „?” pot fi folosite pentru a corespunde unor secvențe de caractere arbitrare. „*” corespunde unui număr arbitrar de caractere, iar „?” corespunde unui singur caracter opțional, adică unui caracter sau niciunuia. Pentru a folosi chiar caracterele „*”, „?” sau „\”, puteți insera un caracter „\” în fața lor, numit și caracter escape.
-
-      Dacă activați această setare, pluginurile din lista specificată pot fi folosite în <ph name="PRODUCT_NAME" />. Utilizatorii pot activa sau dezactiva pluginurile în „about:plugins”, chiar dacă pluginul corespunde și unui șablon din DisabledPlugins. Utilizatorii pot activa și dezactiva și pluginurile care nu corespund niciunui șablon din DisabledPlugins, DisabledPluginsExceptions și EnabledPlugins.
-
-      Scopul acestei politici este să permită trecerea strictă a pluginurilor în lista neagră, în cazul în care lista „DisabledPlugins” conține intrări cu metacaractere, cum ar fi „*” pentru dezactivarea tuturor pluginurilor sau „*Java*” pentru dezactivarea tuturor pluginurilor Java, dar administratorul dorește să activeze anumite versiuni, cum ar fi „IcedTea Java 2.3”. Aceste versiuni pot fi specificate în această politică.
-
-      Rețineți că atât numele pluginului, cât și numele grupului de pluginuri trebuie să fie excluse. Fiecare grup de pluginuri este afișat într-o secțiune separată în about:plugins; fiecare secțiune poate avea unul sau mai multe pluginuri. De exemplu, pluginul „Shockwave Flash” aparține grupului „Adobe Flash Player” și ambele nume trebuie să corespundă cu intrări din lista de excepții, dacă acel plugin trebuie exclus din lista neagră.
-
-      Dacă politica nu este configurată, pluginurile care corespund șabloanelor din „DisabledPlugins” vor fi dezactivate și blocate, iar utilizatorul nu le va putea activa.</translation>
 <translation id="8519264904050090490">Adrese URL pentru excepții adăugate manual ale utilizatorilor gestionați</translation>
 <translation id="8544375438507658205">Motor de redare HTML prestabilit pentru <ph name="PRODUCT_FRAME_NAME" /></translation>
 <translation id="8549772397068118889">Avertisment la accesarea site-urilor din afara pachetelor de conținut</translation>
@@ -2357,7 +2414,6 @@ nu poate fi stabilit de utilizator din setările browserului.
           Separă numele serverelor prin virgulă. Sunt permise metacaracterele (*).
 
           Dacă politica nu este configurată, <ph name="PRODUCT_NAME" /> va încerca să detecteze dacă un anumit server se află în intranet și numai după aceea va răspunde la solicitările IWA. Dacă un server este detectat ca fiind pe internet, <ph name="PRODUCT_NAME" /> va ignora solicitările IWA trimise de acesta.</translation>
-<translation id="8668394701842594241">Specifică o listă de pluginuri care sunt activate în <ph name="PRODUCT_NAME" /> și împiedică modificarea acestei setări de către utilizatori. Pentru a crea corespondențe între secvențe de caractere arbitrare pot fi folosite metacaracterele „*” și „?”. „*” corespunde unui număr arbitrar de caractere, în timp ce „?” specifică un caracter opțional unic, adică înlocuiește zero caractere sau un singur caracter. Caracterul escape este „\”, astfel încât pentru a realiza corespondența cu caracterele „*”, „?” și „\” în sine, puteți plasa caracterul „\” în fața acestora. Lista specificată de pluginuri este întotdeauna utilizată în <ph name="PRODUCT_NAME" /> în cazul în care acestea sunt instalate. Pluginurile sunt marcate ca activate în „about:plugins”, iar utilizatorii nu le pot dezactiva. Rețineți că această politică are prioritate atât față de DisabledPlugins, cât și față de DisabledPluginsExceptions. Dacă această politică rămâne nesetată, utilizatorul poate dezactiva toate pluginurile instalate în sistem.</translation>
 <translation id="8672321184841719703">Versiune țintă pentru actualizări automate</translation>
 <translation id="868068801094828689">Activează raportarea anonimă la Google a datelor privind utilizarea și blocările produsului <ph name="PRODUCT_NAME" /> și împiedică utilizatorii să modifice această setare.
 
@@ -2500,6 +2556,7 @@ nu poate fi stabilit de utilizator din setările browserului.
 <translation id="9088433379343318874">Activează furnizorul de conținut pentru utilizatori monitorizați</translation>
 <translation id="9088444059179765143">Configurează metoda de detectare automată a fusului orar</translation>
 <translation id="9096086085182305205">Lista albă de autentificare a serverelor</translation>
+<translation id="9098186110082719131">Introducerea parolei este necesară o dată la 6 ore.</translation>
 <translation id="9098553063150791878">Politici pentru autentificarea HTTP</translation>
 <translation id="9105265795073104888">Un singur subset de opțiuni pentru configurarea proxy-ului este pus la dispoziția aplicațiilor Android. Acestea pot alege în mod voluntar să folosească proxy-ul. Nu le poți forța să folosească un proxy.</translation>
 <translation id="9112897538922695510">Vă permite să înregistrați o listă de handlere de protocol. Aceasta poate fi doar o politică recomandată. Valoarea proprietății |protocol| trebuie setată la o schemă ca „mailto”, iar valoarea proprietății |url| trebuie setată la șablonul adresei URL al aplicației care gestionează schema. Șablonul poate include „%s”, care, dacă este prezent, va fi înlocuit cu adresa URL gestionată.
@@ -2527,5 +2584,11 @@ nu poate fi stabilit de utilizator din setările browserului.
 <translation id="922540222991413931">Configurați sursele pentru instalarea extensiilor, a aplicațiilor și a scripturilor de utilizator</translation>
 <translation id="924557436754151212">Importați parolele salvate din browserul prestabilit, la prima rulare</translation>
 <translation id="930930237275114205">Setați directorul <ph name="PRODUCT_FRAME_NAME" /> pentru datele utilizatorului</translation>
+<translation id="944607242500063080">Configurează modurile permise pentru deblocare rapidă.</translation>
 <translation id="944817693306670849">Setați dimensiunea pentru memorare în cache pe disc</translation>
+<translation id="969164417253718105">Această setare controlează frecvența cu care ecranul de blocare solicită introducerea parolei pentru a se folosi în continuare deblocarea rapidă. Dacă ultima introducere a parolei a fost în urmă cu mai mult decât prevede această setare, deblocarea rapidă nu va mai fi disponibilă la accesarea ecranului de blocare. Dacă utilizatorul menține pornit ecranul de blocare mai mult decât acest interval de timp, se va solicita o parolă data viitoare când acesta introduce codul greșit sau când accesează din nou ecranul de pornire, în funcție de care dintre acestea se realizează prima.
+
+      Dacă setarea este configurată, utilizatorilor care folosesc deblocarea rapidă li se va solicita să își introducă parola pe ecranul de blocare, în funcție de această setare.
+
+      Dacă setarea nu este configurată, utilizatorilor care folosesc deblocarea rapidă li se va solicita să își introducă parola pe ecranul de blocare în fiecare zi.</translation>
 </translationbundle>

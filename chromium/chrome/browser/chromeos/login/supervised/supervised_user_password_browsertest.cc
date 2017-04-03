@@ -23,10 +23,10 @@
 #include "chrome/browser/supervised_user/supervised_user_constants.h"
 #include "chromeos/cryptohome/mock_async_method_caller.h"
 #include "chromeos/cryptohome/mock_homedir_methods.h"
-#include "components/sync/api/fake_sync_change_processor.h"
-#include "components/sync/api/sync_change.h"
-#include "components/sync/api/sync_error_factory_mock.h"
-#include "components/sync/core/attachments/attachment_service_proxy_for_test.h"
+#include "components/sync/model/attachments/attachment_service_proxy_for_test.h"
+#include "components/sync/model/fake_sync_change_processor.h"
+#include "components/sync/model/sync_change.h"
+#include "components/sync/model/sync_error_factory_mock.h"
 #include "components/sync/protocol/sync.pb.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/test/browser_test_utils.h"
@@ -78,7 +78,7 @@ IN_PROC_BROWSER_TEST_F(SupervisedUserPasswordTest,
       user_manager::UserManager::Get()->GetUsers().at(0);
   std::string sync_id =
       ChromeUserManager::Get()->GetSupervisedUserManager()->GetUserSyncId(
-          user->email());
+          user->GetAccountId().GetUserEmail());
   base::DictionaryValue password;
   password.SetIntegerWithoutPathExpansion(
       kSchemaVersion, SupervisedUserAuthentication::SCHEMA_SALT_HASHED);
@@ -129,7 +129,7 @@ IN_PROC_BROWSER_TEST_F(SupervisedUserPasswordTest,
 
   std::string sync_id =
       ChromeUserManager::Get()->GetSupervisedUserManager()->GetUserSyncId(
-          supervised_user->email());
+          supervised_user->GetAccountId().GetUserEmail());
 
   ::sync_pb::ManagedUserSpecifics managed_user_proto;
 
@@ -191,7 +191,7 @@ IN_PROC_BROWSER_TEST_F(SupervisedUserPasswordTest,
       user_manager::UserManager::Get()->GetUsers().at(0);
   std::string sync_id =
       ChromeUserManager::Get()->GetSupervisedUserManager()->GetUserSyncId(
-          user->email());
+          user->GetAccountId().GetUserEmail());
   base::DictionaryValue password;
   password.SetIntegerWithoutPathExpansion(
       kSchemaVersion, SupervisedUserAuthentication::SCHEMA_SALT_HASHED);
@@ -219,7 +219,7 @@ IN_PROC_BROWSER_TEST_F(SupervisedUserPasswordTest,
 
   std::string sync_id =
       ChromeUserManager::Get()->GetSupervisedUserManager()->GetUserSyncId(
-          supervised_user->email());
+          supervised_user->GetAccountId().GetUserEmail());
 
   ::sync_pb::ManagedUserSpecifics managed_user_proto;
 

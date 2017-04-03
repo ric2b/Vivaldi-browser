@@ -10,6 +10,7 @@
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/trace_event/trace_event.h"
+#include "components/subresource_filter/core/common/first_party_origin.h"
 #include "components/subresource_filter/core/common/memory_mapped_ruleset.h"
 #include "third_party/WebKit/public/platform/WebURL.h"
 
@@ -81,13 +82,13 @@ DocumentSubresourceFilter::DocumentSubresourceFilter(
       ruleset_(ruleset),
       ruleset_matcher_(ruleset_->data(), ruleset_->length()),
       first_disallowed_load_callback_(first_disallowed_load_callback) {
+  TRACE_EVENT1("loader", "DocumentSubresourceFilter::DocumentSubresourceFilter",
+               "document_url", ancestor_document_urls.empty()
+                                   ? std::string()
+                                   : ancestor_document_urls[0].spec());
+
   DCHECK_NE(activation_state_, ActivationState::DISABLED);
   DCHECK(ruleset);
-
-  if (ancestor_document_urls.empty())
-    return;
-
-  document_origin_ = url::Origin(ancestor_document_urls.front());
 
   url::Origin parent_document_origin;
   for (auto iter = ancestor_document_urls.rbegin(),
@@ -100,11 +101,19 @@ DocumentSubresourceFilter::DocumentSubresourceFilter(
       filtering_disabled_for_document_ = true;
       return;
     }
+    // TODO(pkalinnikov): Match several activation types in a batch.
+    generic_blocking_rules_disabled_ =
+        generic_blocking_rules_disabled_ ||
+        ruleset_matcher_.ShouldDisableFilteringForDocument(
+            document_url, parent_document_origin,
+            proto::ACTIVATION_TYPE_GENERICBLOCK);
+
+    // TODO(pkalinnikov): Think about avoiding this conversion.
     parent_document_origin = url::Origin(document_url);
   }
 
-  // TODO(pkalinnikov): Implement GENERICBLOCK activation type as well.
-  // TODO(pkalinnikov): Match several activation types in a batch.
+  url::Origin document_origin = std::move(parent_document_origin);
+  document_origin_.reset(new FirstPartyOrigin(std::move(document_origin)));
 }
 
 DocumentSubresourceFilter::~DocumentSubresourceFilter() = default;
@@ -124,9 +133,10 @@ bool DocumentSubresourceFilter::allowLoad(
     return true;
 
   ++num_loads_evaluated_;
+  DCHECK(document_origin_);
   if (ruleset_matcher_.ShouldDisallowResourceLoad(
-          GURL(resourceUrl), document_origin_,
-          ToElementType(request_context))) {
+          GURL(resourceUrl), *document_origin_, ToElementType(request_context),
+          generic_blocking_rules_disabled_)) {
     ++num_loads_matching_rules_;
     if (activation_state_ == ActivationState::ENABLED) {
       if (!first_disallowed_load_callback_.is_null()) {

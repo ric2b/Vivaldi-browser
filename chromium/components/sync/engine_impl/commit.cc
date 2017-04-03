@@ -6,18 +6,28 @@
 
 #include <utility>
 
-#include "base/metrics/sparse_histogram.h"
+#include "base/feature_list.h"
+#include "base/metrics/histogram_macros.h"
+#include "base/rand_util.h"
 #include "base/trace_event/trace_event.h"
 #include "components/sync/base/data_type_histogram.h"
-#include "components/sync/engine/events/commit_request_event.h"
-#include "components/sync/engine/events/commit_response_event.h"
+#include "components/sync/engine/net/http_bridge.h"
 #include "components/sync/engine_impl/commit_processor.h"
 #include "components/sync/engine_impl/commit_util.h"
 #include "components/sync/engine_impl/cycle/sync_cycle.h"
+#include "components/sync/engine_impl/events/commit_request_event.h"
+#include "components/sync/engine_impl/events/commit_response_event.h"
 #include "components/sync/engine_impl/syncer.h"
 #include "components/sync/engine_impl/syncer_proto_util.h"
 
 namespace syncer {
+
+namespace {
+// The number of random ASCII bytes we'll add to CommitMessage. We choose 256
+// because it is not too large (to hurt performance and compression ratio), but
+// it is not too small to easily be canceled out using statistical analysis.
+const size_t kPaddingSize = 256;
+}
 
 Commit::Commit(ContributionMap contributions,
                const sync_pb::ClientToServerMessage& message,
@@ -48,7 +58,7 @@ Commit* Commit::Init(ModelTypeSet requested_types,
 
   // Give up if no one had anything to commit.
   if (contributions.empty())
-    return NULL;
+    return nullptr;
 
   sync_pb::ClientToServerMessage message;
   message.set_message_contents(sync_pb::ClientToServerMessage::COMMIT);
@@ -56,6 +66,11 @@ Commit* Commit::Init(ModelTypeSet requested_types,
 
   sync_pb::CommitMessage* commit_message = message.mutable_commit();
   commit_message->set_cache_guid(cache_guid);
+
+  // Set padding to mitigate CRIME attack.
+  if (base::FeatureList::IsEnabled(syncer::kSyncClientToServerCompression)) {
+    commit_message->set_padding(base::RandBytesAsString(kPaddingSize));
+  }
 
   // Set extensions activity if bookmark commits are present.
   ExtensionsActivity::Records extensions_activity_buffer;
@@ -115,7 +130,7 @@ SyncerError Commit::PostAndProcessResponse(
 
   TRACE_EVENT_BEGIN0("sync", "PostCommit");
   const SyncerError post_result = SyncerProtoUtil::PostClientToServerMessage(
-      &message_, &response_, cycle, NULL);
+      &message_, &response_, cycle, nullptr);
   TRACE_EVENT_END0("sync", "PostCommit");
 
   // TODO(rlarocque): Use result that includes errors captured later?

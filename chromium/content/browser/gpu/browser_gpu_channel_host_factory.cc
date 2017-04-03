@@ -28,7 +28,7 @@
 #include "gpu/ipc/common/gpu_messages.h"
 #include "ipc/ipc_channel_handle.h"
 #include "ipc/message_filter.h"
-#include "services/shell/runner/common/client_util.h"
+#include "services/service_manager/runner/common/client_util.h"
 
 namespace content {
 
@@ -273,7 +273,7 @@ BrowserGpuChannelHostFactory::AllocateSharedMemory(size_t size) {
 
 void BrowserGpuChannelHostFactory::EstablishGpuChannel(
     const gpu::GpuChannelEstablishedCallback& callback) {
-  DCHECK(!shell::ShellIsRemote());
+  DCHECK(!service_manager::ServiceManagerIsRemote());
   if (gpu_channel_.get() && gpu_channel_->IsLost()) {
     DCHECK(!pending_request_.get());
     // Recreate the channel if it has been lost.
@@ -350,10 +350,10 @@ void BrowserGpuChannelHostFactory::GpuChannelEstablished() {
       FROM_HERE_WITH_EXPLICIT_FUNCTION(
           "466866 BrowserGpuChannelHostFactory::GpuChannelEstablished2"));
 
-  for (size_t n = 0; n < established_callbacks_.size(); n++)
-    established_callbacks_[n].Run(gpu_channel_);
-
-  established_callbacks_.clear();
+  std::vector<gpu::GpuChannelEstablishedCallback> established_callbacks;
+  established_callbacks_.swap(established_callbacks);
+  for (auto& callback : established_callbacks)
+    callback.Run(gpu_channel_);
 }
 
 // static

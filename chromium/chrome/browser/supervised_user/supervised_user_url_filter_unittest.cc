@@ -13,6 +13,7 @@
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/supervised_user/supervised_user_site_list.h"
+#include "extensions/features/features.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
@@ -79,6 +80,7 @@ TEST_F(SupervisedUserURLFilterTest, EffectiveURL) {
   ASSERT_TRUE(IsURLWhitelisted("http://example.com"));
   ASSERT_TRUE(IsURLWhitelisted("https://example.com"));
 
+  // AMP Cache URLs.
   EXPECT_FALSE(IsURLWhitelisted("https://cdn.ampproject.org"));
   EXPECT_TRUE(IsURLWhitelisted("https://cdn.ampproject.org/c/example.com"));
   EXPECT_TRUE(IsURLWhitelisted("https://cdn.ampproject.org/c/www.example.com"));
@@ -97,6 +99,7 @@ TEST_F(SupervisedUserURLFilterTest, EffectiveURL) {
       IsURLWhitelisted("https://sub.cdn.ampproject.org/c/s/example.com"));
   EXPECT_FALSE(IsURLWhitelisted("https://sub.cdn.ampproject.org/c/other.com"));
 
+  // Google AMP viewer URLs.
   EXPECT_FALSE(IsURLWhitelisted("https://www.google.com"));
   EXPECT_FALSE(IsURLWhitelisted("https://www.google.com/amp/"));
   EXPECT_TRUE(IsURLWhitelisted("https://www.google.com/amp/example.com"));
@@ -106,6 +109,7 @@ TEST_F(SupervisedUserURLFilterTest, EffectiveURL) {
       IsURLWhitelisted("https://www.google.com/amp/s/example.com/path"));
   EXPECT_FALSE(IsURLWhitelisted("https://www.google.com/amp/other.com"));
 
+  // Google web cache URLs.
   EXPECT_FALSE(IsURLWhitelisted("https://webcache.googleusercontent.com"));
   EXPECT_FALSE(
       IsURLWhitelisted("https://webcache.googleusercontent.com/search"));
@@ -127,6 +131,20 @@ TEST_F(SupervisedUserURLFilterTest, EffectiveURL) {
   EXPECT_FALSE(
       IsURLWhitelisted("https://webcache.googleusercontent.com/"
                        "search?q=cache:123456789-01:other.com+example.com"));
+
+  // Google Translate URLs.
+  EXPECT_FALSE(IsURLWhitelisted("https://translate.google.com"));
+  EXPECT_FALSE(IsURLWhitelisted("https://translate.googleusercontent.com"));
+  EXPECT_TRUE(
+      IsURLWhitelisted("https://translate.google.com/translate?u=example.com"));
+  EXPECT_TRUE(IsURLWhitelisted(
+      "https://translate.googleusercontent.com/translate?u=example.com"));
+  EXPECT_TRUE(IsURLWhitelisted(
+      "https://translate.google.com/translate?u=www.example.com"));
+  EXPECT_TRUE(IsURLWhitelisted(
+      "https://translate.google.com/translate?u=https://example.com"));
+  EXPECT_FALSE(
+      IsURLWhitelisted("https://translate.google.com/translate?u=other.com"));
 }
 
 TEST_F(SupervisedUserURLFilterTest, Inactive) {
@@ -519,7 +537,7 @@ TEST_F(SupervisedUserURLFilterTest, WhitelistsHostnameHashes) {
   ASSERT_EQ(expected_whitelists, actual_whitelists);
 }
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 TEST_F(SupervisedUserURLFilterTest, ChromeWebstoreDownloadsAreAlwaysAllowed) {
   // When installing an extension from Chrome Webstore, it tries to download the
   // crx file from "https://clients2.google.com/service/update2/", which
@@ -683,4 +701,53 @@ TEST_F(SupervisedUserURLFilterTest, GetEmbeddedURLGoogleWebCache) {
   // Invalid scheme.
   EXPECT_EQ(GURL(), GetEmbeddedURL("https://webcache.googleusercontent.com/"
                                    "search?q=cache:abc://example.com/"));
+}
+
+TEST_F(SupervisedUserURLFilterTest, GetEmbeddedURLTranslate) {
+  // Base case.
+  EXPECT_EQ(GURL("http://example.com"),
+            GetEmbeddedURL("https://translate.google.com/path?u=example.com"));
+  // Different TLD.
+  EXPECT_EQ(GURL("http://example.com"),
+            GetEmbeddedURL("https://translate.google.de/path?u=example.com"));
+  // Alternate base URL.
+  EXPECT_EQ(GURL("http://example.com"),
+            GetEmbeddedURL(
+                "https://translate.googleusercontent.com/path?u=example.com"));
+  // With scheme.
+  EXPECT_EQ(
+      GURL("http://example.com"),
+      GetEmbeddedURL("https://translate.google.com/path?u=http://example.com"));
+  // With https scheme.
+  EXPECT_EQ(GURL("https://example.com"),
+            GetEmbeddedURL(
+                "https://translate.google.com/path?u=https://example.com"));
+  // With other parameters.
+  EXPECT_EQ(
+      GURL("http://example.com"),
+      GetEmbeddedURL(
+          "https://translate.google.com/path?a=asdf&u=example.com&b=fdsa"));
+
+  // Different subdomain is not supported.
+  EXPECT_EQ(GURL(), GetEmbeddedURL(
+                        "https://translate.foo.google.com/path?u=example.com"));
+  EXPECT_EQ(GURL(), GetEmbeddedURL(
+                        "https://translate.www.google.com/path?u=example.com"));
+  EXPECT_EQ(
+      GURL(),
+      GetEmbeddedURL("https://translate.google.google.com/path?u=example.com"));
+  EXPECT_EQ(GURL(), GetEmbeddedURL(
+                        "https://foo.translate.google.com/path?u=example.com"));
+  EXPECT_EQ(GURL(),
+            GetEmbeddedURL("https://translate2.google.com/path?u=example.com"));
+  EXPECT_EQ(GURL(),
+            GetEmbeddedURL(
+                "https://translate2.googleusercontent.com/path?u=example.com"));
+  // Different TLD is not supported for googleusercontent.
+  EXPECT_EQ(GURL(),
+            GetEmbeddedURL(
+                "https://translate.googleusercontent.de/path?u=example.com"));
+  // Query parameter ("u=...") is missing.
+  EXPECT_EQ(GURL(),
+            GetEmbeddedURL("https://translate.google.com/path?t=example.com"));
 }

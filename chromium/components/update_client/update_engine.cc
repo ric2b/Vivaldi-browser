@@ -16,6 +16,7 @@
 #include "components/update_client/crx_update_item.h"
 #include "components/update_client/persisted_data.h"
 #include "components/update_client/update_checker.h"
+#include "components/update_client/update_client_errors.h"
 
 namespace update_client {
 
@@ -25,7 +26,7 @@ UpdateContext::UpdateContext(
     const std::vector<std::string>& ids,
     const UpdateClient::CrxDataCallback& crx_data_callback,
     const UpdateEngine::NotifyObserversCallback& notify_observers_callback,
-    const UpdateEngine::CompletionCallback& callback,
+    const UpdateEngine::Callback& callback,
     UpdateChecker::Factory update_checker_factory,
     CrxDownloader::Factory crx_downloader_factory,
     PingManager* ping_manager)
@@ -43,9 +44,7 @@ UpdateContext::UpdateContext(
       ping_manager(ping_manager),
       retry_after_sec_(0) {}
 
-UpdateContext::~UpdateContext() {
-  base::STLDeleteElements(&update_items);
-}
+UpdateContext::~UpdateContext() {}
 
 UpdateEngine::UpdateEngine(
     const scoped_refptr<Configurator>& config,
@@ -69,12 +68,9 @@ bool UpdateEngine::GetUpdateState(const std::string& id,
   DCHECK(thread_checker_.CalledOnValidThread());
   for (const auto* context : update_contexts_) {
     const auto& update_items = context->update_items;
-    const auto it = std::find_if(update_items.begin(), update_items.end(),
-                                 [id](const CrxUpdateItem* update_item) {
-                                   return id == update_item->id;
-                                 });
+    const auto it = update_items.find(id);
     if (it != update_items.end()) {
-      *update_item = **it;
+      *update_item = *it->second.get();
       return true;
     }
   }
@@ -85,12 +81,12 @@ void UpdateEngine::Update(
     bool is_foreground,
     const std::vector<std::string>& ids,
     const UpdateClient::CrxDataCallback& crx_data_callback,
-    const CompletionCallback& callback) {
+    const Callback& callback) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   if (IsThrottled(is_foreground)) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(callback, Error::ERROR_UPDATE_RETRY_LATER));
+        FROM_HERE, base::Bind(callback, Error::RETRY_LATER));
     return;
   }
 
@@ -115,7 +111,7 @@ void UpdateEngine::Update(
   ignore_result(update_context.release());
 }
 
-void UpdateEngine::UpdateComplete(UpdateContext* update_context, int error) {
+void UpdateEngine::UpdateComplete(UpdateContext* update_context, Error error) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(update_contexts_.find(update_context) != update_contexts_.end());
 

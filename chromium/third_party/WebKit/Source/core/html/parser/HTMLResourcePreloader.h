@@ -38,7 +38,9 @@
 
 namespace blink {
 
-class CORE_EXPORT HTMLResourcePreloader final
+class Document;
+
+class CORE_EXPORT HTMLResourcePreloader
     : public GarbageCollected<HTMLResourcePreloader>,
       public ResourcePreloader {
   WTF_MAKE_NONCOPYABLE(HTMLResourcePreloader);
@@ -53,10 +55,9 @@ class CORE_EXPORT HTMLResourcePreloader final
  protected:
   void preload(std::unique_ptr<PreloadRequest>,
                const NetworkHintsInterface&) override;
-
- private:
   explicit HTMLResourcePreloader(Document&);
 
+ private:
   Member<Document> m_document;
   HeapHashSet<Member<CSSPreloaderResourceClient>> m_cssPreloaders;
 };

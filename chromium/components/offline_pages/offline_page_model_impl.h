@@ -49,6 +49,7 @@ struct OfflinePageItem;
 
 class ArchiveManager;
 class ClientPolicyController;
+class OfflinePageModelQuery;
 class OfflinePageStorageManager;
 
 // Implementation of service for saving pages offline, storing the offline
@@ -65,14 +66,23 @@ class OfflinePageModelImpl : public OfflinePageModel, public KeyedService {
   // Implemented methods:
   void AddObserver(Observer* observer) override;
   void RemoveObserver(Observer* observer) override;
-  void SavePage(const GURL& url,
-                const ClientId& client_id,
-                int64_t proposed_offline_id,
+  void SavePage(const SavePageParams& save_page_params,
                 std::unique_ptr<OfflinePageArchiver> archiver,
                 const SavePageCallback& callback) override;
   void MarkPageAccessed(int64_t offline_id) override;
   void DeletePagesByOfflineId(const std::vector<int64_t>& offline_ids,
                               const DeletePageCallback& callback) override;
+  void DeletePagesByClientIds(const std::vector<ClientId>& client_ids,
+                              const DeletePageCallback& callback) override;
+
+  void GetPagesMatchingQuery(
+      std::unique_ptr<OfflinePageModelQuery> query,
+      const MultipleOfflinePageItemCallback& callback) override;
+
+  void GetPagesByClientIds(
+      const std::vector<ClientId>& client_ids,
+      const MultipleOfflinePageItemCallback& callback) override;
+
   void DeleteCachedPagesByURLPredicate(
       const UrlPredicate& predicate,
       const DeletePageCallback& callback) override;
@@ -85,18 +95,13 @@ class OfflinePageModelImpl : public OfflinePageModel, public KeyedService {
   void GetOfflineIdsForClientId(
       const ClientId& client_id,
       const MultipleOfflineIdCallback& callback) override;
-  const std::vector<int64_t> MaybeGetOfflineIdsForClientId(
-      const ClientId& client_id) const override;
   void GetPageByOfflineId(
       int64_t offline_id,
       const SingleOfflinePageItemCallback& callback) override;
-  const OfflinePageItem* MaybeGetPageByOfflineId(
-      int64_t offline_id) const override;
-  void GetPagesByOnlineURL(
-      const GURL& online_url,
+  void GetPagesByURL(
+      const GURL& url,
+      URLSearchMode url_search_mode,
       const MultipleOfflinePageItemCallback& callback) override;
-  const OfflinePageItem* MaybeGetBestPageForOnlineURL(
-      const GURL& online_url) const override;
   void ExpirePages(const std::vector<int64_t>& offline_ids,
                    const base::Time& expiration_time,
                    const base::Callback<void(bool)>& callback) override;
@@ -120,19 +125,11 @@ class OfflinePageModelImpl : public OfflinePageModel, public KeyedService {
  private:
   FRIEND_TEST_ALL_PREFIXES(OfflinePageModelImplTest, MarkPageForDeletion);
 
-  enum class GetAllPageMode {
-    ALL,               // Get all active page entries.
-    ALL_WITH_EXPIRED,  // Get all pages entries including expired ones.
-  };
-
   typedef ScopedVector<OfflinePageArchiver> PendingArchivers;
 
   // Callback for ensuring archive directory is created.
   void OnEnsureArchivesDirCreatedDone(const base::TimeTicks& start_time);
 
-  void GetAllPagesAfterLoadDone(
-      GetAllPageMode mode,
-      const MultipleOfflinePageItemCallback& callback) const;
   void CheckPagesExistOfflineAfterLoadDone(
       const std::set<GURL>& urls,
       const CheckPagesExistOfflineCallback& callback);
@@ -142,22 +139,31 @@ class OfflinePageModelImpl : public OfflinePageModel, public KeyedService {
   void GetPageByOfflineIdWhenLoadDone(
       int64_t offline_id,
       const SingleOfflinePageItemCallback& callback) const;
-  void GetPagesByOnlineURLWhenLoadDone(
-      const GURL& online_url,
+  const std::vector<int64_t> MaybeGetOfflineIdsForClientId(
+      const ClientId& client_id) const;
+  void GetPagesByURLWhenLoadDone(
+      const GURL& url,
+      URLSearchMode url_search_mode,
       const MultipleOfflinePageItemCallback& callback) const;
   void MarkPageAccessedWhenLoadDone(int64_t offline_id);
 
   void CheckMetadataConsistency();
 
   // Callback for loading pages from the offline page metadata store.
-  void OnLoadDone(const base::TimeTicks& start_time,
-                  OfflinePageMetadataStore::LoadStatus load_status,
-                  const std::vector<OfflinePageItem>& offline_pages);
+  void OnStoreInitialized(const base::TimeTicks& start_time,
+                          int reset_attempts_left,
+                          bool success);
+  void OnStoreResetDone(const base::TimeTicks& start_time,
+                        int reset_attempts_left,
+                        bool success);
+  void OnInitialGetOfflinePagesDone(
+      const base::TimeTicks& start_time,
+      const std::vector<OfflinePageItem>& offline_pages);
+  void FinalizeModelLoad();
 
   // Steps for saving a page offline.
-  void OnCreateArchiveDone(const GURL& requested_url,
+  void OnCreateArchiveDone(const SavePageParams& save_page_params,
                            int64_t offline_id,
-                           const ClientId& client_id,
                            const base::Time& start_time,
                            const SavePageCallback& callback,
                            OfflinePageArchiver* archiver,
@@ -217,6 +223,13 @@ class OfflinePageModelImpl : public OfflinePageModel, public KeyedService {
   void DoDeletePagesByOfflineId(const std::vector<int64_t>& offline_ids,
                                 const DeletePageCallback& callback);
 
+  // Actually does the work of deleting, requires the model is loaded.
+  void DeletePages(const DeletePageCallback& callback,
+                   const MultipleOfflinePageItemResult& items);
+
+  void DoGetPagesByClientIds(const std::vector<ClientId>& client_ids,
+                             const MultipleOfflinePageItemCallback& callback);
+
   // Similar to DoDeletePagesByOfflineId, does actual work of deleting, and
   // requires that the model is loaded.
   void DoDeleteCachedPagesByURLPredicate(const UrlPredicate& predicate,
@@ -235,7 +248,7 @@ class OfflinePageModelImpl : public OfflinePageModel, public KeyedService {
                         OfflinePageStorageManager::ClearStorageResult result);
 
   // Post task to clear storage.
-  void PostClearStorageIfNeededTask();
+  void PostClearStorageIfNeededTask(bool delayed);
 
   // Check if |offline_page| should be removed on cache reset by user.
   bool IsRemovedOnCacheReset(const OfflinePageItem& offline_page) const;

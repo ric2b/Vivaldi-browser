@@ -86,6 +86,7 @@
 #include "public/platform/WebFileSystem.h"
 #include "public/platform/WebFontDescription.h"
 #include "public/platform/WebHistoryScrollRestorationType.h"
+#include "public/platform/WebInputEvent.h"
 #include "public/platform/WebMediaPlayer.h"
 #include "public/platform/WebMediaPlayerClient.h"
 #include "public/platform/WebMediaSource.h"
@@ -118,7 +119,6 @@
 #include "public/web/WebHistoryItem.h"
 #include "public/web/WebIconURL.h"
 #include "public/web/WebInputElement.h"
-#include "public/web/WebInputEvent.h"
 #include "public/web/WebNavigationPolicy.h"
 #include "public/web/WebNavigatorContentUtilsClient.h"
 #include "public/web/WebRemoteFrameClient.h"
@@ -613,12 +613,10 @@ STATIC_ASSERT_ENUM(WebScrollbar::ForwardButtonEndPart, ForwardButtonEndPart);
 STATIC_ASSERT_ENUM(WebScrollbar::ScrollbarBGPart, ScrollbarBGPart);
 STATIC_ASSERT_ENUM(WebScrollbar::TrackBGPart, TrackBGPart);
 STATIC_ASSERT_ENUM(WebScrollbar::AllParts, AllParts);
-STATIC_ASSERT_ENUM(WebScrollbar::ScrollbarOverlayStyleDefault,
-                   ScrollbarOverlayStyleDefault);
-STATIC_ASSERT_ENUM(WebScrollbar::ScrollbarOverlayStyleDark,
-                   ScrollbarOverlayStyleDark);
-STATIC_ASSERT_ENUM(WebScrollbar::ScrollbarOverlayStyleLight,
-                   ScrollbarOverlayStyleLight);
+STATIC_ASSERT_ENUM(WebScrollbarOverlayColorThemeDark,
+                   ScrollbarOverlayColorThemeDark);
+STATIC_ASSERT_ENUM(WebScrollbarOverlayColorThemeLight,
+                   ScrollbarOverlayColorThemeLight);
 
 STATIC_ASSERT_ENUM(WebSettings::EditingBehaviorMac, EditingMacBehavior);
 STATIC_ASSERT_ENUM(WebSettings::EditingBehaviorWin, EditingWindowsBehavior);

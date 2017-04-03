@@ -80,8 +80,9 @@ class ServiceProcessTerminateMonitor
 }  // namespace
 
 // Gets the name of the service process IPC channel.
-IPC::ChannelHandle GetServiceProcessChannel() {
-  return GetServiceProcessScopedVersionedName("_service_ipc");
+mojo::edk::NamedPlatformHandle GetServiceProcessChannel() {
+  return mojo::edk::NamedPlatformHandle(
+      GetServiceProcessScopedVersionedName("_service_ipc"));
 }
 
 bool ForceServiceProcessShutdown(const std::string& version,
@@ -134,8 +135,9 @@ bool ServiceProcessState::TakeSingletonLock() {
   return true;
 }
 
-bool ServiceProcessState::SignalReady(base::SingleThreadTaskRunner* task_runner,
-                                      const base::Closure& terminate_task) {
+bool ServiceProcessState::SignalReady(
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner,
+    const base::Closure& terminate_task) {
   DCHECK(state_);
   DCHECK(state_->ready_event.IsValid());
   if (!SetEvent(state_->ready_event.Get())) {

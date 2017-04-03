@@ -27,13 +27,15 @@ Voor meer informatie over privacy bekijk je het Privacybeleid van Google (http:/
 <translation id="1654128982815600832">Externe verbindingen voor deze computer inschakelen…</translation>
 <translation id="170207782578677537">Kan deze computer niet registreren.</translation>
 <translation id="1704090719919187045">Voorkeuren voor Chromoting-host</translation>
+<translation id="1730409684442507495">• Verbeteringen in afbeeldingskwaliteit op bureaublad, responsiviteit en batterijverbruik.
+• Verbeterde responsiviteit voor bewerkingen via klikken en slepen.
+• Verschillende UI-animatie-effecten zijn verbeterd.</translation>
 <translation id="174018511426417793">Je hebt geen geregistreerde computers. Als je externe verbindingen met een computer mogelijk wilt maken, installeer je Chrome Remote Desktop op die computer en klik je op '<ph name="BUTTON_NAME" />'.</translation>
 <translation id="1742469581923031760">Verbinding maken…</translation>
 <translation id="1770394049404108959">Ik kan de app niet openen.</translation>
 <translation id="177096447311351977">Kanaal-IP voor client: <ph name="CLIENT_GAIA_IDENTIFIER" /> ip='<ph name="CLIENT_IP_ADDRESS_AND_PORT" />' host_ip='<ph name="HOST_IP_ADDRESS_AND_PORT" />' channel='<ph name="CHANNEL_TYPE" />' connection='<ph name="CONNECTION_TYPE" />'.</translation>
 <translation id="1779766957982586368">Venster sluiten</translation>
 <translation id="1841799852846221389">Externe verbindingen voor deze computer uitschakelen…</translation>
-<translation id="189172778771606813">Zijmenu sluiten</translation>
 <translation id="1897488610212723051">Verwijderen</translation>
 <translation id="195619862187186579">Toetsenbordindeling</translation>
 <translation id="1996161829609978754">Chrome downloadt het installatieprogramma voor de Chromoting-host. Zodra het downloaden is voltooid, voer je het installatieprogramma uit voordat je doorgaat.</translation>
@@ -74,7 +76,6 @@ Voor meer informatie over privacy bekijk je het Privacybeleid van Google (http:/
 <translation id="2699970397166997657">Chromoting</translation>
 <translation id="2747641796667576127">Software-updates worden gewoonlijk automatisch uitgevoerd, maar kunnen in zeldzame gevallen mislukken. Het bijwerken van de software duurt slechts een paar minuten en kan worden gedaan terwijl je extern bent verbonden met je computer.</translation>
 <translation id="2841013758207633010">Tijd</translation>
-<translation id="2851674870054673688">Zodra deze persoon de code opgeeft, wordt je deelsessie gestart.</translation>
 <translation id="2851754573186462851">Streaming via Chromium-app</translation>
 <translation id="2855866366045322178">offline</translation>
 <translation id="2888969873284818612">Er is een netwerkfout opgetreden. We starten de app opnieuw wanneer je apparaat weer online is.</translation>
@@ -114,6 +115,7 @@ Voor meer informatie over privacy bekijk je het Privacybeleid van Google (http:/
 host</translation>
 <translation id="3870154837782082782">Google Inc.</translation>
 <translation id="3884839335308961732">Bevestig je account en pincode hieronder om toegang door Chrome Remote Desktop toe te staan.</translation>
+<translation id="3897092660631435901">Menu</translation>
 <translation id="3905196214175737742">Ongeldig domein voor hosteigenaar.</translation>
 <translation id="3908017899227008678">Aanpassen aan venster</translation>
 <translation id="3931191050278863510">Host is gestopt.</translation>
@@ -126,6 +128,7 @@ host</translation>
 <translation id="409800995205263688">OPMERKING: beleidsinstellingen staan alleen verbindingen tussen computers binnen je netwerk toe.</translation>
 <translation id="4155497795971509630">Er ontbreken enkele vereiste componenten. Controleer of de nieuwste versie van de software is geïnstalleerd en probeer het opnieuw.</translation>
 <translation id="4156740505453712750">Om de toegang tot deze computer te beschermen, kies je een pincode van <ph name="BOLD_START" />ten minste zes cijfers<ph name="BOLD_END" />. Je moet deze pincode opgeven wanneer je verbinding maakt vanaf een andere locatie.</translation>
+<translation id="4156741816461781891">Ingelogd als <ph name="EMAIL_ADDRESS" />.</translation>
 <translation id="4176825807642096119">Toegangscode</translation>
 <translation id="4207623512727273241">Voer het installatieprogramma uit voordat je doorgaat.</translation>
 <translation id="4227991223508142681">Hulpprogramma voor hostprovisioning</translation>
@@ -166,7 +169,6 @@ Desktop-host</translation>
 <translation id="5070121137485264635">De externe host vereist dat je op een website van derden wordt geverifieerd. Als je wilt doorgaan, moet je Chrome Remote Desktop aanvullende machtigingen geven om toegang tot dit adres te krijgen:</translation>
 <translation id="507204348399810022">Weet je zeker dat je externe verbindingen met <ph name="HOSTNAME" /> wilt uitschakelen?</translation>
 <translation id="5156271271724754543">Geef dezelfde pincode in beide vakken op.</translation>
-<translation id="5168917394043976756">Zijmenu openen</translation>
 <translation id="5170982930780719864">Ongeldige host-ID.</translation>
 <translation id="518094545883702183">Deze informatie wordt alleen gebruikt voor een diagnose van het probleem dat je meldt, is alleen beschikbaar voor iemand die je melding onderzoekt en wordt maximaal 30 dagen bewaard.</translation>
 <translation id="5222676887888702881">Uitloggen</translation>
@@ -209,10 +211,6 @@ Desktop-host</translation>
 <translation id="6304318647555713317">Client</translation>
 <translation id="6381670701864002291">Iets anders.</translation>
 <translation id="6398765197997659313">Volledig scherm sluiten</translation>
-<translation id="6408143143164565232">• Luisteren naar audio vanaf Windows- of Linux-computers.
-• Ongewenste verbindingen verwijderen door lang op de computernaam te drukken.
-• Soepeler knijpen om te zoomen en scrollen met twee vingers.
-• Nieuw scherm voor Help en feedback.</translation>
 <translation id="6441316101718669559">Bureaubladintegratie wordt niet ondersteund op dit platform. Je kunt de app nog steeds gebruiken, maar de gebruikerservaring is beperkt.</translation>
 <translation id="652218476070540101">De pincode voor deze computer wordt bijgewerkt…</translation>
 <translation id="6527303717912515753">Delen</translation>
@@ -225,6 +223,7 @@ Desktop-host</translation>
 <translation id="6640610550128933069">laatst online: <ph name="DATE" /></translation>
 <translation id="6668065415969892472">Je pincode is bijgewerkt.</translation>
 <translation id="6681800064886881394">Copyright 2013 Google Inc. Alle rechten voorbehouden.</translation>
+<translation id="6705482892455291412">Zodra ze de code opgeven, wordt je gevraagd de verbinding te accepteren en de deelsessie te starten.</translation>
 <translation id="6746493157771801606">Geschiedenis wissen</translation>
 <translation id="6748108480210050150">Van</translation>
 <translation id="677755392401385740">Host gestart voor gebruiker: <ph name="HOST_USERNAME" />.</translation>
@@ -301,6 +300,7 @@ Desktop-host</translation>
 <translation id="9188433529406846933">Autoriseren</translation>
 <translation id="9213184081240281106">Ongeldige hostconfiguratie.</translation>
 <translation id="951991426597076286">Afwijzen</translation>
+<translation id="962733587145768554">Selecteer <ph name="SHARE" /> in het dialoogvenster voor de verbinding om het proces te voltooien.</translation>
 <translation id="979100198331752041">Chrome Remote Desktop op <ph name="HOSTNAME" /> is verouderd en moet worden bijgewerkt.</translation>
 <translation id="985602178874221306">De auteurs van Chromium</translation>
 <translation id="992215271654996353"><ph name="HOSTNAME" /> (laatst online: <ph name="DATE_OR_TIME" />)</translation>

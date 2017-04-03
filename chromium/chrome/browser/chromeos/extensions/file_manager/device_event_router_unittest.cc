@@ -72,6 +72,7 @@ class DeviceEventRouterTest : public testing::Test {
                       bool is_read_only_hardware) {
     return Disk(device_path,
                 mount_path,
+                false,
                 "",
                 "",
                 "",

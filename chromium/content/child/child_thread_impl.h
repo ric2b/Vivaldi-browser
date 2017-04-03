@@ -38,9 +38,9 @@ class SyncChannel;
 class SyncMessageFilter;
 }  // namespace IPC
 
-namespace shell {
+namespace service_manager {
 class Connection;
-}  // namespace shell
+}  // namespace service_manager
 
 namespace mojo {
 namespace edk {
@@ -48,13 +48,11 @@ class ScopedIPCSupport;
 }  // namespace edk
 }  // namespace mojo
 
-namespace blink {
-class WebFrame;
-}  // namespace blink
+namespace discardable_memory {
+class ClientDiscardableSharedMemoryManager;
+}  // namespace discardable_memory
 
 namespace content {
-class ChildMessageFilter;
-class ChildDiscardableSharedMemoryManager;
 class ChildHistogramMessageFilter;
 class ChildResourceMessageFilter;
 class ChildSharedBitmapManager;
@@ -67,7 +65,6 @@ class QuotaDispatcher;
 class QuotaMessageFilter;
 class ResourceDispatcher;
 class ThreadSafeSender;
-struct RequestInfo;
 
 // The main thread of a child process derives from this class.
 class CONTENT_EXPORT ChildThreadImpl
@@ -103,8 +100,14 @@ class CONTENT_EXPORT ChildThreadImpl
   void RecordAction(const base::UserMetricsAction& action) override;
   void RecordComputedAction(const std::string& action) override;
   ServiceManagerConnection* GetServiceManagerConnection() override;
-  shell::InterfaceRegistry* GetInterfaceRegistry() override;
-  shell::InterfaceProvider* GetRemoteInterfaces() override;
+  service_manager::InterfaceRegistry* GetInterfaceRegistry() override;
+  service_manager::InterfaceProvider* GetRemoteInterfaces() override;
+
+  // Returns the service_manager::ServiceInfo for the child process & the
+  // browser process, once available.
+  const service_manager::ServiceInfo& GetChildServiceInfo() const;
+  const service_manager::ServiceInfo& GetBrowserServiceInfo() const;
+  bool IsConnectedToBrowser() const;
 
   IPC::SyncChannel* channel() { return channel_.get(); }
 
@@ -136,8 +139,8 @@ class CONTENT_EXPORT ChildThreadImpl
     return shared_bitmap_manager_.get();
   }
 
-  ChildDiscardableSharedMemoryManager* discardable_shared_memory_manager()
-      const {
+  discardable_memory::ClientDiscardableSharedMemoryManager*
+  discardable_shared_memory_manager() const {
     return discardable_shared_memory_manager_.get();
   }
 
@@ -214,6 +217,7 @@ class CONTENT_EXPORT ChildThreadImpl
   virtual bool OnControlMessageReceived(const IPC::Message& msg);
   virtual void OnProcessBackgrounded(bool backgrounded);
   virtual void OnProcessPurgeAndSuspend();
+  virtual void OnProcessResume();
 
   // IPC::Listener implementation:
   bool OnMessageReceived(const IPC::Message& msg) override;
@@ -236,6 +240,8 @@ class CONTENT_EXPORT ChildThreadImpl
    private:
     IPC::Sender* const sender_;
   };
+
+  class ClientDiscardableSharedMemoryManagerDelegate;
 
   void Init(const Options& options);
 
@@ -266,11 +272,20 @@ class CONTENT_EXPORT ChildThreadImpl
       const std::string& name,
       mojom::AssociatedInterfaceAssociatedRequest request) override;
 
+  // Called when a connection is received from another service. When that other
+  // service is the browser process, stores the remote's info.
+  void OnServiceConnect(const service_manager::ServiceInfo& local_info,
+                        const service_manager::ServiceInfo& remote_info);
+
   std::unique_ptr<mojo::edk::ScopedIPCSupport> mojo_ipc_support_;
-  std::unique_ptr<shell::InterfaceRegistry> interface_registry_;
-  std::unique_ptr<shell::InterfaceProvider> remote_interfaces_;
+  std::unique_ptr<service_manager::InterfaceRegistry> interface_registry_;
+  std::unique_ptr<service_manager::InterfaceProvider> remote_interfaces_;
   std::unique_ptr<ServiceManagerConnection> service_manager_connection_;
-  std::unique_ptr<shell::Connection> browser_connection_;
+  std::unique_ptr<service_manager::Connection> browser_connection_;
+
+  bool connected_to_browser_ = false;
+  service_manager::ServiceInfo child_info_;
+  service_manager::ServiceInfo browser_info_;
 
   mojo::AssociatedBinding<mojom::RouteProvider> route_provider_binding_;
   mojo::AssociatedBindingSet<mojom::AssociatedInterfaceProvider>
@@ -315,8 +330,11 @@ class CONTENT_EXPORT ChildThreadImpl
 
   std::unique_ptr<ChildSharedBitmapManager> shared_bitmap_manager_;
 
-  std::unique_ptr<ChildDiscardableSharedMemoryManager>
+  std::unique_ptr<discardable_memory::ClientDiscardableSharedMemoryManager>
       discardable_shared_memory_manager_;
+
+  std::unique_ptr<ClientDiscardableSharedMemoryManagerDelegate>
+      client_discardable_shared_memory_manager_delegate_;
 
   std::unique_ptr<base::PowerMonitor> power_monitor_;
 

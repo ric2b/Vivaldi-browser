@@ -19,6 +19,7 @@
 #include "chrome/browser/ui/browser_window.h"
 #import "chrome/browser/ui/cocoa/base_bubble_controller.h"
 #import "chrome/browser/ui/cocoa/browser_window_controller.h"
+#include "chrome/browser/ui/cocoa/l10n_util.h"
 #import "chrome/browser/ui/cocoa/profiles/avatar_menu_bubble_controller.h"
 #import "chrome/browser/ui/cocoa/profiles/profile_chooser_controller.h"
 #include "components/signin/core/common/profile_management_switches.h"
@@ -151,13 +152,16 @@ bool ProfileUpdateObserver::HasAvatarError() {
   NSWindowController* wc =
       [browser_->window()->GetNativeWindow() windowController];
   if ([wc isKindOfClass:[BrowserWindowController class]]) {
-    [static_cast<BrowserWindowController*>(wc) lockBarVisibilityForOwner:self
-                                                           withAnimation:NO];
+    [static_cast<BrowserWindowController*>(wc)
+        lockToolbarVisibilityForOwner:self
+                        withAnimation:NO];
   }
 
   // The new avatar bubble does not have an arrow, and it should be anchored
   // to the edge of the avatar button.
-  int anchorX = NSMaxX([anchor bounds]) - kMenuXOffsetAdjust;
+  int anchorX = cocoa_l10n_util::ShouldDoExperimentalRTLLayout()
+                    ? NSMinX([anchor bounds]) + kMenuXOffsetAdjust
+                    : NSMaxX([anchor bounds]) - kMenuXOffsetAdjust;
   NSPoint point = NSMakePoint(anchorX,
                               NSMaxY([anchor bounds]) + kMenuYOffsetAdjust);
   point = [anchor convertPoint:point toView:nil];
@@ -168,13 +172,6 @@ bool ProfileUpdateObserver::HasAvatarError() {
   profiles::TutorialMode tutorialMode;
   profiles::BubbleViewModeFromAvatarBubbleMode(
       mode, &viewMode, &tutorialMode);
-  // Don't start creating the view if it would be an empty fast user switcher.
-  // It has to happen here to prevent the view system from creating an empty
-  // container.
-  if (viewMode == profiles::BUBBLE_VIEW_MODE_FAST_PROFILE_CHOOSER &&
-      !profiles::HasProfileSwitchTargets(browser_->profile())) {
-    return;
-  }
 
   menuController_ =
       [[ProfileChooserController alloc] initWithBrowser:browser_
@@ -194,29 +191,9 @@ bool ProfileUpdateObserver::HasAvatarError() {
   ProfileMetrics::LogProfileOpenMethod(ProfileMetrics::ICON_AVATAR_BUBBLE);
 }
 
-- (BOOL)isCtrlPressed {
-  return [NSEvent modifierFlags] & NSControlKeyMask ? YES : NO;
-}
-
 - (IBAction)buttonClicked:(id)sender {
-  BrowserWindow::AvatarBubbleMode mode =
-      BrowserWindow::AVATAR_BUBBLE_MODE_DEFAULT;
-  if ([self isCtrlPressed])
-    mode = BrowserWindow::AVATAR_BUBBLE_MODE_FAST_USER_SWITCH;
-
   [self showAvatarBubbleAnchoredAt:button_
-                          withMode:mode
-                   withServiceType:signin::GAIA_SERVICE_TYPE_NONE
-                   fromAccessPoint:signin_metrics::AccessPoint::
-                                       ACCESS_POINT_AVATAR_BUBBLE_SIGN_IN];
-}
-
-- (IBAction)buttonRightClicked:(id)sender {
-  BrowserWindow::AvatarBubbleMode mode =
-      BrowserWindow::AVATAR_BUBBLE_MODE_FAST_USER_SWITCH;
-
-  [self showAvatarBubbleAnchoredAt:button_
-                          withMode:mode
+                          withMode:BrowserWindow::AVATAR_BUBBLE_MODE_DEFAULT
                    withServiceType:signin::GAIA_SERVICE_TYPE_NONE
                    fromAccessPoint:signin_metrics::AccessPoint::
                                        ACCESS_POINT_AVATAR_BUBBLE_SIGN_IN];
@@ -227,8 +204,8 @@ bool ProfileUpdateObserver::HasAvatarError() {
       [browser_->window()->GetNativeWindow() windowController];
   if ([wc isKindOfClass:[BrowserWindowController class]]) {
     [static_cast<BrowserWindowController*>(wc)
-        releaseBarVisibilityForOwner:self
-                       withAnimation:YES];
+        releaseToolbarVisibilityForOwner:self
+                           withAnimation:YES];
   }
   menuController_ = nil;
 }

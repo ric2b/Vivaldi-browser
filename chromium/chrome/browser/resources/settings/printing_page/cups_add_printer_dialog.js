@@ -165,6 +165,14 @@ Polymer({
     // corresponding message after the API is ready.
     // The format of address is: ip-address-or-hostname:port-number.
   },
+
+  /**
+   * @param {!Event} event
+   * @private
+   */
+  onProtocolChange_: function(event) {
+    this.newPrinter.printerProtocol = event.target.value;
+  },
 });
 
 Polymer({
@@ -177,12 +185,12 @@ Polymer({
       notify: true,
     },
 
-    /** @type {!Array<string>} */
+    /** @type {?Array<string>} */
     manufacturerList: {
       type: Array,
     },
 
-    /** @type {!Array<string>} */
+    /** @type {?Array<string>} */
     modelList: {
       type: Array,
     },
@@ -199,13 +207,16 @@ Polymer({
 
   /** @override */
   ready: function() {
-    // TODO(xdai): Get available manufacturerList after the API is ready.
+    settings.CupsPrintersBrowserProxyImpl.getInstance().
+        getCupsPrinterManufacturersList().then(
+            this.manufacturerListChanged_.bind(this));
   },
 
   /** @private */
-  selectedManufacturerChanged_: function() {
-    // TODO(xdai): Get available modelList for a selected manufacturer after
-    // the API is ready.
+  selectedManufacturerChanged_: function(manufacturer) {
+    settings.CupsPrintersBrowserProxyImpl.getInstance().
+        getCupsPrinterModelsList(manufacturer).then(
+            this.modelListChanged_.bind(this));
   },
 
   /** @private */
@@ -221,6 +232,24 @@ Polymer({
   printerPPDPathChanged_: function(path) {
     this.newPrinter.printerPPDPath = path;
     this.$$('paper-input').value = this.getBaseName_(path);
+  },
+
+  /**
+   * @param {!ManufacturersInfo} manufacturersInfo
+   * @private
+   */
+  manufacturerListChanged_: function(manufacturersInfo) {
+    if (manufacturersInfo.success)
+      this.manufacturerList = manufacturersInfo.manufacturers;
+  },
+
+  /**
+   * @param {!ModelsInfo} modelsInfo
+   * @private
+   */
+  modelListChanged_: function(modelsInfo) {
+    if (modelsInfo.success)
+      this.modelList = modelsInfo.models;
   },
 
   /** @private */
@@ -255,6 +284,7 @@ Polymer({
 
   properties: {
     printerName: String,
+    dialogTitle: String,
   },
 
   /** @override */
@@ -296,6 +326,8 @@ Polymer({
       value: false,
     },
 
+    configuringDialogTitle: String,
+
     /** @private {string} */
     previousDialog_: String,
 
@@ -331,7 +363,8 @@ Polymer({
   /** Opens the Add printer discovery dialog. */
   open: function() {
     this.resetData_();
-    this.switchDialog_('', AddPrinterDialogs.DISCOVERY, 'showDiscoveryDialog_');
+    this.switchDialog_(
+        '', AddPrinterDialogs.MANUALLY, 'showManuallyAddDialog_');
   },
 
   /**
@@ -382,10 +415,14 @@ Polymer({
     this.switchDialog_(this.currentDialog_, AddPrinterDialogs.CONFIGURING,
                        'showConfiguringDialog_');
     if (this.previousDialog_ == AddPrinterDialogs.DISCOVERY) {
+      this.configuringDialogTitle =
+          loadTimeData.getString('addPrintersNearbyTitle');
       settings.CupsPrintersBrowserProxyImpl.getInstance().
           addCupsPrinter(this.selectedPrinter);
     } else if (this.previousDialog_ == AddPrinterDialogs.MANUALLY ||
                this.previousDialog_ == AddPrinterDialogs.MANUFACTURER) {
+      this.configuringDialogTitle =
+          loadTimeData.getString('addPrintersManuallyTitle');
       settings.CupsPrintersBrowserProxyImpl.getInstance().
           addCupsPrinter(this.newPrinter);
     }
@@ -399,10 +436,7 @@ Polymer({
 
   /** @private */
   configuringDialogClosed_: function() {
-    if (this.previousDialog_ == AddPrinterDialogs.DISCOVERY) {
-      this.switchDialog_(
-          this.currentDialog_, this.previousDialog_, 'showDiscoveryDialog_');
-    } else if (this.previousDialog_ == AddPrinterDialogs.MANUALLY) {
+    if (this.previousDialog_ == AddPrinterDialogs.MANUALLY) {
       this.switchDialog_(
           this.currentDialog_, this.previousDialog_, 'showManuallyAddDialog_');
     } else if (this.previousDialog_ == AddPrinterDialogs.MANUFACTURER) {

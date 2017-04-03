@@ -117,7 +117,7 @@ class MockDownloadItemImpl : public DownloadItemImpl {
   MOCK_METHOD0(OpenDownload, void());
   MOCK_METHOD0(ShowDownloadInShell, void());
   MOCK_METHOD0(ValidateDangerousDownload, void());
-  MOCK_METHOD1(StealDangerousDownload, void(const AcquireFileCallback&));
+  MOCK_METHOD2(StealDangerousDownload, void(bool, const AcquireFileCallback&));
   MOCK_METHOD3(UpdateProgress, void(int64_t, int64_t, const std::string&));
   MOCK_METHOD1(Cancel, void(bool));
   MOCK_METHOD0(MarkAsComplete, void());
@@ -767,7 +767,8 @@ TEST_F(DownloadManagerTest, GetDownloadByGuid) {
 namespace {
 
 base::Callback<bool(const GURL&)> GetSingleURLFilter(const GURL& url) {
-  return base::Bind(&GURL::operator==, base::Owned(new GURL(url)));
+  return base::Bind(static_cast<bool (*)(const GURL&, const GURL&)>(operator==),
+                    GURL(url));
 }
 
 }  // namespace

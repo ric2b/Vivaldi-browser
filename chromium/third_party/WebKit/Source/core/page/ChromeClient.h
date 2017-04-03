@@ -57,17 +57,16 @@ class Element;
 class FileChooser;
 class FloatPoint;
 class Frame;
-class GraphicsContext;
 class GraphicsLayer;
 class HTMLFormControlElement;
 class HTMLInputElement;
 class HTMLSelectElement;
 class HitTestResult;
 class IntRect;
+class KeyboardEvent;
 class LocalFrame;
 class Node;
 class Page;
-class PaintArtifact;
 class PopupOpeningObserver;
 class WebDragData;
 class WebFrameScheduler;
@@ -177,8 +176,6 @@ class CORE_EXPORT ChromeClient : public HostWindow {
 
   virtual void* webView() const = 0;
 
-  virtual IntRect windowResizerRect(LocalFrame&) const = 0;
-
   // Methods used by HostWindow.
   virtual WebScreenInfo screenInfo() const = 0;
   virtual void setCursor(const Cursor&, LocalFrame* localRoot) = 0;
@@ -205,7 +202,7 @@ class CORE_EXPORT ChromeClient : public HostWindow {
   virtual void setToolTip(LocalFrame&, const String&, TextDirection) = 0;
   void clearToolTip(LocalFrame&);
 
-  void print(LocalFrame*);
+  bool print(LocalFrame*);
 
   virtual void annotatedRegionsChanged() = 0;
 
@@ -249,7 +246,7 @@ class CORE_EXPORT ChromeClient : public HostWindow {
                                                  LocalFrame* localRoot) {}
 
   virtual void enterFullscreenForElement(Element*) {}
-  virtual void exitFullscreenForElement(Element*) {}
+  virtual void exitFullscreen(LocalFrame*) {}
 
   virtual void clearCompositedSelection(LocalFrame*) {}
   virtual void updateCompositedSelection(LocalFrame*,
@@ -262,7 +259,7 @@ class CORE_EXPORT ChromeClient : public HostWindow {
   virtual void setHasScrollEventHandlers(bool) = 0;
   virtual bool hasScrollEventHandlers() const = 0;
 
-  virtual void setTouchAction(TouchAction) = 0;
+  virtual void setTouchAction(LocalFrame*, TouchAction) = 0;
 
   // Checks if there is an opened popup, called by LayoutMenuList::showPopup().
   virtual bool hasOpenedPopup() const = 0;
@@ -315,7 +312,7 @@ class CORE_EXPORT ChromeClient : public HostWindow {
 
   virtual void onMouseDown(Node*) {}
 
-  virtual void didUpdateTopControls() const {}
+  virtual void didUpdateBrowserControls() const {}
 
   virtual void registerPopupOpeningObserver(PopupOpeningObserver*) = 0;
   virtual void unregisterPopupOpeningObserver(PopupOpeningObserver*) = 0;

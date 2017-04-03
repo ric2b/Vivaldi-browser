@@ -64,6 +64,7 @@
 #include "components/domain_reliability/service.h"
 #include "components/favicon/core/favicon_service.h"
 #include "components/history/core/browser/history_service.h"
+#include "components/ntp_snippets/bookmarks/bookmark_last_visit_utils.h"
 #include "components/omnibox/browser/omnibox_pref_names.h"
 #include "components/os_crypt/os_crypt_mocker.h"
 #include "components/password_manager/core/browser/mock_password_store.h"
@@ -80,6 +81,7 @@
 #include "content/public/test/test_browser_thread.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "content/public/test/test_utils.h"
+#include "extensions/features/features.h"
 #include "net/cookies/cookie_store.h"
 #include "net/http/http_network_session.h"
 #include "net/http/http_transaction_factory.h"
@@ -108,7 +110,7 @@
 #include "components/signin/core/account_id/account_id.h"
 #endif
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "chrome/browser/extensions/mock_extension_special_storage_policy.h"
 #endif
 
@@ -129,10 +131,12 @@ using domain_reliability::DomainReliabilityServiceFactory;
 using testing::_;
 using testing::ByRef;
 using testing::Invoke;
+using testing::IsEmpty;
 using testing::Matcher;
 using testing::MakeMatcher;
 using testing::MatcherInterface;
 using testing::MatchResultListener;
+using testing::Not;
 using testing::Return;
 using testing::WithArgs;
 
@@ -318,19 +322,13 @@ class TestWebappRegistry : public WebappRegistry {
   TestWebappRegistry() : WebappRegistry() { }
 
   void UnregisterWebappsForUrls(
-      const base::Callback<bool(const GURL&)>& url_filter,
-      const base::Closure& callback) override {
-    // Mocks out a JNI call and runs the callback as a delayed task.
-    BrowserThread::PostDelayedTask(BrowserThread::UI, FROM_HERE, callback,
-                                   base::TimeDelta::FromMilliseconds(10));
+      const base::Callback<bool(const GURL&)>& url_filter) override {
+    // Mocks out a JNI call.
   }
 
   void ClearWebappHistoryForUrls(
-      const base::Callback<bool(const GURL&)>& url_filter,
-      const base::Closure& callback) override {
-    // Mocks out a JNI call and runs the callback as a delayed task.
-    BrowserThread::PostDelayedTask(BrowserThread::UI, FROM_HERE, callback,
-                                   base::TimeDelta::FromMilliseconds(10));
+      const base::Callback<bool(const GURL&)>& url_filter) override {
+    // Mocks out a JNI call.
   }
 };
 #endif
@@ -1138,7 +1136,7 @@ class BrowsingDataRemoverTest : public testing::Test {
   ~BrowsingDataRemoverTest() override {}
 
   void TearDown() override {
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
     mock_policy_ = nullptr;
 #endif
 
@@ -1219,7 +1217,7 @@ class BrowsingDataRemoverTest : public testing::Test {
   }
 
   MockExtensionSpecialStoragePolicy* CreateMockPolicy() {
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
     mock_policy_ = new MockExtensionSpecialStoragePolicy;
     return mock_policy_.get();
 #else
@@ -1229,7 +1227,7 @@ class BrowsingDataRemoverTest : public testing::Test {
   }
 
   storage::SpecialStoragePolicy* mock_policy() {
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
     return mock_policy_.get();
 #else
     return nullptr;
@@ -1239,7 +1237,7 @@ class BrowsingDataRemoverTest : public testing::Test {
   // If |kOrigin1| is protected when extensions are enabled, the expected
   // result for tests where the OriginMatcherFunction result is variable.
   bool ShouldRemoveForProtectedOriginOne() const {
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
     return false;
 #else
     return true;
@@ -1259,7 +1257,7 @@ class BrowsingDataRemoverTest : public testing::Test {
 
   StoragePartitionRemovalData storage_partition_removal_data_;
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   scoped_refptr<MockExtensionSpecialStoragePolicy> mock_policy_;
 #endif
 
@@ -1453,7 +1451,7 @@ TEST_F(BrowsingDataRemoverTest, RemoveChannelIDsForServerIdentifiers) {
 }
 
 TEST_F(BrowsingDataRemoverTest, RemoveUnprotectedLocalStorageForever) {
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   MockExtensionSpecialStoragePolicy* policy = CreateMockPolicy();
   // Protect kOrigin1.
   policy->AddProtected(kOrigin1.GetOrigin());
@@ -1483,7 +1481,7 @@ TEST_F(BrowsingDataRemoverTest, RemoveUnprotectedLocalStorageForever) {
 }
 
 TEST_F(BrowsingDataRemoverTest, RemoveProtectedLocalStorageForever) {
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   // Protect kOrigin1.
   MockExtensionSpecialStoragePolicy* policy = CreateMockPolicy();
   policy->AddProtected(kOrigin1.GetOrigin());
@@ -1514,7 +1512,7 @@ TEST_F(BrowsingDataRemoverTest, RemoveProtectedLocalStorageForever) {
 }
 
 TEST_F(BrowsingDataRemoverTest, RemoveLocalStorageForLastWeek) {
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   CreateMockPolicy();
 #endif
 
@@ -1738,7 +1736,7 @@ TEST_F(BrowsingDataRemoverTest, RemoveQuotaManagedDataForeverBoth) {
 }
 
 TEST_F(BrowsingDataRemoverTest, RemoveQuotaManagedDataForeverOnlyTemporary) {
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   CreateMockPolicy();
 #endif
 
@@ -1782,7 +1780,7 @@ TEST_F(BrowsingDataRemoverTest, RemoveQuotaManagedDataForeverOnlyTemporary) {
 }
 
 TEST_F(BrowsingDataRemoverTest, RemoveQuotaManagedDataForeverOnlyPersistent) {
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   CreateMockPolicy();
 #endif
 
@@ -1826,7 +1824,7 @@ TEST_F(BrowsingDataRemoverTest, RemoveQuotaManagedDataForeverOnlyPersistent) {
 }
 
 TEST_F(BrowsingDataRemoverTest, RemoveQuotaManagedDataForeverNeither) {
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   CreateMockPolicy();
 #endif
 
@@ -1991,7 +1989,7 @@ TEST_F(BrowsingDataRemoverTest, RemoveQuotaManagedDataForLastWeek) {
 }
 
 TEST_F(BrowsingDataRemoverTest, RemoveQuotaManagedUnprotectedOrigins) {
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   MockExtensionSpecialStoragePolicy* policy = CreateMockPolicy();
   // Protect kOrigin1.
   policy->AddProtected(kOrigin1.GetOrigin());
@@ -2037,7 +2035,7 @@ TEST_F(BrowsingDataRemoverTest, RemoveQuotaManagedUnprotectedOrigins) {
 }
 
 TEST_F(BrowsingDataRemoverTest, RemoveQuotaManagedProtectedSpecificOrigin) {
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   MockExtensionSpecialStoragePolicy* policy = CreateMockPolicy();
   // Protect kOrigin1.
   policy->AddProtected(kOrigin1.GetOrigin());
@@ -2089,7 +2087,7 @@ TEST_F(BrowsingDataRemoverTest, RemoveQuotaManagedProtectedSpecificOrigin) {
 }
 
 TEST_F(BrowsingDataRemoverTest, RemoveQuotaManagedProtectedOrigins) {
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   MockExtensionSpecialStoragePolicy* policy = CreateMockPolicy();
   // Protect kOrigin1.
   policy->AddProtected(kOrigin1.GetOrigin());
@@ -2137,7 +2135,7 @@ TEST_F(BrowsingDataRemoverTest, RemoveQuotaManagedProtectedOrigins) {
 }
 
 TEST_F(BrowsingDataRemoverTest, RemoveQuotaManagedIgnoreExtensionsAndDevTools) {
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   CreateMockPolicy();
 #endif
 
@@ -3047,4 +3045,60 @@ TEST_F(BrowsingDataRemoverTest, MultipleTasksInQuickSuccession) {
       BrowsingDataHelper::UNPROTECTED_WEB);
 
   EXPECT_FALSE(remover->is_removing());
+}
+
+// Test that the remover clears bookmark meta data (normally added in a tab
+// helper).
+TEST_F(BrowsingDataRemoverTest, BookmarkLastVisitDatesGetCleared) {
+  TestingProfile profile;
+  profile.CreateBookmarkModel(true);
+
+  bookmarks::BookmarkModel* bookmark_model =
+      BookmarkModelFactory::GetForBrowserContext(&profile);
+  bookmarks::test::WaitForBookmarkModelToLoad(bookmark_model);
+
+  // Create a couple of bookmarks.
+  bookmark_model->AddURL(bookmark_model->bookmark_bar_node(), 0,
+                         base::string16(),
+                         GURL("http://foo.org/desktop"));
+  bookmark_model->AddURL(bookmark_model->mobile_node(), 0,
+                         base::string16(),
+                         GURL("http://foo.org/mobile"));
+
+  // Simulate their visits.
+  ntp_snippets::UpdateBookmarkOnURLVisitedInMainFrame(
+      bookmark_model, GURL("http://foo.org/desktop"),
+      /*is_mobile_platform=*/false);
+  ntp_snippets::UpdateBookmarkOnURLVisitedInMainFrame(
+      bookmark_model, GURL("http://foo.org/mobile"),
+      /*is_mobile_platform=*/true);
+
+  // There should be some recently visited bookmarks.
+  EXPECT_THAT(ntp_snippets::GetRecentlyVisitedBookmarks(
+                  bookmark_model, 0, 2, base::Time::UnixEpoch(),
+                  /*creation_date_fallback=*/false,
+                  /*consider_visits_from_desktop=*/false),
+              Not(IsEmpty()));
+
+  // Inject the bookmark model into the remover.
+  BrowsingDataRemover* remover =
+      BrowsingDataRemoverFactory::GetForBrowserContext(&profile);
+
+  BrowsingDataRemoverCompletionObserver completion_observer(remover);
+  remover->RemoveAndReply(BrowsingDataRemover::Unbounded(),
+                          BrowsingDataRemover::REMOVE_HISTORY,
+                          BrowsingDataHelper::ALL, &completion_observer);
+  completion_observer.BlockUntilCompletion();
+
+  // There should be no recently visited bookmarks.
+  EXPECT_THAT(ntp_snippets::GetRecentlyVisitedBookmarks(
+                  bookmark_model, 0, 2, base::Time::UnixEpoch(),
+                  /*creation_date_fallback=*/false,
+                  /*consider_visits_from_desktop=*/false),
+              IsEmpty());
+  EXPECT_THAT(ntp_snippets::GetRecentlyVisitedBookmarks(
+                  bookmark_model, 0, 2, base::Time::UnixEpoch(),
+                  /*creation_date_fallback=*/false,
+                  /*consider_visits_from_desktop=*/true),
+              IsEmpty());
 }

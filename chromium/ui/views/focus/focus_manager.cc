@@ -313,12 +313,27 @@ void FocusManager::SetFocusedViewWithReason(
   if (focused_view_ == view)
     return;
 
+#if !defined(OS_MACOSX)
+  // TODO(warx): There are some AccessiblePaneViewTest failed on macosx.
+  // crbug.com/650859. Remove !defined(OS_MACOSX) once that is fixed.
+  //
+  // If the widget isn't active store the focused view and then attempt to
+  // activate the widget. If activation succeeds |view| will be focused.
+  // If activation fails |view| will be focused the next time the widget is
+  // made active.
+  if (view && !widget_->IsActive()) {
+    SetStoredFocusView(view);
+    widget_->Activate();
+    return;
+  }
+#endif
+
   base::AutoReset<bool> auto_changing_focus(&is_changing_focus_, true);
   // Update the reason for the focus change (since this is checked by
   // some listeners), then notify all listeners.
   focus_change_reason_ = reason;
-  FOR_EACH_OBSERVER(FocusChangeListener, focus_change_listeners_,
-                    OnWillChangeFocus(focused_view_, view));
+  for (FocusChangeListener& observer : focus_change_listeners_)
+    observer.OnWillChangeFocus(focused_view_, view);
 
   View* old_focused_view = focused_view_;
   focused_view_ = view;
@@ -331,8 +346,8 @@ void FocusManager::SetFocusedViewWithReason(
   if (focused_view_)
     focused_view_->Focus();
 
-  FOR_EACH_OBSERVER(FocusChangeListener, focus_change_listeners_,
-                    OnDidChangeFocus(old_focused_view, focused_view_));
+  for (FocusChangeListener& observer : focus_change_listeners_)
+    observer.OnDidChangeFocus(old_focused_view, focused_view_);
 }
 
 void FocusManager::ClearFocus() {

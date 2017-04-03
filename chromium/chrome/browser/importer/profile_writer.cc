@@ -37,19 +37,19 @@
 #include "components/prefs/pref_service.h"
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_service.h"
-#include "ui/base/l10n/l10n_util.h"
-#include "grit/generated_resources.h"
 
 #if defined(OS_WIN)
 #include "components/password_manager/core/browser/webdata/password_web_data_service_win.h"
 #endif
 
 #include "app/vivaldi_resources.h"
+#include "grit/generated_resources.h"
 #include "importer/imported_notes_entry.h"
 #include "importer/imported_speeddial_entry.h"
 #include "notes/notesnode.h"
 #include "notes/notes_factory.h"
 #include "notes/notes_model.h"
+#include "ui/base/l10n/l10n_util.h"
 
 using namespace vivaldi;
 

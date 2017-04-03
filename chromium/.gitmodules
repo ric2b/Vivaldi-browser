@@ -198,7 +198,7 @@
 	url = ../../external/github.com/google/shaderc.git
 [submodule "third_party/skia"]
 	path = third_party/skia
-	url = ../../skia.git
+	url = ../../skia/skia.git
 [submodule "third_party/smhasher/src"]
 	path = third_party/smhasher/src
 	url = ../../external/smhasher.git

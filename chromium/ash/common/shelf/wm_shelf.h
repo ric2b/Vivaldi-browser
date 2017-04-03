@@ -23,6 +23,7 @@ class GestureEvent;
 namespace ash {
 
 class ShelfLayoutManager;
+class ShelfLayoutManagerTest;
 class ShelfLockingManager;
 class ShelfView;
 class ShelfWidget;
@@ -38,6 +39,10 @@ class ASH_EXPORT WmShelf : public ShelfLayoutManagerObserver {
   // Returns the shelf for the display that |window| is on. Note that the shelf
   // widget may not exist, or the shelf may not be visible.
   static WmShelf* ForWindow(WmWindow* window);
+
+  // Returns if shelf alignment options are enabled, and the user is able to
+  // adjust the alignment (eg. not allowed in guest and supervised user modes).
+  static bool CanChangeShelfAlignment();
 
   virtual void CreateShelfWidget(WmWindow* root);
   void ShutdownShelfWidget();
@@ -153,6 +158,8 @@ class ASH_EXPORT WmShelf : public ShelfLayoutManagerObserver {
                            BackgroundAnimatorChangeType change_type) override;
 
  private:
+  friend class ShelfLayoutManagerTest;
+
   // Layout manager for the shelf container window. Instances are constructed by
   // ShelfWidget and lifetimes are managed by the container windows themselves.
   ShelfLayoutManager* shelf_layout_manager_ = nullptr;

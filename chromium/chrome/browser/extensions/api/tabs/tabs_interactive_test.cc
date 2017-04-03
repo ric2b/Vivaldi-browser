@@ -12,18 +12,17 @@
 #include "chrome/browser/extensions/extension_function_test_utils.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/ui/browser.h"
-#include "chrome/browser/ui/browser_window.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/interactive_test_utils.h"
-#include "chrome/test/base/ui_test_utils.h"
 #include "extensions/browser/api_test_utils.h"
 #include "extensions/common/test_util.h"
 
-namespace api_test_utils = extensions::api_test_utils;
-namespace keys = extensions::tabs_constants;
+namespace extensions {
+
+namespace keys = tabs_constants;
 namespace utils = extension_function_test_utils;
 
-typedef InProcessBrowserTest ExtensionTabsTest;
+using ExtensionTabsTest = InProcessBrowserTest;
 
 // http://crbug.com/154081 for Aura specific
 // http://crbug.com/179063 for other general failures on try bots.
@@ -37,6 +36,11 @@ IN_PROC_BROWSER_TEST_F(ExtensionTabsTest, MAYBE_GetLastFocusedWindow) {
   // Create a new window which making it the "last focused" window.
   // Note that "last focused" means the "top" most window.
   Browser* new_browser = CreateBrowser(browser()->profile());
+  ASSERT_TRUE(ui_test_utils::BringBrowserWindowToFront(new_browser));
+
+  GURL url("about:blank");
+  AddTabAtIndexToBrowser(new_browser, 0, url, ui::PAGE_TRANSITION_LINK, true);
+
   int focused_window_id =
       extensions::ExtensionTabUtil::GetWindowId(new_browser);
 
@@ -69,24 +73,15 @@ IN_PROC_BROWSER_TEST_F(ExtensionTabsTest, MAYBE_GetLastFocusedWindow) {
   EXPECT_TRUE(result.get()->GetList(keys::kTabsKey, &tabs));
 }
 
-// Flaky: http://crbug.com/136562
-IN_PROC_BROWSER_TEST_F(ExtensionTabsTest, DISABLED_QueryLastFocusedWindowTabs) {
+IN_PROC_BROWSER_TEST_F(ExtensionTabsTest, QueryLastFocusedWindowTabs) {
   const size_t kExtraWindows = 2;
   for (size_t i = 0; i < kExtraWindows; ++i)
     CreateBrowser(browser()->profile());
 
   Browser* focused_window = CreateBrowser(browser()->profile());
-#if defined(OS_MACOSX)
-  // See BrowserWindowCocoa::Show. In tests, Browser::window()->IsActive won't
-  // work unless we fake the browser being launched by the user.
-  ASSERT_TRUE(ui_test_utils::ShowAndFocusNativeWindow(
-      focused_window->window()->GetNativeWindow()));
-#endif
+  ASSERT_TRUE(ui_test_utils::BringBrowserWindowToFront(focused_window));
 
-  // Needed on Mac and Linux so that the BrowserWindow::IsActive calls work.
-  content::RunAllPendingInMessageLoop();
-
-  GURL url;
+  GURL url("about:blank");
   AddTabAtIndexToBrowser(focused_window, 0, url, ui::PAGE_TRANSITION_LINK,
                          true);
   int focused_window_id =
@@ -95,6 +90,9 @@ IN_PROC_BROWSER_TEST_F(ExtensionTabsTest, DISABLED_QueryLastFocusedWindowTabs) {
   // Get tabs in the 'last focused' window called from non-focused browser.
   scoped_refptr<extensions::TabsQueryFunction> function =
       new extensions::TabsQueryFunction();
+  scoped_refptr<extensions::Extension> extension(
+      extensions::test_util::CreateEmptyExtension());
+  function->set_extension(extension.get());
   std::unique_ptr<base::ListValue> result(
       utils::ToList(utils::RunFunctionAndReturnSingleResult(
           function.get(), "[{\"lastFocusedWindow\":true}]", browser())));
@@ -111,6 +109,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionTabsTest, DISABLED_QueryLastFocusedWindowTabs) {
 
   // Get tabs NOT in the 'last focused' window called from the focused browser.
   function = new extensions::TabsQueryFunction();
+  function->set_extension(extension.get());
   result.reset(utils::ToList(
       utils::RunFunctionAndReturnSingleResult(function.get(),
                                               "[{\"lastFocusedWindow\":false}]",
@@ -135,3 +134,5 @@ IN_PROC_BROWSER_TEST_F(ExtensionTabsTest, DISABLED_QueryLastFocusedWindowTabs) {
 IN_PROC_BROWSER_TEST_F(ExtensionApiTest, MAYBE_TabCurrentWindow) {
   ASSERT_TRUE(RunExtensionTest("tabs/current_window")) << message_;
 }
+
+}  // namespace extensions

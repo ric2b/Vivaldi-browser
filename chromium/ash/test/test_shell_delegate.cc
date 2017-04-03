@@ -11,16 +11,15 @@
 #include "ash/common/default_accessibility_delegate.h"
 #include "ash/common/gpu_support_stub.h"
 #include "ash/common/media_delegate.h"
-#include "ash/common/new_window_delegate.h"
 #include "ash/common/palette_delegate.h"
 #include "ash/common/session/session_state_delegate.h"
-#include "ash/common/shell_window_ids.h"
+#include "ash/common/test/test_session_state_delegate.h"
+#include "ash/common/test/test_shelf_delegate.h"
+#include "ash/common/test/test_system_tray_delegate.h"
 #include "ash/common/wm/window_state.h"
 #include "ash/common/wm_shell.h"
+#include "ash/public/cpp/shell_window_ids.h"
 #include "ash/test/test_keyboard_ui.h"
-#include "ash/test/test_session_state_delegate.h"
-#include "ash/test/test_shelf_delegate.h"
-#include "ash/test/test_system_tray_delegate.h"
 #include "ash/test/test_wallpaper_delegate.h"
 #include "ash/wm/window_util.h"
 #include "base/logging.h"
@@ -38,26 +37,6 @@
 namespace ash {
 namespace test {
 namespace {
-
-class NewWindowDelegateImpl : public NewWindowDelegate {
- public:
-  NewWindowDelegateImpl() {}
-  ~NewWindowDelegateImpl() override {}
-
- private:
-  // NewWindowDelegate:
-  void NewTab() override {}
-  void NewWindow(bool incognito) override {}
-  void OpenFileManager() override {}
-  void OpenCrosh() override {}
-  void OpenGetHelp() override {}
-  void RestoreTab() override {}
-  void ShowKeyboardOverlay() override {}
-  void ShowTaskManager() override {}
-  void OpenFeedbackPage() override {}
-
-  DISALLOW_COPY_AND_ASSIGN(NewWindowDelegateImpl);
-};
 
 class MediaDelegateImpl : public MediaDelegate {
  public:
@@ -112,12 +91,8 @@ TestShellDelegate::TestShellDelegate()
 
 TestShellDelegate::~TestShellDelegate() {}
 
-::shell::Connector* TestShellDelegate::GetShellConnector() const {
+::service_manager::Connector* TestShellDelegate::GetShellConnector() const {
   return nullptr;
-}
-
-bool TestShellDelegate::IsFirstRunAfterBoot() const {
-  return false;
 }
 
 bool TestShellDelegate::IsIncognitoAllowed() const {
@@ -181,10 +156,6 @@ TestSessionStateDelegate* TestShellDelegate::CreateSessionStateDelegate() {
 
 AccessibilityDelegate* TestShellDelegate::CreateAccessibilityDelegate() {
   return new DefaultAccessibilityDelegate();
-}
-
-NewWindowDelegate* TestShellDelegate::CreateNewWindowDelegate() {
-  return new NewWindowDelegateImpl;
 }
 
 MediaDelegate* TestShellDelegate::CreateMediaDelegate() {

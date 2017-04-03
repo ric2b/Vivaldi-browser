@@ -10,12 +10,8 @@ namespace content {
 void DevToolsManagerDelegate::Inspect(DevToolsAgentHost* agent_host) {
 }
 
-void DevToolsManagerDelegate::DevToolsAgentStateChanged(
-    DevToolsAgentHost* agent_host, bool attached) {
-}
-
 std::string DevToolsManagerDelegate::GetTargetType(RenderFrameHost* host) {
-  return DevToolsAgentHost::kTypePage;
+  return std::string();
 }
 
 std::string DevToolsManagerDelegate::GetTargetTitle(RenderFrameHost* host) {

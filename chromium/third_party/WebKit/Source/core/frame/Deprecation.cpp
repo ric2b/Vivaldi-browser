@@ -54,14 +54,14 @@ String willBeRemoved(const char* feature,
       feature, milestoneString(milestone), details);
 }
 
-String dopplerWillBeRemoved(const char* feature,
-                            Milestone milestone,
-                            const char* details) {
+String replacedWillBeRemoved(const char* feature,
+                             const char* replacement,
+                             Milestone milestone,
+                             const char* details) {
   return String::format(
-      "%s is deprecated and will be removed in %s. It has no effect as the Web "
-      "Audio doppler effects have already been removed internally. See "
+      "%s is deprecated and will be removed in %s. Please use %s instead. See "
       "https://www.chromestatus.com/features/%s for more details.",
-      feature, milestoneString(milestone), details);
+      feature, milestoneString(milestone), replacement, details);
 }
 
 }  // anonymous namespace
@@ -225,31 +225,40 @@ String Deprecation::deprecationMessage(UseCounter::Feature feature) {
                         "'Document.exitFullscreen()'");
 
     case UseCounter::PrefixedIndexedDB:
-      return replacedBy("'webkitIndexedDB'", "'indexedDB'");
+      return replacedWillBeRemoved("'webkitIndexedDB'", "'indexedDB'", M57,
+                                   "5775330191081472");
 
     case UseCounter::PrefixedIDBCursorConstructor:
-      return replacedBy("'webkitIDBCursor'", "'IDBCursor'");
+      return replacedWillBeRemoved("'webkitIDBCursor'", "'IDBCursor'", M57,
+                                   "5775330191081472");
 
     case UseCounter::PrefixedIDBDatabaseConstructor:
-      return replacedBy("'webkitIDBDatabase'", "'IDBDatabase'");
+      return replacedWillBeRemoved("'webkitIDBDatabase'", "'IDBDatabase'", M57,
+                                   "5775330191081472");
 
     case UseCounter::PrefixedIDBFactoryConstructor:
-      return replacedBy("'webkitIDBFactory'", "'IDBFactory'");
+      return replacedWillBeRemoved("'webkitIDBFactory'", "'IDBFactory'", M57,
+                                   "5775330191081472");
 
     case UseCounter::PrefixedIDBIndexConstructor:
-      return replacedBy("'webkitIDBIndex'", "'IDBIndex'");
+      return replacedWillBeRemoved("'webkitIDBIndex'", "'IDBIndex'", M57,
+                                   "5775330191081472");
 
     case UseCounter::PrefixedIDBKeyRangeConstructor:
-      return replacedBy("'webkitIDBKeyRange'", "'IDBKeyRange'");
+      return replacedWillBeRemoved("'webkitIDBKeyRange'", "'IDBKeyRange'", M57,
+                                   "5775330191081472");
 
     case UseCounter::PrefixedIDBObjectStoreConstructor:
-      return replacedBy("'webkitIDBObjectStore'", "'IDBObjectStore'");
+      return replacedWillBeRemoved("'webkitIDBObjectStore'", "'IDBObjectStore'",
+                                   M57, "5775330191081472");
 
     case UseCounter::PrefixedIDBRequestConstructor:
-      return replacedBy("'webkitIDBRequest'", "'IDBRequest'");
+      return replacedWillBeRemoved("'webkitIDBRequest'", "'IDBRequest'", M57,
+                                   "5775330191081472");
 
     case UseCounter::PrefixedIDBTransactionConstructor:
-      return replacedBy("'webkitIDBTransaction'", "'IDBTransaction'");
+      return replacedWillBeRemoved("'webkitIDBTransaction'", "'IDBTransaction'",
+                                   M57, "5775330191081472");
 
     case UseCounter::PrefixedRequestAnimationFrame:
       return "'webkitRequestAnimationFrame' is vendor-specific. Please use the "
@@ -260,12 +269,19 @@ String Deprecation::deprecationMessage(UseCounter::Feature feature) {
              "standard 'cancelAnimationFrame' instead.";
 
     case UseCounter::PrefixedCancelRequestAnimationFrame:
-      return "'webkitCancelRequestAnimationFrame' is vendor-specific. Please "
-             "use the standard 'cancelAnimationFrame' instead.";
+      return replacedWillBeRemoved("webkitCancelRequestAnimationFrame",
+                                   "cancelAnimationFrame", M57,
+                                   "5588435494502400");
 
     case UseCounter::PictureSourceSrc:
       return "<source src> with a <picture> parent is invalid and therefore "
              "ignored. Please use <source srcset> instead.";
+
+    case UseCounter::RadioNameMatchingASCIICaseless:
+    case UseCounter::RadioNameMatchingCaseFolding:
+      return willBeRemoved(
+          "Case-insensitive matching for <input type=radio name=...>", M57,
+          "6165799291060224");
 
     case UseCounter::ConsoleTimeline:
       return replacedBy("'console.timeline'", "'console.time'");
@@ -281,22 +297,6 @@ String Deprecation::deprecationMessage(UseCounter::Feature feature) {
     case UseCounter::GetMatchedCSSRules:
       return "'getMatchedCSSRules()' is deprecated. For more help, check "
              "https://code.google.com/p/chromium/issues/detail?id=437569#c2";
-
-    case UseCounter::AudioListenerDopplerFactor:
-      return dopplerWillBeRemoved("'AudioListener.dopplerFactor'", M56,
-                                  "5238926818148352");
-
-    case UseCounter::AudioListenerSpeedOfSound:
-      return dopplerWillBeRemoved("'AudioListener.speedOfSound'", M56,
-                                  "5238926818148352");
-
-    case UseCounter::AudioListenerSetVelocity:
-      return dopplerWillBeRemoved("'AudioListener.setVelocity()'", M56,
-                                  "5238926818148352");
-
-    case UseCounter::PannerNodeSetVelocity:
-      return dopplerWillBeRemoved("'PannerNode.setVelocity()'", M56,
-                                  "5238926818148352");
 
     case UseCounter::PrefixedWindowURL:
       return replacedBy("'webkitURL'", "'URL'");
@@ -351,10 +351,12 @@ String Deprecation::deprecationMessage(UseCounter::Feature feature) {
              "details.";
 
     case UseCounter::EncryptedMediaInsecureOrigin:
-      return "requestMediaKeySystemAccess() is deprecated on insecure origins "
-             "in the specification. Support will be removed in the future. You "
-             "should consider switching your application to a secure origin, "
-             "such as HTTPS. See https://goo.gl/rStTGz for more details.";
+      return String::format(
+          "Using requestMediaKeySystemAccess() on insecure origins is "
+          "deprecated and will be removed in %s. You should consider "
+          "switching your application to a secure origin, such as HTTPS. See "
+          "https://goo.gl/rStTGz for more details.",
+          milestoneString(M58));
 
     case UseCounter::MediaSourceAbortRemove:
       return "Using SourceBuffer.abort() to abort remove()'s asynchronous "
@@ -409,16 +411,12 @@ String Deprecation::deprecationMessage(UseCounter::Feature feature) {
       return replacedBy("'Performance.onwebkitresourcetimingbufferfull'",
                         "'Performance.onresourcetimingbufferfull'");
 
-    case UseCounter::MediaStreamTrackGetSources:
-      return willBeRemoved("MediaStreamTrack.getSources", M56,
-                           "4765305641369600");
-
     case UseCounter::WebAnimationHyphenatedProperty:
       return "Hyphenated property names in Web Animations keyframes are "
              "invalid and therefore ignored. Please use camelCase instead.";
 
     case UseCounter::HTMLKeygenElement:
-      return willBeRemoved("The <keygen> element", M56, "5716060992962560");
+      return willBeRemoved("The <keygen> element", M57, "5716060992962560");
 
     case UseCounter::EncryptedMediaAllSelectedContentTypesMissingCodecs:
       return String::format(
@@ -426,51 +424,22 @@ String Deprecation::deprecationMessage(UseCounter::Feature feature) {
           "requestMediaKeySystemAccess() include codecs. Non-standard support "
           "for contentType strings without codecs will be removed in %s. "
           "Please specify the desired codec(s) as part of the contentType.",
-          milestoneString(M56));
+          milestoneString(M58));
 
-    case UseCounter::TouchStartUserGestureUtilized:
-      return willBeRemoved(
-          "Performing operations that require explicit user interaction on "
-          "touchstart events",
-          M56, "5649871251963904");
+    case UseCounter::EncryptedMediaCapabilityNotProvided:
+      return String::format(
+          "EME requires that one of 'audioCapabilities' and "
+          "'videoCapabilities' must be non-empty. Non-standard support for "
+          "this will be removed in %s. Please specify at least one valid "
+          "capability for 'audioCapabilities' or 'videoCapabilities'.",
+          milestoneString(M58));
 
-    case UseCounter::TouchMoveUserGestureUtilized:
-      return willBeRemoved(
-          "Performing operations that require explicit user interaction on "
-          "touchmove events",
-          M56, "5649871251963904");
+    case UseCounter::VRDeprecatedFieldOfView:
+      return replacedBy("VREyeParameters.fieldOfView",
+                        "projection matrices provided by VRFrameData");
 
-    case UseCounter::TouchEndDuringScrollUserGestureUtilized:
-      return willBeRemoved(
-          "Performing operations that require explicit user interaction on "
-          "touchend events that occur as part of a scroll",
-          M56, "5649871251963904");
-
-    case UseCounter::MIDIMessageEventReceivedTime:
-      return willBeRemoved("MIDIMessageEvent.receivedTime", M56,
-                           "5665772797952000");
-
-    case UseCounter::V8SVGSVGElement_UseCurrentView_AttributeGetter:
-      return willBeRemoved("SVGSVGElement.useCurrentView", M56,
-                           "4511711998509056");
-
-    case UseCounter::V8SVGSVGElement_CurrentView_AttributeGetter:
-      return willBeRemoved("SVGSVGElement.currentView", M56,
-                           "4511711998509056");
-
-    case UseCounter::V8SVGViewElement_ViewTarget_AttributeGetter:
-      return willBeRemoved("SVGViewElement.viewTarget", M56,
-                           "5665473114931200");
-
-    case UseCounter::ScriptInvalidTypeOrLanguage:
-      return willBeRemoved(
-          "Fetching scripts with an invalid type/language attributes", M56,
-          "5760718284521472");
-
-    // The PaymentAddress.careOf was deprecated and then will be removed in M56.
-    // Please see: https://www.chromestatus.com/features/5728579069411328
-    case UseCounter::PaymentAddressCareOf:
-      return willBeRemoved("PaymentAddress.careOf", M56, "5728579069411328");
+    case UseCounter::VRDeprecatedGetPose:
+      return replacedBy("VRDisplay.getPose()", "VRDisplay.getFrameData()");
 
     // Features that aren't deprecated don't have a deprecation message.
     default:

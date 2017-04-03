@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "components/sync/base/hash_util.h"
 #include "components/sync/base/unique_position.h"
 #include "components/sync/syncable/directory.h"
 #include "components/sync/syncable/scoped_kernel_lock.h"
@@ -24,7 +25,7 @@ ModelNeutralMutableEntry::ModelNeutralMutableEntry(BaseWriteTransaction* trans,
                                                    const Id& id)
     : Entry(trans), base_write_transaction_(trans) {
   Entry same_id(trans, GET_BY_ID, id);
-  kernel_ = NULL;
+  kernel_ = nullptr;
   if (same_id.good()) {
     return;  // already have an item with this ID.
   }
@@ -53,7 +54,7 @@ ModelNeutralMutableEntry::ModelNeutralMutableEntry(BaseWriteTransaction* trans,
   if (type != NIGORI)
     DCHECK(IsTypeWithClientGeneratedRoot(type));
   Entry same_type_root(trans, GET_TYPE_ROOT, type);
-  kernel_ = NULL;
+  kernel_ = nullptr;
   if (same_type_root.good()) {
     return;  // already have a type root for the given type
   }

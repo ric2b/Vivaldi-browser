@@ -30,13 +30,11 @@ const char kRecordUntilFull[] = "record-until-full";
 const char kRecordContinuously[] = "record-continuously";
 const char kRecordAsMuchAsPossible[] = "record-as-much-as-possible";
 const char kTraceToConsole[] = "trace-to-console";
-const char kEnableSampling[] = "enable-sampling";
 const char kEnableSystrace[] = "enable-systrace";
 const char kEnableArgumentFilter[] = "enable-argument-filter";
 
 // String parameters that can be used to parse the trace config string.
 const char kRecordModeParam[] = "record_mode";
-const char kEnableSamplingParam[] = "enable_sampling";
 const char kEnableSystraceParam[] = "enable_systrace";
 const char kEnableArgumentFilterParam[] = "enable_argument_filter";
 const char kIncludedCategoriesParam[] = "included_categories";
@@ -119,6 +117,17 @@ void TraceConfig::MemoryDumpConfig::Clear() {
   allowed_dump_modes.clear();
   triggers.clear();
   heap_profiler_options.Clear();
+}
+
+void TraceConfig::MemoryDumpConfig::Merge(
+    const TraceConfig::MemoryDumpConfig& config) {
+  triggers.insert(triggers.end(), config.triggers.begin(),
+                  config.triggers.end());
+  allowed_dump_modes.insert(config.allowed_dump_modes.begin(),
+                            config.allowed_dump_modes.end());
+  heap_profiler_options.breakdown_threshold_bytes =
+      std::min(heap_profiler_options.breakdown_threshold_bytes,
+               config.heap_profiler_options.breakdown_threshold_bytes);
 }
 
 TraceConfig::EventFilterConfig::EventFilterConfig(
@@ -228,7 +237,6 @@ TraceConfig::TraceConfig(StringPiece config_string) {
 
 TraceConfig::TraceConfig(const TraceConfig& tc)
     : record_mode_(tc.record_mode_),
-      enable_sampling_(tc.enable_sampling_),
       enable_systrace_(tc.enable_systrace_),
       enable_argument_filter_(tc.enable_argument_filter_),
       memory_dump_config_(tc.memory_dump_config_),
@@ -246,7 +254,6 @@ TraceConfig& TraceConfig::operator=(const TraceConfig& rhs) {
     return *this;
 
   record_mode_ = rhs.record_mode_;
-  enable_sampling_ = rhs.enable_sampling_;
   enable_systrace_ = rhs.enable_systrace_;
   enable_argument_filter_ = rhs.enable_argument_filter_;
   memory_dump_config_ = rhs.memory_dump_config_;
@@ -342,7 +349,6 @@ bool TraceConfig::IsCategoryGroupEnabled(
 
 void TraceConfig::Merge(const TraceConfig& config) {
   if (record_mode_ != config.record_mode_
-      || enable_sampling_ != config.enable_sampling_
       || enable_systrace_ != config.enable_systrace_
       || enable_argument_filter_ != config.enable_argument_filter_) {
     DLOG(ERROR) << "Attempting to merge trace config with a different "
@@ -360,9 +366,7 @@ void TraceConfig::Merge(const TraceConfig& config) {
     included_categories_.clear();
   }
 
-  memory_dump_config_.triggers.insert(memory_dump_config_.triggers.end(),
-                             config.memory_dump_config_.triggers.begin(),
-                             config.memory_dump_config_.triggers.end());
+  memory_dump_config_.Merge(config.memory_dump_config_);
 
   disabled_categories_.insert(disabled_categories_.end(),
                               config.disabled_categories_.begin(),
@@ -373,11 +377,12 @@ void TraceConfig::Merge(const TraceConfig& config) {
   synthetic_delays_.insert(synthetic_delays_.end(),
                            config.synthetic_delays_.begin(),
                            config.synthetic_delays_.end());
+  event_filters_.insert(event_filters_.end(), config.event_filters().begin(),
+                        config.event_filters().end());
 }
 
 void TraceConfig::Clear() {
   record_mode_ = RECORD_UNTIL_FULL;
-  enable_sampling_ = false;
   enable_systrace_ = false;
   enable_argument_filter_ = false;
   included_categories_.clear();
@@ -390,7 +395,6 @@ void TraceConfig::Clear() {
 
 void TraceConfig::InitializeDefault() {
   record_mode_ = RECORD_UNTIL_FULL;
-  enable_sampling_ = false;
   enable_systrace_ = false;
   enable_argument_filter_ = false;
 }
@@ -411,7 +415,6 @@ void TraceConfig::InitializeFromConfigDict(const DictionaryValue& dict) {
   }
 
   bool val;
-  enable_sampling_ = dict.GetBoolean(kEnableSamplingParam, &val) ? val : false;
   enable_systrace_ = dict.GetBoolean(kEnableSystraceParam, &val) ? val : false;
   enable_argument_filter_ =
       dict.GetBoolean(kEnableArgumentFilterParam, &val) ? val : false;
@@ -424,6 +427,10 @@ void TraceConfig::InitializeFromConfigDict(const DictionaryValue& dict) {
   if (dict.GetList(kSyntheticDelaysParam, &category_list))
     SetSyntheticDelaysFromList(*category_list);
 
+  const base::ListValue* category_event_filters = nullptr;
+  if (dict.GetList(kEventFiltersParam, &category_event_filters))
+    SetEventFiltersFromConfigList(*category_event_filters);
+
   if (IsCategoryEnabled(MemoryDumpManager::kTraceCategory)) {
     // If dump triggers not set, the client is using the legacy with just
     // category enabled. So, use the default periodic dump config.
@@ -433,10 +440,6 @@ void TraceConfig::InitializeFromConfigDict(const DictionaryValue& dict) {
     else
       SetDefaultMemoryDumpConfig();
   }
-
-  const base::ListValue* category_event_filters = nullptr;
-  if (dict.GetList(kEventFiltersParam, &category_event_filters))
-    SetEventFilters(*category_event_filters);
 }
 
 void TraceConfig::InitializeFromConfigString(StringPiece config_string) {
@@ -482,7 +485,6 @@ void TraceConfig::InitializeFromStrings(StringPiece category_filter_string,
   }
 
   record_mode_ = RECORD_UNTIL_FULL;
-  enable_sampling_ = false;
   enable_systrace_ = false;
   enable_argument_filter_ = false;
   if (!trace_options_string.empty()) {
@@ -497,8 +499,6 @@ void TraceConfig::InitializeFromStrings(StringPiece category_filter_string,
         record_mode_ = ECHO_TO_CONSOLE;
       } else if (token == kRecordAsMuchAsPossible) {
         record_mode_ = RECORD_AS_MUCH_AS_POSSIBLE;
-      } else if (token == kEnableSampling) {
-        enable_sampling_ = true;
       } else if (token == kEnableSystrace) {
         enable_systrace_ = true;
       } else if (token == kEnableArgumentFilter) {
@@ -629,25 +629,9 @@ void TraceConfig::SetDefaultMemoryDumpConfig() {
   memory_dump_config_.triggers.push_back(kDefaultHeavyMemoryDumpTrigger);
   memory_dump_config_.triggers.push_back(kDefaultLightMemoryDumpTrigger);
   memory_dump_config_.allowed_dump_modes = GetDefaultAllowedMemoryDumpModes();
-
-  if (AllocationContextTracker::capture_mode() ==
-      AllocationContextTracker::CaptureMode::PSEUDO_STACK) {
-    for (const auto& filter : event_filters_) {
-      if (filter.predicate_name() ==
-          TraceLog::TraceEventFilter::kHeapProfilerPredicate)
-        return;
-    }
-    // Adds a filter predicate to filter all categories for the heap profiler.
-    // Note that the heap profiler predicate does not filter-out any events.
-    EventFilterConfig heap_profiler_config(
-        TraceLog::TraceEventFilter::kHeapProfilerPredicate);
-    heap_profiler_config.AddIncludedCategory("*");
-    heap_profiler_config.AddIncludedCategory(MemoryDumpManager::kTraceCategory);
-    event_filters_.push_back(heap_profiler_config);
-  }
 }
 
-void TraceConfig::SetEventFilters(
+void TraceConfig::SetEventFiltersFromConfigList(
     const base::ListValue& category_event_filters) {
   event_filters_.clear();
 
@@ -710,7 +694,6 @@ std::unique_ptr<DictionaryValue> TraceConfig::ToDict() const {
       NOTREACHED();
   }
 
-  dict->SetBoolean(kEnableSamplingParam, enable_sampling_);
   dict->SetBoolean(kEnableSystraceParam, enable_systrace_);
   dict->SetBoolean(kEnableArgumentFilterParam, enable_argument_filter_);
 
@@ -810,8 +793,6 @@ std::string TraceConfig::ToTraceOptionsString() const {
     default:
       NOTREACHED();
   }
-  if (enable_sampling_)
-    ret = ret + "," + kEnableSampling;
   if (enable_systrace_)
     ret = ret + "," + kEnableSystrace;
   if (enable_argument_filter_)

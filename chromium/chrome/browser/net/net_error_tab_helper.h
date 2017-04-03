@@ -29,7 +29,7 @@ namespace chrome_browser_net {
 class NetErrorTabHelper
     : public content::WebContentsObserver,
       public content::WebContentsUserData<NetErrorTabHelper>,
-      public mojom::NetworkDiagnostics {
+      public chrome::mojom::NetworkDiagnostics {
  public:
   enum TestingState {
     TESTING_DEFAULT,
@@ -73,10 +73,14 @@ class NetErrorTabHelper
     return dns_probe_status_;
   }
 
-  content::WebContentsFrameBindingSet<mojom::NetworkDiagnostics>&
+  content::WebContentsFrameBindingSet<chrome::mojom::NetworkDiagnostics>&
   network_diagnostics_bindings_for_testing() {
     return network_diagnostics_bindings_;
   }
+
+#if BUILDFLAG(ANDROID_JAVA_UI)
+  void DownloadPageLater();
+#endif  // BUILDFLAG(ANDROID_JAVA_UI)
 
  private:
   friend class content::WebContentsUserData<NetErrorTabHelper>;
@@ -86,22 +90,19 @@ class NetErrorTabHelper
   void InitializePref(content::WebContents* contents);
   bool ProbesAllowed() const;
 
-  // mojom::NetworkDiagnostics:
+  // chrome::mojom::NetworkDiagnostics:
   void RunNetworkDiagnostics(const GURL& url) override;
 
   // Shows the diagnostics dialog after its been sanitized, virtual for
   // testing.
   virtual void RunNetworkDiagnosticsHelper(const std::string& sanitized_url);
 
-  // Relates to offline pages handling.
 #if BUILDFLAG(ANDROID_JAVA_UI)
-  void UpdateHasOfflinePages(int frame_tree_node_id);
-  void SetHasOfflinePages(int frame_tree_node_id, bool has_offline_pages);
-  void ShowOfflinePages();
-  bool IsFromErrorPage() const;
+  // Virtual for testing.
+  virtual void DownloadPageLaterHelper(const GURL& url);
 #endif  // BUILDFLAG(ANDROID_JAVA_UI)
 
-  content::WebContentsFrameBindingSet<mojom::NetworkDiagnostics>
+  content::WebContentsFrameBindingSet<chrome::mojom::NetworkDiagnostics>
       network_diagnostics_bindings_;
 
   // True if the last provisional load that started was for an error page.

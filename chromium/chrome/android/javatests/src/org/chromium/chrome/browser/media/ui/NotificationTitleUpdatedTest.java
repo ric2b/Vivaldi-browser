@@ -24,7 +24,8 @@ import org.chromium.chrome.test.util.browser.TabTitleObserver;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
 import org.chromium.content.browser.test.util.JavaScriptUtils;
-import org.chromium.content_public.browser.WebContentsObserver;
+import org.chromium.content_public.browser.MediaSession;
+import org.chromium.content_public.browser.MediaSessionObserver;
 import org.chromium.content_public.common.MediaMetadata;
 
 /**
@@ -70,12 +71,14 @@ public class NotificationTitleUpdatedTest extends ChromeActivityTestCaseBase<Chr
     }
 
     private void doTestMediaMetadataSetsTitle() throws InterruptedException {
-        simulateMediaSessionStateChanged(mTab, true, false, new MediaMetadata("title2", "", ""));
+        simulateMediaSessionStateChanged(mTab, true, false);
+        simulateMediaSessionMetadataChanged(mTab, new MediaMetadata("title2", "", ""));
         assertTitleMatches("title2");
     }
 
     private void doTestMediaMetadataOverridesTitle() throws InterruptedException {
-        simulateMediaSessionStateChanged(mTab, true, false, new MediaMetadata("title2", "", ""));
+        simulateMediaSessionStateChanged(mTab, true, false);
+        simulateMediaSessionMetadataChanged(mTab, new MediaMetadata("title2", "", ""));
         assertTitleMatches("title2");
 
         simulateUpdateTitle(mTab, "title3");
@@ -145,23 +148,30 @@ public class NotificationTitleUpdatedTest extends ChromeActivityTestCaseBase<Chr
 
     private void simulateMediaSessionStateChanged(
             final Tab tab, final boolean isControllable, final boolean isSuspended) {
-        simulateMediaSessionStateChanged(
-                tab, isControllable, isSuspended, new MediaMetadata("", "", ""));
-    }
-
-    private void simulateMediaSessionStateChanged(final Tab tab, final boolean isControllable,
-            final boolean isSuspended, final MediaMetadata metadata) {
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
                 @Override
                 public void run() {
-                    ObserverList.RewindableIterator<WebContentsObserver> observers =
-                            tab.getWebContents().getObserversForTesting();
+                    ObserverList.RewindableIterator<MediaSessionObserver> observers =
+                            MediaSession.fromWebContents(tab.getWebContents())
+                                    .getObserversForTesting();
                     while (observers.hasNext()) {
-                        observers.next().mediaSessionStateChanged(
-                                isControllable, isSuspended, metadata);
+                        observers.next().mediaSessionStateChanged(isControllable, isSuspended);
                     }
                 }
             });
+    }
+
+    private void simulateMediaSessionMetadataChanged(final Tab tab, final MediaMetadata metadata) {
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                ObserverList.RewindableIterator<MediaSessionObserver> observers =
+                        MediaSession.fromWebContents(tab.getWebContents()).getObserversForTesting();
+                while (observers.hasNext()) {
+                    observers.next().mediaSessionMetadataChanged(metadata);
+                }
+            }
+        });
     }
 
     private void simulateUpdateTitle(Tab tab, String title) {

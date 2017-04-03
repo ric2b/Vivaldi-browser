@@ -27,6 +27,15 @@ enum MessageType {
                // attention, but not as an error.
 };
 
+// The action associated with the sync status.
+enum ActionType {
+  NO_ACTION,           // No action to take.
+  REAUTHENTICATE,      // User needs to reauthenticate.
+  SIGNOUT_AND_SIGNIN,  // User needs to sign out and sign in.
+  UPGRADE_CLIENT,      // User needs to upgrade the client.
+  ENTER_PASSPHRASE,    // User needs to enter their passphrase.
+};
+
 enum StatusLabelStyle {
   PLAIN_TEXT,  // Label will be plain-text only.
   WITH_HTML    // Label may contain an HTML-formatted link.
@@ -54,7 +63,8 @@ MessageType GetStatusLabels(Profile* profile,
                             const SigninManagerBase& signin,
                             StatusLabelStyle style,
                             base::string16* status_label,
-                            base::string16* link_label);
+                            base::string16* link_label,
+                            ActionType* action_type);
 
 // Same as above but for use specifically on the New Tab Page.
 // |status_label| may contain an HTML-formatted link.
@@ -68,7 +78,7 @@ MessageType GetStatusLabelsForNewTabPage(
 #if !defined(OS_CHROMEOS)
 // Gets various labels for the sync global error based on the sync error state.
 // |menu_item_label|, |bubble_message|, and |bubble_accept_label| must not be
-// NULL. Note that we don't use SyncGlobalError on Chrome OS.
+// null. Note that we don't use SyncGlobalError on Chrome OS.
 void GetStatusLabelsForSyncGlobalError(
     const browser_sync::ProfileSyncService* service,
     base::string16* menu_item_label,

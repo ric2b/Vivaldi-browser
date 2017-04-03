@@ -1,10 +1,11 @@
 {
-  "manifest_version":  1,
-  "name": "exe:filesystem_service_unittests",
+  "name": "filesystem_service_unittests",
   "display_name": "Filesystem Service Unittests",
-  "capabilities": {
-    "required": {
-      "service:filesystem": { "interfaces": [ "filesystem::mojom::FileSystem" ] }
+  "interface_provider_specs": {
+    "service_manager:connector": {
+      "requires": {
+        "filesystem": [ "filesystem:filesystem" ]
+      }
     }
   }
 }

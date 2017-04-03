@@ -239,7 +239,7 @@ TEST_F(PrecacheFetcherFetcherTest, Config) {
 
   PrecacheFetcher::Fetcher precache_fetcher(
       request_context_.get(), url, url.host(), callback_,
-      false /* is_resource_request */, SIZE_MAX);
+      false /* is_resource_request */, SIZE_MAX, false /* revalidation_only */);
 
   base::RunLoop().RunUntilIdle();
 
@@ -256,17 +256,18 @@ TEST_F(PrecacheFetcherFetcherTest, ResourceNotInCache) {
       .WillOnce(factory_.RespondWith("", &fetcher2));
   EXPECT_CALL(*this,
               Callback(Property(&PrecacheFetcher::Fetcher::network_url_fetcher,
-                                NotNull())))
-      .Times(1);
+                                NotNull())));
 
   PrecacheFetcher::Fetcher precache_fetcher(
       request_context_.get(), url, url.host(), callback_,
-      true /* is_resource_request */, SIZE_MAX);
+      true /* is_resource_request */, SIZE_MAX, false /* revalidation_only */);
 
   base::RunLoop().RunUntilIdle();
 
   ASSERT_NE(nullptr, fetcher1);
-  EXPECT_EQ(net::LOAD_ONLY_FROM_CACHE | kNoTracking, fetcher1->GetLoadFlags());
+  EXPECT_EQ(
+      net::LOAD_ONLY_FROM_CACHE | net::LOAD_SKIP_CACHE_VALIDATION | kNoTracking,
+      fetcher1->GetLoadFlags());
   ASSERT_NE(nullptr, fetcher2);
   EXPECT_EQ(net::LOAD_VALIDATE_CACHE | kNoTracking, fetcher2->GetLoadFlags());
 }
@@ -284,12 +285,14 @@ TEST_F(PrecacheFetcherFetcherTest, ResourceHasValidators) {
 
   PrecacheFetcher::Fetcher precache_fetcher(
       request_context_.get(), url, url.host(), callback_,
-      true /* is_resource_request */, SIZE_MAX);
+      true /* is_resource_request */, SIZE_MAX, false /* revalidation_only */);
 
   base::RunLoop().RunUntilIdle();
 
   ASSERT_NE(nullptr, fetcher1);
-  EXPECT_EQ(net::LOAD_ONLY_FROM_CACHE | kNoTracking, fetcher1->GetLoadFlags());
+  EXPECT_EQ(
+      net::LOAD_ONLY_FROM_CACHE | net::LOAD_SKIP_CACHE_VALIDATION | kNoTracking,
+      fetcher1->GetLoadFlags());
   ASSERT_NE(nullptr, fetcher2);
   EXPECT_EQ(net::LOAD_VALIDATE_CACHE | kNoTracking, fetcher2->GetLoadFlags());
 }
@@ -297,7 +300,7 @@ TEST_F(PrecacheFetcherFetcherTest, ResourceHasValidators) {
 TEST_F(PrecacheFetcherFetcherTest, ResourceHasNoValidators) {
   GURL url(kGoodResourceURL);
 
-  net::FakeURLFetcher* fetcher;
+  net::FakeURLFetcher* fetcher = nullptr;
   EXPECT_CALL(factory_, DoCreateURLFetcher(_, url, net::URLFetcher::GET, _))
       .WillOnce(factory_.RespondWith("", &fetcher));
   EXPECT_CALL(*this,
@@ -306,11 +309,81 @@ TEST_F(PrecacheFetcherFetcherTest, ResourceHasNoValidators) {
 
   PrecacheFetcher::Fetcher precache_fetcher(
       request_context_.get(), url, url.host(), callback_,
-      true /* is_resource_request */, SIZE_MAX);
+      true /* is_resource_request */, SIZE_MAX, false /* revalidation_only */);
 
   base::RunLoop().RunUntilIdle();
 
-  EXPECT_EQ(net::LOAD_ONLY_FROM_CACHE | kNoTracking, fetcher->GetLoadFlags());
+  EXPECT_EQ(
+      net::LOAD_ONLY_FROM_CACHE | net::LOAD_SKIP_CACHE_VALIDATION | kNoTracking,
+      fetcher->GetLoadFlags());
+}
+
+TEST_F(PrecacheFetcherFetcherTest, RevalidationOnlyResourceNotInCache) {
+  GURL url(kGoodResourceURL);
+
+  net::FakeURLFetcher* fetcher = nullptr;
+  EXPECT_CALL(factory_, DoCreateURLFetcher(_, url, net::URLFetcher::GET, _))
+      .WillOnce(factory_.RespondWith("", CacheMiss, &fetcher));
+  EXPECT_CALL(*this,
+              Callback(Property(&PrecacheFetcher::Fetcher::network_url_fetcher,
+                                nullptr)));  // It never reached the network.
+
+  PrecacheFetcher::Fetcher precache_fetcher(
+      request_context_.get(), url, url.host(), callback_,
+      true /* is_resource_request */, SIZE_MAX, true /* revalidation_only */);
+
+  base::RunLoop().RunUntilIdle();
+
+  ASSERT_NE(nullptr, fetcher);
+  EXPECT_EQ(
+      net::LOAD_ONLY_FROM_CACHE | net::LOAD_SKIP_CACHE_VALIDATION | kNoTracking,
+      fetcher->GetLoadFlags());
+}
+
+TEST_F(PrecacheFetcherFetcherTest, RevalidationOnlyResourceHasValidators) {
+  GURL url(kGoodResourceURL);
+
+  net::FakeURLFetcher *fetcher1 = nullptr, *fetcher2 = nullptr;
+  EXPECT_CALL(factory_, DoCreateURLFetcher(_, url, net::URLFetcher::GET, _))
+      .WillOnce(factory_.RespondWith("", HasETag, &fetcher1))
+      .WillOnce(factory_.RespondWith("", &fetcher2));
+  EXPECT_CALL(*this,
+              Callback(Property(&PrecacheFetcher::Fetcher::network_url_fetcher,
+                                NotNull())));
+
+  PrecacheFetcher::Fetcher precache_fetcher(
+      request_context_.get(), url, url.host(), callback_,
+      true /* is_resource_request */, SIZE_MAX, true /* revalidation_only */);
+
+  base::RunLoop().RunUntilIdle();
+
+  ASSERT_NE(nullptr, fetcher1);
+  EXPECT_EQ(
+      net::LOAD_ONLY_FROM_CACHE | net::LOAD_SKIP_CACHE_VALIDATION | kNoTracking,
+      fetcher1->GetLoadFlags());
+  ASSERT_NE(nullptr, fetcher2);
+  EXPECT_EQ(net::LOAD_VALIDATE_CACHE | kNoTracking, fetcher2->GetLoadFlags());
+}
+
+TEST_F(PrecacheFetcherFetcherTest, RevalidationOnlyResourceHasNoValidators) {
+  GURL url(kGoodResourceURL);
+
+  net::FakeURLFetcher* fetcher = nullptr;
+  EXPECT_CALL(factory_, DoCreateURLFetcher(_, url, net::URLFetcher::GET, _))
+      .WillOnce(factory_.RespondWith("", &fetcher));
+  EXPECT_CALL(*this,
+              Callback(Property(&PrecacheFetcher::Fetcher::network_url_fetcher,
+                                nullptr)));  // It never reached the network.
+
+  PrecacheFetcher::Fetcher precache_fetcher(
+      request_context_.get(), url, url.host(), callback_,
+      true /* is_resource_request */, SIZE_MAX, true /* revalidation_only */);
+
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_EQ(
+      net::LOAD_ONLY_FROM_CACHE | net::LOAD_SKIP_CACHE_VALIDATION | kNoTracking,
+      fetcher->GetLoadFlags());
 }
 
 TEST_F(PrecacheFetcherFetcherTest, ResourceTooBig) {
@@ -333,7 +406,8 @@ TEST_F(PrecacheFetcherFetcherTest, ResourceTooBig) {
 
   PrecacheFetcher::Fetcher precache_fetcher(
       request_context_.get(), url, url.host(), callback_,
-      true /* is_resource_request */, 99 /* max_bytes */);
+      true /* is_resource_request */, 99 /* max_bytes */,
+      false /* revalidation_only */);
 
   base::RunLoop().RunUntilIdle();
 }
@@ -408,6 +482,9 @@ class PrecacheFetcherTest : public testing::Test {
   const scoped_refptr<base::SingleThreadTaskRunner>& task_runner() const {
     return task_runner_;
   }
+
+  // To allow friend access.
+  void Flush() { precache_database_.Flush(); }
 
   // Must be declared first so that it is destroyed last.
   base::MessageLoopForUI loop_;
@@ -1235,7 +1312,7 @@ TEST(PrecacheFetcherStandaloneTest, GetResourceURLBase64Hash) {
                  GURL("http://used-resource-1/b.js")}));
 }
 
-TEST_F(PrecacheFetcherTest, SendUsedUnusedResourceHash) {
+TEST_F(PrecacheFetcherTest, SendUsedDownloadedResourceHash) {
   SetDefaultFlags();
 
   std::unique_ptr<PrecacheUnfinishedWork> unfinished_work(
@@ -1272,15 +1349,16 @@ TEST_F(PrecacheFetcherTest, SendUsedUnusedResourceHash) {
                    {GURL("http://used-resource-1/a.js"),
                     GURL("http://used-resource-1/b.js")}),
                true) +
-           "&unused_resources=" +
-           net::EscapeQueryParamValue(
-               PrecacheFetcher::GetResourceURLBase64HashForTesting(
-                   {GURL("http://unused-resource-1/c.js")}),
-               true)),
+           "&d=" + net::EscapeQueryParamValue(
+                       PrecacheFetcher::GetResourceURLBase64HashForTesting(
+                           {GURL("http://used-resource-1/a.js"),
+                            GURL("http://used-resource-1/b.js"),
+                            GURL("http://unused-resource-1/c.js")}),
+                       true)),
       std::string(), net::HTTP_OK, net::URLRequestStatus::SUCCESS);
   factory_.SetFakeResponse(
       GURL(std::string(kManifestURLPrefix) +
-           "top-host-2.com?manifest=1002&used_resources=&unused_resources=" +
+           "top-host-2.com?manifest=1002&used_resources=&d=" +
            net::EscapeQueryParamValue(
                PrecacheFetcher::GetResourceURLBase64HashForTesting(
                    {GURL("http://unused-resource-2/a.js"),
@@ -1289,7 +1367,7 @@ TEST_F(PrecacheFetcherTest, SendUsedUnusedResourceHash) {
       std::string(), net::HTTP_OK, net::URLRequestStatus::SUCCESS);
   factory_.SetFakeResponse(
       GURL(std::string(kManifestURLPrefix) +
-           "top-host-3.com?manifest=1003&used_resources=&unused_resources="),
+           "top-host-3.com?manifest=1003&used_resources=&d="),
       std::string(), net::HTTP_OK, net::URLRequestStatus::SUCCESS);
 
   {
@@ -1297,6 +1375,46 @@ TEST_F(PrecacheFetcherTest, SendUsedUnusedResourceHash) {
         request_context_.get(), GURL(), std::string(),
         std::move(unfinished_work), kExperimentID,
         precache_database_.GetWeakPtr(), task_runner(), &precache_delegate_);
+    precache_fetcher.Start();
+
+    base::RunLoop().RunUntilIdle();
+  }
+
+  // If we run the precache again, no download should be reported.
+  factory_.ClearFakeResponses();
+  factory_.SetFakeResponse(GURL(kConfigURL), std::string(), net::HTTP_OK,
+                           net::URLRequestStatus::SUCCESS);
+  // Since we returned an empty proto, the manifest id was set to 0.
+  // The d='s are empty because precache fetches are tried first solely from the
+  // cache and, since any matching request to the fake factory succeeds, it is
+  // hardcoded to be cached even though we didn't specify it as such in the fake
+  // response.
+  factory_.SetFakeResponse(GURL(std::string(kManifestURLPrefix) +
+                                "top-host-1.com?manifest=0&used_resources=&d="),
+                           std::string(), net::HTTP_OK,
+                           net::URLRequestStatus::SUCCESS);
+  factory_.SetFakeResponse(GURL(std::string(kManifestURLPrefix) +
+                                "top-host-2.com?manifest=0&used_resources=&d="),
+                           std::string(), net::HTTP_OK,
+                           net::URLRequestStatus::SUCCESS);
+  factory_.SetFakeResponse(GURL(std::string(kManifestURLPrefix) +
+                                "top-host-3.com?manifest=0&used_resources=&d="),
+                           std::string(), net::HTTP_OK,
+                           net::URLRequestStatus::SUCCESS);
+  // Flush so that previous UpdatePrecacheReferrerHost calls make it through.
+  // Otherwise, manifest_id may be non 0 for some of the hosts.
+  Flush();
+  {
+    std::unique_ptr<PrecacheUnfinishedWork> more_work(
+        new PrecacheUnfinishedWork());
+    more_work->set_start_time(base::Time::UnixEpoch().ToInternalValue());
+    more_work->add_top_host()->set_hostname("top-host-1.com");
+    more_work->add_top_host()->set_hostname("top-host-2.com");
+    more_work->add_top_host()->set_hostname("top-host-3.com");
+    PrecacheFetcher precache_fetcher(
+        request_context_.get(), GURL(), std::string(), std::move(more_work),
+        kExperimentID, precache_database_.GetWeakPtr(), task_runner(),
+        &precache_delegate_);
     precache_fetcher.Start();
 
     base::RunLoop().RunUntilIdle();

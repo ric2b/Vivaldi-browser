@@ -36,26 +36,20 @@ static GridSpan dirtiedGridAreas(const Vector<LayoutUnit>& coordinates,
                                               endGridAreaIndex + 1);
 }
 
-class GridItemsSorter {
- public:
-  bool operator()(const std::pair<LayoutBox*, size_t>& firstChild,
-                  const std::pair<LayoutBox*, size_t>& secondChild) const {
-    if (firstChild.first->style()->order() !=
-        secondChild.first->style()->order())
-      return firstChild.first->style()->order() <
-             secondChild.first->style()->order();
-
-    return firstChild.second < secondChild.second;
-  }
-};
+// Helper for the sorting of grid items following order-modified document order.
+// See http://www.w3.org/TR/css-flexbox/#order-modified-document-order
+static inline bool compareOrderModifiedDocumentOrder(
+    const std::pair<LayoutBox*, size_t>& firstItem,
+    const std::pair<LayoutBox*, size_t>& secondItem) {
+  return firstItem.second < secondItem.second;
+}
 
 void GridPainter::paintChildren(const PaintInfo& paintInfo,
                                 const LayoutPoint& paintOffset) {
-  ASSERT(!m_layoutGrid.needsLayout());
+  DCHECK(!m_layoutGrid.needsLayout());
 
-  LayoutRect localPaintInvalidationRect =
-      LayoutRect(paintInfo.cullRect().m_rect);
-  localPaintInvalidationRect.moveBy(-paintOffset);
+  LayoutRect localVisualRect = LayoutRect(paintInfo.cullRect().m_rect);
+  localVisualRect.moveBy(-paintOffset);
 
   Vector<LayoutUnit> columnPositions = m_layoutGrid.columnPositions();
   if (!m_layoutGrid.styleRef().isLeftToRightDirection()) {
@@ -69,12 +63,10 @@ void GridPainter::paintChildren(const PaintInfo& paintInfo,
     std::sort(columnPositions.begin(), columnPositions.end());
   }
 
-  GridSpan dirtiedColumns =
-      dirtiedGridAreas(columnPositions, localPaintInvalidationRect.x(),
-                       localPaintInvalidationRect.maxX());
-  GridSpan dirtiedRows = dirtiedGridAreas(m_layoutGrid.rowPositions(),
-                                          localPaintInvalidationRect.y(),
-                                          localPaintInvalidationRect.maxY());
+  GridSpan dirtiedColumns = dirtiedGridAreas(
+      columnPositions, localVisualRect.x(), localVisualRect.maxX());
+  GridSpan dirtiedRows = dirtiedGridAreas(
+      m_layoutGrid.rowPositions(), localVisualRect.y(), localVisualRect.maxY());
 
   if (!m_layoutGrid.styleRef().isLeftToRightDirection()) {
     // As we changed the order of tracks previously, we need to swap the dirtied
@@ -98,15 +90,13 @@ void GridPainter::paintChildren(const PaintInfo& paintInfo,
   }
 
   for (auto* item : m_layoutGrid.itemsOverflowingGridArea()) {
-    if (item->frameRect().intersects(localPaintInvalidationRect))
+    if (item->frameRect().intersects(localVisualRect))
       gridItemsToBePainted.append(
           std::make_pair(item, m_layoutGrid.paintIndexForGridItem(item)));
   }
 
-  // Sort grid items following order-modified document order.
-  // See http://www.w3.org/TR/css-flexbox/#order-modified-document-order
   std::stable_sort(gridItemsToBePainted.begin(), gridItemsToBePainted.end(),
-                   GridItemsSorter());
+                   compareOrderModifiedDocumentOrder);
 
   LayoutBox* previous = 0;
   for (const auto& gridItemAndPaintIndex : gridItemsToBePainted) {

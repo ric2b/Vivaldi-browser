@@ -18,12 +18,17 @@
 #include "components/test_runner/layout_test_runtime_flags.h"
 #include "components/test_runner/test_runner_export.h"
 #include "components/test_runner/web_test_runner.h"
+#include "media/midi/midi_service.mojom.h"
 #include "third_party/WebKit/public/platform/WebEffectiveConnectionType.h"
 #include "third_party/WebKit/public/platform/WebImage.h"
 #include "v8/include/v8.h"
 
 class GURL;
 class SkBitmap;
+
+namespace base {
+class NullableString16;
+}
 
 namespace blink {
 class WebContentSettingsClient;
@@ -161,13 +166,14 @@ class TestRunner : public WebTestRunner {
   void setDragImage(const blink::WebImage& drag_image);
   bool shouldDumpNavigationPolicy() const;
 
-  bool midiAccessorResult();
+  midi::mojom::Result midiAccessorResult();
 
   // Methods used by MockColorChooser:
   void DidOpenChooser();
   void DidCloseChooser();
 
   bool ShouldDumpConsoleMessages() const;
+  bool ShouldDumpJavaScriptDialogs() const;
 
   blink::WebEffectiveConnectionType effective_connection_type() const {
     return effective_connection_type_;
@@ -467,6 +473,10 @@ class TestRunner : public WebTestRunner {
   // to test output.
   void SetDumpConsoleMessages(bool value);
 
+  // Controls whether JavaScript dialogs such as alert() are dumped to test
+  // output.
+  void SetDumpJavaScriptDialogs(bool value);
+
   // Overrides the NetworkQualityEstimator's estimated network type. If |type|
   // is TypeUnknown the NQE's value is used. Be sure to call this with
   // TypeUnknown at the end of your test if you use this.
@@ -517,19 +527,20 @@ class TestRunner : public WebTestRunner {
                      const GURL& origin,
                      const GURL& embedding_origin);
 
-  // Resolve the beforeinstallprompt event with the matching request id.
-  void ResolveBeforeInstallPromptPromise(int request_id,
-                                         const std::string& platform);
+  // Resolve the in-flight beforeinstallprompt event.
+  void ResolveBeforeInstallPromptPromise(const std::string& platform);
 
   // Calls setlocale(LC_ALL, ...) for a specified locale.
   // Resets between tests.
   void SetPOSIXLocale(const std::string& locale);
 
   // MIDI function to control permission handling.
-  void SetMIDIAccessorResult(bool result);
+  void SetMIDIAccessorResult(midi::mojom::Result result);
 
   // Simulates a click on a Web Notification.
-  void SimulateWebNotificationClick(const std::string& title, int action_index);
+  void SimulateWebNotificationClick(const std::string& title,
+                                    int action_index,
+                                    const base::NullableString16& reply);
 
   // Simulates closing a Web Notification.
   void SimulateWebNotificationClose(const std::string& title, bool by_user);
@@ -601,8 +612,8 @@ class TestRunner : public WebTestRunner {
   // a series of 1px-wide, view-tall paints across the width of the view.
   bool sweep_horizontally_;
 
-  // If false, MockWebMIDIAccessor fails on startSession() for testing.
-  bool midi_accessor_result_;
+  // startSession() result of MockWebMIDIAccessor for testing.
+  midi::mojom::Result midi_accessor_result_;
 
   bool has_custom_text_output_;
   std::string custom_text_output_;

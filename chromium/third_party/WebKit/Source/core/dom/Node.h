@@ -28,6 +28,7 @@
 
 #include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "bindings/core/v8/NodeOrString.h"
+#include "bindings/core/v8/TraceWrapperMember.h"
 #include "core/CoreExport.h"
 #include "core/dom/MutationObserver.h"
 #include "core/dom/SimulatedClickOptions.h"
@@ -45,38 +46,23 @@
 namespace blink {
 
 class Attribute;
-class ClassCollection;
 class ContainerNode;
-class DOMTokenList;
 class Document;
 class Element;
 class ElementShadow;
 class Event;
-class EventDispatchMediator;
 class EventListener;
 class ExceptionState;
-class FloatPoint;
 class GetRootNodeOptions;
-class LocalFrame;
-class HTMLInputElement;
 class HTMLQualifiedName;
 class HTMLSlotElement;
 class IntRect;
 class EventDispatchHandlingState;
-class KeyboardEvent;
-class NSResolver;
-class NameNodeList;
-class NamedNodeMap;
-class NodeEventContext;
 class NodeList;
 class NodeListsNodeData;
 class NodeRareData;
-class PlatformGestureEvent;
 class PlatformMouseEvent;
-class PlatformWheelEvent;
-class PointerEvent;
 class QualifiedName;
-class RadioNodeList;
 class RegisteredEventListener;
 class LayoutBox;
 class LayoutBoxModelObject;
@@ -88,12 +74,11 @@ template <typename NodeType>
 class StaticNodeTypeList;
 using StaticNodeList = StaticNodeTypeList<Node>;
 class StyleChangeReasonForTracing;
-class TagCollection;
 class Text;
 class TouchEvent;
 
-const int nodeStyleChangeShift = 19;
-const int nodeCustomElementShift = 21;
+const int nodeStyleChangeShift = 18;
+const int nodeCustomElementShift = 20;
 
 enum StyleChangeType {
   NoStyleChange = 0,
@@ -110,6 +95,11 @@ enum class CustomElementState {
   Failed = 3 << nodeCustomElementShift,
 
   NotDefinedFlag = 2 << nodeCustomElementShift,
+};
+
+enum class SlotChangeType {
+  Initial,
+  Chained,
 };
 
 class NodeRareDataBase {
@@ -310,7 +300,7 @@ class CORE_EXPORT Node : public EventTarget {
   bool isInsertionPoint() const { return getFlag(IsInsertionPointFlag); }
 
   bool canParticipateInFlatTree() const;
-  bool isSlotOrActiveInsertionPoint() const;
+  bool isActiveSlotOrActiveInsertionPoint() const;
   // A re-distribution across v0 and v1 shadow trees is not supported.
   bool isSlotable() const {
     return isTextNode() || (isElementNode() && !isInsertionPoint());
@@ -353,8 +343,14 @@ class CORE_EXPORT Node : public EventTarget {
 
   // These low-level calls give the caller responsibility for maintaining the
   // integrity of the tree.
-  void setPreviousSibling(Node* previous) { m_previous = previous; }
-  void setNextSibling(Node* next) { m_next = next; }
+  void setPreviousSibling(Node* previous) {
+    m_previous = previous;
+    ScriptWrappableVisitor::writeBarrier(this, m_previous);
+  }
+  void setNextSibling(Node* next) {
+    m_next = next;
+    ScriptWrappableVisitor::writeBarrier(this, m_next);
+  }
 
   virtual bool canContainRangeEndPoint() const { return false; }
 
@@ -427,6 +423,23 @@ class CORE_EXPORT Node : public EventTarget {
   void setNeedsStyleRecalc(StyleChangeType, const StyleChangeReasonForTracing&);
   void clearNeedsStyleRecalc();
 
+  bool needsReattachLayoutTree() { return getFlag(NeedsReattachLayoutTree); }
+  bool childNeedsReattachLayoutTree() {
+    return getFlag(ChildNeedsReattachLayoutTree);
+  }
+
+  void setNeedsReattachLayoutTree();
+  void setChildNeedsReattachLayoutTree() {
+    setFlag(ChildNeedsReattachLayoutTree);
+  }
+
+  void clearNeedsReattachLayoutTree() { clearFlag(NeedsReattachLayoutTree); }
+  void clearChildNeedsReattachLayoutTree() {
+    clearFlag(ChildNeedsReattachLayoutTree);
+  }
+
+  void markAncestorsWithChildNeedsReattachLayoutTree();
+
   bool needsDistributionRecalc() const;
 
   bool childNeedsDistributionRecalc() const {
@@ -458,16 +471,6 @@ class CORE_EXPORT Node : public EventTarget {
 
   void updateDistribution();
 
-  bool svgFilterNeedsLayerUpdate() const {
-    return getFlag(SVGFilterNeedsLayerUpdateFlag);
-  }
-  void setSVGFilterNeedsLayerUpdate() {
-    setFlag(SVGFilterNeedsLayerUpdateFlag);
-  }
-  void clearSVGFilterNeedsLayerUpdate() {
-    clearFlag(SVGFilterNeedsLayerUpdateFlag);
-  }
-
   void setIsLink(bool f);
 
   bool hasEventTargetData() const { return getFlag(HasEventTargetDataFlag); }
@@ -475,22 +478,12 @@ class CORE_EXPORT Node : public EventTarget {
     setFlag(flag, HasEventTargetDataFlag);
   }
 
-  bool isV8CollectableDuringMinorGC() const {
-    return getFlag(V8CollectableDuringMinorGCFlag);
-  }
-  void markV8CollectableDuringMinorGC() {
-    setFlag(true, V8CollectableDuringMinorGCFlag);
-  }
-  void clearV8CollectableDuringMinorGC() {
-    setFlag(false, V8CollectableDuringMinorGCFlag);
-  }
-
   virtual void setFocused(bool flag);
   virtual void setActive(bool flag = true);
   virtual void setDragged(bool flag);
   virtual void setHovered(bool flag = true);
 
-  virtual short tabIndex() const;
+  virtual int tabIndex() const;
 
   virtual Node* focusDelegate();
   // This is called only when the node is focused.
@@ -724,7 +717,7 @@ class CORE_EXPORT Node : public EventTarget {
 
   void dispatchSubtreeModifiedEvent();
   DispatchEventResult dispatchDOMActivateEvent(int detail,
-                                               Event* underlyingEvent);
+                                               Event& underlyingEvent);
 
   void dispatchMouseEvent(const PlatformMouseEvent&,
                           const AtomicString& eventType,
@@ -765,18 +758,17 @@ class CORE_EXPORT Node : public EventTarget {
   HTMLSlotElement* assignedSlot() const;
   HTMLSlotElement* assignedSlotForBinding();
 
-  void setAlreadySpellChecked(bool flag) {
-    setFlag(flag, AlreadySpellCheckedFlag);
-  }
-  bool isAlreadySpellChecked() { return getFlag(AlreadySpellCheckedFlag); }
-
   bool isFinishedParsingChildren() const {
     return getFlag(IsFinishedParsingChildrenFlag);
   }
 
-  void checkSlotChange();
-  void checkSlotChangeAfterInserted() { checkSlotChange(); }
-  void checkSlotChangeBeforeRemoved() { checkSlotChange(); }
+  void checkSlotChange(SlotChangeType);
+  void checkSlotChangeAfterInserted() {
+    checkSlotChange(SlotChangeType::Initial);
+  }
+  void checkSlotChangeBeforeRemoved() {
+    checkSlotChange(SlotChangeType::Initial);
+  }
 
   DECLARE_VIRTUAL_TRACE();
 
@@ -820,33 +812,29 @@ class CORE_EXPORT Node : public EventTarget {
     IsFinishedParsingChildrenFlag = 1 << 12,
 
     // Flags related to recalcStyle.
-    SVGFilterNeedsLayerUpdateFlag = 1 << 13,
-    HasCustomStyleCallbacksFlag = 1 << 14,
-    ChildNeedsStyleInvalidationFlag = 1 << 15,
-    NeedsStyleInvalidationFlag = 1 << 16,
-    ChildNeedsDistributionRecalcFlag = 1 << 17,
-    ChildNeedsStyleRecalcFlag = 1 << 18,
+    HasCustomStyleCallbacksFlag = 1 << 13,
+    ChildNeedsStyleInvalidationFlag = 1 << 14,
+    NeedsStyleInvalidationFlag = 1 << 15,
+    ChildNeedsDistributionRecalcFlag = 1 << 16,
+    ChildNeedsStyleRecalcFlag = 1 << 17,
     StyleChangeMask =
         1 << nodeStyleChangeShift | 1 << (nodeStyleChangeShift + 1),
 
     CustomElementStateMask = 0x3 << nodeCustomElementShift,
 
-    HasNameOrIsEditingTextFlag = 1 << 23,
-    HasWeakReferencesFlag = 1 << 24,
-    V8CollectableDuringMinorGCFlag = 1 << 25,
-    HasEventTargetDataFlag = 1 << 26,
-    AlreadySpellCheckedFlag = 1 << 27,
+    HasNameOrIsEditingTextFlag = 1 << 22,
+    HasEventTargetDataFlag = 1 << 23,
 
-    V0CustomElementFlag = 1 << 28,
-    V0CustomElementUpgradedFlag = 1 << 29,
+    V0CustomElementFlag = 1 << 24,
+    V0CustomElementUpgradedFlag = 1 << 25,
 
-    NeedsReattachLayoutTree = 1 << 30,
-    ChildNeedsReattachLayoutTree = 1 << 31,
+    NeedsReattachLayoutTree = 1 << 26,
+    ChildNeedsReattachLayoutTree = 1 << 27,
 
     DefaultNodeFlags = IsFinishedParsingChildrenFlag | NeedsReattachStyleChange
   };
 
-  // 0 bits remaining.
+  // 4 bits remaining.
 
   bool getFlag(NodeFlags mask) const { return m_nodeFlags & mask; }
   void setFlag(bool f, NodeFlags mask) {
@@ -942,8 +930,9 @@ class CORE_EXPORT Node : public EventTarget {
 
   void trackForDebugging();
 
-  HeapVector<Member<MutationObserverRegistration>>* mutationObserverRegistry();
-  HeapHashSet<Member<MutationObserverRegistration>>*
+  const HeapVector<TraceWrapperMember<MutationObserverRegistration>>*
+  mutationObserverRegistry();
+  const HeapHashSet<TraceWrapperMember<MutationObserverRegistration>>*
   transientMutationObserverRegistry();
 
   uint32_t m_nodeFlags;
@@ -964,6 +953,8 @@ class CORE_EXPORT Node : public EventTarget {
 inline void Node::setParentOrShadowHostNode(ContainerNode* parent) {
   DCHECK(isMainThread());
   m_parentOrShadowHostNode = parent;
+  ScriptWrappableVisitor::writeBarrier(
+      this, reinterpret_cast<Node*>(m_parentOrShadowHostNode.get()));
 }
 
 inline ContainerNode* Node::parentOrShadowHostNode() const {

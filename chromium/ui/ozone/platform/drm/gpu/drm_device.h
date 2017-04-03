@@ -26,10 +26,6 @@ typedef struct _drmModeModeInfo drmModeModeInfo;
 
 struct SkImageInfo;
 
-namespace base {
-class SingleThreadTaskRunner;
-}  // namespace base
-
 namespace ui {
 
 class HardwareDisplayPlaneManager;
@@ -85,6 +81,7 @@ class DrmDevice : public base::RefCountedThreadSafe<DrmDevice> {
                                uint32_t handles[4],
                                uint32_t strides[4],
                                uint32_t offsets[4],
+                               uint64_t modifiers[4],
                                uint32_t* framebuffer,
                                uint32_t flags);
 

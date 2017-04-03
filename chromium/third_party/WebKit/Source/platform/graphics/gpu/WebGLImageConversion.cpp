@@ -2232,23 +2232,28 @@ class FormatConverter {
   STACK_ALLOCATED();
 
  public:
-  FormatConverter(unsigned width,
-                  unsigned height,
+  FormatConverter(const IntRect& sourceDataSubRectangle,
+                  int depth,
+                  int unpackImageHeight,
                   const void* srcStart,
                   void* dstStart,
                   int srcStride,
+                  int srcRowOffset,
                   int dstStride)
-      : m_width(width),
-        m_height(height),
+      : m_srcSubRectangle(sourceDataSubRectangle),
+        m_depth(depth),
+        m_unpackImageHeight(unpackImageHeight),
         m_srcStart(srcStart),
         m_dstStart(dstStart),
         m_srcStride(srcStride),
+        m_srcRowOffset(srcRowOffset),
         m_dstStride(dstStride),
         m_success(false) {
     const unsigned MaxNumberOfComponents = 4;
     const unsigned MaxBytesPerComponent = 4;
     m_unpackedIntermediateSrcData = wrapArrayUnique(
-        new uint8_t[m_width * MaxNumberOfComponents * MaxBytesPerComponent]);
+        new uint8_t[m_srcSubRectangle.width() * MaxNumberOfComponents *
+                    MaxBytesPerComponent]);
     ASSERT(m_unpackedIntermediateSrcData.get());
   }
 
@@ -2271,10 +2276,12 @@ class FormatConverter {
             WebGLImageConversion::AlphaOp alphaOp>
   void convert();
 
-  const unsigned m_width, m_height;
+  const IntRect& m_srcSubRectangle;
+  const int m_depth;
+  const int m_unpackImageHeight;
   const void* const m_srcStart;
   void* const m_dstStart;
-  const int m_srcStride, m_dstStride;
+  const int m_srcStride, m_srcRowOffset, m_dstStride;
   bool m_success;
   std::unique_ptr<uint8_t[]> m_unpackedIntermediateSrcData;
 };
@@ -2452,30 +2459,56 @@ void FormatConverter::convert() {
                            alphaOp == WebGLImageConversion::AlphaDoNothing;
   ASSERT(!trivialUnpack || !trivialPack);
 
-  const SrcType* srcRowStart = static_cast<const SrcType*>(m_srcStart);
+  const SrcType* srcRowStart =
+      static_cast<const SrcType*>(static_cast<const void*>(
+          static_cast<const uint8_t*>(m_srcStart) +
+          ((m_srcStride * m_srcSubRectangle.y()) + m_srcRowOffset)));
+
+  // If packing multiple images into a 3D texture, and flipY is true,
+  // then the sub-rectangle is pointing at the start of the
+  // "bottommost" of those images. Since the source pointer strides in
+  // the positive direction, we need to back it up to point at the
+  // last, or "topmost", of these images.
+  if (m_dstStride < 0 && m_depth > 1) {
+    srcRowStart -= (m_depth - 1) * srcStrideInElements * m_unpackImageHeight;
+  }
+
   DstType* dstRowStart = static_cast<DstType*>(m_dstStart);
   if (trivialUnpack) {
-    for (size_t i = 0; i < m_height; ++i) {
-      pack<DstFormat, alphaOp>(srcRowStart, dstRowStart, m_width);
-      srcRowStart += srcStrideInElements;
-      dstRowStart += dstStrideInElements;
+    for (int d = 0; d < m_depth; ++d) {
+      for (int i = 0; i < m_srcSubRectangle.height(); ++i) {
+        pack<DstFormat, alphaOp>(srcRowStart, dstRowStart,
+                                 m_srcSubRectangle.width());
+        srcRowStart += srcStrideInElements;
+        dstRowStart += dstStrideInElements;
+      }
+      srcRowStart += srcStrideInElements *
+                     (m_unpackImageHeight - m_srcSubRectangle.height());
     }
   } else if (trivialPack) {
-    for (size_t i = 0; i < m_height; ++i) {
-      unpack<SrcFormat>(srcRowStart, dstRowStart, m_width);
-      srcRowStart += srcStrideInElements;
-      dstRowStart += dstStrideInElements;
+    for (int d = 0; d < m_depth; ++d) {
+      for (int i = 0; i < m_srcSubRectangle.height(); ++i) {
+        unpack<SrcFormat>(srcRowStart, dstRowStart, m_srcSubRectangle.width());
+        srcRowStart += srcStrideInElements;
+        dstRowStart += dstStrideInElements;
+      }
+      srcRowStart += srcStrideInElements *
+                     (m_unpackImageHeight - m_srcSubRectangle.height());
     }
   } else {
-    for (size_t i = 0; i < m_height; ++i) {
-      unpack<SrcFormat>(srcRowStart, reinterpret_cast<IntermType*>(
-                                         m_unpackedIntermediateSrcData.get()),
-                        m_width);
-      pack<DstFormat, alphaOp>(
-          reinterpret_cast<IntermType*>(m_unpackedIntermediateSrcData.get()),
-          dstRowStart, m_width);
-      srcRowStart += srcStrideInElements;
-      dstRowStart += dstStrideInElements;
+    for (int d = 0; d < m_depth; ++d) {
+      for (int i = 0; i < m_srcSubRectangle.height(); ++i) {
+        unpack<SrcFormat>(srcRowStart, reinterpret_cast<IntermType*>(
+                                           m_unpackedIntermediateSrcData.get()),
+                          m_srcSubRectangle.width());
+        pack<DstFormat, alphaOp>(
+            reinterpret_cast<IntermType*>(m_unpackedIntermediateSrcData.get()),
+            dstRowStart, m_srcSubRectangle.width());
+        srcRowStart += srcStrideInElements;
+        dstRowStart += dstStrideInElements;
+      }
+      srcRowStart += srcStrideInElements *
+                     (m_unpackImageHeight - m_srcSubRectangle.height());
     }
   }
   m_success = true;
@@ -2689,15 +2722,14 @@ WebGLImageConversion::ImageExtractor::ImageExtractor(
     Image* image,
     ImageHtmlDomSource imageHtmlDomSource,
     bool premultiplyAlpha,
-    bool ignoreGammaAndColorProfile) {
+    bool ignoreColorSpace) {
   m_image = image;
   m_imageHtmlDomSource = imageHtmlDomSource;
-  extractImage(premultiplyAlpha, ignoreGammaAndColorProfile);
+  extractImage(premultiplyAlpha, ignoreColorSpace);
 }
 
-void WebGLImageConversion::ImageExtractor::extractImage(
-    bool premultiplyAlpha,
-    bool ignoreGammaAndColorProfile) {
+void WebGLImageConversion::ImageExtractor::extractImage(bool premultiplyAlpha,
+                                                        bool ignoreColorSpace) {
   ASSERT(!m_imagePixelLocker);
 
   if (!m_image)
@@ -2710,15 +2742,13 @@ void WebGLImageConversion::ImageExtractor::extractImage(
   m_alphaOp = AlphaDoNothing;
   bool hasAlpha = skiaImage ? !skiaImage->isOpaque() : true;
 
-  if ((!skiaImage || ignoreGammaAndColorProfile ||
-       (hasAlpha && !premultiplyAlpha)) &&
+  if ((!skiaImage || ignoreColorSpace || (hasAlpha && !premultiplyAlpha)) &&
       m_image->data()) {
     // Attempt to get raw unpremultiplied image data.
     std::unique_ptr<ImageDecoder> decoder(ImageDecoder::create(
         m_image->data(), true, ImageDecoder::AlphaNotPremultiplied,
-        ignoreGammaAndColorProfile
-            ? ImageDecoder::GammaAndColorProfileIgnored
-            : ImageDecoder::GammaAndColorProfileApplied));
+        ignoreColorSpace ? ImageDecoder::ColorSpaceIgnored
+                         : ImageDecoder::ColorSpaceApplied));
     if (!decoder || !decoder->frameCount())
       return;
     ImageFrame* frame = decoder->frameBufferAtIndex(0);
@@ -2864,9 +2894,12 @@ bool WebGLImageConversion::packImageData(Image* image,
                                          bool flipY,
                                          AlphaOp alphaOp,
                                          DataFormat sourceFormat,
-                                         unsigned width,
-                                         unsigned height,
+                                         unsigned sourceImageWidth,
+                                         unsigned sourceImageHeight,
+                                         const IntRect& sourceImageSubRectangle,
+                                         int depth,
                                          unsigned sourceUnpackAlignment,
+                                         int unpackImageHeight,
                                          Vector<uint8_t>& data) {
   if (!pixels)
     return false;
@@ -2875,28 +2908,34 @@ bool WebGLImageConversion::packImageData(Image* image,
   // Output data is tightly packed (alignment == 1).
   PixelStoreParams params;
   params.alignment = 1;
-  if (computeImageSizeInBytes(format, type, width, height, 1, params,
+  if (computeImageSizeInBytes(format, type, sourceImageSubRectangle.width(),
+                              sourceImageSubRectangle.height(), depth, params,
                               &packedSize, 0, 0) != GL_NO_ERROR)
     return false;
   data.resize(packedSize);
 
-  if (!packPixels(reinterpret_cast<const uint8_t*>(pixels), sourceFormat, width,
-                  height, sourceUnpackAlignment, format, type, alphaOp,
-                  data.data(), flipY))
+  if (!packPixels(reinterpret_cast<const uint8_t*>(pixels), sourceFormat,
+                  sourceImageWidth, sourceImageHeight, sourceImageSubRectangle,
+                  depth, sourceUnpackAlignment, unpackImageHeight, format, type,
+                  alphaOp, data.data(), flipY))
     return false;
   if (ImageObserver* observer = image->getImageObserver())
     observer->didDraw(image);
   return true;
 }
 
-bool WebGLImageConversion::extractImageData(const uint8_t* imageData,
-                                            DataFormat sourceDataFormat,
-                                            const IntSize& imageDataSize,
-                                            GLenum format,
-                                            GLenum type,
-                                            bool flipY,
-                                            bool premultiplyAlpha,
-                                            Vector<uint8_t>& data) {
+bool WebGLImageConversion::extractImageData(
+    const uint8_t* imageData,
+    DataFormat sourceDataFormat,
+    const IntSize& imageDataSize,
+    const IntRect& sourceImageSubRectangle,
+    int depth,
+    int unpackImageHeight,
+    GLenum format,
+    GLenum type,
+    bool flipY,
+    bool premultiplyAlpha,
+    Vector<uint8_t>& data) {
   if (!imageData)
     return false;
   int width = imageDataSize.width();
@@ -2906,13 +2945,15 @@ bool WebGLImageConversion::extractImageData(const uint8_t* imageData,
   // Output data is tightly packed (alignment == 1).
   PixelStoreParams params;
   params.alignment = 1;
-  if (computeImageSizeInBytes(format, type, width, height, 1, params,
+  if (computeImageSizeInBytes(format, type, sourceImageSubRectangle.width(),
+                              sourceImageSubRectangle.height(), depth, params,
                               &packedSize, 0, 0) != GL_NO_ERROR)
     return false;
   data.resize(packedSize);
 
-  if (!packPixels(imageData, sourceDataFormat, width, height, 0, format, type,
-                  premultiplyAlpha ? AlphaDoPremultiply : AlphaDoNothing,
+  if (!packPixels(imageData, sourceDataFormat, width, height,
+                  sourceImageSubRectangle, depth, 0, unpackImageHeight, format,
+                  type, premultiplyAlpha ? AlphaDoPremultiply : AlphaDoNothing,
                   data.data(), flipY))
     return false;
 
@@ -2940,7 +2981,8 @@ bool WebGLImageConversion::extractTextureData(unsigned width,
   data.resize(width * height * bytesPerPixel);
 
   if (!packPixels(static_cast<const uint8_t*>(pixels), sourceDataFormat, width,
-                  height, unpackAlignment, format, type,
+                  height, IntRect(0, 0, width, height), 1, unpackAlignment, 0,
+                  format, type,
                   (premultiplyAlpha ? AlphaDoPremultiply : AlphaDoNothing),
                   data.data(), flipY))
     return false;
@@ -2950,25 +2992,36 @@ bool WebGLImageConversion::extractTextureData(unsigned width,
 
 bool WebGLImageConversion::packPixels(const uint8_t* sourceData,
                                       DataFormat sourceDataFormat,
-                                      unsigned width,
-                                      unsigned height,
+                                      unsigned sourceDataWidth,
+                                      unsigned sourceDataHeight,
+                                      const IntRect& sourceDataSubRectangle,
+                                      int depth,
                                       unsigned sourceUnpackAlignment,
+                                      int unpackImageHeight,
                                       unsigned destinationFormat,
                                       unsigned destinationType,
                                       AlphaOp alphaOp,
                                       void* destinationData,
                                       bool flipY) {
-  int validSrc = width * TexelBytesForFormat(sourceDataFormat);
+  DCHECK_GE(depth, 1);
+  if (unpackImageHeight == 0) {
+    unpackImageHeight = sourceDataSubRectangle.height();
+  }
+  int validSrc = sourceDataWidth * TexelBytesForFormat(sourceDataFormat);
   int remainder =
       sourceUnpackAlignment ? (validSrc % sourceUnpackAlignment) : 0;
   int srcStride =
       remainder ? (validSrc + sourceUnpackAlignment - remainder) : validSrc;
+  int srcRowOffset =
+      sourceDataSubRectangle.x() * TexelBytesForFormat(sourceDataFormat);
 
   DataFormat dstDataFormat = getDataFormat(destinationFormat, destinationType);
-  int dstStride = width * TexelBytesForFormat(dstDataFormat);
+  int dstStride =
+      sourceDataSubRectangle.width() * TexelBytesForFormat(dstDataFormat);
   if (flipY) {
     destinationData =
-        static_cast<uint8_t*>(destinationData) + dstStride * (height - 1);
+        static_cast<uint8_t*>(destinationData) +
+        dstStride * ((depth * sourceDataSubRectangle.height()) - 1);
     dstStride = -dstStride;
   }
   if (!HasAlpha(sourceDataFormat) || !HasColor(sourceDataFormat) ||
@@ -2976,20 +3029,43 @@ bool WebGLImageConversion::packPixels(const uint8_t* sourceData,
     alphaOp = AlphaDoNothing;
 
   if (sourceDataFormat == dstDataFormat && alphaOp == AlphaDoNothing) {
-    const uint8_t* ptr = sourceData;
-    const uint8_t* ptrEnd = sourceData + srcStride * height;
+    const uint8_t* basePtr =
+        sourceData + srcStride * sourceDataSubRectangle.y();
+    const uint8_t* baseEnd =
+        sourceData + srcStride * sourceDataSubRectangle.maxY();
+
+    // If packing multiple images into a 3D texture, and flipY is true,
+    // then the sub-rectangle is pointing at the start of the
+    // "bottommost" of those images. Since the source pointer strides in
+    // the positive direction, we need to back it up to point at the
+    // last, or "topmost", of these images.
+    if (flipY && depth > 1) {
+      const ptrdiff_t distanceToTopImage =
+          (depth - 1) * srcStride * unpackImageHeight;
+      basePtr -= distanceToTopImage;
+      baseEnd -= distanceToTopImage;
+    }
+
     unsigned rowSize = (dstStride > 0) ? dstStride : -dstStride;
     uint8_t* dst = static_cast<uint8_t*>(destinationData);
-    while (ptr < ptrEnd) {
-      memcpy(dst, ptr, rowSize);
-      ptr += srcStride;
-      dst += dstStride;
+
+    for (int i = 0; i < depth; ++i) {
+      const uint8_t* ptr = basePtr;
+      const uint8_t* ptrEnd = baseEnd;
+      while (ptr < ptrEnd) {
+        memcpy(dst, ptr + srcRowOffset, rowSize);
+        ptr += srcStride;
+        dst += dstStride;
+      }
+      basePtr += unpackImageHeight * srcStride;
+      baseEnd += unpackImageHeight * srcStride;
     }
     return true;
   }
 
-  FormatConverter converter(width, height, sourceData, destinationData,
-                            srcStride, dstStride);
+  FormatConverter converter(sourceDataSubRectangle, depth, unpackImageHeight,
+                            sourceData, destinationData, srcStride,
+                            srcRowOffset, dstStride);
   converter.convert(sourceDataFormat, dstDataFormat, alphaOp);
   if (!converter.Success())
     return false;

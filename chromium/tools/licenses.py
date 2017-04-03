@@ -19,14 +19,13 @@ import argparse
 import cgi
 import os
 import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__),
+                                "..", "..", "scripts", "licenses"))
 import licenses_vivaldi
 
 # Paths from the root of the tree to directories to skip.
 PRUNE_PATHS = set([
-    # Same module occurs in crypto/third_party/nss and net/third_party/nss, so
-    # skip this one.
-    os.path.join('third_party','nss'),
-
     # Placeholder directory only, not third-party code.
     os.path.join('third_party','adobe'),
 
@@ -62,12 +61,9 @@ PRUNE_PATHS = set([
     os.path.join('third_party','pyelftools'),
     os.path.join('third_party','pylib'),
     os.path.join('third_party','pywebsocket'),
-    os.path.join('third_party','qunit'),
-    os.path.join('third_party','sinonjs'),
     os.path.join('third_party','syzygy'),
 
-    # Chromium code in third_party.
-    os.path.join('third_party','fuzzymatch'),
+    # Chromium code.
     os.path.join('tools', 'swarming_client'),
 
     # Stuff pulled in from chrome-internal for official builds/tools.
@@ -101,14 +97,11 @@ PRUNE_DIRS = (VCS_METADATA_DIRS +
                'layout_tests'))            # lots of subdirs
 
 ADDITIONAL_PATHS = (
-    os.path.join('..', 'third_party', '_winsparkle_lib'),
-    os.path.join('..', 'third_party', 'sparkle_lib'),
     os.path.join('breakpad'),
     os.path.join('chrome', 'common', 'extensions', 'docs', 'examples'),
     os.path.join('chrome', 'test', 'chromeos', 'autotest'),
     os.path.join('chrome', 'test', 'data'),
     os.path.join('native_client'),
-    os.path.join('net', 'tools', 'spdyshark'),
     os.path.join('sdch', 'open-vcdiff'),
     os.path.join('testing', 'gmock'),
     os.path.join('testing', 'gtest'),
@@ -119,7 +112,7 @@ ADDITIONAL_PATHS = (
     # Fake directories to include the strongtalk and fdlibm licenses.
     os.path.join('v8', 'strongtalk'),
     os.path.join('v8', 'fdlibm'),
-)
+) + licenses_vivaldi.ADDITIONAL_PATHS
 
 
 # Directories where we check out directly from upstream, and therefore
@@ -253,18 +246,6 @@ SPECIAL_CASES = {
         "License Android Compatible": "yes",
         "License File": "/third_party/swiftshader/LICENSE.txt",
     },
-    os.path.join('..', 'third_party', '_winsparkle_lib'): {
-        "Name": "WinSparkle",
-        "URL": "http://winsparkle.org/",
-        "License": "MIT",
-        "License File": "/../third_party/_winsparkle_lib/COPYING",
-    },
-    os.path.join('..', 'third_party', 'sparkle_lib'): {
-        "Name": "Sparkle",
-        "URL": "http://sparkle-project.org/",
-        "License": "MIT",
-        "License File": "/../third_party/sparkle_lib/LICENSE",
-    },
     os.path.join('third_party', 'opera'): {
         "Name": "Opera",
         "URL": "http://www.opera.com/",
@@ -272,6 +253,7 @@ SPECIAL_CASES = {
         "License File": "/third_party/opera/LICENSE.txt",
     },
 }
+SPECIAL_CASES.update(licenses_vivaldi.SPECIAL_CASES)
 
 # Special value for 'License File' field used to indicate that the license file
 # should not be used in about:credits.
@@ -555,11 +537,8 @@ def GenerateCredits(
         }
         entries.append(entry)
 
-    for module, license in licenses_vivaldi.modules.iteritems():
-      entries.append({
-          'name': license['name'],
-          'content': EvaluateTemplate(entry_template, license)
-          })
+    entries.extend(licenses_vivaldi.GetEntries(
+                  entry_template, EvaluateTemplate))
 
     entries.sort(key=lambda entry: (entry['name'], entry['content']))
     entries_contents = '\n'.join([entry['content'] for entry in entries])

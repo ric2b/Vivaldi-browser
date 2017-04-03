@@ -9,8 +9,8 @@
 
 #include "base/memory/shared_memory.h"
 #include "content/common/content_export.h"
+#include "mojo/public/cpp/system/buffer.h"
 #include "ui/gfx/geometry/size.h"
-#include "ui/gfx/gpu_memory_buffer.h"
 
 namespace media {
 class VideoFrame;
@@ -23,6 +23,7 @@ typedef int VideoCaptureControllerID;
 // VideoCaptureControllerEventHandler is the interface for
 // VideoCaptureController to notify clients about the events such as
 // BufferReady, FrameInfo, Error, etc.
+// TODO(mcasas): https://crbug.com/654176 merge back into VideoCaptureController
 class CONTENT_EXPORT VideoCaptureControllerEventHandler {
  public:
   // An Error has occurred in the VideoCaptureDevice.
@@ -30,16 +31,9 @@ class CONTENT_EXPORT VideoCaptureControllerEventHandler {
 
   // A buffer has been newly created.
   virtual void OnBufferCreated(VideoCaptureControllerID id,
-                               base::SharedMemoryHandle handle,
+                               mojo::ScopedSharedBufferHandle handle,
                                int length,
                                int buffer_id) = 0;
-
-  // A GpuMemoryBuffer backed buffer has been newly created.
-  virtual void OnBufferCreated2(
-      VideoCaptureControllerID id,
-      const std::vector<gfx::GpuMemoryBufferHandle>& handles,
-      const gfx::Size& size,
-      int buffer_id) = 0;
 
   // A previously created buffer has been freed and will no longer be used.
   virtual void OnBufferDestroyed(VideoCaptureControllerID id,

@@ -14,7 +14,7 @@
 #include "base/strings/string16.h"
 #include "chrome/browser/ui/cocoa/location_bar/autocomplete_text_field.h"
 #include "components/omnibox/browser/omnibox_view.h"
-#include "components/security_state/security_state_model.h"
+#include "components/security_state/core/security_state.h"
 #include "third_party/skia/include/core/SkColor.h"
 
 class CommandUpdater;
@@ -36,7 +36,7 @@ class OmniboxViewMac : public OmniboxView,
   static SkColor BaseTextColorSkia(bool in_dark_mode);
   static NSColor* BaseTextColor(bool in_dark_mode);
   static NSColor* GetSecureTextColor(
-      security_state::SecurityStateModel::SecurityLevel security_level,
+      security_state::SecurityLevel security_level,
       bool in_dark_mode);
 
   OmniboxViewMac(OmniboxEditController* controller,
@@ -112,6 +112,7 @@ class OmniboxViewMac : public OmniboxView,
   void OnDidChange() override;
   void OnDidEndEditing() override;
   void OnInsertText() override;
+  void OnBeforeDrawRect() override;
   void OnDidDrawRect() override;
   bool OnDoCommandBySelector(SEL cmd) override;
   void OnSetFocus(bool control_down) override;
@@ -231,6 +232,9 @@ class OmniboxViewMac : public OmniboxView,
   // The time of the first character insert operation that has not yet been
   // painted. Used to measure omnibox responsiveness with a histogram.
   base::TimeTicks insert_char_time_;
+
+  // The time when OnBeforeDrawRect() was called.
+  base::TimeTicks draw_rect_start_time_;
 
   DISALLOW_COPY_AND_ASSIGN(OmniboxViewMac);
 };

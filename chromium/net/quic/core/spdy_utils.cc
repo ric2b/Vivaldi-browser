@@ -58,32 +58,34 @@ bool SpdyUtils::ParseHeaders(const char* data,
 // static
 bool SpdyUtils::ExtractContentLengthFromHeaders(int64_t* content_length,
                                                 SpdyHeaderBlock* headers) {
-  if (!ContainsKey(*headers, "content-length")) {
+  auto it = headers->find("content-length");
+  if (it == headers->end()) {
     return false;
+  } else {
+    // Check whether multiple values are consistent.
+    StringPiece content_length_header = it->second;
+    std::vector<string> values =
+        base::SplitString(content_length_header, base::StringPiece("\0", 1),
+                          base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
+    for (const string& value : values) {
+      int64_t new_value;
+      if (!base::StringToInt64(value, &new_value) || new_value < 0) {
+        DLOG(ERROR) << "Content length was either unparseable or negative.";
+        return false;
+      }
+      if (*content_length < 0) {
+        *content_length = new_value;
+        continue;
+      }
+      if (new_value != *content_length) {
+        DLOG(ERROR) << "Parsed content length " << new_value << " is "
+                    << "inconsistent with previously detected content length "
+                    << *content_length;
+        return false;
+      }
+    }
+    return true;
   }
-  // Check whether multiple values are consistent.
-  base::StringPiece content_length_header = (*headers)["content-length"];
-  vector<string> values =
-      base::SplitString(content_length_header, base::StringPiece("\0", 1),
-                        base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
-  for (const string& value : values) {
-    int64_t new_value;
-    if (!base::StringToInt64(value, &new_value) || new_value < 0) {
-      DLOG(ERROR) << "Content length was either unparseable or negative.";
-      return false;
-    }
-    if (*content_length < 0) {
-      *content_length = new_value;
-      continue;
-    }
-    if (new_value != *content_length) {
-      DLOG(ERROR) << "Parsed content length " << new_value << " is "
-                  << "inconsistent with previously detected content length "
-                  << *content_length;
-      return false;
-    }
-  }
-  return true;
 }
 
 // static
@@ -249,7 +251,9 @@ bool SpdyUtils::PopulateHeaderBlockFromUrl(const string url,
   size_t start = pos + 3;
   pos = url.find("/", start);
   if (pos == string::npos) {
-    return false;
+    (*headers)[":authority"] = url.substr(start);
+    (*headers)[":path"] = "/";
+    return true;
   }
   (*headers)[":authority"] = url.substr(start, pos - start);
   (*headers)[":path"] = url.substr(pos);

@@ -1,11 +1,12 @@
 {
-  "manifest_version":  1,
-  "name": "exe:leveldb_service_unittests",
+  "name": "leveldb_service_unittests",
   "display_name": "LevelDB Service Unittests",
-  "capabilities": {
-    "required": {
-      "service:filesystem": { "interfaces": [ "filesystem::mojom::FileSystem" ] },
-      "service:leveldb": { "interfaces":  [ "leveldb::mojom::LevelDBService" ] }
+  "interface_provider_specs": {
+    "service_manager:connector": {
+      "requires": {
+        "filesystem": [ "filesystem:filesystem" ],
+        "leveldb": [ "leveldb:leveldb" ]
+      }
     }
   }
 }

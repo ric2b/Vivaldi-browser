@@ -6,12 +6,12 @@
 
 #include <memory>
 
+#include "components/sync/base/hash_util.h"
 #include "components/sync/base/unique_position.h"
 #include "components/sync/syncable/directory.h"
 #include "components/sync/syncable/scoped_kernel_lock.h"
 #include "components/sync/syncable/scoped_parent_child_index_updater.h"
 #include "components/sync/syncable/syncable_changes_version.h"
-#include "components/sync/syncable/syncable_util.h"
 #include "components/sync/syncable/syncable_write_transaction.h"
 
 using std::string;
@@ -24,7 +24,7 @@ void MutableEntry::Init(WriteTransaction* trans,
                         const Id& parent_id,
                         const string& name) {
   std::unique_ptr<EntryKernel> kernel(new EntryKernel);
-  kernel_ = NULL;
+  kernel_ = nullptr;
 
   kernel->put(ID, trans->directory_->NextId());
   kernel->put(META_HANDLE, trans->directory_->NextMetahandle());
@@ -81,7 +81,7 @@ MutableEntry::MutableEntry(WriteTransaction* trans,
   // We need to have a valid position ready before we can index the item.
   if (model_type == BOOKMARKS) {
     // Base the tag off of our cache-guid and local "c-" style ID.
-    std::string unique_tag = syncable::GenerateSyncableBookmarkHash(
+    std::string unique_tag = GenerateSyncableBookmarkHash(
         trans->directory()->cache_guid(), GetId().GetServerId());
     kernel_->put(UNIQUE_BOOKMARK_TAG, unique_tag);
     kernel_->put(UNIQUE_POSITION, UniquePosition::InitialPosition(unique_tag));
@@ -250,7 +250,7 @@ void MutableEntry::PutUniquePosition(const UniquePosition& value) {
 
 bool MutableEntry::PutPredecessor(const Id& predecessor_id) {
   if (predecessor_id.IsNull()) {
-    dir()->PutPredecessor(kernel_, NULL);
+    dir()->PutPredecessor(kernel_, nullptr);
   } else {
     MutableEntry predecessor(write_transaction(), GET_BY_ID, predecessor_id);
     if (!predecessor.good())
@@ -305,7 +305,7 @@ void MutableEntry::MarkAttachmentAsOnServer(
 
 // This function sets only the flags needed to get this entry to sync.
 bool MarkForSyncing(MutableEntry* e) {
-  DCHECK_NE(static_cast<MutableEntry*>(NULL), e);
+  DCHECK_NE(static_cast<MutableEntry*>(nullptr), e);
   DCHECK(!e->IsRoot()) << "We shouldn't mark a permanent object for syncing.";
   if (!(e->PutIsUnsynced(true)))
     return false;

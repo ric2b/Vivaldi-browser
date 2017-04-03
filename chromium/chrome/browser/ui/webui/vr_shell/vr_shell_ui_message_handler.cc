@@ -10,13 +10,18 @@
 #include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/values.h"
+#include "chrome/browser/android/vr_shell/ui_interface.h"
 #include "chrome/browser/android/vr_shell/ui_scene.h"
 #include "chrome/browser/android/vr_shell/vr_shell.h"
 #include "content/public/browser/web_ui.h"
 
 VrShellUIMessageHandler::VrShellUIMessageHandler() = default;
 
-VrShellUIMessageHandler::~VrShellUIMessageHandler() = default;
+VrShellUIMessageHandler::~VrShellUIMessageHandler() {
+  if (vr_shell_) {
+    vr_shell_->GetUiInterface()->SetUiCommandHandler(nullptr);
+  }
+}
 
 void VrShellUIMessageHandler::RegisterMessages() {
   vr_shell_ = vr_shell::VrShell::GetWeakPtr(web_ui()->GetWebContents());
@@ -33,9 +38,17 @@ void VrShellUIMessageHandler::RegisterMessages() {
 }
 
 void VrShellUIMessageHandler::HandleDomLoaded(const base::ListValue* args) {
+  AllowJavascript();
+}
+
+void VrShellUIMessageHandler::OnJavascriptAllowed() {
+  // If we don't have a VR Shell here, it means either the user manually loaded
+  // this webui page and we want to silently fail to connect to native vr shell,
+  // or VR Shell was deleted, and this webui content is also about to be
+  // deleted.
   if (!vr_shell_)
     return;
-
+  vr_shell_->GetUiInterface()->SetUiCommandHandler(this);
   vr_shell_->OnDomContentsLoaded();
 }
 
@@ -57,4 +70,8 @@ void VrShellUIMessageHandler::HandleDoAction(const base::ListValue* args) {
   if (vr_shell_) {
     vr_shell_->DoUiAction((vr_shell::UiAction) action);
   }
+}
+
+void VrShellUIMessageHandler::SendCommandToUi(const base::Value& value) {
+  CallJavascriptFunction("vrShellUi.command", value);
 }

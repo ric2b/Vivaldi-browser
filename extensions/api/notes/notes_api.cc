@@ -407,7 +407,6 @@ bool NotesUpdateFunction::RunAsync() {
     }
     for (unsigned int i = 0; i < params->changes.attachments->size(); i++) {
       Notes_attachment* attachment = new Notes_attachment();
-      attachment->content = *params->changes.attachments->at(i).content.get();
       if (params->changes.attachments->at(i).content_type)
         attachment->content_type = base::UTF8ToUTF16(
                   *params->changes.attachments->at(i).content_type.get());

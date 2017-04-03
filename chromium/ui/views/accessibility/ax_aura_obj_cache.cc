@@ -6,6 +6,8 @@
 
 #include "base/memory/ptr_util.h"
 #include "base/memory/singleton.h"
+#include "base/strings/string_util.h"
+#include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/focus_client.h"
 #include "ui/aura/window.h"
 #include "ui/views/accessibility/ax_aura_obj_wrapper.h"
@@ -116,6 +118,12 @@ AXAuraObjWrapper* AXAuraObjCache::GetFocus() {
   return nullptr;
 }
 
+void AXAuraObjCache::OnFocusedViewChanged() {
+  View* view = GetFocusedView();
+  if (view)
+    view->NotifyAccessibilityEvent(ui::AX_EVENT_FOCUS, true);
+}
+
 AXAuraObjCache::AXAuraObjCache()
     : current_id_(1),
       focus_client_(nullptr),
@@ -151,14 +159,22 @@ View* AXAuraObjCache::GetFocusedView() {
   if (!focus_manager)
     return nullptr;
 
-  return focus_manager->GetFocusedView();
+  View* focused_view = focus_manager->GetFocusedView();
+  if (focused_view)
+    return focused_view;
+
+  if (focused_window->GetProperty(
+          aura::client::kAccessibilityFocusFallsbackToWidgetKey)) {
+    // If no view is focused, falls back to root view.
+    return focused_widget->GetRootView();
+  }
+
+  return nullptr;
 }
 
 void AXAuraObjCache::OnWindowFocused(aura::Window* gained_focus,
                                      aura::Window* lost_focus) {
-  View* view = GetFocusedView();
-  if (view)
-    view->NotifyAccessibilityEvent(ui::AX_EVENT_FOCUS, true);
+  OnFocusedViewChanged();
 }
 
 void AXAuraObjCache::OnWindowDestroying(aura::Window* window) {

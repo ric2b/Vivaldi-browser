@@ -9,6 +9,7 @@
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/common/chrome_switches.h"
 #include "components/prefs/pref_service.h"
+#include "components/security_state/core/switches.h"
 #include "components/translate/core/common/translate_switches.h"
 #include "content/public/common/content_switches.h"
 #include "notes/notesnode.h"
@@ -61,6 +62,14 @@ void VivaldiBrowserMainExtraParts::PostEarlyInitialization() {
     } else {
       command_line->AppendSwitchASCII(switches::kEnableBlinkFeatures,
                                       "ResizeObserver");
+    }
+
+    // NOTE(jarle): Enable the HTTP_SHOW_WARNING security level for
+    // the URL field security badge. See VB-23666.
+    if (!command_line->HasSwitch(security_state::switches::kMarkHttpAs)) {
+      command_line->AppendSwitchASCII(security_state::switches::kMarkHttpAs,
+          security_state::switches::
+              kMarkHttpWithPasswordsOrCcWithChipAndFormWarning);
     }
   }
 

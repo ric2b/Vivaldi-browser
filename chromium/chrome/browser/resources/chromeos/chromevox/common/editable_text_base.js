@@ -311,6 +311,8 @@ cvox.ChromeVoxEditableTextBase.prototype.speak =
  * @param {cvox.TextChangeEvent} evt The text change event.
  */
 cvox.ChromeVoxEditableTextBase.prototype.changed = function(evt) {
+  // Normalize space characters.
+  evt.value = evt.value.replace('\u00a0', ' ');
   if (!this.shouldDescribeChange(evt)) {
     this.lastChangeDescribed = false;
     return;
@@ -356,6 +358,8 @@ cvox.ChromeVoxEditableTextBase.prototype.describeSelectionChanged =
       var lineValue = this.getLine(this.getLineIndex(evt.start));
       if (lineValue == '') {
         lineValue = Msgs.getMsg('text_box_blank');
+      } else if (lineValue == '\n') {
+        // Pass through the literal line value so character outputs 'new line'.
       } else if (/^\s+$/.test(lineValue)) {
         lineValue = Msgs.getMsg('text_box_whitespace');
       }

@@ -229,6 +229,32 @@ cr.define('settings_startup_urls_page', function() {
       Polymer.dom.flush();
       assertTrue(!!page.$$('settings-startup-url-dialog'));
     });
+
+    test('StartupPagesChanges_CloseOpenEditDialog', function() {
+      var entry1 = {
+        modelIndex: 2,
+        title: 'Test page 1',
+        tooltip: 'test tooltip',
+        url: 'chrome://bar',
+      };
+
+      var entry2 = {
+        modelIndex: 2,
+        title: 'Test page 2',
+        tooltip: 'test tooltip',
+        url: 'chrome://foo',
+      };
+
+      cr.webUIListenerCallback('update-startup-pages', [entry1, entry2]);
+      page.fire(settings.EDIT_STARTUP_URL_EVENT, entry2);
+      Polymer.dom.flush();
+
+      assertTrue(!!page.$$('settings-startup-url-dialog'));
+      cr.webUIListenerCallback('update-startup-pages', [entry1]);
+      Polymer.dom.flush();
+
+      assertFalse(!!page.$$('settings-startup-url-dialog'));
+    });
   });
 
   /** @return {!StartupPageInfo} */
@@ -256,10 +282,10 @@ cr.define('settings_startup_urls_page', function() {
       document.body.appendChild(element);
 
       // Bring up the popup menu for the following tests to use.
-      assertFalse(!!element.$$('iron-dropdown'));
+      assertFalse(!!element.$$('dialog[is=cr-action-menu]'));
       MockInteractions.tap(element.$.dots);
       Polymer.dom.flush();
-      assertTrue(!!element.$$('iron-dropdown'));
+      assertTrue(!!element.$$('dialog[is=cr-action-menu]'));
     });
 
     teardown(function() { element.remove(); });

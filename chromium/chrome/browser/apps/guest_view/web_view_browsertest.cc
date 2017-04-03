@@ -24,6 +24,7 @@
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/apps/app_browsertest_util.h"
 #include "chrome/browser/chrome_content_browser_client.h"
+#include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/download/download_history.h"
 #include "chrome/browser/download/download_prefs.h"
@@ -38,6 +39,7 @@
 #include "chrome/browser/renderer_context_menu/render_view_context_menu_test_util.h"
 #include "chrome/browser/task_manager/task_manager_browsertest_util.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/ui_test_utils.h"
@@ -56,6 +58,7 @@
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/common/child_process_host.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/download_test_observer.h"
@@ -215,11 +218,6 @@ class EmbedderWebContentsObserver : public content::WebContentsObserver {
 
   DISALLOW_COPY_AND_ASSIGN(EmbedderWebContentsObserver);
 };
-
-bool UseCrossProcessFramesForGuests() {
-  return base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kUseCrossProcessFramesForGuests);
-}
 
 void ExecuteScriptWaitForTitle(content::WebContents* web_contents,
                                const char* script,
@@ -609,8 +607,9 @@ class WebViewTestBase : public extensions::PlatformAppBrowserTest {
         menu_manager()->ExtensionIds();
     std::set<MenuItem::ExtensionKey>::iterator i;
     for (i = extension_ids.begin(); i != extension_ids.end(); ++i) {
-      const MenuItem::List* list = menu_manager()->MenuItems(*i);
-      result.insert(result.end(), list->begin(), list->end());
+      const MenuItem::OwnedList* list = menu_manager()->MenuItems(*i);
+      for (const auto& item : *list)
+        result.push_back(item.get());
     }
     return result;
   }
@@ -853,8 +852,15 @@ class WebViewTest : public WebViewTestBase,
     WebViewTestBase::SetUpCommandLine(command_line);
 
     bool use_cross_process_frames_for_guests = GetParam();
-    if (use_cross_process_frames_for_guests)
-      command_line->AppendSwitch(switches::kUseCrossProcessFramesForGuests);
+    if (use_cross_process_frames_for_guests) {
+      command_line->AppendSwitchASCII(
+          switches::kEnableFeatures,
+          ::features::kGuestViewCrossProcessFrames.name);
+    } else {
+      command_line->AppendSwitchASCII(
+          switches::kDisableFeatures,
+          ::features::kGuestViewCrossProcessFrames.name);
+    }
   }
 };
 
@@ -875,8 +881,8 @@ INSTANTIATE_TEST_CASE_P(WebViewTests, WebViewSpeechAPITest, testing::Bool());
 // The following test suites are created to group tests based on specific
 // features of <webview>.
 // These features currently would not work with
-// --use-cross-process-frames-for-guest and is disabled on
-// UseCrossProcessFramesForGuests.
+// --enable-features=GuestViewCrossProcessFrames and is disabled on
+// GuestViewCrossProcessFrames.
 // TODO(avallee): https://crbug.com/610795: Enable this for testing::Bool().
 class WebViewAccessibilityTest : public WebViewTest {};
 INSTANTIATE_TEST_CASE_P(WebViewTests,
@@ -1094,10 +1100,10 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, ReloadEmbedder) {
 
 IN_PROC_BROWSER_TEST_P(WebViewTest, AcceptTouchEvents) {
   // This test only makes sense for non-OOPIF WebView, since with
-  // UseCrossProcessFramesForGuests() events are routed directly to the
+  // GuestViewCrossProcessFrames events are routed directly to the
   // guest, so the embedder does not need to know about the installation of
   // touch handlers.
-  if (UseCrossProcessFramesForGuests())
+  if (base::FeatureList::IsEnabled(::features::kGuestViewCrossProcessFrames))
     return;
 
   LoadAppWithGuest("web_view/accept_touch_events");
@@ -1308,7 +1314,7 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, Shim_TestDisplayNoneWebviewLoad) {
 
 IN_PROC_BROWSER_TEST_P(WebViewTest, Shim_TestDisplayNoneWebviewRemoveChild) {
   // http://crbug.com/585652
-  if (UseCrossProcessFramesForGuests())
+  if (base::FeatureList::IsEnabled(::features::kGuestViewCrossProcessFrames))
     return;
   TestHelper("testDisplayNoneWebviewRemoveChild",
              "web_view/shim", NO_TEST_SERVER);
@@ -3202,7 +3208,7 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, Shim_TestFocusWhileFocused) {
 
 IN_PROC_BROWSER_TEST_P(WebViewTest, NestedGuestContainerBounds) {
   // TODO(lfg): https://crbug.com/581898
-  if (UseCrossProcessFramesForGuests())
+  if (base::FeatureList::IsEnabled(::features::kGuestViewCrossProcessFrames))
     return;
 
   TestHelper("testPDFInWebview", "web_view/shim", NO_TEST_SERVER);
@@ -3376,8 +3382,15 @@ class WebViewGuestScrollTest
   void SetUpCommandLine(base::CommandLine* command_line) override {
     WebViewTestBase::SetUpCommandLine(command_line);
 
-    if (testing::get<0>(GetParam())) {
-      command_line->AppendSwitch(switches::kUseCrossProcessFramesForGuests);
+    bool use_cross_process_frames_for_guests = testing::get<0>(GetParam());
+    if (use_cross_process_frames_for_guests) {
+      command_line->AppendSwitchASCII(
+          switches::kEnableFeatures,
+          ::features::kGuestViewCrossProcessFrames.name);
+    } else {
+      command_line->AppendSwitchASCII(
+          switches::kDisableFeatures,
+          ::features::kGuestViewCrossProcessFrames.name);
     }
   }
 
@@ -3542,7 +3555,7 @@ class FocusChangeWaiter {
 IN_PROC_BROWSER_TEST_F(WebViewGuestTouchFocusTest,
                        TouchFocusesBrowserPluginInEmbedder) {
   // This test is only relevant for non-OOPIF WebView.
-  if (UseCrossProcessFramesForGuests())
+  if (base::FeatureList::IsEnabled(::features::kGuestViewCrossProcessFrames))
     return;
 
   LoadAppWithGuest("web_view/guest_focus_test");
@@ -3845,5 +3858,55 @@ IN_PROC_BROWSER_TEST_P(WebViewFocusTest, TouchFocusesEmbedder) {
   content::SimulateTouchPressAt(GetEmbedderWebContents(),
                                 guest_rect.CenterPoint());
   EXPECT_TRUE(aura_webview->HasFocus());
+}
+#endif
+
+// This runs the chrome://chrome-signin page which includes an OOPIF-<webview>
+// of accounts.google.com.
+class ChromeSignInWebViewTest : public WebViewTestBase {
+ public:
+  ChromeSignInWebViewTest() {}
+  ~ChromeSignInWebViewTest() override {}
+
+ protected:
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    command_line->AppendSwitchASCII(
+        switches::kEnableFeatures,
+        ::features::kGuestViewCrossProcessFrames.name);
+  }
+
+  void WaitForWebViewInDom() {
+    auto* web_contents = browser()->tab_strip_model()->GetActiveWebContents();
+    auto* script =
+        "var count = 10;"
+        "var interval;"
+        "interval = setInterval(function(){"
+        "  if (document.getElementsByTagName('webview').length) {"
+        "    document.title = 'success';"
+        "    console.log('FOUND webview');"
+        "    clearInterval(interval);"
+        "  } else if (count == 0) {"
+        "    document.title = 'error';"
+        "    clearInterval(interval);"
+        "  } else {"
+        "    count -= 1;"
+        "  }"
+        "}, 1000);";
+    ExecuteScriptWaitForTitle(web_contents, script, "success");
+  }
+};
+
+#if (defined(OS_LINUX) && !defined(OS_CHROMEOS)) || defined(OS_MACOSX) || \
+     defined(OS_WIN)
+// This verifies the fix for http://crbug.com/667708.
+IN_PROC_BROWSER_TEST_F(ChromeSignInWebViewTest,
+                       ClosingChromeSignInShouldNotCrash) {
+  GURL signin_url{"chrome://chrome-signin"};
+
+  AddTabAtIndex(0, signin_url, ui::PAGE_TRANSITION_TYPED);
+  AddTabAtIndex(1, signin_url, ui::PAGE_TRANSITION_TYPED);
+  WaitForWebViewInDom();
+
+  chrome::CloseTab(browser());
 }
 #endif

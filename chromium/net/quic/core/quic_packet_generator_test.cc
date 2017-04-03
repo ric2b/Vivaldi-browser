@@ -26,7 +26,6 @@
 
 using base::StringPiece;
 using std::string;
-using std::vector;
 using testing::InSequence;
 using testing::Return;
 using testing::StrictMock;
@@ -207,7 +206,6 @@ class QuicPacketGeneratorTest : public ::testing::Test {
     return ::net::MakeIOVector(s, &iov_);
   }
 
-  QuicFlagSaver flags_;  // Save/restore all QUIC flag values.
   QuicFramer framer_;
   MockRandom random_;
   SimpleBufferAllocator buffer_allocator_;
@@ -215,7 +213,7 @@ class QuicPacketGeneratorTest : public ::testing::Test {
   QuicPacketGenerator generator_;
   QuicPacketCreator* creator_;
   SimpleQuicFramer simple_framer_;
-  vector<SerializedPacket> packets_;
+  std::vector<SerializedPacket> packets_;
   QuicAckFrame ack_frame_;
 
  private:
@@ -879,7 +877,6 @@ TEST_F(QuicPacketGeneratorTest, SetCurrentPath) {
 
 // Regression test for b/31486443.
 TEST_F(QuicPacketGeneratorTest, ConnectionCloseFrameLargerThanPacketSize) {
-  FLAGS_quic_close_connection_on_huge_frames = true;
   delegate_.SetCanWriteAnything();
   QuicConnectionCloseFrame* frame = new QuicConnectionCloseFrame();
   frame->error_code = QUIC_PACKET_WRITE_ERROR;

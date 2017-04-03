@@ -53,19 +53,16 @@
   <script src="chrome://resources/js/cr/ui/overlay.js"></script>
 </head>
 <body>
-  <div id="terms-loading" class="section">
+  <div id="terms" class="section">
     <img class="image-header" src="images/header.png">
-    <div class="scrollable">
+    <div class="scrollable" id="terms-of-service-loading">
       <div class="content">
         <p class="text-title" i18n-content="greetingHeader"></p>
         <p class="text-desc" i18n-content="greetingDescription"></p>
         <paper-progress class="blue" indeterminate></paper-progress>
       </div>
     </div>
-  </div>
-  <div id="terms" class="section" hidden>
-    <img class="image-header" src="images/header.png">
-    <div class="scrollable" >
+    <div class="scrollable" id="terms-of-service-content" hidden>
       <div class="content section-flex">
         <p class="text-title" i18n-content="greetingHeader"></p>
         <p class="text-desc" i18n-content="greetingDescription"></p>
@@ -74,30 +71,36 @@
         <div class="section-terms" id ="terms-container">
           <webview id="terms-view" partition="persist:arc_support"></webview>
         </div>
-        <label class="layout horizontal section-checkbox-container">
-          <input type="checkbox" class="checkbox-option" id="enable-metrics">
-          <p class="checkbox-text" id="text-metrics"></p>
-        </label>
-        <label class="layout horizontal section-checkbox-container">
-          <input type="checkbox" class="checkbox-option"
-              id="enable-backup-restore">
-          <p class="checkbox-text" id="text-backup-restore"></p>
-        </label>
-        <label class="layout horizontal section-checkbox-container">
-          <input type="checkbox" class="checkbox-option"
-              id="enable-location-service">
-          <p class="checkbox-text" id="text-location-service"></p>
-        </label>
+        <div id="metrics-preference">
+          <label class="layout horizontal section-checkbox-container">
+            <input type="checkbox" class="checkbox-option">
+            <p class="checkbox-text"></p>
+          </label>
+        </div>
+        <div id="backup-restore-preference">
+          <label class="layout horizontal section-checkbox-container">
+            <input type="checkbox" class="checkbox-option">
+            <p class="checkbox-text"
+                i18n-values=".innerHTML:textBackupRestore"></p>
+          </label>
+        </div>
+        <div id="location-service-preference">
+          <label class="layout horizontal section-checkbox-container">
+            <input type="checkbox" class="checkbox-option">
+            <p class="checkbox-text"
+                i18n-values=".innerHTML:textLocationService"></p>
+          </label>
+        </div>
         <div class="layout horizontal center end-justified section-buttons">
           <a class="checkbox-text" id="privacy-policy-link"
-              href="#" i18n-content="privacyPolicyLink"></a>
+             href="#" i18n-content="privacyPolicyLink"></a>
           <div class="flex"></div>
           <paper-button class="white" id="button-cancel"
               i18n-content="buttonCancel">
           </paper-button>
           <div class="button-separator"></div>
           <paper-button class="blue" id="button-agree"
-            i18n-content="buttonAgree">
+               i18n-content="buttonAgree">
           </paper-button>
         </div>
       </div>

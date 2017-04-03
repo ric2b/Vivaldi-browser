@@ -152,11 +152,11 @@ with the following commands:
 
 ```shell
 # Resize userdata partition to be 1G
-resize2fs android_emulator_sdk/sdk/system-images/android-23/x86/userdata.img 1G
+resize2fs android_emulator_sdk/sdk/system-images/android-24/x86/userdata.img 1G
 
 # Set filesystem parameter to continue on errors; Android doesn't like some
 # things e2fsprogs does.
-tune2fs -e continue android_emulator_sdk/sdk/system-images/android-23/x86/userdata.img
+tune2fs -e continue android_emulator_sdk/sdk/system-images/android-24/x86/userdata.img
 ```
 
 ## Symbolizing Crashes
@@ -298,8 +298,7 @@ You might want to add stars `*` to each as a regular expression, e.g.
 
 ## Running Blink Layout Tests
 
-See
-https://sites.google.com/a/chromium.org/dev/developers/testing/webkit-layout-tests
+See [Layout Tests](testing/layout_tests.md).
 
 ## Running GPU tests
 

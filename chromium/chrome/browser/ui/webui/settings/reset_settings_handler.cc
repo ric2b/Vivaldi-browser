@@ -17,15 +17,16 @@
 #include "chrome/browser/prefs/chrome_pref_service_factory.h"
 #include "chrome/browser/profile_resetter/brandcode_config_fetcher.h"
 #include "chrome/browser/profile_resetter/brandcoded_default_settings.h"
-#include "chrome/browser/profile_resetter/profile_reset_report.pb.h"
 #include "chrome/browser/profile_resetter/profile_resetter.h"
 #include "chrome/browser/profile_resetter/resettable_settings_snapshot.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/url_constants.h"
+#include "chrome/grit/generated_resources.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/user_metrics.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
+#include "ui/base/l10n/l10n_util.h"
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/browser_process.h"
@@ -42,6 +43,31 @@
 #endif  // defined(OS_WIN)
 
 namespace settings {
+
+namespace {
+
+reset_report::ChromeResetReport::ResetRequestOrigin
+ResetRequestOriginFromString(const std::string& request_origin) {
+  static const char kOriginUserClick[] = "userclick";
+  static const char kOriginTriggeredReset[] = "triggeredreset";
+
+  if (request_origin == ResetSettingsHandler::kCctResetSettingsHash)
+    return reset_report::ChromeResetReport::RESET_REQUEST_ORIGIN_CCT;
+  if (request_origin == kOriginUserClick)
+    return reset_report::ChromeResetReport::RESET_REQUEST_ORIGIN_USER_CLICK;
+  if (request_origin == kOriginTriggeredReset) {
+    return reset_report::ChromeResetReport::
+        RESET_REQUEST_ORIGIN_TRIGGERED_RESET;
+  }
+  if (!request_origin.empty())
+    NOTREACHED();
+
+  return reset_report::ChromeResetReport::RESET_REQUEST_ORIGIN_UNKNOWN;
+}
+
+}  // namespace
+
+const char ResetSettingsHandler::kCctResetSettingsHash[] = "cct";
 
 ResetSettingsHandler::ResetSettingsHandler(Profile* profile)
     : profile_(profile), weak_ptr_factory_(this) {
@@ -90,6 +116,10 @@ void ResetSettingsHandler::RegisterMessages() {
   web_ui()->RegisterMessageCallback("onHideResetProfileBanner",
       base::Bind(&ResetSettingsHandler::OnHideResetProfileBanner,
                  base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "getTriggeredResetToolName",
+      base::Bind(&ResetSettingsHandler::HandleGetTriggeredResetToolName,
+                 base::Unretained(this)));
 #if defined(OS_CHROMEOS)
   web_ui()->RegisterMessageCallback(
        "onPowerwashDialogShow",
@@ -102,27 +132,31 @@ void ResetSettingsHandler::HandleResetProfileSettings(
     const base::ListValue* args) {
   AllowJavascript();
 
-  CHECK_EQ(2U, args->GetSize());
+  CHECK_EQ(3U, args->GetSize());
   std::string callback_id;
   CHECK(args->GetString(0, &callback_id));
   bool send_settings = false;
   CHECK(args->GetBoolean(1, &send_settings));
+  std::string request_origin_string;
+  CHECK(args->GetString(2, &request_origin_string));
+  reset_report::ChromeResetReport::ResetRequestOrigin request_origin =
+      ResetRequestOriginFromString(request_origin_string);
 
   DCHECK(brandcode_.empty() || config_fetcher_);
   if (config_fetcher_ && config_fetcher_->IsActive()) {
     // Reset once the prefs are fetched.
-    config_fetcher_->SetCallback(
-        base::Bind(&ResetSettingsHandler::ResetProfile,
-                   base::Unretained(this),
-                   callback_id,
-                   send_settings));
+    config_fetcher_->SetCallback(base::Bind(&ResetSettingsHandler::ResetProfile,
+                                            base::Unretained(this), callback_id,
+                                            send_settings, request_origin));
   } else {
-    ResetProfile(callback_id, send_settings);
+    ResetProfile(callback_id, send_settings, request_origin);
   }
 }
 
 void ResetSettingsHandler::OnResetProfileSettingsDone(
-    std::string callback_id, bool send_feedback) {
+    std::string callback_id,
+    bool send_feedback,
+    reset_report::ChromeResetReport::ResetRequestOrigin request_origin) {
   ResolveJavascriptCallback(
       base::StringValue(callback_id), *base::Value::CreateNullValue());
   if (send_feedback && setting_snapshot_) {
@@ -133,13 +167,7 @@ void ResetSettingsHandler::OnResetProfileSettingsDone(
       std::unique_ptr<reset_report::ChromeResetReport> report_proto =
           SerializeSettingsReportToProto(*setting_snapshot_, difference);
       if (report_proto) {
-        // The material design version of the settings page currently does not
-        // expose the alternative ways, made available by the old settings page,
-        // to get to the reset settings dialog. Until those are available, we
-        // can assume that all reset requests came directly from user
-        // navigation.
-        report_proto->set_reset_request_origin(
-            reset_report::ChromeResetReport::RESET_REQUEST_ORIGIN_USER_CLICK);
+        report_proto->set_reset_request_origin(request_origin);
         SendSettingsFeedbackProto(*report_proto, profile_);
       }
     }
@@ -199,8 +227,10 @@ void ResetSettingsHandler::OnSettingsFetched() {
   // The master prefs is fetched. We are waiting for user pressing 'Reset'.
 }
 
-void ResetSettingsHandler::ResetProfile(std::string callback_id,
-                                        bool send_settings) {
+void ResetSettingsHandler::ResetProfile(
+    const std::string& callback_id,
+    bool send_settings,
+    reset_report::ChromeResetReport::ResetRequestOrigin request_origin) {
   DCHECK(!GetResetter()->IsActive());
 
   std::unique_ptr<BrandcodedDefaultSettings> default_settings;
@@ -220,17 +250,52 @@ void ResetSettingsHandler::ResetProfile(std::string callback_id,
   GetResetter()->Reset(
       ProfileResetter::ALL, std::move(default_settings),
       base::Bind(&ResetSettingsHandler::OnResetProfileSettingsDone,
-                 weak_ptr_factory_.GetWeakPtr(),
-                 callback_id,
-                 send_settings));
+                 weak_ptr_factory_.GetWeakPtr(), callback_id, send_settings,
+                 request_origin));
   content::RecordAction(base::UserMetricsAction("ResetProfile"));
   UMA_HISTOGRAM_BOOLEAN("ProfileReset.SendFeedback", send_settings);
+  UMA_HISTOGRAM_ENUMERATION(
+      "ProfileReset.ResetRequestOrigin", request_origin,
+      reset_report::ChromeResetReport::ResetRequestOrigin_MAX + 1);
 }
 
 ProfileResetter* ResetSettingsHandler::GetResetter() {
   if (!resetter_)
     resetter_.reset(new ProfileResetter(profile_));
   return resetter_.get();
+}
+
+void ResetSettingsHandler::HandleGetTriggeredResetToolName(
+    const base::ListValue* args) {
+  AllowJavascript();
+
+  CHECK_EQ(1U, args->GetSize());
+  const base::Value* callback_id;
+  CHECK(args->Get(0, &callback_id));
+
+  // Set up the localized strings for the triggered profile reset dialog.
+  // Custom reset tool names are supported on Windows only.
+  base::string16 reset_tool_name;
+#if defined(OS_WIN)
+  Profile* profile = Profile::FromWebUI(web_ui());
+  TriggeredProfileResetter* triggered_profile_resetter =
+      TriggeredProfileResetterFactory::GetForBrowserContext(profile);
+  // TriggeredProfileResetter instance will be nullptr for incognito profiles.
+  if (triggered_profile_resetter) {
+    reset_tool_name = triggered_profile_resetter->GetResetToolName();
+
+    // Now that a reset UI has been shown, don't trigger again for this profile.
+    triggered_profile_resetter->ClearResetTrigger();
+  }
+#endif  // defined(OS_WIN)
+
+  if (reset_tool_name.empty()) {
+    reset_tool_name = l10n_util::GetStringUTF16(
+        IDS_TRIGGERED_RESET_PROFILE_SETTINGS_DEFAULT_TOOL_NAME);
+  }
+
+  base::StringValue string_value(reset_tool_name);
+  ResolveJavascriptCallback(*callback_id, string_value);
 }
 
 #if defined(OS_CHROMEOS)

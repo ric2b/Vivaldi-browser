@@ -17,6 +17,7 @@
 #include "base/debug/leak_annotations.h"
 #include "base/format_macros.h"
 #include "chrome/common/chrome_result_codes.h"
+#include "chrome/install_static/install_details.h"
 #include "chrome/install_static/install_util.h"
 #include "components/crash/content/app/crashpad.h"
 #include "components/crash/core/common/crash_keys.h"
@@ -46,6 +47,16 @@ constexpr char kGPUPixelShaderVersion[] = "gpu-psver";
 constexpr char kGPUVertexShaderVersion[] = "gpu-vsver";
 
 constexpr char kHungAudioThreadDetails[] = "hung-audio-thread-details";
+constexpr char kHungRendererOutstandingAckCount[] = "hung-outstanding-acks";
+constexpr char kHungRendererOutstandingEventType[] =
+    "hung-outstanding-event-type";
+constexpr char kHungRendererLastEventType[] = "hung-last-event-type";
+constexpr char kHungRendererReason[] = "hung-reason";
+constexpr char kInputEventFilterSendFailure[] =
+    "input-event-filter-send-failure";
+
+constexpr char kThirdPartyModulesLoaded[] = "third-party-modules-loaded";
+constexpr char kThirdPartyModulesNotLoaded[] = "third-party-modules-not-loaded";
 
 constexpr char kViewCount[] = "view-count";
 constexpr char kZeroEncodeDetails[] = "zero-encode-details";
@@ -89,6 +100,10 @@ size_t RegisterCrashKeysHelper() {
       {kGPUPixelShaderVersion, kSmallSize},
       {kGPUVertexShaderVersion, kSmallSize},
 
+      // browser/:
+      {kThirdPartyModulesLoaded, kSmallSize},
+      {kThirdPartyModulesNotLoaded, kSmallSize},
+
       // content/:
       {"bad_message_reason", kSmallSize},
       {"discardable-memory-allocated", kSmallSize},
@@ -99,6 +114,11 @@ size_t RegisterCrashKeysHelper() {
       {"total-discardable-memory-allocated", kSmallSize},
       {kBug464926CrashKey, kSmallSize},
       {kViewCount, kSmallSize},
+      {kHungRendererOutstandingAckCount, kSmallSize},
+      {kHungRendererOutstandingEventType, kSmallSize},
+      {kHungRendererLastEventType, kSmallSize},
+      {kHungRendererReason, kSmallSize},
+      {kInputEventFilterSendFailure, kSmallSize},
 
       // media/:
       {kHungAudioThreadDetails, kSmallSize},
@@ -307,23 +327,20 @@ bool ChromeCrashReporterClient::GetDeferredUploadsSupported(
   return false;
 }
 
+// TODO(grt): Remove |exe_path| from crash_reporter::CrashReporterClient.
 bool ChromeCrashReporterClient::GetIsPerUserInstall(
     const base::string16& exe_path) {
-  return !install_static::IsSystemInstall(exe_path.c_str());
+  return !install_static::InstallDetails::Get().system_level();
 }
 
+// TODO(grt): Remove |is_per_user_install| from
+// crash_reporter::CrashReporterClient.
 bool ChromeCrashReporterClient::GetShouldDumpLargerDumps(
     bool is_per_user_install) {
-  base::string16 channel_name;
-  install_static::GetChromeChannelName(is_per_user_install,
-                                       false, // !add_modifier
-                                       &channel_name);
-  // Capture more detail in crash dumps for Beta, Dev, Canary channels and
-  // if channel is unknown (e.g. Chromium or developer builds).
-  return (channel_name == install_static::kChromeChannelBeta ||
-          channel_name == install_static::kChromeChannelDev ||
-          channel_name == install_static::kChromeChannelCanary ||
-          channel_name == install_static::kChromeChannelUnknown);
+  // Capture larger dumps for Google Chrome "beta", "dev", and "canary"
+  // channels. Stable channel and Chromium builds are on channel "", and use
+  // smaller dumps.
+  return !install_static::InstallDetails::Get().channel().empty();
 }
 
 int ChromeCrashReporterClient::GetResultCodeRespawnFailed() {

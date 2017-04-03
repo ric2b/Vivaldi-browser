@@ -95,10 +95,6 @@ namespace time_internal {
 BASE_EXPORT int64_t SaturatedAdd(TimeDelta delta, int64_t value);
 BASE_EXPORT int64_t SaturatedSub(TimeDelta delta, int64_t value);
 
-// Clamp |value| on overflow and underflow conditions. The int64_t argument and
-// return value are in terms of a microsecond timebase.
-BASE_EXPORT int64_t FromCheckedNumeric(const CheckedNumeric<int64_t> value);
-
 }  // namespace time_internal
 
 // TimeDelta ------------------------------------------------------------------
@@ -205,13 +201,24 @@ class BASE_EXPORT TimeDelta {
   TimeDelta operator*(T a) const {
     CheckedNumeric<int64_t> rv(delta_);
     rv *= a;
-    return TimeDelta(time_internal::FromCheckedNumeric(rv));
+    if (rv.IsValid())
+      return TimeDelta(rv.ValueOrDie());
+    // Matched sign overflows. Mismatched sign underflows.
+    if ((delta_ < 0) ^ (a < 0))
+      return TimeDelta(-std::numeric_limits<int64_t>::max());
+    return TimeDelta(std::numeric_limits<int64_t>::max());
   }
   template<typename T>
   TimeDelta operator/(T a) const {
     CheckedNumeric<int64_t> rv(delta_);
     rv /= a;
-    return TimeDelta(time_internal::FromCheckedNumeric(rv));
+    if (rv.IsValid())
+      return TimeDelta(rv.ValueOrDie());
+    // Matched sign overflows. Mismatched sign underflows.
+    // Special case to catch divide by zero.
+    if ((delta_ < 0) ^ (a <= 0))
+      return TimeDelta(-std::numeric_limits<int64_t>::max());
+    return TimeDelta(std::numeric_limits<int64_t>::max());
   }
   template<typename T>
   TimeDelta& operator*=(T a) {
@@ -545,7 +552,7 @@ class BASE_EXPORT Time : public time_internal::TimeBase<Time> {
 
   // Converts an exploded structure representing either the local time or UTC
   // into a Time class. Returns false on a failure when, for example, a day of
-  // month is set to 31 on a 28-30 day month.
+  // month is set to 31 on a 28-30 day month. Returns Time(0) on overflow.
   static bool FromUTCExploded(const Exploded& exploded,
                               Time* time) WARN_UNUSED_RESULT {
     return FromExploded(false, exploded, time);

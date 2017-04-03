@@ -59,6 +59,8 @@ const char* GetEventAckName(InputEventAckState ack_result) {
     case INPUT_EVENT_ACK_STATE_IGNORED: return "IGNORED";
     case INPUT_EVENT_ACK_STATE_SET_NON_BLOCKING:
       return "SET_NON_BLOCKING";
+    case INPUT_EVENT_ACK_STATE_SET_NON_BLOCKING_DUE_TO_FLING:
+      return "SET_NON_BLOCKING_DUE_TO_FLING";
   }
   DLOG(WARNING) << "Unhandled InputEventAckState in GetEventAckName.";
   return "";
@@ -98,7 +100,6 @@ InputRouterImpl::InputRouterImpl(IPC::Sender* sender,
 }
 
 InputRouterImpl::~InputRouterImpl() {
-  STLDeleteElements(&pending_select_messages_);
 }
 
 bool InputRouterImpl::SendInput(std::unique_ptr<IPC::Message> message) {
@@ -319,11 +320,10 @@ bool InputRouterImpl::SendSelectMessage(std::unique_ptr<IPC::Message> message) {
   if (select_message_pending_) {
     if (!pending_select_messages_.empty() &&
         pending_select_messages_.back()->type() == message->type()) {
-      delete pending_select_messages_.back();
       pending_select_messages_.pop_back();
     }
 
-    pending_select_messages_.push_back(message.release());
+    pending_select_messages_.push_back(std::move(message));
     return true;
   }
 
@@ -433,14 +433,14 @@ bool InputRouterImpl::OfferToRenderer(const WebInputEvent& input_event,
     // renderer. Consequently, such event types should not affect event time
     // or in-flight event count metrics.
     if (dispatch_type == InputEventDispatchType::DISPATCH_TYPE_BLOCKING)
-      client_->IncrementInFlightEventCount();
+      client_->IncrementInFlightEventCount(input_event.type);
     return true;
   }
   return false;
 }
 
 void InputRouterImpl::OnInputEventAck(const InputEventAck& ack) {
-  client_->DecrementInFlightEventCount();
+  client_->DecrementInFlightEventCount(ack.source);
 
   if (ack.overscroll) {
     DCHECK(ack.type == WebInputEvent::MouseWheel ||
@@ -466,7 +466,7 @@ void InputRouterImpl::OnSelectMessageAck() {
   select_message_pending_ = false;
   if (!pending_select_messages_.empty()) {
     std::unique_ptr<IPC::Message> next_message =
-        base::WrapUnique(pending_select_messages_.front());
+        std::move(pending_select_messages_.front());
     pending_select_messages_.pop_front();
 
     SendSelectMessage(std::move(next_message));

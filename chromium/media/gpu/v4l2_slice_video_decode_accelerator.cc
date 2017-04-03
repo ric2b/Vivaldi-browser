@@ -472,6 +472,7 @@ V4L2SliceVideoDecodeAccelerator::V4L2SliceVideoDecodeAccelerator(
       output_streamon_(false),
       output_buffer_queued_count_(0),
       video_profile_(VIDEO_CODEC_PROFILE_UNKNOWN),
+      input_format_fourcc_(0),
       output_format_fourcc_(0),
       state_(kUninitialized),
       output_mode_(Config::OutputMode::ALLOCATE),
@@ -517,13 +518,6 @@ bool V4L2SliceVideoDecodeAccelerator::Initialize(const Config& config,
   DCHECK(child_task_runner_->BelongsToCurrentThread());
   DCHECK_EQ(state_, kUninitialized);
 
-  if (!device_->SupportsDecodeProfileForV4L2PixelFormats(
-          config.profile, arraysize(supported_input_fourccs_),
-          supported_input_fourccs_)) {
-    DVLOGF(1) << "unsupported profile " << config.profile;
-    return false;
-  }
-
   if (config.is_encrypted) {
     NOTREACHED() << "Encrypted streams are not supported for this VDA";
     return false;
@@ -547,28 +541,6 @@ bool V4L2SliceVideoDecodeAccelerator::Initialize(const Config& config,
     decode_client_ = client_;
   }
 
-  video_profile_ = config.profile;
-
-  if (video_profile_ >= H264PROFILE_MIN && video_profile_ <= H264PROFILE_MAX) {
-    h264_accelerator_.reset(new V4L2H264Accelerator(this));
-    decoder_.reset(new H264Decoder(h264_accelerator_.get()));
-  } else if (video_profile_ >= VP8PROFILE_MIN &&
-             video_profile_ <= VP8PROFILE_MAX) {
-    vp8_accelerator_.reset(new V4L2VP8Accelerator(this));
-    decoder_.reset(new VP8Decoder(vp8_accelerator_.get()));
-  } else if (video_profile_ >= VP9PROFILE_MIN &&
-             video_profile_ <= VP9PROFILE_MAX) {
-    vp9_accelerator_.reset(new V4L2VP9Accelerator(this));
-    decoder_.reset(new VP9Decoder(vp9_accelerator_.get()));
-  } else {
-    NOTREACHED() << "Unsupported profile " << video_profile_;
-    return false;
-  }
-
-  // TODO(posciak): This needs to be queried once supported.
-  input_planes_count_ = 1;
-  output_planes_count_ = 1;
-
   if (egl_display_ == EGL_NO_DISPLAY) {
     LOGF(ERROR) << "could not get EGLDisplay";
     return false;
@@ -587,6 +559,37 @@ bool V4L2SliceVideoDecodeAccelerator::Initialize(const Config& config,
     }
   } else {
     DVLOGF(1) << "No GL callbacks provided, initializing without GL support";
+  }
+
+  video_profile_ = config.profile;
+
+  // TODO(posciak): This needs to be queried once supported.
+  input_planes_count_ = 1;
+  output_planes_count_ = 1;
+
+  input_format_fourcc_ =
+      V4L2Device::VideoCodecProfileToV4L2PixFmt(video_profile_, true);
+
+  if (!device_->Open(V4L2Device::Type::kDecoder, input_format_fourcc_)) {
+    DVLOGF(1) << "Failed to open device for profile: " << config.profile
+              << " fourcc: " << std::hex << "0x" << input_format_fourcc_;
+    return false;
+  }
+
+  if (video_profile_ >= H264PROFILE_MIN && video_profile_ <= H264PROFILE_MAX) {
+    h264_accelerator_.reset(new V4L2H264Accelerator(this));
+    decoder_.reset(new H264Decoder(h264_accelerator_.get()));
+  } else if (video_profile_ >= VP8PROFILE_MIN &&
+             video_profile_ <= VP8PROFILE_MAX) {
+    vp8_accelerator_.reset(new V4L2VP8Accelerator(this));
+    decoder_.reset(new VP8Decoder(vp8_accelerator_.get()));
+  } else if (video_profile_ >= VP9PROFILE_MIN &&
+             video_profile_ <= VP9PROFILE_MAX) {
+    vp9_accelerator_.reset(new V4L2VP9Accelerator(this));
+    decoder_.reset(new VP9Decoder(vp9_accelerator_.get()));
+  } else {
+    NOTREACHED() << "Unsupported profile " << video_profile_;
+    return false;
   }
 
   // Capabilities check.
@@ -676,16 +679,9 @@ void V4L2SliceVideoDecodeAccelerator::DestroyTask() {
 bool V4L2SliceVideoDecodeAccelerator::SetupFormats() {
   DCHECK_EQ(state_, kUninitialized);
 
-  __u32 input_format_fourcc =
-      V4L2Device::VideoCodecProfileToV4L2PixFmt(video_profile_, true);
-  if (!input_format_fourcc) {
-    NOTREACHED();
-    return false;
-  }
-
   size_t input_size;
   gfx::Size max_resolution, min_resolution;
-  device_->GetSupportedResolution(input_format_fourcc, &min_resolution,
+  device_->GetSupportedResolution(input_format_fourcc_, &min_resolution,
                                   &max_resolution);
   if (max_resolution.width() > 1920 && max_resolution.height() > 1088)
     input_size = kInputBufferMaxSizeFor4k;
@@ -697,7 +693,7 @@ bool V4L2SliceVideoDecodeAccelerator::SetupFormats() {
   fmtdesc.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
   bool is_format_supported = false;
   while (device_->Ioctl(VIDIOC_ENUM_FMT, &fmtdesc) == 0) {
-    if (fmtdesc.pixelformat == input_format_fourcc) {
+    if (fmtdesc.pixelformat == input_format_fourcc_) {
       is_format_supported = true;
       break;
     }
@@ -705,7 +701,7 @@ bool V4L2SliceVideoDecodeAccelerator::SetupFormats() {
   }
 
   if (!is_format_supported) {
-    DVLOGF(1) << "Input fourcc " << input_format_fourcc
+    DVLOGF(1) << "Input fourcc " << input_format_fourcc_
               << " not supported by device.";
     return false;
   }
@@ -713,7 +709,7 @@ bool V4L2SliceVideoDecodeAccelerator::SetupFormats() {
   struct v4l2_format format;
   memset(&format, 0, sizeof(format));
   format.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
-  format.fmt.pix_mp.pixelformat = input_format_fourcc;
+  format.fmt.pix_mp.pixelformat = input_format_fourcc_;
   format.fmt.pix_mp.plane_fmt[0].sizeimage = input_size;
   format.fmt.pix_mp.num_planes = input_planes_count_;
   IOCTL_OR_ERROR_RETURN_FALSE(VIDIOC_S_FMT, &format);
@@ -868,6 +864,9 @@ void V4L2SliceVideoDecodeAccelerator::DestroyInputBuffers() {
   DCHECK(decoder_thread_task_runner_->BelongsToCurrentThread() ||
          !decoder_thread_.IsRunning());
   DCHECK(!input_streamon_);
+
+  if (input_buffer_map_.empty())
+    return;
 
   for (auto& input_record : input_buffer_map_) {
     if (input_record.address != nullptr)
@@ -1630,7 +1629,6 @@ void V4L2SliceVideoDecodeAccelerator::AssignPictureBuffersTask(
   output_buffer_map_.resize(buffers.size());
   for (size_t i = 0; i < output_buffer_map_.size(); ++i) {
     DCHECK(buffers[i].size() == coded_size_);
-    DCHECK_EQ(1u, buffers[i].texture_ids().size());
 
     OutputRecord& output_record = output_buffer_map_[i];
     DCHECK(!output_record.at_device);
@@ -1642,7 +1640,10 @@ void V4L2SliceVideoDecodeAccelerator::AssignPictureBuffersTask(
     DCHECK_EQ(output_record.cleared, false);
 
     output_record.picture_id = buffers[i].id();
-    output_record.texture_id = buffers[i].texture_ids()[0];
+    output_record.texture_id = buffers[i].service_texture_ids().empty()
+                                   ? 0
+                                   : buffers[i].service_texture_ids()[0];
+
     // This will remain true until ImportBufferForPicture is called, either by
     // the client, or by ourselves, if we are allocating.
     output_record.at_client = true;
@@ -1683,6 +1684,7 @@ void V4L2SliceVideoDecodeAccelerator::CreateEGLImageFor(
     uint32_t fourcc) {
   DVLOGF(3) << "index=" << buffer_index;
   DCHECK(child_task_runner_->BelongsToCurrentThread());
+  DCHECK_NE(texture_id, 0u);
 
   if (get_gl_context_cb_.is_null() || make_context_current_cb_.is_null()) {
     DLOGF(ERROR) << "GL callbacks required for binding to EGLImages";
@@ -2249,6 +2251,7 @@ bool V4L2SliceVideoDecodeAccelerator::V4L2H264Accelerator::SubmitFrameMetadata(
 
   struct v4l2_ctrl_h264_scaling_matrix v4l2_scaling_matrix;
   memset(&v4l2_scaling_matrix, 0, sizeof(v4l2_scaling_matrix));
+
   static_assert(arraysize(v4l2_scaling_matrix.scaling_list_4x4) <=
                         arraysize(pps->scaling_list4x4) &&
                     arraysize(v4l2_scaling_matrix.scaling_list_4x4[0]) <=
@@ -2258,18 +2261,36 @@ bool V4L2SliceVideoDecodeAccelerator::V4L2H264Accelerator::SubmitFrameMetadata(
                     arraysize(v4l2_scaling_matrix.scaling_list_8x8[0]) <=
                         arraysize(pps->scaling_list8x8[0]),
                 "scaling_lists must be of correct size");
+  static_assert(arraysize(v4l2_scaling_matrix.scaling_list_4x4) <=
+                        arraysize(sps->scaling_list4x4) &&
+                    arraysize(v4l2_scaling_matrix.scaling_list_4x4[0]) <=
+                        arraysize(sps->scaling_list4x4[0]) &&
+                    arraysize(v4l2_scaling_matrix.scaling_list_8x8) <=
+                        arraysize(sps->scaling_list8x8) &&
+                    arraysize(v4l2_scaling_matrix.scaling_list_8x8[0]) <=
+                        arraysize(sps->scaling_list8x8[0]),
+                "scaling_lists must be of correct size");
+
+  const auto* scaling_list4x4 = &sps->scaling_list4x4[0];
+  const auto* scaling_list8x8 = &sps->scaling_list8x8[0];
+  if (pps->pic_scaling_matrix_present_flag) {
+    scaling_list4x4 = &pps->scaling_list4x4[0];
+    scaling_list8x8 = &pps->scaling_list8x8[0];
+  }
+
   for (size_t i = 0; i < arraysize(v4l2_scaling_matrix.scaling_list_4x4); ++i) {
     for (size_t j = 0; j < arraysize(v4l2_scaling_matrix.scaling_list_4x4[i]);
          ++j) {
-      v4l2_scaling_matrix.scaling_list_4x4[i][j] = pps->scaling_list4x4[i][j];
+      v4l2_scaling_matrix.scaling_list_4x4[i][j] = scaling_list4x4[i][j];
     }
   }
   for (size_t i = 0; i < arraysize(v4l2_scaling_matrix.scaling_list_8x8); ++i) {
     for (size_t j = 0; j < arraysize(v4l2_scaling_matrix.scaling_list_8x8[i]);
          ++j) {
-      v4l2_scaling_matrix.scaling_list_8x8[i][j] = pps->scaling_list8x8[i][j];
+      v4l2_scaling_matrix.scaling_list_8x8[i][j] = scaling_list8x8[i][j];
     }
   }
+
   memset(&ctrl, 0, sizeof(ctrl));
   ctrl.id = V4L2_CID_MPEG_VIDEO_H264_SCALING_MATRIX;
   ctrl.size = sizeof(v4l2_scaling_matrix);
@@ -3168,8 +3189,9 @@ void V4L2SliceVideoDecodeAccelerator::OutputSurface(
   // TODO(posciak): Use visible size from decoder here instead
   // (crbug.com/402760). Passing (0, 0) results in the client using the
   // visible size extracted from the container instead.
+  // TODO(hubbe): Insert correct color space. http://crbug.com/647725
   Picture picture(output_record.picture_id, dec_surface->bitstream_id(),
-                  gfx::Rect(0, 0), false);
+                  gfx::Rect(0, 0), gfx::ColorSpace(), false);
   DVLOGF(3) << dec_surface->ToString()
             << ", bitstream_id: " << picture.bitstream_buffer_id()
             << ", picture_id: " << picture.picture_buffer_id();
@@ -3270,7 +3292,7 @@ bool V4L2SliceVideoDecodeAccelerator::TryToSetupDecodeOnSeparateThread(
 // static
 VideoDecodeAccelerator::SupportedProfiles
 V4L2SliceVideoDecodeAccelerator::GetSupportedProfiles() {
-  scoped_refptr<V4L2Device> device = V4L2Device::Create(V4L2Device::kDecoder);
+  scoped_refptr<V4L2Device> device = V4L2Device::Create();
   if (!device)
     return SupportedProfiles();
 

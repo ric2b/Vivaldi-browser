@@ -29,12 +29,10 @@
 #include "base/timer/timer.h"
 #include "components/component_updater/component_updater_service_internal.h"
 #include "components/component_updater/timer.h"
-#if defined(OS_WIN)
-#include "components/component_updater/updater_state_win.h"
-#endif
 #include "components/update_client/configurator.h"
 #include "components/update_client/crx_update_item.h"
 #include "components/update_client/update_client.h"
+#include "components/update_client/update_client_errors.h"
 #include "components/update_client/utils.h"
 #include "url/gurl.h"
 
@@ -49,14 +47,13 @@ enum UpdateType {
   UPDATE_TYPE_COUNT,
 };
 
-const char kRecoveryComponentId[] = "npdjjkjlcidkjlamlmmdelcjbcpdjocm";
-
 }  // namespace
 
 namespace component_updater {
 
-ComponentInfo::ComponentInfo(const std::string& id, const base::string16& name)
-    : id(id), name(name) {}
+ComponentInfo::ComponentInfo(const std::string& id, const base::string16& name,
+                             const base::Version& version)
+    : id(id), name(name), version(version) {}
 ComponentInfo::~ComponentInfo() {}
 
 CrxUpdateService::CrxUpdateService(
@@ -207,7 +204,8 @@ std::unique_ptr<ComponentInfo> CrxUpdateService::GetComponentForMimeType(
   if (!component)
     return nullptr;
   return base::MakeUnique<ComponentInfo>(GetCrxComponentID(*component),
-                                         base::UTF8ToUTF16(component->name));
+                                         base::UTF8ToUTF16(component->name),
+                                         component->version);
 }
 
 OnDemandUpdater& CrxUpdateService::GetOnDemandUpdater() {
@@ -245,14 +243,13 @@ void CrxUpdateService::MaybeThrottle(const std::string& id,
 }
 
 void CrxUpdateService::OnDemandUpdate(const std::string& id,
-                                      CompletionCallback callback) {
+                                      const Callback& callback) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   if (!GetComponent(id)) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE,
-        base::Bind(callback,
-                   update_client::Error::ERROR_UPDATE_INVALID_ARGUMENT));
+        base::Bind(callback, update_client::Error::INVALID_ARGUMENT));
     return;
   }
 
@@ -273,12 +270,12 @@ bool CrxUpdateService::OnDemandUpdateWithCooldown(const std::string& id) {
       return false;
   }
 
-  OnDemandUpdateInternal(id, CompletionCallback());
+  OnDemandUpdateInternal(id, Callback());
   return true;
 }
 
 void CrxUpdateService::OnDemandUpdateInternal(const std::string& id,
-                                              CompletionCallback callback) {
+                                              const Callback& callback) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   UMA_HISTOGRAM_ENUMERATION("ComponentUpdater.Calls", UPDATE_TYPE_MANUAL,
@@ -312,7 +309,7 @@ bool CrxUpdateService::CheckForUpdates() {
         unsecure_ids,
         base::Bind(&CrxUpdateService::OnUpdate, base::Unretained(this)),
         base::Bind(&CrxUpdateService::OnUpdateComplete, base::Unretained(this),
-                   CompletionCallback(), base::TimeTicks::Now()));
+                   Callback(), base::TimeTicks::Now()));
   }
 
   if (!secure_ids.empty()) {
@@ -320,7 +317,7 @@ bool CrxUpdateService::CheckForUpdates() {
         secure_ids,
         base::Bind(&CrxUpdateService::OnUpdate, base::Unretained(this)),
         base::Bind(&CrxUpdateService::OnUpdateComplete, base::Unretained(this),
-                   CompletionCallback(), base::TimeTicks::Now()));
+                   Callback(), base::TimeTicks::Now()));
   }
 
   return true;
@@ -359,27 +356,19 @@ void CrxUpdateService::OnUpdate(const std::vector<std::string>& ids,
 
   for (const auto& id : ids) {
     const update_client::CrxComponent* registered_component(GetComponent(id));
-    if (registered_component) {
+    if (registered_component)
       components->push_back(*registered_component);
-      if (id == kRecoveryComponentId) {
-        // Override the installer attributes for the recovery component in the
-        // components which will be checked for updates.
-        update_client::CrxComponent& recovery_component(components->back());
-        recovery_component.installer_attributes =
-            GetInstallerAttributesForRecoveryComponentInstaller(
-                recovery_component);
-      }
-    }
   }
 }
 
-void CrxUpdateService::OnUpdateComplete(CompletionCallback callback,
+void CrxUpdateService::OnUpdateComplete(Callback callback,
                                         const base::TimeTicks& start_time,
-                                        int error) {
+                                        update_client::Error error) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  VLOG(1) << "Update completed with error " << error;
+  VLOG(1) << "Update completed with error " << static_cast<int>(error);
 
-  UMA_HISTOGRAM_BOOLEAN("ComponentUpdater.UpdateCompleteResult", error != 0);
+  UMA_HISTOGRAM_BOOLEAN("ComponentUpdater.UpdateCompleteResult",
+                        error != update_client::Error::NONE);
   UMA_HISTOGRAM_LONG_TIMES_100("ComponentUpdater.UpdateCompleteTime",
                                base::TimeTicks::Now() - start_time);
 
@@ -427,25 +416,6 @@ void CrxUpdateService::OnEvent(Events event, const std::string& id) {
       component->fingerprint = update_item.next_fp;
     }
   }
-}
-
-update_client::InstallerAttributes
-CrxUpdateService::GetInstallerAttributesForRecoveryComponentInstaller(
-    const CrxComponent& crx_component) const {
-  update_client::InstallerAttributes installer_attributes;
-#if defined(OS_WIN)
-  DCHECK_EQ("recovery", crx_component.name);
-
-  const bool is_machine =
-      crx_component.installer_attributes.count("ismachine") &&
-      crx_component.installer_attributes.at("ismachine") == "1";
-
-  auto updater_state(UpdaterState::Create(is_machine));
-  if (updater_state) {
-    installer_attributes = updater_state->MakeInstallerAttributes();
-  }
-#endif
-  return installer_attributes;
 }
 
 ///////////////////////////////////////////////////////////////////////////////

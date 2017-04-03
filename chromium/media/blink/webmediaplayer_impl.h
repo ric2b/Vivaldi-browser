@@ -22,6 +22,7 @@
 #include "base/timer/elapsed_timer.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
+#include "media/base/media_observer.h"
 #include "media/base/media_tracks.h"
 #include "media/base/pipeline_impl.h"
 #include "media/base/renderer_factory.h"
@@ -202,6 +203,7 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   bool isRemote() const override;
   void requestRemotePlayback() override;
   void requestRemotePlaybackControl() override;
+  void requestRemotePlaybackStop() override;
 
   void SetMediaPlayerManager(
       RendererMediaPlayerManagerInterface* media_player_manager);
@@ -213,11 +215,17 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   gfx::Size GetCanvasSize() const;
   void SetDeviceScaleFactor(float scale_factor);
   void setPoster(const blink::WebURL& poster) override;
+  void SetUseFallbackPath(bool use_fallback_path);
 #endif
 
   // Called from WebMediaPlayerCast.
   // TODO(hubbe): WMPI_CAST make private.
   void OnPipelineSeeked(bool time_updated);
+
+  // Restart the player/pipeline as soon as possible. This will destroy the
+  // current renderer, if any, and create a new one via the RendererFactory; and
+  // then seek to resume playback at the current position.
+  void ScheduleRestart();
 
   // Distinct states that |delegate_| can be in.
   // TODO(sandersd): This should move into WebMediaPlayerDelegate.
@@ -262,9 +270,6 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   // |time_updated| is false.
   void DoSeek(base::TimeDelta time, bool time_updated);
 
-  // Ask for the renderer to be restarted (destructed and recreated).
-  void ScheduleRestart();
-
   // Called after |defer_load_cb_| has decided to allow the load. If
   // |defer_load_cb_| is null this is called immediately.
   void DoLoad(LoadType load_type,
@@ -282,7 +287,8 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
 
   // Called by GpuVideoDecoder on Android to request a surface to render to (if
   // necessary).
-  void OnSurfaceRequested(const SurfaceCreatedCB& surface_created_cb);
+  void OnSurfaceRequested(bool decoder_requires_restart_for_overlay,
+                          const SurfaceCreatedCB& surface_created_cb);
 
   // Creates a Renderer via the |renderer_factory_|.
   std::unique_ptr<Renderer> CreateRenderer();
@@ -345,6 +351,7 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
 
   // Methods internal to UpdatePlayState().
   PlayState UpdatePlayState_ComputePlayState(bool is_remote,
+                                             bool is_streaming,
                                              bool is_suspended,
                                              bool is_backgrounded);
   void SetDelegateState(DelegateState new_state);
@@ -363,6 +370,10 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   void ScheduleIdlePauseTimer();
 
   void CreateWatchTimeReporter();
+
+  // Return whether |pipeline_metadata_| is compatible with an overlay. This
+  // is intended for android.
+  bool DoesOverlaySupportMetadata() const;
 
   blink::WebLocalFrame* frame_;
 
@@ -545,8 +556,10 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   int overlay_surface_id_;
 
   // If a surface is requested before it's finished being created, the request
-  // is saved and satisfied once the surface is available.
-  SurfaceCreatedCB pending_surface_request_cb_;
+  // is saved and satisfied once the surface is available. If the decoder does
+  // not require restart to change surfaces, this is callback is kept until
+  // cleared by the decoder.
+  SurfaceCreatedCB set_surface_cb_;
 
   // Force to use SurfaceView instead of SurfaceTexture on Android.
   bool force_video_overlays_;
@@ -567,6 +580,11 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   enum class CanSuspendState { UNKNOWN, YES, NO };
   CanSuspendState can_suspend_state_;
 
+  // Used for HLS playback and in certain fallback paths (e.g. on older devices
+  // that can't support the unified media pipeline).
+  GURL fallback_url_;
+  bool use_fallback_path_;
+
   // Called some-time after OnHidden() if the media was suspended in a playing
   // state as part of the call to OnHidden().
   base::OneShotTimer background_pause_timer_;
@@ -583,6 +601,9 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   base::TimeTicks last_time_loading_progressed_;
 
   std::unique_ptr<base::TickClock> tick_clock_;
+
+  // Monitors the player events.
+  base::WeakPtr<MediaObserver> observer_;
 
   // Whether the player is currently in autoplay muted state.
   bool autoplay_muted_ = false;

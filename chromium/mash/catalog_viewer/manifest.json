@@ -1,12 +1,13 @@
 {
-  "manifest_version":  1,
-  "name": "service:catalog_viewer",
+  "name": "catalog_viewer",
   "display_name": "Catalog Viewer",
-  "capabilities": {
-    "provided": { "mash:launchable": [ "mash::mojom::Launchable" ] },
-    "required": {
-      "*": { "classes": [ "app" ] },
-      "service:catalog": { "interfaces": [ "catalog::mojom::Catalog" ] }
+  "interface_provider_specs": {
+    "service_manager:connector": {
+      "provides": { "mash:launchable": [ "mash::mojom::Launchable" ] },
+      "requires": {
+        "*": [ "app" ],
+        "catalog": [ "catalog:catalog" ]
+      }
     }
   }
 }

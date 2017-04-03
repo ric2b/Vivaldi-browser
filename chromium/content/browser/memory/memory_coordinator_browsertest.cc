@@ -3,6 +3,8 @@
 // found in the LICENSE file.
 
 #include "content/browser/memory/memory_coordinator.h"
+
+#include "base/test/scoped_feature_list.h"
 #include "content/browser/browser_main_loop.h"
 #include "content/public/common/content_features.h"
 #include "content/public/test/content_browser_test.h"
@@ -10,32 +12,28 @@
 
 namespace content {
 
-namespace {
-
-void EnableForTesting() {
-  base::FeatureList::ClearInstanceForTesting();
-  std::unique_ptr<base::FeatureList> feature_list(new base::FeatureList);
-  feature_list->InitializeFromCommandLine(features::kMemoryCoordinator.name,
-                                          "");
-  base::FeatureList::SetInstance(std::move(feature_list));
-}
-
-}  // namespace
-
 class MemoryCoordinatorTest : public ContentBrowserTest {
  public:
   MemoryCoordinatorTest() {}
 
   void SetUp() override {
-    EnableForTesting();
+    scoped_feature_list_.InitAndEnableFeature(features::kMemoryCoordinator);
     ContentBrowserTest::SetUp();
   }
 
  private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+
   DISALLOW_COPY_AND_ASSIGN(MemoryCoordinatorTest);
 };
 
-IN_PROC_BROWSER_TEST_F(MemoryCoordinatorTest, HandleAdded) {
+// TODO(bashi): Enable this test on macos when MemoryMonitorMac is implemented.
+#if defined(OS_MACOSX)
+#define MAYBE_HandleAdded DISABLED_HandleAdded
+#else
+#define MAYBE_HandleAdded HandleAdded
+#endif
+IN_PROC_BROWSER_TEST_F(MemoryCoordinatorTest, MAYBE_HandleAdded) {
   GURL url = GetTestUrl("", "simple_page.html");
   NavigateToURL(shell(), url);
   EXPECT_EQ(1u, MemoryCoordinator::GetInstance()->NumChildrenForTesting());

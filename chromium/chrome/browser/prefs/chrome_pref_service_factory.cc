@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <chrome/browser/prefs/chrome_command_line_pref_store.h>
 #include "chrome/browser/prefs/chrome_pref_service_factory.h"
 
 #include <stddef.h>
@@ -22,12 +23,12 @@
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/prefs/chrome_pref_model_associator_client.h"
-#include "chrome/browser/prefs/command_line_pref_store.h"
 #include "chrome/browser/prefs/profile_pref_store_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sync/glue/sync_start_util.h"
 #include "chrome/browser/ui/profile_error_dialog.h"
 #include "chrome/common/chrome_constants.h"
+#include "chrome/common/features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/browser_resources.h"
 #include "chrome/grit/chromium_strings.h"
@@ -50,21 +51,22 @@
 #include "components/search_engines/search_engines_pref_names.h"
 #include "components/signin/core/common/signin_pref_names.h"
 #include "components/sync/base/model_type.h"
-#include "components/sync/driver/pref_names.h"
-#include "components/syncable_prefs/pref_model_associator.h"
-#include "components/syncable_prefs/pref_service_syncable.h"
-#include "components/syncable_prefs/pref_service_syncable_factory.h"
+#include "components/sync/base/pref_names.h"
+#include "components/sync_preferences/pref_model_associator.h"
+#include "components/sync_preferences/pref_service_syncable.h"
+#include "components/sync_preferences/pref_service_syncable_factory.h"
 #include "components/user_prefs/tracked/pref_names.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
+#include "extensions/features/features.h"
 #include "sql/error_delegate_util.h"
 #include "ui/base/resource/resource_bundle.h"
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "extensions/browser/pref_names.h"
 #endif
 
-#if defined(ENABLE_SUPERVISED_USERS)
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
 #include "chrome/browser/supervised_user/supervised_user_pref_store.h"
 #endif
 
@@ -124,7 +126,7 @@ const PrefHashFilter::TrackedPreferenceMetadata kTrackedPrefs[] = {
     PrefHashFilter::TRACKING_STRATEGY_ATOMIC,
     PrefHashFilter::VALUE_IMPERSONAL
   },
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   {
     5, extensions::pref_names::kExtensions,
     PrefHashFilter::NO_ENFORCEMENT,
@@ -340,7 +342,7 @@ GetTrackingConfiguration() {
       data.enforcement_level = PrefHashFilter::ENFORCE_ON_LOAD;
     }
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
     if (enforcement_group >= GROUP_ENFORCE_ALWAYS_WITH_EXTENSIONS_AND_DSE &&
         data.name == extensions::pref_names::kExtensions) {
       // Specifically enable extension settings enforcement.
@@ -376,7 +378,7 @@ void HandleReadError(const base::FilePath& pref_filename,
     if (message_id) {
       BrowserThread::PostTask(
           BrowserThread::UI, FROM_HERE,
-          base::Bind(&ShowProfileErrorDialog, PROFILE_ERROR_PREFERENCES,
+          base::Bind(&ShowProfileErrorDialog, ProfileErrorType::PREFERENCES,
                      message_id,
                      sql::GetCorruptFileDiagnosticsInfo(pref_filename)));
     }
@@ -416,7 +418,7 @@ std::unique_ptr<ProfilePrefStoreManager> CreateProfilePrefStoreManager(
       seed, device_id, g_browser_process->local_state());
 }
 
-void PrepareFactory(syncable_prefs::PrefServiceSyncableFactory* factory,
+void PrepareFactory(sync_preferences::PrefServiceSyncableFactory* factory,
                     const base::FilePath& pref_filename,
                     policy::PolicyService* policy_service,
                     SupervisedUserSettingsService* supervised_user_settings,
@@ -428,7 +430,7 @@ void PrepareFactory(syncable_prefs::PrefServiceSyncableFactory* factory,
   factory->SetManagedPolicies(policy_service, policy_connector);
   factory->SetRecommendedPolicies(policy_service, policy_connector);
 
-#if defined(ENABLE_SUPERVISED_USERS)
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
   if (supervised_user_settings) {
     scoped_refptr<PrefStore> supervised_user_prefs = make_scoped_refptr(
         new SupervisedUserPrefStore(supervised_user_settings));
@@ -440,7 +442,7 @@ void PrepareFactory(syncable_prefs::PrefServiceSyncableFactory* factory,
   factory->set_async(async);
   factory->set_extension_prefs(extension_prefs);
   factory->set_command_line_prefs(make_scoped_refptr(
-      new CommandLinePrefStore(base::CommandLine::ForCurrentProcess())));
+      new ChromeCommandLinePrefStore(base::CommandLine::ForCurrentProcess())));
   factory->set_read_error_callback(base::Bind(&HandleReadError, pref_filename));
   factory->set_user_prefs(user_pref_store);
   factory->SetPrefModelAssociatorClient(
@@ -471,7 +473,7 @@ std::unique_ptr<PrefService> CreateLocalState(
     policy::PolicyService* policy_service,
     const scoped_refptr<PrefRegistry>& pref_registry,
     bool async) {
-  syncable_prefs::PrefServiceSyncableFactory factory;
+  sync_preferences::PrefServiceSyncableFactory factory;
   PrepareFactory(&factory, pref_filename, policy_service,
                  NULL,  // supervised_user_settings
                  new JsonPrefStore(pref_filename, pref_io_task_runner,
@@ -481,7 +483,7 @@ std::unique_ptr<PrefService> CreateLocalState(
   return factory.Create(pref_registry.get());
 }
 
-std::unique_ptr<syncable_prefs::PrefServiceSyncable> CreateProfilePrefs(
+std::unique_ptr<sync_preferences::PrefServiceSyncable> CreateProfilePrefs(
     const base::FilePath& profile_path,
     base::SequencedTaskRunner* pref_io_task_runner,
     TrackedPreferenceValidationDelegate* validation_delegate,
@@ -503,7 +505,7 @@ std::unique_ptr<syncable_prefs::PrefServiceSyncable> CreateProfilePrefs(
       base::Bind(sync_start_util::GetFlareForSyncableService(profile_path),
                  syncer::PREFERENCES);
 
-  syncable_prefs::PrefServiceSyncableFactory factory;
+  sync_preferences::PrefServiceSyncableFactory factory;
   scoped_refptr<PersistentPrefStore> user_pref_store(
       CreateProfilePrefStoreManager(profile_path)
           ->CreateProfilePrefStore(pref_io_task_runner,
@@ -512,7 +514,7 @@ std::unique_ptr<syncable_prefs::PrefServiceSyncable> CreateProfilePrefs(
   PrepareFactory(&factory, profile_path, policy_service,
                  supervised_user_settings, user_pref_store, extension_prefs,
                  async);
-  std::unique_ptr<syncable_prefs::PrefServiceSyncable> pref_service =
+  std::unique_ptr<sync_preferences::PrefServiceSyncable> pref_service =
       factory.CreateSyncable(pref_registry.get());
 
   ConfigureDefaultSearchPrefMigrationToDictionaryValue(pref_service.get());

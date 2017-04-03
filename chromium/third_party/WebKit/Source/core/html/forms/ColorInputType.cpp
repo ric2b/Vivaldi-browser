@@ -93,6 +93,10 @@ InputTypeView* ColorInputType::createView() {
   return this;
 }
 
+InputType::ValueMode ColorInputType::valueMode() const {
+  return ValueMode::kValue;
+}
+
 void ColorInputType::countUsage() {
   countUsageIfVisible(UseCounter::InputTypeColor);
 }
@@ -105,14 +109,9 @@ bool ColorInputType::supportsRequired() const {
   return false;
 }
 
-String ColorInputType::fallbackValue() const {
-  return String("#000000");
-}
-
 String ColorInputType::sanitizeValue(const String& proposedValue) const {
   if (!isValidColorString(proposedValue))
-    return fallbackValue();
-
+    return "#000000";
   return proposedValue.lower();
 }
 
@@ -138,14 +137,9 @@ void ColorInputType::createShadowSubtree() {
   element().updateView();
 }
 
-void ColorInputType::setValue(const String& value,
-                              bool valueChanged,
-                              TextFieldEventBehavior eventBehavior) {
-  InputType::setValue(value, valueChanged, eventBehavior);
-
+void ColorInputType::didSetValue(const String&, bool valueChanged) {
   if (!valueChanged)
     return;
-
   element().updateView();
   if (m_chooser)
     m_chooser->setSelectedColor(valueAsColor());
@@ -224,7 +218,8 @@ void ColorInputType::updateView() {
 
 HTMLElement* ColorInputType::shadowColorSwatch() const {
   ShadowRoot* shadow = element().userAgentShadowRoot();
-  return shadow ? toHTMLElement(shadow->firstChild()->firstChild()) : 0;
+  return shadow ? toHTMLElementOrDie(shadow->firstChild()->firstChild())
+                : nullptr;
 }
 
 Element& ColorInputType::ownerElement() const {

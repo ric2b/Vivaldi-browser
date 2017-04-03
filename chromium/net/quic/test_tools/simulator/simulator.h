@@ -51,6 +51,11 @@ class Simulator : public QuicConnectionHelperInterface {
     random_generator_ = random;
   }
 
+  inline bool enable_random_delays() const { return enable_random_delays_; }
+  inline void set_enable_random_delays(bool enable_random_delays) {
+    enable_random_delays_ = enable_random_delays;
+  }
+
   // Run the simulation until either no actors are scheduled or
   // |termination_predicate| returns true.  Returns true if terminated due to
   // predicate, and false otherwise.
@@ -108,6 +113,10 @@ class Simulator : public QuicConnectionHelperInterface {
   // Flag used to stop simulations ran via RunFor().
   bool run_for_should_stop_;
 
+  // Indicates whether the simulator should add random delays on the links in
+  // order to avoid synchronization issues.
+  bool enable_random_delays_;
+
   // Schedule of when the actors will be executed via an Act() call.  The
   // schedule is subject to the following invariants:
   // - An actor cannot be scheduled for a later time than it's currently in the
@@ -126,13 +135,15 @@ class Simulator : public QuicConnectionHelperInterface {
 
 template <class TerminationPredicate>
 bool Simulator::RunUntil(TerminationPredicate termination_predicate) {
-  while (!schedule_.empty()) {
-    if (termination_predicate()) {
-      return true;
+  bool predicate_value = false;
+  while (true) {
+    predicate_value = termination_predicate();
+    if (predicate_value || schedule_.empty()) {
+      break;
     }
     HandleNextScheduledActor();
   }
-  return false;
+  return predicate_value;
 }
 
 template <class TerminationPredicate>

@@ -13,11 +13,13 @@
 #include "base/memory/weak_ptr.h"
 #include "components/filesystem/public/interfaces/directory.mojom.h"
 #include "mojo/public/cpp/bindings/binding.h"
+#include "mojo/public/cpp/bindings/binding_set.h"
 #include "services/catalog/public/interfaces/catalog.mojom.h"
 #include "services/catalog/types.h"
-#include "services/shell/public/cpp/service.h"
-#include "services/shell/public/interfaces/resolver.mojom.h"
-#include "services/shell/public/interfaces/service.mojom.h"
+#include "services/service_manager/public/cpp/interface_factory.h"
+#include "services/service_manager/public/cpp/service.h"
+#include "services/service_manager/public/interfaces/resolver.mojom.h"
+#include "services/service_manager/public/interfaces/service.mojom.h"
 
 namespace base {
 class SequencedWorkerPool;
@@ -28,7 +30,7 @@ namespace filesystem {
 class LockTable;
 }
 
-namespace shell {
+namespace service_manager {
 class ServiceContext;
 }
 
@@ -40,11 +42,14 @@ class Reader;
 class Store;
 
 // Creates and owns an instance of the catalog. Exposes a ServicePtr that
-// can be passed to the Shell, potentially in a different process.
-class Catalog : public shell::Service,
-                public shell::InterfaceFactory<mojom::Catalog>,
-                public shell::InterfaceFactory<filesystem::mojom::Directory>,
-                public shell::InterfaceFactory<shell::mojom::Resolver> {
+// can be passed to the service manager, potentially in a different process.
+class Catalog
+    : public service_manager::InterfaceFactory<mojom::Catalog>,
+      public service_manager::InterfaceFactory<filesystem::mojom::Directory>,
+      public service_manager::InterfaceFactory<
+          service_manager::mojom::Resolver>,
+      public service_manager::InterfaceFactory<mojom::CatalogControl>,
+      public mojom::CatalogControl {
  public:
   // |manifest_provider| may be null.
   Catalog(base::SequencedWorkerPool* worker_pool,
@@ -55,29 +60,43 @@ class Catalog : public shell::Service,
           ManifestProvider* manifest_provider);
   ~Catalog() override;
 
-  shell::mojom::ServicePtr TakeService();
+  // By default, "foo" resolves to a package named "foo". This allows
+  // an embedder to override that behavior for specific service names. Must be
+  // called before the catalog is connected to the ServiceManager.
+  void OverridePackageName(const std::string& service_name,
+                           const std::string& package_name);
+
+  service_manager::mojom::ServicePtr TakeService();
 
  private:
+  class ServiceImpl;
+
   explicit Catalog(std::unique_ptr<Store> store);
 
   // Starts a scane for system packages.
   void ScanSystemPackageDir();
 
-  // shell::Service:
-  bool OnConnect(const shell::Identity& remote_identity,
-                 shell::InterfaceRegistry* registry) override;
+  // service_manager::InterfaceFactory<service_manager::mojom::Resolver>:
+  void Create(const service_manager::Identity& remote_identity,
+              service_manager::mojom::ResolverRequest request) override;
 
-  // shell::InterfaceFactory<shell::mojom::Resolver>:
-  void Create(const shell::Identity& remote_identity,
-              shell::mojom::ResolverRequest request) override;
-
-  // shell::InterfaceFactory<mojom::Catalog>:
-  void Create(const shell::Identity& remote_identity,
+  // service_manager::InterfaceFactory<mojom::Catalog>:
+  void Create(const service_manager::Identity& remote_identity,
               mojom::CatalogRequest request) override;
 
-  // shell::InterfaceFactory<filesystem::mojom::Directory>:
-  void Create(const shell::Identity& remote_identity,
+  // service_manager::InterfaceFactory<filesystem::mojom::Directory>:
+  void Create(const service_manager::Identity& remote_identity,
               filesystem::mojom::DirectoryRequest request) override;
+
+  // service_manager::InterfaceFactory<mojom::CatalogControl>:
+  void Create(const service_manager::Identity& remote_identity,
+              mojom::CatalogControlRequest request) override;
+
+  // mojom::CatalogControl:
+  void OverrideManifestPath(
+      const std::string& service_name,
+      const base::FilePath& path,
+      const OverrideManifestPathCallback& callback) override;
 
   Instance* GetInstanceForUserId(const std::string& user_id);
 
@@ -85,8 +104,8 @@ class Catalog : public shell::Service,
 
   std::unique_ptr<Store> store_;
 
-  shell::mojom::ServicePtr service_;
-  std::unique_ptr<shell::ServiceContext> shell_connection_;
+  service_manager::mojom::ServicePtr service_;
+  std::unique_ptr<service_manager::ServiceContext> service_context_;
 
   std::map<std::string, std::unique_ptr<Instance>> instances_;
 
@@ -95,6 +114,8 @@ class Catalog : public shell::Service,
   bool loaded_ = false;
 
   scoped_refptr<filesystem::LockTable> lock_table_;
+
+  mojo::BindingSet<mojom::CatalogControl> control_bindings_;
 
   base::WeakPtrFactory<Catalog> weak_factory_;
 

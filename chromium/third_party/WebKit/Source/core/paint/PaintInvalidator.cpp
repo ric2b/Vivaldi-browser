@@ -20,14 +20,6 @@
 
 namespace blink {
 
-// TODO(wangxianzhu): Avoid using function when possible. For example, we can
-// avoid it by avoiding unnecessary conversions between LayoutRects and
-// FloatRects.
-static LayoutRect enclosingLayoutRectIfNotEmpty(const FloatRect& floatRect) {
-  return floatRect.isEmpty() ? LayoutRect(floatRect)
-                             : enclosingLayoutRect(floatRect);
-}
-
 static LayoutRect slowMapToVisualRectInAncestorSpace(
     const LayoutObject& object,
     const LayoutBoxModelObject& ancestor,
@@ -39,7 +31,7 @@ static LayoutRect slowMapToVisualRectInAncestorSpace(
     return result;
   }
 
-  LayoutRect result = enclosingLayoutRectIfNotEmpty(rect);
+  LayoutRect result(rect);
   if (object.isLayoutView())
     toLayoutView(object).mapToVisualRectInAncestorSpace(
         &ancestor, result, InputIsInFrameCoordinates, DefaultVisualRectFlags);
@@ -49,7 +41,7 @@ static LayoutRect slowMapToVisualRectInAncestorSpace(
 }
 
 // TODO(wangxianzhu): Combine this into
-// PaintInvalidator::mapLocalRectToPaintInvalidationBacking() when removing
+// PaintInvalidator::mapLocalRectToBacking() when removing
 // PaintInvalidationState.
 static LayoutRect mapLocalRectToPaintInvalidationBacking(
     GeometryMapper& geometryMapper,
@@ -80,7 +72,10 @@ static LayoutRect mapLocalRectToPaintInvalidationBacking(
   if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
     // In SPv2, visual rects are in the space of their local transform node.
     rect.moveBy(FloatPoint(context.treeBuilderContext.current.paintOffset));
-    return enclosingLayoutRectIfNotEmpty(rect);
+    // Use enclosingIntRect to ensure the final visual rect will cover the
+    // rect in source coordinates no matter if the painting will use pixel
+    // snapping.
+    return LayoutRect(enclosingIntRect(rect));
   }
 
   LayoutRect result;
@@ -89,34 +84,42 @@ static LayoutRect mapLocalRectToPaintInvalidationBacking(
     result = slowMapToVisualRectInAncestorSpace(
         object, *context.paintInvalidationContainer, rect);
   } else if (object == context.paintInvalidationContainer) {
-    result = enclosingLayoutRectIfNotEmpty(rect);
+    result = LayoutRect(rect);
   } else {
     rect.moveBy(FloatPoint(context.treeBuilderContext.current.paintOffset));
+    if ((!object.isSVG() || object.isSVGRoot()) && !rect.isEmpty()) {
+      // Use enclosingIntRect to ensure the final visual rect will cover the
+      // rect in source coordinates no matter if the painting will use pixel
+      // snapping.
+      rect = enclosingIntRect(rect);
+    }
 
     PropertyTreeState currentTreeState(
         context.treeBuilderContext.current.transform,
         context.treeBuilderContext.current.clip,
         context.treeBuilderContext.currentEffect,
         context.treeBuilderContext.current.scroll);
-    const ObjectPaintProperties* containerPaintProperties =
-        context.paintInvalidationContainer->objectPaintProperties();
+    const auto* containerPaintProperties =
+        context.paintInvalidationContainer->paintProperties();
     auto containerContentsProperties =
         containerPaintProperties->contentsProperties();
 
     bool success = false;
-    result = enclosingLayoutRectIfNotEmpty(
-        geometryMapper.mapToVisualRectInDestinationSpace(
-            rect, currentTreeState,
-            containerContentsProperties.propertyTreeState, success));
+    result = LayoutRect(geometryMapper.mapToVisualRectInDestinationSpace(
+        rect, currentTreeState, containerContentsProperties.propertyTreeState,
+        success));
     DCHECK(success);
 
     // Convert the result to the container's contents space.
     result.moveBy(-containerContentsProperties.paintOffset);
   }
 
-  if (context.paintInvalidationContainer->layer()->groupedMapping())
+  object.adjustVisualRectForRasterEffects(result);
+
+  if (context.paintInvalidationContainer->layer()->groupedMapping()) {
     PaintLayer::mapRectInPaintInvalidationContainerToBacking(
         *context.paintInvalidationContainer, result);
+  }
   return result;
 }
 
@@ -136,21 +139,26 @@ LayoutRect PaintInvalidator::mapLocalRectToPaintInvalidationBacking(
                                                        localRect, context);
 }
 
-LayoutRect PaintInvalidator::computePaintInvalidationRectInBacking(
+LayoutRect PaintInvalidator::computeVisualRectInBacking(
     const LayoutObject& object,
     const PaintInvalidatorContext& context) {
   FloatRect localRect;
   if (object.isSVG() && !object.isSVGRoot())
-    localRect = SVGLayoutSupport::localOverflowRectForPaintInvalidation(object);
+    localRect = SVGLayoutSupport::localVisualRect(object);
   else
-    localRect = FloatRect(object.localOverflowRectForPaintInvalidation());
+    localRect = FloatRect(object.localVisualRect());
 
   return mapLocalRectToPaintInvalidationBacking(object, localRect, context);
 }
 
-LayoutPoint PaintInvalidator::computeLocationFromPaintInvalidationBacking(
+LayoutPoint PaintInvalidator::computeLocationInBacking(
     const LayoutObject& object,
     const PaintInvalidatorContext& context) {
+  // Use visual rect location for LayoutTexts because it suffices to check
+  // visual rect change for layout caused invalidation.
+  if (object.isText())
+    return context.newVisualRect.location();
+
   FloatPoint point;
   if (object != context.paintInvalidationContainer) {
     point.moveBy(FloatPoint(context.treeBuilderContext.current.paintOffset));
@@ -160,8 +168,8 @@ LayoutPoint PaintInvalidator::computeLocationFromPaintInvalidationBacking(
         context.treeBuilderContext.current.clip,
         context.treeBuilderContext.currentEffect,
         context.treeBuilderContext.current.scroll);
-    const ObjectPaintProperties* containerPaintProperties =
-        context.paintInvalidationContainer->objectPaintProperties();
+    const auto* containerPaintProperties =
+        context.paintInvalidationContainer->paintProperties();
     auto containerContentsProperties =
         containerPaintProperties->contentsProperties();
 
@@ -319,21 +327,22 @@ void PaintInvalidator::updateContext(const LayoutObject& object,
     context.forcedSubtreeInvalidationFlags |=
         PaintInvalidatorContext::ForcedSubtreeSlowPathRect;
 
-  context.oldBounds = object.previousPaintInvalidationRect();
-  context.oldLocation = object.previousPositionFromPaintInvalidationBacking();
-  context.newBounds = computePaintInvalidationRectInBacking(object, context);
-  context.newLocation =
-      computeLocationFromPaintInvalidationBacking(object, context);
+  ObjectPaintInvalidator objectPaintInvalidator(object);
+  context.oldVisualRect = object.previousVisualRect();
+  context.oldLocation = objectPaintInvalidator.previousLocationInBacking();
+  context.newVisualRect = computeVisualRectInBacking(object, context);
+  context.newLocation = computeLocationInBacking(object, context);
+  context.oldPaintOffset = object.previousPaintOffset();
+  context.newPaintOffset = context.treeBuilderContext.current.paintOffset;
 
   IntSize adjustment = object.scrollAdjustmentForPaintInvalidation(
       *context.paintInvalidationContainer);
   context.newLocation.move(adjustment);
-  context.newBounds.move(adjustment);
+  context.newVisualRect.move(adjustment);
 
-  object.getMutableForPainting().setPreviousPaintInvalidationRect(
-      context.newBounds);
-  object.getMutableForPainting()
-      .setPreviousPositionFromPaintInvalidationBacking(context.newLocation);
+  object.getMutableForPainting().setPreviousVisualRect(context.newVisualRect);
+  objectPaintInvalidator.setPreviousLocationInBacking(context.newLocation);
+  object.getMutableForPainting().setPreviousPaintOffset(context.newPaintOffset);
 }
 
 void PaintInvalidator::invalidatePaintIfNeeded(
@@ -363,18 +372,6 @@ void PaintInvalidator::invalidatePaintIfNeeded(
   layoutView->sendMediaPositionChangeNotifications(visibleRect);
 }
 
-static bool hasPercentageTransform(const ComputedStyle& style) {
-  if (TransformOperation* translate = style.translate()) {
-    if (translate->dependsOnBoxSize())
-      return true;
-  }
-  return style.transform().dependsOnBoxSize() ||
-         (style.transformOriginX() != Length(50, Percent) &&
-          style.transformOriginX().isPercentOrCalc()) ||
-         (style.transformOriginY() != Length(50, Percent) &&
-          style.transformOriginY().isPercentOrCalc());
-}
-
 void PaintInvalidator::invalidatePaintIfNeeded(
     const LayoutObject& object,
     PaintInvalidatorContext& context) {
@@ -400,8 +397,8 @@ void PaintInvalidator::invalidatePaintIfNeeded(
            .shouldCheckForPaintInvalidationRegardlessOfPaintInvalidationState() &&
       context.forcedSubtreeInvalidationFlags ==
           PaintInvalidatorContext::ForcedSubtreeInvalidationRectUpdate) {
-    // We are done updating the paint invalidation rect. No other paint
-    // invalidation work to do for this object.
+    // We are done updating the visual rect. No other paint invalidation work to
+    // do for this object.
     return;
   }
 
@@ -418,35 +415,29 @@ void PaintInvalidator::invalidatePaintIfNeeded(
       break;
     case PaintInvalidationSVGResourceChange:
       context.forcedSubtreeInvalidationFlags |=
-          PaintInvalidatorContext::ForcedSubtreeInvalidationChecking;
+          PaintInvalidatorContext::ForcedSubtreeSVGResourceChange;
       break;
     default:
       break;
   }
 
-  if (context.oldLocation != context.newLocation)
+  if (context.oldLocation != context.newLocation ||
+      (RuntimeEnabledFeatures::slimmingPaintV2Enabled() &&
+       context.oldPaintOffset != context.newPaintOffset)) {
     context.forcedSubtreeInvalidationFlags |=
         PaintInvalidatorContext::ForcedSubtreeInvalidationChecking;
-
-  // TODO(crbug.com/533277): This is a workaround for the bug. Remove when we
-  // detect paint offset change.
-  if (reason != PaintInvalidationNone &&
-      hasPercentageTransform(object.styleRef()))
-    context.forcedSubtreeInvalidationFlags |=
-        PaintInvalidatorContext::ForcedSubtreeInvalidationChecking;
+  }
 
   // TODO(crbug.com/490725): This is a workaround for the bug, to force
-  // descendant to update paint invalidation rects on clipping change.
+  // descendant to update visual rects on clipping change.
   if (!RuntimeEnabledFeatures::slimmingPaintV2Enabled() &&
-      context.oldBounds != context.newBounds
+      context.oldVisualRect != context.newVisualRect
       // Note that isLayoutView() below becomes unnecessary after the launch of
       // root layer scrolling.
       && (object.hasOverflowClip() || object.isLayoutView()) &&
       !toLayoutBox(object).usesCompositedScrolling())
     context.forcedSubtreeInvalidationFlags |=
         PaintInvalidatorContext::ForcedSubtreeInvalidationRectUpdate;
-
-  object.getMutableForPainting().clearPaintInvalidationFlags();
 }
 
 void PaintInvalidator::processPendingDelayedPaintInvalidations() {

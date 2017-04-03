@@ -697,10 +697,6 @@ class NET_EXPORT_PRIVATE QuicConnection
     return last_packet_source_address_;
   }
 
-  void set_largest_packet_size_supported(QuicByteCount size) {
-    largest_packet_size_supported_ = size;
-  }
-
  protected:
   // Calls cancel() on all the alarms owned by this connection.
   void CancelAllAlarms();
@@ -837,11 +833,6 @@ class NET_EXPORT_PRIVATE QuicConnection
   // Sets the MTU discovery alarm if necessary.
   void MaybeSetMtuAlarm();
 
-  // On arrival of a new packet, checks to see if the socket addresses have
-  // changed since the last packet we saw on this connection.
-  void CheckForAddressMigration(const IPEndPoint& self_address,
-                                const IPEndPoint& peer_address);
-
   HasRetransmittableData IsRetransmittable(const SerializedPacket& packet);
   bool IsTerminationPacket(const SerializedPacket& packet);
 
@@ -928,7 +919,7 @@ class NET_EXPORT_PRIVATE QuicConnection
   // established, but which could not be decrypted.  We buffer these on
   // the assumption that they could not be processed because they were
   // sent with the INITIAL encryption and the CHLO message was lost.
-  std::deque<QuicEncryptedPacket*> undecryptable_packets_;
+  std::deque<std::unique_ptr<QuicEncryptedPacket>> undecryptable_packets_;
 
   // Maximum number of undecryptable packets the connection will store.
   size_t max_undecryptable_packets_;
@@ -1096,9 +1087,6 @@ class NET_EXPORT_PRIVATE QuicConnection
 
   // The size of the largest packet received from peer.
   QuicByteCount largest_received_packet_size_;
-
-  // The maximum allowed packet size.
-  QuicByteCount largest_packet_size_supported_;
 
   // Whether a GoAway has been sent.
   bool goaway_sent_;

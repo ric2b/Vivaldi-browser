@@ -10,7 +10,6 @@
 #include "base/callback.h"
 #include "base/macros.h"
 #include "media/base/cdm_promise.h"
-#include "media/mojo/common/mojo_type_trait.h"
 #include "media/mojo/interfaces/content_decryption_module.mojom.h"
 
 namespace media {
@@ -19,16 +18,15 @@ namespace media {
 template <typename... T>
 class MojoCdmPromise : public CdmPromiseTemplate<T...> {
  public:
-  typedef base::Callback<void(mojom::CdmPromiseResultPtr,
-                              typename MojoTypeTrait<T>::MojoType...)>
-      CallbackType;
+  using CallbackType =
+      base::Callback<void(mojom::CdmPromiseResultPtr, const T&...)>;
 
-  MojoCdmPromise(const CallbackType& callback);
+  explicit MojoCdmPromise(const CallbackType& callback);
   ~MojoCdmPromise() final;
 
   // CdmPromiseTemplate<> implementation.
   void resolve(const T&... result) final;
-  void reject(MediaKeys::Exception exception,
+  void reject(CdmPromise::Exception exception,
               uint32_t system_code,
               const std::string& error_message) final;
 

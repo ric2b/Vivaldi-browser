@@ -5,10 +5,11 @@
 #include "chrome/browser/profiles/profile.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_controller.h"
+#include "extensions/features/features.h"
 #include "ui/webgui/notes_ui.h"
 #include "url/gurl.h"
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
 #endif
@@ -46,7 +47,7 @@ WebUIFactoryFunction GetVivaldiWebUIFactoryFunction(WebUI* web_ui,
   return NULL;
 }
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 // Only create ExtensionWebUI for URLs that are allowed extension bindings,
 // hosted by actual tabs.
 bool NeedsExtensionWebUI(Profile* profile, const GURL& url) {
@@ -84,7 +85,7 @@ bool VivaldiWebUIControllerFactory::UseWebUIBindingsForURL(
   // Extensions are rendered via WebUI in tabs, but don't actually need WebUI
   // bindings (see the ExtensionWebUI constructor).
   return
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
       !NeedsExtensionWebUI(Profile::FromBrowserContext(browser_context), url) &&
 #endif
       UseWebUIForURL(browser_context, url);

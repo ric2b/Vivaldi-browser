@@ -15,8 +15,10 @@
 #include "components/guest_view/browser/guest_view_base.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/view_type_utils.h"
+#include "extensions/features/features.h"
+#include "printing/features/features.h"
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "extensions/browser/process_manager.h"
 #endif
 
@@ -40,7 +42,7 @@ void TagWebContents(content::WebContents* contents,
   WebContentsTagsManager::GetInstance()->AddTag(tag);
 }
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 
 bool IsExtensionWebContents(content::WebContents* contents) {
   DCHECK(contents);
@@ -57,7 +59,7 @@ bool IsExtensionWebContents(content::WebContents* contents) {
           view_type != extensions::VIEW_TYPE_BACKGROUND_CONTENTS);
 }
 
-#endif  // defined(ENABLE_EXTENSIONS)
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
 }  // namespace
 #endif  // defined(ENABLE_TASK_MANAGER)
@@ -114,13 +116,13 @@ void WebContentsTags::CreateForTabContents(content::WebContents* web_contents) {
 // static
 void WebContentsTags::CreateForPrintingContents(
     content::WebContents* web_contents) {
-#if defined(ENABLE_TASK_MANAGER) && defined(ENABLE_PRINT_PREVIEW)
+#if defined(ENABLE_TASK_MANAGER) && BUILDFLAG(ENABLE_PRINT_PREVIEW)
   if (!WebContentsTag::FromWebContents(web_contents)) {
     TagWebContents(web_contents,
                    new PrintingTag(web_contents),
                    WebContentsTag::kTagKey);
   }
-#endif  // defined(ENABLE_TASK_MANAGER) && defined(ENABLE_PRINT_PREVIEW)
+#endif  // defined(ENABLE_TASK_MANAGER) && BUILDFLAG(ENABLE_PRINT_PREVIEW)
 }
 
 // static
@@ -139,7 +141,7 @@ void WebContentsTags::CreateForGuestContents(
 // static
 void WebContentsTags::CreateForExtension(content::WebContents* web_contents,
                                          extensions::ViewType view_type) {
-#if defined(ENABLE_TASK_MANAGER) && defined(ENABLE_EXTENSIONS)
+#if defined(ENABLE_TASK_MANAGER) && BUILDFLAG(ENABLE_EXTENSIONS)
   DCHECK(IsExtensionWebContents(web_contents));
 
   if (!WebContentsTag::FromWebContents(web_contents)) {
@@ -147,7 +149,7 @@ void WebContentsTags::CreateForExtension(content::WebContents* web_contents,
                    new ExtensionTag(web_contents, view_type),
                    WebContentsTag::kTagKey);
   }
-#endif  // defined(ENABLE_TASK_MANAGER) && defined(ENABLE_EXTENSIONS)
+#endif  // defined(ENABLE_TASK_MANAGER) && BUILDFLAG(ENABLE_EXTENSIONS)
 }
 
 // static

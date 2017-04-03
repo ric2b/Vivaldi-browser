@@ -4,7 +4,6 @@
 
 #include "modules/payments/PaymentRequest.h"
 
-#include "bindings/core/v8/JSONValuesForV8.h"
 #include "bindings/core/v8/V8BindingForTesting.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
@@ -315,8 +314,8 @@ TEST(PaymentRequestTest, RejectShowPromiseOnInvalidShippingAddress) {
   request->show(scope.getScriptState())
       .then(funcs.expectNoCall(), funcs.expectCall());
 
-  static_cast<mojom::blink::PaymentRequestClient*>(request)
-      ->OnShippingAddressChange(mojom::blink::PaymentAddress::New());
+  static_cast<payments::mojom::blink::PaymentRequestClient*>(request)
+      ->OnShippingAddressChange(payments::mojom::blink::PaymentAddress::New());
 }
 
 TEST(PaymentRequestTest, OnShippingOptionChange) {
@@ -331,7 +330,7 @@ TEST(PaymentRequestTest, OnShippingOptionChange) {
   request->show(scope.getScriptState())
       .then(funcs.expectNoCall(), funcs.expectNoCall());
 
-  static_cast<mojom::blink::PaymentRequestClient*>(request)
+  static_cast<payments::mojom::blink::PaymentRequestClient*>(request)
       ->OnShippingOptionChange("standardShipping");
 }
 
@@ -359,7 +358,8 @@ TEST(PaymentRequestTest, CannotShowAfterAborted) {
   EXPECT_FALSE(scope.getExceptionState().hadException());
   request->show(scope.getScriptState());
   request->abort(scope.getScriptState());
-  static_cast<mojom::blink::PaymentRequestClient*>(request)->OnAbort(true);
+  static_cast<payments::mojom::blink::PaymentRequestClient*>(request)->OnAbort(
+      true);
 
   request->show(scope.getScriptState())
       .then(funcs.expectNoCall(), funcs.expectCall());
@@ -378,8 +378,8 @@ TEST(PaymentRequestTest, RejectShowPromiseOnErrorPaymentMethodNotSupported) {
   request->show(scope.getScriptState())
       .then(funcs.expectNoCall(), funcs.expectCall(&errorMessage));
 
-  static_cast<mojom::blink::PaymentRequestClient*>(request)->OnError(
-      mojom::blink::PaymentErrorReason::NOT_SUPPORTED);
+  static_cast<payments::mojom::blink::PaymentRequestClient*>(request)->OnError(
+      payments::mojom::blink::PaymentErrorReason::NOT_SUPPORTED);
 
   v8::MicrotasksScope::PerformCheckpoint(scope.getScriptState()->isolate());
   EXPECT_EQ("NotSupportedError: The payment method is not supported",
@@ -399,8 +399,8 @@ TEST(PaymentRequestTest, RejectShowPromiseOnErrorCancelled) {
   request->show(scope.getScriptState())
       .then(funcs.expectNoCall(), funcs.expectCall(&errorMessage));
 
-  static_cast<mojom::blink::PaymentRequestClient*>(request)->OnError(
-      mojom::blink::PaymentErrorReason::USER_CANCEL);
+  static_cast<payments::mojom::blink::PaymentRequestClient*>(request)->OnError(
+      payments::mojom::blink::PaymentErrorReason::USER_CANCEL);
 
   v8::MicrotasksScope::PerformCheckpoint(scope.getScriptState()->isolate());
   EXPECT_EQ("Request cancelled", errorMessage);
@@ -435,8 +435,8 @@ TEST(PaymentRequestTest, IgnoreUpdatePaymentDetailsAfterShowPromiseResolved) {
   EXPECT_FALSE(scope.getExceptionState().hadException());
   request->show(scope.getScriptState())
       .then(funcs.expectCall(), funcs.expectNoCall());
-  static_cast<mojom::blink::PaymentRequestClient*>(request)->OnPaymentResponse(
-      buildPaymentResponseForTest());
+  static_cast<payments::mojom::blink::PaymentRequestClient*>(request)
+      ->OnPaymentResponse(buildPaymentResponseForTest());
 
   request->onUpdatePaymentDetails(
       ScriptValue::from(scope.getScriptState(), "foo"));
@@ -471,8 +471,8 @@ TEST(PaymentRequestTest, RejectShowPromiseOnInvalidPaymentDetailsUpdate) {
       .then(funcs.expectNoCall(), funcs.expectCall());
 
   request->onUpdatePaymentDetails(ScriptValue::from(
-      scope.getScriptState(),
-      fromJSONString(scope.getScriptState(), "{}", scope.getExceptionState())));
+      scope.getScriptState(), fromJSONString(scope.getScriptState()->isolate(),
+                                             "{}", scope.getExceptionState())));
   EXPECT_FALSE(scope.getExceptionState().hadException());
 }
 
@@ -500,8 +500,8 @@ TEST(PaymentRequestTest,
       "\"5.00\"}, \"selected\": true}]}";
   request->onUpdatePaymentDetails(ScriptValue::from(
       scope.getScriptState(),
-      fromJSONString(scope.getScriptState(), detailWithShippingOptions,
-                     scope.getExceptionState())));
+      fromJSONString(scope.getScriptState()->isolate(),
+                     detailWithShippingOptions, scope.getExceptionState())));
   EXPECT_FALSE(scope.getExceptionState().hadException());
   EXPECT_EQ("standardShippingOption", request->shippingOption());
   String detailWithoutShippingOptions =
@@ -510,8 +510,8 @@ TEST(PaymentRequestTest,
 
   request->onUpdatePaymentDetails(ScriptValue::from(
       scope.getScriptState(),
-      fromJSONString(scope.getScriptState(), detailWithoutShippingOptions,
-                     scope.getExceptionState())));
+      fromJSONString(scope.getScriptState()->isolate(),
+                     detailWithoutShippingOptions, scope.getExceptionState())));
 
   EXPECT_FALSE(scope.getExceptionState().hadException());
   EXPECT_TRUE(request->shippingOption().isNull());
@@ -539,9 +539,10 @@ TEST(
       "{\"id\": \"fast\", \"label\": \"Fast\", \"amount\": {\"currency\": "
       "\"USD\", \"value\": \"50.00\"}}]}";
 
-  request->onUpdatePaymentDetails(ScriptValue::from(
-      scope.getScriptState(), fromJSONString(scope.getScriptState(), detail,
-                                             scope.getExceptionState())));
+  request->onUpdatePaymentDetails(
+      ScriptValue::from(scope.getScriptState(),
+                        fromJSONString(scope.getScriptState()->isolate(),
+                                       detail, scope.getExceptionState())));
   EXPECT_FALSE(scope.getExceptionState().hadException());
 
   EXPECT_TRUE(request->shippingOption().isNull());
@@ -567,9 +568,10 @@ TEST(PaymentRequestTest, UseTheSelectedShippingOptionFromPaymentDetailsUpdate) {
       "{\"id\": \"fast\", \"label\": \"Fast\", \"amount\": {\"currency\": "
       "\"USD\", \"value\": \"50.00\"}, \"selected\": true}]}";
 
-  request->onUpdatePaymentDetails(ScriptValue::from(
-      scope.getScriptState(), fromJSONString(scope.getScriptState(), detail,
-                                             scope.getExceptionState())));
+  request->onUpdatePaymentDetails(
+      ScriptValue::from(scope.getScriptState(),
+                        fromJSONString(scope.getScriptState()->isolate(),
+                                       detail, scope.getExceptionState())));
   EXPECT_FALSE(scope.getExceptionState().hadException());
 
   EXPECT_EQ("fast", request->shippingOption());
@@ -593,9 +595,50 @@ TEST(PaymentRequestTest, NoExceptionWithErrorMessageInUpdate) {
 
   request->onUpdatePaymentDetails(ScriptValue::from(
       scope.getScriptState(),
-      fromJSONString(scope.getScriptState(), detailWithErrorMsg,
+      fromJSONString(scope.getScriptState()->isolate(), detailWithErrorMsg,
                      scope.getExceptionState())));
   EXPECT_FALSE(scope.getExceptionState().hadException());
+}
+
+TEST(PaymentRequestTest,
+     ShouldResolveWithEmptyShippingOptionsIfIDsOfShippingOptionsAreDuplicated) {
+  V8TestingScope scope;
+  PaymentRequestMockFunctionScope funcs(scope.getScriptState());
+  makePaymentRequestOriginSecure(scope.document());
+  PaymentDetails details;
+  details.setTotal(buildPaymentItemForTest());
+  HeapVector<PaymentShippingOption> shippingOptions(2);
+  shippingOptions[0] = buildShippingOptionForTest(
+      PaymentTestDataId, PaymentTestOverwriteValue, "standard");
+  shippingOptions[0].setSelected(true);
+  shippingOptions[1] = buildShippingOptionForTest(
+      PaymentTestDataId, PaymentTestOverwriteValue, "standard");
+  details.setShippingOptions(shippingOptions);
+  PaymentOptions options;
+  options.setRequestShipping(true);
+  PaymentRequest* request = PaymentRequest::create(
+      scope.getScriptState(), buildPaymentMethodDataForTest(), details, options,
+      scope.getExceptionState());
+  EXPECT_FALSE(scope.getExceptionState().hadException());
+  EXPECT_TRUE(request->shippingOption().isNull());
+  request->show(scope.getScriptState())
+      .then(funcs.expectNoCall(), funcs.expectNoCall());
+  String detailWithShippingOptions =
+      "{\"total\": {\"label\": \"Total\", \"amount\": {\"currency\": \"USD\", "
+      "\"value\": \"5.00\"}},"
+      "\"shippingOptions\": [{\"id\": \"standardShippingOption\", \"label\": "
+      "\"Standard shipping\", \"amount\": {\"currency\": \"USD\", \"value\": "
+      "\"5.00\"}, \"selected\": true}, {\"id\": \"standardShippingOption\", "
+      "\"label\": \"Standard shipping\", \"amount\": {\"currency\": \"USD\", "
+      "\"value\": \"5.00\"}, \"selected\": true}]}";
+
+  request->onUpdatePaymentDetails(ScriptValue::from(
+      scope.getScriptState(),
+      fromJSONString(scope.getScriptState()->isolate(),
+                     detailWithShippingOptions, scope.getExceptionState())));
+
+  EXPECT_FALSE(scope.getExceptionState().hadException());
+  EXPECT_TRUE(request->shippingOption().isNull());
 }
 
 }  // namespace

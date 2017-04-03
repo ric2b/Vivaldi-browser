@@ -73,6 +73,8 @@
 #include "components/user_manager/user_manager.h"
 #endif
 
+#include "app/vivaldi_apptools.h"
+
 using base::ListValue;
 using content::BrowserThread;
 
@@ -129,7 +131,8 @@ bool CanChangeChannel(Profile* profile) {
     const user_manager::User* user =
         profile ? chromeos::ProfileHelper::Get()->GetUserByProfile(profile)
                 : nullptr;
-    std::string email = user ? user->email() : std::string();
+    std::string email =
+        user ? user->GetAccountId().GetUserEmail() : std::string();
     size_t at_pos = email.find('@');
     if (at_pos != std::string::npos && at_pos + 1 < email.length())
       domain = email.substr(email.find('@') + 1);
@@ -432,7 +435,7 @@ void HelpHandler::Observe(int type, const content::NotificationSource& source,
 
 // static
 base::string16 HelpHandler::BuildBrowserVersionString() {
-  std::string version = chrome::GetVivaldiVersionString();
+  std::string version = vivaldi::GetVivaldiVersionString();
 
   std::string modifier = chrome::GetChannelString();
   if (!modifier.empty())

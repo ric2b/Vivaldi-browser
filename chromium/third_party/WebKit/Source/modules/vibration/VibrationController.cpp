@@ -52,7 +52,7 @@ blink::VibrationController::VibrationPattern sanitizeVibrationPatternInternal(
 
   // If the last item in the pattern is a pause then discard it.
   if (length && !(length % 2))
-    sanitized.removeLast();
+    sanitized.pop_back();
 
   return sanitized;
 }
@@ -152,9 +152,7 @@ void VibrationController::didVibrate() {
 
 void VibrationController::cancel() {
   m_pattern.clear();
-
-  if (m_timerDoVibrate.isActive())
-    m_timerDoVibrate.stop();
+  m_timerDoVibrate.stop();
 
   if (m_isRunning && !m_isCallingCancel && m_service) {
     m_isCallingCancel = true;

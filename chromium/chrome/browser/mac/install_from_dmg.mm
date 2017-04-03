@@ -30,6 +30,7 @@
 #include "base/mac/scoped_cftyperef.h"
 #include "base/mac/scoped_ioobject.h"
 #include "base/mac/scoped_nsautorelease_pool.h"
+#include "base/mac/sdk_forward_declarations.h"
 #include "base/macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -44,6 +45,8 @@
 #include "components/strings/grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/l10n/l10n_util_mac.h"
+
+#include "app/vivaldi_constants.h"
 
 // When C++ exceptions are disabled, the C++ library defines |try| and
 // |catch| so as to allow exception-expecting C++ code to build properly when
@@ -367,7 +370,7 @@ bool LaunchInstalledApp(NSString* installed_path,
   base::FilePath helper_path = browser_path.Append("Contents/Versions");
   helper_path = helper_path.Append(
 #if defined(VIVALDI_BUILD)
-      chrome::kVivaldiVersion
+      vivaldi::kVivaldiVersion
 #else
       chrome::kChromeVersion
 #endif
@@ -685,30 +688,14 @@ void EjectAndTrashDiskImage(const std::string& dmg_bsd_device_name) {
     return;
   }
 
-  char* disk_image_path_in_trash_c;
-  OSStatus status = FSPathMoveObjectToTrashSync(disk_image_path.c_str(),
-                                                &disk_image_path_in_trash_c,
-                                                kFSFileOperationDefaultOptions);
-  if (status != noErr) {
-    OSSTATUS_LOG(ERROR, status) << "FSPathMoveObjectToTrashSync";
+  NSURL* disk_image_path_nsurl =
+      [NSURL fileURLWithPath:base::SysUTF8ToNSString(disk_image_path)];
+  NSError* ns_error = nil;
+  if (![[NSFileManager defaultManager] trashItemAtURL:disk_image_path_nsurl
+                                     resultingItemURL:nil
+                                                error:&ns_error]) {
+    LOG(ERROR) << base::SysNSStringToUTF8([ns_error localizedDescription]);
     return;
   }
 
-  // FSPathMoveObjectToTrashSync alone doesn't result in the Trash icon in the
-  // Dock indicating that any garbage has been placed within it. Using the
-  // trash path that FSPathMoveObjectToTrashSync claims to have used, call
-  // FNNotifyByPath to fatten up the icon.
-  base::FilePath disk_image_path_in_trash(disk_image_path_in_trash_c);
-  free(disk_image_path_in_trash_c);
-
-  base::FilePath trash_path = disk_image_path_in_trash.DirName();
-  const UInt8* trash_path_u8 = reinterpret_cast<const UInt8*>(
-      trash_path.value().c_str());
-  status = FNNotifyByPath(trash_path_u8,
-                          kFNDirectoryModifiedMessage,
-                          kNilOptions);
-  if (status != noErr) {
-    OSSTATUS_LOG(ERROR, status) << "FNNotifyByPath";
-    return;
-  }
 }

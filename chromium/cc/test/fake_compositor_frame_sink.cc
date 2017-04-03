@@ -5,7 +5,7 @@
 #include "cc/test/fake_compositor_frame_sink.h"
 
 #include "base/bind.h"
-#include "base/message_loop/message_loop.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "cc/output/compositor_frame_sink_client.h"
 #include "cc/resources/returned_resource.h"
 #include "cc/test/begin_frame_args_test.h"
@@ -17,11 +17,24 @@ FakeCompositorFrameSink::FakeCompositorFrameSink(
     scoped_refptr<ContextProvider> context_provider,
     scoped_refptr<ContextProvider> worker_context_provider)
     : CompositorFrameSink(std::move(context_provider),
-                          std::move(worker_context_provider)) {}
+                          std::move(worker_context_provider),
+                          nullptr,
+                          nullptr),
+      weak_ptr_factory_(this) {
+  gpu_memory_buffer_manager_ =
+      context_provider_ ? &test_gpu_memory_buffer_manager_ : nullptr;
+  shared_bitmap_manager_ =
+      context_provider_ ? nullptr : &test_shared_bitmap_manager_;
+}
 
 FakeCompositorFrameSink::~FakeCompositorFrameSink() = default;
 
-void FakeCompositorFrameSink::SwapBuffers(CompositorFrame frame) {
+void FakeCompositorFrameSink::DetachFromClient() {
+  ReturnResourcesHeldByParent();
+  CompositorFrameSink::DetachFromClient();
+}
+
+void FakeCompositorFrameSink::SubmitCompositorFrame(CompositorFrame frame) {
   ReturnResourcesHeldByParent();
 
   last_sent_frame_.reset(new CompositorFrame(std::move(frame)));
@@ -45,21 +58,14 @@ void FakeCompositorFrameSink::SwapBuffers(CompositorFrame frame) {
     }
   }
 
-  PostSwapBuffersComplete();
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE,
+      base::Bind(&FakeCompositorFrameSink::DidReceiveCompositorFrameAck,
+                 weak_ptr_factory_.GetWeakPtr()));
 }
 
-bool FakeCompositorFrameSink::BindToClient(CompositorFrameSinkClient* client) {
-  if (CompositorFrameSink::BindToClient(client)) {
-    client_ = client;
-    return true;
-  } else {
-    return false;
-  }
-}
-
-void FakeCompositorFrameSink::DetachFromClient() {
-  ReturnResourcesHeldByParent();
-  CompositorFrameSink::DetachFromClient();
+void FakeCompositorFrameSink::DidReceiveCompositorFrameAck() {
+  client_->DidReceiveCompositorFrameAck();
 }
 
 void FakeCompositorFrameSink::ReturnResourcesHeldByParent() {

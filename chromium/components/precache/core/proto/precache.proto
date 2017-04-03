@@ -92,7 +92,7 @@ message PrecacheConfigurationSettings {
   // The maximum number of bytes that can be fetched by precache on a single
   // day. After this limit is reached, no more resources will be downloaded,
   // until the quota gets replenished the next day.
-  optional uint64 daily_quota_total = 6 [default = 40000000 /* 10 MB */];
+  optional uint64 daily_quota_total = 6 [default = 40000000 /* 40 MB */];
 
   // The number of resources to fetch per precache run. Only the first
   // |total_resources_count| resource URLs are fetched.
@@ -105,4 +105,8 @@ message PrecacheConfigurationSettings {
   // affects the fetcher's behavior with respect to max_bytes_total and
   // total_resources_count.
   optional bool global_ranking = 9 [default = false];
+
+  // If true, resource fetches are only made over the network for a given URL if
+  // an existing cache entry exists and has revalidation headers.
+  optional bool revalidation_only = 10 [default = false];
 };

@@ -8,6 +8,7 @@
 
 #include "base/callback.h"
 #include "base/time/time.h"
+#include "ui/base/page_transition_types.h"
 #include "url/gurl.h"
 
 namespace history {
@@ -43,35 +44,19 @@ class Visit {
         base::Time visit_time,
         GURL url,
         base::string16 title,
-        std::string transition);
+        ui::PageTransition transition);
   ~Visit();
 
   Visit(const Visit& other);
 
-  void set_id(std::string id) { id_ = id; }
-  std::string id() { return id_; }
-
-  void set_visit_time(base::Time visit_time) { visit_time_ = visit_time; }
-  base::Time visit_time() { return visit_time_; }
-
-  void set_url(GURL url) { url_ = url; }
-  GURL url() { return url_; }
-
-  void set_title(base::string16 title) { title_ = title; }
-  base::string16 title() { return title_; }
-
-  void set_transition(std::string transition) { transition_ = transition; }
-  std::string transition() { return transition_; }
-
   typedef std::vector<Visit> VisitsList;
   typedef base::Callback<void(const VisitsList&)> VisitsCallback;
 
- private:
-  std::string id_;
-  base::Time visit_time_;
-  GURL url_;
-  base::string16 title_;
-  std::string transition_;
+  std::string id;
+  base::Time visit_time;
+  GURL url;
+  base::string16 title;
+  ui::PageTransition transition;
 };
 }  //  namespace history
 

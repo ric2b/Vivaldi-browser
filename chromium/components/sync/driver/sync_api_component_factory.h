@@ -9,11 +9,11 @@
 #include <string>
 
 #include "base/memory/weak_ptr.h"
-#include "components/sync/api/data_type_error_handler.h"
-#include "components/sync/api/syncable_service.h"
 #include "components/sync/base/model_type.h"
-#include "components/sync/core/attachments/attachment_service.h"
 #include "components/sync/driver/data_type_controller.h"
+#include "components/sync/model/attachments/attachment_service.h"
+#include "components/sync/model/data_type_error_handler.h"
+#include "components/sync/model/syncable_service.h"
 
 namespace base {
 class FilePath;
@@ -118,7 +118,7 @@ class SyncApiComponentFactory {
   // |model_type| is the model type this AttachmentService will be used with.
   //
   // |delegate| is optional delegate for AttachmentService to notify about
-  // asynchronous events (AttachmentUploaded). Pass NULL if delegate is not
+  // asynchronous events (AttachmentUploaded). Pass null if delegate is not
   // provided. AttachmentService doesn't take ownership of delegate, the pointer
   // must be valid throughout AttachmentService lifetime.
   virtual std::unique_ptr<AttachmentService> CreateAttachmentService(

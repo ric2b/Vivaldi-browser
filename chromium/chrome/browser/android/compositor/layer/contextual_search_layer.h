@@ -38,8 +38,9 @@ class ContextualSearchLayer : public OverlayPanelLayer {
                      int search_term_resource_id,
                      int search_caption_resource_id,
                      int search_bar_shadow_resource_id,
-                     int panel_icon_resource_id,
+                     int sprite_resource_id,
                      int search_provider_icon_sprite_metadata_resource_id,
+                     int  quick_action_icon_resource_id,
                      int arrow_up_resource_id,
                      int close_icon_resource_id,
                      int progress_bar_background_resource_id,
@@ -65,7 +66,9 @@ class ContextualSearchLayer : public OverlayPanelLayer {
                      float search_bar_margin_side,
                      float search_bar_height,
                      float search_context_opacity,
+                     float search_text_layer_min_height,
                      float search_term_opacity,
+                     float search_term_caption_spacing,
                      float search_caption_animation_percentage,
                      bool search_caption_visible,
                      bool search_bar_border_visible,
@@ -74,16 +77,25 @@ class ContextualSearchLayer : public OverlayPanelLayer {
                      float search_bar_shadow_opacity,
                      bool search_provider_icon_sprite_visible,
                      float search_provider_icon_sprite_completion_percentage,
+                     bool quick_action_icon_visible,
                      bool thumbnail_visible,
-                     float thumbnail_visibility_percentage,
-                     int thumbnail_size,
+                     float static_image_visibility_percentage,
+                     int static_image_size,
                      float arrow_icon_opacity,
                      float arrow_icon_rotation,
                      float close_icon_opacity,
                      bool progress_bar_visible,
                      float progress_bar_height,
                      float progress_bar_opacity,
-                     int progress_bar_completion);
+                     int progress_bar_completion,
+                     float divider_line_visibility_percentage,
+                     float divider_line_width,
+                     float divider_line_height,
+                     int divider_line_color,
+                     float divider_line_x_offset,
+                     bool touch_highlight_visible,
+                     float touch_highlight_x_offset,
+                     float touch_highlight_width);
 
   void SetThumbnail(const SkBitmap* thumbnail);
 
@@ -98,10 +110,31 @@ class ContextualSearchLayer : public OverlayPanelLayer {
   void SetupIconLayer(bool search_provider_icon_sprite_visible,
                       int search_provider_icon_sprite_metadata_resource_id,
                       float search_provider_icon_sprite_completion_percentage,
+                      bool quick_action_icon_visible,
+                      int quick_action_icon_resource_id,
                       bool thumbnail_visible,
-                      float thumbnail_visibility_percentage);
+                      float static_image_visibility_percentage);
 
-  int thumbnail_size_;
+  void SetStaticImageProperties(
+      scoped_refptr<cc::UIResourceLayer> static_image_layer,
+      float top_margin,
+      float side_margin,
+      float visibility_percentage);
+
+  // Sets up |text_layer_|, which contains |bar_text_|, |search_context_| and
+  // |search_caption_|.
+  void SetupTextLayer(float search_bar_top,
+                      float search_bar_height,
+                      float search_text_layer_min_height,
+                      int search_caption_resource_id,
+                      bool search_caption_visible,
+                      float search_caption_animation_percentage,
+                      float search_term_opacity,
+                      int search_context_resource_id,
+                      float search_context_opacity,
+                      float search_term_caption_spacing);
+
+  int static_image_size_;
   float thumbnail_side_margin_;
   float thumbnail_top_margin_;
 
@@ -109,6 +142,7 @@ class ContextualSearchLayer : public OverlayPanelLayer {
   scoped_refptr<cc::Layer> icon_layer_;
   scoped_refptr<CrushedSpriteLayer> search_provider_icon_sprite_;
   scoped_refptr<cc::UIResourceLayer> thumbnail_layer_;
+  scoped_refptr<cc::UIResourceLayer> quick_action_icon_layer_;
   scoped_refptr<cc::UIResourceLayer> arrow_icon_;
   scoped_refptr<cc::UIResourceLayer> search_promo_;
   scoped_refptr<cc::SolidColorLayer> search_promo_container_;
@@ -118,6 +152,9 @@ class ContextualSearchLayer : public OverlayPanelLayer {
   scoped_refptr<cc::NinePatchLayer> progress_bar_;
   scoped_refptr<cc::NinePatchLayer> progress_bar_background_;
   scoped_refptr<cc::UIResourceLayer> search_caption_;
+  scoped_refptr<cc::UIResourceLayer> text_layer_;
+  scoped_refptr<cc::SolidColorLayer> divider_line_;
+  scoped_refptr<cc::SolidColorLayer> touch_highlight_layer_;
 };
 
 }  //  namespace android

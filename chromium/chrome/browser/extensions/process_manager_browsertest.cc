@@ -12,6 +12,7 @@
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/test/histogram_tester.h"
+#include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/browser_action_test_util.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
 #include "chrome/browser/extensions/extension_service.h"
@@ -173,6 +174,9 @@ class NavigationCompletedObserver : public content::WebContentsObserver {
 // a real browser.
 class ProcessManagerBrowserTest : public ExtensionBrowserTest {
  public:
+  ProcessManagerBrowserTest() {
+    guest_view::GuestViewManager::set_factory_for_testing(&factory_);
+  }
   // Create an extension with web-accessible frames and an optional background
   // page.
   const Extension* CreateExtension(const std::string& name,
@@ -261,6 +265,7 @@ class ProcessManagerBrowserTest : public ExtensionBrowserTest {
   }
 
  private:
+  guest_view::TestGuestViewManagerFactory factory_;
   std::vector<std::unique_ptr<TestExtensionDir>> temp_dirs_;
 };
 
@@ -731,7 +736,7 @@ IN_PROC_BROWSER_TEST_F(ProcessManagerBrowserTest,
       main_frame->GetProcess()->GetID(),
       GURL("chrome-extension://some-extension-id/resource.html")));
 
-  if (extensions::IsIsolateExtensionsEnabled()) {
+  if (IsIsolateExtensionsEnabled()) {
     EXPECT_TRUE(policy->CanCommitURL(
         extension_frame->GetProcess()->GetID(),
         GURL("blob:chrome-extension://some-extension-id/some-guid")));
@@ -1091,8 +1096,6 @@ IN_PROC_BROWSER_TEST_F(ProcessManagerBrowserTest,
   content::WebContents* popup = OpenPopup(main_frame, popup_url);
   EXPECT_NE(popup, tab);
   ASSERT_EQ(2, browser()->tab_strip_model()->count());
-  EXPECT_EQ(1u, pm->GetRenderFrameHostsForExtension(extension->id()).size());
-  EXPECT_EQ(1u, pm->GetAllFrames().size());
   EXPECT_NE(popup->GetRenderProcessHost(), main_frame->GetProcess());
 
   // Ensure the popup's window.opener is defined.
@@ -1145,8 +1148,6 @@ IN_PROC_BROWSER_TEST_F(ProcessManagerBrowserTest,
   content::WebContents* popup = OpenPopup(extension_frame, popup_url);
   EXPECT_NE(popup, tab);
   ASSERT_EQ(2, browser()->tab_strip_model()->count());
-  EXPECT_EQ(1u, pm->GetRenderFrameHostsForExtension(extension->id()).size());
-  EXPECT_EQ(1u, pm->GetAllFrames().size());
   EXPECT_NE(popup->GetRenderProcessHost(), extension_frame->GetProcess());
   EXPECT_EQ(popup->GetRenderProcessHost(), main_frame->GetProcess());
 

@@ -7,7 +7,6 @@
 
 #include "ash/common/accelerators/accelerator_controller_delegate.h"
 #include "base/macros.h"
-#include "services/shell/public/cpp/connector.h"
 
 namespace ash {
 namespace mus {
@@ -16,7 +15,7 @@ class WindowManager;
 
 class AcceleratorControllerDelegateMus : public AcceleratorControllerDelegate {
  public:
-  explicit AcceleratorControllerDelegateMus(shell::Connector* connector);
+  explicit AcceleratorControllerDelegateMus(WindowManager* window_manager);
   ~AcceleratorControllerDelegateMus() override;
 
   // AcceleratorControllerDelegate:
@@ -32,7 +31,7 @@ class AcceleratorControllerDelegateMus : public AcceleratorControllerDelegate {
                                              int new_shortcut_id) override;
 
  private:
-  shell::Connector* connector_;
+  WindowManager* window_manager_;
 
   DISALLOW_COPY_AND_ASSIGN(AcceleratorControllerDelegateMus);
 };

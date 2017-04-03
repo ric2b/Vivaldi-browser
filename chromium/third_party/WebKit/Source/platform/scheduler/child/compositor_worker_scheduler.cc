@@ -39,7 +39,7 @@ class CompositorWorkerTaskRunnerWrapper : public TaskQueue {
 
   void SetQueueEnabled(bool enabled) override { NOTREACHED(); }
 
-  void InsertFence() override { NOTREACHED(); }
+  void InsertFence(InsertFencePosition position) override { NOTREACHED(); }
 
   void RemoveFence() override { NOTREACHED(); }
 
@@ -58,6 +58,11 @@ class CompositorWorkerTaskRunnerWrapper : public TaskQueue {
     return false;
   };
 
+  size_t GetNumberOfPendingTasks() const override {
+    NOTREACHED();
+    return 0;
+  };
+
   bool HasPendingImmediateWork() const override {
     NOTREACHED();
     return false;
@@ -72,6 +77,11 @@ class CompositorWorkerTaskRunnerWrapper : public TaskQueue {
     NOTREACHED();
     return nullptr;
   };
+
+  QueueType GetQueueType() const override {
+    NOTREACHED();
+    return QueueType::DEFAULT;
+  }
 
   void SetQueuePriority(QueuePriority priority) override { NOTREACHED(); }
 

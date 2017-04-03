@@ -5,8 +5,6 @@
 #ifndef ASH_COMMON_SYSTEM_TRAY_DEFAULT_SYSTEM_TRAY_DELEGATE_H_
 #define ASH_COMMON_SYSTEM_TRAY_DEFAULT_SYSTEM_TRAY_DELEGATE_H_
 
-#include <memory>
-
 #include "ash/ash_export.h"
 #include "ash/common/system/tray/system_tray_delegate.h"
 #include "base/macros.h"
@@ -23,21 +21,17 @@ class ASH_EXPORT DefaultSystemTrayDelegate : public SystemTrayDelegate {
   std::string GetSupervisedUserManager() const override;
   bool IsUserSupervised() const override;
   void GetSystemUpdateInfo(UpdateInfo* info) const override;
-  bool ShouldShowSettings() override;
-  bool ShouldShowDisplayNotification() override;
+  bool ShouldShowSettings() const override;
+  bool ShouldShowNotificationTray() const override;
   void ToggleBluetooth() override;
-  bool IsBluetoothDiscovering() override;
+  bool IsBluetoothDiscovering() const override;
   bool GetBluetoothAvailable() override;
   bool GetBluetoothEnabled() override;
   bool GetBluetoothDiscovering() override;
-  VolumeControlDelegate* GetVolumeControlDelegate() const override;
-  void SetVolumeControlDelegate(
-      std::unique_ptr<VolumeControlDelegate> delegate) override;
   int GetSystemTrayMenuWidth() override;
 
  private:
   bool bluetooth_enabled_;
-  std::unique_ptr<VolumeControlDelegate> volume_control_delegate_;
 
   DISALLOW_COPY_AND_ASSIGN(DefaultSystemTrayDelegate);
 };

@@ -8,7 +8,6 @@
 #include <utility>
 
 #include "ash/common/system/networking_config_delegate.h"
-#include "ash/common/system/volume_control_delegate.h"
 #include "base/message_loop/message_loop.h"
 #include "base/time/time.h"
 
@@ -40,19 +39,19 @@ void DefaultSystemTrayDelegate::GetSystemUpdateInfo(UpdateInfo* info) const {
   info->factory_reset_required = false;
 }
 
-bool DefaultSystemTrayDelegate::ShouldShowSettings() {
+bool DefaultSystemTrayDelegate::ShouldShowSettings() const {
   return true;
 }
 
-bool DefaultSystemTrayDelegate::ShouldShowDisplayNotification() {
-  return false;
+bool DefaultSystemTrayDelegate::ShouldShowNotificationTray() const {
+  return true;
 }
 
 void DefaultSystemTrayDelegate::ToggleBluetooth() {
   bluetooth_enabled_ = !bluetooth_enabled_;
 }
 
-bool DefaultSystemTrayDelegate::IsBluetoothDiscovering() {
+bool DefaultSystemTrayDelegate::IsBluetoothDiscovering() const {
   return false;
 }
 
@@ -66,16 +65,6 @@ bool DefaultSystemTrayDelegate::GetBluetoothEnabled() {
 
 bool DefaultSystemTrayDelegate::GetBluetoothDiscovering() {
   return false;
-}
-
-VolumeControlDelegate* DefaultSystemTrayDelegate::GetVolumeControlDelegate()
-    const {
-  return volume_control_delegate_.get();
-}
-
-void DefaultSystemTrayDelegate::SetVolumeControlDelegate(
-    std::unique_ptr<VolumeControlDelegate> delegate) {
-  volume_control_delegate_ = std::move(delegate);
 }
 
 int DefaultSystemTrayDelegate::GetSystemTrayMenuWidth() {

@@ -5,6 +5,7 @@
 #include "net/tools/quic/quic_client_session.h"
 
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "net/log/net_log_with_source.h"
 #include "net/quic/chromium/crypto/proof_verifier_chromium.h"
 #include "net/quic/core/crypto/crypto_protocol.h"
@@ -30,7 +31,7 @@ QuicClientSession::QuicClientSession(
 QuicClientSession::~QuicClientSession() {}
 
 void QuicClientSession::Initialize() {
-  crypto_stream_.reset(CreateQuicCryptoStream());
+  crypto_stream_ = CreateQuicCryptoStream();
   QuicClientSessionBase::Initialize();
 }
 
@@ -63,14 +64,16 @@ QuicSpdyClientStream* QuicClientSession::CreateOutgoingDynamicStream(
   if (!ShouldCreateOutgoingDynamicStream()) {
     return nullptr;
   }
-  QuicSpdyClientStream* stream = CreateClientStream();
+  std::unique_ptr<QuicSpdyClientStream> stream = CreateClientStream();
   stream->SetPriority(priority);
-  ActivateStream(stream);
-  return stream;
+  QuicSpdyClientStream* stream_ptr = stream.get();
+  ActivateStream(std::move(stream));
+  return stream_ptr;
 }
 
-QuicSpdyClientStream* QuicClientSession::CreateClientStream() {
-  return new QuicSpdyClientStream(GetNextOutgoingStreamId(), this);
+std::unique_ptr<QuicSpdyClientStream> QuicClientSession::CreateClientStream() {
+  return base::MakeUnique<QuicSpdyClientStream>(GetNextOutgoingStreamId(),
+                                                this);
 }
 
 QuicCryptoClientStreamBase* QuicClientSession::GetCryptoStream() {
@@ -117,12 +120,13 @@ QuicSpdyStream* QuicClientSession::CreateIncomingDynamicStream(
   }
   QuicSpdyStream* stream = new QuicSpdyClientStream(id, this);
   stream->CloseWriteSide();
-  ActivateStream(stream);
+  ActivateStream(base::WrapUnique(stream));
   return stream;
 }
 
-QuicCryptoClientStreamBase* QuicClientSession::CreateQuicCryptoStream() {
-  return new QuicCryptoClientStream(
+std::unique_ptr<QuicCryptoClientStreamBase>
+QuicClientSession::CreateQuicCryptoStream() {
+  return base::MakeUnique<QuicCryptoClientStream>(
       server_id_, this, new ProofVerifyContextChromium(0, NetLogWithSource()),
       crypto_config_, this);
 }

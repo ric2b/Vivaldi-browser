@@ -15,7 +15,6 @@ var natives = requireNative('test_native_handler');
 var uncaughtExceptionHandler = require('uncaught_exception_handler');
 var userGestures = requireNative('user_gestures');
 
-var RunWithNativesEnabled = requireNative('v8_context').RunWithNativesEnabled;
 var GetModuleSystem = requireNative('v8_context').GetModuleSystem;
 
 binding.registerCustomHook(function(api) {
@@ -121,10 +120,6 @@ binding.registerCustomHook(function(api) {
     console.log("[SUCCESS] " + testName(currentTest));
     chromeTest.log("(  SUCCESS )");
     testDone();
-  });
-
-  apiFunctions.setHandleRequest('runWithNativesEnabled', function(callback) {
-    RunWithNativesEnabled(callback);
   });
 
   apiFunctions.setHandleRequest('getModuleSystem', function(context) {
@@ -257,8 +252,9 @@ binding.registerCustomHook(function(api) {
       if (func)
         return $Function.apply(func, undefined, args);
     } catch (e) {
-      var msg = "uncaught exception " + e;
-      chromeTest.fail(msg);
+      if (e === failureException)
+        throw e;
+      uncaughtExceptionHandler.handle(e.message, e);
     }
   };
 

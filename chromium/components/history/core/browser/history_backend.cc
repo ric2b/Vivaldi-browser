@@ -17,7 +17,6 @@
 #include "base/compiler_specific.h"
 #include "base/files/file_enumerator.h"
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/rand_util.h"
 #include "base/sequenced_task_runner.h"
@@ -215,7 +214,6 @@ HistoryBackend::HistoryBackend(
       scheduled_kill_db_(false),
       expirer_(this, backend_client.get(), task_runner),
       recent_redirects_(kMaxRedirectCount),
-      backend_destroy_message_loop_(nullptr),
       segment_queried_(false),
       backend_client_(std::move(backend_client)),
       task_runner_(task_runner) {}
@@ -232,9 +230,8 @@ HistoryBackend::~HistoryBackend() {
 
   if (!backend_destroy_task_.is_null()) {
     // Notify an interested party (typically a unit test) that we're done.
-    DCHECK(backend_destroy_message_loop_);
-    backend_destroy_message_loop_->task_runner()->PostTask(
-        FROM_HERE, backend_destroy_task_);
+    DCHECK(backend_destroy_task_runner_);
+    backend_destroy_task_runner_->PostTask(FROM_HERE, backend_destroy_task_);
   }
 
 #if defined(OS_ANDROID)
@@ -259,11 +256,12 @@ void HistoryBackend::Init(
       base::Bind(&HistoryBackend::OnMemoryPressure, base::Unretained(this))));
 }
 
-void HistoryBackend::SetOnBackendDestroyTask(base::MessageLoop* message_loop,
-                                             const base::Closure& task) {
+void HistoryBackend::SetOnBackendDestroyTask(
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner,
+    const base::Closure& task) {
   if (!backend_destroy_task_.is_null())
     DLOG(WARNING) << "Setting more than one destroy task, overriding";
-  backend_destroy_message_loop_ = message_loop;
+  backend_destroy_task_runner_ = std::move(task_runner);
   backend_destroy_task_ = task;
 }
 
@@ -437,12 +435,11 @@ UrlVisitCount::TopUrlsPerDayList HistoryBackend::TopUrlsPerDay(
 }
 
 Visit::VisitsList HistoryBackend::VisitSearch(
-    const std::string& text_query,
     const QueryOptions& options) const {
   if (!db_)
     return Visit::VisitsList();
 
-  auto visits = db_->VisitSearch(text_query, options);
+  auto visits = db_->VisitSearch(options);
   return visits;
 }
 
@@ -517,7 +514,7 @@ void HistoryBackend::AddPage(const HistoryAddPageArgs& request) {
         origin_url.SchemeIs(url::kFtpScheme)) {
       std::string host(origin_url.host());
       size_t registry_length =
-          net::registry_controlled_domains::GetRegistryLength(
+          net::registry_controlled_domains::GetCanonicalHostRegistryLength(
               host,
               net::registry_controlled_domains::EXCLUDE_UNKNOWN_REGISTRIES,
               net::registry_controlled_domains::EXCLUDE_PRIVATE_REGISTRIES);
@@ -2535,16 +2532,16 @@ void HistoryBackend::NotifyURLVisited(ui::PageTransition transition,
                                       const URLRow& row,
                                       const RedirectList& redirects,
                                       base::Time visit_time) {
-  FOR_EACH_OBSERVER(HistoryBackendObserver, observers_,
-                    OnURLVisited(this, transition, row, redirects, visit_time));
+  for (HistoryBackendObserver& observer : observers_)
+    observer.OnURLVisited(this, transition, row, redirects, visit_time);
 
   if (delegate_)
     delegate_->NotifyURLVisited(transition, row, redirects, visit_time);
 }
 
 void HistoryBackend::NotifyURLsModified(const URLRows& rows) {
-  FOR_EACH_OBSERVER(HistoryBackendObserver, observers_,
-                    OnURLsModified(this, rows));
+  for (HistoryBackendObserver& observer : observers_)
+    observer.OnURLsModified(this, rows);
 
   if (delegate_)
     delegate_->NotifyURLsModified(rows);
@@ -2555,9 +2552,10 @@ void HistoryBackend::NotifyURLsDeleted(bool all_history,
                                        const URLRows& rows,
                                        const std::set<GURL>& favicon_urls) {
   URLRows copied_rows(rows);
-  FOR_EACH_OBSERVER(
-      HistoryBackendObserver, observers_,
-      OnURLsDeleted(this, all_history, expired, copied_rows, favicon_urls));
+  for (HistoryBackendObserver& observer : observers_) {
+    observer.OnURLsDeleted(this, all_history, expired, copied_rows,
+                           favicon_urls);
+  }
 
   if (delegate_)
     delegate_->NotifyURLsDeleted(all_history, expired, copied_rows,

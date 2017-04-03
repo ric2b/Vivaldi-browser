@@ -12,12 +12,14 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/command_line.h"
+#include "base/json/json_reader.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string16.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -52,10 +54,10 @@
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_client.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/referrer.h"
 #include "content/public/common/resource_type.h"
-#include "content/public/common/security_style.h"
 #include "content/public/common/web_preferences.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
@@ -63,6 +65,7 @@
 #include "content/shell/browser/shell.h"
 #include "content/shell/browser/shell_content_browser_client.h"
 #include "content/test/test_content_browser_client.h"
+#include "net/dns/mock_host_resolver.h"
 #include "net/log/net_log_with_source.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
@@ -335,21 +338,57 @@ void CountScriptResources(
   *num_resources = static_cast<int>(version->script_cache_map()->size());
 }
 
+void StoreString(std::string* result,
+                 const base::Closure& callback,
+                 const base::Value* value) {
+  value->GetAsString(result);
+  callback.Run();
+}
+
+int GetInt(const base::DictionaryValue& dict, base::StringPiece path) {
+  int out = 0;
+  EXPECT_TRUE(dict.GetInteger(path, &out));
+  return out;
+}
+
+std::string GetString(const base::DictionaryValue& dict,
+                      base::StringPiece path) {
+  std::string out;
+  EXPECT_TRUE(dict.GetString(path, &out));
+  return out;
+}
+
+bool GetBoolean(const base::DictionaryValue& dict, base::StringPiece path) {
+  bool out = false;
+  EXPECT_TRUE(dict.GetBoolean(path, &out));
+  return out;
+}
+
+bool CheckHeader(const base::DictionaryValue& dict,
+                 base::StringPiece header_name,
+                 base::StringPiece header_value) {
+  const base::ListValue* headers = nullptr;
+  EXPECT_TRUE(dict.GetList("headers", &headers));
+  for (size_t i = 0; i < headers->GetSize(); ++i) {
+    const base::ListValue* name_value_pair = nullptr;
+    EXPECT_TRUE(headers->GetList(i, &name_value_pair));
+    EXPECT_EQ(2u, name_value_pair->GetSize());
+    std::string name;
+    EXPECT_TRUE(name_value_pair->GetString(0, &name));
+    std::string value;
+    EXPECT_TRUE(name_value_pair->GetString(1, &value));
+    if (name == header_name && value == header_value)
+      return true;
+  }
+  return false;
+}
+
 }  // namespace
 
-class ServiceWorkerBrowserTest : public testing::WithParamInterface<bool>,
-                                 public ContentBrowserTest {
+class ServiceWorkerBrowserTest
+    : public MojoServiceWorkerTestP<ContentBrowserTest> {
  protected:
   using self = ServiceWorkerBrowserTest;
-
-  void SetUp() override {
-    is_mojo_enabled_ = GetParam();
-    if (is_mojo_enabled()) {
-      base::CommandLine::ForCurrentProcess()->AppendSwitch(
-          switches::kMojoServiceWorker);
-    }
-    ContentBrowserTest::SetUp();
-  }
 
   void SetUpOnMainThread() override {
     ASSERT_TRUE(embedded_test_server()->Start());
@@ -378,7 +417,6 @@ class ServiceWorkerBrowserTest : public testing::WithParamInterface<bool>,
 
   ServiceWorkerContextWrapper* wrapper() { return wrapper_.get(); }
   ServiceWorkerContext* public_context() { return wrapper(); }
-  bool is_mojo_enabled() const { return is_mojo_enabled_; }
 
   void AssociateRendererProcessToPattern(const GURL& pattern) {
     wrapper_->process_manager()->AddProcessReferenceToPattern(
@@ -387,7 +425,6 @@ class ServiceWorkerBrowserTest : public testing::WithParamInterface<bool>,
 
  private:
   scoped_refptr<ServiceWorkerContextWrapper> wrapper_;
-  bool is_mojo_enabled_ = false;
 };
 
 class ConsoleListener : public EmbeddedWorkerInstance::Listener {
@@ -1361,6 +1398,744 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerBrowserTest, Reload) {
   run_loop.Run();
 }
 
+class ServiceWorkerNavigationPreloadTest : public ServiceWorkerBrowserTest {
+ public:
+  using self = ServiceWorkerNavigationPreloadTest;
+
+  ~ServiceWorkerNavigationPreloadTest() override {}
+
+  void SetUpOnMainThread() override {
+    host_resolver()->AddRule("*", "127.0.0.1");
+    ServiceWorkerBrowserTest::SetUpOnMainThread();
+  }
+
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    command_line->AppendSwitchASCII(
+        switches::kEnableFeatures,
+        features::kServiceWorkerNavigationPreload.name);
+  }
+
+ protected:
+  static const std::string kNavigationPreloadHeaderName;
+  static const std::string kEnableNavigationPreloadScript;
+  static const std::string kPreloadResponseTestScript;
+
+  static bool HasNavigationPreloadHeader(
+      const net::test_server::HttpRequest& request) {
+    return request.headers.find(kNavigationPreloadHeaderName) !=
+           request.headers.end();
+  }
+
+  static std::string GetNavigationPreloadHeader(
+      const net::test_server::HttpRequest& request) {
+    DCHECK(HasNavigationPreloadHeader(request));
+    return request.headers.find(kNavigationPreloadHeaderName)->second;
+  }
+
+  void SetupForNavigationPreloadTest(const GURL& scope,
+                                     const GURL& worker_url) {
+    scoped_refptr<WorkerActivatedObserver> observer =
+        new WorkerActivatedObserver(wrapper());
+    observer->Init();
+    public_context()->RegisterServiceWorker(
+        scope, worker_url,
+        base::Bind(&ExpectResultAndRun, true, base::Bind(&base::DoNothing)));
+    observer->Wait();
+
+    embedded_test_server()->RegisterRequestMonitor(
+        base::Bind(&self::MonitorRequestHandler, base::Unretained(this)));
+  }
+
+  void RegisterStaticFile(const std::string& relative_url,
+                          const std::string& content,
+                          const std::string& content_type) {
+    embedded_test_server()->RegisterRequestHandler(
+        base::Bind(&self::StaticRequestHandler, base::Unretained(this),
+                   relative_url, content, content_type));
+  }
+
+  void RegisterCustomResponse(const std::string& relative_url,
+                              const std::string& response) {
+    embedded_test_server()->RegisterRequestHandler(
+        base::Bind(&self::CustomRequestHandler, base::Unretained(this),
+                   relative_url, response));
+  }
+
+  void RegisterKeepSearchRedirect(const std::string& relative_url,
+                                  const std::string& redirect_location) {
+    embedded_test_server()->RegisterRequestHandler(
+        base::Bind(&self::KeepSearchRedirectHandler, base::Unretained(this),
+                   relative_url, redirect_location));
+  }
+
+  int GetRequestCount(const std::string& relative_url) const {
+    const auto& it = request_log_.find(relative_url);
+    if (it == request_log_.end())
+      return 0;
+    return it->second.size();
+  }
+
+  std::string GetTextContent() {
+    base::RunLoop run_loop;
+    std::string text_content;
+    shell()->web_contents()->GetMainFrame()->ExecuteJavaScriptForTests(
+        base::ASCIIToUTF16("document.body.textContent;"),
+        base::Bind(&StoreString, &text_content, run_loop.QuitClosure()));
+    run_loop.Run();
+    return text_content;
+  }
+
+  std::map<std::string, std::vector<net::test_server::HttpRequest>>
+      request_log_;
+
+ private:
+  class CustomResponse : public net::test_server::HttpResponse {
+   public:
+    CustomResponse(const std::string& response) : response_(response) {}
+    ~CustomResponse() override {}
+
+    void SendResponse(
+        const net::test_server::SendBytesCallback& send,
+        const net::test_server::SendCompleteCallback& done) override {
+      send.Run(response_, done);
+    }
+
+   private:
+    const std::string response_;
+
+    DISALLOW_COPY_AND_ASSIGN(CustomResponse);
+  };
+
+  std::unique_ptr<net::test_server::HttpResponse> StaticRequestHandler(
+      const std::string& relative_url,
+      const std::string& content,
+      const std::string& content_type,
+      const net::test_server::HttpRequest& request) const {
+    const size_t query_position = request.relative_url.find('?');
+    if (request.relative_url.substr(0, query_position) != relative_url)
+      return std::unique_ptr<net::test_server::HttpResponse>();
+    std::unique_ptr<net::test_server::BasicHttpResponse> http_response(
+        base::MakeUnique<net::test_server::BasicHttpResponse>());
+    http_response->set_code(net::HTTP_OK);
+    http_response->set_content(content);
+    http_response->set_content_type(content_type);
+    return std::move(http_response);
+  }
+
+  std::unique_ptr<net::test_server::HttpResponse> CustomRequestHandler(
+      const std::string& relative_url,
+      const std::string& response,
+      const net::test_server::HttpRequest& request) const {
+    const size_t query_position = request.relative_url.find('?');
+    if (request.relative_url.substr(0, query_position) != relative_url)
+      return std::unique_ptr<net::test_server::HttpResponse>();
+    return base::MakeUnique<CustomResponse>(response);
+  }
+
+  std::unique_ptr<net::test_server::HttpResponse> KeepSearchRedirectHandler(
+      const std::string& relative_url,
+      const std::string& redirect_location,
+      const net::test_server::HttpRequest& request) const {
+    const size_t query_position = request.relative_url.find('?');
+    if (request.relative_url.substr(0, query_position) != relative_url)
+      return std::unique_ptr<net::test_server::HttpResponse>();
+    std::unique_ptr<net::test_server::BasicHttpResponse> response(
+        new net::test_server::BasicHttpResponse());
+    response->set_code(net::HTTP_PERMANENT_REDIRECT);
+    response->AddCustomHeader(
+        "Location",
+        query_position == std::string::npos
+            ? redirect_location
+            : redirect_location + request.relative_url.substr(query_position));
+    return std::move(response);
+  }
+
+  void MonitorRequestHandler(const net::test_server::HttpRequest& request) {
+    request_log_[request.relative_url].push_back(request);
+  }
+};
+
+const std::string
+    ServiceWorkerNavigationPreloadTest::kNavigationPreloadHeaderName(
+        "Service-Worker-Navigation-Preload");
+
+const std::string
+    ServiceWorkerNavigationPreloadTest::kEnableNavigationPreloadScript(
+        "self.addEventListener('install', event => {\n"
+        "    event.waitUntil(self.registration.navigationPreload.enable());\n"
+        "  });\n");
+
+const std::string
+    ServiceWorkerNavigationPreloadTest::kPreloadResponseTestScript =
+        "var preload_resolve;\n"
+        "var preload_promise = new Promise(r => { preload_resolve = r; });\n"
+        "self.addEventListener('fetch', event => {\n"
+        "    event.waitUntil(event.preloadResponse.then(\n"
+        "        r => {\n"
+        "          if (!r) {\n"
+        "            preload_resolve(\n"
+        "                {result: 'RESOLVED', \n"
+        "                 info: 'Resolved with ' + r + '.'});\n"
+        "            return;\n"
+        "          }\n"
+        "          var info = {};\n"
+        "          info.type = r.type;\n"
+        "          info.url = r.url;\n"
+        "          info.status = r.status;\n"
+        "          info.ok = r.ok;\n"
+        "          info.statusText = r.statusText;\n"
+        "          info.headers = [];\n"
+        "          r.headers.forEach(\n"
+        "              (v, n) => { info.headers.push([n,v]); });\n"
+        "          preload_resolve({result: 'RESOLVED',\n"
+        "                           info: JSON.stringify(info)}); },\n"
+        "        e => { preload_resolve({result: 'REJECTED',\n"
+        "                                info: e.toString()}); }));\n"
+        "    event.respondWith(\n"
+        "        new Response(\n"
+        "            '<title>WAITING</title><script>\\n' +\n"
+        "            'navigator.serviceWorker.onmessage = e => {\\n' +\n"
+        "            '    var div = document.createElement(\\'div\\');\\n' +\n"
+        "            '    div.appendChild(' +\n"
+        "            '        document.createTextNode(e.data.info));\\n' +\n"
+        "            '    document.body.appendChild(div);\\n' +\n"
+        "            '    document.title = e.data.result;\\n' +\n"
+        "            '  };\\n' +\n"
+        "            'navigator.serviceWorker.controller.postMessage(\\n' +\n"
+        "            '    null);\\n' +\n"
+        "            '</script>',"
+        "            {headers: [['content-type', 'text/html']]}));\n"
+        "  });\n"
+        "self.addEventListener('message', event => {\n"
+        "    event.waitUntil(\n"
+        "        preload_promise.then(\n"
+        "            result => event.source.postMessage(result)));\n"
+        "  });";
+
+IN_PROC_BROWSER_TEST_P(ServiceWorkerNavigationPreloadTest, NetworkFallback) {
+  const char kPageUrl[] = "/service_worker/navigation_preload.html";
+  const char kWorkerUrl[] = "/service_worker/navigation_preload.js";
+  const char kPage[] = "<title>PASS</title>Hello world.";
+  const std::string kScript = kEnableNavigationPreloadScript +
+                              "self.addEventListener('fetch', event => {\n"
+                              "    // Do nothing.\n"
+                              "  });";
+  const GURL page_url = embedded_test_server()->GetURL(kPageUrl);
+  const GURL worker_url = embedded_test_server()->GetURL(kWorkerUrl);
+  RegisterStaticFile(kPageUrl, kPage, "text/html");
+  RegisterStaticFile(kWorkerUrl, kScript, "text/javascript");
+
+  SetupForNavigationPreloadTest(page_url, worker_url);
+
+  const base::string16 title = base::ASCIIToUTF16("PASS");
+  TitleWatcher title_watcher(shell()->web_contents(), title);
+  NavigateToURL(shell(), page_url);
+  EXPECT_EQ(title, title_watcher.WaitAndGetTitle());
+  EXPECT_EQ("Hello world.", GetTextContent());
+
+  // The page request must be sent once or twice:
+  // - A navigation preload request may be sent. But it is possible that the
+  //   navigation preload request is canceled before reaching the server.
+  // - A fallback request must be sent since respondWith wasn't used.
+  const int request_count = GetRequestCount(kPageUrl);
+  ASSERT_TRUE(request_count == 1 || request_count == 2);
+  if (request_count == 1) {
+    // Fallback request.
+    EXPECT_FALSE(HasNavigationPreloadHeader(request_log_[kPageUrl][0]));
+  } else if (request_count == 2) {
+    // Navigation preload request.
+    ASSERT_TRUE(HasNavigationPreloadHeader(request_log_[kPageUrl][0]));
+    EXPECT_EQ("true", GetNavigationPreloadHeader(request_log_[kPageUrl][0]));
+    // Fallback request.
+    EXPECT_FALSE(HasNavigationPreloadHeader(request_log_[kPageUrl][1]));
+  }
+}
+
+IN_PROC_BROWSER_TEST_P(ServiceWorkerNavigationPreloadTest, SetHeaderValue) {
+  const std::string kPageUrl = "/service_worker/navigation_preload.html";
+  const std::string kWorkerUrl = "/service_worker/navigation_preload.js";
+  const std::string kPage = "<title>FROM_SERVER</title>";
+  const std::string kScript =
+      "function createResponse(title, body) {\n"
+      "  return new Response('<title>' + title + '</title>' + body,\n"
+      "                      {headers: [['content-type', 'text/html']]})\n"
+      "}\n"
+      "self.addEventListener('fetch', event => {\n"
+      "    if (event.request.url.indexOf('?enable') != -1) {\n"
+      "      event.respondWith(\n"
+      "          self.registration.navigationPreload.enable()\n"
+      "            .then(_ => event.preloadResponse)\n"
+      "            .then(res => createResponse('ENABLED', res)));\n"
+      "    } else if (event.request.url.indexOf('?change') != -1) {\n"
+      "      event.respondWith(\n"
+      "          self.registration.navigationPreload.setHeaderValue('Hello')\n"
+      "            .then(_ => event.preloadResponse)\n"
+      "            .then(res => createResponse('CHANGED', res)));\n"
+      "    } else if (event.request.url.indexOf('?disable') != -1) {\n"
+      "      event.respondWith(\n"
+      "          self.registration.navigationPreload.disable()\n"
+      "            .then(_ => event.preloadResponse)\n"
+      "            .then(res => createResponse('DISABLED', res)));\n"
+      "    } else if (event.request.url.indexOf('?test') != -1) {\n"
+      "      event.respondWith(event.preloadResponse.then(res =>\n"
+      "          createResponse('TEST', res)));\n"
+      "    }\n"
+      "  });";
+  const GURL page_url = embedded_test_server()->GetURL(kPageUrl);
+  const GURL worker_url = embedded_test_server()->GetURL(kWorkerUrl);
+  RegisterStaticFile(kPageUrl, kPage, "text/html");
+  RegisterStaticFile(kWorkerUrl, kScript, "text/javascript");
+
+  SetupForNavigationPreloadTest(page_url, worker_url);
+
+  const std::string kPageUrl1 = kPageUrl + "?enable";
+  const base::string16 title1 = base::ASCIIToUTF16("ENABLED");
+  TitleWatcher title_watcher1(shell()->web_contents(), title1);
+  title_watcher1.AlsoWaitForTitle(base::ASCIIToUTF16("FROM_SERVER"));
+  NavigateToURL(shell(), embedded_test_server()->GetURL(kPageUrl1));
+  EXPECT_EQ(title1, title_watcher1.WaitAndGetTitle());
+  // When the navigation started, the navigation preload was not enabled yet.
+  EXPECT_EQ("null", GetTextContent());
+  ASSERT_EQ(0, GetRequestCount(kPageUrl1));
+
+  const std::string kPageUrl2 = kPageUrl + "?change";
+  const base::string16 title2 = base::ASCIIToUTF16("CHANGED");
+  TitleWatcher title_watcher2(shell()->web_contents(), title2);
+  title_watcher2.AlsoWaitForTitle(base::ASCIIToUTF16("FROM_SERVER"));
+  NavigateToURL(shell(), embedded_test_server()->GetURL(kPageUrl2));
+  EXPECT_EQ(title2, title_watcher2.WaitAndGetTitle());
+  // When the navigation started, the navigation preload was enabled, but the
+  // header was not changed yet.
+  EXPECT_EQ("[object Response]", GetTextContent());
+  ASSERT_EQ(1, GetRequestCount(kPageUrl2));
+  ASSERT_TRUE(HasNavigationPreloadHeader(request_log_[kPageUrl2][0]));
+  EXPECT_EQ("true", GetNavigationPreloadHeader(request_log_[kPageUrl2][0]));
+
+  const std::string kPageUrl3 = kPageUrl + "?disable";
+  const base::string16 title3 = base::ASCIIToUTF16("DISABLED");
+  TitleWatcher title_watcher3(shell()->web_contents(), title3);
+  title_watcher3.AlsoWaitForTitle(base::ASCIIToUTF16("FROM_SERVER"));
+  NavigateToURL(shell(), embedded_test_server()->GetURL(kPageUrl3));
+  EXPECT_EQ(title3, title_watcher3.WaitAndGetTitle());
+  // When the navigation started, the navigation preload was not disabled yet.
+  EXPECT_EQ("[object Response]", GetTextContent());
+  ASSERT_EQ(1, GetRequestCount(kPageUrl3));
+  ASSERT_TRUE(HasNavigationPreloadHeader(request_log_[kPageUrl3][0]));
+  EXPECT_EQ("Hello", GetNavigationPreloadHeader(request_log_[kPageUrl3][0]));
+
+  const std::string kPageUrl4 = kPageUrl + "?test";
+  const base::string16 title4 = base::ASCIIToUTF16("TEST");
+  TitleWatcher title_watcher4(shell()->web_contents(), title4);
+  title_watcher4.AlsoWaitForTitle(base::ASCIIToUTF16("FROM_SERVER"));
+  NavigateToURL(shell(), embedded_test_server()->GetURL(kPageUrl4));
+  EXPECT_EQ(title4, title_watcher4.WaitAndGetTitle());
+  // When the navigation started, the navigation preload must be disabled.
+  EXPECT_EQ("null", GetTextContent());
+  ASSERT_EQ(0, GetRequestCount(kPageUrl4));
+}
+
+IN_PROC_BROWSER_TEST_P(ServiceWorkerNavigationPreloadTest,
+                       RespondWithNavigationPreload) {
+  const char kPageUrl[] = "/service_worker/navigation_preload.html";
+  const char kWorkerUrl[] = "/service_worker/navigation_preload.js";
+  const char kPage[] = "<title>PASS</title>Hello world.";
+  const std::string kScript =
+      kEnableNavigationPreloadScript +
+      "self.addEventListener('fetch', event => {\n"
+      "    if (!event.preloadResponse) {\n"
+      "      event.respondWith(\n"
+      "          new Response('<title>ERROR</title>',"
+      "                       {headers: [['content-type', 'text/html']]}));\n"
+      "      return;\n"
+      "    }\n"
+      "    event.respondWith(event.preloadResponse);\n"
+      "  });";
+  const GURL page_url = embedded_test_server()->GetURL(kPageUrl);
+  const GURL worker_url = embedded_test_server()->GetURL(kWorkerUrl);
+  RegisterStaticFile(kPageUrl, kPage, "text/html");
+  RegisterStaticFile(kWorkerUrl, kScript, "text/javascript");
+
+  SetupForNavigationPreloadTest(page_url, worker_url);
+
+  const base::string16 title = base::ASCIIToUTF16("PASS");
+  TitleWatcher title_watcher(shell()->web_contents(), title);
+  title_watcher.AlsoWaitForTitle(base::ASCIIToUTF16("ERROR"));
+  NavigateToURL(shell(), page_url);
+  EXPECT_EQ(title, title_watcher.WaitAndGetTitle());
+  EXPECT_EQ("Hello world.", GetTextContent());
+
+  // The page request must be sent only once, since the worker responded with
+  // the navigation preload response
+  ASSERT_EQ(1, GetRequestCount(kPageUrl));
+  EXPECT_EQ("true",
+            request_log_[kPageUrl][0].headers[kNavigationPreloadHeaderName]);
+}
+
+IN_PROC_BROWSER_TEST_P(ServiceWorkerNavigationPreloadTest, GetResponseText) {
+  const char kPageUrl[] = "/service_worker/navigation_preload.html";
+  const char kWorkerUrl[] = "/service_worker/navigation_preload.js";
+  const char kPage[] = "<title>PASS</title>Hello world.";
+  const std::string kScript =
+      kEnableNavigationPreloadScript +
+      "self.addEventListener('fetch', event => {\n"
+      "    event.respondWith(\n"
+      "        event.preloadResponse\n"
+      "          .then(response => response.text())\n"
+      "          .then(text =>\n"
+      "                  new Response(\n"
+      "                      text,\n"
+      "                      {headers: [['content-type', 'text/html']]})));\n"
+      "  });";
+  const GURL page_url = embedded_test_server()->GetURL(kPageUrl);
+  const GURL worker_url = embedded_test_server()->GetURL(kWorkerUrl);
+  RegisterStaticFile(kPageUrl, kPage, "text/html");
+  RegisterStaticFile(kWorkerUrl, kScript, "text/javascript");
+
+  SetupForNavigationPreloadTest(page_url, worker_url);
+
+  const base::string16 title = base::ASCIIToUTF16("PASS");
+  TitleWatcher title_watcher(shell()->web_contents(), title);
+  NavigateToURL(shell(), page_url);
+  EXPECT_EQ(title, title_watcher.WaitAndGetTitle());
+  EXPECT_EQ("Hello world.", GetTextContent());
+
+  // The page request must be sent only once, since the worker responded with
+  // "Hello world".
+  EXPECT_EQ(1, GetRequestCount(kPageUrl));
+}
+
+IN_PROC_BROWSER_TEST_P(ServiceWorkerNavigationPreloadTest,
+                       AbortPreloadRequest) {
+  const char kPageUrl[] = "/service_worker/navigation_preload.html";
+  const char kWorkerUrl[] = "/service_worker/navigation_preload.js";
+  const char kPage[] = "<title>ERROR</title>Hello world.";
+  // In this script, event.preloadResponse is not guarded by event.waitUntil.
+  // So the preload request should be canceled, when the fetch event handler
+  // has been executed.
+  const std::string kScript =
+      kEnableNavigationPreloadScript +
+      "var preload_resolve;\n"
+      "var preload_promise = new Promise(r => { preload_resolve = r; });\n"
+      "self.addEventListener('fetch', event => {\n"
+      "    event.preloadResponse.then(\n"
+      "        _ => { preload_resolve({result: 'RESOLVED',\n"
+      "                                info: 'Preload resolved.'}); },\n"
+      "        e => { preload_resolve({result: 'REJECTED',\n"
+      "                                info: e.toString()}); });\n"
+      "    event.respondWith(\n"
+      "        new Response(\n"
+      "            '<title>WAITING</title><script>\\n' +\n"
+      "            'navigator.serviceWorker.onmessage = e => {\\n' +\n"
+      "            '    var div = document.createElement(\\'div\\');\\n' +\n"
+      "            '    div.appendChild(' +\n"
+      "            '        document.createTextNode(e.data.info));\\n' +\n"
+      "            '    document.body.appendChild(div);\\n' +\n"
+      "            '    document.title = e.data.result;\\n' +\n"
+      "            '  };\\n' +\n"
+      "            'navigator.serviceWorker.controller.postMessage(\\n' +\n"
+      "            '    null);\\n' +\n"
+      "            '</script>',"
+      "            {headers: [['content-type', 'text/html']]}));\n"
+      "  });\n"
+      "self.addEventListener('message', event => {\n"
+      "    event.waitUntil(\n"
+      "        preload_promise.then(\n"
+      "            result => event.source.postMessage(result)));\n"
+      "  });";
+  const GURL page_url = embedded_test_server()->GetURL(kPageUrl);
+  const GURL worker_url = embedded_test_server()->GetURL(kWorkerUrl);
+  RegisterStaticFile(kPageUrl, kPage, "text/html");
+  RegisterStaticFile(kWorkerUrl, kScript, "text/javascript");
+
+  SetupForNavigationPreloadTest(page_url, worker_url);
+
+  const base::string16 title = base::ASCIIToUTF16("REJECTED");
+  TitleWatcher title_watcher(shell()->web_contents(), title);
+  title_watcher.AlsoWaitForTitle(base::ASCIIToUTF16("RESOLVED"));
+  title_watcher.AlsoWaitForTitle(base::ASCIIToUTF16("ERROR"));
+  NavigateToURL(shell(), page_url);
+  EXPECT_EQ(title, title_watcher.WaitAndGetTitle());
+
+  EXPECT_EQ(
+      "AbortError: Service Worker navigation preload aborted. Need to guard "
+      "with respondWith or waitUntil.",
+      GetTextContent());
+}
+
+IN_PROC_BROWSER_TEST_P(ServiceWorkerNavigationPreloadTest, NetworkError) {
+  const char kPageUrl[] = "/service_worker/navigation_preload.html";
+  const char kWorkerUrl[] = "/service_worker/navigation_preload.js";
+  const GURL page_url = embedded_test_server()->GetURL(kPageUrl);
+  const GURL worker_url = embedded_test_server()->GetURL(kWorkerUrl);
+  RegisterStaticFile(
+      kWorkerUrl, kEnableNavigationPreloadScript + kPreloadResponseTestScript,
+      "text/javascript");
+
+  SetupForNavigationPreloadTest(page_url, worker_url);
+
+  EXPECT_TRUE(embedded_test_server()->ShutdownAndWaitUntilComplete());
+
+  const base::string16 title = base::ASCIIToUTF16("REJECTED");
+  TitleWatcher title_watcher(shell()->web_contents(), title);
+  title_watcher.AlsoWaitForTitle(base::ASCIIToUTF16("RESOLVED"));
+  NavigateToURL(shell(), page_url);
+  EXPECT_EQ(title, title_watcher.WaitAndGetTitle());
+  EXPECT_EQ("NetworkError: Service Worker navigation preload network error.",
+            GetTextContent());
+}
+
+IN_PROC_BROWSER_TEST_P(ServiceWorkerNavigationPreloadTest,
+                       PreloadHeadersSimple) {
+  const char kPageUrl[] = "/service_worker/navigation_preload.html";
+  const char kWorkerUrl[] = "/service_worker/navigation_preload.js";
+  const char kPage[] = "<title>ERROR</title>Hello world.";
+  const GURL page_url = embedded_test_server()->GetURL(kPageUrl);
+  const GURL worker_url = embedded_test_server()->GetURL(kWorkerUrl);
+  RegisterStaticFile(kPageUrl, kPage, "text/html");
+  RegisterStaticFile(
+      kWorkerUrl, kEnableNavigationPreloadScript + kPreloadResponseTestScript,
+      "text/javascript");
+
+  SetupForNavigationPreloadTest(page_url, worker_url);
+
+  const base::string16 title = base::ASCIIToUTF16("RESOLVED");
+  TitleWatcher title_watcher(shell()->web_contents(), title);
+  title_watcher.AlsoWaitForTitle(base::ASCIIToUTF16("REJECTED"));
+  title_watcher.AlsoWaitForTitle(base::ASCIIToUTF16("ERROR"));
+  NavigateToURL(shell(), page_url);
+  EXPECT_EQ(title, title_watcher.WaitAndGetTitle());
+
+  // The page request must be sent only once, since the worker responded with
+  // a generated Response.
+  EXPECT_EQ(1, GetRequestCount(kPageUrl));
+  std::unique_ptr<base::Value> result =
+      base::JSONReader::Read(GetTextContent());
+  base::DictionaryValue* dict = nullptr;
+  ASSERT_TRUE(result->GetAsDictionary(&dict));
+  EXPECT_EQ("basic", GetString(*dict, "type"));
+  EXPECT_EQ(page_url, GURL(GetString(*dict, "url")));
+  EXPECT_EQ(200, GetInt(*dict, "status"));
+  EXPECT_EQ(true, GetBoolean(*dict, "ok"));
+  EXPECT_EQ("OK", GetString(*dict, "statusText"));
+  EXPECT_TRUE(CheckHeader(*dict, "content-type", "text/html"));
+  EXPECT_TRUE(CheckHeader(*dict, "content-length",
+                          base::IntToString(sizeof(kPage) - 1)));
+}
+
+IN_PROC_BROWSER_TEST_P(ServiceWorkerNavigationPreloadTest, NotEnabled) {
+  const char kPageUrl[] = "/service_worker/navigation_preload.html";
+  const char kWorkerUrl[] = "/service_worker/navigation_preload.js";
+  const char kPage[] = "<title>ERROR</title>Hello world.";
+  const GURL page_url = embedded_test_server()->GetURL(kPageUrl);
+  const GURL worker_url = embedded_test_server()->GetURL(kWorkerUrl);
+  RegisterStaticFile(kPageUrl, kPage, "text/html");
+  RegisterStaticFile(kWorkerUrl, kPreloadResponseTestScript, "text/javascript");
+
+  SetupForNavigationPreloadTest(page_url, worker_url);
+
+  const base::string16 title = base::ASCIIToUTF16("RESOLVED");
+  TitleWatcher title_watcher(shell()->web_contents(), title);
+  title_watcher.AlsoWaitForTitle(base::ASCIIToUTF16("REJECTED"));
+  title_watcher.AlsoWaitForTitle(base::ASCIIToUTF16("ERROR"));
+  NavigateToURL(shell(), page_url);
+  EXPECT_EQ(title, title_watcher.WaitAndGetTitle());
+
+  // The page request must not be sent, since the worker responded with a
+  // generated Response and the navigation preload isn't enabled.
+  EXPECT_EQ(0, GetRequestCount(kPageUrl));
+  EXPECT_EQ("Resolved with null.", GetTextContent());
+}
+
+IN_PROC_BROWSER_TEST_P(ServiceWorkerNavigationPreloadTest,
+                       PreloadHeadersCustom) {
+  const char kPageUrl[] = "/service_worker/navigation_preload.html";
+  const char kWorkerUrl[] = "/service_worker/navigation_preload.js";
+  const char kPageResponse[] =
+      "HTTP/1.1 201 HELLOWORLD\r\n"
+      "Connection: close\r\n"
+      "Content-Length: 32\r\n"
+      "Content-Type: text/html\r\n"
+      "Custom-Header: pen pineapple\r\n"
+      "Custom-Header: apple pen\r\n"
+      "Set-Cookie: COOKIE1\r\n"
+      "Set-Cookie2: COOKIE2\r\n"
+      "\r\n"
+      "<title>ERROR</title>Hello world.";
+  const GURL page_url = embedded_test_server()->GetURL(kPageUrl);
+  const GURL worker_url = embedded_test_server()->GetURL(kWorkerUrl);
+  RegisterCustomResponse(kPageUrl, kPageResponse);
+  RegisterStaticFile(
+      kWorkerUrl, kEnableNavigationPreloadScript + kPreloadResponseTestScript,
+      "text/javascript");
+
+  SetupForNavigationPreloadTest(page_url, worker_url);
+
+  const base::string16 title = base::ASCIIToUTF16("RESOLVED");
+  TitleWatcher title_watcher(shell()->web_contents(), title);
+  title_watcher.AlsoWaitForTitle(base::ASCIIToUTF16("REJECTED"));
+  title_watcher.AlsoWaitForTitle(base::ASCIIToUTF16("ERROR"));
+  NavigateToURL(shell(), page_url);
+  EXPECT_EQ(title, title_watcher.WaitAndGetTitle());
+
+  // The page request must be sent only once, since the worker responded with
+  // a generated Response.
+  EXPECT_EQ(1, GetRequestCount(kPageUrl));
+  std::unique_ptr<base::Value> result =
+      base::JSONReader::Read(GetTextContent());
+  base::DictionaryValue* dict = nullptr;
+  ASSERT_TRUE(result->GetAsDictionary(&dict));
+  EXPECT_EQ("basic", GetString(*dict, "type"));
+  EXPECT_EQ(page_url, GURL(GetString(*dict, "url")));
+  EXPECT_EQ(201, GetInt(*dict, "status"));
+  EXPECT_EQ(true, GetBoolean(*dict, "ok"));
+  EXPECT_EQ("HELLOWORLD", GetString(*dict, "statusText"));
+  EXPECT_TRUE(CheckHeader(*dict, "content-type", "text/html"));
+  EXPECT_TRUE(CheckHeader(*dict, "content-length", "32"));
+  EXPECT_TRUE(CheckHeader(*dict, "custom-header", "pen pineapple, apple pen"));
+  // The forbidden response headers (Set-Cookie, Set-Cookie2) must be removed.
+  EXPECT_FALSE(dict->HasKey("set-cookie"));
+  EXPECT_FALSE(dict->HasKey("set-cookie2"));
+}
+
+IN_PROC_BROWSER_TEST_P(ServiceWorkerNavigationPreloadTest, RejectRedirects) {
+  const char kPageUrl[] = "/service_worker/navigation_preload.html";
+  const char kWorkerUrl[] = "/service_worker/navigation_preload.js";
+  const char kRedirectedPageUrl[] =
+      "/service_worker/navigation_preload_redirected.html";
+  const char kPageResponse[] =
+      "HTTP/1.1 302 Found\r\n"
+      "Connection: close\r\n"
+      "Location: /service_worker/navigation_preload_redirected.html\r\n"
+      "\r\n";
+  const char kRedirectedPage[] = "<title>ERROR</title>Redirected page.";
+  const GURL redirecred_page_url =
+      embedded_test_server()->GetURL(kRedirectedPageUrl);
+  const GURL page_url = embedded_test_server()->GetURL(kPageUrl);
+  const GURL worker_url = embedded_test_server()->GetURL(kWorkerUrl);
+  RegisterCustomResponse(kPageUrl, kPageResponse);
+  RegisterStaticFile(
+      kWorkerUrl, kEnableNavigationPreloadScript + kPreloadResponseTestScript,
+      "text/javascript");
+  RegisterStaticFile(kRedirectedPageUrl, kRedirectedPage, "text/html");
+
+  SetupForNavigationPreloadTest(page_url, worker_url);
+
+  const base::string16 title = base::ASCIIToUTF16("REJECTED");
+  TitleWatcher title_watcher(shell()->web_contents(), title);
+  title_watcher.AlsoWaitForTitle(base::ASCIIToUTF16("RESOLVED"));
+  NavigateToURL(shell(), page_url);
+  EXPECT_EQ(title, title_watcher.WaitAndGetTitle());
+
+  // The page request must be sent only once, since the worker responded with
+  // a generated Response.
+  EXPECT_EQ(1, GetRequestCount(kPageUrl));
+  // The redirected request must not be sent.
+  EXPECT_EQ(0, GetRequestCount(kRedirectedPageUrl));
+  EXPECT_EQ(
+      "NetworkError: Service Worker navigation preload doesn't suport "
+      "redirect.",
+      GetTextContent());
+}
+
+// Tests responding with the navigation preload response when the navigation
+// occurred after a redirect.
+IN_PROC_BROWSER_TEST_P(ServiceWorkerNavigationPreloadTest,
+                       RedirectAndRespondWithNavigationPreload) {
+  const std::string kPageUrl = "/service_worker/navigation_preload.html";
+  const char kWorkerUrl[] = "/service_worker/navigation_preload.js";
+  const char kPage[] =
+      "<title></title>\n"
+      "<script>document.title = document.location.search;</script>";
+  const std::string kScript =
+      kEnableNavigationPreloadScript +
+      "self.addEventListener('fetch', event => {\n"
+      "    if (event.request.url.indexOf('navigation_preload.html') == -1)\n"
+      "      return; // For in scope redirection.\n"
+      "    event.respondWith(event.preloadResponse);\n"
+      "  });";
+  const GURL page_url = embedded_test_server()->GetURL(kPageUrl);
+  const GURL worker_url = embedded_test_server()->GetURL(kWorkerUrl);
+  RegisterStaticFile(kPageUrl, kPage, "text/html");
+  RegisterStaticFile(kWorkerUrl, kScript, "text/javascript");
+
+  // Register redirects to the target URL. The service worker responds to the
+  // target URL with the navigation preload response.
+  const char kRedirectPageUrl[] = "/redirect";
+  const char kInScopeRedirectPageUrl[] = "/service_worker/redirect";
+  RegisterKeepSearchRedirect(kRedirectPageUrl, page_url.spec());
+  RegisterKeepSearchRedirect(kInScopeRedirectPageUrl, page_url.spec());
+
+  SetupForNavigationPreloadTest(
+      embedded_test_server()->GetURL("/service_worker/"), worker_url);
+
+  const GURL redirect_page_url =
+      embedded_test_server()->GetURL(kRedirectPageUrl).Resolve("?1");
+  const GURL in_scope_redirect_page_url =
+      embedded_test_server()->GetURL(kInScopeRedirectPageUrl).Resolve("?2");
+  const GURL cross_origin_redirect_page_url =
+      embedded_test_server()->GetURL("a.com", kRedirectPageUrl).Resolve("?3");
+
+  // Navigate to a same-origin, out of scope URL that redirects to the target
+  // URL. The navigation preload request should be the single request to the
+  // target URL.
+  const base::string16 title1 = base::ASCIIToUTF16("?1");
+  TitleWatcher title_watcher1(shell()->web_contents(), title1);
+  NavigateToURL(shell(), redirect_page_url);
+  EXPECT_EQ(title1, title_watcher1.WaitAndGetTitle());
+  EXPECT_EQ(1, GetRequestCount(kPageUrl + "?1"));
+
+  // Navigate to a same-origin, in-scope URL that redirects to the target URL.
+  // The navigation preload request should be the single request to the target
+  // URL.
+  const base::string16 title2 = base::ASCIIToUTF16("?2");
+  TitleWatcher title_watcher2(shell()->web_contents(), title2);
+  NavigateToURL(shell(), in_scope_redirect_page_url);
+  EXPECT_EQ(title2, title_watcher2.WaitAndGetTitle());
+  EXPECT_EQ(1, GetRequestCount(kPageUrl + "?2"));
+
+  // Navigate to a cross-origin URL that redirects to the target URL. The
+  // navigation preload request should be the single request to the target URL.
+  const base::string16 title3 = base::ASCIIToUTF16("?3");
+  TitleWatcher title_watcher3(shell()->web_contents(), title3);
+  NavigateToURL(shell(), cross_origin_redirect_page_url);
+  EXPECT_EQ(title3, title_watcher3.WaitAndGetTitle());
+  EXPECT_EQ(1, GetRequestCount(kPageUrl + "?3"));
+}
+
+// When the content type of the page is not correctly set,
+// OnStartLoadingResponseBody() of mojom::URLLoaderClient is called before
+// OnReceiveResponse(). This behavior is caused by MimeSniffingResourceHandler.
+// This test checks that even if the MimeSniffingResourceHandler is triggered
+// navigation preload must be handled correctly.
+IN_PROC_BROWSER_TEST_P(ServiceWorkerNavigationPreloadTest,
+                       RespondWithNavigationPreloadWithMimeSniffing) {
+  const char kPageUrl[] = "/service_worker/navigation_preload.html";
+  const char kWorkerUrl[] = "/service_worker/navigation_preload.js";
+  const char kPage[] = "<title>PASS</title>Hello world.";
+  const std::string kScript = kEnableNavigationPreloadScript +
+                              "self.addEventListener('fetch', event => {\n"
+                              "    event.respondWith(event.preloadResponse);\n"
+                              "  });";
+  const GURL page_url = embedded_test_server()->GetURL(kPageUrl);
+  const GURL worker_url = embedded_test_server()->GetURL(kWorkerUrl);
+
+  // Setting an empty content type to trigger MimeSniffingResourceHandler.
+  RegisterStaticFile(kPageUrl, kPage, "");
+  RegisterStaticFile(kWorkerUrl, kScript, "text/javascript");
+
+  SetupForNavigationPreloadTest(page_url, worker_url);
+
+  const base::string16 title = base::ASCIIToUTF16("PASS");
+  TitleWatcher title_watcher(shell()->web_contents(), title);
+  NavigateToURL(shell(), page_url);
+  EXPECT_EQ(title, title_watcher.WaitAndGetTitle());
+  EXPECT_EQ("Hello world.", GetTextContent());
+
+  // The page request must be sent only once, since the worker responded with
+  // the navigation preload response
+  EXPECT_EQ(1, GetRequestCount(kPageUrl));
+}
+
 // Flaky on Win/Mac: http://crbug.com/533631
 #if defined(OS_WIN) || defined(OS_MACOSX)
 #define MAYBE_ResponseFromHTTPSServiceWorkerIsMarkedAsSecure DISABLED_ResponseFromHTTPSServiceWorkerIsMarkedAsSecure
@@ -1388,11 +2163,14 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerBrowserTest,
   TitleWatcher title_watcher(shell()->web_contents(), title);
   NavigateToURL(shell(), https_server.GetURL(kPageUrl));
   EXPECT_EQ(title, title_watcher.WaitAndGetTitle());
-  EXPECT_FALSE(static_cast<WebContentsImpl*>(shell()->web_contents())
-                   ->DisplayedInsecureContent());
   NavigationEntry* entry =
       shell()->web_contents()->GetController().GetVisibleEntry();
-  EXPECT_EQ(SECURITY_STYLE_AUTHENTICATED, entry->GetSSL().security_style);
+  EXPECT_TRUE(entry->GetSSL().initialized);
+  EXPECT_FALSE(!!(entry->GetSSL().content_status &
+                  SSLStatus::DISPLAYED_INSECURE_CONTENT));
+  EXPECT_TRUE(
+      https_server.GetCertificate()->Equals(entry->GetSSL().certificate.get()));
+  EXPECT_EQ(0u, entry->GetSSL().cert_status & net::CERT_STATUS_ALL_ERRORS);
 
   shell()->Close();
 
@@ -1420,11 +2198,12 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerBrowserTest,
   TitleWatcher title_watcher(shell()->web_contents(), title);
   NavigateToURL(shell(), embedded_test_server()->GetURL(kPageUrl));
   EXPECT_EQ(title, title_watcher.WaitAndGetTitle());
-  EXPECT_FALSE(static_cast<WebContentsImpl*>(shell()->web_contents())
-                   ->DisplayedInsecureContent());
   NavigationEntry* entry =
       shell()->web_contents()->GetController().GetVisibleEntry();
-  EXPECT_EQ(SECURITY_STYLE_UNAUTHENTICATED, entry->GetSSL().security_style);
+  EXPECT_TRUE(entry->GetSSL().initialized);
+  EXPECT_FALSE(!!(entry->GetSSL().content_status &
+                  SSLStatus::DISPLAYED_INSECURE_CONTENT));
+  EXPECT_FALSE(entry->GetSSL().certificate);
 
   shell()->Close();
 
@@ -2054,6 +2833,9 @@ INSTANTIATE_TEST_CASE_P(ServiceWorkerBrowserTest,
                         ::testing::Values(true, false));
 INSTANTIATE_TEST_CASE_P(ServiceWorkerBrowserTest,
                         ServiceWorkerBlackBoxBrowserTest,
+                        ::testing::Values(true, false));
+INSTANTIATE_TEST_CASE_P(ServiceWorkerBrowserTest,
+                        ServiceWorkerNavigationPreloadTest,
                         ::testing::Values(true, false));
 INSTANTIATE_TEST_CASE_P(ServiceWorkerBrowserTest,
                         ServiceWorkerV8CacheStrategiesTest,

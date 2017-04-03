@@ -31,11 +31,14 @@ class AnimatingWallpaperWidgetController;
 class DockedWindowLayoutManager;
 class PanelLayoutManager;
 class SystemModalContainerLayoutManager;
+class SystemTray;
 class WallpaperWidgetController;
 class WmShelf;
 class WmShell;
 class WmWindow;
 class WorkspaceController;
+
+enum class LoginStatus;
 
 namespace wm {
 class RootWindowLayoutManager;
@@ -94,6 +97,16 @@ class ASH_EXPORT WmRootWindowController {
 
   virtual WmShelf* GetShelf() = 0;
 
+  // Creates the shelf for this root window and notifies observers.
+  void CreateShelf();
+
+  // Show shelf view if it was created hidden (before session has started).
+  // TODO(jamescook): Eliminate this and handle show via Shelf.
+  void ShowShelf();
+
+  // Returns the system tray controller. May be null for external displays.
+  SystemTray* GetSystemTray();
+
   // Returns the window associated with this WmRootWindowController.
   virtual WmWindow* GetWindow() = 0;
 
@@ -127,6 +140,10 @@ class ASH_EXPORT WmRootWindowController {
   // TODO: port remaining classic ash wallpaper functionality here.
   virtual void OnInitialWallpaperAnimationStarted();
   virtual void OnWallpaperAnimationFinished(views::Widget* widget);
+
+  // Called when the login status changes after login (such as lock/unlock).
+  // TODO(oshima): Investigate if we can merge this and |OnLoginStateChanged|.
+  virtual void UpdateAfterLoginStatusChange(LoginStatus status);
 
  protected:
   // Moves child windows to |dest|.

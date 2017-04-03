@@ -157,6 +157,10 @@ LayoutObject* FileInputType::createLayoutObject(const ComputedStyle&) const {
   return new LayoutFileUploadControl(&element());
 }
 
+InputType::ValueMode FileInputType::valueMode() const {
+  return ValueMode::kFilename;
+}
+
 bool FileInputType::canSetStringValue() const {
   return false;
 }
@@ -174,11 +178,9 @@ bool FileInputType::canSetValue(const String& value) {
   return value.isEmpty();
 }
 
-bool FileInputType::getTypeSpecificValue(String& value) {
-  if (m_fileList->isEmpty()) {
-    value = String();
-    return true;
-  }
+String FileInputType::valueInFilenameValueMode() const {
+  if (m_fileList->isEmpty())
+    return String();
 
   // HTML5 tells us that we're supposed to use this goofy value for
   // file input controls. Historically, browsers revealed the real
@@ -186,8 +188,7 @@ bool FileInputType::getTypeSpecificValue(String& value) {
   // decided to try to parse the value by looking for backslashes
   // (because that's what Windows file paths use). To be compatible
   // with that code, we make up a fake path for the file.
-  value = "C:\\fakepath\\" + m_fileList->item(0)->name();
-  return true;
+  return "C:\\fakepath\\" + m_fileList->item(0)->name();
 }
 
 void FileInputType::setValue(const String&,
@@ -273,7 +274,7 @@ void FileInputType::createShadowSubtree() {
 void FileInputType::disabledAttributeChanged() {
   DCHECK(element().shadow());
   if (Element* button =
-          toElement(element().userAgentShadowRoot()->firstChild()))
+          toElementOrDie(element().userAgentShadowRoot()->firstChild()))
     button->setBooleanAttribute(disabledAttr,
                                 element().isDisabledFormControl());
 }
@@ -281,7 +282,7 @@ void FileInputType::disabledAttributeChanged() {
 void FileInputType::multipleAttributeChanged() {
   DCHECK(element().shadow());
   if (Element* button =
-          toElement(element().userAgentShadowRoot()->firstChild()))
+          toElementOrDie(element().userAgentShadowRoot()->firstChild()))
     button->setAttribute(
         valueAttr,
         AtomicString(locale().queryString(
@@ -395,6 +396,13 @@ String FileInputType::defaultToolTip(const InputTypeView&) const {
       names.append('\n');
   }
   return names.toString();
+}
+
+void FileInputType::copyNonAttributeProperties(const HTMLInputElement& source) {
+  DCHECK(m_fileList->isEmpty());
+  const FileList* sourceList = source.files();
+  for (unsigned i = 0; i < sourceList->length(); ++i)
+    m_fileList->append(sourceList->item(i)->clone());
 }
 
 }  // namespace blink

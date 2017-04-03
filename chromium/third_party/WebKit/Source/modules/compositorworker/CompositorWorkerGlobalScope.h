@@ -15,6 +15,7 @@
 namespace blink {
 
 class CompositorWorkerThread;
+class InProcessWorkerObjectProxy;
 class WorkerThreadStartupData;
 
 class MODULES_EXPORT CompositorWorkerGlobalScope final
@@ -37,6 +38,7 @@ class MODULES_EXPORT CompositorWorkerGlobalScope final
                    PassRefPtr<SerializedScriptValue>,
                    const MessagePortArray&,
                    ExceptionState&);
+  static bool canTransferArrayBuffer() { return true; }
   DEFINE_ATTRIBUTE_EVENT_LISTENER(message);
 
   int requestAnimationFrame(FrameRequestCallback*);
@@ -55,7 +57,8 @@ class MODULES_EXPORT CompositorWorkerGlobalScope final
                               double timeOrigin,
                               std::unique_ptr<SecurityOrigin::PrivilegeData>,
                               WorkerClients*);
-  CompositorWorkerThread* thread() const;
+
+  InProcessWorkerObjectProxy& workerObjectProxy() const;
 
   bool m_executingAnimationFrameCallbacks;
   FrameRequestCallbackCollection m_callbackCollection;

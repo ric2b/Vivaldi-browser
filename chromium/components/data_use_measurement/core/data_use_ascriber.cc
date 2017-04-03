@@ -9,13 +9,16 @@
 #include "base/memory/ptr_util.h"
 #include "components/data_use_measurement/core/data_use_network_delegate.h"
 #include "components/data_use_measurement/core/data_use_recorder.h"
+#include "components/data_use_measurement/core/url_request_classifier.h"
 
 namespace data_use_measurement {
 
 std::unique_ptr<net::NetworkDelegate> DataUseAscriber::CreateNetworkDelegate(
-    std::unique_ptr<net::NetworkDelegate> wrapped_network_delegate) {
+    std::unique_ptr<net::NetworkDelegate> wrapped_network_delegate,
+    const metrics::UpdateUsagePrefCallbackType& metrics_data_use_forwarder) {
   return base::MakeUnique<data_use_measurement::DataUseNetworkDelegate>(
-      std::move(wrapped_network_delegate), this);
+      std::move(wrapped_network_delegate), this, CreateURLRequestClassifier(),
+      metrics_data_use_forwarder);
 }
 
 void DataUseAscriber::OnBeforeUrlRequest(net::URLRequest* request) {
@@ -41,12 +44,11 @@ void DataUseAscriber::OnNetworkBytesReceived(net::URLRequest* request,
     recorder->OnNetworkBytesReceived(request, bytes_received);
 }
 
-void DataUseAscriber::OnUrlRequestCompleted(net::URLRequest* request,
-                                            bool started) {
+void DataUseAscriber::OnUrlRequestDestroyed(net::URLRequest* request) {
   DataUseRecorder* recorder = GetDataUseRecorder(request);
   // TODO(kundaji): Enforce DCHECK(recorder).
   if (recorder)
-    recorder->OnUrlRequestCompleted(request);
+    recorder->OnUrlRequestDestroyed(request);
 }
 
 }  // namespace data_use_measurement

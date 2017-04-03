@@ -28,8 +28,6 @@
 #include "cc/layers/texture_layer_impl.h"
 #include "cc/output/copy_output_request.h"
 #include "cc/output/copy_output_result.h"
-#include "cc/proto/begin_main_frame_and_commit_state.pb.h"
-#include "cc/proto/gfx_conversions.h"
 #include "cc/test/animation_test_common.h"
 #include "cc/test/fake_compositor_frame_sink.h"
 #include "cc/test/fake_content_layer_client.h"
@@ -62,7 +60,6 @@ namespace {
 class VerifyTreeCalcsLayerTreeSettings : public LayerTreeSettings {
  public:
   VerifyTreeCalcsLayerTreeSettings() {
-    verify_transform_tree_calculations = true;
     verify_clip_tree_calculations = true;
   }
 };
@@ -102,7 +99,9 @@ class LayerTreeHostCommonTestBase : public LayerTestCommon::LayerImplTest {
   void ExecuteCalculateDrawProperties(Layer* root_layer,
                                       float device_scale_factor,
                                       float page_scale_factor,
-                                      Layer* page_scale_layer) {
+                                      Layer* page_scale_layer,
+                                      Layer* inner_viewport_scroll_layer,
+                                      Layer* outer_viewport_scroll_layer) {
     PropertyTreeBuilder::PreCalculateMetaInformation(root_layer);
 
     EXPECT_TRUE(page_scale_layer || (page_scale_factor == 1.f));
@@ -118,6 +117,8 @@ class LayerTreeHostCommonTestBase : public LayerTestCommon::LayerImplTest {
     inputs.device_scale_factor = device_scale_factor;
     inputs.page_scale_factor = page_scale_factor;
     inputs.page_scale_layer = page_scale_layer;
+    inputs.inner_viewport_scroll_layer = inner_viewport_scroll_layer;
+    inputs.outer_viewport_scroll_layer = outer_viewport_scroll_layer;
     LayerTreeHostCommon::CalculateDrawPropertiesForTesting(&inputs);
   }
 
@@ -126,6 +127,8 @@ class LayerTreeHostCommonTestBase : public LayerTestCommon::LayerImplTest {
       float device_scale_factor,
       float page_scale_factor,
       LayerImpl* page_scale_layer,
+      LayerImpl* inner_viewport_scroll_layer,
+      LayerImpl* outer_viewport_scroll_layer,
       bool skip_verify_visible_rect_calculations = false) {
     if (device_scale_factor !=
         root_layer->layer_tree_impl()->device_scale_factor())
@@ -150,6 +153,8 @@ class LayerTreeHostCommonTestBase : public LayerTestCommon::LayerImplTest {
     inputs.device_scale_factor = device_scale_factor;
     inputs.page_scale_factor = page_scale_factor;
     inputs.page_scale_layer = page_scale_layer;
+    inputs.inner_viewport_scroll_layer = inner_viewport_scroll_layer;
+    inputs.outer_viewport_scroll_layer = outer_viewport_scroll_layer;
     inputs.can_adjust_raster_scales = true;
     if (skip_verify_visible_rect_calculations)
       inputs.verify_visible_rect_calculations = false;
@@ -160,16 +165,22 @@ class LayerTreeHostCommonTestBase : public LayerTestCommon::LayerImplTest {
   template <class LayerType>
   void ExecuteCalculateDrawProperties(LayerType* root_layer) {
     LayerType* page_scale_application_layer = nullptr;
-    ExecuteCalculateDrawProperties(root_layer, 1.f, 1.f,
-                                   page_scale_application_layer);
+    LayerType* inner_viewport_scroll_layer = nullptr;
+    LayerType* outer_viewport_scroll_layer = nullptr;
+    ExecuteCalculateDrawProperties(
+        root_layer, 1.f, 1.f, page_scale_application_layer,
+        inner_viewport_scroll_layer, outer_viewport_scroll_layer);
   }
 
   template <class LayerType>
   void ExecuteCalculateDrawProperties(LayerType* root_layer,
                                       float device_scale_factor) {
     LayerType* page_scale_application_layer = nullptr;
-    ExecuteCalculateDrawProperties(root_layer, device_scale_factor, 1.f,
-                                   page_scale_application_layer);
+    LayerType* inner_viewport_scroll_layer = nullptr;
+    LayerType* outer_viewport_scroll_layer = nullptr;
+    ExecuteCalculateDrawProperties(
+        root_layer, device_scale_factor, 1.f, page_scale_application_layer,
+        inner_viewport_scroll_layer, outer_viewport_scroll_layer);
   }
 
   const LayerList* GetUpdateLayerList() { return &update_layer_list_; }
@@ -206,8 +217,7 @@ class LayerTreeHostCommonTestBase : public LayerTestCommon::LayerImplTest {
     draw_property_utils::UpdatePropertyTrees(property_trees,
                                              can_render_to_separate_surface);
     draw_property_utils::FindLayersThatNeedUpdates(
-        root_layer->GetLayerTree(), property_trees->transform_tree,
-        property_trees->effect_tree, &update_layer_list_);
+        root_layer->GetLayerTree(), property_trees, &update_layer_list_);
   }
 
   void ExecuteCalculateDrawPropertiesAndSaveUpdateLayerList(
@@ -515,10 +525,8 @@ TEST_F(LayerTreeHostCommonTest, TransformsAboutScrollOffset) {
   const float kDeviceScale = 1.666f;
 
   FakeImplTaskRunnerProvider task_runner_provider;
-  TestSharedBitmapManager shared_bitmap_manager;
   TestTaskGraphRunner task_graph_runner;
-  FakeLayerTreeHostImpl host_impl(&task_runner_provider, &shared_bitmap_manager,
-                                  &task_graph_runner);
+  FakeLayerTreeHostImpl host_impl(&task_runner_provider, &task_graph_runner);
 
   std::unique_ptr<LayerImpl> sublayer_scoped_ptr(
       LayerImpl::Create(host_impl.active_tree(), 1));
@@ -558,7 +566,8 @@ TEST_F(LayerTreeHostCommonTest, TransformsAboutScrollOffset) {
   host_impl.active_tree()->SetRootLayerForTesting(std::move(root));
 
   ExecuteCalculateDrawProperties(root_layer, kDeviceScale, page_scale,
-                                 scroll_layer->test_properties()->parent);
+                                 scroll_layer->test_properties()->parent,
+                                 nullptr, nullptr);
   gfx::Transform expected_transform;
   gfx::PointF sub_layer_screen_position = kScrollLayerPosition - kScrollDelta;
   expected_transform.Translate(MathUtil::Round(sub_layer_screen_position.x() *
@@ -579,7 +588,8 @@ TEST_F(LayerTreeHostCommonTest, TransformsAboutScrollOffset) {
   scroll_layer->test_properties()->transform = arbitrary_translate;
   root_layer->layer_tree_impl()->property_trees()->needs_rebuild = true;
   ExecuteCalculateDrawProperties(root_layer, kDeviceScale, page_scale,
-                                 scroll_layer->test_properties()->parent);
+                                 scroll_layer->test_properties()->parent,
+                                 nullptr, nullptr);
   expected_transform.MakeIdentity();
   expected_transform.Translate(
       MathUtil::Round(kTranslateX * page_scale * kDeviceScale +
@@ -601,7 +611,8 @@ TEST_F(LayerTreeHostCommonTest, TransformsAboutScrollOffset) {
   root_layer->layer_tree_impl()->SetPageScaleOnActiveTree(page_scale);
   EXPECT_FALSE(root_layer->layer_tree_impl()->property_trees()->needs_rebuild);
   ExecuteCalculateDrawProperties(root_layer, kDeviceScale, page_scale,
-                                 scroll_layer->test_properties()->parent);
+                                 scroll_layer->test_properties()->parent,
+                                 nullptr, nullptr);
 
   expected_transform.MakeIdentity();
   expected_transform.Translate(
@@ -1110,12 +1121,15 @@ TEST_F(LayerTreeHostCommonTest, LayerFullyContainedWithinClipInTargetSpace) {
   float device_scale_factor = 1.f;
   float page_scale_factor = 1.f;
   LayerImpl* page_scale_layer = nullptr;
+  LayerImpl* inner_viewport_scroll_layer = nullptr;
+  LayerImpl* outer_viewport_scroll_layer = nullptr;
   // Visible rects computed by combining clips in target space and root space
   // don't match because of rotation transforms. So, we skip
   // verify_visible_rect_calculations.
   bool skip_verify_visible_rect_calculations = true;
   ExecuteCalculateDrawProperties(root, device_scale_factor, page_scale_factor,
-                                 page_scale_layer,
+                                 page_scale_layer, inner_viewport_scroll_layer,
+                                 outer_viewport_scroll_layer,
                                  skip_verify_visible_rect_calculations);
 
   // Mapping grand_child's bounds to target space produces a non-empty rect
@@ -1193,6 +1207,8 @@ TEST_F(LayerTreeHostCommonTest, RenderSurfaceWithSublayerScale) {
 }
 
 TEST_F(LayerTreeHostCommonTest, TransformAboveRootLayer) {
+  // Transformations applied at the root of the tree should be forwarded
+  // to child layers instead of applied to the root RenderSurface.
   LayerImpl* root = root_layer_for_testing();
   LayerImpl* child = AddChild<LayerImpl>(root);
 
@@ -3453,12 +3469,10 @@ TEST_F(LayerTreeHostCommonTest,
 
 TEST_F(LayerTreeHostCommonTest, OcclusionBySiblingOfTarget) {
   FakeImplTaskRunnerProvider task_runner_provider;
-  TestSharedBitmapManager shared_bitmap_manager;
   TestTaskGraphRunner task_graph_runner;
   std::unique_ptr<CompositorFrameSink> compositor_frame_sink =
       FakeCompositorFrameSink::Create3d();
-  FakeLayerTreeHostImpl host_impl(&task_runner_provider, &shared_bitmap_manager,
-                                  &task_graph_runner);
+  FakeLayerTreeHostImpl host_impl(&task_runner_provider, &task_graph_runner);
 
   std::unique_ptr<LayerImpl> root =
       LayerImpl::Create(host_impl.active_tree(), 1);
@@ -3528,15 +3542,54 @@ TEST_F(LayerTreeHostCommonTest, OcclusionBySiblingOfTarget) {
   EXPECT_TRUE(expected_occlusion.IsEqual(actual_occlusion));
 }
 
-TEST_F(LayerTreeHostCommonTest,
-       OcclusionForLayerWithUninvertibleDrawTransform) {
+TEST_F(LayerTreeHostCommonTest, TextureLayerSnapping) {
   FakeImplTaskRunnerProvider task_runner_provider;
-  TestSharedBitmapManager shared_bitmap_manager;
   TestTaskGraphRunner task_graph_runner;
   std::unique_ptr<CompositorFrameSink> compositor_frame_sink =
       FakeCompositorFrameSink::Create3d();
-  FakeLayerTreeHostImpl host_impl(&task_runner_provider, &shared_bitmap_manager,
-                                  &task_graph_runner);
+  FakeLayerTreeHostImpl host_impl(&task_runner_provider, &task_graph_runner);
+
+  std::unique_ptr<LayerImpl> root =
+      LayerImpl::Create(host_impl.active_tree(), 1);
+  std::unique_ptr<TextureLayerImpl> child =
+      TextureLayerImpl::Create(host_impl.active_tree(), 2);
+
+  LayerImpl* child_ptr = child.get();
+
+  root->SetBounds(gfx::Size(100, 100));
+  child->SetBounds(gfx::Size(100, 100));
+  child->SetDrawsContent(true);
+  gfx::Transform fractional_translate;
+  fractional_translate.Translate(10.5f, 20.3f);
+  child->test_properties()->transform = fractional_translate;
+
+  host_impl.SetViewportSize(root->bounds());
+
+  root->test_properties()->AddChild(std::move(child));
+  host_impl.active_tree()->SetRootLayerForTesting(std::move(root));
+  host_impl.SetVisible(true);
+  host_impl.InitializeRenderer(compositor_frame_sink.get());
+  host_impl.active_tree()->BuildLayerListAndPropertyTreesForTesting();
+  bool update_lcd_text = false;
+  host_impl.active_tree()->UpdateDrawProperties(update_lcd_text);
+
+  EXPECT_NE(child_ptr->ScreenSpaceTransform(), fractional_translate);
+  fractional_translate.RoundTranslationComponents();
+  EXPECT_TRANSFORMATION_MATRIX_EQ(child_ptr->ScreenSpaceTransform(),
+                                  fractional_translate);
+  gfx::RectF layer_bounds_in_screen_space =
+      MathUtil::MapClippedRect(child_ptr->ScreenSpaceTransform(),
+                               gfx::RectF(gfx::SizeF(child_ptr->bounds())));
+  EXPECT_EQ(layer_bounds_in_screen_space, gfx::RectF(11.f, 20.f, 100.f, 100.f));
+}
+
+TEST_F(LayerTreeHostCommonTest,
+       OcclusionForLayerWithUninvertibleDrawTransform) {
+  FakeImplTaskRunnerProvider task_runner_provider;
+  TestTaskGraphRunner task_graph_runner;
+  std::unique_ptr<CompositorFrameSink> compositor_frame_sink =
+      FakeCompositorFrameSink::Create3d();
+  FakeLayerTreeHostImpl host_impl(&task_runner_provider, &task_graph_runner);
 
   std::unique_ptr<LayerImpl> root =
       LayerImpl::Create(host_impl.active_tree(), 1);
@@ -4158,13 +4211,11 @@ TEST_F(LayerTreeHostCommonTest, BackFaceCullingWithoutPreserves3d) {
   EXPECT_FALSE(front_facing_child_of_back_facing_surface->has_render_surface());
   EXPECT_FALSE(back_facing_child_of_back_facing_surface->has_render_surface());
 
-  EXPECT_EQ(4u, update_layer_list_impl()->size());
+  EXPECT_EQ(3u, update_layer_list_impl()->size());
   EXPECT_TRUE(UpdateLayerListImplContains(front_facing_child->id()));
   EXPECT_TRUE(UpdateLayerListImplContains(front_facing_surface->id()));
   EXPECT_TRUE(UpdateLayerListImplContains(
       front_facing_child_of_front_facing_surface->id()));
-  EXPECT_TRUE(UpdateLayerListImplContains(
-      front_facing_child_of_back_facing_surface->id()));
 }
 
 TEST_F(LayerTreeHostCommonTest, BackFaceCullingWithPreserves3d) {
@@ -4527,7 +4578,7 @@ TEST_F(LayerTreeHostCommonScalingTest, SurfaceLayerTransformsInHighDPI) {
   root->layer_tree_impl()->BuildLayerListAndPropertyTreesForTesting();
   root->layer_tree_impl()->SetPageScaleOnActiveTree(page_scale_factor);
   ExecuteCalculateDrawProperties(root, device_scale_factor, page_scale_factor,
-                                 root);
+                                 root, nullptr, nullptr);
 
   EXPECT_FLOAT_EQ(device_scale_factor * page_scale_factor,
                   parent->GetIdealContentsScale());
@@ -4613,7 +4664,7 @@ TEST_F(LayerTreeHostCommonScalingTest, SmallIdealScale) {
 
   {
     ExecuteCalculateDrawProperties(root, device_scale_factor, page_scale_factor,
-                                   root);
+                                   root, nullptr, nullptr);
 
     // The ideal scale is able to go below 1.
     float expected_ideal_scale =
@@ -4801,10 +4852,9 @@ TEST_F(LayerTreeHostCommonTest, TransparentChildRenderSurfaceCreation) {
 
 TEST_F(LayerTreeHostCommonTest, OpacityAnimatingOnPendingTree) {
   FakeImplTaskRunnerProvider task_runner_provider;
-  TestSharedBitmapManager shared_bitmap_manager;
   TestTaskGraphRunner task_graph_runner;
   FakeLayerTreeHostImpl host_impl(host()->GetSettings(), &task_runner_provider,
-                                  &shared_bitmap_manager, &task_graph_runner);
+                                  &task_graph_runner);
   host_impl.CreatePendingTree();
   std::unique_ptr<LayerImpl> root =
       LayerImpl::Create(host_impl.pending_tree(), 1);
@@ -4906,7 +4956,6 @@ class LCDTextTest : public LayerTreeHostCommonTestBase,
       : LayerTreeHostCommonTestBase(LCDTextTestLayerTreeSettings()),
         host_impl_(LCDTextTestLayerTreeSettings(),
                    &task_runner_provider_,
-                   &shared_bitmap_manager_,
                    &task_graph_runner_) {}
 
   scoped_refptr<AnimationTimeline> timeline() { return timeline_; }
@@ -4965,7 +5014,6 @@ class LCDTextTest : public LayerTreeHostCommonTestBase,
   bool layers_always_allowed_lcd_text_;
 
   FakeImplTaskRunnerProvider task_runner_provider_;
-  TestSharedBitmapManager shared_bitmap_manager_;
   TestTaskGraphRunner task_graph_runner_;
   FakeLayerTreeHostImpl host_impl_;
   scoped_refptr<AnimationTimeline> timeline_;
@@ -4980,7 +5028,7 @@ TEST_P(LCDTextTest, CanUseLCDText) {
   bool expect_not_lcd_text = layers_always_allowed_lcd_text_;
 
   // Case 1: Identity transform.
-  ExecuteCalculateDrawProperties(root_, 1.f, 1.f, nullptr);
+  ExecuteCalculateDrawProperties(root_, 1.f, 1.f, nullptr, nullptr, nullptr);
   EXPECT_EQ(expect_lcd_text, root_->CanUseLCDText());
   EXPECT_EQ(expect_lcd_text, child_->CanUseLCDText());
   EXPECT_EQ(expect_lcd_text, grand_child_->CanUseLCDText());
@@ -4990,7 +5038,7 @@ TEST_P(LCDTextTest, CanUseLCDText) {
   integral_translation.Translate(1.0, 2.0);
   child_->test_properties()->transform = integral_translation;
   child_->layer_tree_impl()->property_trees()->needs_rebuild = true;
-  ExecuteCalculateDrawProperties(root_, 1.f, 1.f, nullptr);
+  ExecuteCalculateDrawProperties(root_, 1.f, 1.f, nullptr, nullptr, nullptr);
   EXPECT_EQ(expect_lcd_text, root_->CanUseLCDText());
   EXPECT_EQ(expect_lcd_text, child_->CanUseLCDText());
   EXPECT_EQ(expect_lcd_text, grand_child_->CanUseLCDText());
@@ -5000,7 +5048,7 @@ TEST_P(LCDTextTest, CanUseLCDText) {
   non_integral_translation.Translate(1.5, 2.5);
   child_->test_properties()->transform = non_integral_translation;
   child_->layer_tree_impl()->property_trees()->needs_rebuild = true;
-  ExecuteCalculateDrawProperties(root_, 1.f, 1.f, nullptr);
+  ExecuteCalculateDrawProperties(root_, 1.f, 1.f, nullptr, nullptr, nullptr);
   EXPECT_EQ(expect_lcd_text, root_->CanUseLCDText());
   EXPECT_EQ(expect_not_lcd_text, child_->CanUseLCDText());
   EXPECT_EQ(expect_not_lcd_text, grand_child_->CanUseLCDText());
@@ -5010,7 +5058,7 @@ TEST_P(LCDTextTest, CanUseLCDText) {
   rotation.Rotate(10.0);
   child_->test_properties()->transform = rotation;
   child_->layer_tree_impl()->property_trees()->needs_rebuild = true;
-  ExecuteCalculateDrawProperties(root_, 1.f, 1.f, nullptr);
+  ExecuteCalculateDrawProperties(root_, 1.f, 1.f, nullptr, nullptr, nullptr);
   EXPECT_EQ(expect_lcd_text, root_->CanUseLCDText());
   EXPECT_EQ(expect_not_lcd_text, child_->CanUseLCDText());
   EXPECT_EQ(expect_not_lcd_text, grand_child_->CanUseLCDText());
@@ -5020,7 +5068,7 @@ TEST_P(LCDTextTest, CanUseLCDText) {
   scale.Scale(2.0, 2.0);
   child_->test_properties()->transform = scale;
   child_->layer_tree_impl()->property_trees()->needs_rebuild = true;
-  ExecuteCalculateDrawProperties(root_, 1.f, 1.f, nullptr);
+  ExecuteCalculateDrawProperties(root_, 1.f, 1.f, nullptr, nullptr, nullptr);
   EXPECT_EQ(expect_lcd_text, root_->CanUseLCDText());
   EXPECT_EQ(expect_not_lcd_text, child_->CanUseLCDText());
   EXPECT_EQ(expect_not_lcd_text, grand_child_->CanUseLCDText());
@@ -5030,7 +5078,7 @@ TEST_P(LCDTextTest, CanUseLCDText) {
   skew.Skew(10.0, 0.0);
   child_->test_properties()->transform = skew;
   child_->layer_tree_impl()->property_trees()->needs_rebuild = true;
-  ExecuteCalculateDrawProperties(root_, 1.f, 1.f, nullptr);
+  ExecuteCalculateDrawProperties(root_, 1.f, 1.f, nullptr, nullptr, nullptr);
   EXPECT_EQ(expect_lcd_text, root_->CanUseLCDText());
   EXPECT_EQ(expect_not_lcd_text, child_->CanUseLCDText());
   EXPECT_EQ(expect_not_lcd_text, grand_child_->CanUseLCDText());
@@ -5039,7 +5087,7 @@ TEST_P(LCDTextTest, CanUseLCDText) {
   child_->test_properties()->transform = gfx::Transform();
   child_->layer_tree_impl()->property_trees()->needs_rebuild = true;
   child_->test_properties()->opacity = 0.5f;
-  ExecuteCalculateDrawProperties(root_, 1.f, 1.f, nullptr);
+  ExecuteCalculateDrawProperties(root_, 1.f, 1.f, nullptr, nullptr, nullptr);
   EXPECT_EQ(expect_lcd_text, root_->CanUseLCDText());
   EXPECT_EQ(expect_not_lcd_text, child_->CanUseLCDText());
   EXPECT_EQ(expect_not_lcd_text, grand_child_->CanUseLCDText());
@@ -5048,21 +5096,21 @@ TEST_P(LCDTextTest, CanUseLCDText) {
   child_->test_properties()->transform = gfx::Transform();
   child_->layer_tree_impl()->property_trees()->needs_rebuild = true;
   child_->test_properties()->opacity = 1.f;
-  ExecuteCalculateDrawProperties(root_, 1.f, 1.f, nullptr);
+  ExecuteCalculateDrawProperties(root_, 1.f, 1.f, nullptr, nullptr, nullptr);
   EXPECT_EQ(expect_lcd_text, root_->CanUseLCDText());
   EXPECT_EQ(expect_lcd_text, child_->CanUseLCDText());
   EXPECT_EQ(expect_lcd_text, grand_child_->CanUseLCDText());
 
   // Case 9: Non-opaque content.
   child_->SetContentsOpaque(false);
-  ExecuteCalculateDrawProperties(root_, 1.f, 1.f, nullptr);
+  ExecuteCalculateDrawProperties(root_, 1.f, 1.f, nullptr, nullptr, nullptr);
   EXPECT_EQ(expect_lcd_text, root_->CanUseLCDText());
   EXPECT_EQ(expect_not_lcd_text, child_->CanUseLCDText());
   EXPECT_EQ(expect_lcd_text, grand_child_->CanUseLCDText());
 
   // Case 10: Sanity check: restore content opaqueness.
   child_->SetContentsOpaque(true);
-  ExecuteCalculateDrawProperties(root_, 1.f, 1.f, nullptr);
+  ExecuteCalculateDrawProperties(root_, 1.f, 1.f, nullptr, nullptr, nullptr);
   EXPECT_EQ(expect_lcd_text, root_->CanUseLCDText());
   EXPECT_EQ(expect_lcd_text, child_->CanUseLCDText());
   EXPECT_EQ(expect_lcd_text, grand_child_->CanUseLCDText());
@@ -5073,7 +5121,7 @@ TEST_P(LCDTextTest, CanUseLCDTextWithAnimation) {
   bool expect_not_lcd_text = layers_always_allowed_lcd_text_;
 
   // Sanity check: Make sure can_use_lcd_text_ is set on each node.
-  ExecuteCalculateDrawProperties(root_, 1.f, 1.f, nullptr);
+  ExecuteCalculateDrawProperties(root_, 1.f, 1.f, nullptr, nullptr, nullptr);
   EXPECT_EQ(expect_lcd_text, root_->CanUseLCDText());
   EXPECT_EQ(expect_lcd_text, child_->CanUseLCDText());
   EXPECT_EQ(expect_lcd_text, grand_child_->CanUseLCDText());
@@ -5086,7 +5134,7 @@ TEST_P(LCDTextTest, CanUseLCDTextWithAnimation) {
 
   AddOpacityTransitionToElementWithPlayer(child_->element_id(), timeline(),
                                           10.0, 0.9f, 0.1f, false);
-  ExecuteCalculateDrawProperties(root_, 1.f, 1.f, nullptr);
+  ExecuteCalculateDrawProperties(root_, 1.f, 1.f, nullptr, nullptr, nullptr);
   // Text LCD should be adjusted while animation is active.
   EXPECT_EQ(expect_lcd_text, root_->CanUseLCDText());
   EXPECT_EQ(expect_not_lcd_text, child_->CanUseLCDText());
@@ -5098,7 +5146,7 @@ TEST_P(LCDTextTest, CanUseLCDTextWithAnimationContentsOpaque) {
   bool expect_not_lcd_text = layers_always_allowed_lcd_text_;
 
   // Sanity check: Make sure can_use_lcd_text_ is set on each node.
-  ExecuteCalculateDrawProperties(root_, 1.f, 1.f, nullptr);
+  ExecuteCalculateDrawProperties(root_, 1.f, 1.f, nullptr, nullptr, nullptr);
   EXPECT_EQ(expect_lcd_text, root_->CanUseLCDText());
   EXPECT_EQ(expect_lcd_text, child_->CanUseLCDText());
   EXPECT_EQ(expect_lcd_text, grand_child_->CanUseLCDText());
@@ -5108,7 +5156,7 @@ TEST_P(LCDTextTest, CanUseLCDTextWithAnimationContentsOpaque) {
   child_->SetContentsOpaque(false);
   AddOpacityTransitionToElementWithPlayer(child_->element_id(), timeline(),
                                           10.0, 0.9f, 0.1f, false);
-  ExecuteCalculateDrawProperties(root_, 1.f, 1.f, nullptr);
+  ExecuteCalculateDrawProperties(root_, 1.f, 1.f, nullptr, nullptr, nullptr);
   // LCD text should be disabled for non-opaque layers even during animations.
   EXPECT_EQ(expect_lcd_text, root_->CanUseLCDText());
   EXPECT_EQ(expect_not_lcd_text, child_->CanUseLCDText());
@@ -5123,10 +5171,8 @@ INSTANTIATE_TEST_CASE_P(LayerTreeHostCommonTest,
 
 TEST_F(LayerTreeHostCommonTest, SubtreeHidden_SingleLayerImpl) {
   FakeImplTaskRunnerProvider task_runner_provider;
-  TestSharedBitmapManager shared_bitmap_manager;
   TestTaskGraphRunner task_graph_runner;
-  FakeLayerTreeHostImpl host_impl(&task_runner_provider, &shared_bitmap_manager,
-                                  &task_graph_runner);
+  FakeLayerTreeHostImpl host_impl(&task_runner_provider, &task_graph_runner);
   host_impl.CreatePendingTree();
 
   std::unique_ptr<LayerImpl> root =
@@ -5167,10 +5213,8 @@ TEST_F(LayerTreeHostCommonTest, SubtreeHidden_SingleLayerImpl) {
 
 TEST_F(LayerTreeHostCommonTest, SubtreeHidden_TwoLayersImpl) {
   FakeImplTaskRunnerProvider task_runner_provider;
-  TestSharedBitmapManager shared_bitmap_manager;
   TestTaskGraphRunner task_graph_runner;
-  FakeLayerTreeHostImpl host_impl(&task_runner_provider, &shared_bitmap_manager,
-                                  &task_graph_runner);
+  FakeLayerTreeHostImpl host_impl(&task_runner_provider, &task_graph_runner);
   host_impl.CreatePendingTree();
 
   std::unique_ptr<LayerImpl> root =
@@ -5211,10 +5255,8 @@ void EmptyCopyOutputCallback(std::unique_ptr<CopyOutputResult> result) {}
 
 TEST_F(LayerTreeHostCommonTest, SubtreeHiddenWithCopyRequest) {
   FakeImplTaskRunnerProvider task_runner_provider;
-  TestSharedBitmapManager shared_bitmap_manager;
   TestTaskGraphRunner task_graph_runner;
-  FakeLayerTreeHostImpl host_impl(&task_runner_provider, &shared_bitmap_manager,
-                                  &task_graph_runner);
+  FakeLayerTreeHostImpl host_impl(&task_runner_provider, &task_graph_runner);
   host_impl.CreatePendingTree();
 
   std::unique_ptr<LayerImpl> root =
@@ -5357,10 +5399,8 @@ TEST_F(LayerTreeHostCommonTest, SubtreeHiddenWithCopyRequest) {
 
 TEST_F(LayerTreeHostCommonTest, ClippedOutCopyRequest) {
   FakeImplTaskRunnerProvider task_runner_provider;
-  TestSharedBitmapManager shared_bitmap_manager;
   TestTaskGraphRunner task_graph_runner;
-  FakeLayerTreeHostImpl host_impl(&task_runner_provider, &shared_bitmap_manager,
-                                  &task_graph_runner);
+  FakeLayerTreeHostImpl host_impl(&task_runner_provider, &task_graph_runner);
   host_impl.CreatePendingTree();
 
   std::unique_ptr<LayerImpl> root =
@@ -5867,10 +5907,8 @@ TEST_F(LayerTreeHostCommonTest,
 
 TEST_F(LayerTreeHostCommonTest, CanRenderToSeparateSurface) {
   FakeImplTaskRunnerProvider task_runner_provider;
-  TestSharedBitmapManager shared_bitmap_manager;
   TestTaskGraphRunner task_graph_runner;
-  FakeLayerTreeHostImpl host_impl(&task_runner_provider, &shared_bitmap_manager,
-                                  &task_graph_runner);
+  FakeLayerTreeHostImpl host_impl(&task_runner_provider, &task_graph_runner);
 
   std::unique_ptr<LayerImpl> root =
       LayerImpl::Create(host_impl.active_tree(), 12345);
@@ -5972,38 +6010,36 @@ TEST_F(LayerTreeHostCommonTest, CanRenderToSeparateSurface) {
 TEST_F(LayerTreeHostCommonTest, DoNotIncludeBackfaceInvisibleSurfaces) {
   LayerImpl* root = root_layer_for_testing();
   LayerImpl* back_facing = AddChild<LayerImpl>(root);
+
   LayerImpl* render_surface1 = AddChild<LayerImpl>(back_facing);
-  LayerImpl* render_surface2 = AddChild<LayerImpl>(back_facing);
   LayerImpl* child1 = AddChild<LayerImpl>(render_surface1);
+
+  LayerImpl* flattener = AddChild<LayerImpl>(back_facing);
+  LayerImpl* render_surface2 = AddChild<LayerImpl>(flattener);
   LayerImpl* child2 = AddChild<LayerImpl>(render_surface2);
 
   child1->SetDrawsContent(true);
   child2->SetDrawsContent(true);
 
   root->SetBounds(gfx::Size(50, 50));
-  root->Set3dSortingContextId(1);
-  root->test_properties()->should_flatten_transform = false;
   back_facing->SetBounds(gfx::Size(50, 50));
-  back_facing->Set3dSortingContextId(1);
   back_facing->test_properties()->should_flatten_transform = false;
+
   render_surface1->SetBounds(gfx::Size(30, 30));
-  render_surface1->Set3dSortingContextId(1);
   render_surface1->test_properties()->should_flatten_transform = false;
   render_surface1->test_properties()->force_render_surface = true;
   render_surface1->test_properties()->double_sided = false;
+  child1->SetBounds(gfx::Size(20, 20));
+
+  flattener->SetBounds(gfx::Size(30, 30));
   render_surface2->SetBounds(gfx::Size(30, 30));
-  // Different context from the rest.
-  render_surface2->Set3dSortingContextId(2);
   render_surface2->test_properties()->should_flatten_transform = false;
   render_surface2->test_properties()->force_render_surface = true;
   render_surface2->test_properties()->double_sided = false;
-  child1->SetBounds(gfx::Size(20, 20));
   child2->SetBounds(gfx::Size(20, 20));
 
   ExecuteCalculateDrawProperties(root);
 
-  EXPECT_EQ(render_surface1->sorting_context_id(), root->sorting_context_id());
-  EXPECT_NE(render_surface2->sorting_context_id(), root->sorting_context_id());
   EXPECT_EQ(3u, render_surface_layer_list_impl()->size());
   EXPECT_EQ(2u, render_surface_layer_list_impl()
                     ->at(0)
@@ -6567,10 +6603,8 @@ TEST_F(LayerTreeHostCommonTest, ScrollCompensationWithRounding) {
   //       + fixed
   //
   FakeImplTaskRunnerProvider task_runner_provider;
-  TestSharedBitmapManager shared_bitmap_manager;
   TestTaskGraphRunner task_graph_runner;
-  FakeLayerTreeHostImpl host_impl(&task_runner_provider, &shared_bitmap_manager,
-                                  &task_graph_runner);
+  FakeLayerTreeHostImpl host_impl(&task_runner_provider, &task_graph_runner);
   host_impl.CreatePendingTree();
   std::unique_ptr<LayerImpl> root_ptr =
       LayerImpl::Create(host_impl.active_tree(), 1);
@@ -6809,6 +6843,7 @@ TEST_F(LayerTreeHostCommonTest, StickyPositionTop) {
   sticky_position.is_sticky = true;
   sticky_position.is_anchored_top = true;
   sticky_position.top_offset = 10.0f;
+  sticky_position.parent_relative_sticky_box_offset = gfx::Point(10, 20);
   sticky_position.scroll_container_relative_sticky_box_rect =
       gfx::Rect(10, 20, 10, 10);
   sticky_position.scroll_container_relative_containing_block_rect =
@@ -6865,6 +6900,126 @@ TEST_F(LayerTreeHostCommonTest, StickyPositionTop) {
       sticky_pos_impl->ScreenSpaceTransform().To2dTranslation());
 }
 
+TEST_F(LayerTreeHostCommonTest, StickyPositionTopScrollParent) {
+  scoped_refptr<Layer> root = Layer::Create();
+  scoped_refptr<Layer> container = Layer::Create();
+  scoped_refptr<Layer> scroller = Layer::Create();
+  scoped_refptr<Layer> sticky_pos = Layer::Create();
+  root->AddChild(container);
+  container->AddChild(scroller);
+  root->AddChild(sticky_pos);
+  sticky_pos->SetScrollParent(scroller.get());
+  host()->SetRootLayer(root);
+  scroller->SetScrollClipLayerId(container->id());
+
+  LayerStickyPositionConstraint sticky_position;
+  sticky_position.is_sticky = true;
+  sticky_position.is_anchored_top = true;
+  sticky_position.top_offset = 10.0f;
+  sticky_position.parent_relative_sticky_box_offset = gfx::Point(10, 20);
+  sticky_position.scroll_container_relative_sticky_box_rect =
+      gfx::Rect(10, 20, 10, 10);
+  sticky_position.scroll_container_relative_containing_block_rect =
+      gfx::Rect(0, 0, 50, 50);
+  sticky_pos->SetStickyPositionConstraint(sticky_position);
+
+  root->SetBounds(gfx::Size(200, 200));
+  container->SetBounds(gfx::Size(100, 100));
+  container->SetPosition(gfx::PointF(50, 50));
+  scroller->SetBounds(gfx::Size(1000, 1000));
+  sticky_pos->SetBounds(gfx::Size(10, 10));
+  sticky_pos->SetPosition(gfx::PointF(60, 70));
+
+  ExecuteCalculateDrawProperties(root.get());
+  host()->host_impl()->CreatePendingTree();
+  host()->CommitAndCreatePendingTree();
+  host()->host_impl()->ActivateSyncTree();
+  LayerTreeImpl* layer_tree_impl = host()->host_impl()->active_tree();
+
+  LayerImpl* root_impl = layer_tree_impl->LayerById(root->id());
+  LayerImpl* scroller_impl = layer_tree_impl->LayerById(scroller->id());
+  LayerImpl* sticky_pos_impl = layer_tree_impl->LayerById(sticky_pos->id());
+
+  ExecuteCalculateDrawProperties(root_impl);
+  EXPECT_VECTOR2DF_EQ(
+      gfx::Vector2dF(60.f, 70.f),
+      sticky_pos_impl->ScreenSpaceTransform().To2dTranslation());
+
+  // Scroll less than sticking point, sticky element should move with scroll as
+  // we haven't gotten to the initial sticky item location yet.
+  SetScrollOffsetDelta(scroller_impl, gfx::Vector2dF(5.f, 5.f));
+  ExecuteCalculateDrawProperties(root_impl);
+  EXPECT_VECTOR2DF_EQ(
+      gfx::Vector2dF(55.f, 65.f),
+      sticky_pos_impl->ScreenSpaceTransform().To2dTranslation());
+
+  // Scroll past the sticking point, the Y coordinate should now be clamped.
+  SetScrollOffsetDelta(scroller_impl, gfx::Vector2dF(15.f, 15.f));
+  ExecuteCalculateDrawProperties(root_impl);
+  EXPECT_VECTOR2DF_EQ(
+      gfx::Vector2dF(45.f, 60.f),
+      sticky_pos_impl->ScreenSpaceTransform().To2dTranslation());
+  SetScrollOffsetDelta(scroller_impl, gfx::Vector2dF(15.f, 25.f));
+  ExecuteCalculateDrawProperties(root_impl);
+  EXPECT_VECTOR2DF_EQ(
+      gfx::Vector2dF(45.f, 60.f),
+      sticky_pos_impl->ScreenSpaceTransform().To2dTranslation());
+
+  // Scroll past the end of the sticky container (note: this element does not
+  // have its own layer as it does not need to be composited).
+  SetScrollOffsetDelta(scroller_impl, gfx::Vector2dF(15.f, 50.f));
+  ExecuteCalculateDrawProperties(root_impl);
+  EXPECT_VECTOR2DF_EQ(
+      gfx::Vector2dF(45.f, 40.f),
+      sticky_pos_impl->ScreenSpaceTransform().To2dTranslation());
+}
+
+TEST_F(LayerTreeHostCommonTest, StickyPositionSubpixelScroll) {
+  scoped_refptr<Layer> root = Layer::Create();
+  scoped_refptr<Layer> container = Layer::Create();
+  scoped_refptr<Layer> scroller = Layer::Create();
+  scoped_refptr<Layer> sticky_pos = Layer::Create();
+  root->AddChild(container);
+  container->AddChild(scroller);
+  scroller->AddChild(sticky_pos);
+  host()->SetRootLayer(root);
+  scroller->SetScrollClipLayerId(container->id());
+
+  LayerStickyPositionConstraint sticky_position;
+  sticky_position.is_sticky = true;
+  sticky_position.is_anchored_bottom = true;
+  sticky_position.bottom_offset = 10.0f;
+  sticky_position.parent_relative_sticky_box_offset = gfx::Point(0, 200);
+  sticky_position.scroll_container_relative_sticky_box_rect =
+      gfx::Rect(0, 200, 10, 10);
+  sticky_position.scroll_container_relative_containing_block_rect =
+      gfx::Rect(0, 0, 100, 500);
+  sticky_pos->SetStickyPositionConstraint(sticky_position);
+
+  root->SetBounds(gfx::Size(100, 100));
+  container->SetBounds(gfx::Size(100, 100));
+  scroller->SetBounds(gfx::Size(100, 1000));
+  sticky_pos->SetBounds(gfx::Size(10, 10));
+  sticky_pos->SetPosition(gfx::PointF(0, 200));
+
+  ExecuteCalculateDrawProperties(root.get());
+  host()->host_impl()->CreatePendingTree();
+  host()->CommitAndCreatePendingTree();
+  host()->host_impl()->ActivateSyncTree();
+  LayerTreeImpl* layer_tree_impl = host()->host_impl()->active_tree();
+
+  LayerImpl* root_impl = layer_tree_impl->LayerById(root->id());
+  LayerImpl* scroller_impl = layer_tree_impl->LayerById(scroller->id());
+  LayerImpl* sticky_pos_impl = layer_tree_impl->LayerById(sticky_pos->id());
+
+  ExecuteCalculateDrawProperties(root_impl);
+  SetScrollOffsetDelta(scroller_impl, gfx::Vector2dF(0.f, 0.8f));
+  ExecuteCalculateDrawProperties(root_impl);
+  EXPECT_VECTOR2DF_EQ(
+      gfx::Vector2dF(0.f, 80.f),
+      sticky_pos_impl->ScreenSpaceTransform().To2dTranslation());
+}
+
 TEST_F(LayerTreeHostCommonTest, StickyPositionBottom) {
   scoped_refptr<Layer> root = Layer::Create();
   scoped_refptr<Layer> container = Layer::Create();
@@ -6880,6 +7035,7 @@ TEST_F(LayerTreeHostCommonTest, StickyPositionBottom) {
   sticky_position.is_sticky = true;
   sticky_position.is_anchored_bottom = true;
   sticky_position.bottom_offset = 10.0f;
+  sticky_position.parent_relative_sticky_box_offset = gfx::Point(0, 150);
   sticky_position.scroll_container_relative_sticky_box_rect =
       gfx::Rect(0, 150, 10, 10);
   sticky_position.scroll_container_relative_containing_block_rect =
@@ -6934,6 +7090,155 @@ TEST_F(LayerTreeHostCommonTest, StickyPositionBottom) {
       sticky_pos_impl->ScreenSpaceTransform().To2dTranslation());
 }
 
+TEST_F(LayerTreeHostCommonTest, StickyPositionBottomInnerViewportDelta) {
+  scoped_refptr<Layer> root = Layer::Create();
+  scoped_refptr<Layer> scroller = Layer::Create();
+  scoped_refptr<Layer> sticky_pos = Layer::Create();
+  root->AddChild(scroller);
+  scroller->AddChild(sticky_pos);
+  host()->SetRootLayer(root);
+  scroller->SetScrollClipLayerId(root->id());
+  host()->GetLayerTree()->RegisterViewportLayers(nullptr, root, scroller,
+                                                 nullptr);
+
+  LayerStickyPositionConstraint sticky_position;
+  sticky_position.is_sticky = true;
+  sticky_position.is_anchored_bottom = true;
+  sticky_position.bottom_offset = 10.0f;
+  sticky_position.parent_relative_sticky_box_offset = gfx::Point(0, 70);
+  sticky_position.scroll_container_relative_sticky_box_rect =
+      gfx::Rect(0, 70, 10, 10);
+  sticky_position.scroll_container_relative_containing_block_rect =
+      gfx::Rect(0, 60, 100, 100);
+  sticky_pos->SetStickyPositionConstraint(sticky_position);
+
+  root->SetBounds(gfx::Size(100, 100));
+  scroller->SetBounds(gfx::Size(100, 1000));
+  sticky_pos->SetBounds(gfx::Size(10, 10));
+  sticky_pos->SetPosition(gfx::PointF(0, 70));
+
+  ExecuteCalculateDrawProperties(root.get(), 1.f, 1.f, root.get(),
+                                 scroller.get(), nullptr);
+  host()->CommitAndCreateLayerImplTree();
+  LayerTreeImpl* layer_tree_impl = host()->host_impl()->active_tree();
+  LayerImpl* root_impl = layer_tree_impl->LayerById(root->id());
+  ASSERT_EQ(scroller->id(), layer_tree_impl->InnerViewportScrollLayer()->id());
+
+  LayerImpl* inner_scroll = layer_tree_impl->InnerViewportScrollLayer();
+  LayerImpl* sticky_pos_impl = layer_tree_impl->LayerById(sticky_pos->id());
+
+  // Initially the sticky element is moved to the bottom of the container.
+  EXPECT_VECTOR2DF_EQ(
+      gfx::Vector2dF(0.f, 70.f),
+      sticky_pos_impl->ScreenSpaceTransform().To2dTranslation());
+
+  // We start to hide the toolbar, but not far enough that the sticky element
+  // should be moved up yet.
+  root_impl->SetBoundsDelta(gfx::Vector2dF(0.f, -10.f));
+  ExecuteCalculateDrawProperties(root_impl, 1.f, 1.f, root_impl, inner_scroll,
+                                 nullptr);
+  EXPECT_VECTOR2DF_EQ(
+      gfx::Vector2dF(0.f, 70.f),
+      sticky_pos_impl->ScreenSpaceTransform().To2dTranslation());
+
+  // On hiding more of the toolbar the sticky element starts to stick.
+  root_impl->SetBoundsDelta(gfx::Vector2dF(0.f, -20.f));
+  ExecuteCalculateDrawProperties(root_impl, 1.f, 1.f, root_impl, inner_scroll,
+                                 nullptr);
+  EXPECT_VECTOR2DF_EQ(
+      gfx::Vector2dF(0.f, 60.f),
+      sticky_pos_impl->ScreenSpaceTransform().To2dTranslation());
+
+  // On hiding more the sticky element stops moving as it has reached its
+  // limit.
+  root_impl->SetBoundsDelta(gfx::Vector2dF(0.f, -30.f));
+  ExecuteCalculateDrawProperties(root_impl, 1.f, 1.f, root_impl, inner_scroll,
+                                 nullptr);
+  EXPECT_VECTOR2DF_EQ(
+      gfx::Vector2dF(0.f, 60.f),
+      sticky_pos_impl->ScreenSpaceTransform().To2dTranslation());
+}
+
+TEST_F(LayerTreeHostCommonTest, StickyPositionBottomOuterViewportDelta) {
+  scoped_refptr<Layer> root = Layer::Create();
+  scoped_refptr<Layer> scroller = Layer::Create();
+  scoped_refptr<Layer> outer_clip = Layer::Create();
+  scoped_refptr<Layer> outer_viewport = Layer::Create();
+  scoped_refptr<Layer> sticky_pos = Layer::Create();
+  root->AddChild(scroller);
+  scroller->AddChild(outer_clip);
+  outer_clip->AddChild(outer_viewport);
+  outer_viewport->AddChild(sticky_pos);
+  host()->SetRootLayer(root);
+  scroller->SetScrollClipLayerId(root->id());
+  outer_viewport->SetScrollClipLayerId(outer_clip->id());
+  host()->GetLayerTree()->RegisterViewportLayers(nullptr, root, scroller,
+                                                 outer_viewport);
+
+  LayerStickyPositionConstraint sticky_position;
+  sticky_position.is_sticky = true;
+  sticky_position.is_anchored_bottom = true;
+  sticky_position.bottom_offset = 10.0f;
+  sticky_position.parent_relative_sticky_box_offset = gfx::Point(0, 70);
+  sticky_position.scroll_container_relative_sticky_box_rect =
+      gfx::Rect(0, 70, 10, 10);
+  sticky_position.scroll_container_relative_containing_block_rect =
+      gfx::Rect(0, 60, 100, 100);
+  sticky_pos->SetStickyPositionConstraint(sticky_position);
+
+  root->SetBounds(gfx::Size(100, 100));
+  scroller->SetBounds(gfx::Size(100, 1000));
+  outer_clip->SetBounds(gfx::Size(100, 100));
+  sticky_pos->SetBounds(gfx::Size(10, 10));
+  sticky_pos->SetPosition(gfx::PointF(0, 70));
+
+  ExecuteCalculateDrawProperties(root.get(), 1.f, 1.f, root.get(),
+                                 scroller.get(), outer_viewport.get());
+  host()->CommitAndCreateLayerImplTree();
+  LayerTreeImpl* layer_tree_impl = host()->host_impl()->active_tree();
+  LayerImpl* root_impl = layer_tree_impl->LayerById(root->id());
+  ASSERT_EQ(outer_viewport->id(),
+            layer_tree_impl->OuterViewportScrollLayer()->id());
+
+  LayerImpl* inner_scroll = layer_tree_impl->InnerViewportScrollLayer();
+  LayerImpl* outer_scroll = layer_tree_impl->OuterViewportScrollLayer();
+  LayerImpl* sticky_pos_impl = layer_tree_impl->LayerById(sticky_pos->id());
+  LayerImpl* outer_clip_impl = layer_tree_impl->LayerById(outer_clip->id());
+
+  // Initially the sticky element is moved to the bottom of the container.
+  EXPECT_VECTOR2DF_EQ(
+      gfx::Vector2dF(0.f, 70.f),
+      sticky_pos_impl->ScreenSpaceTransform().To2dTranslation());
+
+  // We start to hide the toolbar, but not far enough that the sticky element
+  // should be moved up yet.
+  outer_clip_impl->SetBoundsDelta(gfx::Vector2dF(0.f, -10.f));
+  ExecuteCalculateDrawProperties(root_impl, 1.f, 1.f, root_impl, inner_scroll,
+                                 outer_scroll);
+  EXPECT_VECTOR2DF_EQ(
+      gfx::Vector2dF(0.f, 70.f),
+      sticky_pos_impl->ScreenSpaceTransform().To2dTranslation());
+
+  // On hiding more of the toolbar the sticky element starts to stick.
+  outer_clip_impl->SetBoundsDelta(gfx::Vector2dF(0.f, -20.f));
+  ExecuteCalculateDrawProperties(root_impl, 1.f, 1.f, root_impl, inner_scroll,
+                                 outer_scroll);
+
+  // On hiding more the sticky element stops moving as it has reached its
+  // limit.
+  EXPECT_VECTOR2DF_EQ(
+      gfx::Vector2dF(0.f, 60.f),
+      sticky_pos_impl->ScreenSpaceTransform().To2dTranslation());
+
+  outer_clip_impl->SetBoundsDelta(gfx::Vector2dF(0.f, -30.f));
+  ExecuteCalculateDrawProperties(root_impl, 1.f, 1.f, root_impl, inner_scroll,
+                                 outer_scroll);
+
+  EXPECT_VECTOR2DF_EQ(
+      gfx::Vector2dF(0.f, 60.f),
+      sticky_pos_impl->ScreenSpaceTransform().To2dTranslation());
+}
+
 TEST_F(LayerTreeHostCommonTest, StickyPositionLeftRight) {
   scoped_refptr<Layer> root = Layer::Create();
   scoped_refptr<Layer> container = Layer::Create();
@@ -6951,6 +7256,7 @@ TEST_F(LayerTreeHostCommonTest, StickyPositionLeftRight) {
   sticky_position.is_anchored_right = true;
   sticky_position.left_offset = 10.f;
   sticky_position.right_offset = 10.f;
+  sticky_position.parent_relative_sticky_box_offset = gfx::Point(145, 0);
   sticky_position.scroll_container_relative_sticky_box_rect =
       gfx::Rect(145, 0, 10, 10);
   sticky_position.scroll_container_relative_containing_block_rect =
@@ -7053,6 +7359,7 @@ TEST_F(LayerTreeHostCommonTest, StickyPositionMainThreadUpdates) {
   sticky_position.is_sticky = true;
   sticky_position.is_anchored_top = true;
   sticky_position.top_offset = 10.0f;
+  sticky_position.parent_relative_sticky_box_offset = gfx::Point(10, 20);
   sticky_position.scroll_container_relative_sticky_box_rect =
       gfx::Rect(10, 20, 10, 10);
   sticky_position.scroll_container_relative_containing_block_rect =
@@ -7124,6 +7431,110 @@ TEST_F(LayerTreeHostCommonTest, StickyPositionMainThreadUpdates) {
       sticky_pos_impl->ScreenSpaceTransform().To2dTranslation());
 }
 
+// This tests the main thread updates with a composited sticky container. In
+// this case the position received from main is relative to the container but
+// the constraint rects are relative to the ancestor scroller.
+TEST_F(LayerTreeHostCommonTest, StickyPositionCompositedContainer) {
+  scoped_refptr<Layer> root = Layer::Create();
+  scoped_refptr<Layer> container = Layer::Create();
+  scoped_refptr<Layer> scroller = Layer::Create();
+  scoped_refptr<Layer> sticky_container = Layer::Create();
+  scoped_refptr<Layer> sticky_pos = Layer::Create();
+  root->AddChild(container);
+  container->AddChild(scroller);
+  scroller->AddChild(sticky_container);
+  sticky_container->AddChild(sticky_pos);
+  host()->SetRootLayer(root);
+  scroller->SetScrollClipLayerId(container->id());
+
+  LayerStickyPositionConstraint sticky_position;
+  sticky_position.is_sticky = true;
+  sticky_position.is_anchored_top = true;
+  sticky_position.top_offset = 10.0f;
+  // The sticky position layer is only offset by (0, 10) from its parent
+  // layer, this position is used to determine the offset applied by the main
+  // thread.
+  sticky_position.parent_relative_sticky_box_offset = gfx::Point(0, 10);
+  sticky_position.scroll_container_relative_sticky_box_rect =
+      gfx::Rect(20, 30, 10, 10);
+  sticky_position.scroll_container_relative_containing_block_rect =
+      gfx::Rect(20, 20, 30, 30);
+  sticky_pos->SetStickyPositionConstraint(sticky_position);
+
+  root->SetBounds(gfx::Size(100, 100));
+  container->SetBounds(gfx::Size(100, 100));
+  scroller->SetBounds(gfx::Size(1000, 1000));
+  sticky_container->SetPosition(gfx::PointF(20, 20));
+  sticky_container->SetBounds(gfx::Size(30, 30));
+  sticky_pos->SetBounds(gfx::Size(10, 10));
+  sticky_pos->SetPosition(gfx::PointF(0, 10));
+
+  ExecuteCalculateDrawProperties(root.get());
+  host()->host_impl()->CreatePendingTree();
+  host()->CommitAndCreatePendingTree();
+  host()->host_impl()->ActivateSyncTree();
+  LayerTreeImpl* layer_tree_impl = host()->host_impl()->active_tree();
+
+  LayerImpl* root_impl = layer_tree_impl->LayerById(root->id());
+  LayerImpl* scroller_impl = layer_tree_impl->LayerById(scroller->id());
+  LayerImpl* sticky_pos_impl = layer_tree_impl->LayerById(sticky_pos->id());
+
+  ExecuteCalculateDrawProperties(root_impl);
+  EXPECT_VECTOR2DF_EQ(
+      gfx::Vector2dF(20.f, 30.f),
+      sticky_pos_impl->ScreenSpaceTransform().To2dTranslation());
+
+  // Scroll less than sticking point, sticky element should move with scroll as
+  // we haven't gotten to the initial sticky item location yet.
+  SetScrollOffsetDelta(scroller_impl, gfx::Vector2dF(0.f, 5.f));
+  ExecuteCalculateDrawProperties(root_impl);
+  EXPECT_VECTOR2DF_EQ(
+      gfx::Vector2dF(20.f, 25.f),
+      sticky_pos_impl->ScreenSpaceTransform().To2dTranslation());
+
+  // Scroll past the sticking point, the Y coordinate should now be clamped.
+  SetScrollOffsetDelta(scroller_impl, gfx::Vector2dF(0.f, 25.f));
+  ExecuteCalculateDrawProperties(root_impl);
+  EXPECT_VECTOR2DF_EQ(
+      gfx::Vector2dF(20.f, 10.f),
+      sticky_pos_impl->ScreenSpaceTransform().To2dTranslation());
+
+  // Now the main thread commits the new position of the sticky element.
+  scroller->SetScrollOffset(gfx::ScrollOffset(0, 25));
+  sticky_pos->SetPosition(gfx::PointF(0, 15));
+  ExecuteCalculateDrawProperties(root.get());
+  host()->host_impl()->CreatePendingTree();
+  host()->CommitAndCreatePendingTree();
+  host()->host_impl()->ActivateSyncTree();
+  layer_tree_impl = host()->host_impl()->active_tree();
+  root_impl = layer_tree_impl->LayerById(root->id());
+  scroller_impl = layer_tree_impl->LayerById(scroller->id());
+  sticky_pos_impl = layer_tree_impl->LayerById(sticky_pos->id());
+
+  // The element should still be where it was before. We reset the delta to
+  // (0, 0) because we have synced a scroll offset of (0, 25) from the main
+  // thread.
+  SetScrollOffsetDelta(scroller_impl, gfx::Vector2dF(0.f, 0.f));
+  ExecuteCalculateDrawProperties(root_impl);
+  EXPECT_VECTOR2DF_EQ(
+      gfx::Vector2dF(20.f, 10.f),
+      sticky_pos_impl->ScreenSpaceTransform().To2dTranslation());
+
+  // And if we scroll a little further it remains there.
+  SetScrollOffsetDelta(scroller_impl, gfx::Vector2dF(0.f, 5.f));
+  ExecuteCalculateDrawProperties(root_impl);
+  EXPECT_VECTOR2DF_EQ(
+      gfx::Vector2dF(20.f, 10.f),
+      sticky_pos_impl->ScreenSpaceTransform().To2dTranslation());
+
+  // And hits the bottom of the container.
+  SetScrollOffsetDelta(scroller_impl, gfx::Vector2dF(0.f, 10.f));
+  ExecuteCalculateDrawProperties(root_impl);
+  EXPECT_VECTOR2DF_EQ(
+      gfx::Vector2dF(20.f, 5.f),
+      sticky_pos_impl->ScreenSpaceTransform().To2dTranslation());
+}
+
 // A transform on a sticky element should not affect its sticky position.
 TEST_F(LayerTreeHostCommonTest, StickyPositionScaledStickyBox) {
   scoped_refptr<Layer> root = Layer::Create();
@@ -7143,6 +7554,7 @@ TEST_F(LayerTreeHostCommonTest, StickyPositionScaledStickyBox) {
   sticky_position.is_sticky = true;
   sticky_position.is_anchored_top = true;
   sticky_position.top_offset = 0.0f;
+  sticky_position.parent_relative_sticky_box_offset = gfx::Point(0, 20);
   sticky_position.scroll_container_relative_sticky_box_rect =
       gfx::Rect(0, 20, 10, 10);
   sticky_position.scroll_container_relative_containing_block_rect =
@@ -7221,6 +7633,7 @@ TEST_F(LayerTreeHostCommonTest, StickyPositionScaledContainer) {
   sticky_position.is_sticky = true;
   sticky_position.is_anchored_top = true;
   sticky_position.top_offset = 0.0f;
+  sticky_position.parent_relative_sticky_box_offset = gfx::Point(0, 20);
   sticky_position.scroll_container_relative_sticky_box_rect =
       gfx::Rect(0, 20, 10, 10);
   sticky_position.scroll_container_relative_containing_block_rect =
@@ -7390,12 +7803,11 @@ class AnimationScaleFactorTrackingLayerImpl : public LayerImpl {
 
 TEST_F(LayerTreeHostCommonTest, MaximumAnimationScaleFactor) {
   FakeImplTaskRunnerProvider task_runner_provider;
-  TestSharedBitmapManager shared_bitmap_manager;
   TestTaskGraphRunner task_graph_runner;
   LayerTreeSettings settings = host()->GetSettings();
   settings.layer_transforms_should_scale_layer_contents = true;
   FakeLayerTreeHostImpl host_impl(settings, &task_runner_provider,
-                                  &shared_bitmap_manager, &task_graph_runner);
+                                  &task_graph_runner);
   std::unique_ptr<AnimationScaleFactorTrackingLayerImpl> grand_parent =
       AnimationScaleFactorTrackingLayerImpl::Create(host_impl.active_tree(), 1);
   std::unique_ptr<AnimationScaleFactorTrackingLayerImpl> parent =
@@ -7648,10 +8060,8 @@ static void GatherDrawnLayers(const LayerImplList* rsll,
 
 TEST_F(LayerTreeHostCommonTest, RenderSurfaceLayerListMembership) {
   FakeImplTaskRunnerProvider task_runner_provider;
-  TestSharedBitmapManager shared_bitmap_manager;
   TestTaskGraphRunner task_graph_runner;
-  FakeLayerTreeHostImpl host_impl(&task_runner_provider, &shared_bitmap_manager,
-                                  &task_graph_runner);
+  FakeLayerTreeHostImpl host_impl(&task_runner_provider, &task_graph_runner);
 
   std::unique_ptr<LayerImpl> grand_parent =
       LayerImpl::Create(host_impl.active_tree(), 1);
@@ -7874,12 +8284,11 @@ TEST_F(LayerTreeHostCommonTest, RenderSurfaceLayerListMembership) {
 
 TEST_F(LayerTreeHostCommonTest, DrawPropertyScales) {
   FakeImplTaskRunnerProvider task_runner_provider;
-  TestSharedBitmapManager shared_bitmap_manager;
   TestTaskGraphRunner task_graph_runner;
   LayerTreeSettings settings = host()->GetSettings();
   settings.layer_transforms_should_scale_layer_contents = true;
   FakeLayerTreeHostImpl host_impl(settings, &task_runner_provider,
-                                  &shared_bitmap_manager, &task_graph_runner);
+                                  &task_graph_runner);
 
   std::unique_ptr<LayerImpl> root =
       LayerImpl::Create(host_impl.active_tree(), 1);
@@ -7989,12 +8398,11 @@ TEST_F(LayerTreeHostCommonTest, DrawPropertyScales) {
 
 TEST_F(LayerTreeHostCommonTest, AnimationScales) {
   FakeImplTaskRunnerProvider task_runner_provider;
-  TestSharedBitmapManager shared_bitmap_manager;
   TestTaskGraphRunner task_graph_runner;
   LayerTreeSettings settings = host()->GetSettings();
   settings.layer_transforms_should_scale_layer_contents = true;
   FakeLayerTreeHostImpl host_impl(settings, &task_runner_provider,
-                                  &shared_bitmap_manager, &task_graph_runner);
+                                  &task_graph_runner);
 
   std::unique_ptr<LayerImpl> root =
       LayerImpl::Create(host_impl.active_tree(), 1);
@@ -8068,12 +8476,11 @@ TEST_F(LayerTreeHostCommonTest,
   // Returns empty scale if layer_transforms_should_scale_layer_contents is
   // false.
   FakeImplTaskRunnerProvider task_runner_provider;
-  TestSharedBitmapManager shared_bitmap_manager;
   TestTaskGraphRunner task_graph_runner;
   LayerTreeSettings settings = host()->GetSettings();
   settings.layer_transforms_should_scale_layer_contents = false;
   FakeLayerTreeHostImpl host_impl(settings, &task_runner_provider,
-                                  &shared_bitmap_manager, &task_graph_runner);
+                                  &task_graph_runner);
 
   std::unique_ptr<LayerImpl> root =
       LayerImpl::Create(host_impl.active_tree(), 1);
@@ -8148,10 +8555,8 @@ TEST_F(LayerTreeHostCommonTest, VisibleContentRectInChildRenderSurface) {
 
 TEST_F(LayerTreeHostCommonTest, BoundsDeltaAffectVisibleContentRect) {
   FakeImplTaskRunnerProvider task_runner_provider;
-  TestSharedBitmapManager shared_bitmap_manager;
   TestTaskGraphRunner task_graph_runner;
-  FakeLayerTreeHostImpl host_impl(&task_runner_provider, &shared_bitmap_manager,
-                                  &task_graph_runner);
+  FakeLayerTreeHostImpl host_impl(&task_runner_provider, &task_graph_runner);
 
   // Set two layers: the root layer clips it's child,
   // the child draws its content.
@@ -8161,7 +8566,7 @@ TEST_F(LayerTreeHostCommonTest, BoundsDeltaAffectVisibleContentRect) {
   // Sublayer should be bigger than the root enlarged by bounds_delta.
   gfx::Size sublayer_size = gfx::Size(300, 1000);
 
-  // Device viewport accomidated the root and the top controls.
+  // Device viewport accomidated the root and the browser controls.
   gfx::Size device_viewport_size = gfx::Size(300, 600);
 
   host_impl.SetViewportSize(device_viewport_size);
@@ -8779,10 +9184,8 @@ TEST_F(LayerTreeHostCommonTest, SkippingSubtreeMain) {
 
 TEST_F(LayerTreeHostCommonTest, SkippingLayerImpl) {
   FakeImplTaskRunnerProvider task_runner_provider;
-  TestSharedBitmapManager shared_bitmap_manager;
   TestTaskGraphRunner task_graph_runner;
-  FakeLayerTreeHostImpl host_impl(&task_runner_provider, &shared_bitmap_manager,
-                                  &task_graph_runner);
+  FakeLayerTreeHostImpl host_impl(&task_runner_provider, &task_graph_runner);
 
   std::unique_ptr<LayerImpl> root =
       LayerImpl::Create(host_impl.active_tree(), 1);
@@ -8906,8 +9309,8 @@ TEST_F(LayerTreeHostCommonTest, SkippingLayerImpl) {
   std::unique_ptr<Animation> transform_animation(
       Animation::Create(std::move(curve), 3, 3, TargetProperty::TRANSFORM));
   scoped_refptr<AnimationPlayer> player(AnimationPlayer::Create(1));
-  host_impl.active_tree()->animation_host()->RegisterPlayerForElement(
-      root_ptr->element_id(), player.get());
+  host_impl.animation_host()->RegisterPlayerForElement(root_ptr->element_id(),
+                                                       player.get());
   player->AddAnimation(std::move(transform_animation));
   grandchild_ptr->set_visible_layer_rect(gfx::Rect());
   child_ptr->SetScrollClipLayer(root_ptr->id());
@@ -8917,8 +9320,8 @@ TEST_F(LayerTreeHostCommonTest, SkippingLayerImpl) {
   ExecuteCalculateDrawPropertiesAndSaveUpdateLayerList(root_ptr);
   EXPECT_EQ(gfx::Rect(0, 0), grandchild_ptr->visible_layer_rect());
 
-  host_impl.active_tree()->animation_host()->UnregisterPlayerForElement(
-      root_ptr->element_id(), player.get());
+  host_impl.animation_host()->UnregisterPlayerForElement(root_ptr->element_id(),
+                                                         player.get());
 }
 
 TEST_F(LayerTreeHostCommonTest, LayerSkippingInSubtreeOfSingularTransform) {
@@ -8954,7 +9357,7 @@ TEST_F(LayerTreeHostCommonTest, LayerSkippingInSubtreeOfSingularTransform) {
   std::unique_ptr<Animation> transform_animation(
       Animation::Create(std::move(curve), 3, 3, TargetProperty::TRANSFORM));
   scoped_refptr<AnimationPlayer> player(AnimationPlayer::Create(1));
-  host_impl()->active_tree()->animation_host()->RegisterPlayerForElement(
+  host_impl()->animation_host()->RegisterPlayerForElement(
       grand_child->element_id(), player.get());
   player->AddAnimation(std::move(transform_animation));
 
@@ -8962,16 +9365,14 @@ TEST_F(LayerTreeHostCommonTest, LayerSkippingInSubtreeOfSingularTransform) {
   EXPECT_EQ(gfx::Rect(0, 0), grand_child->visible_layer_rect());
   EXPECT_EQ(gfx::Rect(0, 0), child->visible_layer_rect());
 
-  host_impl()->active_tree()->animation_host()->UnregisterPlayerForElement(
+  host_impl()->animation_host()->UnregisterPlayerForElement(
       grand_child->element_id(), player.get());
 }
 
 TEST_F(LayerTreeHostCommonTest, SkippingPendingLayerImpl) {
   FakeImplTaskRunnerProvider task_runner_provider;
-  TestSharedBitmapManager shared_bitmap_manager;
   TestTaskGraphRunner task_graph_runner;
-  FakeLayerTreeHostImpl host_impl(&task_runner_provider, &shared_bitmap_manager,
-                                  &task_graph_runner);
+  FakeLayerTreeHostImpl host_impl(&task_runner_provider, &task_graph_runner);
 
   host_impl.CreatePendingTree();
   std::unique_ptr<LayerImpl> root =
@@ -9016,8 +9417,8 @@ TEST_F(LayerTreeHostCommonTest, SkippingPendingLayerImpl) {
   std::unique_ptr<Animation> animation(
       Animation::Create(std::move(curve), 3, 3, TargetProperty::OPACITY));
   scoped_refptr<AnimationPlayer> player(AnimationPlayer::Create(1));
-  host_impl.active_tree()->animation_host()->RegisterPlayerForElement(
-      root_ptr->element_id(), player.get());
+  host_impl.animation_host()->RegisterPlayerForElement(root_ptr->element_id(),
+                                                       player.get());
   player->AddAnimation(std::move(animation));
   root_ptr->test_properties()->opacity = 0.f;
   grandchild_ptr->set_visible_layer_rect(gfx::Rect());
@@ -9025,8 +9426,8 @@ TEST_F(LayerTreeHostCommonTest, SkippingPendingLayerImpl) {
   ExecuteCalculateDrawPropertiesAndSaveUpdateLayerList(root_ptr);
   EXPECT_EQ(gfx::Rect(10, 10), grandchild_ptr->visible_layer_rect());
 
-  host_impl.active_tree()->animation_host()->UnregisterPlayerForElement(
-      root_ptr->element_id(), player.get());
+  host_impl.animation_host()->UnregisterPlayerForElement(root_ptr->element_id(),
+                                                         player.get());
 }
 
 TEST_F(LayerTreeHostCommonTest, SkippingLayer) {
@@ -9153,12 +9554,15 @@ TEST_F(LayerTreeHostCommonTest, RenderSurfaceClipsSubtree) {
   float device_scale_factor = 1.f;
   float page_scale_factor = 1.f;
   LayerImpl* page_scale_layer = nullptr;
+  LayerImpl* inner_viewport_scroll_layer = nullptr;
+  LayerImpl* outer_viewport_scroll_layer = nullptr;
   // Visible rects computed by combining clips in target space and root space
   // don't match because of rotation transforms. So, we skip
   // verify_visible_rect_calculations.
   bool skip_verify_visible_rect_calculations = true;
   ExecuteCalculateDrawProperties(root, device_scale_factor, page_scale_factor,
-                                 page_scale_layer,
+                                 page_scale_layer, inner_viewport_scroll_layer,
+                                 outer_viewport_scroll_layer,
                                  skip_verify_visible_rect_calculations);
 
   TransformTree& transform_tree =
@@ -9175,7 +9579,7 @@ TEST_F(LayerTreeHostCommonTest, RenderSurfaceClipsSubtree) {
 
   ClipTree& clip_tree = root->layer_tree_impl()->property_trees()->clip_tree;
   ClipNode* clip_node = clip_tree.Node(render_surface->clip_tree_index());
-  EXPECT_FALSE(clip_node->applies_local_clip);
+  EXPECT_EQ(clip_node->clip_type, ClipNode::ClipType::NONE);
   EXPECT_EQ(gfx::Rect(20, 20), test_layer->visible_layer_rect());
 
   // Also test the visible rects computed by combining clips in root space.
@@ -9688,22 +10092,21 @@ TEST_F(LayerTreeHostCommonTest,
   test_layer->SetBounds(gfx::Size(30, 30));
   test_layer->SetDrawsContent(true);
 
-  // We want layer between the two targets to create a clip node and transform
+  // We want layer between the two targets to create a clip node and effect
   // node but it shouldn't create a render surface.
   between_targets->SetMasksToBounds(true);
-  between_targets->Set3dSortingContextId(2);
+  between_targets->test_properties()->opacity = 0.5f;
 
   ExecuteCalculateDrawProperties(root);
 
-  TransformTree& tree =
-      root->layer_tree_impl()->property_trees()->transform_tree;
-  TransformNode* node = tree.Node(render_surface1->transform_tree_index());
+  EffectTree& tree = root->layer_tree_impl()->property_trees()->effect_tree;
+  EffectNode* node = tree.Node(render_surface1->effect_tree_index());
   EXPECT_EQ(node->surface_contents_scale, gfx::Vector2dF(2.f, 2.f));
 
-  node = tree.Node(between_targets->transform_tree_index());
+  node = tree.Node(between_targets->effect_tree_index());
   EXPECT_EQ(node->surface_contents_scale, gfx::Vector2dF(1.f, 1.f));
 
-  node = tree.Node(render_surface2->transform_tree_index());
+  node = tree.Node(render_surface2->effect_tree_index());
   EXPECT_EQ(node->surface_contents_scale, gfx::Vector2dF(2.f, 2.f));
 
   EXPECT_EQ(gfx::Rect(15, 15), test_layer->visible_layer_rect());
@@ -9941,43 +10344,6 @@ TEST_F(LayerTreeHostCommonTest, TransformAnimationsTrackingTest) {
   node = tree.Node(animated->transform_tree_index());
   EXPECT_FALSE(node->is_currently_animating);
   EXPECT_FALSE(node->has_potential_animation);
-}
-
-TEST_F(LayerTreeHostCommonTest, SerializeScrollUpdateInfo) {
-  LayerTreeHostCommon::ScrollUpdateInfo scroll;
-  scroll.layer_id = 2;
-  scroll.scroll_delta = gfx::Vector2d(5, 10);
-
-  proto::ScrollUpdateInfo proto;
-  scroll.ToProtobuf(&proto);
-  LayerTreeHostCommon::ScrollUpdateInfo new_scroll;
-  new_scroll.FromProtobuf(proto);
-
-  EXPECT_EQ(scroll, new_scroll);
-}
-
-TEST_F(LayerTreeHostCommonTest, SerializeScrollAndScale) {
-  ScrollAndScaleSet scroll_and_scale_set;
-
-  LayerTreeHostCommon::ScrollUpdateInfo scroll1;
-  scroll1.layer_id = 1;
-  scroll1.scroll_delta = gfx::Vector2d(5, 10);
-  LayerTreeHostCommon::ScrollUpdateInfo scroll2;
-  scroll2.layer_id = 2;
-  scroll2.scroll_delta = gfx::Vector2d(1, 5);
-  scroll_and_scale_set.scrolls.push_back(scroll1);
-  scroll_and_scale_set.scrolls.push_back(scroll2);
-
-  scroll_and_scale_set.page_scale_delta = 0.3f;
-  scroll_and_scale_set.elastic_overscroll_delta = gfx::Vector2dF(0.5f, 0.6f);
-  scroll_and_scale_set.top_controls_delta = 0.9f;
-
-  proto::ScrollAndScaleSet proto;
-  scroll_and_scale_set.ToProtobuf(&proto);
-  ScrollAndScaleSet new_scroll_and_scale_set;
-  new_scroll_and_scale_set.FromProtobuf(proto);
-
-  EXPECT_TRUE(scroll_and_scale_set.EqualsForTesting(new_scroll_and_scale_set));
 }
 
 TEST_F(LayerTreeHostCommonTest, ScrollTreeBuilderTest) {

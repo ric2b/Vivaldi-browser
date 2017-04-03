@@ -51,9 +51,13 @@ std::unique_ptr<UsbService> UsbService::Create(
 }
 
 UsbService::~UsbService() {
+#if DCHECK_IS_ON()
+  DCHECK(did_shutdown_);
+#endif
   for (const auto& map_entry : devices_)
     map_entry.second->OnDisconnect();
-  FOR_EACH_OBSERVER(Observer, observer_list_, WillDestroyUsbService());
+  for (auto& observer : observer_list_)
+    observer.WillDestroyUsbService();
 }
 
 UsbService::UsbService(
@@ -67,6 +71,13 @@ scoped_refptr<UsbDevice> UsbService::GetDevice(const std::string& guid) {
   if (it == devices_.end())
     return nullptr;
   return it->second;
+}
+
+void UsbService::Shutdown() {
+#if DCHECK_IS_ON()
+  DCHECK(!did_shutdown_);
+  did_shutdown_ = true;
+#endif
 }
 
 void UsbService::GetDevices(const GetDevicesCallback& callback) {
@@ -127,15 +138,18 @@ void UsbService::GetTestDevices(
 void UsbService::NotifyDeviceAdded(scoped_refptr<UsbDevice> device) {
   DCHECK(CalledOnValidThread());
 
-  FOR_EACH_OBSERVER(Observer, observer_list_, OnDeviceAdded(device));
+  for (auto& observer : observer_list_)
+    observer.OnDeviceAdded(device);
 }
 
 void UsbService::NotifyDeviceRemoved(scoped_refptr<UsbDevice> device) {
   DCHECK(CalledOnValidThread());
 
-  FOR_EACH_OBSERVER(Observer, observer_list_, OnDeviceRemoved(device));
+  for (auto& observer : observer_list_)
+    observer.OnDeviceRemoved(device);
   device->NotifyDeviceRemoved();
-  FOR_EACH_OBSERVER(Observer, observer_list_, OnDeviceRemovedCleanup(device));
+  for (auto& observer : observer_list_)
+    observer.OnDeviceRemovedCleanup(device);
 }
 
 }  // namespace device

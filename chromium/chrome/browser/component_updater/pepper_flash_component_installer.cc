@@ -26,6 +26,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/version.h"
 #include "build/build_config.h"
+#include "chrome/browser/component_updater/component_installer_errors.h"
 #include "chrome/browser/plugins/plugin_prefs.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_content_client.h"
@@ -36,15 +37,22 @@
 #include "components/component_updater/component_updater_service.h"
 #include "components/component_updater/default_component_installer.h"
 #include "components/update_client/update_client.h"
+#include "components/update_client/update_client_errors.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/plugin_service.h"
 #include "content/public/common/content_constants.h"
 #include "content/public/common/pepper_plugin_info.h"
 #include "ppapi/shared_impl/ppapi_permissions.h"
 
-#if defined(OS_LINUX)
+#if defined(OS_CHROMEOS)
+#include "chrome/common/chrome_features.h"
+#include "chromeos/dbus/dbus_method_call_status.h"
+#include "chromeos/dbus/dbus_thread_manager.h"
+#include "chromeos/dbus/image_loader_client.h"
+#include "content/public/browser/browser_thread.h"
+#elif defined(OS_LINUX)
 #include "chrome/common/component_flash_hint_file_linux.h"
-#endif  // defined(OS_LINUX)
+#endif  // defined(OS_CHROMEOS)
 
 using content::BrowserThread;
 using content::PluginService;
@@ -54,11 +62,46 @@ namespace component_updater {
 namespace {
 
 #if defined(GOOGLE_CHROME_BUILD)
+#if defined(OS_CHROMEOS)
+// CRX hash for Chrome OS. The extension id is:
+// ckjlcfmdbdglblbjglepgnoekdnkoklc.
+const uint8_t kSha2Hash[] = {0x2a, 0x9b, 0x25, 0xc3, 0x13, 0x6b, 0x1b, 0x19,
+                             0x6b, 0x4f, 0x6d, 0xe4, 0xa3, 0xda, 0xea, 0xb2,
+                             0x67, 0xeb, 0xf0, 0xbb, 0x1f, 0x48, 0xa2, 0x73,
+                             0xea, 0x47, 0x11, 0xc8, 0x2b, 0xd9, 0x03, 0xb5};
+#else
 // CRX hash. The extension id is: mimojjlkmoijpicakmndhoigimigcmbb.
 const uint8_t kSha2Hash[] = {0xc8, 0xce, 0x99, 0xba, 0xce, 0x89, 0xf8, 0x20,
                              0xac, 0xd3, 0x7e, 0x86, 0x8c, 0x86, 0x2c, 0x11,
                              0xb9, 0x40, 0xc5, 0x55, 0xaf, 0x08, 0x63, 0x70,
                              0x54, 0xf9, 0x56, 0xd3, 0xe7, 0x88, 0xba, 0x8c};
+#endif  // defined(OS_CHROMEOS)
+
+#if defined(OS_CHROMEOS)
+void LogRegistrationResult(chromeos::DBusMethodCallStatus call_status,
+                           bool result) {
+  if (call_status != chromeos::DBUS_METHOD_CALL_SUCCESS) {
+    LOG(ERROR) << "Call to imageloader service failed.";
+    return;
+  }
+  if (!result)
+    LOG(ERROR) << "Component flash registration failed";
+}
+
+void ImageLoaderRegistration(const std::string& version,
+                             const base::FilePath& install_dir) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  chromeos::ImageLoaderClient* loader =
+      chromeos::DBusThreadManager::Get()->GetImageLoaderClient();
+
+  if (loader) {
+    loader->RegisterComponent("PepperFlashPlayer", version, install_dir.value(),
+                              base::Bind(&LogRegistrationResult));
+  } else {
+    LOG(ERROR) << "Failed to get ImageLoaderClient object.";
+  }
+}
+#endif  // defined(OS_CHROMEOS)
 #endif  // defined(GOOGLE_CHROME_BUILD)
 
 #if !defined(OS_LINUX) && defined(GOOGLE_CHROME_BUILD)
@@ -159,8 +202,9 @@ class FlashComponentInstallerTraits : public ComponentInstallerTraits {
   // The following methods override ComponentInstallerTraits.
   bool SupportsGroupPolicyEnabledComponentUpdates() const override;
   bool RequiresNetworkEncryption() const override;
-  bool OnCustomInstall(const base::DictionaryValue& manifest,
-                       const base::FilePath& install_dir) override;
+  update_client::CrxInstaller::Result OnCustomInstall(
+      const base::DictionaryValue& manifest,
+      const base::FilePath& install_dir) override;
   bool VerifyInstallation(const base::DictionaryValue& manifest,
                           const base::FilePath& install_dir) const override;
   void ComponentReady(const base::Version& version,
@@ -186,23 +230,30 @@ bool FlashComponentInstallerTraits::RequiresNetworkEncryption() const {
   return false;
 }
 
-bool FlashComponentInstallerTraits::OnCustomInstall(
+update_client::CrxInstaller::Result
+FlashComponentInstallerTraits::OnCustomInstall(
     const base::DictionaryValue& manifest,
     const base::FilePath& install_dir) {
-#if defined(OS_LINUX)
+  std::string version;
+  if (!manifest.GetString("version", &version)) {
+    return ToInstallerResult(FlashError::MISSING_VERSION_IN_MANIFEST);
+  }
+
+#if defined(OS_CHROMEOS)
+  BrowserThread::PostTask(
+      BrowserThread::UI, FROM_HERE,
+      base::Bind(&ImageLoaderRegistration, version, install_dir));
+#elif defined(OS_LINUX)
   const base::FilePath flash_path =
       install_dir.Append(chrome::kPepperFlashPluginFilename);
   // Populate the component updated flash hint file so that the zygote can
   // locate and preload the latest version of flash.
-  std::string version;
-  if (!manifest.GetString("version", &version))
-    return false;
   if (!component_flash_hint_file::RecordFlashUpdate(flash_path, flash_path,
                                                     version)) {
-    return false;
+    return ToInstallerResult(FlashError::HINT_FILE_RECORD_ERROR);
   }
 #endif  // defined(OS_LINUX)
-  return true;
+  return update_client::CrxInstaller::Result(update_client::InstallError::NONE);
 }
 
 void FlashComponentInstallerTraits::ComponentReady(
@@ -263,6 +314,12 @@ void RegisterPepperFlashComponent(ComponentUpdateService* cus) {
   base::CommandLine* cmd_line = base::CommandLine::ForCurrentProcess();
   if (cmd_line->HasSwitch(switches::kDisableBundledPpapiFlash))
     return;
+
+#if defined(OS_CHROMEOS)
+  if (!base::FeatureList::IsEnabled(features::kCrosCompUpdates))
+    return;
+#endif  // defined(OS_CHROMEOS)
+
   std::unique_ptr<ComponentInstallerTraits> traits(
       new FlashComponentInstallerTraits);
   // |cus| will take ownership of |installer| during installer->Register(cus).

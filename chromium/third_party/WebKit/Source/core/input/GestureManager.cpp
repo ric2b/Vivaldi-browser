@@ -5,6 +5,7 @@
 #include "core/input/GestureManager.h"
 
 #include "core/dom/Document.h"
+#include "core/dom/DocumentUserGestureToken.h"
 #include "core/editing/SelectionController.h"
 #include "core/events/GestureEvent.h"
 #include "core/frame/FrameHost.h"
@@ -139,8 +140,6 @@ WebInputEventResult GestureManager::handleGestureTap(
   uint64_t preDispatchDomTreeVersion = m_frame->document()->domTreeVersion();
   uint64_t preDispatchStyleVersion = m_frame->document()->styleVersion();
 
-  UserGestureIndicator gestureIndicator(DefinitelyProcessingUserGesture);
-
   HitTestResult currentHitTest = targetedEvent.hitTestResult();
 
   // We use the adjusted position so the application isn't surprised to see a
@@ -183,6 +182,8 @@ WebInputEventResult GestureManager::handleGestureTap(
   Node* tappedNode = currentHitTest.innerNode();
   IntPoint tappedPosition = gestureEvent.position();
   Node* tappedNonTextNode = tappedNode;
+  UserGestureIndicator gestureIndicator(DocumentUserGestureToken::create(
+      tappedNode ? &tappedNode->document() : nullptr));
 
   if (tappedNonTextNode && tappedNonTextNode->isTextNode())
     tappedNonTextNode = FlatTreeTraversal::parent(*tappedNonTextNode);
@@ -363,10 +364,13 @@ WebInputEventResult GestureManager::sendContextMenuEventForGesture(
   PlatformEvent::EventType eventType = PlatformEvent::MousePressed;
   if (m_frame->settings() && m_frame->settings()->showContextMenuOnMouseUp())
     eventType = PlatformEvent::MouseReleased;
+  // TODO(crbug.com/661200): We don't want a mousedown here but text area
+  // cursor doesn't appear on long-tap focus w/o the mousedown.
   PlatformMouseEvent mouseEvent(
       targetedEvent.event().position(), targetedEvent.event().globalPosition(),
-      WebPointerProperties::Button::NoButton, eventType, /* clickCount */ 0,
-      static_cast<PlatformEvent::Modifiers>(modifiers),
+      WebPointerProperties::Button::Right, eventType, /* clickCount */ 1,
+      static_cast<PlatformEvent::Modifiers>(
+          modifiers | PlatformEvent::Modifiers::RightButtonDown),
       PlatformMouseEvent::FromTouch, WTF::monotonicallyIncreasingTime(),
       WebPointerProperties::PointerType::Mouse);
 

@@ -11,8 +11,8 @@
 #include "components/leveldb/public/cpp/util.h"
 #include "components/leveldb/public/interfaces/leveldb.mojom.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
-#include "services/shell/public/cpp/service_context.h"
-#include "services/shell/public/cpp/service_test.h"
+#include "services/service_manager/public/cpp/service_context.h"
+#include "services/service_manager/public/cpp/service_test.h"
 
 using filesystem::mojom::FileError;
 
@@ -39,6 +39,13 @@ base::Callback<void(T1, T2)> Capture(T1* t1,
                                      T2* t2,
                                      const base::Closure& quit_closure) {
   return base::Bind(&DoCaptures<T1, T2>, t1, t2, quit_closure);
+}
+
+template <typename T1>
+base::Callback<void(const T1&)> CaptureConstRef(
+    T1* t1,
+    const base::Closure& quit_closure) {
+  return base::Bind(&DoCaptures<const T1&>, t1, quit_closure);
 }
 
 template <typename T1, typename T2>
@@ -96,17 +103,17 @@ void LevelDBSyncOpenInMemory(mojom::LevelDBService* leveldb,
   run_loop.Run();
 }
 
-class LevelDBServiceTest : public shell::test::ServiceTest {
+class LevelDBServiceTest : public service_manager::test::ServiceTest {
  public:
-  LevelDBServiceTest() : ServiceTest("exe:leveldb_service_unittests") {}
+  LevelDBServiceTest() : ServiceTest("leveldb_service_unittests") {}
   ~LevelDBServiceTest() override {}
 
  protected:
   // Overridden from mojo::test::ApplicationTestBase:
   void SetUp() override {
     ServiceTest::SetUp();
-    connector()->ConnectToInterface("service:filesystem", &files_);
-    connector()->ConnectToInterface("service:leveldb", &leveldb_);
+    connector()->ConnectToInterface("filesystem", &files_);
+    connector()->ConnectToInterface("leveldb", &leveldb_);
   }
 
   void TearDown() override {
@@ -298,11 +305,11 @@ TEST_F(LevelDBServiceTest, GetSnapshotSimple) {
   LevelDBSyncOpenInMemory(leveldb().get(), GetProxy(&database), &error);
   EXPECT_EQ(mojom::DatabaseError::OK, error);
 
-  uint64_t snapshot_id = 0;
+  base::UnguessableToken snapshot;
   base::RunLoop run_loop;
-  database->GetSnapshot(Capture(&snapshot_id, run_loop.QuitClosure()));
+  database->GetSnapshot(CaptureConstRef(&snapshot, run_loop.QuitClosure()));
   run_loop.Run();
-  EXPECT_NE(static_cast<uint64_t>(0), snapshot_id);
+  EXPECT_FALSE(snapshot.is_empty());
 }
 
 TEST_F(LevelDBServiceTest, GetFromSnapshots) {
@@ -317,9 +324,10 @@ TEST_F(LevelDBServiceTest, GetFromSnapshots) {
   EXPECT_EQ(mojom::DatabaseError::OK, error);
 
   // Take a snapshot where key=value.
-  uint64_t key_value_snapshot = 0;
+  base::UnguessableToken key_value_snapshot;
   base::RunLoop run_loop;
-  database->GetSnapshot(Capture(&key_value_snapshot, run_loop.QuitClosure()));
+  database->GetSnapshot(
+      CaptureConstRef(&key_value_snapshot, run_loop.QuitClosure()));
   run_loop.Run();
 
   // Change key to "yek".
@@ -352,7 +360,7 @@ TEST_F(LevelDBServiceTest, InvalidArgumentOnInvalidSnapshot) {
   LevelDBSyncOpenInMemory(leveldb().get(), GetProxy(&database), &error);
   EXPECT_EQ(mojom::DatabaseError::OK, error);
 
-  uint64_t invalid_snapshot = 8;
+  base::UnguessableToken invalid_snapshot = base::UnguessableToken::Create();
 
   error = mojom::DatabaseError::OK;
   std::vector<uint8_t> value;

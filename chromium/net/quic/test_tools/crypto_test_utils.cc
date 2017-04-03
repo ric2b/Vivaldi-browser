@@ -4,18 +4,10 @@
 
 #include "net/quic/test_tools/crypto_test_utils.h"
 
-#include <openssl/bn.h>
-#include <openssl/ec.h>
-#include <openssl/ecdsa.h>
-#include <openssl/evp.h>
-#include <openssl/obj_mac.h>
-#include <openssl/sha.h>
-
 #include <memory>
 
 #include "base/strings/string_util.h"
 #include "crypto/openssl_util.h"
-#include "crypto/scoped_openssl_types.h"
 #include "crypto/secure_hash.h"
 #include "net/quic/core/crypto/channel_id.h"
 #include "net/quic/core/crypto/common_cert_set.h"
@@ -35,12 +27,16 @@
 #include "net/quic/test_tools/quic_framer_peer.h"
 #include "net/quic/test_tools/quic_test_utils.h"
 #include "net/quic/test_tools/simple_quic_framer.h"
+#include "third_party/boringssl/src/include/openssl/bn.h"
+#include "third_party/boringssl/src/include/openssl/ec.h"
+#include "third_party/boringssl/src/include/openssl/ecdsa.h"
+#include "third_party/boringssl/src/include/openssl/evp.h"
+#include "third_party/boringssl/src/include/openssl/obj_mac.h"
+#include "third_party/boringssl/src/include/openssl/sha.h"
 
 using base::StringPiece;
 using std::make_pair;
-using std::pair;
 using std::string;
-using std::vector;
 
 namespace net {
 namespace test {
@@ -60,11 +56,13 @@ class CryptoFramerVisitor : public CryptoFramerVisitorInterface {
 
   bool error() const { return error_; }
 
-  const vector<CryptoHandshakeMessage>& messages() const { return messages_; }
+  const std::vector<CryptoHandshakeMessage>& messages() const {
+    return messages_;
+  }
 
  private:
   bool error_;
-  vector<CryptoHandshakeMessage> messages_;
+  std::vector<CryptoHandshakeMessage> messages_;
 };
 
 // HexChar parses |c| as a hex character. If valid, it sets |*value| to the
@@ -136,9 +134,8 @@ class TestChannelIDKey : public ChannelIDKey {
   // ChannelIDKey implementation.
 
   bool Sign(StringPiece signed_data, string* out_signature) const override {
-    crypto::ScopedEVP_MD_CTX md_ctx(EVP_MD_CTX_create());
-    if (!md_ctx ||
-        EVP_DigestSignInit(md_ctx.get(), nullptr, EVP_sha256(), nullptr,
+    bssl::ScopedEVP_MD_CTX md_ctx;
+    if (EVP_DigestSignInit(md_ctx.get(), nullptr, EVP_sha256(), nullptr,
                            ecdsa_key_.get()) != 1) {
       return false;
     }
@@ -160,7 +157,7 @@ class TestChannelIDKey : public ChannelIDKey {
     }
 
     uint8_t* derp = der_sig.get();
-    crypto::ScopedECDSA_SIG sig(
+    bssl::UniquePtr<ECDSA_SIG> sig(
         d2i_ECDSA_SIG(nullptr, const_cast<const uint8_t**>(&derp), sig_len));
     if (sig.get() == nullptr) {
       return false;
@@ -199,7 +196,7 @@ class TestChannelIDKey : public ChannelIDKey {
   }
 
  private:
-  crypto::ScopedEVP_PKEY ecdsa_key_;
+  bssl::UniquePtr<EVP_PKEY> ecdsa_key_;
 };
 
 class TestChannelIDSource : public ChannelIDSource {
@@ -235,24 +232,24 @@ class TestChannelIDSource : public ChannelIDSource {
     // clearing the most-significant bit.
     digest[0] &= 0x7f;
 
-    crypto::ScopedBIGNUM k(BN_new());
+    bssl::UniquePtr<BIGNUM> k(BN_new());
     CHECK(BN_bin2bn(digest, sizeof(digest), k.get()) != nullptr);
 
-    crypto::ScopedEC_GROUP p256(
+    bssl::UniquePtr<EC_GROUP> p256(
         EC_GROUP_new_by_curve_name(NID_X9_62_prime256v1));
     CHECK(p256);
 
-    crypto::ScopedEC_KEY ecdsa_key(EC_KEY_new());
+    bssl::UniquePtr<EC_KEY> ecdsa_key(EC_KEY_new());
     CHECK(ecdsa_key && EC_KEY_set_group(ecdsa_key.get(), p256.get()));
 
-    crypto::ScopedEC_POINT point(EC_POINT_new(p256.get()));
+    bssl::UniquePtr<EC_POINT> point(EC_POINT_new(p256.get()));
     CHECK(EC_POINT_mul(p256.get(), point.get(), k.get(), nullptr, nullptr,
                        nullptr));
 
     EC_KEY_set_private_key(ecdsa_key.get(), k.get());
     EC_KEY_set_public_key(ecdsa_key.get(), point.get());
 
-    crypto::ScopedEVP_PKEY pkey(EVP_PKEY_new());
+    bssl::UniquePtr<EVP_PKEY> pkey(EVP_PKEY_new());
     // EVP_PKEY_set1_EC_KEY takes a reference so no |release| here.
     EVP_PKEY_set1_EC_KEY(pkey.get(), ecdsa_key.get());
 
@@ -281,7 +278,7 @@ class FullChloGenerator {
                     IPAddress server_ip,
                     IPEndPoint client_addr,
                     const QuicClock* clock,
-                    QuicCryptoProof* proof,
+                    scoped_refptr<QuicCryptoProof> proof,
                     QuicCompressedCertsCache* compressed_certs_cache,
                     CryptoHandshakeMessage* out)
       : crypto_config_(crypto_config),
@@ -290,7 +287,8 @@ class FullChloGenerator {
         clock_(clock),
         proof_(proof),
         compressed_certs_cache_(compressed_certs_cache),
-        out_(out) {}
+        out_(out),
+        params_(new QuicCryptoNegotiatedParameters) {}
 
   class ValidateClientHelloCallback : public ValidateClientHelloResultCallback {
    public:
@@ -319,7 +317,7 @@ class FullChloGenerator {
         result_, /*reject_only=*/false, /*connection_id=*/1, server_ip_,
         client_addr_, AllSupportedVersions().front(), AllSupportedVersions(),
         /*use_stateless_rejects=*/true, /*server_designated_connection_id=*/0,
-        clock_, QuicRandom::GetInstance(), compressed_certs_cache_, &params_,
+        clock_, QuicRandom::GetInstance(), compressed_certs_cache_, params_,
         proof_, /*total_framing_overhead=*/50, kDefaultMaxPacketSize,
         GetProcessClientHelloCallback());
   }
@@ -332,7 +330,8 @@ class FullChloGenerator {
         QuicErrorCode error,
         const string& error_details,
         std::unique_ptr<CryptoHandshakeMessage> message,
-        std::unique_ptr<DiversificationNonce> diversification_nonce) override {
+        std::unique_ptr<DiversificationNonce> diversification_nonce,
+        std::unique_ptr<ProofSource::Details> proof_source_details) override {
       generator_->ProcessClientHelloDone(std::move(message));
     }
 
@@ -374,11 +373,11 @@ class FullChloGenerator {
   IPAddress server_ip_;
   IPEndPoint client_addr_;
   const QuicClock* clock_;
-  QuicCryptoProof* proof_;
+  scoped_refptr<QuicCryptoProof> proof_;
   QuicCompressedCertsCache* compressed_certs_cache_;
   CryptoHandshakeMessage* out_;
 
-  QuicCryptoNegotiatedParameters params_;
+  scoped_refptr<QuicCryptoNegotiatedParameters> params_;
   scoped_refptr<ValidateClientHelloResultCallback::Result> result_;
 };
 
@@ -403,7 +402,7 @@ int CryptoTestUtils::HandshakeWithFakeServer(
       QuicCompressedCertsCache::kQuicCompressedCertsCacheSize);
   SetupCryptoServerConfigForTest(server_conn->clock(),
                                  server_conn->random_generator(),
-                                 server_quic_config, &crypto_config, options);
+                                 &crypto_config, options);
 
   TestQuicSpdyServerSession server_session(server_conn, *server_quic_config,
                                            &crypto_config,
@@ -481,7 +480,6 @@ int CryptoTestUtils::HandshakeWithFakeClient(
 void CryptoTestUtils::SetupCryptoServerConfigForTest(
     const QuicClock* clock,
     QuicRandom* rand,
-    QuicConfig* config,
     QuicCryptoServerConfig* crypto_config,
     const FakeServerOptions& fake_options) {
   QuicCryptoServerConfig::ConfigOptions options;
@@ -533,7 +531,7 @@ void CryptoTestUtils::CommunicateHandshakeMessagesAndRunCallbacks(
 }
 
 // static
-pair<size_t, size_t> CryptoTestUtils::AdvanceHandshake(
+std::pair<size_t, size_t> CryptoTestUtils::AdvanceHandshake(
     PacketSavingConnection* client_conn,
     QuicCryptoStream* client,
     size_t client_i,
@@ -574,7 +572,7 @@ uint64_t CryptoTestUtils::LeafCertHashForTesting() {
   std::unique_ptr<ProofSource> proof_source(
       CryptoTestUtils::ProofSourceForTesting());
   if (!proof_source->GetProof(server_ip, "", "", AllSupportedVersions().front(),
-                              "", &chain, &sig, &cert_sct) ||
+                              "", QuicTagVector(), &chain, &sig, &cert_sct) ||
       chain->certs.empty()) {
     DCHECK(false) << "Proof generation failed";
     return 0;
@@ -674,7 +672,7 @@ void CryptoTestUtils::FillInDummyReject(CryptoHandshakeMessage* rej,
   rej->SetStringPiece(kServerNonceTag, "SERVER_NONCE");
   int64_t ttl = 2 * 24 * 60 * 60;
   rej->SetValue(kSTTL, ttl);
-  vector<QuicTag> reject_reasons;
+  std::vector<QuicTag> reject_reasons;
   reject_reasons.push_back(CLIENT_NONCE_INVALID_FAILURE);
   rej->SetVector(kRREJ, reject_reasons);
 }
@@ -929,7 +927,7 @@ void CryptoTestUtils::MovePackets(PacketSavingConnection* source_conn,
       break;
     }
 
-    for (const QuicStreamFrame* stream_frame : framer.stream_frames()) {
+    for (const auto& stream_frame : framer.stream_frames()) {
       ASSERT_TRUE(crypto_framer.ProcessInput(
           StringPiece(stream_frame->data_buffer, stream_frame->data_length)));
       ASSERT_FALSE(crypto_visitor.error());
@@ -982,7 +980,7 @@ string CryptoTestUtils::GenerateClientNonceHex(
                                     new_config_options));
   primary_config->set_primary_time(clock->WallNow().ToUNIXSeconds());
   std::unique_ptr<net::CryptoHandshakeMessage> msg(
-      crypto_config->AddConfig(primary_config.get(), clock->WallNow()));
+      crypto_config->AddConfig(std::move(primary_config), clock->WallNow()));
   StringPiece orbit;
   CHECK(msg->GetStringPiece(net::kORBT, &orbit));
   string nonce;
@@ -1008,7 +1006,7 @@ void CryptoTestUtils::GenerateFullCHLO(
     IPEndPoint client_addr,
     QuicVersion version,
     const QuicClock* clock,
-    QuicCryptoProof* proof,
+    scoped_refptr<QuicCryptoProof> proof,
     QuicCompressedCertsCache* compressed_certs_cache,
     CryptoHandshakeMessage* out) {
   // Pass a inchoate CHLO.

@@ -35,7 +35,6 @@ HeadlessDevToolsClientImpl::HeadlessDevToolsClientImpl()
       accessibility_domain_(this),
       animation_domain_(this),
       application_cache_domain_(this),
-      browser_domain_(this),
       cache_storage_domain_(this),
       console_domain_(this),
       css_domain_(this),
@@ -61,8 +60,8 @@ HeadlessDevToolsClientImpl::HeadlessDevToolsClientImpl()
       runtime_domain_(this),
       security_domain_(this),
       service_worker_domain_(this),
+      target_domain_(this),
       tracing_domain_(this),
-      worker_domain_(this),
       browser_main_thread_(content::BrowserThread::GetTaskRunnerForThread(
           content::BrowserThread::UI)),
       weak_ptr_factory_(this) {}
@@ -181,10 +180,6 @@ application_cache::Domain* HeadlessDevToolsClientImpl::GetApplicationCache() {
   return &application_cache_domain_;
 }
 
-browser::Domain* HeadlessDevToolsClientImpl::GetBrowser() {
-  return &browser_domain_;
-}
-
 cache_storage::Domain* HeadlessDevToolsClientImpl::GetCacheStorage() {
   return &cache_storage_domain_;
 }
@@ -285,12 +280,12 @@ service_worker::Domain* HeadlessDevToolsClientImpl::GetServiceWorker() {
   return &service_worker_domain_;
 }
 
-tracing::Domain* HeadlessDevToolsClientImpl::GetTracing() {
-  return &tracing_domain_;
+target::Domain* HeadlessDevToolsClientImpl::GetTarget() {
+  return &target_domain_;
 }
 
-worker::Domain* HeadlessDevToolsClientImpl::GetWorker() {
-  return &worker_domain_;
+tracing::Domain* HeadlessDevToolsClientImpl::GetTracing() {
+  return &tracing_domain_;
 }
 
 template <typename CallbackType>

@@ -1,30 +1,31 @@
 {
     "extensions": [
         {
-            "type": "@WebInspector.Panel",
-            "name": "console",
+            "type": "view",
+            "location": "panel",
+            "id": "console",
             "title": "Console",
             "order": 20,
-            "className": "WebInspector.ConsolePanel"
+            "className": "Console.ConsolePanel"
         },
         {
             "type": "view",
             "location": "drawer-view",
-            "id": "console",
+            "id": "console-view",
             "title": "Console",
             "persistence": "permanent",
             "order": 0,
-            "className": "WebInspector.ConsolePanel.WrapperView"
+            "className": "Console.ConsolePanel.WrapperView"
         },
         {
-            "type": "@WebInspector.Revealer",
-            "contextTypes": ["WebInspector.Console"],
-            "className": "WebInspector.ConsolePanel.ConsoleRevealer"
+            "type": "@Common.Revealer",
+            "contextTypes": ["Common.Console"],
+            "className": "Console.ConsolePanel.ConsoleRevealer"
         },
         {
-            "type": "@WebInspector.ActionDelegate",
+            "type": "@UI.ActionDelegate",
             "actionId": "console.show",
-            "className": "WebInspector.ConsoleView.ActionDelegate",
+            "className": "Console.ConsoleView.ActionDelegate",
             "bindings": [
                 {
                     "shortcut": "Ctrl+`"
@@ -32,12 +33,12 @@
             ]
         },
         {
-            "type": "@WebInspector.ActionDelegate",
+            "type": "@UI.ActionDelegate",
             "category": "Console",
             "actionId": "console.clear",
             "title": "Clear console",
-            "iconClass": "clear-toolbar-item",
-            "className": "WebInspector.ConsoleView.ActionDelegate",
+            "iconClass": "largeicon-clear",
+            "className": "Console.ConsoleView.ActionDelegate",
             "bindings": [
                 {
                     "platform": "windows,linux",
@@ -50,11 +51,11 @@
             ]
         },
         {
-            "type": "@WebInspector.ActionDelegate",
+            "type": "@UI.ActionDelegate",
             "category": "Console",
             "actionId": "console.clear.history",
             "title": "Clear console history",
-            "className": "WebInspector.ConsoleView.ActionDelegate"
+            "className": "Console.ConsoleView.ActionDelegate"
         },
         {
             "type": "setting",
@@ -66,6 +67,18 @@
             "options": [
                 { "value": true, "title": "Hide network messages" },
                 { "value": false, "title": "Show network messages" }
+            ]
+        },
+        {
+            "type": "setting",
+            "category": "Console",
+            "title": "Hide violations",
+            "settingName": "hideViolationMessages",
+            "settingType": "boolean",
+            "defaultValue": true,
+            "options": [
+                { "value": true, "title": "Hide violations" },
+                { "value": false, "title": "Show violations" }
             ]
         },
         {

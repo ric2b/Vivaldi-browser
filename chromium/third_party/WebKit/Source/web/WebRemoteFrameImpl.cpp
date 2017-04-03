@@ -283,8 +283,8 @@ void WebRemoteFrameImpl::dispatchWillSendRequest(WebURLRequest&) {
   NOTREACHED();
 }
 
-WebURLLoader* WebRemoteFrameImpl::createAssociatedURLLoader(
-    const WebURLLoaderOptions&) {
+WebAssociatedURLLoader* WebRemoteFrameImpl::createAssociatedURLLoader(
+    const WebAssociatedURLLoaderOptions&) {
   NOTREACHED();
   return nullptr;
 }
@@ -332,12 +332,6 @@ void WebRemoteFrameImpl::dispatchMessageEventWithOriginCheck(
 WebRect WebRemoteFrameImpl::selectionBoundsRect() const {
   NOTREACHED();
   return WebRect();
-}
-
-bool WebRemoteFrameImpl::selectionStartHasSpellingMarkerFor(int from,
-                                                            int length) const {
-  NOTREACHED();
-  return false;
 }
 
 WebString WebRemoteFrameImpl::layerTreeAsText(bool showDebugInfo) const {

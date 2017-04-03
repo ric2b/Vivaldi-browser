@@ -72,21 +72,29 @@ WTF::String CanvasRenderingContext::colorSpaceAsString() const {
 sk_sp<SkColorSpace> CanvasRenderingContext::skColorSpace() const {
   switch (m_colorSpace) {
     case kSRGBCanvasColorSpace:
-      return SkColorSpace::NewNamed(SkColorSpace::kSRGB_Named);
+      return SkColorSpace::MakeNamed(SkColorSpace::kSRGB_Named);
     case kLinearRGBCanvasColorSpace:
-      return SkColorSpace::NewNamed(SkColorSpace::kSRGB_Named)
-          ->makeLinearGamma();
+      return SkColorSpace::MakeNamed(SkColorSpace::kSRGBLinear_Named);
     case kLegacyCanvasColorSpace:
       if (RuntimeEnabledFeatures::colorCorrectRenderingEnabled()) {
         // Legacy colorspace ensures color matching with CSS is preserved.
         // So if CSS is color corrected from sRGB to display space, then
         // canvas must do the same
-        return SkColorSpace::NewNamed(SkColorSpace::kSRGB_Named);
+        return SkColorSpace::MakeNamed(SkColorSpace::kSRGB_Named);
       }
       return nullptr;
   };
   CHECK(false);
   return nullptr;
+}
+
+SkColorType CanvasRenderingContext::colorType() const {
+  switch (m_colorSpace) {
+    case kLinearRGBCanvasColorSpace:
+      return kRGBA_F16_SkColorType;
+    default:
+      return kN32_SkColorType;
+  }
 }
 
 void CanvasRenderingContext::dispose() {

@@ -32,7 +32,8 @@ const int kFlushInputRateInUs = 16666;
 }
 
 RenderWidgetHostViewBase::RenderWidgetHostViewBase()
-    : popup_type_(blink::WebPopupTypeNone),
+    : is_fullscreen_(false),
+      popup_type_(blink::WebPopupTypeNone),
       background_color_(SK_ColorWHITE),
       mouse_locked_(false),
       showing_context_menu_(false),
@@ -42,7 +43,6 @@ RenderWidgetHostViewBase::RenderWidgetHostViewBase()
 #endif
       current_device_scale_factor_(0),
       current_display_rotation_(display::Display::ROTATE_0),
-      pinch_zoom_enabled_(content::IsPinchToZoomEnabled()),
       text_input_manager_(nullptr),
       renderer_frame_number_(0),
       weak_factory_(this) {
@@ -80,9 +80,8 @@ RenderWidgetHost* RenderWidgetHostViewBase::GetRenderWidgetHost() const {
 void RenderWidgetHostViewBase::NotifyObserversAboutShutdown() {
   // Note: RenderWidgetHostInputEventRouter is an observer, and uses the
   // following notification to remove this view from its surface owners map.
-  FOR_EACH_OBSERVER(RenderWidgetHostViewBaseObserver,
-                    observers_,
-                    OnRenderWidgetHostViewBaseDestroyed(this));
+  for (auto& observer : observers_)
+    observer.OnRenderWidgetHostViewBaseDestroyed(this);
   // All observers are required to disconnect after they are notified.
   DCHECK(!observers_.might_have_observers());
 }
@@ -97,6 +96,10 @@ bool RenderWidgetHostViewBase::OnMessageReceived(const IPC::Message& msg){
 
 void RenderWidgetHostViewBase::SetBackgroundColor(SkColor color) {
   background_color_ = color;
+}
+
+SkColor RenderWidgetHostViewBase::background_color() {
+  return background_color_;
 }
 
 void RenderWidgetHostViewBase::SetBackgroundColorToDefault() {
@@ -114,7 +117,7 @@ gfx::Size RenderWidgetHostViewBase::GetPhysicalBackingSize() const {
                                 display.device_scale_factor());
 }
 
-bool RenderWidgetHostViewBase::DoTopControlsShrinkBlinkSize() const {
+bool RenderWidgetHostViewBase::DoBrowserControlsShrinkBlinkSize() const {
   return false;
 }
 
@@ -447,17 +450,20 @@ gfx::PointF RenderWidgetHostViewBase::TransformPointToRootCoordSpaceF(
       gfx::ToRoundedPoint(point)));
 }
 
-gfx::Point RenderWidgetHostViewBase::TransformPointToLocalCoordSpace(
+bool RenderWidgetHostViewBase::TransformPointToLocalCoordSpace(
     const gfx::Point& point,
-    const cc::SurfaceId& original_surface) {
-  return point;
+    const cc::SurfaceId& original_surface,
+    gfx::Point* transformed_point) {
+  *transformed_point = point;
+  return true;
 }
 
-gfx::Point RenderWidgetHostViewBase::TransformPointToCoordSpaceForView(
+bool RenderWidgetHostViewBase::TransformPointToCoordSpaceForView(
     const gfx::Point& point,
-    RenderWidgetHostViewBase* target_view) {
+    RenderWidgetHostViewBase* target_view,
+    gfx::Point* transformed_point) {
   NOTREACHED();
-  return point;
+  return true;
 }
 
 bool RenderWidgetHostViewBase::IsRenderWidgetHostViewGuest() {

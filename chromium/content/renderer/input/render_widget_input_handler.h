@@ -11,7 +11,7 @@
 #include "base/time/time.h"
 #include "content/common/input/input_event_ack.h"
 #include "content/common/input/input_event_dispatch_type.h"
-#include "third_party/WebKit/public/web/WebInputEvent.h"
+#include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/events/blink/did_overscroll_params.h"
 
@@ -48,18 +48,6 @@ class CONTENT_EXPORT RenderWidgetInputHandler {
       const blink::WebFloatSize& accumulatedOverscroll,
       const blink::WebFloatPoint& position,
       const blink::WebFloatSize& velocity);
-
-  // When paused in debugger, we send ack for mouse event early. This ensures
-  // that we continue receiving mouse moves and pass them to debugger. Returns
-  // whether we are paused in mouse move event and have sent the ack.
-  bool SendAckForMouseMoveFromDebugger();
-
-  // When resumed from pause in debugger while handling mouse move,
-  // we should not send an extra ack (see SendAckForMouseMoveFromDebugger).
-  void IgnoreAckForMouseMoveFromDebugger();
-
-  // Issue the pending InputEventAck if one exists.
-  void FlushPendingInputEventAck();
 
   bool handling_input_event() const { return handling_input_event_; }
   void set_handling_input_event(bool handling_input_event) {
@@ -98,14 +86,6 @@ class CONTENT_EXPORT RenderWidgetInputHandler {
 
   // Indicates if the next sequence of Char events should be suppressed or not.
   bool suppress_next_char_events_;
-
-  // The time spent in input handlers this frame. Used to throttle input acks.
-  base::TimeDelta total_input_handling_time_this_frame_;
-
-  // Whether we should not send ack for the current mouse move.
-  bool ignore_ack_for_mouse_move_from_debugger_;
-
-  std::unique_ptr<InputEventAck> pending_input_event_ack_;
 
   DISALLOW_COPY_AND_ASSIGN(RenderWidgetInputHandler);
 };

@@ -47,6 +47,7 @@ class TabLayer : public Layer {
 
   void SetProperties(int id,
                      bool can_use_live_layer,
+                     bool browser_controls_at_bottom,
                      int toolbar_resource_id,
                      int close_button_resource_id,
                      int shadow_resource_id,
@@ -95,7 +96,6 @@ class TabLayer : public Layer {
                      float toolbar_alpha,
                      float toolbar_y_offset,
                      float side_border_scale,
-                     bool attach_content,
                      bool inset_border);
 
   bool is_incognito() const { return incognito_; }

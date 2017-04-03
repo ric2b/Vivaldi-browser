@@ -27,13 +27,15 @@
 <translation id="1654128982815600832">מפעיל חיבורים מרוחקים למחשב זה...</translation>
 <translation id="170207782578677537">הרישום של מחשב זה נכשל.</translation>
 <translation id="1704090719919187045">‏העדפות מארח Chromoting</translation>
+<translation id="1730409684442507495">• שיפור באיכות התמונה, מהירות התגובה וצריכת הסוללה במחשבים שולחניים.
+• שיפור במהירות התגובה של פעולות לחיצה-גרירה.
+• שיפור בהנפשות מסוימות של ממשק המשתמש.</translation>
 <translation id="174018511426417793">‏אין לך מחשבים רשומים. כדי להפעיל חיבורים מרוחקים למחשב, התקן את 'שולחן עבודה מרוחק של Chrome' במחשב היעד ולחץ על '<ph name="BUTTON_NAME" />'.</translation>
 <translation id="1742469581923031760">מתחבר…</translation>
 <translation id="1770394049404108959">איני יכול לפתוח את היישום.</translation>
 <translation id="177096447311351977">‏IP הערוץ של הלקוח: <ph name="CLIENT_GAIA_IDENTIFIER" /> ip='<ph name="CLIENT_IP_ADDRESS_AND_PORT" />' host_ip='<ph name="HOST_IP_ADDRESS_AND_PORT" />' ערוץ='<ph name="CHANNEL_TYPE" />' חיבור='<ph name="CONNECTION_TYPE" />'.</translation>
 <translation id="1779766957982586368">סגור חלון</translation>
 <translation id="1841799852846221389">משבית חיבורים מרוחקים למחשב זה...</translation>
-<translation id="189172778771606813">סגור את חלונית ההזזה לניווט</translation>
 <translation id="1897488610212723051">מחק</translation>
 <translation id="195619862187186579">פריסות מקלדת</translation>
 <translation id="1996161829609978754">‏Chrome מוריד את מתקין המארח של Chromoting. בסיום ההורדה, הפעל את המתקין לפני שתמשיך.</translation>
@@ -74,7 +76,6 @@
 <translation id="2699970397166997657">Chromoting</translation>
 <translation id="2747641796667576127">עדכוני תוכנה מתבצעים בדרך כלל באופן אוטומטי, אבל במקרים נדירים הם עשויים להיכשל. עדכון התוכנה לא אמור לקחת יותר ממספר דקות, וניתן לבצע אותו כשאתה מחובר למחשב באופן מרוחק.</translation>
 <translation id="2841013758207633010">שעה</translation>
-<translation id="2851674870054673688">לאחר שהמשתמש יזין את הקוד, השיתוף יתחיל לפעול.</translation>
 <translation id="2851754573186462851">Chromium App Streaming</translation>
 <translation id="2855866366045322178">לא מקוון</translation>
 <translation id="2888969873284818612">אירעה שגיאת רשת. נפעיל את היישום מחדש כשהמכשיר יהיה שוב מקוון.</translation>
@@ -114,6 +115,7 @@
 Chromoting</translation>
 <translation id="3870154837782082782">Google Inc.</translation>
 <translation id="3884839335308961732">‏אשר את החשבון ומספר ה-PIN שלך שמפורטים למטה כדי לאפשר גישה באמצעות שולחן העבודה המרוחק של Chrome.</translation>
+<translation id="3897092660631435901">תפריט</translation>
 <translation id="3905196214175737742">דומיין לא חוקי של בעל המארח.</translation>
 <translation id="3908017899227008678">הקטן להתאמה</translation>
 <translation id="3931191050278863510">המארח הופסק.</translation>
@@ -126,6 +128,7 @@ Chromoting</translation>
 <translation id="409800995205263688">הערה: הגדרות המדיניות מתירות חיבורים רק בין מחשבים הנמצאים בתוך הרשת שלך.</translation>
 <translation id="4155497795971509630">חלק מהרכיבים הדרושים חסרים. ודא שהתקנת את הגרסה העדכנית ביותר של התוכנה ונסה שוב.</translation>
 <translation id="4156740505453712750">‏כדי להגן על הגישה למחשב זה, בחר PIN באורך <ph name="BOLD_START" />שש ספרות לפחות<ph name="BOLD_END" />. PIN זה יידרש בעת התחברות ממיקום אחר.</translation>
+<translation id="4156741816461781891">מחובר באמצעות חשבון <ph name="EMAIL_ADDRESS" />.</translation>
 <translation id="4176825807642096119">קוד גישה</translation>
 <translation id="4207623512727273241">הפעל את המתקין לפני שתמשיך.</translation>
 <translation id="4227991223508142681">Host Provisioning Utility</translation>
@@ -166,7 +169,6 @@ Chromoting</translation>
 <translation id="5070121137485264635">‏המארח המרוחק דורש שתבצע אימות מול אתר של צד שלישי. כדי להמשיך, עליך להעניק לשולחן העבודה המרוחק של Chrome הרשאות נוספות כדי לגשת לכתובת זו:</translation>
 <translation id="507204348399810022">האם אתה בטוח שברצונך להשבית את החיבורים המרוחקים אל <ph name="HOSTNAME" />?</translation>
 <translation id="5156271271724754543">‏הזן את אותו PIN בשתי התיבות.</translation>
-<translation id="5168917394043976756">פתח את חלונית ההזזה לניווט</translation>
 <translation id="5170982930780719864">מזהה מארח לא חוקי.</translation>
 <translation id="518094545883702183">המידע הזה משמש רק לאבחון הבעיה שדיווחת עליה. הוא זמין רק למי שבוחן את הדוח, ונשמר למשך זמן של 30 ימים לכל היותר.</translation>
 <translation id="5222676887888702881">יציאה</translation>
@@ -209,10 +211,6 @@ Chromoting</translation>
 <translation id="6304318647555713317">לקוח</translation>
 <translation id="6381670701864002291">משהו אחר.</translation>
 <translation id="6398765197997659313">צא ממסך מלא</translation>
-<translation id="6408143143164565232">‏• האזן לאודיו ממחשבי Windows או Linux.
-• הסר חיבורים לא רצויים באמצעות לחיצה ארוכה על שם המחשב.
-• פעולה חלקה יותר של תנועת צביטה לשינוי מרחק התצוגה וגלילה באמצעות שתי אצבעות.
-• מסך חדש לעזרה ומשוב.</translation>
 <translation id="6441316101718669559">שילוב של שולחן עבודה אינו נתמך בפלטפורמה זו. תוכל עדיין להשתמש ביישום, אבל תהיה לכך השפעה שלילית על חוויית המשתמש.</translation>
 <translation id="652218476070540101">‏ה-PIN של מחשב זה מתעדכן...</translation>
 <translation id="6527303717912515753">שתף</translation>
@@ -225,6 +223,7 @@ Chromoting</translation>
 <translation id="6640610550128933069">חיבור אחרון לרשת ב-<ph name="DATE" /></translation>
 <translation id="6668065415969892472">‏ה-PIN שלך עודכן.</translation>
 <translation id="6681800064886881394">‏Copyright © 2013 Google Inc.‎. כל הזכויות שמורות.</translation>
+<translation id="6705482892455291412">לאחר הזנת הקוד, תתבקש לאשר את החיבור ולהתחיל בשיתוף ההפעלה.</translation>
 <translation id="6746493157771801606">נקה היסטוריה</translation>
 <translation id="6748108480210050150">מאת</translation>
 <translation id="677755392401385740">המארח הופעל עבור המשתמש: <ph name="HOST_USERNAME" />.</translation>
@@ -301,6 +300,7 @@ Chromoting</translation>
 <translation id="9188433529406846933">מתן הרשאה</translation>
 <translation id="9213184081240281106">תצורה לא חוקית של המארח.</translation>
 <translation id="951991426597076286">דחה</translation>
+<translation id="962733587145768554">בחר באפשרות '<ph name="SHARE" />' בתיבת הדו-שיח של החיבור כדי להשלים את התהליך.</translation>
 <translation id="979100198331752041">‏שולחן העבודה המרוחק של Chrome ב-<ph name="HOSTNAME" /> אינו מעודכן ויש לעדכן אותו.</translation>
 <translation id="985602178874221306">‏מחברי Chromium</translation>
 <translation id="992215271654996353"><ph name="HOSTNAME" /> (התחברות אחרונה <ph name="DATE_OR_TIME" />)</translation>

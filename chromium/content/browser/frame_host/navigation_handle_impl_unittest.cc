@@ -8,6 +8,7 @@
 #include "content/public/browser/ssl_status.h"
 #include "content/public/common/request_context_type.h"
 #include "content/test/test_render_frame_host.h"
+#include "content/test/test_web_contents.h"
 
 namespace content {
 
@@ -71,6 +72,7 @@ class NavigationHandleImplTest : public RenderViewHostImplTestHarness {
         base::TimeTicks::Now(), 0, false);
     EXPECT_EQ(REQUEST_CONTEXT_TYPE_UNSPECIFIED,
               test_handle_->request_context_type_);
+    contents()->GetMainFrame()->InitializeRenderFrameIfNeeded();
   }
 
   void TearDown() override {
@@ -125,6 +127,7 @@ class NavigationHandleImplTest : public RenderViewHostImplTestHarness {
     // the NavigationHandleImplTest.
     test_handle_->WillRedirectRequest(
         GURL(), "GET", GURL(), false, scoped_refptr<net::HttpResponseHeaders>(),
+        net::HttpResponseInfo::CONNECTION_INFO_HTTP1_1,
         base::Bind(&NavigationHandleImplTest::UpdateThrottleCheckResult,
                    base::Unretained(this)));
   }
@@ -138,11 +141,14 @@ class NavigationHandleImplTest : public RenderViewHostImplTestHarness {
     was_callback_called_ = false;
     callback_result_ = NavigationThrottle::DEFER;
 
-    // It's safe to use base::Unretained since the NavigationHandle is owned by
-    // the NavigationHandleImplTest.
+    // It's safe to use base::Unretained since the NavigationHandle is owned
+    // by the NavigationHandleImplTest. The ConnectionInfo is different from
+    // that sent to WillRedirectRequest to verify that it's correctly plumbed
+    // in both cases.
     test_handle_->WillProcessResponse(
-        main_test_rfh(),
-        scoped_refptr<net::HttpResponseHeaders>(), SSLStatus(),
+        main_test_rfh(), scoped_refptr<net::HttpResponseHeaders>(),
+        net::HttpResponseInfo::CONNECTION_INFO_QUIC_35, SSLStatus(),
+        GlobalRequestID(), false, false, false, base::Closure(),
         base::Bind(&NavigationHandleImplTest::UpdateThrottleCheckResult,
                    base::Unretained(this)));
   }
@@ -189,16 +195,33 @@ TEST_F(NavigationHandleImplTest, SimpleDataChecks) {
   SimulateWillStartRequest();
   EXPECT_EQ(REQUEST_CONTEXT_TYPE_LOCATION,
             test_handle()->GetRequestContextType());
+  EXPECT_EQ(net::HttpResponseInfo::CONNECTION_INFO_UNKNOWN,
+            test_handle()->GetConnectionInfo());
 
   test_handle()->Resume();
   SimulateWillRedirectRequest();
   EXPECT_EQ(REQUEST_CONTEXT_TYPE_LOCATION,
             test_handle()->GetRequestContextType());
+  EXPECT_EQ(net::HttpResponseInfo::CONNECTION_INFO_HTTP1_1,
+            test_handle()->GetConnectionInfo());
 
   test_handle()->Resume();
   SimulateWillProcessResponse();
   EXPECT_EQ(REQUEST_CONTEXT_TYPE_LOCATION,
             test_handle()->GetRequestContextType());
+  EXPECT_EQ(net::HttpResponseInfo::CONNECTION_INFO_QUIC_35,
+            test_handle()->GetConnectionInfo());
+}
+
+TEST_F(NavigationHandleImplTest, SimpleDataCheckNoRedirect) {
+  SimulateWillStartRequest();
+  EXPECT_EQ(net::HttpResponseInfo::CONNECTION_INFO_UNKNOWN,
+            test_handle()->GetConnectionInfo());
+
+  test_handle()->Resume();
+  SimulateWillProcessResponse();
+  EXPECT_EQ(net::HttpResponseInfo::CONNECTION_INFO_QUIC_35,
+            test_handle()->GetConnectionInfo());
 }
 
 // Checks that a deferred navigation can be properly resumed.

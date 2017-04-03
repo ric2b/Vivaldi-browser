@@ -48,7 +48,6 @@ class SyncedTabDelegateAndroid : public sync_sessions::SyncedTabDelegate {
   int GetSyncId() const override;
   void SetSyncId(int sync_id) override;
   bool ShouldSync(sync_sessions::SyncSessionsClient* sessions_client) override;
-  std::string GetExtData() const override;
   bool ProfileIsSupervised() const override;
   const std::vector<std::unique_ptr<const sessions::SerializedNavigationEntry>>*
   GetBlockedNavigations() const override;

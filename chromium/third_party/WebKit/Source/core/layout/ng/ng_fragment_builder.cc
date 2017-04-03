@@ -8,9 +8,7 @@ namespace blink {
 
 NGFragmentBuilder::NGFragmentBuilder(
     NGPhysicalFragmentBase::NGFragmentType type)
-    : type_(type),
-      writing_mode_(HorizontalTopBottom),
-      direction_(LeftToRight) {}
+    : type_(type), writing_mode_(HorizontalTopBottom), direction_(LTR) {}
 
 NGFragmentBuilder& NGFragmentBuilder::SetWritingMode(
     NGWritingMode writing_mode) {
@@ -18,7 +16,7 @@ NGFragmentBuilder& NGFragmentBuilder::SetWritingMode(
   return *this;
 }
 
-NGFragmentBuilder& NGFragmentBuilder::SetDirection(NGDirection direction) {
+NGFragmentBuilder& NGFragmentBuilder::SetDirection(TextDirection direction) {
   direction_ = direction;
   return *this;
 }
@@ -43,7 +41,7 @@ NGFragmentBuilder& NGFragmentBuilder::SetBlockOverflow(LayoutUnit size) {
   return *this;
 }
 
-NGFragmentBuilder& NGFragmentBuilder::AddChild(NGFragment* child,
+NGFragmentBuilder& NGFragmentBuilder::AddChild(NGFragmentBase* child,
                                                NGLogicalOffset offset) {
   DCHECK_EQ(type_, NGPhysicalFragmentBase::FragmentBox)
       << "Only box fragments can have children";

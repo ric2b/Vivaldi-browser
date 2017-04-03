@@ -6,6 +6,7 @@
 
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/run_loop.h"
 #include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/layout.h"
@@ -13,6 +14,7 @@
 #include "ui/events/event_utils.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/views/animation/ink_drop_host.h"
+#include "ui/views/animation/ink_drop_impl.h"
 #include "ui/views/animation/test/ink_drop_host_view_test_api.h"
 #include "ui/views/animation/test/test_ink_drop.h"
 #include "ui/views/animation/test/test_ink_drop_host.h"
@@ -22,6 +24,7 @@
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/controls/button/menu_button.h"
 #include "ui/views/controls/button/radio_button.h"
+#include "ui/views/controls/button/toggle_button.h"
 #include "ui/views/controls/link.h"
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/test/views_test_base.h"
@@ -71,8 +74,20 @@ class TestCustomButton : public CustomButton, public ButtonListener {
     canceled_ = true;
   }
 
+  // InkDropHostView:
+  void AddInkDropLayer(ui::Layer* ink_drop_layer) override {
+    ++ink_drop_layer_add_count_;
+    CustomButton::AddInkDropLayer(ink_drop_layer);
+  }
+  void RemoveInkDropLayer(ui::Layer* ink_drop_layer) override {
+    ++ink_drop_layer_remove_count_;
+    CustomButton::RemoveInkDropLayer(ink_drop_layer);
+  }
+
   bool pressed() { return pressed_; }
   bool canceled() { return canceled_; }
+  int ink_drop_layer_add_count() { return ink_drop_layer_add_count_; }
+  int ink_drop_layer_remove_count() { return ink_drop_layer_remove_count_; }
 
   void Reset() {
     pressed_ = false;
@@ -85,6 +100,9 @@ class TestCustomButton : public CustomButton, public ButtonListener {
  private:
   bool pressed_ = false;
   bool canceled_ = false;
+
+  int ink_drop_layer_add_count_ = 0;
+  int ink_drop_layer_remove_count_ = 0;
 
   DISALLOW_COPY_AND_ASSIGN(TestCustomButton);
 };
@@ -125,6 +143,14 @@ class CustomButtonTest : public ViewsTestBase {
     widget_->SetContentsView(button_);
   }
 
+  void CreateButtonWithRealInkDrop() {
+    delete button_;
+    button_ = new TestCustomButton(false);
+    InkDropHostViewTestApi(button_).SetInkDrop(
+        base::MakeUnique<InkDropImpl>(button_, button_->size()));
+    widget_->SetContentsView(button_);
+  }
+
  protected:
   Widget* widget() { return widget_.get(); }
   TestCustomButton* button() { return button_; }
@@ -136,7 +162,7 @@ class CustomButtonTest : public ViewsTestBase {
 
  private:
   std::unique_ptr<Widget> widget_;
-  TestCustomButton* button_;
+  TestCustomButton* button_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(CustomButtonTest);
 };
@@ -334,6 +360,9 @@ TEST_F(CustomButtonTest, AsCustomButton) {
 
   MenuButton menu_button(text, NULL, false);
   EXPECT_TRUE(CustomButton::AsCustomButton(&menu_button));
+
+  ToggleButton toggle_button(NULL);
+  EXPECT_TRUE(CustomButton::AsCustomButton(&toggle_button));
 
   Label label;
   EXPECT_FALSE(CustomButton::AsCustomButton(&label));
@@ -565,6 +594,39 @@ TEST_F(CustomButtonTest, InkDropStaysHiddenWhileDragging) {
   EXPECT_EQ(InkDropState::HIDDEN, ink_drop->GetTargetInkDropState());
 
   SetDraggedView(nullptr);
+}
+
+// Test that hiding or closing a Widget doesn't attempt to add a layer due to
+// changed visibility states.
+TEST_F(CustomButtonTest, NoLayerAddedForWidgetVisibilityChanges) {
+  CreateButtonWithRealInkDrop();
+
+  EXPECT_TRUE(button()->visible());
+  EXPECT_FALSE(button()->layer());
+
+  widget()->Hide();
+  EXPECT_FALSE(button()->layer());
+  EXPECT_EQ(0, button()->ink_drop_layer_add_count());
+  EXPECT_EQ(0, button()->ink_drop_layer_remove_count());
+
+  widget()->Show();
+  EXPECT_FALSE(button()->layer());
+  EXPECT_EQ(0, button()->ink_drop_layer_add_count());
+  EXPECT_EQ(0, button()->ink_drop_layer_remove_count());
+
+  // Allow the button to be interrogated after the view hierarchy is torn down.
+  button()->set_owned_by_client();
+  widget()->Close();  // Start an asynchronous close.
+  EXPECT_FALSE(button()->layer());
+  EXPECT_EQ(0, button()->ink_drop_layer_add_count());
+  EXPECT_EQ(0, button()->ink_drop_layer_remove_count());
+
+  base::RunLoop().RunUntilIdle();  // Complete the Close().
+  EXPECT_FALSE(button()->layer());
+  EXPECT_EQ(0, button()->ink_drop_layer_add_count());
+  EXPECT_EQ(0, button()->ink_drop_layer_remove_count());
+
+  delete button();
 }
 
 // Todo(karandeepb): On Mac, a button should get clicked on a Space key press

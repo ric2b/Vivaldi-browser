@@ -3,7 +3,9 @@
 // found in the LICENSE file.
 
 #include "base/json/json_reader.h"
-#include "headless/public/domains/types.h"
+#include "headless/public/devtools/domains/accessibility.h"
+#include "headless/public/devtools/domains/memory.h"
+#include "headless/public/devtools/domains/page.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace headless {
@@ -24,9 +26,11 @@ TEST(TypesTest, IntegerPropertyParseError) {
   std::unique_ptr<base::Value> object = base::JSONReader::Read(json);
   EXPECT_TRUE(object);
 
+#if DCHECK_IS_ON()
   ErrorReporter errors;
   EXPECT_FALSE(page::NavigateToHistoryEntryParams::Parse(*object, &errors));
   EXPECT_TRUE(errors.HasErrors());
+#endif  // DCHECK_IS_ON()
 }
 
 TEST(TypesTest, BooleanProperty) {
@@ -48,10 +52,12 @@ TEST(TypesTest, BooleanPropertyParseError) {
   std::unique_ptr<base::Value> object = base::JSONReader::Read(json);
   EXPECT_TRUE(object);
 
+#if DCHECK_IS_ON()
   ErrorReporter errors;
   EXPECT_FALSE(memory::SetPressureNotificationsSuppressedParams::Parse(
       *object, &errors));
   EXPECT_TRUE(errors.HasErrors());
+#endif  // DCHECK_IS_ON()
 }
 
 TEST(TypesTest, DoubleProperty) {
@@ -70,9 +76,11 @@ TEST(TypesTest, DoublePropertyParseError) {
   std::unique_ptr<base::Value> object = base::JSONReader::Read(json);
   EXPECT_TRUE(object);
 
+#if DCHECK_IS_ON()
   ErrorReporter errors;
   EXPECT_FALSE(page::SetGeolocationOverrideParams::Parse(*object, &errors));
   EXPECT_TRUE(errors.HasErrors());
+#endif  // DCHECK_IS_ON()
 }
 
 TEST(TypesTest, StringProperty) {
@@ -91,9 +99,11 @@ TEST(TypesTest, StringPropertyParseError) {
   std::unique_ptr<base::Value> object = base::JSONReader::Read(json);
   EXPECT_TRUE(object);
 
+#if DCHECK_IS_ON()
   ErrorReporter errors;
   EXPECT_FALSE(page::NavigateParams::Parse(*object, &errors));
   EXPECT_TRUE(errors.HasErrors());
+#endif  // DCHECK_IS_ON()
 }
 
 TEST(TypesTest, EnumProperty) {
@@ -114,9 +124,11 @@ TEST(TypesTest, EnumPropertyParseError) {
   std::unique_ptr<base::Value> object = base::JSONReader::Read(json);
   EXPECT_TRUE(object);
 
+#if DCHECK_IS_ON()
   ErrorReporter errors;
   EXPECT_FALSE(runtime::RemoteObject::Parse(*object, &errors));
   EXPECT_TRUE(errors.HasErrors());
+#endif  // DCHECK_IS_ON()
 }
 
 TEST(TypesTest, ArrayProperty) {
@@ -146,9 +158,11 @@ TEST(TypesTest, ArrayPropertyParseError) {
   std::unique_ptr<base::Value> object = base::JSONReader::Read(json);
   EXPECT_TRUE(object);
 
+#if DCHECK_IS_ON()
   ErrorReporter errors;
   EXPECT_FALSE(dom::QuerySelectorAllResult::Parse(*object, &errors));
   EXPECT_TRUE(errors.HasErrors());
+#endif  // DCHECK_IS_ON()
 }
 
 TEST(TypesTest, ObjectProperty) {
@@ -173,9 +187,11 @@ TEST(TypesTest, ObjectPropertyParseError) {
   std::unique_ptr<base::Value> object = base::JSONReader::Read(json);
   EXPECT_TRUE(object);
 
+#if DCHECK_IS_ON()
   ErrorReporter errors;
   EXPECT_FALSE(runtime::EvaluateResult::Parse(*object, &errors));
   EXPECT_TRUE(errors.HasErrors());
+#endif  // DCHECK_IS_ON()
 }
 
 TEST(TypesTest, AnyProperty) {

@@ -198,6 +198,36 @@ def ParseGTestXML(xml_content):
   return results
 
 
+def ConvertTestFilterFileIntoGTestFilterArgument(input_lines):
+  """Converts test filter file contents into --gtest_filter argument.
+
+  See //testing/buildbot/filters/README.md for description of the
+  syntax that |input_lines| are expected to follow.
+
+  See
+  https://github.com/google/googletest/blob/master/googletest/docs/AdvancedGuide.md#running-a-subset-of-the-tests
+  for description of the syntax that --gtest_filter argument should follow.
+
+  Args:
+    input_lines: An iterable (e.g. a list or a file) containing input lines.
+  Returns:
+    a string suitable for feeding as an argument of --gtest_filter parameter.
+  """
+  # Strip whitespace + skip empty lines and lines beginning with '#'.
+  stripped_lines = (l.strip() for l in input_lines)
+  filter_lines = list(l for l in stripped_lines if l and l[0] != '#')
+
+  # Split the tests into positive and negative patterns (gtest treats
+  # every pattern after the first '-' sign as an exclusion).
+  positive_patterns = ':'.join(l for l in filter_lines if l[0] != '-')
+  negative_patterns = ':'.join(l[1:] for l in filter_lines if l[0] == '-')
+  if negative_patterns:
+    negative_patterns = '-' + negative_patterns
+
+  # Join the filter lines into one, big --gtest_filter argument.
+  return positive_patterns + negative_patterns
+
+
 class GtestTestInstance(test_instance.TestInstance):
 
   def __init__(self, args, isolate_delegate, error_func):
@@ -205,10 +235,11 @@ class GtestTestInstance(test_instance.TestInstance):
     # TODO(jbudorick): Support multiple test suites.
     if len(args.suite_name) > 1:
       raise ValueError('Platform mode currently supports only 1 gtest suite')
+    self._exe_dist_dir = None
     self._extract_test_list_from_filter = args.extract_test_list_from_filter
     self._shard_timeout = args.shard_timeout
+    self._store_tombstones = args.store_tombstones
     self._suite = args.suite_name[0]
-    self._exe_dist_dir = None
 
     # GYP:
     if args.executable_dist_dir:
@@ -252,7 +283,7 @@ class GtestTestInstance(test_instance.TestInstance):
       self._gtest_filter = args.test_filter
     elif args.test_filter_file:
       with open(args.test_filter_file, 'r') as f:
-        self._gtest_filter = ':'.join(l.strip() for l in f)
+        self._gtest_filter = ConvertTestFilterFileIntoGTestFilterArgument(f)
     else:
       self._gtest_filter = None
 
@@ -334,6 +365,10 @@ class GtestTestInstance(test_instance.TestInstance):
   @property
   def shard_timeout(self):
     return self._shard_timeout
+
+  @property
+  def store_tombstones(self):
+    return self._store_tombstones
 
   @property
   def suite(self):

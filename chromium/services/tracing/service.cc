@@ -12,15 +12,15 @@
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/message_loop/message_loop.h"
-#include "services/shell/public/cpp/interface_registry.h"
+#include "services/service_manager/public/cpp/interface_registry.h"
 
 namespace tracing {
 
 Service::Service() : collector_binding_(this), tracing_active_(false) {}
 Service::~Service() {}
 
-bool Service::OnConnect(const shell::Identity& remote_identity,
-                        shell::InterfaceRegistry* registry) {
+bool Service::OnConnect(const service_manager::ServiceInfo& remote_info,
+                        service_manager::InterfaceRegistry* registry) {
   registry->AddInterface<mojom::Factory>(this);
   registry->AddInterface<mojom::Collector>(this);
   registry->AddInterface<mojom::StartupPerformanceDataCollector>(this);
@@ -30,24 +30,23 @@ bool Service::OnConnect(const shell::Identity& remote_identity,
 bool Service::OnStop() {
   // TODO(beng): This is only required because Service isn't run by
   // ServiceRunner - instead it's launched automatically by the standalone
-  // shell. It shouldn't be.
+  // service manager. It shouldn't be.
   base::MessageLoop::current()->QuitWhenIdle();
   return false;
 }
 
-void Service::Create(const shell::Identity& remote_identity,
+void Service::Create(const service_manager::Identity& remote_identity,
                      mojom::FactoryRequest request) {
   bindings_.AddBinding(this, std::move(request));
 }
 
-void Service::Create(const shell::Identity& remote_identity,
+void Service::Create(const service_manager::Identity& remote_identity,
                      mojom::CollectorRequest request) {
   collector_binding_.Bind(std::move(request));
 }
 
-void Service::Create(
-    const shell::Identity& remote_identity,
-    mojom::StartupPerformanceDataCollectorRequest request) {
+void Service::Create(const service_manager::Identity& remote_identity,
+                     mojom::StartupPerformanceDataCollectorRequest request) {
   startup_performance_data_collector_bindings_.AddBinding(this,
                                                           std::move(request));
 }
@@ -139,14 +138,14 @@ void Service::StopAndFlush() {
   AllDataCollected();
 }
 
-void Service::SetShellProcessCreationTime(int64_t time) {
-  if (startup_performance_times_.shell_process_creation_time == 0)
-    startup_performance_times_.shell_process_creation_time = time;
+void Service::SetServiceManagerProcessCreationTime(int64_t time) {
+  if (startup_performance_times_.service_manager_process_creation_time == 0)
+    startup_performance_times_.service_manager_process_creation_time = time;
 }
 
-void Service::SetShellMainEntryPointTime(int64_t time) {
-  if (startup_performance_times_.shell_main_entry_point_time == 0)
-    startup_performance_times_.shell_main_entry_point_time = time;
+void Service::SetServiceManagerMainEntryPointTime(int64_t time) {
+  if (startup_performance_times_.service_manager_main_entry_point_time == 0)
+    startup_performance_times_.service_manager_main_entry_point_time = time;
 }
 
 void Service::SetBrowserMessageLoopStartTicks(int64_t ticks) {

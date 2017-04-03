@@ -124,24 +124,24 @@ TEST_F(VisualRectMappingTest, LayoutView) {
   setBodyInnerHTML(
       "<style>body { margin: 0; }</style>"
       "<div id=frameContainer>"
-      "  <iframe id=frame src='http://test.com' width='50' height='50' "
+      "  <iframe src='http://test.com' width='50' height='50' "
       "frameBorder='0'></iframe>"
       "</div>");
-
-  Document& frameDocument = setupChildIframe(
-      "frame",
+  setChildFrameHTML(
       "<style>body { margin: 0; }</style><span><img style='width: 20px; "
       "height: 100px'></span>text text text");
+
   document().view()->updateAllLifecyclePhases();
 
   LayoutBlock* frameContainer =
       toLayoutBlock(getLayoutObjectByElementId("frameContainer"));
-  LayoutBlock* frameBody = toLayoutBlock(frameDocument.body()->layoutObject());
+  LayoutBlock* frameBody =
+      toLayoutBlock(childDocument().body()->layoutObject());
   LayoutText* frameText = toLayoutText(frameBody->lastChild());
 
-  // This case involves clipping: frame height is 50, y-coordinate of result rect is 13,
-  // so height should be clipped to (50 - 13) == 37.
-  frameDocument.view()->setScrollPosition(DoublePoint(0, 47),
+  // This case involves clipping: frame height is 50, y-coordinate of result
+  // rect is 13, so height should be clipped to (50 - 13) == 37.
+  childDocument().view()->setScrollOffset(ScrollOffset(0, 47),
                                           ProgrammaticScroll);
   LayoutRect originalRect(4, 60, 20, 80);
   LayoutRect rect = originalRect;
@@ -165,23 +165,24 @@ TEST_F(VisualRectMappingTest, LayoutViewSubpixelRounding) {
   setBodyInnerHTML(
       "<style>body { margin: 0; }</style>"
       "<div id=frameContainer style='position: relative; left: 0.5px'>"
-      "  <iframe id=frame style='position: relative; left: 0.5px' "
+      "  <iframe style='position: relative; left: 0.5px' "
       "src='http://test.com' width='200' height='200' frameBorder='0'></iframe>"
       "</div>");
-
-  Document& frameDocument = setupChildIframe(
-      "frame",
+  setChildFrameHTML(
       "<style>body { margin: 0; }</style><div id='target' style='position: "
       "relative; width: 100px; height: 100px; left: 0.5px'>");
+
   document().view()->updateAllLifecyclePhases();
 
   LayoutBlock* frameContainer =
       toLayoutBlock(getLayoutObjectByElementId("frameContainer"));
-  LayoutObject* target = frameDocument.getElementById("target")->layoutObject();
+  LayoutObject* target =
+      childDocument().getElementById("target")->layoutObject();
   LayoutRect rect(0, 0, 100, 100);
   EXPECT_TRUE(target->mapToVisualRectInAncestorSpace(frameContainer, rect));
-  // When passing from the iframe to the parent frame, the rect of (0.5, 0, 100, 100) is expanded to (0, 0, 100, 100), and then offset by
-  // the 0.5 offset of frameContainer.
+  // When passing from the iframe to the parent frame, the rect of (0.5, 0, 100,
+  // 100) is expanded to (0, 0, 100, 100), and then offset by the 0.5 offset of
+  // frameContainer.
   EXPECT_EQ(LayoutRect(LayoutPoint(DoublePoint(0.5, 0)), LayoutSize(101, 100)),
             rect);
 }
@@ -191,24 +192,24 @@ TEST_F(VisualRectMappingTest, LayoutViewDisplayNone) {
   setBodyInnerHTML(
       "<style>body { margin: 0; }</style>"
       "<div id=frameContainer>"
-      "  <iframe id=frame src='http://test.com' width='50' height='50' "
+      "  <iframe id='frame' src='http://test.com' width='50' height='50' "
       "frameBorder='0'></iframe>"
       "</div>");
+  setChildFrameHTML(
+      "<style>body { margin: 0; }</style><div "
+      "style='width:100px;height:100px;'></div>");
 
-  Document& frameDocument =
-      setupChildIframe("frame",
-                       "<style>body { margin: 0; }</style><div "
-                       "style='width:100px;height:100px;'></div>");
   document().view()->updateAllLifecyclePhases();
 
   LayoutBlock* frameContainer =
       toLayoutBlock(getLayoutObjectByElementId("frameContainer"));
-  LayoutBlock* frameBody = toLayoutBlock(frameDocument.body()->layoutObject());
+  LayoutBlock* frameBody =
+      toLayoutBlock(childDocument().body()->layoutObject());
   LayoutBlock* frameDiv = toLayoutBlock(frameBody->lastChild());
 
-  // This part is copied from the LayoutView test, just to ensure that the mapped
-  // rect is valid before display:none is set on the iframe.
-  frameDocument.view()->setScrollPosition(DoublePoint(0, 47),
+  // This part is copied from the LayoutView test, just to ensure that the
+  // mapped rect is valid before display:none is set on the iframe.
+  childDocument().view()->setScrollOffset(ScrollOffset(0, 47),
                                           ProgrammaticScroll);
   LayoutRect originalRect(4, 60, 20, 80);
   LayoutRect rect = originalRect;
@@ -233,13 +234,14 @@ TEST_F(VisualRectMappingTest, SelfFlippedWritingMode) {
       "</div>");
 
   LayoutBlock* target = toLayoutBlock(getLayoutObjectByElementId("target"));
-  LayoutRect overflowRect = target->localOverflowRectForPaintInvalidation();
-  // -40 = -box_shadow_offset_x(40) (with target's top-right corner as the origin)
+  LayoutRect visualRect = target->localVisualRect();
+  // -40 = -box_shadow_offset_x(40) (with target's top-right corner as the
+  // origin)
   // 140 = width(100) + box_shadow_offset_x(40)
   // 70 = height(50) + box_shadow_offset_y(20)
-  EXPECT_EQ(LayoutRect(-40, 0, 140, 70), overflowRect);
+  EXPECT_EQ(LayoutRect(-40, 0, 140, 70), visualRect);
 
-  LayoutRect rect = overflowRect;
+  LayoutRect rect = visualRect;
   // TODO(wkorman): The calls to flipForWritingMode() here and in other test
   // cases below are necessary because mapToVisualRectInAncestorSpace()
   // currently expects the input rect to be in "physical coordinates" (*not*
@@ -250,11 +252,11 @@ TEST_F(VisualRectMappingTest, SelfFlippedWritingMode) {
   // This rect is in physical coordinates of target.
   EXPECT_EQ(LayoutRect(0, 0, 140, 70), rect);
 
-  rect = overflowRect;
+  rect = visualRect;
   target->flipForWritingMode(rect);
   EXPECT_TRUE(target->mapToVisualRectInAncestorSpace(&layoutView(), rect));
   EXPECT_EQ(LayoutRect(222, 111, 140, 70), rect);
-  checkPaintInvalidationStateRectMapping(rect, overflowRect, *target,
+  checkPaintInvalidationStateRectMapping(rect, visualRect, *target,
                                          layoutView(), layoutView());
 }
 
@@ -268,14 +270,14 @@ TEST_F(VisualRectMappingTest, ContainerFlippedWritingMode) {
       "</div>");
 
   LayoutBlock* target = toLayoutBlock(getLayoutObjectByElementId("target"));
-  LayoutRect targetOverflowRect =
-      target->localOverflowRectForPaintInvalidation();
-  // -40 = -box_shadow_offset_x(40) (with target's top-right corner as the origin)
+  LayoutRect targetVisualRect = target->localVisualRect();
+  // -40 = -box_shadow_offset_x(40) (with target's top-right corner as the
+  // origin)
   // 140 = width(100) + box_shadow_offset_x(40)
   // 110 = height(90) + box_shadow_offset_y(20)
-  EXPECT_EQ(LayoutRect(-40, 0, 140, 110), targetOverflowRect);
+  EXPECT_EQ(LayoutRect(-40, 0, 140, 110), targetVisualRect);
 
-  LayoutRect rect = targetOverflowRect;
+  LayoutRect rect = targetVisualRect;
   target->flipForWritingMode(rect);
   EXPECT_TRUE(target->mapToVisualRectInAncestorSpace(target, rect));
   // This rect is in physical coordinates of target.
@@ -283,31 +285,30 @@ TEST_F(VisualRectMappingTest, ContainerFlippedWritingMode) {
 
   LayoutBlock* container =
       toLayoutBlock(getLayoutObjectByElementId("container"));
-  rect = targetOverflowRect;
+  rect = targetVisualRect;
   target->flipForWritingMode(rect);
   EXPECT_TRUE(target->mapToVisualRectInAncestorSpace(container, rect));
   // 100 is the physical x location of target in container.
   EXPECT_EQ(LayoutRect(100, 0, 140, 110), rect);
-  rect = targetOverflowRect;
+  rect = targetVisualRect;
   target->flipForWritingMode(rect);
   EXPECT_TRUE(target->mapToVisualRectInAncestorSpace(&layoutView(), rect));
   EXPECT_EQ(LayoutRect(322, 111, 140, 110), rect);
-  checkPaintInvalidationStateRectMapping(rect, targetOverflowRect, *target,
+  checkPaintInvalidationStateRectMapping(rect, targetVisualRect, *target,
                                          layoutView(), layoutView());
 
-  LayoutRect containerOverflowRect =
-      container->localOverflowRectForPaintInvalidation();
-  EXPECT_EQ(LayoutRect(0, 0, 200, 100), containerOverflowRect);
-  rect = containerOverflowRect;
+  LayoutRect containerVisualRect = container->localVisualRect();
+  EXPECT_EQ(LayoutRect(0, 0, 200, 100), containerVisualRect);
+  rect = containerVisualRect;
   container->flipForWritingMode(rect);
   EXPECT_TRUE(container->mapToVisualRectInAncestorSpace(container, rect));
   EXPECT_EQ(LayoutRect(0, 0, 200, 100), rect);
-  rect = containerOverflowRect;
+  rect = containerVisualRect;
   container->flipForWritingMode(rect);
   EXPECT_TRUE(container->mapToVisualRectInAncestorSpace(&layoutView(), rect));
   EXPECT_EQ(LayoutRect(222, 111, 200, 100), rect);
-  checkPaintInvalidationStateRectMapping(
-      rect, containerOverflowRect, *container, layoutView(), layoutView());
+  checkPaintInvalidationStateRectMapping(rect, containerVisualRect, *container,
+                                         layoutView(), layoutView());
 }
 
 TEST_F(VisualRectMappingTest, ContainerOverflowScroll) {
@@ -328,47 +329,48 @@ TEST_F(VisualRectMappingTest, ContainerOverflowScroll) {
   document().view()->updateAllLifecyclePhases();
 
   LayoutBlock* target = toLayoutBlock(getLayoutObjectByElementId("target"));
-  LayoutRect targetOverflowRect =
-      target->localOverflowRectForPaintInvalidation();
+  LayoutRect targetVisualRect = target->localVisualRect();
   // 140 = width(100) + box_shadow_offset_x(40)
   // 110 = height(90) + box_shadow_offset_y(20)
-  EXPECT_EQ(LayoutRect(0, 0, 140, 110), targetOverflowRect);
-  LayoutRect rect = targetOverflowRect;
+  EXPECT_EQ(LayoutRect(0, 0, 140, 110), targetVisualRect);
+  LayoutRect rect = targetVisualRect;
   EXPECT_TRUE(target->mapToVisualRectInAncestorSpace(target, rect));
   EXPECT_EQ(LayoutRect(0, 0, 140, 110), rect);
 
-  rect = targetOverflowRect;
+  rect = targetVisualRect;
   EXPECT_TRUE(target->mapToVisualRectInAncestorSpace(container, rect));
   rect.move(-container->scrolledContentOffset());
   // 2 = target_x(0) + container_border_left(10) - scroll_left(8)
   // 3 = target_y(0) + container_border_top(10) - scroll_top(7)
-  // Rect is not clipped by container's overflow clip because of overflow:scroll.
+  // Rect is not clipped by container's overflow clip because of
+  // overflow:scroll.
   EXPECT_EQ(LayoutRect(2, 3, 140, 110), rect);
 
-  rect = targetOverflowRect;
+  rect = targetVisualRect;
   EXPECT_TRUE(target->mapToVisualRectInAncestorSpace(&layoutView(), rect));
-  // (2, 3, 140, 100) is first clipped by container's overflow clip, to (10, 10, 50, 80),
-  // then is by added container's offset in LayoutView (111, 222).
+  // (2, 3, 140, 100) is first clipped by container's overflow clip, to
+  // (10, 10, 50, 80), then is by added container's offset in LayoutView
+  // (111, 222).
   EXPECT_EQ(LayoutRect(232, 121, 50, 80), rect);
-  checkPaintInvalidationStateRectMapping(rect, targetOverflowRect, *target,
+  checkPaintInvalidationStateRectMapping(rect, targetVisualRect, *target,
                                          layoutView(), layoutView());
 
-  LayoutRect containerOverflowRect =
-      container->localOverflowRectForPaintInvalidation();
-  // Because container has overflow clip, its visual overflow doesn't include overflow from children.
+  LayoutRect containerVisualRect = container->localVisualRect();
+  // Because container has overflow clip, its visual overflow doesn't include
+  // overflow from children.
   // 70 = width(50) + border_left_width(10) + border_right_width(10)
   // 100 = height(80) + border_top_width(10) + border_bottom_width(10)
-  EXPECT_EQ(LayoutRect(0, 0, 70, 100), containerOverflowRect);
-  rect = containerOverflowRect;
+  EXPECT_EQ(LayoutRect(0, 0, 70, 100), containerVisualRect);
+  rect = containerVisualRect;
   EXPECT_TRUE(container->mapToVisualRectInAncestorSpace(container, rect));
   // Container should not apply overflow clip on its own overflow rect.
   EXPECT_EQ(LayoutRect(0, 0, 70, 100), rect);
 
-  rect = containerOverflowRect;
+  rect = containerVisualRect;
   EXPECT_TRUE(container->mapToVisualRectInAncestorSpace(&layoutView(), rect));
   EXPECT_EQ(LayoutRect(222, 111, 70, 100), rect);
-  checkPaintInvalidationStateRectMapping(
-      rect, containerOverflowRect, *container, layoutView(), layoutView());
+  checkPaintInvalidationStateRectMapping(rect, containerVisualRect, *container,
+                                         layoutView(), layoutView());
 }
 
 TEST_F(VisualRectMappingTest, ContainerFlippedWritingModeAndOverflowScroll) {
@@ -385,7 +387,8 @@ TEST_F(VisualRectMappingTest, ContainerFlippedWritingModeAndOverflowScroll) {
   LayoutBlock* container =
       toLayoutBlock(getLayoutObjectByElementId("container"));
   EXPECT_EQ(LayoutUnit(), container->scrollTop());
-  // The initial scroll offset is to the left-most because of flipped blocks writing mode.
+  // The initial scroll offset is to the left-most because of flipped blocks
+  // writing mode.
   // 150 = total_layout_overflow(100 + 100) - width(50)
   EXPECT_EQ(LayoutUnit(150), container->scrollLeft());
   container->setScrollTop(LayoutUnit(7));
@@ -394,20 +397,20 @@ TEST_F(VisualRectMappingTest, ContainerFlippedWritingModeAndOverflowScroll) {
   document().view()->updateAllLifecyclePhases();
 
   LayoutBlock* target = toLayoutBlock(getLayoutObjectByElementId("target"));
-  LayoutRect targetOverflowRect =
-      target->localOverflowRectForPaintInvalidation();
-  // -40 = -box_shadow_offset_x(40) (with target's top-right corner as the origin)
+  LayoutRect targetVisualRect = target->localVisualRect();
+  // -40 = -box_shadow_offset_x(40) (with target's top-right corner as the
+  // origin)
   // 140 = width(100) + box_shadow_offset_x(40)
   // 110 = height(90) + box_shadow_offset_y(20)
-  EXPECT_EQ(LayoutRect(-40, 0, 140, 110), targetOverflowRect);
+  EXPECT_EQ(LayoutRect(-40, 0, 140, 110), targetVisualRect);
 
-  LayoutRect rect = targetOverflowRect;
+  LayoutRect rect = targetVisualRect;
   target->flipForWritingMode(rect);
   EXPECT_TRUE(target->mapToVisualRectInAncestorSpace(target, rect));
   // This rect is in physical coordinates of target.
   EXPECT_EQ(LayoutRect(0, 0, 140, 110), rect);
 
-  rect = targetOverflowRect;
+  rect = targetVisualRect;
   target->flipForWritingMode(rect);
   EXPECT_TRUE(target->mapToVisualRectInAncestorSpace(container, rect));
   rect.move(-container->scrolledContentOffset());
@@ -416,37 +419,40 @@ TEST_F(VisualRectMappingTest, ContainerFlippedWritingModeAndOverflowScroll) {
   // Rect is clipped by container's overflow clip because of overflow:scroll.
   EXPECT_EQ(LayoutRect(-2, 3, 140, 110), rect);
 
-  rect = targetOverflowRect;
+  rect = targetVisualRect;
   target->flipForWritingMode(rect);
   EXPECT_TRUE(target->mapToVisualRectInAncestorSpace(&layoutView(), rect));
-  // (-2, 3, 140, 100) is first clipped by container's overflow clip, to (40, 10, 50, 80),
-  // then is added by container's offset in LayoutView (111, 222).
-  // TODO(crbug.com/600039): rect.x() should be 262 (left + border-left), but is offset
+  // (-2, 3, 140, 100) is first clipped by container's overflow clip, to
+  // (40, 10, 50, 80), then is added by container's offset in LayoutView
+  // (111, 222).
+  // TODO(crbug.com/600039): rect.x() should be 262 (left + border-left), but is
+  // offset
   // by extra horizontal border-widths because of layout error.
   EXPECT_EQ(LayoutRect(322, 121, 50, 80), rect);
-  checkPaintInvalidationStateRectMapping(rect, targetOverflowRect, *target,
+  checkPaintInvalidationStateRectMapping(rect, targetVisualRect, *target,
                                          layoutView(), layoutView());
 
-  LayoutRect containerOverflowRect =
-      container->localOverflowRectForPaintInvalidation();
-  // Because container has overflow clip, its visual overflow doesn't include overflow from children.
+  LayoutRect containerVisualRect = container->localVisualRect();
+  // Because container has overflow clip, its visual overflow doesn't include
+  // overflow from children.
   // 110 = width(50) + border_left_width(40) + border_right_width(20)
   // 120 = height(80) + border_top_width(10) + border_bottom_width(30)
-  EXPECT_EQ(LayoutRect(0, 0, 110, 120), containerOverflowRect);
+  EXPECT_EQ(LayoutRect(0, 0, 110, 120), containerVisualRect);
 
-  rect = containerOverflowRect;
+  rect = containerVisualRect;
   container->flipForWritingMode(rect);
   EXPECT_TRUE(container->mapToVisualRectInAncestorSpace(container, rect));
   EXPECT_EQ(LayoutRect(0, 0, 110, 120), rect);
 
-  rect = containerOverflowRect;
+  rect = containerVisualRect;
   container->flipForWritingMode(rect);
   EXPECT_TRUE(container->mapToVisualRectInAncestorSpace(&layoutView(), rect));
-  // TODO(crbug.com/600039): rect.x() should be 222 (left), but is offset by extra horizontal
+  // TODO(crbug.com/600039): rect.x() should be 222 (left), but is offset by
+  // extra horizontal
   // border-widths because of layout error.
   EXPECT_EQ(LayoutRect(282, 111, 110, 120), rect);
-  checkPaintInvalidationStateRectMapping(
-      rect, containerOverflowRect, *container, layoutView(), layoutView());
+  checkPaintInvalidationStateRectMapping(rect, containerVisualRect, *container,
+                                         layoutView(), layoutView());
 }
 
 TEST_F(VisualRectMappingTest, ContainerOverflowHidden) {
@@ -467,16 +473,15 @@ TEST_F(VisualRectMappingTest, ContainerOverflowHidden) {
   document().view()->updateAllLifecyclePhases();
 
   LayoutBlock* target = toLayoutBlock(getLayoutObjectByElementId("target"));
-  LayoutRect targetOverflowRect =
-      target->localOverflowRectForPaintInvalidation();
+  LayoutRect targetVisualRect = target->localVisualRect();
   // 140 = width(100) + box_shadow_offset_x(40)
   // 110 = height(90) + box_shadow_offset_y(20)
-  EXPECT_EQ(LayoutRect(0, 0, 140, 110), targetOverflowRect);
-  LayoutRect rect = targetOverflowRect;
+  EXPECT_EQ(LayoutRect(0, 0, 140, 110), targetVisualRect);
+  LayoutRect rect = targetVisualRect;
   EXPECT_TRUE(target->mapToVisualRectInAncestorSpace(target, rect));
   EXPECT_EQ(LayoutRect(0, 0, 140, 110), rect);
 
-  rect = targetOverflowRect;
+  rect = targetVisualRect;
   EXPECT_TRUE(target->mapToVisualRectInAncestorSpace(container, rect));
   // Rect is not clipped by container's overflow clip.
   EXPECT_EQ(LayoutRect(10, 10, 140, 110), rect);
@@ -496,7 +501,8 @@ TEST_F(VisualRectMappingTest, ContainerFlippedWritingModeAndOverflowHidden) {
   LayoutBlock* container =
       toLayoutBlock(getLayoutObjectByElementId("container"));
   EXPECT_EQ(LayoutUnit(), container->scrollTop());
-  // The initial scroll offset is to the left-most because of flipped blocks writing mode.
+  // The initial scroll offset is to the left-most because of flipped blocks
+  // writing mode.
   // 150 = total_layout_overflow(100 + 100) - width(50)
   EXPECT_EQ(LayoutUnit(150), container->scrollLeft());
   container->setScrollTop(LayoutUnit(7));
@@ -504,20 +510,20 @@ TEST_F(VisualRectMappingTest, ContainerFlippedWritingModeAndOverflowHidden) {
   document().view()->updateAllLifecyclePhases();
 
   LayoutBlock* target = toLayoutBlock(getLayoutObjectByElementId("target"));
-  LayoutRect targetOverflowRect =
-      target->localOverflowRectForPaintInvalidation();
-  // -40 = -box_shadow_offset_x(40) (with target's top-right corner as the origin)
+  LayoutRect targetVisualRect = target->localVisualRect();
+  // -40 = -box_shadow_offset_x(40) (with target's top-right corner as the
+  // origin)
   // 140 = width(100) + box_shadow_offset_x(40)
   // 110 = height(90) + box_shadow_offset_y(20)
-  EXPECT_EQ(LayoutRect(-40, 0, 140, 110), targetOverflowRect);
+  EXPECT_EQ(LayoutRect(-40, 0, 140, 110), targetVisualRect);
 
-  LayoutRect rect = targetOverflowRect;
+  LayoutRect rect = targetVisualRect;
   target->flipForWritingMode(rect);
   EXPECT_TRUE(target->mapToVisualRectInAncestorSpace(target, rect));
   // This rect is in physical coordinates of target.
   EXPECT_EQ(LayoutRect(0, 0, 140, 110), rect);
 
-  rect = targetOverflowRect;
+  rect = targetVisualRect;
   target->flipForWritingMode(rect);
   EXPECT_TRUE(target->mapToVisualRectInAncestorSpace(container, rect));
   // 58 = target_physical_x(100) + container_border_left(40) - scroll_left(58)
@@ -538,7 +544,8 @@ TEST_F(VisualRectMappingTest, ContainerAndTargetDifferentFlippedWritingMode) {
   LayoutBlock* container =
       toLayoutBlock(getLayoutObjectByElementId("container"));
   EXPECT_EQ(LayoutUnit(), container->scrollTop());
-  // The initial scroll offset is to the left-most because of flipped blocks writing mode.
+  // The initial scroll offset is to the left-most because of flipped blocks
+  // writing mode.
   // 150 = total_layout_overflow(100 + 100) - width(50)
   EXPECT_EQ(LayoutUnit(150), container->scrollLeft());
   container->setScrollTop(LayoutUnit(7));
@@ -547,18 +554,17 @@ TEST_F(VisualRectMappingTest, ContainerAndTargetDifferentFlippedWritingMode) {
   document().view()->updateAllLifecyclePhases();
 
   LayoutBlock* target = toLayoutBlock(getLayoutObjectByElementId("target"));
-  LayoutRect targetOverflowRect =
-      target->localOverflowRectForPaintInvalidation();
+  LayoutRect targetVisualRect = target->localVisualRect();
   // 140 = width(100) + box_shadow_offset_x(40)
   // 110 = height(90) + box_shadow_offset_y(20)
-  EXPECT_EQ(LayoutRect(0, 0, 140, 110), targetOverflowRect);
+  EXPECT_EQ(LayoutRect(0, 0, 140, 110), targetVisualRect);
 
-  LayoutRect rect = targetOverflowRect;
+  LayoutRect rect = targetVisualRect;
   EXPECT_TRUE(target->mapToVisualRectInAncestorSpace(target, rect));
   // This rect is in physical coordinates of target.
   EXPECT_EQ(LayoutRect(0, 0, 140, 110), rect);
 
-  rect = targetOverflowRect;
+  rect = targetVisualRect;
   EXPECT_TRUE(target->mapToVisualRectInAncestorSpace(container, rect));
   rect.move(-container->scrolledContentOffset());
   // -2 = target_physical_x(100) + container_border_left(40) - scroll_left(142)
@@ -593,13 +599,12 @@ TEST_F(VisualRectMappingTest,
       toLayoutBlock(getLayoutObjectByElementId("normal-flow"));
   EXPECT_EQ(scroller, &normalFlow->containerForPaintInvalidation());
 
-  LayoutRect normalFlowOverflowRect =
-      normalFlow->localOverflowRectForPaintInvalidation();
-  EXPECT_EQ(LayoutRect(0, 0, 2000, 2000), normalFlowOverflowRect);
-  LayoutRect rect = normalFlowOverflowRect;
+  LayoutRect normalFlowVisualRect = normalFlow->localVisualRect();
+  EXPECT_EQ(LayoutRect(0, 0, 2000, 2000), normalFlowVisualRect);
+  LayoutRect rect = normalFlowVisualRect;
   EXPECT_TRUE(normalFlow->mapToVisualRectInAncestorSpace(scroller, rect));
   EXPECT_EQ(LayoutRect(0, 0, 2000, 2000), rect);
-  checkPaintInvalidationStateRectMapping(rect, normalFlowOverflowRect,
+  checkPaintInvalidationStateRectMapping(rect, normalFlowVisualRect,
                                          *normalFlow, layoutView(), *scroller);
 
   LayoutBlock* stackingContext =
@@ -608,13 +613,12 @@ TEST_F(VisualRectMappingTest,
   EXPECT_EQ(stackingContext, &absolute->containerForPaintInvalidation());
   EXPECT_EQ(stackingContext, absolute->container());
 
-  LayoutRect absoluteOverflowRect =
-      absolute->localOverflowRectForPaintInvalidation();
-  EXPECT_EQ(LayoutRect(0, 0, 50, 50), absoluteOverflowRect);
-  rect = absoluteOverflowRect;
+  LayoutRect absoluteVisualRect = absolute->localVisualRect();
+  EXPECT_EQ(LayoutRect(0, 0, 50, 50), absoluteVisualRect);
+  rect = absoluteVisualRect;
   EXPECT_TRUE(absolute->mapToVisualRectInAncestorSpace(stackingContext, rect));
   EXPECT_EQ(LayoutRect(222, 111, 50, 50), rect);
-  checkPaintInvalidationStateRectMapping(rect, absoluteOverflowRect, *absolute,
+  checkPaintInvalidationStateRectMapping(rect, absoluteVisualRect, *absolute,
                                          layoutView(), *stackingContext);
 }
 
@@ -629,7 +633,8 @@ TEST_F(VisualRectMappingTest,
       // This div makes stacking-context composited.
       "    <div style='position: absolute; width: 1px; height: 1px; "
       "background:yellow; will-change: transform'></div>"
-      // This stacking context is paintInvalidationContainer of the absolute child, but not a container of it.
+      // This stacking context is paintInvalidationContainer of the absolute
+      // child, but not a container of it.
       "    <div id='stacking-context' style='opacity: 0.9'>"
       "        <div id='absolute' style='position: absolute; top: 50px; left: "
       "50px; width: 50px; height: 50px; background: green'></div>"
@@ -644,14 +649,13 @@ TEST_F(VisualRectMappingTest,
   EXPECT_EQ(stackingContext, &absolute->containerForPaintInvalidation());
   EXPECT_EQ(container, absolute->container());
 
-  LayoutRect absoluteOverflowRect =
-      absolute->localOverflowRectForPaintInvalidation();
-  EXPECT_EQ(LayoutRect(0, 0, 50, 50), absoluteOverflowRect);
-  LayoutRect rect = absoluteOverflowRect;
+  LayoutRect absoluteVisualRect = absolute->localVisualRect();
+  EXPECT_EQ(LayoutRect(0, 0, 50, 50), absoluteVisualRect);
+  LayoutRect rect = absoluteVisualRect;
   EXPECT_TRUE(absolute->mapToVisualRectInAncestorSpace(stackingContext, rect));
   // -172 = top(50) - y_offset_of_stacking_context(222)
   EXPECT_EQ(LayoutRect(50, -172, 50, 50), rect);
-  checkPaintInvalidationStateRectMapping(rect, absoluteOverflowRect, *absolute,
+  checkPaintInvalidationStateRectMapping(rect, absoluteVisualRect, *absolute,
                                          layoutView(), *stackingContext);
 }
 
@@ -665,13 +669,12 @@ TEST_F(VisualRectMappingTest, CSSClip) {
 
   LayoutBox* target = toLayoutBox(getLayoutObjectByElementId("target"));
 
-  LayoutRect targetOverflowRect =
-      target->localOverflowRectForPaintInvalidation();
-  EXPECT_EQ(LayoutRect(0, 0, 400, 400), targetOverflowRect);
-  LayoutRect rect = targetOverflowRect;
+  LayoutRect targetVisualRect = target->localVisualRect();
+  EXPECT_EQ(LayoutRect(0, 0, 400, 400), targetVisualRect);
+  LayoutRect rect = targetVisualRect;
   EXPECT_TRUE(target->mapToVisualRectInAncestorSpace(&layoutView(), rect));
   EXPECT_EQ(LayoutRect(0, 0, 200, 200), rect);
-  checkPaintInvalidationStateRectMapping(rect, targetOverflowRect, *target,
+  checkPaintInvalidationStateRectMapping(rect, targetVisualRect, *target,
                                          layoutView(), layoutView());
 }
 
@@ -685,13 +688,12 @@ TEST_F(VisualRectMappingTest, ContainPaint) {
 
   LayoutBox* target = toLayoutBox(getLayoutObjectByElementId("target"));
 
-  LayoutRect targetOverflowRect =
-      target->localOverflowRectForPaintInvalidation();
-  EXPECT_EQ(LayoutRect(0, 0, 400, 400), targetOverflowRect);
-  LayoutRect rect = targetOverflowRect;
+  LayoutRect targetVisualRect = target->localVisualRect();
+  EXPECT_EQ(LayoutRect(0, 0, 400, 400), targetVisualRect);
+  LayoutRect rect = targetVisualRect;
   EXPECT_TRUE(target->mapToVisualRectInAncestorSpace(&layoutView(), rect));
   EXPECT_EQ(LayoutRect(0, 0, 200, 200), rect);
-  checkPaintInvalidationStateRectMapping(rect, targetOverflowRect, *target,
+  checkPaintInvalidationStateRectMapping(rect, targetVisualRect, *target,
                                          layoutView(), layoutView());
 }
 

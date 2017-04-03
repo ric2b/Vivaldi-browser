@@ -35,7 +35,7 @@
 
 #include "core/CoreExport.h"
 #include "core/frame/UseCounter.h"
-#include "core/html/HTMLTextFormControlElement.h"
+#include "core/html/TextControlElement.h"
 #include "core/html/forms/ColorChooserClient.h"
 #include "core/html/forms/StepRange.h"
 
@@ -87,13 +87,15 @@ class CORE_EXPORT InputType : public GarbageCollectedFinalized<InputType> {
 
   // DOM property functions
 
-  // Checked first, before internal storage or the value attribute.
-  virtual bool getTypeSpecificValue(String&);
-  // Checked last, if both internal storage and value attribute are missing.
-  virtual String fallbackValue() const;
-  // Checked after even fallbackValue, only when the valueWithDefault function
-  // is called.
-  virtual String defaultValue() const;
+  // Returns a string value in ValueMode::kFilename.
+  virtual String valueInFilenameValueMode() const;
+  // Default string to be used for showing button and form submission if |value|
+  // is missing.
+  virtual String defaultLabel() const;
+
+  // https://html.spec.whatwg.org/multipage/forms.html#dom-input-value
+  enum class ValueMode { kValue, kDefault, kDefaultOn, kFilename };
+  virtual ValueMode valueMode() const = 0;
 
   virtual double valueAsDate() const;
   virtual void setValueAsDate(double, ExceptionState&) const;
@@ -121,10 +123,9 @@ class CORE_EXPORT InputType : public GarbageCollectedFinalized<InputType> {
   virtual bool valueMissing(const String&) const;
   virtual bool patternMismatch(const String&) const;
   virtual bool tooLong(const String&,
-                       HTMLTextFormControlElement::NeedsToCheckDirtyFlag) const;
-  virtual bool tooShort(
-      const String&,
-      HTMLTextFormControlElement::NeedsToCheckDirtyFlag) const;
+                       TextControlElement::NeedsToCheckDirtyFlag) const;
+  virtual bool tooShort(const String&,
+                        TextControlElement::NeedsToCheckDirtyFlag) const;
   bool rangeUnderflow(const String&) const;
   bool rangeOverflow(const String&) const;
   bool isInRange(const String&) const;
@@ -135,7 +136,7 @@ class CORE_EXPORT InputType : public GarbageCollectedFinalized<InputType> {
   bool stepMismatch(const String&) const;
   virtual bool getAllowedValueStep(Decimal*) const;
   virtual StepRange createStepRange(AnyStepHandling) const;
-  virtual void stepUp(int, ExceptionState&);
+  virtual void stepUp(double, ExceptionState&);
   virtual void stepUpFromLayoutObject(int);
   virtual String badInputText() const;
   virtual String rangeOverflowText(const Decimal& maximum) const;
@@ -176,7 +177,6 @@ class CORE_EXPORT InputType : public GarbageCollectedFinalized<InputType> {
   virtual bool canSetSuggestedValue();
   virtual bool shouldSendChangeEventAfterCheckedChanged();
   virtual bool canSetValue(const String&);
-  virtual bool storesValueSeparateFromAttribute();
   virtual void setValue(const String&,
                         bool valueChanged,
                         TextFieldEventBehavior);
@@ -195,6 +195,9 @@ class CORE_EXPORT InputType : public GarbageCollectedFinalized<InputType> {
   virtual const QualifiedName& subResourceAttributeName() const;
   virtual bool supportsAutocapitalize() const;
   virtual const AtomicString& defaultAutocapitalize() const;
+  virtual void copyNonAttributeProperties(const HTMLInputElement&);
+  virtual void onAttachWithLayoutObject();
+  virtual void onDetachWithLayoutObject();
 
   // Parses the specified string for the type, and return
   // the Decimal value for the parsing result if the parsing
@@ -248,7 +251,7 @@ class CORE_EXPORT InputType : public GarbageCollectedFinalized<InputType> {
   // Helper for stepUp()/stepDown(). Adds step value * count to the current
   // value.
   void applyStep(const Decimal&,
-                 int count,
+                 double count,
                  AnyStepHandling,
                  TextFieldEventBehavior,
                  ExceptionState&);

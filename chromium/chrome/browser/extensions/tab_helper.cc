@@ -10,6 +10,7 @@
 #include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/activity_log/activity_log.h"
+#include "chrome/browser/extensions/api/bookmark_manager_private/bookmark_manager_private_api.h"
 #include "chrome/browser/extensions/api/declarative_content/chrome_content_rules_registry.h"
 #include "chrome/browser/extensions/api/extension_action/extension_action_api.h"
 #include "chrome/browser/extensions/bookmark_app_helper.h"
@@ -62,6 +63,7 @@
 #include "extensions/common/extension_urls.h"
 #include "extensions/common/feature_switch.h"
 #include "extensions/common/manifest_handlers/icons_handler.h"
+#include "url/url_constants.h"
 
 #if defined(OS_WIN)
 #include "chrome/browser/web_applications/web_app_win.h"
@@ -182,6 +184,8 @@ TabHelper::TabHelper(content::WebContents* web_contents)
   ChromeExtensionWebContentsObserver::CreateForWebContents(web_contents);
   ExtensionWebContentsObserver::GetForWebContents(web_contents)->dispatcher()->
       set_delegate(this);
+
+  BookmarkManagerPrivateDragEventRouter::CreateForWebContents(web_contents);
 
   registrar_.Add(this,
                  content::NOTIFICATION_LOAD_STOP,
@@ -437,13 +441,16 @@ void TabHelper::OnInlineWebstoreInstall(content::RenderFrameHost* host,
                                         int install_id,
                                         int return_route_id,
                                         const std::string& webstore_item_id,
-                                        const GURL& requestor_url,
                                         int listeners_mask) {
+  GURL requestor_url(host->GetLastCommittedURL());
   // Check that the listener is reasonable. We should never get anything other
   // than an install stage listener, a download listener, or both.
+  // The requestor_url should also be valid, and the renderer should disallow
+  // child frames from sending the IPC.
   if ((listeners_mask & ~(api::webstore::INSTALL_STAGE_LISTENER |
                           api::webstore::DOWNLOAD_PROGRESS_LISTENER)) != 0 ||
-      requestor_url.is_empty()) {
+      !requestor_url.is_valid() || requestor_url == url::kAboutBlankURL ||
+      host->GetParent()) {
     NOTREACHED();
     return;
   }
@@ -529,10 +536,8 @@ void TabHelper::OnContentScriptsExecuting(
     content::RenderFrameHost* host,
     const ScriptExecutionObserver::ExecutingScriptsMap& executing_scripts_map,
     const GURL& on_url) {
-  FOR_EACH_OBSERVER(
-      ScriptExecutionObserver,
-      script_execution_observers_,
-      OnScriptsExecuted(web_contents(), executing_scripts_map, on_url));
+  for (auto& observer : script_execution_observers_)
+    observer.OnScriptsExecuted(web_contents(), executing_scripts_map, on_url);
 }
 
 const Extension* TabHelper::GetExtension(const ExtensionId& extension_app_id) {

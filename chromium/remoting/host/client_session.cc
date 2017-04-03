@@ -46,6 +46,7 @@ ClientSession::ClientSession(
     EventHandler* event_handler,
     std::unique_ptr<protocol::ConnectionToClient> connection,
     DesktopEnvironmentFactory* desktop_environment_factory,
+    const DesktopEnvironmentOptions& desktop_environment_options,
     const base::TimeDelta& max_duration,
     scoped_refptr<protocol::PairingRegistry> pairing_registry,
     const std::vector<HostExtension*>& extensions)
@@ -53,6 +54,7 @@ ClientSession::ClientSession(
       connection_(std::move(connection)),
       client_jid_(connection_->session()->jid()),
       desktop_environment_factory_(desktop_environment_factory),
+      desktop_environment_options_(desktop_environment_options),
       input_tracker_(&host_input_filter_),
       remote_input_filter_(&input_tracker_),
       mouse_clamping_filter_(&remote_input_filter_),
@@ -241,8 +243,8 @@ void ClientSession::OnConnectionAuthenticated() {
 
   // Create the desktop environment. Drop the connection if it could not be
   // created for any reason (for instance the curtain could not initialize).
-  desktop_environment_ =
-      desktop_environment_factory_->Create(weak_factory_.GetWeakPtr());
+  desktop_environment_ = desktop_environment_factory_->Create(
+      weak_factory_.GetWeakPtr(), desktop_environment_options_);
   if (!desktop_environment_) {
     DisconnectSession(protocol::HOST_CONFIGURATION_ERROR);
     return;
@@ -281,8 +283,11 @@ void ClientSession::CreateMediaStreams() {
       desktop_environment_->CreateVideoCapturer());
 
   // Create a AudioStream to pump audio from the capturer to the client.
-  audio_stream_ = connection_->StartAudioStream(
-      desktop_environment_->CreateAudioCapturer());
+  std::unique_ptr<protocol::AudioSource> audio_capturer =
+      desktop_environment_->CreateAudioCapturer();
+  if (audio_capturer) {
+    audio_stream_ = connection_->StartAudioStream(std::move(audio_capturer));
+  }
 
   video_stream_->SetObserver(this);
 
@@ -292,6 +297,9 @@ void ClientSession::CreateMediaStreams() {
 
   // Pause capturing if necessary.
   video_stream_->Pause(pause_video_);
+
+  if (event_timestamp_source_for_tests_)
+    video_stream_->SetEventTimestampsSource(event_timestamp_source_for_tests_);
 }
 
 void ClientSession::OnConnectionChannelsConnected() {
@@ -353,14 +361,6 @@ void ClientSession::OnConnectionClosed(protocol::ErrorCode error) {
   event_handler_->OnSessionClosed(this);
 }
 
-void ClientSession::OnInputEventReceived(
-    int64_t event_timestamp) {
-  DCHECK(CalledOnValidThread());
-
-  if (video_stream_.get())
-    video_stream_->OnInputEventReceived(event_timestamp);
-}
-
 void ClientSession::OnRouteChange(
     const std::string& channel_name,
     const protocol::TransportRoute& route) {
@@ -409,9 +409,17 @@ ClientSessionControl* ClientSession::session_control() {
   return this;
 }
 
+void ClientSession::SetEventTimestampsSourceForTests(
+    scoped_refptr<protocol::InputEventTimestampsSource>
+        event_timestamp_source) {
+  DCHECK(CalledOnValidThread());
+  event_timestamp_source_for_tests_ = event_timestamp_source;
+  if (video_stream_)
+    video_stream_->SetEventTimestampsSource(event_timestamp_source_for_tests_);
+}
+
 std::unique_ptr<protocol::ClipboardStub> ClientSession::CreateClipboardProxy() {
   DCHECK(CalledOnValidThread());
-
   return base::MakeUnique<protocol::ClipboardThreadProxy>(
       client_clipboard_factory_.GetWeakPtr(),
       base::ThreadTaskRunnerHandle::Get());

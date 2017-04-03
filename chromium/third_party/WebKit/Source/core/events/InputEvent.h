@@ -6,6 +6,7 @@
 #define InputEvent_h
 
 #include "core/clipboard/DataTransfer.h"
+#include "core/dom/Range.h"
 #include "core/dom/StaticRange.h"
 #include "core/events/InputEventInit.h"
 #include "core/events/UIEvent.h"
@@ -21,11 +22,11 @@ class InputEvent final : public UIEvent {
     return new InputEvent(type, initializer);
   }
 
+  // https://w3c.github.io/input-events/#h-interface-inputevent-attributes
   enum class InputType {
     None,
     // Insertion.
     InsertText,
-    InsertNonText,
     InsertLineBreak,
     InsertParagraph,
     InsertOrderedList,
@@ -44,34 +45,24 @@ class InputEvent final : public UIEvent {
     DeleteContentForward,
     DeleteByCut,
     DeleteByDrag,
-    // Command.
-    Undo,
-    Redo,
-    // Styling.
-    Bold,
-    Italic,
-    Underline,
-    StrikeThrough,
-    Superscript,
-    Subscript,
+    // History.
+    HistoryUndo,
+    HistoryRedo,
     // Formatting.
-    JustifyCenter,
-    JustifyRight,
-    JustifyLeft,
-    Indent,
-    Outdent,
-    RemoveFormat,
-    // Not on spec.
-    JustifyFull,
-    SetColor,
-    SetBackgroundColor,
-    SetFont,
-    ChangeAttributes,
-    SetWritingDirection,
-    Unscript,
-    CreateLink,
-    Unlink,
-    FormatBlock,
+    FormatBold,
+    FormatItalic,
+    FormatUnderline,
+    FormatStrikeThrough,
+    FormatSuperscript,
+    FormatSubscript,
+    FormatJustifyCenter,
+    FormatJustifyFull,
+    FormatJustifyRight,
+    FormatJustifyLeft,
+    FormatIndent,
+    FormatOutdent,
+    FormatRemove,
+    FormatSetBlockTextDirection,
 
     // Add new input types immediately above this line.
     NumberOfInputTypes,

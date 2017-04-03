@@ -36,7 +36,7 @@ inline AudioNodeInput::AudioNodeInput(AudioHandler& handler)
       m_handler(handler) {
   // Set to mono by default.
   m_internalSummingBus =
-      AudioBus::create(1, AudioHandler::ProcessingSizeInFrames);
+      AudioBus::create(1, AudioUtilities::kRenderQuantumFrames);
 }
 
 std::unique_ptr<AudioNodeInput> AudioNodeInput::create(AudioHandler& handler) {
@@ -94,11 +94,13 @@ void AudioNodeInput::disable(AudioNodeOutput& output) {
 
 void AudioNodeInput::enable(AudioNodeOutput& output) {
   ASSERT(deferredTaskHandler().isGraphOwner());
-  DCHECK(m_disabledOutputs.contains(&output));
 
   // Move output from disabled list to active list.
   m_outputs.add(&output);
-  m_disabledOutputs.remove(&output);
+  if (m_disabledOutputs.size() > 0) {
+    DCHECK(m_disabledOutputs.contains(&output));
+    m_disabledOutputs.remove(&output);
+  }
   changedOutputs();
 
   // Propagate enabled state to outputs.
@@ -119,7 +121,7 @@ void AudioNodeInput::updateInternalBus() {
     return;
 
   m_internalSummingBus = AudioBus::create(numberOfInputChannels,
-                                          AudioHandler::ProcessingSizeInFrames);
+                                          AudioUtilities::kRenderQuantumFrames);
 }
 
 unsigned AudioNodeInput::numberOfChannels() const {

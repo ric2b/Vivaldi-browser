@@ -3,10 +3,14 @@
 # found in the LICENSE file.
 
 import("//build/config/features.gni")
+import("//chrome/common/features.gni")
+import("//components/spellcheck/spellcheck_build_features.gni")
+import("//extensions/features/features.gni")
 import("//tools/grit/grit_rule.gni")
 
 grit("resources") {
   source = "resources/renderer_resources.grd"
+  defines = chrome_grit_defines
   use_qualified_include = true
   output_dir = "$root_gen_dir/chrome"
   output_name = "renderer_resources"
@@ -22,8 +26,6 @@ static_library("renderer") {
   sources = [
     "app_categorizer.cc",
     "app_categorizer.h",
-    "banners/app_banner_client.cc",
-    "banners/app_banner_client.h",
     "benchmarking_extension.cc",
     "benchmarking_extension.h",
     "chrome_content_renderer_client.cc",
@@ -48,8 +50,6 @@ static_library("renderer") {
     "net/net_error_page_controller.h",
     "net_benchmarking_extension.cc",
     "net_benchmarking_extension.h",
-    "page_load_histograms.cc",
-    "page_load_histograms.h",
     "page_load_metrics/metrics_render_frame_observer.cc",
     "page_load_metrics/metrics_render_frame_observer.h",
     "page_load_metrics/page_timing_metrics_sender.cc",
@@ -104,7 +104,9 @@ static_library("renderer") {
     "//components/password_manager/content/renderer",
     "//components/plugins/renderer",
     "//components/printing/renderer",
+    "//components/rappor/public/interfaces",
     "//components/resources:components_resources",
+    "//components/spellcheck:build_features",
     "//components/startup_metric_utils/common:interfaces",
     "//components/subresource_filter/content/renderer",
     "//components/translate/content/renderer",
@@ -116,8 +118,12 @@ static_library("renderer") {
     "//content/app/strings",
     "//content/public/common",
     "//content/public/renderer",
+    "//extensions/features",
     "//media",
+    "//media/capture",
     "//net",
+    "//ppapi/features",
+    "//printing/features",
     "//skia",
     "//storage/common",
     "//third_party/WebKit/public:blink",
@@ -125,7 +131,7 @@ static_library("renderer") {
     "//third_party/WebKit/public:resources",
     "//third_party/icu",
     "//third_party/re2",
-    "//third_party/widevine/cdm:version_h",
+    "//third_party/widevine/cdm:headers",
     "//ui/surface",
     "//v8:v8",
   ]
@@ -368,6 +374,7 @@ static_library("test_support") {
   deps = [
     ":renderer",
     "//content/test:test_support",
+    "//extensions/features",
     "//testing/gmock",
     "//testing/gtest",
   ]

@@ -25,7 +25,6 @@ namespace ui {
 
 class CursorDelegateEvdev;
 class DeviceEventDispatcherEvdev;
-class InputDeviceFactoryEvdevProxy;
 
 #if !defined(USE_EVDEV)
 #error Missing dependency on ui/events/ozone:events_ozone_evdev
@@ -100,7 +99,7 @@ class EVENTS_OZONE_EVDEV_EXPORT InputDeviceFactoryEvdev {
                                  bool value);
 
   // Owned per-device event converters (by path).
-  std::map<base::FilePath, EventConverterEvdev*> converters_;
+  std::map<base::FilePath, std::unique_ptr<EventConverterEvdev>> converters_;
 
   // Task runner for our thread.
   scoped_refptr<base::TaskRunner> task_runner_;

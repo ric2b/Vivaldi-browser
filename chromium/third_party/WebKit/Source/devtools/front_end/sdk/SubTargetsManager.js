@@ -1,324 +1,461 @@
 // Copyright 2016 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
-
 /**
- * @constructor
- * @extends {WebInspector.SDKModel}
- * @param {!WebInspector.Target} target
+ * @unrestricted
  */
-WebInspector.SubTargetsManager = function(target)
-{
-    WebInspector.SDKModel.call(this, WebInspector.SubTargetsManager, target);
-    target.registerTargetDispatcher(new WebInspector.SubTargetsDispatcher(this));
+SDK.SubTargetsManager = class extends SDK.SDKModel {
+  /**
+   * @param {!SDK.Target} target
+   */
+  constructor(target) {
+    super(SDK.SubTargetsManager, target);
+    target.registerTargetDispatcher(new SDK.SubTargetsDispatcher(this));
     this._lastAnonymousTargetId = 0;
     this._agent = target.targetAgent();
 
-    /** @type {!Map<string, !WebInspector.TargetInfo>} */
-    this._allTargets = new Map();
-
-    /** @type {!Map<string, !WebInspector.Target>} */
+    /** @type {!Map<string, !SDK.Target>} */
     this._attachedTargets = new Map();
-    /** @type {!Map<string, !WebInspector.SubTargetConnection>} */
+    /** @type {!Map<string, !SDK.SubTargetConnection>} */
     this._connections = new Map();
-
+    /** @type {!Map<string, !SDK.PendingTarget>} */
+    this._pendingTargets = new Map();
     this._agent.setAutoAttach(true /* autoAttach */, true /* waitForDebuggerOnStart */);
-    this._agent.setAttachToFrames(Runtime.experiments.isEnabled("autoAttachToCrossProcessSubframes"));
-}
+    if (Runtime.experiments.isEnabled('autoAttachToCrossProcessSubframes'))
+      this._agent.setAttachToFrames(true);
+
+    if (Runtime.experiments.isEnabled('nodeDebugging') && !target.parentTarget()) {
+      var defaultLocations = [{host: 'localhost', port: 9229}];
+      this._agent.setRemoteLocations(defaultLocations);
+      this._agent.setDiscoverTargets(true);
+    }
+    SDK.targetManager.addEventListener(SDK.TargetManager.Events.MainFrameNavigated, this._mainFrameNavigated, this);
+  }
+
+  /**
+   * @param {!SDK.Target} target
+   * @return {?SDK.SubTargetsManager}
+   */
+  static fromTarget(target) {
+    return /** @type {?SDK.SubTargetsManager} */ (target.model(SDK.SubTargetsManager));
+  }
+
+  /**
+   * @override
+   * @return {!Promise}
+   */
+  suspendModel() {
+    var fulfill;
+    var promise = new Promise(f => fulfill = f);
+    this._agent.setAutoAttach(true /* autoAttach */, false /* waitForDebuggerOnStart */, fulfill);
+    return promise;
+  }
+
+  /**
+   * @override
+   * @return {!Promise}
+   */
+  resumeModel() {
+    var fulfill;
+    var promise = new Promise(f => fulfill = f);
+    this._agent.setAutoAttach(true /* autoAttach */, true /* waitForDebuggerOnStart */, fulfill);
+    return promise;
+  }
+
+  /**
+   * @override
+   */
+  dispose() {
+    for (var attachedTargetId of this._attachedTargets.keys())
+      this._detachedFromTarget(attachedTargetId);
+    for (var pendingConnectionId of this._pendingTargets.keys())
+      this._targetDestroyed(pendingConnectionId);
+  }
+
+  /**
+   * @param {!Protocol.Target.TargetID} targetId
+   */
+  activateTarget(targetId) {
+    this._agent.activateTarget(targetId);
+  }
+
+  /**
+   * @param {!Protocol.Target.TargetID} targetId
+   * @param {function(?SDK.TargetInfo)=} callback
+   */
+  getTargetInfo(targetId, callback) {
+    /**
+     * @param {?Protocol.Error} error
+     * @param {?Protocol.Target.TargetInfo} targetInfo
+     */
+    function innerCallback(error, targetInfo) {
+      if (error) {
+        console.error(error);
+        callback(null);
+        return;
+      }
+      if (targetInfo)
+        callback(new SDK.TargetInfo(targetInfo));
+      else
+        callback(null);
+    }
+    this._agent.getTargetInfo(targetId, innerCallback);
+  }
+
+  /**
+   * @param {string} targetId
+   * @return {?SDK.Target}
+   */
+  targetForId(targetId) {
+    return this._attachedTargets.get(targetId) || null;
+  }
+
+  /**
+   * @param {!SDK.Target} target
+   * @return {?SDK.TargetInfo}
+   */
+  targetInfo(target) {
+    return target[SDK.SubTargetsManager._InfoSymbol] || null;
+  }
+
+  /**
+   * @param {string} type
+   * @return {number}
+   */
+  _capabilitiesForType(type) {
+    if (type === 'worker')
+      return SDK.Target.Capability.JS | SDK.Target.Capability.Log;
+    if (type === 'service_worker')
+      return SDK.Target.Capability.Log | SDK.Target.Capability.Network | SDK.Target.Capability.Target;
+    if (type === 'iframe') {
+      return SDK.Target.Capability.Browser | SDK.Target.Capability.DOM | SDK.Target.Capability.JS |
+          SDK.Target.Capability.Log | SDK.Target.Capability.Network | SDK.Target.Capability.Target;
+    }
+    if (type === 'node')
+      return SDK.Target.Capability.JS;
+    return 0;
+  }
+
+  /**
+   * @param {!SDK.TargetInfo} targetInfo
+   * @param {boolean} waitingForDebugger
+   */
+  _attachedToTarget(targetInfo, waitingForDebugger) {
+    var targetName = '';
+    if (targetInfo.type === 'node') {
+      targetName = targetInfo.title;
+    } else if (targetInfo.type !== 'iframe') {
+      var parsedURL = targetInfo.url.asParsedURL();
+      targetName = parsedURL ? parsedURL.lastPathComponentWithFragment() : '#' + (++this._lastAnonymousTargetId);
+    }
+    var target = SDK.targetManager.createTarget(
+        targetName, this._capabilitiesForType(targetInfo.type), this._createConnection.bind(this, targetInfo.id),
+        this.target());
+    target[SDK.SubTargetsManager._InfoSymbol] = targetInfo;
+    this._attachedTargets.set(targetInfo.id, target);
+
+    // Only pause new worker if debugging SW - we are going through the pause on start checkbox.
+    var mainIsServiceWorker =
+        !this.target().parentTarget() && this.target().hasTargetCapability() && !this.target().hasBrowserCapability();
+    if (mainIsServiceWorker && waitingForDebugger)
+      target.debuggerAgent().pause();
+    target.runtimeAgent().runIfWaitingForDebugger();
+
+    var pendingTarget = this._pendingTargets.get(targetInfo.id);
+    if (!pendingTarget) {
+      this._targetCreated(targetInfo);
+      pendingTarget = this._pendingTargets.get(targetInfo.id);
+    }
+    pendingTarget.notifyAttached(target);
+    this.dispatchEventToListeners(SDK.SubTargetsManager.Events.PendingTargetAttached, pendingTarget);
+  }
+
+  /**
+   * @param {string} targetId
+   * @param {!InspectorBackendClass.Connection.Params} params
+   * @return {!InspectorBackendClass.Connection}
+   */
+  _createConnection(targetId, params) {
+    var connection = new SDK.SubTargetConnection(this._agent, targetId, params);
+    this._connections.set(targetId, connection);
+    return connection;
+  }
+
+  /**
+   * @param {string} targetId
+   */
+  _detachedFromTarget(targetId) {
+    var target = this._attachedTargets.get(targetId);
+    this._attachedTargets.delete(targetId);
+    var connection = this._connections.get(targetId);
+    connection._onDisconnect.call(null, 'target terminated');
+    this._connections.delete(targetId);
+    this.dispatchEventToListeners(
+        SDK.SubTargetsManager.Events.PendingTargetDetached, this._pendingTargets.get(targetId));
+  }
+
+  /**
+   * @param {string} targetId
+   * @param {string} message
+   */
+  _receivedMessageFromTarget(targetId, message) {
+    var connection = this._connections.get(targetId);
+    if (connection)
+      connection._onMessage.call(null, message);
+  }
+
+  /**
+   * @param {!SDK.TargetInfo} targetInfo
+   */
+  _targetCreated(targetInfo) {
+    var pendingTarget = this._pendingTargets.get(targetInfo.id);
+    if (pendingTarget)
+      return;
+    pendingTarget = new SDK.PendingTarget(targetInfo.id, targetInfo.title, targetInfo.type === 'node', this);
+    this._pendingTargets.set(targetInfo.id, pendingTarget);
+    this.dispatchEventToListeners(SDK.SubTargetsManager.Events.PendingTargetAdded, pendingTarget);
+  }
+
+  /**
+   * @param {string} targetId
+   */
+  _targetDestroyed(targetId) {
+    var pendingTarget = this._pendingTargets.get(targetId);
+    if (!pendingTarget)
+      return;
+    this._pendingTargets.delete(targetId);
+    this.dispatchEventToListeners(SDK.SubTargetsManager.Events.PendingTargetRemoved, pendingTarget);
+  }
+
+  /**
+   * @return {!Array<!SDK.PendingTarget>}
+   */
+  pendingTargets() {
+    return this._pendingTargets.valuesArray();
+  }
+
+  /**
+   * @param {!Common.Event} event
+   */
+  _mainFrameNavigated(event) {
+    if (event.data.target() !== this.target())
+      return;
+
+    var idsToDetach = [];
+    for (var targetId of this._attachedTargets.keys()) {
+      var target = this._attachedTargets.get(targetId);
+      var targetInfo = this.targetInfo(target);
+      if (targetInfo.type === 'worker')
+        idsToDetach.push(targetId);
+    }
+    idsToDetach.forEach(id => this._detachedFromTarget(id));
+  }
+};
 
 /** @enum {symbol} */
-WebInspector.SubTargetsManager.Events = {
-    SubTargetAdded: Symbol("SubTargetAdded"),
-    SubTargetRemoved: Symbol("SubTargetRemoved"),
-}
+SDK.SubTargetsManager.Events = {
+  PendingTargetAdded: Symbol('PendingTargetAdded'),
+  PendingTargetRemoved: Symbol('PendingTargetRemoved'),
+  PendingTargetAttached: Symbol('PendingTargetAttached'),
+  PendingTargetDetached: Symbol('PendingTargetDetached'),
+};
 
-WebInspector.SubTargetsManager._InfoSymbol = Symbol("SubTargetInfo");
-
-WebInspector.SubTargetsManager.prototype = {
-    /**
-     * @override
-     * @return {!Promise}
-     */
-    suspendModel: function()
-    {
-        var fulfill;
-        var promise = new Promise(f => fulfill = f);
-        this._agent.setAutoAttach(true /* autoAttach */, false /* waitForDebuggerOnStart */, fulfill);
-        return promise;
-    },
-
-    /**
-     * @override
-     * @return {!Promise}
-     */
-    resumeModel: function()
-    {
-        var fulfill;
-        var promise = new Promise(f => fulfill = f);
-        this._agent.setAutoAttach(true /* autoAttach */, true /* waitForDebuggerOnStart */, fulfill);
-        return promise;
-    },
-
-    /**
-     * @override
-     */
-    dispose: function()
-    {
-        for (var connection of this._connections.values())
-            connection._close();
-        this._connections.clear();
-        this._attachedTargets.clear();
-    },
-
-    /**
-     * @param {!TargetAgent.TargetID} targetId
-     */
-    activateTarget: function(targetId)
-    {
-        this._agent.activateTarget(targetId);
-    },
-
-    /**
-     * @param {!TargetAgent.TargetID} targetId
-     * @param {function(?WebInspector.TargetInfo)=} callback
-     */
-    getTargetInfo: function(targetId, callback)
-    {
-        /**
-         * @param {?Protocol.Error} error
-         * @param {?TargetAgent.TargetInfo} targetInfo
-         */
-        function innerCallback(error, targetInfo)
-        {
-            if (error) {
-                console.error(error);
-                callback(null);
-                return;
-            }
-            if (targetInfo)
-                callback(new WebInspector.TargetInfo(targetInfo));
-            else
-                callback(null)
-        }
-        this._agent.getTargetInfo(targetId, innerCallback);
-    },
-
-    /**
-     * @param {string} targetId
-     * @return {?WebInspector.Target}
-     */
-    targetForId: function(targetId)
-    {
-        return this._attachedTargets.get(targetId) || null;
-    },
-
-    /**
-     * @param {!WebInspector.Target} target
-     * @return {?WebInspector.TargetInfo}
-     */
-    targetInfo: function(target)
-    {
-        return target[WebInspector.SubTargetsManager._InfoSymbol] || null;
-    },
-
-    /**
-     * @param {string} type
-     * @return {number}
-     */
-    _capabilitiesForType: function(type)
-    {
-        if (type === "worker")
-            return WebInspector.Target.Capability.JS | WebInspector.Target.Capability.Log;
-        if (type === "service_worker")
-            return WebInspector.Target.Capability.Log | WebInspector.Target.Capability.Network | WebInspector.Target.Capability.Worker;
-        if (type === "iframe")
-            return WebInspector.Target.Capability.Browser | WebInspector.Target.Capability.DOM |
-                WebInspector.Target.Capability.JS | WebInspector.Target.Capability.Log |
-                WebInspector.Target.Capability.Network | WebInspector.Target.Capability.Worker;
-        return 0;
-    },
-
-    /**
-     * @param {!WebInspector.TargetInfo} targetInfo
-     */
-    _targetCreated: function(targetInfo)
-    {
-        console.assert(!this._allTargets.has(targetInfo.id));
-        console.assert(!this._attachedTargets.has(targetInfo.id));
-        this._allTargets.set(targetInfo.id, targetInfo);
-    },
-
-    /**
-     * @param {string} targetId
-     */
-    _targetRemoved: function(targetId)
-    {
-        console.assert(this._allTargets.has(targetId));
-        console.assert(!this._attachedTargets.has(targetId));
-        this._allTargets.delete(targetId);
-    },
-
-    /**
-     * @param {string} targetId
-     * @param {boolean} waitingForDebugger
-     */
-    _attachedToTarget: function(targetId, waitingForDebugger)
-    {
-        var targetInfo = /** @type {!WebInspector.TargetInfo} */ (this._allTargets.get(targetId));
-
-        var connection = new WebInspector.SubTargetConnection(this._agent, targetId);
-        this._connections.set(targetId, connection);
-
-        var targetName = "";
-        if (targetInfo.type !== "iframe") {
-            var parsedURL = targetInfo.url.asParsedURL();
-            targetName = parsedURL ? parsedURL.lastPathComponentWithFragment() : "#" + (++this._lastAnonymousTargetId);
-        }
-        var target = WebInspector.targetManager.createTarget(targetName, this._capabilitiesForType(targetInfo.type), connection, this.target());
-        target[WebInspector.SubTargetsManager._InfoSymbol] = targetInfo;
-        this._attachedTargets.set(targetId, target);
-
-        // Only pause new worker if debugging SW - we are going through the pause on start checkbox.
-        var mainIsServiceWorker = !this.target().parentTarget() && this.target().hasWorkerCapability() && !this.target().hasBrowserCapability();
-        if (mainIsServiceWorker && waitingForDebugger)
-            target.debuggerAgent().pause();
-        target.runtimeAgent().runIfWaitingForDebugger();
-
-        this.dispatchEventToListeners(WebInspector.SubTargetsManager.Events.SubTargetAdded, target);
-    },
-
-    /**
-     * @param {string} targetId
-     */
-    _detachedFromTarget: function(targetId)
-    {
-        var connection = this._connections.get(targetId);
-        if (connection)
-            connection._close();
-        this._connections.delete(targetId);
-        var target = this._attachedTargets.get(targetId);
-        this._attachedTargets.delete(targetId);
-        this.dispatchEventToListeners(WebInspector.SubTargetsManager.Events.SubTargetRemoved, target);
-    },
-
-    /**
-     * @param {string} targetId
-     * @param {string} message
-     */
-    _receivedMessageFromTarget: function(targetId, message)
-    {
-        var connection = this._connections.get(targetId);
-        if (connection)
-            connection.dispatch(message);
-    },
-
-    __proto__: WebInspector.SDKModel.prototype
-}
+SDK.SubTargetsManager._InfoSymbol = Symbol('SubTargetInfo');
 
 /**
- * @constructor
- * @implements {TargetAgent.Dispatcher}
- * @param {!WebInspector.SubTargetsManager} manager
+ * @implements {Protocol.TargetDispatcher}
+ * @unrestricted
  */
-WebInspector.SubTargetsDispatcher = function(manager)
-{
+SDK.SubTargetsDispatcher = class {
+  /**
+   * @param {!SDK.SubTargetsManager} manager
+   */
+  constructor(manager) {
     this._manager = manager;
-}
+  }
 
-WebInspector.SubTargetsDispatcher.prototype = {
-    /**
-     * @override
-     * @param {!TargetAgent.TargetInfo} targetInfo
-     */
-    targetCreated: function(targetInfo)
-    {
-        this._manager._targetCreated(new WebInspector.TargetInfo(targetInfo));
-    },
+  /**
+   * @override
+   * @param {!Protocol.Target.TargetInfo} targetInfo
+   */
+  targetCreated(targetInfo) {
+    this._manager._targetCreated(new SDK.TargetInfo(targetInfo));
+  }
 
-    /**
-     * @override
-     * @param {string} targetId
-     */
-    targetRemoved: function(targetId)
-    {
-        this._manager._targetRemoved(targetId);
-    },
+  /**
+   * @override
+   * @param {string} targetId
+   */
+  targetDestroyed(targetId) {
+    this._manager._targetDestroyed(targetId);
+  }
 
-    /**
-     * @override
-     * @param {string} targetId
-     * @param {boolean} waitingForDebugger
-     */
-    attachedToTarget: function(targetId, waitingForDebugger)
-    {
-        this._manager._attachedToTarget(targetId, waitingForDebugger);
-    },
+  /**
+   * @override
+   * @param {!Protocol.Target.TargetInfo} targetInfo
+   * @param {boolean} waitingForDebugger
+   */
+  attachedToTarget(targetInfo, waitingForDebugger) {
+    this._manager._attachedToTarget(new SDK.TargetInfo(targetInfo), waitingForDebugger);
+  }
 
-    /**
-     * @override
-     * @param {string} targetId
-     */
-    detachedFromTarget: function(targetId)
-    {
-        this._manager._detachedFromTarget(targetId);
-    },
+  /**
+   * @override
+   * @param {string} targetId
+   */
+  detachedFromTarget(targetId) {
+    this._manager._detachedFromTarget(targetId);
+  }
 
-    /**
-     * @override
-     * @param {string} targetId
-     * @param {string} message
-     */
-    receivedMessageFromTarget: function(targetId, message)
-    {
-        this._manager._receivedMessageFromTarget(targetId, message);
-    }
-}
+  /**
+   * @override
+   * @param {string} targetId
+   * @param {string} message
+   */
+  receivedMessageFromTarget(targetId, message) {
+    this._manager._receivedMessageFromTarget(targetId, message);
+  }
+};
 
 /**
- * @constructor
- * @extends {InspectorBackendClass.Connection}
- * @param {!Protocol.TargetAgent} agent
- * @param {string} targetId
+ * @implements {InspectorBackendClass.Connection}
+ * @unrestricted
  */
-WebInspector.SubTargetConnection = function(agent, targetId)
-{
-    InspectorBackendClass.Connection.call(this);
+SDK.SubTargetConnection = class {
+  /**
+   * @param {!Protocol.TargetAgent} agent
+   * @param {string} targetId
+   * @param {!InspectorBackendClass.Connection.Params} params
+   */
+  constructor(agent, targetId, params) {
     this._agent = agent;
     this._targetId = targetId;
-}
+    this._onMessage = params.onMessage;
+    this._onDisconnect = params.onDisconnect;
+  }
 
-WebInspector.SubTargetConnection.prototype = {
-    /**
-     * @override
-     * @param {!Object} messageObject
-     */
-    sendMessage: function(messageObject)
-    {
-        this._agent.sendMessageToTarget(this._targetId, JSON.stringify(messageObject));
-    },
+  /**
+   * @override
+   * @param {string} message
+   */
+  sendMessage(message) {
+    this._agent.sendMessageToTarget(this._targetId, message);
+  }
 
-    _close: function()
-    {
-        this.connectionClosed("target_terminated");
-    },
-
-    __proto__: InspectorBackendClass.Connection.prototype
-}
+  /**
+   * @override
+   * @return {!Promise}
+   */
+  disconnect() {
+    throw new Error('Not implemented');
+  }
+};
 
 /**
- * @constructor
- * @param {!TargetAgent.TargetInfo} payload
+ * @unrestricted
  */
-WebInspector.TargetInfo = function(payload)
-{
+SDK.TargetInfo = class {
+  /**
+   * @param {!Protocol.Target.TargetInfo} payload
+   */
+  constructor(payload) {
     this.id = payload.targetId;
     this.url = payload.url;
     this.type = payload.type;
-    if (this.type !== "page" && this.type !== "iframe") {
-        this.title = WebInspector.UIString("Worker: %s", this.url);
-        this.canActivate = false;
-    } else {
-        this.title = payload.title;
-        this.canActivate = true;
-    }
-}
+    this.canActivate = this.type === 'page' || this.type === 'iframe';
+    if (this.type === 'node')
+      this.title = Common.UIString('Node: %s', this.url);
+    else if (this.type === 'page' || this.type === 'iframe')
+      this.title = payload.title;
+    else
+      this.title = Common.UIString('Worker: %s', this.url);
+  }
+};
+
+/**
+ * @unrestricted
+ */
+SDK.PendingTarget = class {
+  /**
+   * @param {string} id
+   * @param {string} title
+   * @param {boolean} canConnect
+   * @param {?SDK.SubTargetsManager} manager
+   */
+  constructor(id, title, canConnect, manager) {
+    this._id = id;
+    this._title = title;
+    this._isRemote = canConnect;
+    this._manager = manager;
+    /** @type {?Promise} */
+    this._connectPromise = null;
+    /** @type {?Function} */
+    this._attachedCallback = null;
+  }
+
+  /**
+   * @return {string}
+   */
+  id() {
+    return this._id;
+  }
+
+  /**
+   * @return {?SDK.Target}
+   */
+  target() {
+    if (!this._manager)
+      return null;
+    return this._manager.targetForId(this.id());
+  }
+
+  /**
+   * @return {string}
+   */
+  name() {
+    return this._title;
+  }
+
+  /**
+   * @return {!Promise}
+   */
+  attach() {
+    if (!this._manager)
+      return Promise.reject();
+    if (this._connectPromise)
+      return this._connectPromise;
+    if (this.target())
+      return Promise.resolve(this.target());
+    this._connectPromise = new Promise(resolve => {
+      this._attachedCallback = resolve;
+      this._manager._agent.attachToTarget(this.id());
+    });
+    return this._connectPromise;
+  }
+
+  /**
+   * @return {!Promise}
+   */
+  detach() {
+    if (this._manager)
+      this._manager._agent.detachFromTarget(this.id());
+    return Promise.resolve();
+  }
+
+  /**
+   * @param {!SDK.Target} target
+   */
+  notifyAttached(target) {
+    if (this._attachedCallback)
+      this._attachedCallback(target);
+    this._connectPromise = null;
+    this._attachedCallback = null;
+  }
+
+  /**
+   * @return {boolean}
+   */
+  canConnect() {
+    return this._isRemote;
+  }
+};

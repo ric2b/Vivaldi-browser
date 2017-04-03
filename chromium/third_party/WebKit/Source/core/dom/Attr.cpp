@@ -30,7 +30,6 @@
 #include "core/dom/Element.h"
 #include "core/dom/Text.h"
 #include "core/events/ScopedEventQueue.h"
-#include "core/frame/UseCounter.h"
 #include "wtf/text/AtomicString.h"
 #include "wtf/text/StringBuilder.h"
 
@@ -40,14 +39,14 @@ using namespace HTMLNames;
 
 Attr::Attr(Element& element, const QualifiedName& name)
     : Node(&element.document(), CreateOther),
-      m_element(&element),
+      m_element(this, &element),
       m_name(name) {}
 
 Attr::Attr(Document& document,
            const QualifiedName& name,
            const AtomicString& standaloneValue)
     : Node(&document, CreateOther),
-      m_element(nullptr),
+      m_element(this, nullptr),
       m_name(name),
       m_standaloneValueOrAttachedLocalName(standaloneValue) {}
 
@@ -83,32 +82,21 @@ const AtomicString& Attr::value() const {
 }
 
 void Attr::setValue(const AtomicString& value) {
+  // Element::setAttribute will remove the attribute if value is null.
+  DCHECK(!value.isNull());
   if (m_element)
     m_element->setAttribute(getQualifiedName(), value);
   else
     m_standaloneValueOrAttachedLocalName = value;
 }
 
-const AtomicString& Attr::valueForBindings() const {
-  UseCounter::count(document(), UseCounter::AttrGetValue);
-  return value();
-}
-
-void Attr::setValueForBindings(const AtomicString& value) {
-  UseCounter::count(document(), UseCounter::AttrSetValue);
-  if (m_element)
-    UseCounter::count(document(), UseCounter::AttrSetValueWithElement);
-  setValue(value);
-}
-
 void Attr::setNodeValue(const String& v) {
   // Attr uses AtomicString type for its value to save memory as there
   // is duplication among Elements' attributes values.
-  setValue(AtomicString(v));
+  setValue(v.isNull() ? emptyAtom : AtomicString(v));
 }
 
 Node* Attr::cloneNode(bool /*deep*/) {
-  UseCounter::count(document(), UseCounter::AttrCloneNode);
   return new Attr(document(), m_name, value());
 }
 

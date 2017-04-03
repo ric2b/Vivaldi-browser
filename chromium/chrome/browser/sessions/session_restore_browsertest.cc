@@ -1252,7 +1252,15 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest, RestorePinnedSelectedTab) {
 
 // Regression test for crbug.com/240156. When restoring tabs with a navigation,
 // the navigation should take active tab focus.
-IN_PROC_BROWSER_TEST_F(SessionRestoreTest, RestoreWithNavigateSelectedTab) {
+// Flaky on Mac. http://crbug.com/656211.
+#if defined(OS_MACOSX)
+#define MAYBE_RestoreWithNavigateSelectedTab \
+  DISABLED_RestoreWithNavigateSelectedTab
+#else
+#define MAYBE_RestoreWithNavigateSelectedTab RestoreWithNavigateSelectedTab
+#endif
+IN_PROC_BROWSER_TEST_F(SessionRestoreTest,
+                       MAYBE_RestoreWithNavigateSelectedTab) {
   // Create 2 tabs.
   ui_test_utils::NavigateToURL(browser(), url1_);
   ui_test_utils::NavigateToURLWithDisposition(
@@ -1457,8 +1465,9 @@ IN_PROC_BROWSER_TEST_F(SmartSessionRestoreTest, PRE_CorrectLoadingOrder) {
   new_browser->tab_strip_model()->ActivateTabAt(1, true);
 }
 
-// PRE_CorrectLoadingOrder is flaky on ChromeOS MSAN. https://crbug.com/582323.
-#if defined (OS_CHROMEOS) && defined(MEMORY_SANITIZER)
+// PRE_CorrectLoadingOrder is flaky on ChromeOS MSAN: https://crbug.com/582323
+// And Mac: https://crbug.com/656687
+#if (defined(OS_CHROMEOS) && defined(MEMORY_SANITIZER)) || defined(OS_MACOSX)
 #define MAYBE_CorrectLoadingOrder DISABLED_CorrectLoadingOrder
 #else
 #define MAYBE_CorrectLoadingOrder CorrectLoadingOrder

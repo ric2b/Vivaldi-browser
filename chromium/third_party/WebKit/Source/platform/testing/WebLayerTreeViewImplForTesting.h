@@ -12,13 +12,13 @@
 #include <memory>
 
 namespace cc {
+class AnimationHost;
 class LayerTreeHost;
 class LayerTreeSettings;
 }
 
 namespace blink {
 
-class WebCompositorAnimationTimeline;
 class WebLayer;
 
 // Dummy WeblayerTeeView that does not support any actual compositing.
@@ -86,22 +86,23 @@ class WebLayerTreeViewImplForTesting
                            const gfx::Vector2dF& outerDelta,
                            const gfx::Vector2dF& elasticOverscrollDelta,
                            float pageScale,
-                           float topControlsDelta) override;
+                           float browserControlsDelta) override;
   void RequestNewCompositorFrameSink() override;
   void DidInitializeCompositorFrameSink() override {}
   void DidFailToInitializeCompositorFrameSink() override;
   void WillCommit() override {}
   void DidCommit() override {}
   void DidCommitAndDrawFrame() override {}
-  void DidCompleteSwapBuffers() override {}
+  void DidReceiveCompositorFrameAck() override {}
   void DidCompletePageScaleAnimation() override {}
 
   // cc::LayerTreeHostSingleThreadClient implementation.
-  void DidPostSwapBuffers() override {}
-  void DidAbortSwapBuffers() override {}
+  void DidSubmitCompositorFrame() override {}
+  void DidLoseCompositorFrameSink() override {}
 
  private:
   cc::TestTaskGraphRunner m_taskGraphRunner;
+  std::unique_ptr<cc::AnimationHost> m_animationHost;
   std::unique_ptr<cc::LayerTreeHost> m_layerTreeHost;
 };
 

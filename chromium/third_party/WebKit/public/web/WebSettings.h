@@ -148,7 +148,6 @@ class WebSettings {
   virtual void setAutoplayExperimentMode(const WebString&) = 0;
   virtual void setAutoZoomFocusedNodeToLegibleScale(bool) = 0;
   virtual void setBrowserSideNavigationEnabled(bool) = 0;
-  virtual void setCaretBrowsingEnabled(bool) = 0;
   virtual void setClobberUserAgentInitialScaleQuirk(bool) = 0;
   virtual void setCookieEnabled(bool) = 0;
   virtual void setNavigateOnDragDrop(bool) = 0;
@@ -181,6 +180,7 @@ class WebSettings {
   virtual void setForcePreloadNoneForMediaElements(bool) = 0;
   virtual void setForceZeroLayoutHeight(bool) = 0;
   virtual void setFullscreenSupported(bool) = 0;
+  virtual void setHideDownloadUI(bool) = 0;
   virtual void setHistoryEntryRequiresUserGesture(bool) = 0;
   virtual void setHyperlinkAuditingEnabled(bool) = 0;
   virtual void setIgnoreMainFrameOverflowHiddenQuirk(bool) = 0;
@@ -215,7 +215,6 @@ class WebSettings {
   virtual void setPerTilePaintingEnabled(bool) = 0;
   virtual void setPictographFontFamily(const WebString&,
                                        UScriptCode = USCRIPT_COMMON) = 0;
-  virtual void setPinchOverlayScrollbarThickness(int) = 0;
   virtual void setPluginsEnabled(bool) = 0;
   virtual void setAvailablePointerTypes(int) = 0;
   virtual void setPrimaryPointerType(PointerType) = 0;
@@ -291,6 +290,11 @@ class WebSettings {
   virtual void setWebSecurityEnabled(bool) = 0;
   virtual void setWideViewportQuirkEnabled(bool) = 0;
   virtual void setXSSAuditorEnabled(bool) = 0;
+  // Background timer throttling aggressiveness settings.
+  virtual void setExpensiveBackgroundThrottlingCPUBudget(float) = 0;
+  virtual void setExpensiveBackgroundThrottlingInitialBudget(float) = 0;
+  virtual void setExpensiveBackgroundThrottlingMaxBudget(float) = 0;
+  virtual void setExpensiveBackgroundThrottlingMaxDelay(float) = 0;
 
  protected:
   ~WebSettings() {}

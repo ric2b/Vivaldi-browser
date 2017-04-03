@@ -157,6 +157,15 @@ bool GLES2DecoderPassthroughImpl::Initialize(
     return false;
   }
 
+  // Check for required extensions
+  if (!feature_info_->feature_flags().angle_robust_client_memory ||
+      !feature_info_->feature_flags().chromium_bind_generates_resource ||
+      (feature_info_->IsWebGLContext() !=
+       feature_info_->feature_flags().angle_webgl_compatibility)) {
+    Destroy(true);
+    return false;
+  }
+
   image_manager_.reset(new ImageManager());
 
   bind_generates_resource_ = group_->bind_generates_resource();
@@ -172,15 +181,25 @@ bool GLES2DecoderPassthroughImpl::Initialize(
   active_texture_unit_ = 0;
   bound_textures_.resize(num_texture_units, 0);
 
+  if (group_->gpu_preferences().enable_gpu_driver_debug_logging &&
+      feature_info_->feature_flags().khr_debug) {
+    InitializeGLDebugLogging();
+  }
+
+  emulated_extensions_.push_back("GL_CHROMIUM_lose_context");
+  emulated_extensions_.push_back("GL_CHROMIUM_pixel_transfer_buffer_object");
+  emulated_extensions_.push_back("GL_CHROMIUM_resource_safe");
+  emulated_extensions_.push_back("GL_CHROMIUM_strict_attribs");
+  emulated_extensions_.push_back("GL_CHROMIUM_texture_mailbox");
+  emulated_extensions_.push_back("GL_CHROMIUM_trace_marker");
+  BuildExtensionsString();
+
   set_initialized();
   return true;
 }
 
 void GLES2DecoderPassthroughImpl::Destroy(bool have_context) {
-  if (image_manager_.get()) {
-    image_manager_->Destroy(have_context);
-    image_manager_.reset();
-  }
+  image_manager_.reset();
 
   DeleteServiceObjects(
       &framebuffer_id_map_, have_context,
@@ -265,7 +284,11 @@ gpu::Capabilities GLES2DecoderPassthroughImpl::GetCapabilities() {
 
   PopulateNumericCapabilities(&caps, feature_info_.get());
 
-  caps.bind_generates_resource_chromium = group_->bind_generates_resource();
+  glGetIntegerv(GL_BIND_GENERATES_RESOURCE_CHROMIUM,
+                &caps.bind_generates_resource_chromium);
+  DCHECK_EQ(caps.bind_generates_resource_chromium != GL_FALSE,
+            group_->bind_generates_resource());
+
   caps.egl_image_external =
       feature_info_->feature_flags().oes_egl_image_external;
   caps.texture_format_astc =
@@ -514,6 +537,16 @@ const gpu::gles2::ContextState* GLES2DecoderPassthroughImpl::GetContextState() {
 scoped_refptr<ShaderTranslatorInterface>
 GLES2DecoderPassthroughImpl::GetTranslator(GLenum type) {
   return nullptr;
+}
+
+void GLES2DecoderPassthroughImpl::BuildExtensionsString() {
+  std::ostringstream combined_string_stream;
+  combined_string_stream << reinterpret_cast<const char*>(
+                                glGetString(GL_EXTENSIONS))
+                         << " ";
+  std::copy(emulated_extensions_.begin(), emulated_extensions_.end(),
+            std::ostream_iterator<std::string>(combined_string_stream, " "));
+  extension_string_ = combined_string_stream.str();
 }
 
 #define GLES2_CMD_OP(name)                                               \

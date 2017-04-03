@@ -54,9 +54,10 @@ namespace {
 // function is used, for example, to determine the URL to show in console
 // messages about mixed content.
 KURL mainResourceUrlForFrame(Frame* frame) {
-  if (frame->isRemoteFrame())
+  if (frame->isRemoteFrame()) {
     return KURL(KURL(),
                 frame->securityContext()->getSecurityOrigin()->toString());
+  }
   return toLocalFrame(frame)->document()->url();
 }
 
@@ -70,10 +71,11 @@ static void measureStricterVersionOfIsMixedContent(Frame* frame,
   // sure we're not breaking the world without realizing it.
   SecurityOrigin* origin = frame->securityContext()->getSecurityOrigin();
   if (MixedContentChecker::isMixedContent(origin, url)) {
-    if (origin->protocol() != "https")
+    if (origin->protocol() != "https") {
       UseCounter::count(
           frame,
           UseCounter::MixedContentInNonHTTPSFrameThatRestrictsMixedContent);
+    }
   } else if (!SecurityOrigin::isSecure(url) &&
              SchemeRegistry::shouldTreatURLSchemeAsSecure(origin->protocol())) {
     UseCounter::count(
@@ -99,7 +101,10 @@ bool MixedContentChecker::isMixedContent(SecurityOrigin* securityOrigin,
   // secure. We do a quick check against `SecurityOrigin::isSecure` to catch
   // things like `about:blank`, which cannot be sanely passed into
   // `SecurityOrigin::create` (as their origin depends on their context).
-  bool isAllowed = SecurityOrigin::isSecure(url) ||
+  // blob: and filesystem: URLs never hit the network, and access is restricted
+  // to same-origin contexts, so they are not blocked either.
+  bool isAllowed = url.protocolIs("blob") || url.protocolIs("filesystem") ||
+                   SecurityOrigin::isSecure(url) ||
                    SecurityOrigin::create(url)->isPotentiallyTrustworthy();
   // TODO(mkwst): Remove this once 'localhost' is no longer considered
   // potentially trustworthy.
@@ -258,10 +263,11 @@ bool MixedContentChecker::shouldBlockFetch(
 
   switch (contextType) {
     case WebMixedContent::ContextType::OptionallyBlockable:
-      client->passiveInsecureContentFound(url);
       allowed = !strictMode;
-      if (allowed)
+      if (allowed) {
+        client->passiveInsecureContentFound(url);
         client->didDisplayInsecureContent();
+      }
       break;
 
     case WebMixedContent::ContextType::Blockable: {
@@ -306,9 +312,10 @@ bool MixedContentChecker::shouldBlockFetch(
       break;
   };
 
-  if (reportingStatus == SendReport)
+  if (reportingStatus == SendReport) {
     logToConsoleAboutFetch(frame, mainResourceUrlForFrame(mixedFrame), url,
                            requestContext, allowed);
+  }
   return !allowed;
 }
 
@@ -345,9 +352,10 @@ bool MixedContentChecker::shouldBlockWebSocket(
   UseCounter::count(mixedFrame, UseCounter::MixedContentPresent);
   UseCounter::count(mixedFrame, UseCounter::MixedContentWebSocket);
   if (ContentSecurityPolicy* policy =
-          frame->securityContext()->contentSecurityPolicy())
+          frame->securityContext()->contentSecurityPolicy()) {
     policy->reportMixedContent(url,
                                ResourceRequest::RedirectStatus::NoRedirect);
+  }
 
   Settings* settings = mixedFrame->settings();
   // Use the current local frame's client; the embedder doesn't distinguish
@@ -373,9 +381,10 @@ bool MixedContentChecker::shouldBlockWebSocket(
   if (allowed)
     client->didRunInsecureContent(securityOrigin, url);
 
-  if (reportingStatus == SendReport)
+  if (reportingStatus == SendReport) {
     logToConsoleAboutWebSocket(frame, mainResourceUrlForFrame(mixedFrame), url,
                                allowed);
+  }
   return !allowed;
 }
 
@@ -422,9 +431,20 @@ void MixedContentChecker::checkMixedPrivatePublic(
 
   // Just count these for the moment, don't block them.
   if (NetworkUtils::isReservedIPAddress(resourceIPAddress) &&
-      frame->document()->addressSpace() == WebAddressSpacePublic)
+      frame->document()->addressSpace() == WebAddressSpacePublic) {
     UseCounter::count(frame->document(),
                       UseCounter::MixedContentPrivateHostnameInPublicHostname);
+    // We can simplify the IP checks here, as we've already verified that
+    // |resourceIPAddress| is a reserved IP address, which means it's also a
+    // valid IP address in a normalized form.
+    if (resourceIPAddress.startsWith("127.0.0.") ||
+        resourceIPAddress == "[::1]") {
+      UseCounter::count(frame->document(),
+                        frame->document()->isSecureContext()
+                            ? UseCounter::LoopbackEmbeddedInSecureContext
+                            : UseCounter::LoopbackEmbeddedInNonSecureContext);
+    }
+  }
 }
 
 Frame* MixedContentChecker::effectiveFrameForFrameType(

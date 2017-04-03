@@ -8,17 +8,16 @@
 
 #include <limits>
 
-#include "ash/common/shell_window_ids.h"
-#include "ash/display/display_manager.h"
 #include "ash/display/window_tree_host_manager.h"
+#include "ash/public/cpp/shell_window_ids.h"
 #include "ash/shell.h"
-#include "base/callback.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "third_party/skia/include/core/SkPaint.h"
 #include "third_party/skia/include/core/SkPath.h"
 #include "ui/aura/window.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/paint_recorder.h"
+#include "ui/display/manager/display_manager.h"
 #include "ui/display/manager/managed_display_info.h"
 #include "ui/gfx/canvas.h"
 
@@ -157,10 +156,6 @@ void OverscanCalibrator::OnDeviceScaleFactorChanged(
     float device_scale_factor) {
   // TODO(mukai): Cancel the overscan calibration when the device
   // configuration has changed.
-}
-
-base::Closure OverscanCalibrator::PrepareForLayerBoundsChange() {
-  return base::Closure();
 }
 
 }  // namespace chromeos

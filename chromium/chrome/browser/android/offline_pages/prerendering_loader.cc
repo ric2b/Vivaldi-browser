@@ -15,6 +15,17 @@
 #include "net/base/network_change_notifier.h"
 #include "ui/gfx/geometry/size.h"
 
+namespace {
+// Whether to report DomContentLoaded event to the snapshot controller.
+bool kConsiderDclForSnapshot = false;
+// The delay to wait for snapshotting after DomContentLoaded event if
+// kConsiderDclForSnapshot is true.
+long kOfflinePageDclDelayMs = 25000;
+// The delay to wait for snapshotting after OnLoad event.
+long kOfflinePageOnloadDelayMs = 2000;
+}  // namespace
+
+
 namespace offline_pages {
 
 
@@ -82,7 +93,9 @@ bool PrerenderingLoader::LoadPage(const GURL& url,
 
   DCHECK(adapter_->IsActive());
   snapshot_controller_.reset(
-      new SnapshotController(base::ThreadTaskRunnerHandle::Get(), this));
+      new SnapshotController(base::ThreadTaskRunnerHandle::Get(), this,
+                             kOfflinePageDclDelayMs,
+                             kOfflinePageOnloadDelayMs));
   callback_ = callback;
   session_contents_.swap(new_web_contents);
   state_ = State::LOADING;
@@ -130,8 +143,8 @@ void PrerenderingLoader::OnPrerenderDomContentLoaded() {
   if (!adapter_->GetWebContents()) {
     // Without a WebContents object at this point, we are done.
     HandleLoadingStopped();
-  } else {
-    // Inform SnapshotController of DomContentContent event so it can
+  } else if (kConsiderDclForSnapshot) {
+    // Inform SnapshotController of DomContentLoaded event so it can
     // determine when to consider it really LOADED (e.g., some multiple
     // second delay from this event).
     snapshot_controller_->DocumentAvailableInMainFrame();

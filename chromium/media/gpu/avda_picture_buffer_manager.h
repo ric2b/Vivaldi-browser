@@ -24,6 +24,7 @@ class SurfaceTexture;
 }
 
 namespace media {
+class AVDACodecImage;
 class AVDASharedState;
 class VideoCodecBridge;
 
@@ -38,22 +39,19 @@ class MEDIA_GPU_EXPORT AVDAPictureBufferManager {
  public:
   using PictureBufferMap = std::map<int32_t, PictureBuffer>;
 
-  AVDAPictureBufferManager();
+  explicit AVDAPictureBufferManager(AVDAStateProvider* state_provider);
   virtual ~AVDAPictureBufferManager();
 
-  // Must be called before anything else. If |surface_view_id| is |kNoSurfaceID|
+  // Must be called before anything else. If |surface_id| is |kNoSurfaceID|
   // then a new SurfaceTexture will be returned. Otherwise, the corresponding
   // SurfaceView will be returned.
-  gl::ScopedJavaSurface Initialize(AVDAStateProvider* state_provider,
-                                   int surface_view_id);
+  //
+  // May be called multiple times to switch to a new |surface_id|. Picture
+  // buffers will be updated to use the new surface during the call to
+  // UseCodecBufferForPictureBuffer().
+  gl::ScopedJavaSurface Initialize(int surface_id);
 
   void Destroy(const PictureBufferMap& buffers);
-
-  // Returns the GL texture target that the PictureBuffer textures use.
-  uint32_t GetTextureTarget() const;
-
-  // Returns the size to use when requesting picture buffers.
-  gfx::Size GetPictureBufferSize() const;
 
   // Sets up |picture_buffer| so that its texture will refer to the image that
   // is represented by the decoded output buffer at codec_buffer_index.
@@ -81,37 +79,43 @@ class MEDIA_GPU_EXPORT AVDAPictureBufferManager {
   // Whether the pictures buffers are overlayable.
   bool ArePicturesOverlayable();
 
+  // Are there any unrendered picture buffers oustanding?
+  bool HasUnrenderedPictures() const;
+
+  // Returns the GL texture target that the PictureBuffer textures use.
+  // Always use OES textures even though this will cause flickering in dev tools
+  // when inspecting a fullscreen video.  See http://crbug.com/592798
+  static constexpr GLenum kTextureTarget = GL_TEXTURE_EXTERNAL_OES;
+
  private:
   // Release any codec buffer that is associated with the given picture buffer
   // back to the codec.  It is okay if there is no such buffer.
   void ReleaseCodecBufferForPicture(const PictureBuffer& picture_buffer);
 
-  gpu::gles2::TextureRef* GetTextureForPicture(
-      const PictureBuffer& picture_buffer);
-
   // Sets up the texture references (as found by |picture_buffer|), for the
   // specified |image|. If |image| is null, clears any ref on the texture
   // associated with |picture_buffer|.
-  void SetImageForPicture(
-      const PictureBuffer& picture_buffer,
-      const scoped_refptr<gpu::gles2::GLStreamTextureImage>& image);
+  void SetImageForPicture(const PictureBuffer& picture_buffer,
+                          gpu::gles2::GLStreamTextureImage* image);
+
+  AVDACodecImage* GetImageForPicture(int picture_buffer_id) const;
 
   scoped_refptr<AVDASharedState> shared_state_;
 
-  AVDAStateProvider* state_provider_;
+  AVDAStateProvider* const state_provider_;
 
   // The SurfaceTexture to render to. Non-null after Initialize() if
   // we're not rendering to a SurfaceView.
   scoped_refptr<gl::SurfaceTexture> surface_texture_;
-
-  class OnFrameAvailableHandler;
-  scoped_refptr<OnFrameAvailableHandler> on_frame_available_handler_;
 
   VideoCodecBridge* media_codec_;
 
   // Picture buffer IDs that are out for display. Stored in order of frames as
   // they are returned from the decoder.
   std::vector<int32_t> pictures_out_for_display_;
+
+  // Maps a picture buffer id to a AVDACodecImage.
+  std::map<int, scoped_refptr<AVDACodecImage>> codec_images_;
 
   DISALLOW_COPY_AND_ASSIGN(AVDAPictureBufferManager);
 };

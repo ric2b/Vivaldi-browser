@@ -23,7 +23,6 @@ class Window;
 namespace ui {
 
 class Event;
-class EventHandler;
 class GestureEvent;
 class GestureProviderAura;
 class TouchEvent;
@@ -188,6 +187,10 @@ class UI_CHROMEOS_EXPORT TouchExplorationController
   // called when the object with accessibility focus is updated via something
   // other than touch exploration.
   void SetTouchAccessibilityAnchorPoint(const gfx::Point& anchor_point);
+
+  // Events within the exclude bounds will not be rewritten.
+  // |bounds| are in root window coordinates.
+  void SetExcludeBounds(const gfx::Rect& bounds);
 
  private:
   friend class TouchExplorationControllerTestApi;
@@ -499,6 +502,9 @@ class UI_CHROMEOS_EXPORT TouchExplorationController
 
   // This toggles whether VLOGS are turned on or not.
   bool VLOG_on_;
+
+  // LocatedEvents within this area should be left alone.
+  gfx::Rect exclude_bounds_;
 
   DISALLOW_COPY_AND_ASSIGN(TouchExplorationController);
 };

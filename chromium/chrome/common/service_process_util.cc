@@ -34,6 +34,7 @@
 #include "ui/base/ui_base_switches.h"
 
 #include "app/vivaldi_apptools.h"
+#include "base/vivaldi_switches.h"
 
 #if !defined(OS_MACOSX)
 
@@ -288,7 +289,7 @@ bool ServiceProcessState::CreateSharedData() {
   return true;
 }
 
-IPC::ChannelHandle ServiceProcessState::GetServiceProcessChannel() {
+mojo::edk::NamedPlatformHandle ServiceProcessState::GetServiceProcessChannel() {
   return ::GetServiceProcessChannel();
 }
 

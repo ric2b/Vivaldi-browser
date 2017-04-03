@@ -112,7 +112,7 @@ void MojoRenderer::InitializeRendererFromStreams(
   // |remote_renderer_| is destroyed.
   remote_renderer_->Initialize(
       std::move(client_ptr_info), std::move(audio_stream),
-      std::move(video_stream), base::nullopt,
+      std::move(video_stream), base::nullopt, base::nullopt,
       base::Bind(&MojoRenderer::OnInitialized, base::Unretained(this), client));
 }
 
@@ -125,12 +125,15 @@ void MojoRenderer::InitializeRendererFromUrl(media::RendererClient* client) {
   mojom::RendererClientAssociatedPtrInfo client_ptr_info;
   client_binding_.Bind(&client_ptr_info, remote_renderer_.associated_group());
 
+  MediaUrlParams url_params = demuxer_stream_provider_->GetMediaUrlParams();
+
   // Using base::Unretained(this) is safe because |this| owns
   // |remote_renderer_|, and the callback won't be dispatched if
   // |remote_renderer_| is destroyed.
   remote_renderer_->Initialize(
       std::move(client_ptr_info), mojom::DemuxerStreamPtr(),
-      mojom::DemuxerStreamPtr(), demuxer_stream_provider_->GetUrl(),
+      mojom::DemuxerStreamPtr(), url_params.media_url,
+      url_params.first_party_for_cookies,
       base::Bind(&MojoRenderer::OnInitialized, base::Unretained(this), client));
 }
 
@@ -262,10 +265,10 @@ void MojoRenderer::OnTimeUpdate(base::TimeDelta time,
   media_time_interpolator_.SetBounds(time, max_time, capture_time);
 }
 
-void MojoRenderer::OnBufferingStateChange(mojom::BufferingState state) {
+void MojoRenderer::OnBufferingStateChange(BufferingState state) {
   DVLOG(2) << __FUNCTION__;
   DCHECK(task_runner_->BelongsToCurrentThread());
-  client_->OnBufferingStateChange(static_cast<media::BufferingState>(state));
+  client_->OnBufferingStateChange(state);
 }
 
 void MojoRenderer::OnEnded() {
@@ -297,8 +300,10 @@ void MojoRenderer::OnVideoNaturalSizeChange(const gfx::Size& size) {
   DVLOG(2) << __FUNCTION__ << ": " << size.ToString();
   DCHECK(task_runner_->BelongsToCurrentThread());
 
-  video_renderer_sink_->PaintSingleFrame(
-      video_overlay_factory_->CreateFrame(size));
+  if (video_overlay_factory_) {
+    video_renderer_sink_->PaintSingleFrame(
+        video_overlay_factory_->CreateFrame(size));
+  }
   client_->OnVideoNaturalSizeChange(size);
 }
 

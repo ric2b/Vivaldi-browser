@@ -21,13 +21,13 @@
 #include "components/bookmarks/browser/bookmark_utils.h"
 #include "components/favicon/core/favicon_service.h"
 #include "components/history/core/browser/history_service.h"
-#include "components/sync/core/change_record.h"
-#include "components/sync/core/read_node.h"
-#include "components/sync/core/write_node.h"
-#include "components/sync/core/write_transaction.h"
 #include "components/sync/driver/sync_client.h"
+#include "components/sync/syncable/change_record.h"
 #include "components/sync/syncable/entry.h"  // TODO(tim): Investigating bug 121587.
+#include "components/sync/syncable/read_node.h"
 #include "components/sync/syncable/syncable_write_transaction.h"
+#include "components/sync/syncable/write_node.h"
+#include "components/sync/syncable/write_transaction.h"
 #include "components/undo/bookmark_undo_service.h"
 #include "components/undo/bookmark_undo_utils.h"
 #include "ui/gfx/favicon_size.h"
@@ -47,7 +47,7 @@ BookmarkChangeProcessor::BookmarkChangeProcessor(
     BookmarkModelAssociator* model_associator,
     std::unique_ptr<syncer::DataTypeErrorHandler> err_handler)
     : syncer::ChangeProcessor(std::move(err_handler)),
-      bookmark_model_(NULL),
+      bookmark_model_(nullptr),
       sync_client_(sync_client),
       model_associator_(model_associator) {
   DCHECK(model_associator);
@@ -280,7 +280,7 @@ void BookmarkChangeProcessor::BookmarkModelLoaded(BookmarkModel* model,
 
 void BookmarkChangeProcessor::BookmarkModelBeingDeleted(BookmarkModel* model) {
   NOTREACHED();
-  bookmark_model_ = NULL;
+  bookmark_model_ = nullptr;
 }
 
 void BookmarkChangeProcessor::BookmarkNodeAdded(BookmarkModel* model,
@@ -523,9 +523,9 @@ bool BookmarkChangeProcessor::PlaceSyncNode(MoveOrCreate operation,
   bool success = false;
   if (index == 0) {
     // Insert into first position.
-    success = (operation == CREATE) ?
-        dst->InitBookmarkByCreation(sync_parent, NULL) :
-        dst->SetPosition(sync_parent, NULL);
+    success = (operation == CREATE)
+                  ? dst->InitBookmarkByCreation(sync_parent, nullptr)
+                  : dst->SetPosition(sync_parent, nullptr);
     if (success) {
       DCHECK_EQ(dst->GetParentId(), sync_parent.GetId());
       DCHECK_EQ(dst->GetId(), sync_parent.GetFirstChildId());
@@ -594,7 +594,7 @@ void BookmarkChangeProcessor::ApplyChangesFromSyncModel(
 
   // A parent to hold nodes temporarily orphaned by parent deletion.  It is
   // created only if it is needed.
-  const BookmarkNode* foster_parent = NULL;
+  const BookmarkNode* foster_parent = nullptr;
 
   // Iterate over the deletions, which are always at the front of the list.
   ChangeRecordList::const_iterator it;
@@ -667,7 +667,7 @@ void BookmarkChangeProcessor::ApplyChangesFromSyncModel(
     // Because the Synced Bookmarks node can be created server side, it's
     // possible it'll arrive at the client as an update. In that case it won't
     // have been associated at startup, the GetChromeNodeFromSyncId call above
-    // will return NULL, and we won't detect it as a permanent node, resulting
+    // will return null, and we won't detect it as a permanent node, resulting
     // in us trying to create it here (which will fail). Therefore, we add
     // special logic here just to detect the Synced Bookmarks folder.
     if (synced_bookmarks_id != syncer::kInvalidId &&
@@ -741,7 +741,7 @@ void BookmarkChangeProcessor::ApplyChangesFromSyncModel(
     // There should be no nodes left under the foster parent.
     DCHECK_EQ(foster_parent->child_count(), 0);
     model->Remove(foster_parent);
-    foster_parent = NULL;
+    foster_parent = nullptr;
   }
 
   // Notify UI intensive observers of BookmarkModel that all updates have been
@@ -964,7 +964,7 @@ void BookmarkChangeProcessor::SetSyncNodeFavicon(
     const BookmarkNode* bookmark_node,
     BookmarkModel* model,
     syncer::WriteNode* sync_node) {
-  scoped_refptr<base::RefCountedMemory> favicon_bytes(NULL);
+  scoped_refptr<base::RefCountedMemory> favicon_bytes(nullptr);
   EncodeFavicon(bookmark_node, model, &favicon_bytes);
   if (favicon_bytes.get() && favicon_bytes->size()) {
     sync_pb::BookmarkSpecifics updated_specifics(

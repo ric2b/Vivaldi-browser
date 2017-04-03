@@ -22,8 +22,10 @@
 #include "chrome/common/extensions/extension_process_policy.h"
 #include "chrome/test/base/search_test_utils.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "chromeos/login/login_state.h"
 #include "content/public/browser/notification_registrar.h"
 #include "content/public/browser/notification_service.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/web_contents.h"
@@ -37,7 +39,7 @@
 #include "extensions/test/result_catcher.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
-#include "third_party/WebKit/public/web/WebInputEvent.h"
+#include "third_party/WebKit/public/platform/WebInputEvent.h"
 
 using content::WebContents;
 
@@ -83,14 +85,14 @@ const char kPerformXhrJs[] =
     "};\n"
     "xhr.send();\n";
 
-// Performs an XHR in the given |web_contents|, replying when complete.
-void PerformXhrInPage(content::WebContents* web_contents,
+// Performs an XHR in the given |frame|, replying when complete.
+void PerformXhrInFrame(content::RenderFrameHost* frame,
                       const std::string& host,
                       int port,
                       const std::string& page) {
   bool success = false;
   EXPECT_TRUE(ExecuteScriptAndExtractBool(
-      web_contents,
+      frame,
       base::StringPrintf(kPerformXhrJs, host.c_str(), port, page.c_str()),
       &success));
   EXPECT_TRUE(success);
@@ -160,6 +162,23 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest, WebRequestTypes) {
   ASSERT_TRUE(StartEmbeddedTestServer());
   ASSERT_TRUE(RunExtensionSubtest("webrequest", "test_types.html")) << message_;
 }
+
+#if defined(OS_CHROMEOS)
+IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest, WebRequestPublicSession) {
+  ASSERT_TRUE(StartEmbeddedTestServer());
+  // Set Public Session state.
+  chromeos::LoginState::Get()->SetLoggedInState(
+      chromeos::LoginState::LOGGED_IN_ACTIVE,
+      chromeos::LoginState::LOGGED_IN_USER_PUBLIC_ACCOUNT);
+  // Disable a CHECK while doing api tests.
+  WebRequestPermissions::AllowAllExtensionLocationsInPublicSessionForTesting(
+      true);
+  ASSERT_TRUE(RunExtensionSubtest("webrequest_public_session", "test.html")) <<
+      message_;
+  WebRequestPermissions::AllowAllExtensionLocationsInPublicSessionForTesting(
+      false);
+}
+#endif  // defined(OS_CHROMEOS)
 
 // Test that a request to an OpenSearch description document (OSDD) generates
 // an event with the expected details.
@@ -529,7 +548,11 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest,
                        WebRequestWithWithheldPermissions) {
   FeatureSwitch::ScopedOverride enable_scripts_require_action(
       FeatureSwitch::scripts_require_action(), true);
-  ASSERT_TRUE(StartEmbeddedTestServer());
+
+  host_resolver()->AddRule("*", "127.0.0.1");
+  ASSERT_TRUE(embedded_test_server()->Start());
+  content::SetupCrossSiteRedirector(embedded_test_server());
+
   // Load an extension that registers a listener for webRequest events, and
   // wait 'til it's initialized.
   ExtensionTestMessageListener listener("ready", false);
@@ -539,8 +562,9 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest,
   EXPECT_TRUE(listener.WaitUntilSatisfied());
 
   // Navigate the browser to a page in a new tab.
-  const std::string kHost = "example.com";
-  GURL url = embedded_test_server()->GetURL(kHost, "/empty.html");
+  GURL url = embedded_test_server()->GetURL(
+                 "/cross-site/a.com/iframe_cross_site.html");
+  const std::string kHost = "a.com";
   chrome::NavigateParams params(browser(), url, ui::PAGE_TRANSITION_LINK);
   params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
   ui_test_utils::NavigateToURL(&params);
@@ -558,12 +582,32 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest,
   // The extension shouldn't have currently received any webRequest events,
   // since it doesn't have permission (and shouldn't receive any from an XHR).
   EXPECT_EQ(0, GetWebRequestCountFromBackgroundPage(extension, profile()));
-  PerformXhrInPage(web_contents, kHost, port, kXhrPath);
+
+  content::RenderFrameHost* main_frame = nullptr;
+  content::RenderFrameHost* child_frame = nullptr;
+  auto get_main_and_child_frame = [](content::WebContents* web_contents,
+                                     content::RenderFrameHost** main_frame,
+                                     content::RenderFrameHost** child_frame) {
+    *child_frame = nullptr;
+    *main_frame = web_contents->GetMainFrame();
+    std::vector<content::RenderFrameHost*> all_frames =
+        web_contents->GetAllFrames();
+    ASSERT_EQ(3u, all_frames.size());
+    *child_frame = all_frames[0] == *main_frame ? all_frames[1] : all_frames[0];
+    ASSERT_TRUE(*child_frame);
+  };
+
+  get_main_and_child_frame(web_contents, &main_frame, &child_frame);
+  const std::string kMainHost = main_frame->GetLastCommittedURL().host();
+  const std::string kChildHost = child_frame->GetLastCommittedURL().host();
+
+  PerformXhrInFrame(main_frame, kHost, port, kXhrPath);
+  PerformXhrInFrame(child_frame, kChildHost, port, kXhrPath);
   EXPECT_EQ(0, GetWebRequestCountFromBackgroundPage(extension, profile()));
+  EXPECT_EQ(BLOCKED_ACTION_WEB_REQUEST, runner->GetBlockedActions(extension));
 
   // Grant activeTab permission, and perform another XHR. The extension should
   // receive the event.
-  EXPECT_EQ(BLOCKED_ACTION_WEB_REQUEST, runner->GetBlockedActions(extension));
   runner->set_default_bubble_close_action_for_testing(
       base::WrapUnique(new ToolbarActionsBarBubbleDelegate::CloseAction(
           ToolbarActionsBarBubbleDelegate::CLOSE_EXECUTE)));
@@ -571,15 +615,26 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest,
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(content::WaitForLoadStop(web_contents));
   // The runner will have refreshed the page...
+  get_main_and_child_frame(web_contents, &main_frame, &child_frame);
   EXPECT_EQ(BLOCKED_ACTION_NONE, runner->GetBlockedActions(extension));
+
   int xhr_count = GetWebRequestCountFromBackgroundPage(extension, profile());
-  // ... which means that we should have a non-zero xhr count.
+  // ... which means that we should have a non-zero xhr count...
   EXPECT_GT(xhr_count, 0);
-  // And the extension should receive future events.
-  PerformXhrInPage(web_contents, kHost, port, kXhrPath);
+  // ... and the extension should receive future events.
+  PerformXhrInFrame(main_frame, kHost, port, kXhrPath);
   ++xhr_count;
   EXPECT_EQ(xhr_count,
             GetWebRequestCountFromBackgroundPage(extension, profile()));
+
+  // However, activeTab only grants access to the main frame, not to child
+  // frames. As such, trying to XHR in the child frame should still fail.
+  PerformXhrInFrame(child_frame, kChildHost, port, kXhrPath);
+  EXPECT_EQ(xhr_count,
+            GetWebRequestCountFromBackgroundPage(extension, profile()));
+  // But since there's no way for the user to currently grant access to child
+  // frames, this shouldn't show up as a blocked action.
+  EXPECT_EQ(BLOCKED_ACTION_NONE, runner->GetBlockedActions(extension));
 
   // If we revoke the extension's tab permissions, it should no longer receive
   // webRequest events.
@@ -588,7 +643,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest,
   ASSERT_TRUE(granter);
   granter->RevokeForTesting();
   base::RunLoop().RunUntilIdle();
-  PerformXhrInPage(web_contents, kHost, port, kXhrPath);
+  PerformXhrInFrame(main_frame, kHost, port, kXhrPath);
   EXPECT_EQ(xhr_count,
             GetWebRequestCountFromBackgroundPage(extension, profile()));
   EXPECT_EQ(BLOCKED_ACTION_WEB_REQUEST, runner->GetBlockedActions(extension));

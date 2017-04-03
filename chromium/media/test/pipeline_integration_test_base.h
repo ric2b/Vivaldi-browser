@@ -10,6 +10,7 @@
 
 #include "base/features/scoped_test_feature_override.h"
 #include "base/md5.h"
+#include "base/memory/scoped_vector.h"
 #include "base/message_loop/message_loop.h"
 #include "media/audio/clockless_audio_sink.h"
 #include "media/audio/null_audio_sink.h"
@@ -30,7 +31,9 @@ class FilePath;
 
 namespace media {
 
+class AudioDecoder;
 class CdmContext;
+class VideoDecoder;
 class MockGpuVideoAcceleratorFactories;
 
 // Empty MD5 hash string.  Used to verify empty video tracks.
@@ -80,7 +83,12 @@ class PipelineIntegrationTestBase : public Pipeline::Client {
   // started. |filename| points at a test file located under media/test/data/.
   PipelineStatus Start(const std::string& filename);
   PipelineStatus Start(const std::string& filename, CdmContext* cdm_context);
-  PipelineStatus Start(const std::string& filename, uint8_t test_type);
+  PipelineStatus Start(const std::string& filename,
+                       uint8_t test_type,
+                       ScopedVector<VideoDecoder> prepend_video_decoders =
+                           ScopedVector<VideoDecoder>(),
+                       ScopedVector<AudioDecoder> prepend_audio_decoders =
+                           ScopedVector<AudioDecoder>());
 
   // Starts the pipeline with |data| (with |size| bytes). The |data| will be
   // valid throughtout the lifetime of this test.
@@ -145,24 +153,34 @@ class PipelineIntegrationTestBase : public Pipeline::Client {
   VideoPixelFormat last_video_frame_format_;
   ColorSpace last_video_frame_color_space_;
   DummyTickClock dummy_clock_;
+  PipelineMetadata metadata_;
+  scoped_refptr<VideoFrame> last_frame_;
+  base::TimeDelta current_duration_;
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
   std::unique_ptr<MockGpuVideoAcceleratorFactories>
       mock_video_accelerator_factories_;
   std::unique_ptr<DecodingMockVDA> mock_vda_;
   base::ScopedTestFeatureOverride mse_mpeg_aac_enabler_;
 #endif
-  PipelineMetadata metadata_;
-  scoped_refptr<VideoFrame> last_frame_;
+
+  PipelineStatus StartInternal(
+      std::unique_ptr<DataSource> data_source,
+      CdmContext* cdm_context,
+      uint8_t test_type,
+      ScopedVector<VideoDecoder> prepend_video_decoders =
+          ScopedVector<VideoDecoder>(),
+      ScopedVector<AudioDecoder> prepend_audio_decoders =
+          ScopedVector<AudioDecoder>());
+
+  PipelineStatus StartWithFile(
+      const std::string& filename,
+      CdmContext* cdm_context,
+      uint8_t test_type,
+      ScopedVector<VideoDecoder> prepend_video_decoders =
+          ScopedVector<VideoDecoder>(),
+      ScopedVector<AudioDecoder> prepend_audio_decoders =
+          ScopedVector<AudioDecoder>());
   std::string filename_;
-
-  PipelineStatus StartInternal(std::unique_ptr<DataSource> data_source,
-                               CdmContext* cdm_context,
-                               uint8_t test_type);
-
-  PipelineStatus StartWithFile(const std::string& filename,
-                               CdmContext* cdm_context,
-                               uint8_t test_type);
-
   void OnSeeked(base::TimeDelta seek_time, PipelineStatus status);
   void OnStatusCallback(PipelineStatus status);
   void DemuxerEncryptedMediaInitDataCB(EmeInitDataType type,
@@ -176,9 +194,19 @@ class PipelineIntegrationTestBase : public Pipeline::Client {
   virtual void CreateDemuxer(std::unique_ptr<DataSource> data_source);
 
   // Creates and returns a Renderer.
-  virtual std::unique_ptr<Renderer> CreateRenderer(const base::FilePath& file_path);
+  virtual std::unique_ptr<Renderer> CreateRenderer(
+      const base::FilePath& file_path,
+      ScopedVector<VideoDecoder> prepend_video_decoders =
+          ScopedVector<VideoDecoder>(),
+      ScopedVector<AudioDecoder> prepend_audio_decoders =
+          ScopedVector<AudioDecoder>());
 
   void OnVideoFramePaint(const scoped_refptr<VideoFrame>& frame);
+
+  void CheckDuration();
+
+  // Return the media start time from |demuxer_|.
+  base::TimeDelta GetStartTime();
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
   void EnableMockVDA();

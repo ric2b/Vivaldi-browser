@@ -151,6 +151,7 @@ class MockInputHandler : public cc::InputHandler {
 
   void MouseDown() override {}
   void MouseUp() override {}
+  void MouseLeave() override {}
 
   void MouseMoveAt(const gfx::Point& mouse_position) override {}
 
@@ -254,7 +255,6 @@ class MockInputHandlerProxyClient
                     const gfx::Vector2dF& latest_overscroll_delta,
                     const gfx::Vector2dF& current_fling_velocity,
                     const gfx::PointF& causal_event_viewport_point));
-  void DidStartFlinging() override {}
   void DidStopFlinging() override {}
   void DidAnimateForInput() override {}
 

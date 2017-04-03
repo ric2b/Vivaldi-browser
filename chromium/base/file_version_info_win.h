@@ -32,7 +32,6 @@ class BASE_EXPORT FileVersionInfoWin : public FileVersionInfo {
   base::string16 product_short_name() override;
   base::string16 internal_name() override;
   base::string16 product_version() override;
-  base::string16 source_version() override;
   base::string16 private_build() override;
   base::string16 special_build() override;
   base::string16 comments() override;

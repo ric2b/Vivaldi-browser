@@ -46,7 +46,9 @@ bool FakePrinterDiscoverer::StopDiscovery() {
 }
 
 void FakePrinterDiscoverer::AddObserver(PrinterDiscoverer::Observer* observer) {
-  observers_.push_back(observer);
+  auto found = std::find(observers_.begin(), observers_.end(), observer);
+  if (found == observers_.end())
+    observers_.push_back(observer);
 }
 
 void FakePrinterDiscoverer::RemoveObserver(
@@ -67,7 +69,7 @@ FakePrinterDiscoverer::FakePrinterDiscoverer()
     printers_[i].set_manufacturer("Chromium");
     printers_[i].set_model(i % 3 == 0 ? "Inkjet" : "Laser Maker");
     printers_[i].set_uri(
-        base::StringPrintf("lpr://192.168.1.%d:9100/bldg/printer", i));
+        base::StringPrintf("lpd://192.168.1.%d:9100/bldg/printer", i));
     printers_[i].set_uuid(
         base::StringPrintf("UUID-%4d-%4d-%4d-UUID", i * 3, i * 2, i));
   }

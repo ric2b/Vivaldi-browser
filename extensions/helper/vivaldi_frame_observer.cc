@@ -29,17 +29,19 @@ bool VivaldiFrameObserver::OnMessageReceived(const IPC::Message& message) {
 }
 
 void VivaldiFrameObserver::OnDidUpdateFocusedElementInfo(std::string tagname,
-  std::string type, bool editable) {
+  std::string type, bool editable, std::string role) {
   focused_element_tagname_ = tagname;
   focused_element_type_ = type;
   focused_element_editable_ = editable;
+  focused_element_role_ = role;
 }
 
 void VivaldiFrameObserver::GetFocusedElementInfo(
-  std::string *tagname, std::string *type, bool *editable) {
+  std::string *tagname, std::string *type, bool *editable, std::string *role) {
   *tagname = focused_element_tagname_;
   *type = focused_element_type_;
   *editable = focused_element_editable_;
+  *role = focused_element_role_;
 }
 
 void VivaldiFrameObserver::RenderFrameHostChanged(

@@ -9,6 +9,7 @@
 #include "bindings/core/v8/V8IdleTaskRunner.h"
 #include "bindings/core/v8/V8Initializer.h"
 #include "bindings/core/v8/V8PerIsolateData.h"
+#include "core/inspector/WorkerThreadDebugger.h"
 #include "platform/CrossThreadFunctional.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/WebThreadSupportingGC.h"
@@ -68,7 +69,7 @@ void WorkerBackingThread::initialize() {
   V8Initializer::initializeWorker(m_isolate);
 
   std::unique_ptr<V8IsolateInterruptor> interruptor =
-      wrapUnique(new V8IsolateInterruptor(m_isolate));
+      makeUnique<V8IsolateInterruptor>(m_isolate);
   ThreadState::current()->addInterruptor(std::move(interruptor));
   ThreadState::current()->registerTraceDOMWrappers(
       m_isolate, V8GCController::traceDOMWrappers, nullptr, nullptr);
@@ -78,6 +79,9 @@ void WorkerBackingThread::initialize() {
                        backingThread().platformThread().scheduler())));
   if (m_isOwningThread)
     Platform::current()->didStartWorkerThread();
+
+  V8PerIsolateData::from(m_isolate)->setThreadDebugger(
+      makeUnique<WorkerThreadDebugger>(m_isolate));
 }
 
 void WorkerBackingThread::shutdown() {

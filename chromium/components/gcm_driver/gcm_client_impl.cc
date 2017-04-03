@@ -82,6 +82,7 @@ enum ResetStoreError {
 const char kGCMScope[] = "GCM";
 const int kMaxRegistrationRetries = 5;
 const int kMaxUnregistrationRetries = 5;
+const char kDeletedCountKey[] = "total_deleted";
 const char kMessageTypeDataMessage[] = "gcm";
 const char kMessageTypeDeletedMessagesKey[] = "deleted_messages";
 const char kMessageTypeKey[] = "message_type";
@@ -544,8 +545,6 @@ void GCMClientImpl::DestroyStoreWhenNotNeeded() {
 }
 
 void GCMClientImpl::ResetStore() {
-  DCHECK_EQ(LOADING, state_);
-
   // If already being reset, don't do it again. We want to prevent from
   // resetting and loading from the store again and again.
   if (gcm_store_reset_) {
@@ -701,16 +700,19 @@ void GCMClientImpl::StartCheckin() {
 }
 
 void GCMClientImpl::OnCheckinCompleted(
+    net::HttpStatusCode response_code,
     const checkin_proto::AndroidCheckinResponse& checkin_response) {
   checkin_request_.reset();
 
-  if (!checkin_response.has_android_id() ||
-      !checkin_response.has_security_token()) {
-    // TODO(fgorski): I don't think a retry here will help, we should probably
-    // start over. By checking in with (0, 0).
+  if (response_code == net::HTTP_UNAUTHORIZED ||
+      response_code == net::HTTP_BAD_REQUEST) {
+    LOG(ERROR) << "Checkin rejected. Resetting GCM Store.";
+    ResetStore();
     return;
   }
 
+  DCHECK(checkin_response.has_android_id());
+  DCHECK(checkin_response.has_security_token());
   CheckinInfo checkin_info;
   checkin_info.android_id = checkin_response.android_id();
   checkin_info.secret = checkin_response.security_token();
@@ -719,7 +721,7 @@ void GCMClientImpl::OnCheckinCompleted(
     OnFirstTimeDeviceCheckinCompleted(checkin_info);
   } else {
     // checkin_info is not expected to change after a periodic checkin as it
-    // would invalidate the registratoin IDs.
+    // would invalidate the registration IDs.
     DCHECK_EQ(READY, state_);
     DCHECK_EQ(device_checkin_info_.android_id, checkin_info.android_id);
     DCHECK_EQ(device_checkin_info_.secret, checkin_info.secret);
@@ -811,6 +813,13 @@ void GCMClientImpl::DestroyStoreCallback(bool success) {
 }
 
 void GCMClientImpl::ResetStoreCallback(bool success) {
+  // Even an incomplete reset may invalidate registrations, and this might be
+  // the only opportunity to notify the delegate. For example a partial reset
+  // that deletes the "CURRENT" file will cause GCMStoreImpl to consider the DB
+  // to no longer exist, in which case the next load will simply create a new
+  // store rather than resetting it.
+  delegate_->OnStoreReset();
+
   if (!success) {
     LOG(ERROR) << "Failed to reset GCM store";
     RecordResetStoreErrorToUMA(DESTROYING_STORE_FAILED);
@@ -1187,6 +1196,9 @@ GCMClient::GCMStatistics GCMClientImpl::GetStatistics() const {
   stats.is_recording = recorder_.is_recording();
   stats.gcm_client_state = GetStateString();
   stats.connection_client_created = mcs_client_.get() != NULL;
+  stats.last_checkin = last_checkin_time_;
+  stats.next_checkin =
+      last_checkin_time_ + gservices_settings_.GetCheckinInterval();
   if (connection_factory_.get())
     stats.connection_state = connection_factory_->GetConnectionStateString();
   if (mcs_client_.get()) {
@@ -1324,10 +1336,7 @@ void GCMClientImpl::HandleIncomingMessage(const gcm::MCSMessage& message) {
                                 message_data);
       break;
     case DELETED_MESSAGES:
-      recorder_.RecordDataMessageReceived(app_id, data_message_stanza.from(),
-                                          data_message_stanza.ByteSize(), true,
-                                          GCMStatsRecorder::DELETED_MESSAGES);
-      delegate_->OnMessagesDeleted(app_id);
+      HandleIncomingDeletedMessages(app_id, data_message_stanza, message_data);
       break;
     case SEND_ERROR:
       HandleIncomingSendError(app_id, data_message_stanza, message_data);
@@ -1390,6 +1399,14 @@ void GCMClientImpl::HandleIncomingDataMessage(
     }
   }
 
+  UMA_HISTOGRAM_BOOLEAN("GCM.DataMessageReceivedHasRegisteredApp", registered);
+  if (registered) {
+    UMA_HISTOGRAM_BOOLEAN("GCM.DataMessageReceived", true);
+    bool has_collapse_key =
+        data_message_stanza.has_token() && !data_message_stanza.token().empty();
+    UMA_HISTOGRAM_BOOLEAN("GCM.DataMessageReceivedHasCollapseKey",
+                          has_collapse_key);
+  }
   recorder_.RecordDataMessageReceived(app_id, sender,
       data_message_stanza.ByteSize(), registered,
       GCMStatsRecorder::DATA_MESSAGE);
@@ -1404,6 +1421,25 @@ void GCMClientImpl::HandleIncomingDataMessage(
   incoming_message.raw_data = data_message_stanza.raw_data();
 
   delegate_->OnMessageReceived(app_id, incoming_message);
+}
+
+void GCMClientImpl::HandleIncomingDeletedMessages(
+    const std::string& app_id,
+    const mcs_proto::DataMessageStanza& data_message_stanza,
+    MessageData& message_data) {
+  int deleted_count = 0;
+  MessageData::iterator count_iter = message_data.find(kDeletedCountKey);
+  if (count_iter != message_data.end()) {
+    if (!base::StringToInt(count_iter->second, &deleted_count))
+      deleted_count = 0;
+  }
+  UMA_HISTOGRAM_COUNTS_1000("GCM.DeletedMessagesReceived", deleted_count);
+
+  recorder_.RecordDataMessageReceived(app_id, data_message_stanza.from(),
+                                      data_message_stanza.ByteSize(),
+                                      true /* to_registered_app */,
+                                      GCMStatsRecorder::DELETED_MESSAGES);
+  delegate_->OnMessagesDeleted(app_id);
 }
 
 void GCMClientImpl::HandleIncomingSendError(

@@ -23,6 +23,7 @@ import org.chromium.base.PerfTraceEvent;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.base.test.BaseActivityInstrumentationTestCase;
+import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.PerfTest;
 import org.chromium.base.test.util.parameter.BaseParameter;
@@ -55,7 +56,6 @@ import org.chromium.chrome.test.util.NewTabPageTestUtils;
 import org.chromium.chrome.test.util.parameters.AddFakeAccountToAppParameter;
 import org.chromium.chrome.test.util.parameters.AddFakeAccountToOsParameter;
 import org.chromium.chrome.test.util.parameters.AddGoogleAccountToOsParameter;
-import org.chromium.content.browser.test.util.CallbackHelper;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
 import org.chromium.content.browser.test.util.JavaScriptUtils;
@@ -483,7 +483,7 @@ public abstract class ChromeActivityTestCaseBase<T extends ChromeActivity>
                 intent.putExtra(ChromeTabbedActivity.INTENT_EXTRA_TEST_RENDER_PROCESS_LIMIT,
                         limit.value());
             }
-        } catch (Exception ex) {
+        } catch (NoSuchMethodException ex) {
             // Ignore exception.
         }
         return intent;
@@ -856,7 +856,7 @@ public abstract class ChromeActivityTestCaseBase<T extends ChromeActivity>
 
                 System.out.println(perfTagAnalysisString);
             }
-        } catch (Exception ex) {
+        } catch (NoSuchMethodException ex) {
             // Eat exception here.
         }
     }

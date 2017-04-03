@@ -69,8 +69,7 @@ base::string16 WebUI::GetJavascriptCall(
 }
 
 WebUIImpl::WebUIImpl(WebContents* contents, const std::string& frame_name)
-    : link_transition_type_(ui::PAGE_TRANSITION_LINK),
-      bindings_(BINDINGS_POLICY_WEB_UI),
+    : bindings_(BINDINGS_POLICY_WEB_UI),
       web_contents_(contents),
       web_contents_observer_(new MainFrameNavigationObserver(this, contents)),
       frame_name_(frame_name) {
@@ -108,14 +107,13 @@ void WebUIImpl::OnWebUISend(const GURL& source_url,
   ProcessWebUIMessage(source_url, message, args);
 }
 
-void WebUIImpl::RenderViewCreated(RenderViewHost* render_view_host) {
-  controller_->RenderViewCreated(render_view_host);
+void WebUIImpl::RenderFrameCreated(RenderFrameHost* render_frame_host) {
+  controller_->RenderFrameCreated(render_frame_host);
 }
 
-void WebUIImpl::RenderViewReused(RenderViewHost* render_view_host,
-                                 bool was_main_frame) {
-  if (was_main_frame) {
-    GURL site_url = render_view_host->GetSiteInstance()->GetSiteURL();
+void WebUIImpl::RenderFrameReused(RenderFrameHost* render_frame_host) {
+  if (!render_frame_host->GetParent()) {
+    GURL site_url = render_frame_host->GetSiteInstance()->GetSiteURL();
     GetContentClient()->browser()->LogWebUIUrl(site_url);
   }
 }
@@ -138,14 +136,6 @@ const base::string16& WebUIImpl::GetOverriddenTitle() const {
 
 void WebUIImpl::OverrideTitle(const base::string16& title) {
   overridden_title_ = title;
-}
-
-ui::PageTransition WebUIImpl::GetLinkTransitionType() const {
-  return link_transition_type_;
-}
-
-void WebUIImpl::SetLinkTransitionType(ui::PageTransition type) {
-  link_transition_type_ = type;
 }
 
 int WebUIImpl::GetBindings() const {

@@ -16,6 +16,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "build/build_config.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
+#include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browsing_data/browsing_data_filter_builder.h"
 #include "chrome/browser/browsing_data/browsing_data_helper.h"
@@ -29,6 +30,8 @@
 #include "chrome/browser/history/web_history_service_factory.h"
 #include "chrome/browser/io_thread.h"
 #include "chrome/browser/media/media_device_id_salt.h"
+#include "chrome/browser/net/nqe/ui_network_quality_estimator_service.h"
+#include "chrome/browser/net/nqe/ui_network_quality_estimator_service_factory.h"
 #include "chrome/browser/net/predictor.h"
 #include "chrome/browser/net/spdyproxy/data_reduction_proxy_chrome_settings.h"
 #include "chrome/browser/net/spdyproxy/data_reduction_proxy_chrome_settings_factory.h"
@@ -49,6 +52,7 @@
 #include "chrome/common/url_constants.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata_service.h"
+#include "components/bookmarks/browser/bookmark_model.h"
 #include "components/browsing_data/content/storage_partition_http_cache_data_remover.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
@@ -60,6 +64,7 @@
 #include "components/history/core/browser/history_service.h"
 #include "components/nacl/browser/nacl_browser.h"
 #include "components/nacl/browser/pnacl_host.h"
+#include "components/ntp_snippets/bookmarks/bookmark_last_visit_utils.h"
 #include "components/ntp_snippets/content_suggestions_service.h"
 #include "components/omnibox/browser/omnibox_pref_names.h"
 #include "components/password_manager/core/browser/password_store.h"
@@ -77,6 +82,7 @@
 #include "content/public/browser/ssl_host_state_delegate.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/user_metrics.h"
+#include "extensions/features/features.h"
 #include "net/base/net_errors.h"
 #include "net/cookies/cookie_store.h"
 #include "net/http/http_network_session.h"
@@ -98,7 +104,7 @@
 #include "components/precache/content/precache_manager.h"
 #endif
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "chrome/browser/extensions/activity_log/activity_log.h"
 #include "extensions/browser/extension_prefs.h"
 #endif
@@ -107,7 +113,7 @@
 #include "chrome/browser/browsing_data/browsing_data_flash_lso_helper.h"
 #endif
 
-#if defined(ENABLE_SESSION_SERVICE)
+#if BUILDFLAG(ENABLE_SESSION_SERVICE)
 #include "chrome/browser/sessions/session_service.h"
 #include "chrome/browser/sessions/session_service_factory.h"
 #endif
@@ -525,6 +531,7 @@ void BrowsingDataRemover::RemoveImpl(
           &history_task_tracker_);
     }
 
+    // Currently, ContentSuggestionService instance exists only on Android.
     ntp_snippets::ContentSuggestionsService* content_suggestions_service =
         ContentSuggestionsServiceFactory::GetForProfileIfExists(profile_);
     if (content_suggestions_service) {
@@ -532,7 +539,15 @@ void BrowsingDataRemover::RemoveImpl(
                                                 filter);
     }
 
-#if defined(ENABLE_EXTENSIONS)
+    // Remove the last visit dates meta-data from the bookmark model.
+    // TODO(vitaliii): Do not remove all dates, but only the ones matched by the
+    // time range and the filter.
+    bookmarks::BookmarkModel* bookmark_model =
+        BookmarkModelFactory::GetForBrowserContext(profile_);
+    if (bookmark_model)
+      ntp_snippets::RemoveAllLastVisitDates(bookmark_model);
+
+#if BUILDFLAG(ENABLE_EXTENSIONS)
     // The extension activity log contains details of which websites extensions
     // were active on. It therefore indirectly stores details of websites a
     // user has visited so best clean from here as well.
@@ -629,7 +644,7 @@ void BrowsingDataRemover::RemoveImpl(
         tab_service->DeleteLastSession();
       }
 
-#if defined(ENABLE_SESSION_SERVICE)
+#if BUILDFLAG(ENABLE_SESSION_SERVICE)
       // We also delete the last session when we delete the history.
       SessionService* session_service =
           SessionServiceFactory::GetForProfile(profile_);
@@ -702,13 +717,8 @@ void BrowsingDataRemover::RemoveImpl(
     }
 
     // Clear the history information (last launch time and origin URL) of any
-    // registered webapps. The webapp_registry makes a JNI call into a Java-side
-    // AsyncTask, so don't wait for the reply.
-    waiting_for_clear_webapp_history_ = true;
-    webapp_registry_->ClearWebappHistoryForUrls(
-        filter,
-        base::Bind(&BrowsingDataRemover::OnClearedWebappHistory,
-                   weak_ptr_factory_.GetWeakPtr()));
+    // registered webapps.
+    webapp_registry_->ClearWebappHistoryForUrls(filter);
 #endif
 
     data_reduction_proxy::DataReductionProxySettings*
@@ -1038,6 +1048,20 @@ void BrowsingDataRemover::RemoveImpl(
         ContentSuggestionsServiceFactory::GetForProfileIfExists(profile_);
     if (content_suggestions_service)
       content_suggestions_service->ClearAllCachedSuggestions();
+
+    // |ui_nqe_service| may be null if |profile_| is not a regular profile.
+    UINetworkQualityEstimatorService* ui_nqe_service =
+        UINetworkQualityEstimatorServiceFactory::GetForProfile(profile_);
+    DCHECK(profile_->GetProfileType() !=
+               Profile::ProfileType::REGULAR_PROFILE ||
+           ui_nqe_service != nullptr);
+    if (ui_nqe_service) {
+      // Network Quality Estimator (NQE) stores the quality (RTT, bandwidth
+      // etc.) of different networks in prefs. The stored quality is not
+      // broken down by URLs or timestamps, so clearing the cache should
+      // completely clear the prefs.
+      ui_nqe_service->ClearPrefs();
+    }
   }
 
   if (remove_mask & REMOVE_COOKIES || remove_mask & REMOVE_PASSWORDS) {
@@ -1160,15 +1184,9 @@ void BrowsingDataRemover::RemoveImpl(
   }
 
 #if BUILDFLAG(ANDROID_JAVA_UI)
-  if (remove_mask & REMOVE_WEBAPP_DATA) {
-    // Clear all data associated with registered webapps. The webapp_registry
-    // makes a JNI call into a Java-side AsyncTask, so don't wait for the reply.
-    waiting_for_clear_webapp_data_ = true;
-    webapp_registry_->UnregisterWebappsForUrls(
-        filter,
-        base::Bind(&BrowsingDataRemover::OnClearedWebappData,
-                   weak_ptr_factory_.GetWeakPtr()));
-  }
+  // Clear all data associated with registered webapps.
+  if (remove_mask & REMOVE_WEBAPP_DATA)
+    webapp_registry_->UnregisterWebappsForUrls(filter);
 
   // For now we're considering offline pages as cache, so if we're removing
   // cache we should remove offline pages as well.
@@ -1276,8 +1294,6 @@ bool BrowsingDataRemover::AllDone() {
          !waiting_for_clear_pnacl_cache_ &&
 #if BUILDFLAG(ANDROID_JAVA_UI)
          !waiting_for_clear_precache_history_ &&
-         !waiting_for_clear_webapp_data_ &&
-         !waiting_for_clear_webapp_history_ &&
          !waiting_for_clear_offline_page_data_ &&
 #endif
 #if defined(ENABLE_WEBRTC)
@@ -1533,18 +1549,6 @@ void BrowsingDataRemover::OnClearedWebRtcLogs() {
 void BrowsingDataRemover::OnClearedPrecacheHistory() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   waiting_for_clear_precache_history_ = false;
-  NotifyIfDone();
-}
-
-void BrowsingDataRemover::OnClearedWebappData() {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  waiting_for_clear_webapp_data_ = false;
-  NotifyIfDone();
-}
-
-void BrowsingDataRemover::OnClearedWebappHistory() {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  waiting_for_clear_webapp_history_ = false;
   NotifyIfDone();
 }
 

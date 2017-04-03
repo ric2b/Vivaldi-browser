@@ -256,8 +256,14 @@ int NavigationManagerImpl::GetCurrentItemIndex() const {
 }
 
 int NavigationManagerImpl::GetPendingItemIndex() const {
-  if ([session_controller_ hasPendingEntry])
+  if ([session_controller_ hasPendingEntry]) {
+    if ([session_controller_ pendingEntryIndex] != -1) {
+      return [session_controller_ pendingEntryIndex];
+    }
+    // TODO(crbug.com/665189): understand why current item index is
+    // returned here.
     return GetCurrentItemIndex();
+  }
   return -1;
 }
 
@@ -281,27 +287,27 @@ bool NavigationManagerImpl::RemoveItemAtIndex(int index) {
 }
 
 bool NavigationManagerImpl::CanGoBack() const {
-  return [session_controller_ canGoBack];
+  return CanGoToOffset(-1);
 }
 
 bool NavigationManagerImpl::CanGoForward() const {
-  return [session_controller_ canGoForward];
+  return CanGoToOffset(1);
+}
+
+bool NavigationManagerImpl::CanGoToOffset(int offset) const {
+  return [session_controller_ canGoDelta:offset];
 }
 
 void NavigationManagerImpl::GoBack() {
-  if (CanGoBack()) {
-    [session_controller_ goBack];
-    // Signal the delegate to load the old page.
-    delegate_->NavigateToPendingEntry();
-  }
+  delegate_->GoToIndex(GetIndexForOffset(-1));
 }
 
 void NavigationManagerImpl::GoForward() {
-  if (CanGoForward()) {
-    [session_controller_ goForward];
-    // Signal the delegate to load the new page.
-    delegate_->NavigateToPendingEntry();
-  }
+  delegate_->GoToIndex(GetIndexForOffset(1));
+}
+
+void NavigationManagerImpl::GoToIndex(int index) {
+  delegate_->GoToIndex(index);
 }
 
 void NavigationManagerImpl::Reload(bool check_for_reposts) {
@@ -329,6 +335,10 @@ void NavigationManagerImpl::RemoveTransientURLRewriters() {
 void NavigationManagerImpl::CopyState(
     NavigationManagerImpl* navigation_manager) {
   SetSessionController([navigation_manager->GetSessionController() copy]);
+}
+
+int NavigationManagerImpl::GetIndexForOffset(int offset) const {
+  return [session_controller_ indexOfEntryForDelta:offset];
 }
 
 }  // namespace web

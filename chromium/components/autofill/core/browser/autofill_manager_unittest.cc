@@ -14,6 +14,7 @@
 #include "base/feature_list.h"
 #include "base/format_macros.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_vector.h"
 #include "base/metrics/field_trial.h"
@@ -48,6 +49,7 @@
 #include "components/autofill/core/common/form_field_data.h"
 #include "components/prefs/pref_service.h"
 #include "components/rappor/test_rappor_service.h"
+#include "components/security_state/core/switches.h"
 #include "components/variations/variations_associated_data.h"
 #include "grit/components_strings.h"
 #include "net/url_request/url_request_test_util.h"
@@ -131,8 +133,7 @@ class TestPersonalDataManager : public PersonalDataManager {
 
   std::string SaveImportedProfile(const AutofillProfile& profile) override {
     num_times_save_imported_profile_called_++;
-    AutofillProfile* imported_profile = new AutofillProfile(profile);
-    AddProfile(imported_profile);
+    AddProfile(base::MakeUnique<AutofillProfile>(profile));
     return profile.guid();
   }
 
@@ -152,14 +153,14 @@ class TestPersonalDataManager : public PersonalDataManager {
     return NULL;
   }
 
-  void AddProfile(AutofillProfile* profile) {
+  void AddProfile(std::unique_ptr<AutofillProfile> profile) {
     profile->set_modification_date(base::Time::Now());
-    web_profiles_.push_back(profile);
+    web_profiles_.push_back(std::move(profile));
   }
 
-  void AddCreditCard(CreditCard* credit_card) {
+  void AddCreditCard(std::unique_ptr<CreditCard> credit_card) {
     credit_card->set_modification_date(base::Time::Now());
-    local_credit_cards_.push_back(credit_card);
+    local_credit_cards_.push_back(std::move(credit_card));
   }
 
   void RecordUseOf(const AutofillDataModel& data_model) override {
@@ -176,14 +177,19 @@ class TestPersonalDataManager : public PersonalDataManager {
     CreditCard* credit_card = GetCreditCardWithGUID(guid.c_str());
     if (credit_card) {
       local_credit_cards_.erase(
-          std::find(local_credit_cards_.begin(), local_credit_cards_.end(),
-                    credit_card));
+          std::find_if(local_credit_cards_.begin(), local_credit_cards_.end(),
+                       [credit_card](const std::unique_ptr<CreditCard>& ptr) {
+                         return ptr.get() == credit_card;
+                       }));
     }
 
     AutofillProfile* profile = GetProfileWithGUID(guid.c_str());
     if (profile) {
       web_profiles_.erase(
-          std::find(web_profiles_.begin(), web_profiles_.end(), profile));
+          std::find_if(web_profiles_.begin(), web_profiles_.end(),
+                       [profile](const std::unique_ptr<AutofillProfile>& ptr) {
+                         return ptr.get() == profile;
+                       }));
     }
   }
 
@@ -198,92 +204,93 @@ class TestPersonalDataManager : public PersonalDataManager {
   // Create Elvis card with whitespace in the credit card number.
   void CreateTestCreditCardWithWhitespace() {
     ClearCreditCards();
-    CreditCard* credit_card = new CreditCard;
-    test::SetCreditCardInfo(credit_card, "Elvis Presley",
+    std::unique_ptr<CreditCard> credit_card = base::MakeUnique<CreditCard>();
+    test::SetCreditCardInfo(credit_card.get(), "Elvis Presley",
                             "4234 5678 9012 3456",  // Visa
                             "04", "2999");
     credit_card->set_guid("00000000-0000-0000-0000-000000000008");
-    local_credit_cards_.push_back(credit_card);
+    local_credit_cards_.push_back(std::move(credit_card));
   }
 
   // Create Elvis card with separator characters in the credit card number.
   void CreateTestCreditCardWithSeparators() {
     ClearCreditCards();
-    CreditCard* credit_card = new CreditCard;
-    test::SetCreditCardInfo(credit_card, "Elvis Presley",
+    std::unique_ptr<CreditCard> credit_card = base::MakeUnique<CreditCard>();
+    test::SetCreditCardInfo(credit_card.get(), "Elvis Presley",
                             "4234-5678-9012-3456",  // Visa
                             "04", "2999");
     credit_card->set_guid("00000000-0000-0000-0000-000000000009");
-    local_credit_cards_.push_back(credit_card);
+    local_credit_cards_.push_back(std::move(credit_card));
   }
 
   void CreateTestCreditCardsYearAndMonth(const char* year, const char* month) {
     ClearCreditCards();
-    CreditCard* credit_card = new CreditCard;
-    test::SetCreditCardInfo(credit_card, "Miku Hatsune",
+    std::unique_ptr<CreditCard> credit_card = base::MakeUnique<CreditCard>();
+    test::SetCreditCardInfo(credit_card.get(), "Miku Hatsune",
                             "4234567890654321",  // Visa
                             month, year);
     credit_card->set_guid("00000000-0000-0000-0000-000000000007");
-    local_credit_cards_.push_back(credit_card);
+    local_credit_cards_.push_back(std::move(credit_card));
   }
 
   void CreateTestExpiredCreditCard() {
     ClearCreditCards();
-    CreditCard* credit_card = new CreditCard;
-    test::SetCreditCardInfo(credit_card, "Homer Simpson",
+    std::unique_ptr<CreditCard> credit_card = base::MakeUnique<CreditCard>();
+    test::SetCreditCardInfo(credit_card.get(), "Homer Simpson",
                             "4234567890654321",  // Visa
                             "05", "2000");
     credit_card->set_guid("00000000-0000-0000-0000-000000000009");
-    local_credit_cards_.push_back(credit_card);
+    local_credit_cards_.push_back(std::move(credit_card));
   }
 
  private:
-  void CreateTestAutofillProfiles(ScopedVector<AutofillProfile>* profiles) {
-    AutofillProfile* profile = new AutofillProfile;
-    test::SetProfileInfo(profile, "Elvis", "Aaron",
-                         "Presley", "theking@gmail.com", "RCA",
-                         "3734 Elvis Presley Blvd.", "Apt. 10",
-                         "Memphis", "Tennessee", "38116", "US",
+  void CreateTestAutofillProfiles(
+      std::vector<std::unique_ptr<AutofillProfile>>* profiles) {
+    std::unique_ptr<AutofillProfile> profile =
+        base::MakeUnique<AutofillProfile>();
+    test::SetProfileInfo(profile.get(), "Elvis", "Aaron", "Presley",
+                         "theking@gmail.com", "RCA", "3734 Elvis Presley Blvd.",
+                         "Apt. 10", "Memphis", "Tennessee", "38116", "US",
                          "12345678901");
     profile->set_guid("00000000-0000-0000-0000-000000000001");
-    profiles->push_back(profile);
-    profile = new AutofillProfile;
-    test::SetProfileInfo(profile, "Charles", "Hardin",
-                         "Holley", "buddy@gmail.com", "Decca",
-                         "123 Apple St.", "unit 6", "Lubbock",
-                         "Texas", "79401", "US", "23456789012");
+    profiles->push_back(std::move(profile));
+    profile = base::MakeUnique<AutofillProfile>();
+    test::SetProfileInfo(profile.get(), "Charles", "Hardin", "Holley",
+                         "buddy@gmail.com", "Decca", "123 Apple St.", "unit 6",
+                         "Lubbock", "Texas", "79401", "US", "23456789012");
     profile->set_guid("00000000-0000-0000-0000-000000000002");
-    profiles->push_back(profile);
-    profile = new AutofillProfile;
-    test::SetProfileInfo(
-        profile, "", "", "", "", "", "", "", "", "", "", "", "");
+    profiles->push_back(std::move(profile));
+    profile = base::MakeUnique<AutofillProfile>();
+    test::SetProfileInfo(profile.get(), "", "", "", "", "", "", "", "", "", "",
+                         "", "");
     profile->set_guid("00000000-0000-0000-0000-000000000003");
-    profiles->push_back(profile);
+    profiles->push_back(std::move(profile));
   }
 
-  void CreateTestCreditCards(ScopedVector<CreditCard>* credit_cards) {
-    CreditCard* credit_card = new CreditCard;
-    test::SetCreditCardInfo(credit_card, "Elvis Presley",
+  void CreateTestCreditCards(
+      std::vector<std::unique_ptr<CreditCard>>* credit_cards) {
+    std::unique_ptr<CreditCard> credit_card = base::MakeUnique<CreditCard>();
+    test::SetCreditCardInfo(credit_card.get(), "Elvis Presley",
                             "4234567890123456",  // Visa
                             "04", "2999");
     credit_card->set_guid("00000000-0000-0000-0000-000000000004");
     credit_card->set_use_count(10);
     credit_card->set_use_date(base::Time::Now() - base::TimeDelta::FromDays(5));
-    credit_cards->push_back(credit_card);
+    credit_cards->push_back(std::move(credit_card));
 
-    credit_card = new CreditCard;
-    test::SetCreditCardInfo(credit_card, "Buddy Holly",
+    credit_card = base::MakeUnique<CreditCard>();
+    test::SetCreditCardInfo(credit_card.get(), "Buddy Holly",
                             "5187654321098765",  // Mastercard
                             "10", "2998");
     credit_card->set_guid("00000000-0000-0000-0000-000000000005");
     credit_card->set_use_count(5);
     credit_card->set_use_date(base::Time::Now() - base::TimeDelta::FromDays(4));
-    credit_cards->push_back(credit_card);
+    credit_cards->push_back(std::move(credit_card));
 
-    credit_card = new CreditCard;
-    test::SetCreditCardInfo(credit_card, "", "", "", "");
+    credit_card = base::MakeUnique<CreditCard>();
+    test::SetCreditCardInfo(credit_card.get(), "", "", "", "");
     credit_card->set_guid("00000000-0000-0000-0000-000000000006");
-    credit_cards->push_back(credit_card);
+    credit_cards->push_back(std::move(credit_card));
   }
 
   size_t num_times_save_imported_profile_called_;
@@ -472,7 +479,8 @@ class MockAutocompleteHistoryManager : public AutocompleteHistoryManager {
 
 class MockAutofillDriver : public TestAutofillDriver {
  public:
-  MockAutofillDriver() : is_off_the_record_(false) {}
+  MockAutofillDriver()
+      : is_off_the_record_(false), did_interact_with_credit_card_form_(false) {}
 
   // Mock methods to enable testability.
   MOCK_METHOD3(SendFormDataToRenderer, void(int query_id,
@@ -485,8 +493,21 @@ class MockAutofillDriver : public TestAutofillDriver {
 
   bool IsOffTheRecord() const override { return is_off_the_record_; }
 
+  void DidInteractWithCreditCardForm() override {
+    did_interact_with_credit_card_form_ = true;
+  };
+
+  void ClearDidInteractWithCreditCardForm() {
+    did_interact_with_credit_card_form_ = false;
+  };
+
+  bool did_interact_with_credit_card_form() const {
+    return did_interact_with_credit_card_form_;
+  }
+
  private:
   bool is_off_the_record_;
+  bool did_interact_with_credit_card_form_;
   DISALLOW_COPY_AND_ASSIGN(MockAutofillDriver);
 };
 
@@ -591,12 +612,12 @@ class TestAutofillManager : public AutofillManager {
     return personal_data_->GetCreditCardWithGUID(guid);
   }
 
-  void AddProfile(AutofillProfile* profile) {
-    personal_data_->AddProfile(profile);
+  void AddProfile(std::unique_ptr<AutofillProfile> profile) {
+    personal_data_->AddProfile(std::move(profile));
   }
 
-  void AddCreditCard(CreditCard* credit_card) {
-    personal_data_->AddCreditCard(credit_card);
+  void AddCreditCard(std::unique_ptr<CreditCard> credit_card) {
+    personal_data_->AddCreditCard(std::move(credit_card));
   }
 
   int GetPackedCreditCardID(int credit_card_id) {
@@ -606,8 +627,8 @@ class TestAutofillManager : public AutofillManager {
     return MakeFrontendID(credit_card_guid, std::string());
   }
 
-  void AddSeenForm(FormStructure* form) {
-    form_structures()->push_back(form);
+  void AddSeenForm(std::unique_ptr<FormStructure> form) {
+    form_structures()->push_back(std::move(form));
   }
 
   void ClearFormStructures() {
@@ -891,7 +912,6 @@ class AutofillManagerTest : public testing::Test {
     } else {
       form->origin = GURL("http://myform.com/form.html");
       form->action = GURL("http://myform.com/submit.html");
-      autofill_client_.set_is_context_secure(false);
     }
 
     FormFieldData field;
@@ -989,6 +1009,13 @@ class AutofillManagerTest : public testing::Test {
     DCHECK(autofill_manager_->full_card_request_);
     return static_cast<CardUnmaskDelegate*>(
         autofill_manager_->full_card_request_.get());
+  }
+
+  void SetHttpWarningEnabled() {
+    base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
+        security_state::switches::kMarkHttpAs,
+        security_state::switches::
+            kMarkHttpWithPasswordsOrCcWithChipAndFormWarning);
   }
 
  protected:
@@ -1273,29 +1300,32 @@ TEST_F(AutofillManagerTest,
 
   // Two profiles have the same last name, and the third shares the same first
   // letter for last name.
-  AutofillProfile* profile1 = new AutofillProfile;
+  std::unique_ptr<AutofillProfile> profile1 =
+      base::MakeUnique<AutofillProfile>();
   profile1->set_guid("00000000-0000-0000-0000-000000000103");
   profile1->SetInfo(AutofillType(NAME_FIRST), ASCIIToUTF16("Robin"), "en-US");
   profile1->SetInfo(AutofillType(NAME_LAST), ASCIIToUTF16("Grimes"), "en-US");
   profile1->SetInfo(AutofillType(ADDRESS_HOME_LINE1),
                     ASCIIToUTF16("1234 Smith Blvd."), "en-US");
-  autofill_manager_->AddProfile(profile1);
+  autofill_manager_->AddProfile(std::move(profile1));
 
-  AutofillProfile* profile2 = new AutofillProfile;
+  std::unique_ptr<AutofillProfile> profile2 =
+      base::MakeUnique<AutofillProfile>();
   profile2->set_guid("00000000-0000-0000-0000-000000000124");
   profile2->SetInfo(AutofillType(NAME_FIRST), ASCIIToUTF16("Carl"), "en-US");
   profile2->SetInfo(AutofillType(NAME_LAST), ASCIIToUTF16("Grimes"), "en-US");
   profile2->SetInfo(AutofillType(ADDRESS_HOME_LINE1),
                     ASCIIToUTF16("1234 Smith Blvd."), "en-US");
-  autofill_manager_->AddProfile(profile2);
+  autofill_manager_->AddProfile(std::move(profile2));
 
-  AutofillProfile* profile3 = new AutofillProfile;
+  std::unique_ptr<AutofillProfile> profile3 =
+      base::MakeUnique<AutofillProfile>();
   profile3->set_guid("00000000-0000-0000-0000-000000000126");
   profile3->SetInfo(AutofillType(NAME_FIRST), ASCIIToUTF16("Aaron"), "en-US");
   profile3->SetInfo(AutofillType(NAME_LAST), ASCIIToUTF16("Googler"), "en-US");
   profile3->SetInfo(AutofillType(ADDRESS_HOME_LINE1),
                     ASCIIToUTF16("1600 Amphitheater pkwy"), "en-US");
-  autofill_manager_->AddProfile(profile3);
+  autofill_manager_->AddProfile(std::move(profile3));
 
   FormFieldData field;
   test::CreateTestFormField("Last Name", "lastname", "G", "text", &field);
@@ -1365,11 +1395,10 @@ TEST_F(AutofillManagerTest, GetProfileSuggestions_WithDuplicates) {
   FormsSeen(forms);
 
   // Add a duplicate profile.
-  AutofillProfile* duplicate_profile =
-      new AutofillProfile(
-          *(autofill_manager_->GetProfileWithGUID(
-              "00000000-0000-0000-0000-000000000001")));
-  autofill_manager_->AddProfile(duplicate_profile);
+  std::unique_ptr<AutofillProfile> duplicate_profile =
+      base::MakeUnique<AutofillProfile>(*(autofill_manager_->GetProfileWithGUID(
+          "00000000-0000-0000-0000-000000000001")));
+  autofill_manager_->AddProfile(std::move(duplicate_profile));
 
   const FormFieldData& field = form.fields[0];
   GetAutofillSuggestions(form, field);
@@ -1474,12 +1503,12 @@ TEST_F(AutofillManagerTest, GetCreditCardSuggestions_StopCharsOnly) {
 // field has stop characters in it and some input.
 TEST_F(AutofillManagerTest, GetCreditCardSuggestions_StopCharsWithInput) {
   // Add a credit card with particular numbers that we will attempt to recall.
-  CreditCard* credit_card = new CreditCard;
-  test::SetCreditCardInfo(credit_card, "John Smith",
+  std::unique_ptr<CreditCard> credit_card = base::MakeUnique<CreditCard>();
+  test::SetCreditCardInfo(credit_card.get(), "John Smith",
                           "5255667890123123",  // Mastercard
                           "08", "2017");
   credit_card->set_guid("00000000-0000-0000-0000-000000000007");
-  autofill_manager_->AddCreditCard(credit_card);
+  autofill_manager_->AddCreditCard(std::move(credit_card));
 
   // Set up our form data.
   FormData form;
@@ -1555,11 +1584,11 @@ TEST_F(AutofillManagerTest, GetCreditCardSuggestions_NonCCNumber) {
 }
 
 // Test that we return a warning explaining that credit card profile suggestions
-// are unavailable when the form is not secure.
-TEST_F(AutofillManagerTest, GetCreditCardSuggestions_NonHTTPS) {
+// are unavailable when the page and the form target URL are not secure.
+TEST_F(AutofillManagerTest, GetCreditCardSuggestions_NonSecureContext) {
   // Set up our form data.
   FormData form;
-  CreateTestCreditCardFormData(&form, false, false);
+  CreateTestCreditCardFormData(&form, /* is_https */ false, false);
   std::vector<FormData> forms(1, form);
   FormsSeen(forms);
 
@@ -1578,6 +1607,65 @@ TEST_F(AutofillManagerTest, GetCreditCardSuggestions_NonHTTPS) {
   GetAutofillSuggestions(form, field);
   // Autocomplete suggestions are queried, but not Autofill.
   EXPECT_FALSE(external_delegate_->on_suggestions_returned_seen());
+}
+
+// Test that we return an extra "Payment not secure" warning when the page and
+// the form target URL are not secure.
+TEST_F(AutofillManagerTest,
+       GetCreditCardSuggestions_NonSecureContextWithHttpBadSwitchOn) {
+  SetHttpWarningEnabled();
+
+  // Set up our form data.
+  FormData form;
+  CreateTestCreditCardFormData(&form, /* is_https */ false, false);
+  std::vector<FormData> forms(1, form);
+  FormsSeen(forms);
+
+  const FormFieldData& field = form.fields[0];
+  GetAutofillSuggestions(form, field);
+
+  // Test that we sent the right values to the external delegate.
+  external_delegate_->CheckSuggestions(
+      kDefaultPageID,
+      Suggestion(l10n_util::GetStringUTF8(
+                     IDS_AUTOFILL_CREDIT_CARD_HTTP_WARNING_MESSAGE),
+                 "", "", -1),
+      Suggestion(
+          l10n_util::GetStringUTF8(IDS_AUTOFILL_WARNING_INSECURE_CONNECTION),
+          "", "", -1));
+
+  // Clear the test credit cards and try again -- we shouldn't return a warning.
+  personal_data_.ClearCreditCards();
+  GetAutofillSuggestions(form, field);
+  // Autocomplete suggestions are queried, but not Autofill.
+  EXPECT_FALSE(external_delegate_->on_suggestions_returned_seen());
+}
+
+// Test that we don't show the extra "Payment not secure" warning when the page
+// and the form target URL are secure, even when the switch is on.
+TEST_F(AutofillManagerTest,
+       GetCreditCardSuggestions_SecureContextWithHttpBadSwitchOn) {
+  SetHttpWarningEnabled();
+
+  // Set up our form data.
+  FormData form;
+  CreateTestCreditCardFormData(&form, /* is_https */ true, false);
+  std::vector<FormData> forms(1, form);
+  FormsSeen(forms);
+
+  FormFieldData field = form.fields[1];
+  GetAutofillSuggestions(form, field);
+
+  // Test that we sent the right values to the external delegate.
+  external_delegate_->CheckSuggestions(
+      kDefaultPageID, Suggestion("Visa\xC2\xA0\xE2\x8B\xAF"
+                                 "3456",
+                                 "04/99", kVisaCard,
+                                 autofill_manager_->GetPackedCreditCardID(4)),
+      Suggestion("MasterCard\xC2\xA0\xE2\x8B\xAF"
+                 "8765",
+                 "10/98", kMasterCard,
+                 autofill_manager_->GetPackedCreditCardID(5)));
 }
 
 // Test that we will eventually return the credit card signin promo when there
@@ -1615,18 +1703,101 @@ TEST_F(AutofillManagerTest, GetCreditCardSuggestions_OnlySigninPromo) {
   EXPECT_TRUE(external_delegate_->on_suggestions_returned_seen());
 }
 
+// Test that we return a warning explaining that credit card profile suggestions
+// are unavailable when the page is secure, but the form action URL is valid but
+// not secure.
+TEST_F(AutofillManagerTest,
+       GetCreditCardSuggestions_SecureContext_FormActionNotHTTPS) {
+  // Set up our form data.
+  FormData form;
+  CreateTestCreditCardFormData(&form, /* is_https= */ true, false);
+  // However we set the action (target URL) to be HTTP after all.
+  form.action = GURL("http://myform.com/submit.html");
+  std::vector<FormData> forms(1, form);
+  FormsSeen(forms);
+
+  const FormFieldData& field = form.fields[0];
+  GetAutofillSuggestions(form, field);
+
+  // Test that we sent the right values to the external delegate.
+  external_delegate_->CheckSuggestions(
+      kDefaultPageID, Suggestion(l10n_util::GetStringUTF8(
+                                     IDS_AUTOFILL_WARNING_INSECURE_CONNECTION),
+                                 "", "", -1));
+
+  // Clear the test credit cards and try again -- we shouldn't return a warning.
+  personal_data_.ClearCreditCards();
+  GetAutofillSuggestions(form, field);
+  // Autocomplete suggestions are queried, but not Autofill.
+  EXPECT_FALSE(external_delegate_->on_suggestions_returned_seen());
+}
+
+// Test that we return credit card suggestions for secure pages that have an
+// empty form action target URL.
+TEST_F(AutofillManagerTest,
+       GetCreditCardSuggestions_SecureContext_EmptyFormAction) {
+  // Set up our form data.
+  FormData form;
+  CreateTestCreditCardFormData(&form, true, false);
+  // Clear the form action.
+  form.action = GURL();
+  std::vector<FormData> forms(1, form);
+  FormsSeen(forms);
+
+  FormFieldData field = form.fields[1];
+  GetAutofillSuggestions(form, field);
+
+  // Test that we sent the right values to the external delegate.
+  external_delegate_->CheckSuggestions(
+      kDefaultPageID, Suggestion("Visa\xC2\xA0\xE2\x8B\xAF"
+                                 "3456",
+                                 "04/99", kVisaCard,
+                                 autofill_manager_->GetPackedCreditCardID(4)),
+      Suggestion("MasterCard\xC2\xA0\xE2\x8B\xAF"
+                 "8765",
+                 "10/98", kMasterCard,
+                 autofill_manager_->GetPackedCreditCardID(5)));
+}
+
+// Test that we return credit card suggestions for secure pages that have a
+// form action set to "javascript:something".
+TEST_F(AutofillManagerTest,
+       GetCreditCardSuggestions_SecureContext_JavascriptFormAction) {
+  // Set up our form data.
+  FormData form;
+  CreateTestCreditCardFormData(&form, true, false);
+  // Have the form action be a javascript function (which is a valid URL).
+  form.action = GURL("javascript:alert('Hello');");
+  std::vector<FormData> forms(1, form);
+  FormsSeen(forms);
+
+  FormFieldData field = form.fields[1];
+  GetAutofillSuggestions(form, field);
+
+  // Test that we sent the right values to the external delegate.
+  external_delegate_->CheckSuggestions(
+      kDefaultPageID, Suggestion("Visa\xC2\xA0\xE2\x8B\xAF"
+                                 "3456",
+                                 "04/99", kVisaCard,
+                                 autofill_manager_->GetPackedCreditCardID(4)),
+      Suggestion("MasterCard\xC2\xA0\xE2\x8B\xAF"
+                 "8765",
+                 "10/98", kMasterCard,
+                 autofill_manager_->GetPackedCreditCardID(5)));
+}
+
 // Test that we return all credit card suggestions in the case that two cards
 // have the same obfuscated number.
 TEST_F(AutofillManagerTest, GetCreditCardSuggestions_RepeatedObfuscatedNumber) {
   // Add a credit card with the same obfuscated number as Elvis's.
   // |credit_card| will be owned by the mock PersonalDataManager.
-  CreditCard* credit_card = new CreditCard;
-  test::SetCreditCardInfo(credit_card, "Elvis Presley",
+  std::unique_ptr<CreditCard> credit_card = base::MakeUnique<CreditCard>();
+  test::SetCreditCardInfo(credit_card.get(), "Elvis Presley",
                           "5231567890123456",  // Mastercard
                           "05", "2999");
   credit_card->set_guid("00000000-0000-0000-0000-000000000007");
   credit_card->set_use_date(base::Time::Now() - base::TimeDelta::FromDays(15));
-  autofill_manager_->AddCreditCard(credit_card);
+  autofill_manager_->AddCreditCard(std::move(credit_card));
 
   // Set up our form data.
   FormData form;
@@ -1781,11 +1952,12 @@ TEST_F(AutofillManagerTest, GetFieldSuggestionsWithDuplicateValues) {
   FormsSeen(forms);
 
   // |profile| will be owned by the mock PersonalDataManager.
-  AutofillProfile* profile = new AutofillProfile;
-  test::SetProfileInfo(
-      profile, "Elvis", "", "", "", "", "", "", "", "", "", "", "");
+  std::unique_ptr<AutofillProfile> profile =
+      base::MakeUnique<AutofillProfile>();
+  test::SetProfileInfo(profile.get(), "Elvis", "", "", "", "", "", "", "", "",
+                       "", "", "");
   profile->set_guid("00000000-0000-0000-0000-000000000101");
-  autofill_manager_->AddProfile(profile);
+  autofill_manager_->AddProfile(std::move(profile));
 
   FormFieldData& field = form.fields[0];
   field.is_autofilled = true;
@@ -1805,13 +1977,14 @@ TEST_F(AutofillManagerTest, GetProfileSuggestions_FancyPhone) {
   std::vector<FormData> forms(1, form);
   FormsSeen(forms);
 
-  AutofillProfile* profile = new AutofillProfile;
+  std::unique_ptr<AutofillProfile> profile =
+      base::MakeUnique<AutofillProfile>();
   profile->set_guid("00000000-0000-0000-0000-000000000103");
   profile->SetInfo(AutofillType(NAME_FULL), ASCIIToUTF16("Natty Bumppo"),
                    "en-US");
   profile->SetRawInfo(PHONE_HOME_WHOLE_NUMBER,
                       ASCIIToUTF16("1800PRAIRIE"));
-  autofill_manager_->AddProfile(profile);
+  autofill_manager_->AddProfile(std::move(profile));
 
   const FormFieldData& field = form.fields[9];
   GetAutofillSuggestions(form, field);
@@ -1844,10 +2017,10 @@ TEST_F(AutofillManagerTest, GetProfileSuggestions_ForPhonePrefixOrSuffix) {
                      {"Phone Extension", "ext", 5, "tel-extension"}};
 
   FormFieldData field;
-  for (size_t i = 0; i < arraysize(test_fields); ++i) {
+  for (const auto& test_field : test_fields) {
     test::CreateTestFormField(
-        test_fields[i].label, test_fields[i].name, "", "text", &field);
-    field.max_length = test_fields[i].max_length;
+        test_field.label, test_field.name, "", "text", &field);
+    field.max_length = test_field.max_length;
     field.autocomplete_attribute = std::string();
     form.fields.push_back(field);
   }
@@ -1855,11 +2028,12 @@ TEST_F(AutofillManagerTest, GetProfileSuggestions_ForPhonePrefixOrSuffix) {
   std::vector<FormData> forms(1, form);
   FormsSeen(forms);
 
-  AutofillProfile* profile = new AutofillProfile;
+  std::unique_ptr<AutofillProfile> profile =
+      base::MakeUnique<AutofillProfile>();
   profile->set_guid("00000000-0000-0000-0000-000000000104");
   profile->SetRawInfo(PHONE_HOME_WHOLE_NUMBER, ASCIIToUTF16("1800FLOWERS"));
   personal_data_.ClearAutofillProfiles();
-  autofill_manager_->AddProfile(profile);
+  autofill_manager_->AddProfile(std::move(profile));
 
   const FormFieldData& phone_prefix = form.fields[2];
   GetAutofillSuggestions(form, phone_prefix);
@@ -2823,15 +2997,15 @@ TEST_F(AutofillManagerTest, FillPhoneNumber) {
 
   FormFieldData field;
   const size_t default_max_length = field.max_length;
-  for (size_t i = 0; i < arraysize(test_fields); ++i) {
+  for (const auto& test_field : test_fields) {
     test::CreateTestFormField(
-        test_fields[i].label, test_fields[i].name, "", "text", &field);
-    field.max_length = test_fields[i].max_length;
+        test_field.label, test_field.name, "", "text", &field);
+    field.max_length = test_field.max_length;
     field.autocomplete_attribute = std::string();
     form_with_us_number_max_length.fields.push_back(field);
 
     field.max_length = default_max_length;
-    field.autocomplete_attribute = test_fields[i].autocomplete_attribute;
+    field.autocomplete_attribute = test_field.autocomplete_attribute;
     form_with_autocompletetype.fields.push_back(field);
   }
 
@@ -3248,7 +3422,7 @@ TEST_F(AutofillManagerTest, OnLoadedServerPredictions) {
   // |form_structure| will be owned by |autofill_manager_|.
   TestFormStructure* form_structure = new TestFormStructure(form);
   form_structure->DetermineHeuristicTypes();
-  autofill_manager_->AddSeenForm(form_structure);
+  autofill_manager_->AddSeenForm(base::WrapUnique(form_structure));
 
   // Similarly, a second form.
   FormData form2;
@@ -3268,7 +3442,7 @@ TEST_F(AutofillManagerTest, OnLoadedServerPredictions) {
 
   TestFormStructure* form_structure2 = new TestFormStructure(form2);
   form_structure2->DetermineHeuristicTypes();
-  autofill_manager_->AddSeenForm(form_structure2);
+  autofill_manager_->AddSeenForm(base::WrapUnique(form_structure2));
 
   AutofillQueryResponseContents response;
   response.add_field()->set_autofill_type(3);
@@ -3321,7 +3495,7 @@ TEST_F(AutofillManagerTest, OnLoadedServerPredictions_ResetManager) {
   // |form_structure| will be owned by |autofill_manager_|.
   TestFormStructure* form_structure = new TestFormStructure(form);
   form_structure->DetermineHeuristicTypes();
-  autofill_manager_->AddSeenForm(form_structure);
+  autofill_manager_->AddSeenForm(base::WrapUnique(form_structure));
 
   AutofillQueryResponseContents response;
   response.add_field()->set_autofill_type(3);
@@ -3367,7 +3541,7 @@ TEST_F(AutofillManagerTest, FormSubmittedServerTypes) {
     server_types.push_back(form_structure->field(i)->heuristic_type());
   }
   form_structure->SetFieldTypes(heuristic_types, server_types);
-  autofill_manager_->AddSeenForm(form_structure);
+  autofill_manager_->AddSeenForm(base::WrapUnique(form_structure));
 
   // Fill the form.
   const char guid[] = "00000000-0000-0000-0000-000000000001";
@@ -3917,10 +4091,11 @@ TEST_F(AutofillManagerTest, DisambiguateUploadTypes) {
 
 TEST_F(AutofillManagerTest, RemoveProfile) {
   // Add and remove an Autofill profile.
-  AutofillProfile* profile = new AutofillProfile;
+  std::unique_ptr<AutofillProfile> profile =
+      base::MakeUnique<AutofillProfile>();
   const char guid[] = "00000000-0000-0000-0000-000000000102";
   profile->set_guid(guid);
-  autofill_manager_->AddProfile(profile);
+  autofill_manager_->AddProfile(std::move(profile));
 
   int id = MakeFrontendID(std::string(), guid);
 
@@ -3931,10 +4106,10 @@ TEST_F(AutofillManagerTest, RemoveProfile) {
 
 TEST_F(AutofillManagerTest, RemoveCreditCard) {
   // Add and remove an Autofill credit card.
-  CreditCard* credit_card = new CreditCard;
+  std::unique_ptr<CreditCard> credit_card = base::MakeUnique<CreditCard>();
   const char guid[] = "00000000-0000-0000-0000-000000100007";
   credit_card->set_guid(guid);
-  autofill_manager_->AddCreditCard(credit_card);
+  autofill_manager_->AddCreditCard(std::move(credit_card));
 
   int id = MakeFrontendID(guid, std::string());
 
@@ -4224,16 +4399,16 @@ TEST_F(AutofillManagerTest, DontSaveCvcInAutocompleteHistory) {
     const char* name;
     const char* value;
     ServerFieldType expected_field_type;
-  } fields[] = {
+  } test_fields[] = {
       {"Card number", "1", "4234-5678-9012-3456", CREDIT_CARD_NUMBER},
       {"Card verification code", "2", "123", CREDIT_CARD_VERIFICATION_CODE},
       {"expiration date", "3", "04/2020", CREDIT_CARD_EXP_4_DIGIT_YEAR},
   };
 
-  for (size_t i = 0; i < arraysize(fields); ++i) {
+  for (const auto& test_field : test_fields) {
     FormFieldData field;
-    test::CreateTestFormField(fields[i].label, fields[i].name, fields[i].value,
-                              "text", &field);
+    test::CreateTestFormField(test_field.label, test_field.name,
+                              test_field.value, "text", &field);
     form.fields.push_back(field);
   }
 
@@ -4242,10 +4417,11 @@ TEST_F(AutofillManagerTest, DontSaveCvcInAutocompleteHistory) {
   FormSubmitted(form);
 
   EXPECT_EQ(form.fields.size(), form_seen_by_ahm.fields.size());
-  ASSERT_EQ(arraysize(fields), form_seen_by_ahm.fields.size());
-  for (size_t i = 0; i < arraysize(fields); ++i) {
-    EXPECT_EQ(form_seen_by_ahm.fields[i].should_autocomplete,
-              fields[i].expected_field_type != CREDIT_CARD_VERIFICATION_CODE);
+  ASSERT_EQ(arraysize(test_fields), form_seen_by_ahm.fields.size());
+  for (size_t i = 0; i < arraysize(test_fields); ++i) {
+    EXPECT_EQ(
+        form_seen_by_ahm.fields[i].should_autocomplete,
+        test_fields[i].expected_field_type != CREDIT_CARD_VERIFICATION_CODE);
   }
 }
 
@@ -5096,7 +5272,8 @@ TEST_F(AutofillManagerTest,
   std::vector<FormData> forms(1, form);
   FormsSeen(forms);
 
-  AutofillProfile* profile1 = new AutofillProfile;
+  std::unique_ptr<AutofillProfile> profile1 =
+      base::MakeUnique<AutofillProfile>();
   profile1->set_guid("00000000-0000-0000-0000-000000000103");
   profile1->SetInfo(AutofillType(NAME_FIRST), ASCIIToUTF16("Robin"), "en-US");
   profile1->SetInfo(AutofillType(NAME_MIDDLE), ASCIIToUTF16("Adam Smith"),
@@ -5104,9 +5281,10 @@ TEST_F(AutofillManagerTest,
   profile1->SetInfo(AutofillType(NAME_LAST), ASCIIToUTF16("Grimes"), "en-US");
   profile1->SetInfo(AutofillType(ADDRESS_HOME_LINE1),
                     ASCIIToUTF16("1234 Smith Blvd."), "en-US");
-  autofill_manager_->AddProfile(profile1);
+  autofill_manager_->AddProfile(std::move(profile1));
 
-  AutofillProfile* profile2 = new AutofillProfile;
+  std::unique_ptr<AutofillProfile> profile2 =
+      base::MakeUnique<AutofillProfile>();
   profile2->set_guid("00000000-0000-0000-0000-000000000124");
   profile2->SetInfo(AutofillType(NAME_FIRST), ASCIIToUTF16("Carl"), "en-US");
   profile2->SetInfo(AutofillType(NAME_MIDDLE), ASCIIToUTF16("Shawn Smith"),
@@ -5114,7 +5292,7 @@ TEST_F(AutofillManagerTest,
   profile2->SetInfo(AutofillType(NAME_LAST), ASCIIToUTF16("Grimes"), "en-US");
   profile2->SetInfo(AutofillType(ADDRESS_HOME_LINE1),
                     ASCIIToUTF16("1234 Smith Blvd."), "en-US");
-  autofill_manager_->AddProfile(profile2);
+  autofill_manager_->AddProfile(std::move(profile2));
 
   FormFieldData field;
   test::CreateTestFormField("Middle Name", "middlename", "S", "text", &field);
@@ -5253,6 +5431,38 @@ TEST_F(AutofillManagerTest,
   for (const FormFieldData& field : mixed_form.fields) {
     GetAutofillSuggestions(mixed_form, field);
     EXPECT_TRUE(external_delegate_->on_suggestions_returned_seen());
+  }
+}
+
+// Tests that querying for credit card field suggestions notifies the
+// driver of an interaction with a credit card field.
+TEST_F(AutofillManagerTest, NotifyDriverOfCreditCardInteraction) {
+  // Set up a credit card form.
+  FormData form;
+  form.name = ASCIIToUTF16("MyForm");
+  form.origin = GURL("https://myform.com/form.html");
+  form.action = GURL("https://myform.com/submit.html");
+  FormFieldData field;
+  test::CreateTestFormField("Name on Card", "nameoncard", "", "text", &field);
+  field.should_autocomplete = false;
+  form.fields.push_back(field);
+  test::CreateTestFormField("Card Number", "cardnumber", "", "text", &field);
+  field.should_autocomplete = true;
+  form.fields.push_back(field);
+  test::CreateTestFormField("Expiration Month", "ccexpiresmonth", "", "text",
+                            &field);
+  field.should_autocomplete = false;
+  form.fields.push_back(field);
+  form.fields.push_back(field);
+  std::vector<FormData> forms(1, form);
+  FormsSeen(forms);
+  EXPECT_FALSE(autofill_driver_->did_interact_with_credit_card_form());
+
+  // The driver should always be notified.
+  for (const FormFieldData& field : form.fields) {
+    GetAutofillSuggestions(form, field);
+    EXPECT_TRUE(autofill_driver_->did_interact_with_credit_card_form());
+    autofill_driver_->ClearDidInteractWithCreditCardForm();
   }
 }
 

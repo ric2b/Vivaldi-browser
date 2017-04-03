@@ -79,10 +79,11 @@ ScopedVector<AudioDecoder> DefaultRendererFactory::CreateAudioDecoders(
       new FFmpegAudioDecoder(media_task_runner, media_log_));
 #endif
 
-  audio_decoders.push_back(new OpusAudioDecoder(media_task_runner));
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
   }
 #endif
+
+  audio_decoders.push_back(new OpusAudioDecoder(media_task_runner));
 
   // Use an external decoder only if we cannot otherwise decode in the
   // renderer.

@@ -5,11 +5,8 @@
 #ifndef COMPONENTS_SYNC_TEST_ENGINE_FAKE_MODEL_WORKER_H_
 #define COMPONENTS_SYNC_TEST_ENGINE_FAKE_MODEL_WORKER_H_
 
-#include <vector>
-
-#include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "base/threading/non_thread_safe.h"
+#include "base/threading/thread_checker.h"
 #include "components/sync/base/syncer_error.h"
 #include "components/sync/engine/model_safe_worker.h"
 
@@ -17,13 +14,13 @@ namespace syncer {
 
 // Fake implementation of ModelSafeWorker that does work on the
 // current thread regardless of the group.
-class FakeModelWorker : public ModelSafeWorker, public base::NonThreadSafe {
+class FakeModelWorker : public ModelSafeWorker {
  public:
   explicit FakeModelWorker(ModelSafeGroup group);
 
   // ModelSafeWorker implementation.
-  void RegisterForLoopDestruction() override;
   ModelSafeGroup GetModelSafeGroup() override;
+  bool IsOnModelThread() override;
 
  protected:
   SyncerError DoWorkAndWaitUntilDoneImpl(const WorkCallback& work) override;
@@ -32,6 +29,7 @@ class FakeModelWorker : public ModelSafeWorker, public base::NonThreadSafe {
   ~FakeModelWorker() override;
 
   const ModelSafeGroup group_;
+  base::ThreadChecker thread_checker_;
 
   DISALLOW_COPY_AND_ASSIGN(FakeModelWorker);
 };

@@ -13,7 +13,7 @@
 #include "chrome/test/base/testing_profile.h"
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_service.h"
-#include "components/syncable_prefs/testing_pref_service_syncable.h"
+#include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/models/table_model_observer.h"
@@ -48,7 +48,7 @@ class KeywordEditorControllerTest : public testing::Test,
 
   void SetUp() override {
     if (simulate_load_failure_)
-      util_.model()->OnWebDataServiceRequestDone(0, NULL);
+      util_.model()->OnWebDataServiceRequestDone(0, nullptr);
     else
       util_.VerifyLoad();
 

@@ -28,8 +28,18 @@ if (is_component_build) {
   link_target_type = "static_library"
 }
 target(link_target_type, "base") {
-  # This is part of the media component.
-  visibility = [ "//media/*" ]
+  # This should only be depended on by "media" target. Other targets should
+  # depend on "media" target directly.
+  visibility = [
+    "//media",
+
+    # TODO(xhwang): Clean up the dependency graph within "media" target.
+    "//media/audio",
+    "//media/ffmpeg",
+
+    # TODO(xhwang): Remove this dependency.
+    "//media/capture",
+  ]
   sources = [
     "audio_block_fifo.cc",
     "audio_block_fifo.h",
@@ -68,8 +78,6 @@ target(link_target_type, "base") {
     "audio_renderer_sink.h",
     "audio_shifter.cc",
     "audio_shifter.h",
-    "audio_splicer.cc",
-    "audio_splicer.h",
     "audio_timestamp_helper.cc",
     "audio_timestamp_helper.h",
     "bind_to_current_loop.h",
@@ -97,6 +105,8 @@ target(link_target_type, "base") {
     "cdm_promise.h",
     "cdm_promise_adapter.cc",
     "cdm_promise_adapter.h",
+    "cdm_session_tracker.cc",
+    "cdm_session_tracker.h",
     "channel_mixer.cc",
     "channel_mixer.h",
     "channel_mixing_matrix.cc",
@@ -152,6 +162,8 @@ target(link_target_type, "base") {
     "media_log.cc",
     "media_log.h",
     "media_log_event.h",
+    "media_observer.cc",
+    "media_observer.h",
     "media_permission.cc",
     "media_permission.h",
     "media_resources.cc",
@@ -164,6 +176,7 @@ target(link_target_type, "base") {
     "media_tracks.h",
     "media_url_demuxer.cc",
     "media_url_demuxer.h",
+    "media_url_params.h",
     "media_util.cc",
     "media_util.h",
     "mime_util.cc",
@@ -181,10 +194,12 @@ target(link_target_type, "base") {
     "pipeline.h",
     "pipeline_impl.cc",
     "pipeline_impl.h",
+    "pipeline_metadata.cc",
     "pipeline_metadata.h",
     "pipeline_status.h",
     "player_tracker.cc",
     "player_tracker.h",
+    "provision_fetcher.h",
     "ranges.cc",
     "ranges.h",
     "renderer.cc",
@@ -229,10 +244,6 @@ target(link_target_type, "base") {
     "timestamp_constants.h",
     "user_input_monitor.cc",
     "user_input_monitor.h",
-    "video_capture_types.cc",
-    "video_capture_types.h",
-    "video_capturer_source.cc",
-    "video_capturer_source.h",
     "video_codecs.cc",
     "video_codecs.h",
     "video_decoder.cc",
@@ -260,7 +271,9 @@ target(link_target_type, "base") {
 
   allow_circular_includes_from = []
   defines = []
-  public_deps = []
+  public_deps = [
+    "//ppapi/features",
+  ]
   deps = [
     "//base/third_party/dynamic_annotations:dynamic_annotations",
     "//gpu",
@@ -289,7 +302,7 @@ target(link_target_type, "base") {
   }
 
   if (is_android) {
-    public_deps = [
+    public_deps += [
       "//media/base/android",
       "//media/base/android:media_jni_headers",
     ]
@@ -400,7 +413,7 @@ static_library("test_support") {
   ]
 }
 
-source_set("unittests") {
+source_set("unit_tests") {
   testonly = true
   sources = [
     "audio_block_fifo_unittest.cc",
@@ -421,7 +434,6 @@ source_set("unittests") {
     "audio_renderer_mixer_unittest.cc",
     "audio_sample_types_unittest.cc",
     "audio_shifter_unittest.cc",
-    "audio_splicer_unittest.cc",
     "audio_timestamp_helper_unittest.cc",
     "bind_to_current_loop_unittest.cc",
     "bit_reader_unittest.cc",
@@ -445,7 +457,6 @@ source_set("unittests") {
     "null_video_sink_unittest.cc",
     "pipeline_impl_unittest.cc",
     "ranges_unittest.cc",
-    "run_all_unittests.cc",
     "seekable_buffer_unittest.cc",
     "serial_runner_unittest.cc",
     "silent_sink_suspender_unittest.cc",
@@ -473,7 +484,8 @@ source_set("unittests") {
     "//base/test:test_support",
     "//gpu/command_buffer/common",
     "//media",
-    "//media/base/android:anywhere_unittests",
+    "//media/base/android:anywhere_unit_tests",
+    "//ppapi/features",
     "//skia",
     "//testing/gmock",
     "//testing/gtest",
@@ -489,11 +501,30 @@ source_set("unittests") {
   }
 
   if (is_android) {
-    deps += [ "//ui/gl" ]
+    deps += [
+      "//media/base/android:unit_tests",
+      "//ui/gl",
+    ]
   }
 
   if (current_cpu == "x86" || current_cpu == "x64") {
     sources += [ "simd/convert_rgb_to_yuv_unittest.cc" ]
+  }
+}
+
+test("media_base_unittests") {
+  deps = [
+    ":unit_tests",
+    "//media/test:run_all_unittests",
+  ]
+
+  if (is_android) {
+    deps += [
+      # The test needs the java dependencies to add the java classes for their
+      # native counterparts to the test apk.
+      "//media/base/android:media_java",
+      "//ui/android:ui_java",
+    ]
   }
 }
 

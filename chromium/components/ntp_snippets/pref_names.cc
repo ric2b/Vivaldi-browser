@@ -9,8 +9,6 @@ namespace prefs {
 
 const char kEnableSnippets[] = "ntp_snippets.enable";
 
-const char kSnippetHosts[] = "ntp_snippets.hosts";
-
 const char kRemoteSuggestionCategories[] = "ntp_snippets.remote_categories";
 
 const char kSnippetBackgroundFetchingIntervalWifi[] =
@@ -33,12 +31,15 @@ const char kSnippetThumbnailsInteractiveRequestCount[] =
 const char kSnippetThumbnailsRequestsDay[] =
     "ntp.request_throttler.suggestion_thumbnails.day";
 
+const char kDismissedAssetDownloadSuggestions[] =
+    "ntp_suggestions.downloads.assets.dismissed_ids";
 const char kDismissedRecentOfflineTabSuggestions[] =
     "ntp_suggestions.offline_pages.recent_tabs.dismissed_ids";
-const char kDismissedDownloadSuggestions[] =
-    "ntp_suggestions.offline_pages.downloads.dismissed_ids";
+const char kDismissedOfflinePageDownloadSuggestions[] =
+    "ntp_suggestions.downloads.offline_pages.dismissed_ids";
 const char kDismissedForeignSessionsSuggestions[] =
     "ntp_suggestions.foreign_sessions.dismissed_ids";
+const char kDismissedCategories[] = "ntp_suggestions.dismissed_categories";
 
 const char kBookmarksFirstM54Start[] =
     "ntp_suggestions.bookmarks.first_M54_start";

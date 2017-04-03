@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "base/single_thread_task_runner.h"
 #include "remoting/host/desktop_environment.h"
 #include "remoting/host/fake_mouse_cursor_monitor.h"
 #include "remoting/host/input_injector.h"
@@ -121,8 +122,8 @@ class FakeDesktopEnvironmentFactory : public DesktopEnvironmentFactory {
 
   // DesktopEnvironmentFactory implementation.
   std::unique_ptr<DesktopEnvironment> Create(
-      base::WeakPtr<ClientSessionControl> client_session_control) override;
-  void SetEnableCurtaining(bool enable) override;
+      base::WeakPtr<ClientSessionControl> client_session_control,
+      const DesktopEnvironmentOptions& options) override;
   bool SupportsAudioCapture() const override;
 
   base::WeakPtr<FakeDesktopEnvironment> last_desktop_environment() {

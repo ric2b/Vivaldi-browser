@@ -52,4 +52,16 @@ bool RenderViewHostDelegate::IsOverridingUserAgent() {
   return false;
 }
 
+bool RenderViewHostDelegate::IsJavaScriptDialogShowing() const {
+  return false;
+}
+
+bool RenderViewHostDelegate::HideDownloadUI() const {
+  return false;
+}
+
+bool RenderViewHostDelegate::IsFocusedElementEditable() {
+  return false;
+}
+
 }  // namespace content

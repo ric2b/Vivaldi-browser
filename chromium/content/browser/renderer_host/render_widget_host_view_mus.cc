@@ -12,7 +12,7 @@
 #include "content/common/render_widget_window_tree_client_factory.mojom.h"
 #include "content/common/text_input_state.h"
 #include "content/public/common/service_manager_connection.h"
-#include "services/shell/public/cpp/connector.h"
+#include "services/service_manager/public/cpp/connector.h"
 #include "services/ui/public/cpp/property_type_converters.h"
 #include "services/ui/public/cpp/window.h"
 #include "services/ui/public/cpp/window_property.h"
@@ -186,11 +186,11 @@ void RenderWidgetHostViewMus::SetIsLoading(bool is_loading) {
 
 void RenderWidgetHostViewMus::TextInputStateChanged(
     const TextInputState& params) {
-  // TODO(fsamuel): Implement an IME mojo app.
+  // TODO(fsamuel): Implement an IME service.
 }
 
 void RenderWidgetHostViewMus::ImeCancelComposition() {
-  // TODO(fsamuel): Implement an IME mojo app.
+  // TODO(fsamuel): Implement an IME service.
 }
 
 void RenderWidgetHostViewMus::ImeCompositionRangeChanged(

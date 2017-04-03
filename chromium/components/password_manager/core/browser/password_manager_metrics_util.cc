@@ -91,21 +91,15 @@ void LogAutoSigninPromoUserAction(AutoSigninPromoUserAction action) {
 void LogAccountChooserUserActionOneAccount(AccountChooserUserAction action) {
   UMA_HISTOGRAM_ENUMERATION("PasswordManager.AccountChooserDialogOneAccount",
                             action, ACCOUNT_CHOOSER_ACTION_COUNT);
-  // TODO(vasilii): deprecate the histogram when the new ones hit the Stable.
-  UMA_HISTOGRAM_ENUMERATION("PasswordManager.AccountChooserDialog", action,
-                            ACCOUNT_CHOOSER_ACTION_COUNT);
 }
 
 void LogAccountChooserUserActionManyAccounts(AccountChooserUserAction action) {
   UMA_HISTOGRAM_ENUMERATION(
       "PasswordManager.AccountChooserDialogMultipleAccounts", action,
       ACCOUNT_CHOOSER_ACTION_COUNT);
-  // TODO(vasilii): deprecate the histogram when the new ones hit the Stable.
-  UMA_HISTOGRAM_ENUMERATION("PasswordManager.AccountChooserDialog", action,
-                            ACCOUNT_CHOOSER_ACTION_COUNT);
 }
 
-void LogAutoSigninPromoUserAction(SyncSignInUserAction action) {
+void LogSyncSigninPromoUserAction(SyncSignInUserAction action) {
   UMA_HISTOGRAM_ENUMERATION("PasswordManager.SignInPromo", action,
                             CHROME_SIGNIN_ACTION_COUNT);
 }
@@ -113,6 +107,20 @@ void LogAutoSigninPromoUserAction(SyncSignInUserAction action) {
 void LogAccountChooserUsability(AccountChooserUsabilityMetric usability) {
   UMA_HISTOGRAM_ENUMERATION("PasswordManager.AccountChooserDialogUsability",
                             usability, ACCOUNT_CHOOSER_USABILITY_COUNT);
+}
+
+void LogCredentialManagerGetResult(CredentialManagerGetResult result,
+                                   CredentialManagerGetMediation status) {
+  switch (status) {
+    case CREDENTIAL_MANAGER_GET_UNMEDIATED:
+      UMA_HISTOGRAM_ENUMERATION("PasswordManager.GetUnmediated", result,
+                                CREDENTIAL_MANAGER_GET_COUNT);
+      break;
+    case CREDENTIAL_MANAGER_GET_MEDIATED:
+      UMA_HISTOGRAM_ENUMERATION("PasswordManager.GetMediated", result,
+                                CREDENTIAL_MANAGER_GET_COUNT);
+      break;
+  }
 }
 
 }  // namespace metrics_util

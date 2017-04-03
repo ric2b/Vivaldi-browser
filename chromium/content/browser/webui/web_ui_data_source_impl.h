@@ -5,8 +5,11 @@
 #ifndef CONTENT_BROWSER_WEBUI_WEB_UI_DATA_SOURCE_IMPL_H_
 #define CONTENT_BROWSER_WEBUI_WEB_UI_DATA_SOURCE_IMPL_H_
 
+#include <stdint.h>
+
 #include <map>
 #include <string>
+#include <unordered_set>
 
 #include "base/callback.h"
 #include "base/compiler_specific.h"
@@ -34,6 +37,7 @@ class CONTENT_EXPORT WebUIDataSourceImpl
   void AddLocalizedStrings(
       const base::DictionaryValue& localized_strings) override;
   void AddBoolean(const std::string& name, bool value) override;
+  void AddInteger(const std::string& name, int32_t value) override;
   void SetJsonPath(const std::string& path) override;
   void AddResourcePath(const std::string& path, int resource_id) override;
   void SetDefaultResource(int resource_id) override;
@@ -45,6 +49,9 @@ class CONTENT_EXPORT WebUIDataSourceImpl
   void OverrideContentSecurityPolicyChildSrc(const std::string& data) override;
   void DisableDenyXFrameOptions() override;
   void DisableI18nAndUseGzipForAllPaths() override;
+
+  // When DisableI18nAndUseGzipForAllPaths is enabled, exclude the given |path|.
+  void ExcludePathFromGzip(const std::string& path);
 
  protected:
   ~WebUIDataSourceImpl() override;
@@ -82,6 +89,7 @@ class CONTENT_EXPORT WebUIDataSourceImpl
   int default_resource_;
   std::string json_path_;
   std::map<std::string, int> path_to_idr_map_;
+  std::unordered_set<std::string> excluded_paths_;
   // The |replacements_| is intended to replace |localized_strings_|.
   // TODO(dschuyler): phase out |localized_strings_| in Q1 2016. (Or rename
   // to |load_time_flags_| if the usage is reduced to storing flags only).

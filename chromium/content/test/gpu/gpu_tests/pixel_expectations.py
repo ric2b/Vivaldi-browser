@@ -19,28 +19,30 @@ class PixelExpectations(GpuTestExpectations):
     self.Skip('Pixel_OffscreenCanvasWebGLSoftwareCompositing', ['android'])
     self.Skip('Pixel_OffscreenCanvasWebGLSoftwareCompositingWorker',
               ['android'])
+    self.Skip('Pixel_CanvasDisplayLinearRGBUnaccelerated2D', ['android'])
 
     self.Fail('Pixel_ScissorTestWithPreserveDrawingBuffer',
         ['android'], bug=521588)
 
-    self.Fail('Pixel_ScissorTestWithPreserveDrawingBufferES3',
-              ['mac'], bug=540039)
-    self.Fail('Pixel_WebGLGreenTriangleES3',
-              ['mac', ('intel', 0x116)], bug=540531)
-
     # TODO(ccameron) fix these on Mac Retina
     self.Fail('Pixel_CSS3DBlueBox', ['mac'], bug=533690)
-    self.Fail('Pixel_CSS3DBlueBoxES3', ['mac'], bug=533690)
 
     # TODO(vmiura) check / generate reference images for Android devices
     self.Fail('Pixel_SolidColorBackground', ['mac', 'android'], bug=624256)
-
-    # TODO(erikchen) check / generate reference images.
-    self.Fail('Pixel_CSSFilterEffects', ['mac'], bug=581526)
-    self.Fail('Pixel_CSSFilterEffects_NoOverlays', ['mac'], bug=581526)
 
     self.Fail('Pixel_OffscreenCanvasUnaccelerated2DGPUCompositingWorker',
               ['mac', ('nvidia', 0xfe9)], bug=652931)
 
     # TODO(kbr): flakily timing out on this configuration.
     self.Flaky('*', ['linux', 'intel', 'debug'], bug=648369)
+
+    # Flaky for unknown reasons only on macOS. Not planning to investigate
+    # further.
+    self.Flaky('Pixel_ScissorTestWithPreserveDrawingBuffer', ['mac'],
+               bug=660461)
+
+    # TODO(zakerinasab): Check / generate reference images. Remove the Fail
+    # lines after fixing 657946 and comment out the Skip line.
+    self.Fail('Pixel_CanvasDisplayLinearRGBAccelerated2D', bug=657946)
+    self.Fail('Pixel_CanvasDisplayLinearRGBUnaccelerated2D', bug=657946)
+    self.Fail('Pixel_CanvasDisplayLinearRGBUnaccelerated2DGPUCompositing', bug=657946)

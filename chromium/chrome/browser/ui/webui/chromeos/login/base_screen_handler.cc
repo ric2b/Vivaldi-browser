@@ -31,6 +31,8 @@ BaseScreenHandler::BaseScreenHandler(const std::string& js_screen_path)
 }
 
 BaseScreenHandler::~BaseScreenHandler() {
+  if (base_screen_)
+    base_screen_->set_model_view_channel(nullptr);
 }
 
 void BaseScreenHandler::InitializeBase() {
@@ -87,8 +89,12 @@ void BaseScreenHandler::ShowScreenWithData(OobeScreen screen,
                                          screen_params);
 }
 
+OobeUI* BaseScreenHandler::GetOobeUI() const {
+  return static_cast<OobeUI*>(web_ui()->GetController());
+}
+
 OobeScreen BaseScreenHandler::GetCurrentScreen() const {
-  OobeUI* oobe_ui = static_cast<OobeUI*>(web_ui()->GetController());
+  OobeUI* oobe_ui = GetOobeUI();
   if (!oobe_ui)
     return OobeScreen::SCREEN_UNKNOWN;
   return oobe_ui->current_screen();

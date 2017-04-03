@@ -5,7 +5,6 @@
 #include "core/dom/custom/CustomElementRegistry.h"
 
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/core/v8/ScriptValue.h"
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/dom/ElementDefinitionOptions.h"
@@ -51,6 +50,7 @@ class CustomElementRegistryTest : public ::testing::Test {
   ShadowRoot* attachShadowTo(Element* element) {
     NonThrowableExceptionState noExceptions;
     ShadowRootInit shadowRootInit;
+    shadowRootInit.setMode("open");
     return element->attachShadow(scriptState(), shadowRootInit, noExceptions);
   }
 
@@ -161,39 +161,6 @@ TEST_F(CustomElementRegistryTest, collectCandidates_shouldBeInDocumentOrder) {
   EXPECT_EQ(elementC, elements[2].get());
 }
 
-class TestCustomElementDefinition : public CustomElementDefinition {
-  WTF_MAKE_NONCOPYABLE(TestCustomElementDefinition);
-
- public:
-  TestCustomElementDefinition(const CustomElementDescriptor& descriptor)
-      : CustomElementDefinition(descriptor) {}
-
-  TestCustomElementDefinition(const CustomElementDescriptor& descriptor,
-                              const HashSet<AtomicString>& observedAttributes)
-      : CustomElementDefinition(descriptor, observedAttributes) {}
-
-  ~TestCustomElementDefinition() override = default;
-
-  ScriptValue getConstructorForScript() override { return ScriptValue(); }
-
-  bool runConstructor(Element* element) override {
-    if (constructionStack().isEmpty() || constructionStack().last() != element)
-      return false;
-    constructionStack().last().clear();
-    return true;
-  }
-
-  HTMLElement* createElementSync(Document&, const QualifiedName&) override {
-    return nullptr;
-  }
-
-  HTMLElement* createElementSync(Document&,
-                                 const QualifiedName&,
-                                 ExceptionState&) override {
-    return nullptr;
-  }
-};
-
 // Classes which use trace macros cannot be local because of the
 // traceImpl template.
 class LogUpgradeDefinition : public TestCustomElementDefinition {
@@ -289,18 +256,15 @@ class LogUpgradeDefinition : public TestCustomElementDefinition {
   }
 };
 
-class LogUpgradeBuilder final : public CustomElementDefinitionBuilder {
+class LogUpgradeBuilder final : public TestCustomElementDefinitionBuilder {
   STACK_ALLOCATED();
   WTF_MAKE_NONCOPYABLE(LogUpgradeBuilder);
 
  public:
   LogUpgradeBuilder() {}
 
-  bool checkConstructorIntrinsics() override { return true; }
-  bool checkConstructorNotRegistered() override { return true; }
-  bool checkPrototype() override { return true; }
-  bool rememberOriginalProperties() override { return true; }
-  CustomElementDefinition* build(const CustomElementDescriptor& descriptor) {
+  CustomElementDefinition* build(
+      const CustomElementDescriptor& descriptor) override {
     return new LogUpgradeDefinition(descriptor);
   }
 };
@@ -449,6 +413,32 @@ TEST_F(CustomElementRegistryTest, adoptedCallback) {
 
   EXPECT_EQ(2u, definition->m_logs.size())
       << "adoptNode() should not invoke other callbacks";
+}
+
+TEST_F(CustomElementRegistryTest, lookupCustomElementDefinition) {
+  NonThrowableExceptionState shouldNotThrow;
+  TestCustomElementDefinitionBuilder builder;
+  CustomElementDefinition* definitionA = registry().define(
+      "a-a", builder, ElementDefinitionOptions(), shouldNotThrow);
+  ElementDefinitionOptions options;
+  options.setExtends("div");
+  CustomElementDefinition* definitionB =
+      registry().define("b-b", builder, options, shouldNotThrow);
+  // look up defined autonomous custom element
+  CustomElementDefinition* definition = registry().definitionFor(
+      CustomElementDescriptor(CustomElementDescriptor("a-a", "a-a")));
+  EXPECT_NE(nullptr, definition) << "a-a, a-a should be registered";
+  EXPECT_EQ(definitionA, definition);
+  // look up undefined autonomous custom element
+  definition = registry().definitionFor(CustomElementDescriptor("a-a", "div"));
+  EXPECT_EQ(nullptr, definition) << "a-a, div should not be registered";
+  // look up defined customized built-in element
+  definition = registry().definitionFor(CustomElementDescriptor("b-b", "div"));
+  EXPECT_NE(nullptr, definition) << "b-b, div should be registered";
+  EXPECT_EQ(definitionB, definition);
+  // look up undefined customized built-in element
+  definition = registry().definitionFor(CustomElementDescriptor("a-a", "div"));
+  EXPECT_EQ(nullptr, definition) << "a-a, div should not be registered";
 }
 
 // TODO(dominicc): Add tests which adjust the "is" attribute when type

@@ -160,64 +160,24 @@ cr.define('options', function() {
     },
 
     /**
-     * Updates the visibility of the list and empty list placeholder.
+     * Updates the list with the given entries and updates the visibility of the
+     * list and empty list placeholder.
      * @param {!cr.ui.List} list The list to toggle visilibility for.
+     * @param {!Array} entries The list of entries.
      */
-    updateListVisibility_: function(list) {
-      var empty = list.dataModel.length == 0;
+    updateListAndVisibility_: function(list, entries) {
+      // Setting the dataModel results in a redraw of the viewport, which is why
+      // the visibility needs to be updated first. Otherwise, redraw will not
+      // render the updated entries when transitioning from a previously empty
+      // list to a non-empty one. The attribute list.hidden would be true in
+      // this case, resulting in |redraw()| not adding the new elements to the
+      // viewport and thus showing a empty list to the user
+      // (http://crbug.com/672869).
+      var empty = entries.length == 0;
       var listPlaceHolderID = list.id + '-empty-placeholder';
       list.hidden = empty;
       $(listPlaceHolderID).hidden = !empty;
-    },
-
-    /**
-     * Updates eliding of origins. If there is no enough space to show the full
-     * origin, the origin is elided from the left with ellipsis.
-     * @param {!cr.ui.List} list The list to update eliding.
-     */
-    updateOriginsEliding_: function(list) {
-      var entries = list.getElementsByClassName('deletable-item');
-      if (entries.length == 0)
-        return;
-      var entry = entries[0];
-      var computedStyle = window.getComputedStyle(entry.urlDiv);
-      var columnWidth = entry.urlDiv.offsetWidth -
-          parseInt(computedStyle.webkitMarginStart, 10) -
-          parseInt(computedStyle.webkitPaddingStart, 10);
-
-      // We use a canvas context to compute text widths. This canvas is not
-      // part of the DOM and thus avoids layout thrashing when updating the
-      // contained text.
-      var canvas = document.createElement('canvas');
-      var ctx = canvas.getContext('2d');
-      ctx.font = computedStyle.font;
-
-      for (var i = 0; i < entries.length; ++i) {
-        entry = entries[i];
-        // For android://com.example, elide from the right.
-        if (!entry.isClickable)
-          continue;
-        var cellWidth = columnWidth;
-        if (entry.androidUriSuffix)
-          cellWidth -= entry.androidUriSuffix.offsetWidth;
-        var urlLink = entry.urlLink;
-        if (cellWidth <= 0) {
-          console.error('cellWidth <= 0. Skip origins eliding for ' +
-              urlLink.textContent);
-          continue;
-        }
-
-        var textContent = urlLink.textContent;
-        if (ctx.measureText(textContent).width <= cellWidth)
-          continue;
-
-        textContent = '…' + textContent.substring(1);
-        while (ctx.measureText(textContent).width > cellWidth)
-          textContent = '…' + textContent.substring(2);
-
-        // Write the elided origin back to the DOM.
-        urlLink.textContent = textContent;
-      }
+      list.dataModel = new ArrayDataModel(entries);
     },
 
     /**
@@ -245,11 +205,7 @@ cr.define('options', function() {
         };
         entries = entries.filter(filter);
       }
-      this.savedPasswordsList_.dataModel = new ArrayDataModel(entries);
-      this.updateListVisibility_(this.savedPasswordsList_);
-      // updateOriginsEliding_ should be called after updateListVisibility_,
-      // otherwise updateOrigins... might be not able to read width of elements.
-      this.updateOriginsEliding_(this.savedPasswordsList_);
+      this.updateListAndVisibility_(assert(this.savedPasswordsList_), entries);
     },
 
     /**
@@ -258,11 +214,8 @@ cr.define('options', function() {
      * @param {!Array} entries The list of password exception data.
      */
     setPasswordExceptionsList_: function(entries) {
-      this.passwordExceptionsList_.dataModel = new ArrayDataModel(entries);
-      this.updateListVisibility_(this.passwordExceptionsList_);
-      // updateOriginsEliding_ should be called after updateListVisibility_,
-      // otherwise updateOrigins... might be not able to read width of elements.
-      this.updateOriginsEliding_(this.passwordExceptionsList_);
+      this.updateListAndVisibility_(
+          assert(this.passwordExceptionsList_), entries);
     },
 
     /**

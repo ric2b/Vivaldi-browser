@@ -45,6 +45,8 @@ class MetaBuildWrapper(object):
     self.chromium_src_dir = CHROMIUM_SRC_DIR
     self.default_config = os.path.join(self.chromium_src_dir, 'tools', 'mb',
                                        'mb_config.pyl')
+    self.default_isolate_map = os.path.join(self.chromium_src_dir, 'testing',
+                                            'buildbot', 'gn_isolate_map.pyl')
     self.executable = sys.executable
     self.platform = sys.platform
     self.sep = os.sep
@@ -78,13 +80,18 @@ class MetaBuildWrapper(object):
                         help='master name to look up config from')
       subp.add_argument('-c', '--config',
                         help='configuration to analyze')
-      subp.add_argument('--phase', type=int,
-                        help=('build phase for a given build '
-                              '(int in [1, 2, ...))'))
+      subp.add_argument('--phase',
+                        help='optional phase name (used when builders '
+                             'do multiple compiles with different '
+                             'arguments in a single build)')
       subp.add_argument('-f', '--config-file', metavar='PATH',
                         default=self.default_config,
                         help='path to config file '
-                            '(default is //tools/mb/mb_config.pyl)')
+                             '(default is %(default)s)')
+      subp.add_argument('-i', '--isolate-map-file', metavar='PATH',
+                        default=self.default_isolate_map,
+                        help='path to isolate map file '
+                             '(default is %(default)s)')
       subp.add_argument('-g', '--goma-dir',
                         help='path to goma directory')
       subp.add_argument('--gyp-script', metavar='PATH',
@@ -125,8 +132,7 @@ class MetaBuildWrapper(object):
                                  'each builder as a JSON object')
     subp.add_argument('-f', '--config-file', metavar='PATH',
                       default=self.default_config,
-                      help='path to config file '
-                          '(default is //tools/mb/mb_config.pyl)')
+                      help='path to config file (default is %(default)s)')
     subp.add_argument('-g', '--goma-dir',
                       help='path to goma directory')
     subp.set_defaults(func=self.CmdExport)
@@ -202,16 +208,14 @@ class MetaBuildWrapper(object):
                             help='validate the config file')
     subp.add_argument('-f', '--config-file', metavar='PATH',
                       default=self.default_config,
-                      help='path to config file '
-                          '(default is //tools/mb/mb_config.pyl)')
+                      help='path to config file (default is %(default)s)')
     subp.set_defaults(func=self.CmdValidate)
 
     subp = subps.add_parser('audit',
                             help='Audit the config file to track progress')
     subp.add_argument('-f', '--config-file', metavar='PATH',
                       default=self.default_config,
-                      help='path to config file '
-                          '(default is //tools/mb/mb_config.pyl)')
+                      help='path to config file (default is %(default)s)')
     subp.add_argument('-i', '--internal', action='store_true',
                       help='check internal masters also')
     subp.add_argument('-m', '--master', action='append',
@@ -270,8 +274,9 @@ class MetaBuildWrapper(object):
         if not config:
           continue
 
-        if isinstance(config, list):
-          args = [self.FlattenConfig(c)['gn_args'] for c in config]
+        if isinstance(config, dict):
+          args = {k: self.FlattenConfig(v)['gn_args']
+                  for k, v in config.items()}
         elif config.startswith('//'):
           args = config
         else:
@@ -369,8 +374,8 @@ class MetaBuildWrapper(object):
     all_configs = {}
     for master in self.masters:
       for config in self.masters[master].values():
-        if isinstance(config, list):
-          for c in config:
+        if isinstance(config, dict):
+          for c in config.values():
             all_configs[c] = master
         else:
           all_configs[config] = master
@@ -521,8 +526,8 @@ class MetaBuildWrapper(object):
         config = self.masters[master][builder]
         if config == 'tbd':
           tbd.add(builder)
-        elif isinstance(config, list):
-          vals = self.FlattenConfig(config[0])
+        elif isinstance(config, dict):
+          vals = self.FlattenConfig(config.values()[0])
           if vals['type'] == 'gyp':
             gyp.add(builder)
           else:
@@ -669,8 +674,14 @@ class MetaBuildWrapper(object):
     self.mixins = contents['mixins']
 
   def ReadIsolateMap(self):
-    return ast.literal_eval(self.ReadFile(self.PathJoin(
-        self.chromium_src_dir, 'testing', 'buildbot', 'gn_isolate_map.pyl')))
+    if not self.Exists(self.args.isolate_map_file):
+      raise MBErr('isolate map file not found at %s' %
+                  self.args.isolate_map_file)
+    try:
+      return ast.literal_eval(self.ReadFile(self.args.isolate_map_file))
+    except SyntaxError as e:
+      raise MBErr('Failed to parse isolate map file "%s": %s' %
+                  (self.args.isolate_map_file, e))
 
   def ConfigFromArgs(self):
     if self.args.config:
@@ -693,15 +704,15 @@ class MetaBuildWrapper(object):
                   (self.args.builder, self.args.master, self.args.config_file))
 
     config = self.masters[self.args.master][self.args.builder]
-    if isinstance(config, list):
+    if isinstance(config, dict):
       if self.args.phase is None:
         raise MBErr('Must specify a build --phase for %s on %s' %
                     (self.args.builder, self.args.master))
-      phase = int(self.args.phase)
-      if phase < 1 or phase > len(config):
-        raise MBErr('Phase %d out of bounds for %s on %s' %
+      phase = str(self.args.phase)
+      if phase not in config:
+        raise MBErr('Phase %s doesn\'t exist for %s on %s' %
                     (phase, self.args.builder, self.args.master))
-      return config[phase-1]
+      return config[phase]
 
     if self.args.phase is not None:
       raise MBErr('Must not specify a build --phase for %s on %s' %
@@ -846,10 +857,15 @@ class MetaBuildWrapper(object):
             isolate_map[target].get('label_type') == 'group'):
         # For script targets, the build target is usually a group,
         # for which gn generates the runtime_deps next to the stamp file
-        # for the label, which lives under the obj/ directory.
+        # for the label, which lives under the obj/ directory, but it may
+        # also be an executable.
         label = isolate_map[target]['label']
         runtime_deps_targets = [
             'obj/%s.stamp.runtime_deps' % label.replace(':', '/')]
+        if self.platform == 'win32':
+          runtime_deps_targets += [ target + '.exe.runtime_deps' ]
+        else:
+          runtime_deps_targets += [ target + '.runtime_deps' ]
       elif self.platform == 'win32':
         runtime_deps_targets = [target + '.exe.runtime_deps']
       else:

@@ -4,29 +4,19 @@
 
 #include "chrome/browser/chromeos/login/users/wallpaper/wallpaper_manager.h"
 
-#include <stdint.h>
-#include <numeric>
 #include <utility>
-#include <vector>
 
 #include "ash/common/ash_constants.h"
 #include "ash/common/wallpaper/wallpaper_controller.h"
 #include "ash/common/wm_shell.h"
-#include "ash/public/interfaces/wallpaper.mojom.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
-#include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
-#include "base/files/file_util.h"
 #include "base/logging.h"
-#include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/path_service.h"
 #include "base/sha1.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/strings/string_util.h"
-#include "base/strings/stringprintf.h"
 #include "base/sys_info.h"
 #include "base/threading/worker_pool.h"
 #include "base/time/time.h"
@@ -35,25 +25,23 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/customization/customization_document.h"
+#include "chrome/browser/chromeos/extensions/wallpaper_manager_util.h"
 #include "chrome/browser/chromeos/login/startup_utils.h"
+#include "chrome/browser/chromeos/login/users/avatar/user_image_loader.h"
 #include "chrome/browser/chromeos/login/wizard_controller.h"
-#include "chrome/browser/chromeos/settings/cros_settings.h"
+#include "chrome/browser/image_decoder.h"
 #include "chrome/browser/ui/ash/ash_util.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chromeos/chromeos_switches.h"
 #include "chromeos/cryptohome/system_salt_getter.h"
-#include "chromeos/dbus/dbus_thread_manager.h"
-#include "chromeos/login/user_names.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/signin/core/account_id/account_id.h"
 #include "components/user_manager/known_user.h"
-#include "components/user_manager/user.h"
-#include "components/user_manager/user_image/user_image.h"
-#include "components/user_manager/user_manager.h"
+#include "components/user_manager/user_names.h"
 #include "components/user_manager/user_type.h"
 #include "components/wallpaper/wallpaper_files_id.h"
 #include "components/wallpaper/wallpaper_layout.h"
@@ -61,11 +49,7 @@
 #include "content/public/browser/notification_service.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/service_manager_connection.h"
-#include "services/shell/public/cpp/connector.h"
-#include "third_party/skia/include/core/SkColor.h"
-#include "ui/gfx/codec/jpeg_codec.h"
-#include "ui/gfx/image/image_skia_operations.h"
-#include "ui/gfx/skia_util.h"
+#include "services/service_manager/public/cpp/connector.h"
 
 using content::BrowserThread;
 using wallpaper::WallpaperManagerBase;
@@ -187,39 +171,24 @@ void SetKnownUserWallpaperFilesId(
                                           wallpaper_files_id.id());
 }
 
-ash::mojom::WallpaperLayout WallpaperLayoutToMojo(
-    wallpaper::WallpaperLayout layout) {
-  switch (layout) {
-    case wallpaper::WALLPAPER_LAYOUT_CENTER:
-      return ash::mojom::WallpaperLayout::CENTER;
-    case wallpaper::WALLPAPER_LAYOUT_CENTER_CROPPED:
-      return ash::mojom::WallpaperLayout::CENTER_CROPPED;
-    case wallpaper::WALLPAPER_LAYOUT_STRETCH:
-      return ash::mojom::WallpaperLayout::STRETCH;
-    case wallpaper::WALLPAPER_LAYOUT_TILE:
-      return ash::mojom::WallpaperLayout::TILE;
-    case wallpaper::NUM_WALLPAPER_LAYOUT:
-      NOTREACHED();
-      return ash::mojom::WallpaperLayout::CENTER;
-  }
-  NOTREACHED();
-  return ash::mojom::WallpaperLayout::CENTER;
-}
-
-// A helper to set the wallpaper image for Ash and Mash.
+// A helper to set the wallpaper image for Classic Ash and Mash.
 void SetWallpaper(const gfx::ImageSkia& image,
                   wallpaper::WallpaperLayout layout) {
   if (chrome::IsRunningInMash()) {
-    shell::Connector* connector =
+    // In mash, connect to the WallpaperController interface via mojo.
+    service_manager::Connector* connector =
         content::ServiceManagerConnection::GetForProcess()->GetConnector();
+    if (!connector)
+      return;
+
     ash::mojom::WallpaperControllerPtr wallpaper_controller;
-    connector->ConnectToInterface("service:ash", &wallpaper_controller);
-    wallpaper_controller->SetWallpaper(*image.bitmap(),
-                                       WallpaperLayoutToMojo(layout));
-    return;
-  }
-  // Avoid loading unnecessary wallpapers in tests without a shell instance.
-  if (ash::WmShell::HasInstance()) {
+    connector->ConnectToInterface("ash", &wallpaper_controller);
+    // TODO(crbug.com/655875): Optimize ash wallpaper transport; avoid sending
+    // large bitmaps over Mojo; use shared memory like BitmapUploader, etc.
+    wallpaper_controller->SetWallpaper(*image.bitmap(), layout);
+  } else if (ash::WmShell::HasInstance()) {
+    // Note: Wallpaper setting is skipped in unit tests without shell instances.
+    // In classic ash, interact with the WallpaperController class directly.
     ash::WmShell::Get()->wallpaper_controller()->SetWallpaperImage(image,
                                                                    layout);
   }
@@ -336,7 +305,7 @@ class WallpaperManager::PendingWallpaper :
     // The only known case for this check to fail is global destruction during
     // wallpaper load. It should never happen.
     if (!BrowserThread::CurrentlyOn(BrowserThread::UI))
-      return; // We are in a process of global destruction.
+      return;  // We are in a process of global destruction.
 
     timer.Stop();  // Erase reference to self.
 
@@ -400,6 +369,11 @@ void WallpaperManager::Shutdown() {
   wallpaper_manager = nullptr;
 }
 
+void WallpaperManager::BindRequest(
+    ash::mojom::WallpaperManagerRequest request) {
+  bindings_.AddBinding(this, std::move(request));
+}
+
 WallpaperManager::WallpaperResolution
 WallpaperManager::GetAppropriateResolution() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -419,12 +393,6 @@ void WallpaperManager::AddObservers() {
 }
 
 void WallpaperManager::EnsureLoggedInUserWallpaperLoaded() {
-  // Some browser tests do not have a shell instance. As no wallpaper is needed
-  // in these tests anyway, avoid loading one, preventing crashes and speeding
-  // up the tests.
-  if (!ash::WmShell::HasInstance())
-    return;
-
   WallpaperInfo info;
   if (GetLoggedInUserWallpaperInfo(&info)) {
     UMA_HISTOGRAM_ENUMERATION("Ash.Wallpaper.Type", info.type,
@@ -433,7 +401,7 @@ void WallpaperManager::EnsureLoggedInUserWallpaperLoaded() {
       return;
   }
   SetUserWallpaperNow(
-      user_manager::UserManager::Get()->GetLoggedInUser()->GetAccountId());
+      user_manager::UserManager::Get()->GetActiveUser()->GetAccountId());
 }
 
 void WallpaperManager::InitializeWallpaper() {
@@ -470,12 +438,16 @@ void WallpaperManager::InitializeWallpaper() {
 
   if (!user_manager->IsUserLoggedIn()) {
     if (!StartupUtils::IsDeviceRegistered())
-      SetDefaultWallpaperDelayed(login::SignInAccountId());
+      SetDefaultWallpaperDelayed(user_manager::SignInAccountId());
     else
       InitializeRegisteredDeviceWallpaper();
     return;
   }
-  SetUserWallpaperDelayed(user_manager->GetLoggedInUser()->GetAccountId());
+  SetUserWallpaperDelayed(user_manager->GetActiveUser()->GetAccountId());
+}
+
+void WallpaperManager::Open() {
+  wallpaper_manager_util::OpenWallpaperManager();
 }
 
 void WallpaperManager::Observe(int type,
@@ -724,8 +696,10 @@ void WallpaperManager::ScheduleSetUserWallpaper(const AccountId& account_id,
       user_manager::UserManager::Get()->FindUser(account_id);
 
   // User is unknown or there is no visible wallpaper in kiosk mode.
-  if (!user || user->GetType() == user_manager::USER_TYPE_KIOSK_APP)
+  if (!user || user->GetType() == user_manager::USER_TYPE_KIOSK_APP ||
+      user->GetType() == user_manager::USER_TYPE_ARC_KIOSK_APP) {
     return;
+  }
 
   // Guest user or regular user in ephemeral mode.
   if ((user_manager::UserManager::Get()->IsUserNonCryptohomeDataEphemeral(
@@ -826,7 +800,7 @@ void WallpaperManager::UpdateWallpaper(bool clear_cache) {
   // be set. It could result a black screen on external monitors.
   // See http://crbug.com/265689 for detail.
   if (last_selected_user_.empty())
-    SetDefaultWallpaperNow(chromeos::login::SignInAccountId());
+    SetDefaultWallpaperNow(user_manager::SignInAccountId());
   WallpaperManagerBase::UpdateWallpaper(clear_cache);
 }
 
@@ -881,8 +855,10 @@ void WallpaperManager::RemovePendingWallpaperFromList(
     }
   }
 
-  if (loading_.empty())
-    FOR_EACH_OBSERVER(Observer, observers_, OnPendingListEmptyForTesting());
+  if (loading_.empty()) {
+    for (auto& observer : observers_)
+      observer.OnPendingListEmptyForTesting();
+  }
 }
 
 void WallpaperManager::SetPolicyControlledWallpaper(
@@ -923,7 +899,7 @@ void WallpaperManager::InitializeRegisteredDeviceWallpaper() {
   int public_session_user_index = FindPublicSession(users);
   if ((!show_users && public_session_user_index == -1) || users.empty()) {
     // Boot into sign in form, preload default wallpaper.
-    SetDefaultWallpaperDelayed(login::SignInAccountId());
+    SetDefaultWallpaperDelayed(user_manager::SignInAccountId());
     return;
   }
 

@@ -4,20 +4,24 @@
 
 #include "ash/mus/accelerators/accelerator_controller_delegate_mus.h"
 
+#include "ash/mus/window_manager.h"
 #include "base/logging.h"
 #include "mash/public/interfaces/launchable.mojom.h"
+#include "services/service_manager/public/cpp/connector.h"
+#include "services/ui/public/interfaces/constants.mojom.h"
 #include "services/ui/public/interfaces/display/display_controller.mojom.h"
+#include "services/ui/public/interfaces/display/test_display_controller.mojom.h"
 
 namespace ash {
 namespace mus {
 
 AcceleratorControllerDelegateMus::AcceleratorControllerDelegateMus(
-    shell::Connector* connector)
-    : connector_(connector) {
+    WindowManager* window_manager)
+    : window_manager_(window_manager) {
 #if !defined(OS_CHROMEOS)
-  // To avoid trybot complaining that |connector_| is not being
-  // used in non-ChromeOS.
-  connector_ = nullptr;
+  // To avoid trybot complaining that |window_manager_| is not being used in
+  // non-ChromeOS.
+  window_manager_ = nullptr;
 #endif
 }
 
@@ -51,30 +55,20 @@ bool AcceleratorControllerDelegateMus::HandlesAction(AcceleratorAction action) {
       return false;
 
 #if defined(OS_CHROMEOS)
-    case DEV_ADD_REMOVE_DISPLAY: {
-      display::mojom::DisplayControllerPtr display_controller;
-      connector_->ConnectToInterface("service:ui", &display_controller);
-      display_controller->ToggleVirtualDisplay();
-      return true;
-    }
+    case DEV_ADD_REMOVE_DISPLAY:
     case DEV_TOGGLE_UNIFIED_DESKTOP:
+    case SWAP_PRIMARY_DISPLAY:
+    case TOUCH_HUD_PROJECTION_TOGGLE:
+      return true;
     case LOCK_PRESSED:
     case LOCK_RELEASED:
     case POWER_PRESSED:
     case POWER_RELEASED:
-    case SWAP_PRIMARY_DISPLAY:
     case TOGGLE_MIRROR_MODE:
     case TOUCH_HUD_CLEAR:
     case TOUCH_HUD_MODE_CHANGE:
       NOTIMPLEMENTED();
       return false;
-    case TOUCH_HUD_PROJECTION_TOGGLE: {
-      mash::mojom::LaunchablePtr launchable;
-      connector_->ConnectToInterface("service:touch_hud", &launchable);
-      launchable->Launch(mash::mojom::kWindow,
-                         mash::mojom::LaunchMode::DEFAULT);
-      return true;
-    }
 #endif
 
     default:
@@ -87,14 +81,59 @@ bool AcceleratorControllerDelegateMus::CanPerformAction(
     AcceleratorAction action,
     const ui::Accelerator& accelerator,
     const ui::Accelerator& previous_accelerator) {
+#if defined(OS_CHROMEOS)
+  switch (action) {
+    case DEV_ADD_REMOVE_DISPLAY:
+    case DEV_TOGGLE_UNIFIED_DESKTOP:
+    case SWAP_PRIMARY_DISPLAY:
+    case TOUCH_HUD_PROJECTION_TOGGLE:
+      return true;
+    default:
+      break;
+  }
+#endif
   return false;
 }
 
 void AcceleratorControllerDelegateMus::PerformAction(
     AcceleratorAction action,
     const ui::Accelerator& accelerator) {
-  // Should never be hit as HandlesAction() unconditionally returns false.
+#if defined(OS_CHROMEOS)
+  switch (action) {
+    case DEV_ADD_REMOVE_DISPLAY: {
+      display::mojom::TestDisplayControllerPtr test_display_controller;
+      window_manager_->connector()->ConnectToInterface(
+          ui::mojom::kServiceName, &test_display_controller);
+      test_display_controller->ToggleAddRemoveDisplay();
+      break;
+    }
+    case DEV_TOGGLE_UNIFIED_DESKTOP: {
+      // TODO(crbug.com/657816): This is hack. I'm just stealing the shortcut
+      // key to toggle display size in mus. This should be removed by launch.
+      display::mojom::TestDisplayControllerPtr test_display_controller;
+      window_manager_->connector()->ConnectToInterface(
+          ui::mojom::kServiceName, &test_display_controller);
+      test_display_controller->ToggleDisplayResolution();
+      break;
+    }
+    case SWAP_PRIMARY_DISPLAY: {
+      window_manager_->GetDisplayController()->SwapPrimaryDisplay();
+      break;
+    }
+    case TOUCH_HUD_PROJECTION_TOGGLE: {
+      mash::mojom::LaunchablePtr launchable;
+      window_manager_->connector()->ConnectToInterface("touch_hud",
+                                                       &launchable);
+      launchable->Launch(mash::mojom::kWindow,
+                         mash::mojom::LaunchMode::DEFAULT);
+      break;
+    }
+    default:
+      NOTREACHED();
+  }
+#else
   NOTREACHED();
+#endif
 }
 
 void AcceleratorControllerDelegateMus::ShowDeprecatedAcceleratorNotification(

@@ -4,6 +4,7 @@
 
 #include "media/capture/video/linux/v4l2_capture_delegate.h"
 
+#include <linux/version.h>
 #include <poll.h>
 #include <sys/fcntl.h>
 #include <sys/ioctl.h>
@@ -18,6 +19,19 @@
 #include "media/base/bind_to_current_loop.h"
 #include "media/capture/video/blob_utils.h"
 #include "media/capture/video/linux/video_capture_device_linux.h"
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 6, 0)
+// 16 bit depth, Realsense F200.
+#define V4L2_PIX_FMT_Z16 v4l2_fourcc('Z', '1', '6', ' ')
+#endif
+
+// TODO(aleksandar.stojiljkovic): Wrap this with kernel version check once the
+// format is introduced to kernel.
+// See https://crbug.com/661877
+#ifndef V4L2_PIX_FMT_INVZ
+// 16 bit depth, Realsense SR300.
+#define V4L2_PIX_FMT_INVZ v4l2_fourcc('I', 'N', 'V', 'Z')
+#endif
 
 namespace media {
 
@@ -38,10 +52,6 @@ const int kMjpegHeight = 480;
 // Typical framerate, in fps
 const int kTypicalFramerate = 30;
 
-// Constant used to multiply zoom values to avoid using floating point. Used to
-// scale both the readings (min, max, current) and the value to set it to.
-const int kZoomMultiplier = 100;
-
 // V4L2 color formats supported by V4L2CaptureDelegate derived classes.
 // This list is ordered by precedence of use -- but see caveats for MJPEG.
 static struct {
@@ -50,6 +60,9 @@ static struct {
   size_t num_planes;
 } const kSupportedFormatsAndPlanarity[] = {
     {V4L2_PIX_FMT_YUV420, PIXEL_FORMAT_I420, 1},
+    {V4L2_PIX_FMT_Y16, PIXEL_FORMAT_Y16, 1},
+    {V4L2_PIX_FMT_Z16, PIXEL_FORMAT_Y16, 1},
+    {V4L2_PIX_FMT_INVZ, PIXEL_FORMAT_Y16, 1},
     {V4L2_PIX_FMT_YUYV, PIXEL_FORMAT_YUY2, 1},
     {V4L2_PIX_FMT_UYVY, PIXEL_FORMAT_UYVY, 1},
     {V4L2_PIX_FMT_RGB24, PIXEL_FORMAT_RGB24, 1},
@@ -110,6 +123,7 @@ static mojom::RangePtr RetrieveUserControlRange(int device_fd, int control_id) {
     return mojom::Range::New();
   capability->max = range.maximum;
   capability->min = range.minimum;
+  capability->step = range.step;
 
   v4l2_control current = {};
   current.id = control_id;
@@ -429,9 +443,9 @@ void V4L2CaptureDelegate::SetPhotoOptions(
   if (settings->has_zoom) {
     v4l2_control zoom_current = {};
     zoom_current.id = V4L2_CID_ZOOM_ABSOLUTE;
-    zoom_current.value = settings->zoom / kZoomMultiplier;
+    zoom_current.value = settings->zoom;
     if (HANDLE_EINTR(ioctl(device_fd_.get(), VIDIOC_S_CTRL, &zoom_current)) < 0)
-      DPLOG(ERROR) << "setting zoom to " << settings->zoom / kZoomMultiplier;
+      DPLOG(ERROR) << "setting zoom to " << settings->zoom;
   }
 
   if (settings->has_white_balance_mode &&
@@ -572,9 +586,17 @@ void V4L2CaptureDelegate::DoCapture() {
     if (first_ref_time_.is_null())
       first_ref_time_ = now;
     const base::TimeDelta timestamp = now - first_ref_time_;
-    client_->OnIncomingCapturedData(buffer_tracker->start(),
-                                    buffer_tracker->payload_size(),
-                                    capture_format_, rotation_, now, timestamp);
+
+#ifdef V4L2_BUF_FLAG_ERROR
+    if (buffer.flags & V4L2_BUF_FLAG_ERROR) {
+      LOG(ERROR) << "Dequeued v4l2 buffer contains corrupted data ("
+                 << buffer.bytesused << " bytes).";
+      buffer.bytesused = 0;
+    } else
+#endif
+      client_->OnIncomingCapturedData(
+          buffer_tracker->start(), buffer_tracker->payload_size(),
+          capture_format_, rotation_, now, timestamp);
 
     while (!take_photo_callbacks_.empty()) {
       VideoCaptureDevice::TakePhotoCallback cb =

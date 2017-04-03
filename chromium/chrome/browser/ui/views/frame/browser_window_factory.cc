@@ -10,6 +10,8 @@
 #include "ui/views/widget/widget.h"
 #include "ui/vivaldi_browser_window.h"
 
+#include "ui/vivaldi_browser_window.h"
+
 // static
 BrowserWindow* BrowserWindow::CreateBrowserWindow(Browser* browser) {
   // gisli@vivaldi.com:  Put this here as we choose between Win and Mac

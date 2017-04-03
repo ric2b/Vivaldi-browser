@@ -23,7 +23,7 @@ CompositorWorkerGlobalScope* CompositorWorkerGlobalScope::create(
   CompositorWorkerGlobalScope* context = new CompositorWorkerGlobalScope(
       startupData->m_scriptURL, startupData->m_userAgent, thread, timeOrigin,
       std::move(startupData->m_starterOriginPrivilegeData),
-      startupData->m_workerClients.release());
+      startupData->m_workerClients);
   context->applyContentSecurityPolicyFromVector(
       *startupData->m_contentSecurityPolicyHeaders);
   if (!startupData->m_referrerPolicy.isNull())
@@ -76,8 +76,8 @@ void CompositorWorkerGlobalScope::postMessage(
       MessagePort::disentanglePorts(executionContext, ports, exceptionState);
   if (exceptionState.hadException())
     return;
-  thread()->workerObjectProxy().postMessageToWorkerObject(std::move(message),
-                                                          std::move(channels));
+  workerObjectProxy().postMessageToWorkerObject(std::move(message),
+                                                std::move(channels));
 }
 
 int CompositorWorkerGlobalScope::requestAnimationFrame(
@@ -100,8 +100,9 @@ bool CompositorWorkerGlobalScope::executeAnimationFrameCallbacks(
   return !m_callbackCollection.isEmpty();
 }
 
-CompositorWorkerThread* CompositorWorkerGlobalScope::thread() const {
-  return static_cast<CompositorWorkerThread*>(WorkerGlobalScope::thread());
+InProcessWorkerObjectProxy& CompositorWorkerGlobalScope::workerObjectProxy()
+    const {
+  return static_cast<CompositorWorkerThread*>(thread())->workerObjectProxy();
 }
 
 }  // namespace blink

@@ -18,6 +18,10 @@
 
 struct MediaPlayerHostMsg_Initialize_Params;
 
+namespace blink {
+enum class WebRemotePlaybackAvailability;
+}
+
 namespace remote_media {
 
 // media::MediaPlayerManager implementation that allows the user to play media
@@ -34,11 +38,15 @@ class RemoteMediaPlayerManager : public content::BrowserMediaPlayerManager {
   // Callback to trigger when a remote device has been unselected.
   void OnRemoteDeviceUnselected(int player_id);
 
+  // Callback to trigger when the video on a remote device starts playing.
+  void OnRemotePlaybackStarted(int player_id);
+
   // Callback to trigger when the video on a remote device finishes playing.
   void OnRemotePlaybackFinished(int player_id);
 
   // Callback to trigger when the availability of remote routes changes.
-  void OnRouteAvailabilityChanged(int tab_id, bool routes_available);
+  void OnRouteAvailabilityChanged(
+      int player_id, blink::WebRemotePlaybackAvailability availability);
 
   // Callback to trigger when the device picker dialog was dismissed.
   void OnCancelledRemotePlaybackRequest(int player_id);
@@ -78,6 +86,7 @@ class RemoteMediaPlayerManager : public content::BrowserMediaPlayerManager {
   void OnSuspendAndReleaseResources(int player_id) override;
   void OnRequestRemotePlayback(int player_id) override;
   void OnRequestRemotePlaybackControl(int player_id) override;
+  void OnRequestRemotePlaybackStop(int player_id) override;
 
   bool IsPlayingRemotely(int player_id) override;
 

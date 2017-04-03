@@ -55,6 +55,7 @@
 #include "platform/tracing/TraceEvent.h"
 #include "public/platform/WebCompositeAndReadbackAsyncCallback.h"
 #include "public/platform/WebCursorInfo.h"
+#include "public/platform/WebFloatRect.h"
 #include "public/web/WebAXObject.h"
 #include "public/web/WebFrameClient.h"
 #include "public/web/WebViewClient.h"
@@ -94,6 +95,12 @@ class PagePopupChromeClient final : public EmptyChromeClient {
     rectInScreen.x += windowRect.x;
     rectInScreen.y += windowRect.y;
     return rectInScreen;
+  }
+
+  float windowToViewportScalar(const float scalarValue) const override {
+    WebFloatRect viewportRect(0, 0, scalarValue, 0);
+    m_popup->widgetClient()->convertWindowToViewport(&viewportRect);
+    return viewportRect.width;
   }
 
   void addMessageToConsole(LocalFrame*,
@@ -195,8 +202,14 @@ class PagePopupChromeClient final : public EmptyChromeClient {
     return false;
   }
 
-  void setTouchAction(TouchAction touchAction) override {
-    if (WebViewClient* client = m_popup->m_webView->client())
+  void setTouchAction(LocalFrame* frame, TouchAction touchAction) override {
+    DCHECK(frame);
+    WebLocalFrameImpl* webFrame = WebLocalFrameImpl::fromFrame(frame);
+    WebFrameWidgetBase* widget = webFrame->localRoot()->frameWidget();
+    if (!widget)
+      return;
+
+    if (WebWidgetClient* client = widget->client())
       client->setTouchAction(static_cast<WebTouchAction>(touchAction));
   }
 
@@ -289,13 +302,13 @@ bool WebPagePopupImpl::initializePage() {
   m_page->settings().setScrollAnimatorEnabled(
       mainSettings.scrollAnimatorEnabled());
 
-  provideContextFeaturesTo(*m_page, wrapUnique(new PagePopupFeaturesClient()));
+  provideContextFeaturesTo(*m_page, makeUnique<PagePopupFeaturesClient>());
   DEFINE_STATIC_LOCAL(FrameLoaderClient, emptyFrameLoaderClient,
                       (EmptyFrameLoaderClient::create()));
   LocalFrame* frame =
       LocalFrame::create(&emptyFrameLoaderClient, &m_page->frameHost(), 0);
   frame->setPagePopupOwner(m_popupClient->ownerElement());
-  frame->setView(FrameView::create(frame));
+  frame->setView(FrameView::create(*frame));
   frame->init();
   frame->view()->setParentVisible(true);
   frame->view()->setSelfVisible(true);

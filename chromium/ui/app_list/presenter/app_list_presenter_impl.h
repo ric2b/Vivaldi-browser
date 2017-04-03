@@ -27,7 +27,6 @@ namespace test {
 class AppListPresenterImplTestApi;
 }
 
-class AppListPresenterImplTest;
 class AppListViewDelegate;
 
 // Manages app list UI. Creates AppListView and schedules showing/hiding
@@ -53,7 +52,7 @@ class APP_LIST_PRESENTER_EXPORT AppListPresenterImpl
 
   // AppListPresenter:
   void Show(int64_t display_id) override;
-  void Dismiss() override;
+  void Dismiss() final;
   void ToggleAppList(int64_t display_id) override;
   bool IsVisible() const override;
   bool GetTargetVisibility() const override;

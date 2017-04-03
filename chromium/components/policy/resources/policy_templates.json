@@ -139,7 +139,7 @@
 #   persistent IDs for all fields (but not for groups!) are needed. These are
 #   specified by the 'id' keys of each policy. NEVER CHANGE EXISTING IDs,
 #   because doing so would break the deployed wire format!
-#   For your editing convenience: highest ID currently used: 349
+#   For your editing convenience: highest ID currently used: 353
 #
 # Placeholders:
 #   The following placeholder strings are automatically substituted:
@@ -1337,6 +1337,7 @@
         'items': { 'type': 'string' },
       },
       'supported_on': ['chrome.*:8-', 'chrome_os:11-'],
+      'deprecated': True,
       'features': {
         'dynamic_refresh': True,
         'per_profile': True,
@@ -1345,7 +1346,9 @@
       'id': 19,
       'caption': '''Specify a list of disabled plugins''',
       'tags': [],
-      'desc': '''Specifies a list of plugins that are disabled in <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> and prevents users from changing this setting.
+      'desc': '''This policy is deprecated. Please use the <ph name="DEFAULT_PLUGINS_SETTING_POLICY">$1<ex>DefaultPluginsSetting</ex></ph> to control the avalability of the Flash plugin and <ph name="ALWAYS_OPEN_PDF_EXTERNALLY_POLICY">$1<ex>AlwaysOpenPdfExternally</ex></ph> to control whether the integrated PDF viewer should be used for opening PDF files.
+
+      Specifies a list of plugins that are disabled in <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> and prevents users from changing this setting.
 
       The wildcard characters '*' and '?' can be used to match sequences of arbitrary characters. '*' matches an arbitrary number of characters while '?' specifies an optional single character, i.e. matches zero or one characters. The escape character is '\\', so to match actual '*', '?', or '\\' characters, you can put a '\\' in front of them.
 
@@ -1364,6 +1367,7 @@
         'items': { 'type': 'string' },
       },
       'supported_on': ['chrome.*:11-', 'chrome_os:11-'],
+      'deprecated': True,
       'features': {
         'dynamic_refresh': True,
         'per_profile': True,
@@ -1372,7 +1376,9 @@
       'id': 78,
       'caption': '''Specify a list of enabled plugins''',
       'tags': ['system-security'],
-      'desc': '''Specifies a list of plugins that are enabled in <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> and prevents users from changing this setting.
+      'desc': '''This policy is deprecated. Please use the <ph name="DEFAULT_PLUGINS_SETTING_POLICY">$1<ex>DefaultPluginsSetting</ex></ph> to control the avalability of the Flash plugin and <ph name="ALWAYS_OPEN_PDF_EXTERNALLY_POLICY">$1<ex>AlwaysOpenPdfExternally</ex></ph> to control whether the integrated PDF viewer should be used for opening PDF files.
+
+      Specifies a list of plugins that are enabled in <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> and prevents users from changing this setting.
 
       The wildcard characters '*' and '?' can be used to match sequences of arbitrary characters. '*' matches an arbitrary number of characters while '?' specifies an optional single character, i.e. matches zero or one characters. The escape character is '\\', so to match actual '*', '?', or '\\' characters, you can put a '\\' in front of them.
 
@@ -1391,6 +1397,7 @@
         'items': { 'type': 'string' },
       },
       'supported_on': ['chrome.*:11-', 'chrome_os:11-'],
+      'deprecated': True,
       'features': {
         'dynamic_refresh': True,
         'per_profile': True,
@@ -1399,7 +1406,9 @@
       'id': 79,
       'caption': '''Specify a list of plugins that the user can enable or disable''',
       'tags': [],
-      'desc': '''Specifies a list of plugins that user can enable or disable in <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph>.
+      'desc': '''This policy is deprecated. Please use the <ph name="DEFAULT_PLUGINS_SETTING_POLICY">$1<ex>DefaultPluginsSetting</ex></ph> to control the avalability of the Flash plugin and <ph name="ALWAYS_OPEN_PDF_EXTERNALLY_POLICY">$1<ex>AlwaysOpenPdfExternally</ex></ph> to control whether the integrated PDF viewer should be used for opening PDF files.
+
+      Specifies a list of plugins that user can enable or disable in <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph>.
 
       The wildcard characters '*' and '?' can be used to match sequences of arbitrary characters. '*' matches an arbitrary number of characters while '?' specifies an optional single character, i.e. matches zero or one characters. The escape character is '\\', so to match actual '*', '?', or '\\' characters, you can put a '\\' in front of them.
 
@@ -5034,11 +5043,11 @@
       'id': 349,
       'caption': '''Report information about status of Android''',
       'tags': ['admin-sharing'],
-      'desc': '''Report information about the status of Android is send back to
-      the server.
+      'desc': '''Information about the status of Android is sent back to the
+      server.
 
-      If the policy is set to false, the information will not be reported.
-      If set to true or left unset, the information will be reported.
+      If the policy is set to false, no status information is reported.
+      If set to true or left unset, status information is reported.
 
       This policy only applies if Android apps are enabled.''',
     },
@@ -5753,7 +5762,7 @@
       'id': 299,
       'caption': '''Allow users to opt in to Safe Browsing extended reporting''',
       'tags': [],
-      'desc': '''Setting this policy to false stops users from choosing to send information about security errors they encounter to Google servers. If this setting is true or not configured, then users will be allowed to send information when they encounter an SSL error or Safe Browsing warning.''',
+      'desc': '''Setting this policy to false stops users from choosing to send some system information and page content to Google servers. If this setting is true or not configured, then users will be allowed to send some system information and page content to Safe Browsing to help detect dangerous apps and sites.''',
     },
     {
       'name': 'SpellCheckServiceEnabled',
@@ -5788,9 +5797,7 @@
       'id': 152,
       'caption': '''Disable mounting of external storage''',
       'tags': [],
-      'desc': '''Disable mounting of external storage.
-
-      When this policy is set to true, external storage will not be available in the file browser.
+      'desc': '''When this policy is set to true, external storage will not be available in the file browser.
 
       This policy affects all types of storage media. For example: USB flash drives, external hard drives, SD and other memory cards, optical storage etc. Internal storage is not affected, therefore files saved in the Download folder can still be accessed. Google Drive is also not affected by this policy.
 
@@ -5804,9 +5811,17 @@
       'tags': [],
       'supported_on': ['chrome_os:54-'],
       'caption': '''Treat external storage devices as read-only.''',
-      'desc': '''When this policy is set to true, users cannot write anything to external storage devices.''',
+      'desc': '''Treat external storage devices as read-only.
+
+      This policy is effective only when ExternalStorageDisabled is set to false or not configured.
+
+      When this policy is set to true, users cannot write anything to external storage devices.
+
+      If this setting is disabled or not configured then users can create and modify files of external storage devices which are physically writable.
+
+      Dynamic refresh of this policy is supported in M56 and later.''',
       'features': {
-        'dynamic_refresh': False,
+        'dynamic_refresh': True,
         'per_profile': True,
       },
       'example_value': True
@@ -7475,7 +7490,7 @@
           'tags': [],
           'desc': '''If true, remote attestation is allowed for the device and a certificate will automatically be generated and uploaded to the Device Management Server.
 
-          If it is set to false, or if it is not set, no certificate will be generated and calls to the enterprise.platformKeysPrivate extension API will fail.''',
+          If it is set to false, or if it is not set, no certificate will be generated and calls to the enterprise.platformKeys extension API will fail.''',
         },
         {
           'name': 'AttestationEnabledForUser',
@@ -7490,7 +7505,7 @@
           'id': 200,
           'caption': '''Enable remote attestation for the user''',
           'tags': [],
-          'desc': '''If true, the user can use the hardware on Chrome devices to remote attest its identity to the privacy CA via the Enterprise Platform Keys API chrome.enterprise.platformKeysPrivate.challengeUserKey().
+          'desc': '''If true, the user can use the hardware on Chrome devices to remote attest its identity to the privacy CA via the Enterprise Platform Keys API chrome.enterprise.platformKeys.challengeUserKey().
 
           If it is set to false, or if it is not set, calls to the API will fail with an error code.''',
         },
@@ -7510,7 +7525,7 @@
           'id': 201,
           'caption': '''Extensions allowed to to use the remote attestation API''',
           'tags': [],
-          'desc': '''This policy specifies the allowed extensions to use Enterprise Platform Keys API chrome.enterprise.platformKeysPrivate.challengeUserKey() for remote attestation. Extensions must be added to this list to use the API.
+          'desc': '''This policy specifies the allowed extensions to use Enterprise Platform Keys API chrome.enterprise.platformKeys.challengeUserKey() for remote attestation. Extensions must be added to this list to use the API.
 
           If an extension is not in the list, or the list is not set, the call to the API will fail with an error code.''',
         },
@@ -8665,7 +8680,7 @@
 
       If this policy is set, the user cannot change or override it.
 
-      After enabling Bluetooth, the device must be rebooted for the changes to take effect (no need to reboot the device when disabling Bluetooth).''',
+      After enabling Bluetooth, the user must log out and log back in for the changes to take effect (no need for this when disabling Bluetooth).''',
     },
     {
       'name': 'SuppressUnsupportedOSWarning',
@@ -8778,6 +8793,44 @@
       'example_value': True,
       'tags': [],
       'id': 327,
+    },
+    {
+      'name': 'NetworkThrottlingEnabled',
+      'device_only': True,
+      'caption': '''Enables throttling network bandwidth''',
+      'desc': '''Allows choosing whether network throttling is enabled or not.
+      This applies to all users, and to all interfaces on the device. Once set,
+      the throttling persists until the policy is changed to disable it.
+
+      If set to false, there is no throttling.
+      If set to true, the system is throttled to achieve the provided upload and download rates (in kbits/s).''',
+      'type': 'dict',
+      'schema': {
+        'type': 'object',
+        'properties': {
+          'enabled': {
+            'description': 'A boolean flag indicating if throttling is enabled.',
+            'type': 'boolean'
+          },
+          'upload_rate_kbits': {
+            'description': 'Desired upload rate in kbits/s.',
+            'type': 'integer'
+          },
+          'download_rate_kbits': {
+            'description': 'Desired download rate in kbits/s.',
+            'type': 'integer'
+          }
+        },
+        'required': ['enabled', 'upload_rate_kbits', 'download_rate_kbits']
+      },
+      'supported_on': ['chrome_os:56-'],
+      'features': {
+        'dynamic_refresh': True,
+        'per_profile': False,
+      },
+      'example_value': [{'enabled': 'true', 'upload_rate_kbits': '5600', 'download_rate_kbits': '5600'}],
+      'tags': [],
+      'id': 351,
     },
     {
       'name': 'LoginVideoCaptureAllowedUrls',
@@ -9072,6 +9125,151 @@
 
       If set to False, updates to components are disabled. However, some components are exempt from this policy: updates to any component that does not contain executable code, or does not significantly alter the behavior of the browser, or is critical for its security will not be disabled.
       Examples of such components include the certificate revocation lists and safe browsing data. ''',
+    },
+    {
+      'name': 'NativePrinters',
+      'type': 'list',
+      'schema': {
+        'type': 'array',
+        'items': {
+          'type': 'object',
+          'id': 'PrinterType',
+          'properties': {
+            'display_name': { 'type': 'string' },
+            'description': { 'type': 'string' },
+            'manufacturer': { 'type': 'string' },
+            'model': { 'type': 'string' },
+            'uri': { 'type': 'string' },
+            'uuid': { 'type': 'string' },
+            'ppd_resource': {
+              'type': 'object',
+              'id': 'PpdResource',
+              'properties': {
+                'effective_manufacturer': { 'type': 'string' },
+                'effective_model': { 'type': 'string' }
+              }
+            }
+          }
+        }
+      },
+      'supported_on': [ 'chrome_os:56-' ],
+      'features': {
+        'dynamic_refresh': True,
+        'per_profile': True,
+      },
+      'example_value': [{
+        "display_name": "Color Laser",
+        "description": "The printer next to the water cooler.",
+        "manufacturer": "Printer Manufacturer",
+        "model": "Color Laser 2004",
+        "uri": "ipps://print-server.intranet.example.com:443/ipp/cl2k4",
+        "uuid": "1c395fdb-5d93-4904-b246-b2c046e79d12",
+        "ppd_resource": {
+          "effective_manufacturer": "MakesPrinters",
+          "effective_model": "ColorLaser2k4"
+        }
+      }],
+      'id': 350,
+      'caption': '''Native Printing''',
+      'tags': [],
+      'desc': '''Configures a list of printers.
+
+      This policy allows administrators to provide printer configurations for
+      their users.
+
+      <ph name="PRINTER_DISPLAY_NAME">display_name</ph> and <ph
+      name="PRINTER_DESCRIPTION">description</ph> are free form strings that
+      can be customized for ease of printer selection. <ph
+      name="PRINTER_MANUFACTURER">manufacturer</ph> and <ph
+      name="PRINTER_MODEL">model</ph> should match one of the <ph
+      name="PRODUCT_NAME">$2<ex>Google Chrome OS</ex></ph> supported
+      printers.  <ph name="PRINTER_URI">uri</ph> should be an address reachable
+      from a client computer including the <ph name="URI_SCHEME">scheme</ph>,
+      <ph name="URI_PORT">port</ph>, and <ph name="URI_QUEUE">queue</ph>.  <ph
+      name="PRINTER_UUID">uuid</ph> is optional.  If provided, it is used to
+      help deduplicate <ph name="ZEROCONF_DISCOVERY">zeroconf</ph> printers.
+
+      Printer setup is completed upon the first use of a printer.  PPDs are not
+      downloaded until the printer is used.  After that time, frequently used
+      PPDs are cached.
+
+      This policy has no effect on whether users can configure printers on
+      individual devices.  It is intended to be supplementary to the
+      configuration of printers by individual users.''',
+    },
+    {
+      'name': 'QuickUnlockModeWhitelist',
+      'type': 'list',
+      'schema': {
+        'type': 'array',
+        'items': {
+          'type': 'string',
+          'enum': [
+            'all',
+            'PIN'
+          ],
+        },
+        'id': 'QuickUnlockModeWhitelist',
+      },
+      'supported_on': ['chrome_os:56-'],
+      'features': {
+        'dynamic_refresh': True,
+        'per_profile': True,
+      },
+      'example_value': ['PIN'],
+      'id': 352,
+      'caption': '''Configure allowed quick unlock modes.''',
+      'tags': [],
+      'desc': '''Controls which quick unlock modes are allowed to be set up and used.
+      This setting white-lists the allowed quick unlock modes that can be set up and used to unlock the lock screen. The value is a list of strings, each of which should be one of the following: "all", "PIN". If "all" is selected, then all supported quick modes will be available, otherwise the modes in the list will be the ones available.
+
+      If this setting is configured, quick unlock modes which have a type that is not on this list can not be set up or used.
+
+      If this setting is left not configured, "PIN" mode will be enabled, and all other modes will be disabled.''',
+    },
+    {
+      'name': 'QuickUnlockTimeout',
+      'type': 'int-enum',
+      'schema': {
+        'type': 'integer',
+        'enum': [ 0, 1, 2, 3 ],
+      },
+      'items': [
+        {
+          'name': 'SixHours',
+          'value': 0,
+          'caption': '''Password entry is required every six hours.''',
+        },
+        {
+          'name': 'TweleveHours',
+          'value': 1,
+          'caption': '''Password entry is required every twelve hours.''',
+        },
+        {
+          'name': 'Day',
+          'value': 2,
+          'caption': '''Password entry is required every day (24 hours).''',
+        },
+        {
+          'name': 'Week',
+          'value': 3,
+          'caption': '''Password entry is required every week (168 hours).''',
+        },
+      ],
+      'supported_on': ['chrome_os:56-'],
+      'features': {
+        'dynamic_refresh': True,
+        'per_profile': True,
+      },
+      'example_value': 2,
+      'id': 353,
+      'caption': '''Sets how often user has to enter password to use quick unlock.''',
+      'tags': [],
+      'desc': '''This setting controls how often the lock screen will request the password to be entered in order to continue using quick unlock. Each time the lock screen is entered, if the last password entry was more than this setting, the quick unlock will not be available on entering the lock screen. Should the user stay on the lock screen past this period of time, a password will be requested next time the user enters the wrong code, or re-enters the lock screen, whichever comes first.
+
+      If this setting is configured, users using quick unlock will be requested to enter their passwords on the lock screen depending on this setting.
+
+      If this setting is not configured, users using quick unlock will be requested to enter their password on the lock screen every day.''',
     },
   ],
   'messages': {

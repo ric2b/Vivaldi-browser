@@ -5,42 +5,18 @@
 #ifndef COMPONENTS_SESSION_MANAGER_CORE_SESSION_MANAGER_H_
 #define COMPONENTS_SESSION_MANAGER_CORE_SESSION_MANAGER_H_
 
-#include <memory>
+#include <vector>
 
 #include "base/macros.h"
+#include "base/observer_list.h"
 #include "components/session_manager/session_manager_export.h"
+#include "components/session_manager/session_manager_types.h"
+
+class AccountId;
 
 namespace session_manager {
 
-class SessionManagerDelegate;
-
-// TODO(nkostylev): Get rid/consolidate with:
-// ash::SessionStateDelegate::SessionState and chromeos::LoggedInState.
-enum SessionState {
-  // Default value, when session state hasn't been initialized yet.
-  SESSION_STATE_UNKNOWN = 0,
-
-  // Running out of box UI.
-  SESSION_STATE_OOBE,
-
-  // Running login UI (primary user) but user sign in hasn't completed yet.
-  SESSION_STATE_LOGIN_PRIMARY,
-
-  // Running login UI (primary or secondary user), user sign in has been
-  // completed but login UI hasn't been hidden yet. This means that either
-  // some session initialization is happening or user has to go through some
-  // UI flow on the same login UI like select avatar, agree to terms of
-  // service etc.
-  SESSION_STATE_LOGGED_IN_NOT_ACTIVE,
-
-  // A user(s) has logged in *and* login UI is hidden i.e. user session is
-  // not blocked.
-  SESSION_STATE_ACTIVE,
-
-  // Same as SESSION_STATE_LOGIN_PRIMARY but for multi-profiles sign in i.e.
-  // when there's at least one user already active in the session.
-  SESSION_STATE_LOGIN_SECONDARY,
-};
+class SessionManagerObserver;
 
 class SESSION_EXPORT SessionManager {
  public:
@@ -51,21 +27,48 @@ class SESSION_EXPORT SessionManager {
   // initialized yet.
   static SessionManager* Get();
 
-  SessionState session_state() const { return session_state_; }
-  virtual void SetSessionState(SessionState state);
+  void SetSessionState(SessionState state);
 
-  // Let session delegate executed on its plan of actions depending on the
-  // current session type / state.
-  void Start();
+  // Creates a session for the given user. The first one is for regular cases
+  // and the 2nd one is for the crash-and-restart case.
+  void CreateSession(const AccountId& user_account_id,
+                     const std::string& user_id_hash);
+  void CreateSessionForRestart(const AccountId& user_account_id,
+                               const std::string& user_id_hash);
+
+  // Returns true if we're logged in and browser has been started i.e.
+  // browser_creator.LaunchBrowser(...) was called after sign in
+  // or restart after crash.
+  virtual bool IsSessionStarted() const;
+
+  // Called when browser session is started i.e. after
+  // browser_creator.LaunchBrowser(...) was called after user sign in.
+  // When user is at the image screen IsUserLoggedIn() will return true
+  // but IsSessionStarted() will return false. During the kiosk splash screen,
+  // we perform additional initialization after the user is logged in but
+  // before the session has been started.
+  virtual void SessionStarted();
+
+  void AddObserver(SessionManagerObserver* observer);
+  void RemoveObserver(SessionManagerObserver* observer);
+
+  SessionState session_state() const { return session_state_; }
+  const std::vector<Session>& sessions() const { return sessions_; }
 
  protected:
-  // Initializes SessionManager with delegate.
-  void Initialize(SessionManagerDelegate* delegate);
+  // Notifies UserManager about a user signs in when creating a user session.
+  virtual void NotifyUserLoggedIn(const AccountId& user_account_id,
+                                  const std::string& user_id_hash,
+                                  bool browser_restart);
 
   // Sets SessionManager instance.
   static void SetInstance(SessionManager* session_manager);
 
  private:
+  void CreateSessionInternal(const AccountId& user_account_id,
+                             const std::string& user_id_hash,
+                             bool browser_restart);
+
   // Pointer to the existing SessionManager instance (if any).
   // Set in ctor, reset in dtor. Not owned since specific implementation of
   // SessionManager should decide on its own appropriate owner of SessionManager
@@ -73,28 +76,23 @@ class SESSION_EXPORT SessionManager {
   // g_browser_process->platform_part().
   static SessionManager* instance;
 
-  SessionState session_state_;
-  std::unique_ptr<SessionManagerDelegate> delegate_;
+  SessionState session_state_ = SessionState::UNKNOWN;
+
+  // True if SessionStarted() has been called.
+  bool session_started_ = false;
+
+  // Id of the primary session, i.e. the first user session.
+  static const SessionId kPrimarySessionId = 1;
+
+  // ID assigned to the next session.
+  SessionId next_id_ = kPrimarySessionId;
+
+  // Keeps track of user sessions.
+  std::vector<Session> sessions_;
+
+  base::ObserverList<SessionManagerObserver> observers_;
 
   DISALLOW_COPY_AND_ASSIGN(SessionManager);
-};
-
-class SESSION_EXPORT SessionManagerDelegate {
- public:
-  SessionManagerDelegate();
-  virtual ~SessionManagerDelegate();
-
-  virtual void SetSessionManager(
-      session_manager::SessionManager* session_manager);
-
-  // Executes specific actions defined by this delegate.
-  virtual void Start() = 0;
-
- protected:
-  session_manager::SessionManager* session_manager_;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(SessionManagerDelegate);
 };
 
 }  // namespace session_manager

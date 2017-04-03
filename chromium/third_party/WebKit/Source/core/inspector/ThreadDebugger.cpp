@@ -17,6 +17,7 @@
 #include "bindings/core/v8/V8Node.h"
 #include "bindings/core/v8/V8NodeList.h"
 #include "bindings/core/v8/V8ScriptRunner.h"
+#include "core/dom/DocumentUserGestureToken.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/inspector/InspectorDOMDebuggerAgent.h"
 #include "core/inspector/InspectorTraceEvents.h"
@@ -30,7 +31,8 @@ namespace blink {
 
 ThreadDebugger::ThreadDebugger(v8::Isolate* isolate)
     : m_isolate(isolate),
-      m_v8Inspector(v8_inspector::V8Inspector::create(isolate, this)) {}
+      m_v8Inspector(v8_inspector::V8Inspector::create(isolate, this)),
+      m_v8TracingCpuProfiler(v8::TracingCpuProfiler::Create(isolate)) {}
 
 ThreadDebugger::~ThreadDebugger() {}
 
@@ -135,8 +137,8 @@ void ThreadDebugger::promiseRejectionRevoked(v8::Local<v8::Context> context,
 }
 
 void ThreadDebugger::beginUserGesture() {
-  m_userGestureIndicator =
-      wrapUnique(new UserGestureIndicator(DefinitelyProcessingNewUserGesture));
+  m_userGestureIndicator = wrapUnique(
+      new UserGestureIndicator(DocumentUserGestureToken::create(nullptr)));
 }
 
 void ThreadDebugger::endUserGesture() {
@@ -412,6 +414,8 @@ void ThreadDebugger::getEventListenersCallback(
                        v8::Boolean::New(isolate, info.useCapture));
     createDataProperty(context, listenerObject, v8String(isolate, "passive"),
                        v8::Boolean::New(isolate, info.passive));
+    createDataProperty(context, listenerObject, v8String(isolate, "once"),
+                       v8::Boolean::New(isolate, info.once));
     createDataProperty(context, listenerObject, v8String(isolate, "type"),
                        v8String(isolate, currentEventType));
     v8::Local<v8::Function> removeFunction;

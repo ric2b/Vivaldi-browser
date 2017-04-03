@@ -51,6 +51,7 @@ static_library("browser") {
     "//components/pref_registry:pref_registry",
     "//components/prefs",
     "//components/url_formatter",
+    "//extensions/features",
     "//net",
     "//url",
   ]
@@ -64,8 +65,6 @@ static_library("browser") {
 source_set("unit_tests") {
   testonly = true
   sources = [
-    "content_settings_mock_provider.cc",
-    "content_settings_mock_provider.h",
     "content_settings_registry_unittest.cc",
     "content_settings_rule_unittest.cc",
     "content_settings_utils_unittest.cc",
@@ -85,6 +84,7 @@ source_set("unit_tests") {
     "//components/content_settings/core/test:test_support",
     "//components/pref_registry:test_support",
     "//components/prefs",
+    "//extensions/features",
     "//testing/gtest",
     "//url",
   ]

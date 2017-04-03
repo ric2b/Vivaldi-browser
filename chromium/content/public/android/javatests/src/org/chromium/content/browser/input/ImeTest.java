@@ -10,7 +10,6 @@ import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.res.Configuration;
 import android.os.Handler;
-import android.os.Looper;
 import android.test.suitebuilder.annotation.MediumTest;
 import android.test.suitebuilder.annotation.SmallTest;
 import android.text.InputType;
@@ -23,13 +22,12 @@ import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
 
 import org.chromium.base.ThreadUtils;
-import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.RetryOnFailure;
-import org.chromium.base.test.util.parameter.Parameter;
-import org.chromium.base.test.util.parameter.ParameterizedTest;
+import org.chromium.base.test.util.UrlUtils;
 import org.chromium.content.browser.ContentViewCore;
+import org.chromium.content.browser.SelectionPopupController;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
 import org.chromium.content.browser.test.util.DOMUtils;
@@ -48,25 +46,8 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
 
 /**
- * IME (input method editor) and text input tests. Note that we run each test case twice,
- * once with ImeThread feature and once without it.
+ * IME (input method editor) and text input tests.
  */
-@ParameterizedTest.Set(tests = {
-        @ParameterizedTest(parameters = {
-                @Parameter(
-                        tag = CommandLineFlags.Parameter.PARAMETER_TAG,
-                        arguments = {
-                                @Parameter.Argument(
-                                        name = CommandLineFlags.Parameter.ADD_ARG,
-                                        stringArray = {"enable-features=ImeThread"})})}),
-        @ParameterizedTest(parameters = {
-                @Parameter(
-                        tag = CommandLineFlags.Parameter.PARAMETER_TAG,
-                        arguments = {
-                                @Parameter.Argument(
-                                        name = CommandLineFlags.Parameter.ADD_ARG,
-                                        stringArray = {"disable-features=ImeThread"})})})
-        })
 public class ImeTest extends ContentShellTestBase {
     protected ChromiumBaseInputConnection mConnection;
     private TestInputConnectionFactory mConnectionFactory;
@@ -77,6 +58,7 @@ public class ImeTest extends ContentShellTestBase {
 
     private ContentViewCore mContentViewCore;
     private WebContents mWebContents;
+    private SelectionPopupController mSelectionPopupController;
     private TestCallbackHelperContainer mCallbackContainer;
     protected TestInputMethodManagerWrapper mInputMethodManagerWrapper;
 
@@ -85,6 +67,7 @@ public class ImeTest extends ContentShellTestBase {
         super.setUp();
         startActivityWithTestUrl(INPUT_FORM_HTML);
         mContentViewCore = getContentViewCore();
+        mSelectionPopupController = mContentViewCore.getSelectionPopupControllerForTesting();
         mWebContents = getWebContents();
 
         mInputMethodManagerWrapper = new TestInputMethodManagerWrapper(mContentViewCore);
@@ -96,16 +79,14 @@ public class ImeTest extends ContentShellTestBase {
 
         mCallbackContainer = new TestCallbackHelperContainer(mContentViewCore);
         DOMUtils.waitForNonZeroNodeBounds(mWebContents, "input_text");
-        DOMUtils.clickNode(this, mContentViewCore, "input_text");
+        boolean result = DOMUtils.clickNode(this, mContentViewCore, "input_text");
+
+        assertEquals("Failed to dispatch touch event.", true, result);
         assertWaitForKeyboardStatus(true);
 
         mConnection = getInputConnection();
         mImeAdapter = getImeAdapter();
 
-        if (usingReplicaInputConnection()) {
-            // This is not needed if onCreateInputConnection() can return correct selection range.
-            waitAndVerifyUpdateSelection(0, 0, 0, -1, -1);
-        }
         waitForKeyboardStates(1, 0, 1, new Integer[] {TextInputType.TEXT});
         assertEquals(0, mConnectionFactory.getOutAttrs().initialSelStart);
         assertEquals(0, mConnectionFactory.getOutAttrs().initialSelEnd);
@@ -114,6 +95,36 @@ public class ImeTest extends ContentShellTestBase {
         clearEventLogs();
 
         resetAllStates();
+    }
+
+    private void fullyLoadUrl(final String url) throws Throwable {
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                getActivity().getActiveShell().loadUrl(url);
+            }
+        });
+        waitForActiveShellToBeDoneLoading();
+    }
+
+    @MediumTest
+    @Feature({"TextInput", "Main"})
+    @RetryOnFailure
+    public void testKeyboardDismissedWhenNavigating() throws Throwable {
+        assertWaitForKeyboardStatus(true);
+
+        // Hide keyboard when loading a new Url.
+        fullyLoadUrl(UrlUtils.getIsolatedTestFileUrl(INPUT_FORM_HTML));
+        assertWaitForKeyboardStatus(false);
+
+        DOMUtils.clickNode(this, mContentViewCore, "input_text");
+        assertWaitForKeyboardStatus(true);
+
+        // Hide keyboard when navigating.
+        final String code = "document.getElementById(\"link\").click()";
+        JavaScriptUtils.executeJavaScriptAndWaitForResult(
+                getContentViewCore().getWebContents(), code);
+        assertWaitForKeyboardStatus(false);
     }
 
     @MediumTest
@@ -149,7 +160,6 @@ public class ImeTest extends ContentShellTestBase {
     @SmallTest
     @Feature({"TextInput", "Main"})
     public void testCompositionWithNullTextNotCrash() throws Throwable {
-        if (usingReplicaInputConnection()) return;
         commitText(null, 1);
         assertTextsAroundCursor("", null, "");
 
@@ -160,28 +170,55 @@ public class ImeTest extends ContentShellTestBase {
     @SmallTest
     @Feature({"TextInput", "Main"})
     @RetryOnFailure
-    public void testDeleteSurroundingTextWithZeroValue() throws Throwable {
+    public void testDeleteSurroundingTextWithRangeSelection() throws Throwable {
         commitText("hello", 1);
         waitAndVerifyUpdateSelection(0, 5, 5, -1, -1);
-        deleteSurroundingText(0, 0);
 
-        setSelection(0, 0);
-        waitAndVerifyUpdateSelection(1, 0, 0, -1, -1);
+        setSelection(1, 4);
+        waitAndVerifyUpdateSelection(1, 1, 4, -1, -1);
+
         deleteSurroundingText(0, 0);
+        assertTextsAroundCursor("h", "ell", "o");
+
+        deleteSurroundingText(1, 1);
+        assertTextsAroundCursor("", "ell", "");
+
+        deleteSurroundingText(1, 0);
+        assertTextsAroundCursor("", "ell", "");
+
+        deleteSurroundingText(0, 1);
+        assertTextsAroundCursor("", "ell", "");
+    }
+
+    @SmallTest
+    @Feature({"TextInput", "Main"})
+    @RetryOnFailure
+    public void testDeleteSurroundingTextWithCursorSelection() throws Throwable {
+        commitText("hello", 1);
+        waitAndVerifyUpdateSelection(0, 5, 5, -1, -1);
 
         setSelection(2, 2);
-        waitAndVerifyUpdateSelection(2, 2, 2, -1, -1);
+        waitAndVerifyUpdateSelection(1, 2, 2, -1, -1);
+
         deleteSurroundingText(0, 0);
         assertTextsAroundCursor("he", null, "llo");
+
+        deleteSurroundingText(1, 1);
+        assertTextsAroundCursor("h", null, "lo");
+
+        deleteSurroundingText(1, 0);
+        assertTextsAroundCursor("", null, "lo");
+
+        deleteSurroundingText(0, 10);
+        assertTextsAroundCursor("", null, "");
+
+        deleteSurroundingText(10, 10);
+        assertTextsAroundCursor("", null, "");
     }
 
     @SmallTest
     @Feature({"TextInput", "Main"})
     public void testSetComposingTextForNewCursorPositions() throws Throwable {
-        // When newCursorPosition != 1, setComposingText doesn't work for ReplicaInputConnection
-        // because there is a bug in BaseInputConnection.
-        if (usingReplicaInputConnection()) return;
-
         // Cursor is on the right of composing text when newCursorPosition > 0.
         setComposingText("ab", 1);
         waitAndVerifyUpdateSelection(0, 2, 2, 0, 2);
@@ -229,10 +266,6 @@ public class ImeTest extends ContentShellTestBase {
     @Feature({"TextInput", "Main"})
     @RetryOnFailure
     public void testCommitTextForNewCursorPositions() throws Throwable {
-        // When newCursorPosition != 1, commitText doesn't work for ReplicaInputConnection
-        // because there is a bug in BaseInputConnection.
-        if (usingReplicaInputConnection()) return;
-
         // Cursor is on the left of committing text.
         commitText("ab", 0);
         waitAndVerifyUpdateSelection(0, 0, 0, -1, -1);
@@ -430,18 +463,8 @@ public class ImeTest extends ContentShellTestBase {
     private void assertTextsAroundCursor(
             CharSequence before, CharSequence selected, CharSequence after) throws Exception {
         assertEquals(before, getTextBeforeCursor(100, 0));
-
-        CharSequence actualSelected = getSelectedText(0);
-        assertEquals(selected, actualSelected);
-
-        if (usingReplicaInputConnection() && after.equals("\n")) {
-            // When the text ends with \n, we have a second new line that is not user
-            // visible/editable one, it is a side effect of using <br> internally.
-            // Replica model simply deviates from the blink editor in this case.
-            assertEquals("", getTextAfterCursor(100, 0));
-        } else {
-            assertEquals(after, getTextAfterCursor(100, 0));
-        }
+        assertEquals(selected, getSelectedText(0));
+        assertEquals(after, getTextAfterCursor(100, 0));
     }
 
     private void waitForKeyboardStates(int show, int hide, int restart, Integer[] history)
@@ -603,21 +626,15 @@ public class ImeTest extends ContentShellTestBase {
         });
     }
 
-    private void reloadPage() {
+    private void reloadPage() throws Throwable {
         // Reload the page, then focus will be lost and keyboard should be hidden.
-        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
-            @Override
-            public void run() {
-                final String currentUrl = getContentViewCore().getWebContents().getUrl();
-                getActivity().getActiveShell().loadUrl(currentUrl);
-            }
-        });
+        fullyLoadUrl(getContentViewCore().getWebContents().getUrl());
     }
 
     @SmallTest
     @Feature({"TextInput"})
     @RetryOnFailure
-    public void testPhysicalKeyboard_AttachDetach() throws Exception {
+    public void testPhysicalKeyboard_AttachDetach() throws Throwable {
         attachPhysicalKeyboard();
         // We still call showSoftKeyboard, which will be ignored by physical keyboard.
         waitForKeyboardStates(1, 0, 1, new Integer[] {TextInputType.TEXT});
@@ -760,39 +777,30 @@ public class ImeTest extends ContentShellTestBase {
         assertTextsAroundCursor("blablargblarg", null, "");
     }
 
+    // crbug.com/606059
     @MediumTest
     @Feature({"TextInput"})
     @RetryOnFailure
     public void testPasteLongText() throws Exception {
-        // Chrome can crash after pasting long text into textarea, becasue there is an overflow bug
-        // in SpannableStringBuilder#replace(). This can be avoided by enabling ImeThread.
-        // crbug.com/606059
-        if (usingReplicaInputConnection()) return;
-
-        int textLength = 25000;
-        String text = new String(new char[textLength]).replace("\0", "a");
-
-        commitText(text, 1);
-        waitAndVerifyUpdateSelection(0, textLength, textLength, -1, -1);
-        selectAll();
-        waitAndVerifyUpdateSelection(1, 0, textLength, -1, -1);
-        copy();
+        final int textLength = 25000;
+        final String text = new String(new char[textLength]).replace("\0", "a");
+        setClip(text);
         assertClipboardContents(getActivity(), text);
 
         focusElement("textarea");
-        waitAndVerifyUpdateSelection(2, 0, 0, -1, -1);
+        waitAndVerifyUpdateSelection(0, 0, 0, -1, -1);
 
         // In order to reproduce the bug, we need some text after the pasting text.
         commitText("hello", 1);
-        waitAndVerifyUpdateSelection(3, 5, 5, -1, -1);
+        waitAndVerifyUpdateSelection(1, 5, 5, -1, -1);
 
         setSelection(0, 0);
-        waitAndVerifyUpdateSelection(4, 0, 0, -1, -1);
+        waitAndVerifyUpdateSelection(2, 0, 0, -1, -1);
 
         // It will crash after the 3rd paste if ImeThread is not enabled.
         for (int i = 0; i < 10; i++) {
             paste();
-            waitAndVerifyUpdateSelection(5 + i, textLength * (i + 1), textLength * (i + 1), -1, -1);
+            waitAndVerifyUpdateSelection(3 + i, textLength * (i + 1), textLength * (i + 1), -1, -1);
         }
     }
 
@@ -1066,10 +1074,6 @@ public class ImeTest extends ContentShellTestBase {
         dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_B));
         assertEquals("hôˆb", getTextBeforeCursor(9, 0));
         int index = 4;
-        if (usingReplicaInputConnection()) {
-            // A transitional state due to finishComposingText.
-            waitAndVerifyUpdateSelection(index++, 3, 3, -1, -1);
-        }
         waitAndVerifyUpdateSelection(index++, 4, 4, -1, -1);
 
         // ALT-i
@@ -1085,10 +1089,6 @@ public class ImeTest extends ContentShellTestBase {
         assertEquals("hôˆb", getTextBeforeCursor(9, 0));
         dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DEL));
         assertEquals("hôˆb", getTextBeforeCursor(9, 0));
-        if (usingReplicaInputConnection()) {
-            // A transitional state due to finishComposingText in deleteSurroundingTextImpl.
-            waitAndVerifyUpdateSelection(index++, 5, 5, -1, -1);
-        }
         waitAndVerifyUpdateSelection(index++, 4, 4, -1, -1);
     }
 
@@ -1172,55 +1172,12 @@ public class ImeTest extends ContentShellTestBase {
         dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_LEFT));
         dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DPAD_LEFT));
 
-        if (usingReplicaInputConnection()) {
-            // Ideally getTextBeforeCursor immediately after dispatchKeyEvent should return a
-            // correct value, but we have a stop-gap solution in render_widget_input_handler and it
-            // make take some round trip time until we get the correct value.
-            waitUntilGetCharacterBeforeCursorBecomes("l");
-        } else {
-            assertTextsAroundCursor("hell", null, "o");
-        }
-    }
-
-    private void waitUntilGetCharacterBeforeCursorBecomes(final String expectedText)
-            throws InterruptedException {
-        pollForCriteriaOnThread(Criteria.equals(expectedText, new Callable<String>() {
-            @Override
-            public String call() {
-                return (String) mConnection.getTextBeforeCursor(1, 0);
-            }
-        }));
-    }
-
-    private void pollForCriteriaOnThread(final Criteria criteria) throws InterruptedException {
-        final Callable<Boolean> callable = new Callable<Boolean>() {
-            @Override
-            public Boolean call() throws Exception {
-                return criteria.isSatisfied();
-            }
-        };
-        CriteriaHelper.pollInstrumentationThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                try {
-                    return runBlockingOnImeThread(callable);
-                } catch (Exception e) {
-                    e.printStackTrace();
-                    fail();
-                    return false;
-                }
-            }
-
-            @Override
-            public String getFailureReason() {
-                return criteria.getFailureReason();
-            }
-        });
+        assertTextsAroundCursor("hell", null, "o");
     }
 
     @SmallTest
     @Feature({"TextInput"})
-    @RetryOnFailure
+    @DisabledTest(message = "crbug.com/661572")
     public void testPastePopupShowAndHide() throws Throwable {
         commitText("hello", 1);
         waitAndVerifyUpdateSelection(0, 5, 5, -1, -1);
@@ -1237,7 +1194,7 @@ public class ImeTest extends ContentShellTestBase {
         CriteriaHelper.pollUiThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
-                return mContentViewCore.isPastePopupShowing();
+                return mSelectionPopupController.isPastePopupShowing();
             }
         });
 
@@ -1245,10 +1202,10 @@ public class ImeTest extends ContentShellTestBase {
         CriteriaHelper.pollUiThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
-                return !mContentViewCore.isPastePopupShowing();
+                return !mSelectionPopupController.isPastePopupShowing();
             }
         });
-        assertFalse(mContentViewCore.hasInsertion());
+        assertFalse(mSelectionPopupController.isInsertion());
     }
 
     @SmallTest
@@ -1262,7 +1219,7 @@ public class ImeTest extends ContentShellTestBase {
 
         setComposingText("h", 1);
         assertWaitForSelectActionBarStatus(false);
-        assertFalse(mContentViewCore.hasSelection());
+        assertFalse(mSelectionPopupController.hasSelection());
     }
 
     @SmallTest
@@ -1271,11 +1228,11 @@ public class ImeTest extends ContentShellTestBase {
     public void testTextHandlesPreservedWithDpadNavigation() throws Throwable {
         DOMUtils.longPressNode(this, mContentViewCore, "plain_text");
         assertWaitForSelectActionBarStatus(true);
-        assertTrue(mContentViewCore.hasSelection());
+        assertTrue(mSelectionPopupController.hasSelection());
 
         dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_DOWN));
         assertWaitForSelectActionBarStatus(true);
-        assertTrue(mContentViewCore.hasSelection());
+        assertTrue(mSelectionPopupController.hasSelection());
     }
 
     @MediumTest
@@ -1303,7 +1260,7 @@ public class ImeTest extends ContentShellTestBase {
 
     @MediumTest
     @Feature({"TextInput"})
-    @DisabledTest(message = "crbug.com/628964")
+    @RetryOnFailure
     public void testContentEditableEvents_SetComposingText() throws Throwable {
         focusElementAndWaitForStateUpdate("contenteditable_event");
         waitForEventLogs("selectionchange,selectionchange");
@@ -1324,7 +1281,6 @@ public class ImeTest extends ContentShellTestBase {
     @MediumTest
     @Feature({"TextInput"})
     @RetryOnFailure
-    @DisabledTest(message = "crbug.com/650691")
     public void testInputTextEvents_SetComposingText() throws Throwable {
         beginBatchEdit();
         setComposingText("a", 1);
@@ -1340,7 +1296,7 @@ public class ImeTest extends ContentShellTestBase {
 
     @MediumTest
     @Feature({"TextInput"})
-    @DisabledTest(message = "crbug.com/628964")
+    @RetryOnFailure
     public void testContentEditableEvents_CommitText() throws Throwable {
         focusElementAndWaitForStateUpdate("contenteditable_event");
         waitForEventLogs("selectionchange,selectionchange");
@@ -1364,42 +1320,55 @@ public class ImeTest extends ContentShellTestBase {
 
     @MediumTest
     @Feature({"TextInput"})
-    @DisabledTest(message = "crbug.com/628964")
+    @RetryOnFailure
     public void testContentEditableEvents_DeleteSurroundingText() throws Throwable {
         focusElementAndWaitForStateUpdate("contenteditable_event");
         waitForEventLogs("selectionchange,selectionchange");
         clearEventLogs();
 
-        commitText("a", 1);
-        waitAndVerifyUpdateSelection(0, 1, 1, -1, -1);
+        commitText("hello", 1);
+        waitAndVerifyUpdateSelection(0, 5, 5, -1, -1);
         waitForEventLogs("keydown(229),input,keyup(229),selectionchange");
         clearEventLogs();
 
-        deleteSurroundingText(1, 0);
-        waitAndVerifyUpdateSelection(1, 0, 0, -1, -1);
+        setSelection(2, 2);
+        waitAndVerifyUpdateSelection(1, 2, 2, -1, -1);
+        waitForEventLogs("selectionchange");
+        clearEventLogs();
 
-        waitForEventLogs("keydown(229),input,keyup(229),selectionchange,selectionchange");
+        deleteSurroundingText(1, 1);
+        waitAndVerifyUpdateSelection(2, 1, 1, -1, -1);
+        // TODO(yabinh): It should only fire 1 input and 1 selectionchange events.
+        waitForEventLogs("keydown(229),input,input,keyup(229),selectionchange,selectionchange,"
+                + "selectionchange,selectionchange");
     }
 
     @MediumTest
     @Feature({"TextInput"})
     @RetryOnFailure
     public void testInputTextEvents_DeleteSurroundingText() throws Throwable {
-        commitText("a", 1);
-        waitAndVerifyUpdateSelection(0, 1, 1, -1, -1);
+        commitText("hello", 1);
+        waitAndVerifyUpdateSelection(0, 5, 5, -1, -1);
         waitForEventLogs("keydown(229),input,keyup(229),selectionchange");
         clearEventLogs();
 
-        deleteSurroundingText(1, 0);
-        waitAndVerifyUpdateSelection(1, 0, 0, -1, -1);
+        setSelection(2, 2);
+        waitAndVerifyUpdateSelection(1, 2, 2, -1, -1);
+        waitForEventLogs("selectionchange");
+        clearEventLogs();
 
-        waitForEventLogs("keydown(229),input,keyup(229),selectionchange,selectionchange");
+        deleteSurroundingText(1, 1);
+        waitAndVerifyUpdateSelection(2, 1, 1, -1, -1);
+        // TODO(yabinh): It should only fire 1 input and 1 selectionchange events.
+        waitForEventLogs("keydown(229),input,input,keyup(229),selectionchange,selectionchange,"
+                + "selectionchange,selectionchange");
     }
 
     @MediumTest
     @Feature({"TextInput"})
     @RetryOnFailure
     public void testGetCursorCapsMode() throws Throwable {
+        focusElementAndWaitForStateUpdate("contenteditable_event");
         commitText("Hello World", 1);
         waitAndVerifyUpdateSelection(0, 11, 11, -1, -1);
         assertEquals(0,
@@ -1422,27 +1391,8 @@ public class ImeTest extends ContentShellTestBase {
     private void waitForEventLogs(String expectedLogs) throws Exception {
         final String code = "getEventLogs()";
         final String sanitizedExpectedLogs = "\"" + expectedLogs + "\"";
-        if (usingReplicaInputConnection()) {
-            // When using replica input connection, update from JavaScript will come at a later
-            // time.
-            CriteriaHelper.pollInstrumentationThread(new Criteria() {
-                @Override
-                public boolean isSatisfied() {
-                    try {
-                        String eventLogs = JavaScriptUtils.executeJavaScriptAndWaitForResult(
-                                getContentViewCore().getWebContents(), code);
-                        updateFailureReason(eventLogs);
-                        return sanitizedExpectedLogs.equals(eventLogs);
-                    } catch (InterruptedException | TimeoutException e) {
-                        updateFailureReason(e.getMessage());
-                        return false;
-                    }
-                }
-            });
-        } else {
-            assertEquals(sanitizedExpectedLogs, JavaScriptUtils.executeJavaScriptAndWaitForResult(
-                    getContentViewCore().getWebContents(), code));
-        }
+        assertEquals(sanitizedExpectedLogs, JavaScriptUtils.executeJavaScriptAndWaitForResult(
+                                                    getContentViewCore().getWebContents(), code));
     }
 
     // https://crbug.com/604675
@@ -1665,6 +1615,18 @@ public class ImeTest extends ContentShellTestBase {
         });
     }
 
+    private void setClip(final CharSequence text) {
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                final ClipboardManager clipboardManager =
+                        (ClipboardManager) getActivity().getSystemService(
+                                Context.CLIPBOARD_SERVICE);
+                clipboardManager.setPrimaryClip(ClipData.newPlainText(null, text));
+            }
+        });
+    }
+
     private void paste() {
         final WebContents webContents = mWebContents;
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
@@ -1862,10 +1824,6 @@ public class ImeTest extends ContentShellTestBase {
         }));
         // When we focus another element, the connection may be recreated.
         mConnection = getInputConnection();
-    }
-
-    private boolean usingReplicaInputConnection() {
-        return mConnectionFactory.getHandler().getLooper() == Looper.getMainLooper();
     }
 
     private static class TestInputConnectionFactory implements ChromiumBaseInputConnection.Factory {

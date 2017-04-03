@@ -25,6 +25,7 @@
 #include "cc/test/fake_output_surface.h"
 #include "cc/test/scheduler_test_common.h"
 #include "cc/test/test_shared_bitmap_manager.h"
+#include "gpu/GLES2/gl2extchromium.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -115,7 +116,9 @@ class DisplayTest : public testing::Test {
 
     std::unique_ptr<FakeOutputSurface> output_surface;
     if (context) {
-      output_surface = FakeOutputSurface::Create3d(std::move(context));
+      auto provider = TestContextProvider::Create(std::move(context));
+      provider->BindToCurrentThread();
+      output_surface = FakeOutputSurface::Create3d(std::move(provider));
     } else {
       std::unique_ptr<TestSoftwareOutputDevice> device(
           new TestSoftwareOutputDevice);
@@ -130,8 +133,8 @@ class DisplayTest : public testing::Test {
 
     display_ = base::MakeUnique<Display>(
         &shared_bitmap_manager_, nullptr /* gpu_memory_buffer_manager */,
-        settings, std::move(begin_frame_source), std::move(output_surface),
-        std::move(scheduler),
+        settings, kArbitraryFrameSinkId, std::move(begin_frame_source),
+        std::move(output_surface), std::move(scheduler),
         base::MakeUnique<TextureMailboxDeleter>(task_runner_.get()));
     display_->SetVisible(true);
   }
@@ -181,13 +184,12 @@ TEST_F(DisplayTest, DisplayDamaged) {
   SetUpDisplay(settings, nullptr);
 
   StubDisplayClient client;
-  display_->Initialize(&client, &manager_, kArbitraryFrameSinkId);
+  display_->Initialize(&client, &manager_);
 
   LocalFrameId local_frame_id(id_allocator_.GenerateId());
-  SurfaceId surface_id(factory_.frame_sink_id(), local_frame_id);
   EXPECT_FALSE(scheduler_->damaged);
   EXPECT_FALSE(scheduler_->has_new_root_surface);
-  display_->SetSurfaceId(surface_id, 1.f);
+  display_->SetLocalFrameId(local_frame_id, 1.f);
   EXPECT_FALSE(scheduler_->damaged);
   EXPECT_FALSE(scheduler_->display_resized_);
   EXPECT_TRUE(scheduler_->has_new_root_surface);
@@ -431,7 +433,6 @@ class MockedContext : public TestWebGraphicsContext3D {
 
 TEST_F(DisplayTest, Finish) {
   LocalFrameId local_frame_id(id_allocator_.GenerateId());
-  SurfaceId surface_id(factory_.frame_sink_id(), local_frame_id);
 
   RendererSettings settings;
   settings.partial_swap_enabled = true;
@@ -444,9 +445,9 @@ TEST_F(DisplayTest, Finish) {
   SetUpDisplay(settings, std::move(context));
 
   StubDisplayClient client;
-  display_->Initialize(&client, &manager_, kArbitraryFrameSinkId);
+  display_->Initialize(&client, &manager_);
 
-  display_->SetSurfaceId(surface_id, 1.f);
+  display_->SetLocalFrameId(local_frame_id, 1.f);
 
   display_->Resize(gfx::Size(100, 100));
   factory_.Create(local_frame_id);
@@ -497,6 +498,32 @@ TEST_F(DisplayTest, Finish) {
   testing::Mock::VerifyAndClearExpectations(context_ptr);
 
   factory_.Destroy(local_frame_id);
+}
+
+class CountLossDisplayClient : public StubDisplayClient {
+ public:
+  CountLossDisplayClient() = default;
+
+  void DisplayOutputSurfaceLost() override { ++loss_count_; }
+
+  int loss_count() const { return loss_count_; }
+
+ private:
+  int loss_count_ = 0;
+};
+
+TEST_F(DisplayTest, ContextLossInformsClient) {
+  SetUpDisplay(RendererSettings(), TestWebGraphicsContext3D::Create());
+
+  CountLossDisplayClient client;
+  display_->Initialize(&client, &manager_);
+
+  // Verify DidLoseOutputSurface callback is hooked up correctly.
+  EXPECT_EQ(0, client.loss_count());
+  output_surface_->context_provider()->ContextGL()->LoseContextCHROMIUM(
+      GL_GUILTY_CONTEXT_RESET_ARB, GL_INNOCENT_CONTEXT_RESET_ARB);
+  output_surface_->context_provider()->ContextGL()->Flush();
+  EXPECT_EQ(1, client.loss_count());
 }
 
 }  // namespace

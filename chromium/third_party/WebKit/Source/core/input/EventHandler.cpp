@@ -34,6 +34,7 @@
 #include "core/clipboard/DataTransfer.h"
 #include "core/dom/DOMNodeIds.h"
 #include "core/dom/Document.h"
+#include "core/dom/DocumentUserGestureToken.h"
 #include "core/dom/TouchList.h"
 #include "core/dom/shadow/FlatTreeTraversal.h"
 #include "core/dom/shadow/ShadowRoot.h"
@@ -68,7 +69,6 @@
 #include "core/layout/HitTestRequest.h"
 #include "core/layout/HitTestResult.h"
 #include "core/layout/LayoutPart.h"
-#include "core/layout/LayoutTextControlSingleLine.h"
 #include "core/layout/LayoutView.h"
 #include "core/layout/api/LayoutViewItem.h"
 #include "core/loader/DocumentLoader.h"
@@ -214,10 +214,6 @@ void EventHandler::clear() {
   m_eventHandlerWillResetCapturingMouseEventsNode = false;
 }
 
-void EventHandler::nodeWillBeRemoved(Node& nodeToBeRemoved) {
-  m_mouseEventManager->nodeWillBeRemoved(nodeToBeRemoved);
-}
-
 void EventHandler::updateSelectionForMouseDrag() {
   m_mouseEventManager->updateSelectionForMouseDrag();
 }
@@ -277,8 +273,10 @@ HitTestResult EventHandler::hitTestResultAtPoint(
     return result;
 
   m_frame->contentLayoutItem().hitTest(result);
-  if (!request.readOnly())
-    m_frame->document()->updateHoverActiveState(request, result.innerElement());
+  if (!request.readOnly()) {
+    m_frame->document()->updateHoverActiveState(request, result.innerElement(),
+                                                result.scrollbar());
+  }
 
   return result;
 }
@@ -444,82 +442,82 @@ OptionalCursor EventHandler::selectCursor(const HitTestResult& result) {
     }
   }
 
-  switch (style ? style->cursor() : CURSOR_AUTO) {
-    case CURSOR_AUTO: {
+  switch (style ? style->cursor() : ECursor::Auto) {
+    case ECursor::Auto: {
       bool horizontalText = !style || style->isHorizontalWritingMode();
       const Cursor& iBeam =
           horizontalText ? iBeamCursor() : verticalTextCursor();
       return selectAutoCursor(result, node, iBeam);
     }
-    case CURSOR_CROSS:
+    case ECursor::Cross:
       return crossCursor();
-    case CURSOR_POINTER:
+    case ECursor::Pointer:
       return handCursor();
-    case CURSOR_MOVE:
+    case ECursor::Move:
       return moveCursor();
-    case CURSOR_ALL_SCROLL:
+    case ECursor::AllScroll:
       return moveCursor();
-    case CURSOR_E_RESIZE:
+    case ECursor::EResize:
       return eastResizeCursor();
-    case CURSOR_W_RESIZE:
+    case ECursor::WResize:
       return westResizeCursor();
-    case CURSOR_N_RESIZE:
+    case ECursor::NResize:
       return northResizeCursor();
-    case CURSOR_S_RESIZE:
+    case ECursor::SResize:
       return southResizeCursor();
-    case CURSOR_NE_RESIZE:
+    case ECursor::NeResize:
       return northEastResizeCursor();
-    case CURSOR_SW_RESIZE:
+    case ECursor::SwResize:
       return southWestResizeCursor();
-    case CURSOR_NW_RESIZE:
+    case ECursor::NwResize:
       return northWestResizeCursor();
-    case CURSOR_SE_RESIZE:
+    case ECursor::SeResize:
       return southEastResizeCursor();
-    case CURSOR_NS_RESIZE:
+    case ECursor::NsResize:
       return northSouthResizeCursor();
-    case CURSOR_EW_RESIZE:
+    case ECursor::EwResize:
       return eastWestResizeCursor();
-    case CURSOR_NESW_RESIZE:
+    case ECursor::NeswResize:
       return northEastSouthWestResizeCursor();
-    case CURSOR_NWSE_RESIZE:
+    case ECursor::NwseResize:
       return northWestSouthEastResizeCursor();
-    case CURSOR_COL_RESIZE:
+    case ECursor::ColResize:
       return columnResizeCursor();
-    case CURSOR_ROW_RESIZE:
+    case ECursor::RowResize:
       return rowResizeCursor();
-    case CURSOR_TEXT:
+    case ECursor::Text:
       return iBeamCursor();
-    case CURSOR_WAIT:
+    case ECursor::Wait:
       return waitCursor();
-    case CURSOR_HELP:
+    case ECursor::Help:
       return helpCursor();
-    case CURSOR_VERTICAL_TEXT:
+    case ECursor::VerticalText:
       return verticalTextCursor();
-    case CURSOR_CELL:
+    case ECursor::Cell:
       return cellCursor();
-    case CURSOR_CONTEXT_MENU:
+    case ECursor::ContextMenu:
       return contextMenuCursor();
-    case CURSOR_PROGRESS:
+    case ECursor::Progress:
       return progressCursor();
-    case CURSOR_NO_DROP:
+    case ECursor::NoDrop:
       return noDropCursor();
-    case CURSOR_ALIAS:
+    case ECursor::Alias:
       return aliasCursor();
-    case CURSOR_COPY:
+    case ECursor::Copy:
       return copyCursor();
-    case CURSOR_NONE:
+    case ECursor::None:
       return noneCursor();
-    case CURSOR_NOT_ALLOWED:
+    case ECursor::NotAllowed:
       return notAllowedCursor();
-    case CURSOR_DEFAULT:
+    case ECursor::Default:
       return pointerCursor();
-    case CURSOR_ZOOM_IN:
+    case ECursor::ZoomIn:
       return zoomInCursor();
-    case CURSOR_ZOOM_OUT:
+    case ECursor::ZoomOut:
       return zoomOutCursor();
-    case CURSOR_WEBKIT_GRAB:
+    case ECursor::WebkitGrab:
       return grabCursor();
-    case CURSOR_WEBKIT_GRABBING:
+    case ECursor::WebkitGrabbing:
       return grabbingCursor();
   }
   return pointerCursor();
@@ -528,6 +526,10 @@ OptionalCursor EventHandler::selectCursor(const HitTestResult& result) {
 OptionalCursor EventHandler::selectAutoCursor(const HitTestResult& result,
                                               Node* node,
                                               const Cursor& iBeam) {
+  if (result.scrollbar()) {
+    return pointerCursor();
+  }
+
   bool editable = (node && hasEditableStyle(*node));
 
   const bool isOverLink =
@@ -572,10 +574,6 @@ WebInputEventResult EventHandler::handleMousePressEvent(
       WebPointerProperties::Button::NoButton)
     return WebInputEventResult::HandledSuppressed;
 
-  UserGestureIndicator gestureIndicator(DefinitelyProcessingUserGesture);
-  m_frame->localFrameRoot()->eventHandler().m_lastMouseDownUserGestureToken =
-      UserGestureIndicator::currentToken();
-
   if (m_eventHandlerWillResetCapturingMouseEventsNode)
     m_capturingMouseEventsNode = nullptr;
   m_mouseEventManager->handleMousePressEventUpdateStates(mouseEvent);
@@ -618,6 +616,11 @@ WebInputEventResult EventHandler::handleMousePressEvent(
     m_mouseEventManager->invalidateClick();
     return result;
   }
+
+  UserGestureIndicator gestureIndicator(
+      DocumentUserGestureToken::create(m_frame->document()));
+  m_frame->localFrameRoot()->eventHandler().m_lastMouseDownUserGestureToken =
+      UserGestureIndicator::currentToken();
 
   if (RuntimeEnabledFeatures::middleClickAutoscrollEnabled()) {
     // We store whether middle click autoscroll is in progress before calling
@@ -765,13 +768,10 @@ WebInputEventResult EventHandler::handleMouseMoveOrLeaveEvent(
 
   m_mouseEventManager->setLastKnownMousePosition(mouseEvent);
 
-  if (m_hoverTimer.isActive())
-    m_hoverTimer.stop();
-
+  m_hoverTimer.stop();
   m_cursorUpdateTimer.stop();
 
   m_mouseEventManager->cancelFakeMouseMoveEvent();
-
   m_mouseEventManager->handleSvgPanIfNeeded(false);
 
   if (m_frameSetBeingResized) {
@@ -812,7 +812,7 @@ WebInputEventResult EventHandler::handleMouseMoveOrLeaveEvent(
   // So we must force the hit-test to fail, while still clearing hover/active
   // state.
   if (forceLeave) {
-    m_frame->document()->updateHoverActiveState(request, 0);
+    m_frame->document()->updateHoverActiveState(request, nullptr, nullptr);
   } else {
     mev = EventHandlingUtil::performMouseEventHitTest(m_frame, request,
                                                       mouseEvent);
@@ -900,17 +900,6 @@ WebInputEventResult EventHandler::handleMouseReleaseEvent(
   if (!mouseEvent.fromTouch())
     m_frame->selection().setCaretBlinkingSuspended(false);
 
-  std::unique_ptr<UserGestureIndicator> gestureIndicator;
-
-  if (m_frame->localFrameRoot()->eventHandler().m_lastMouseDownUserGestureToken)
-    gestureIndicator = wrapUnique(new UserGestureIndicator(
-        m_frame->localFrameRoot()
-            ->eventHandler()
-            .m_lastMouseDownUserGestureToken.release()));
-  else
-    gestureIndicator =
-        wrapUnique(new UserGestureIndicator(DefinitelyProcessingUserGesture));
-
   if (RuntimeEnabledFeatures::middleClickAutoscrollEnabled()) {
     if (Page* page = m_frame->page())
       page->autoscrollController().handleMouseReleaseForMiddleClickAutoscroll(
@@ -950,6 +939,24 @@ WebInputEventResult EventHandler::handleMouseReleaseEvent(
     m_capturingMouseEventsNode = nullptr;
   if (subframe)
     return passMouseReleaseEventToSubframe(mev, subframe);
+
+  // Mouse events will be associated with the Document where mousedown
+  // occurred. If, e.g., there is a mousedown, then a drag to a different
+  // Document and mouseup there, the mouseup's gesture will be associated with
+  // the mousedown's Document. It's not absolutely certain that this is the
+  // correct behavior.
+  std::unique_ptr<UserGestureIndicator> gestureIndicator;
+  if (m_frame->localFrameRoot()
+          ->eventHandler()
+          .m_lastMouseDownUserGestureToken) {
+    gestureIndicator = wrapUnique(new UserGestureIndicator(
+        m_frame->localFrameRoot()
+            ->eventHandler()
+            .m_lastMouseDownUserGestureToken.release()));
+  } else {
+    gestureIndicator = wrapUnique(new UserGestureIndicator(
+        DocumentUserGestureToken::create(m_frame->document())));
+  }
 
   WebInputEventResult eventResult = updatePointerTargetAndDispatchEvents(
       EventTypeNames::mouseup, mev.innerNode(), mev.event());
@@ -1519,13 +1526,13 @@ void EventHandler::updateGestureHoverActiveState(const HitTestRequest& request,
       // If the old hovered frame is different from the new hovered frame.
       // we should clear the old hovered node from the old hovered frame.
       if (newHoverFrame != oldHoverFrame)
-        doc->updateHoverActiveState(request, nullptr);
+        doc->updateHoverActiveState(request, nullptr, nullptr);
     }
   }
 
   // Recursively set the new active/hover states on every frame in the chain of
   // innerElement.
-  m_frame->document()->updateHoverActiveState(request, innerElement);
+  m_frame->document()->updateHoverActiveState(request, innerElement, nullptr);
 }
 
 // Update the mouseover/mouseenter/mouseout/mouseleave events across all frames
@@ -1827,9 +1834,10 @@ WebInputEventResult EventHandler::sendContextMenuEventForKey(
         visualViewport.viewportToRootFrame(clippedRect.center());
   } else {
     locationInRootFrame = IntPoint(
-        rightAligned ? visualViewport.visibleRect().maxX() - kContextMenuMargin
-                     : visualViewport.location().x() + kContextMenuMargin,
-        visualViewport.location().y() + kContextMenuMargin);
+        rightAligned
+            ? visualViewport.visibleRect().maxX() - kContextMenuMargin
+            : visualViewport.scrollOffset().width() + kContextMenuMargin,
+        visualViewport.scrollOffset().height() + kContextMenuMargin);
   }
 
   m_frame->view()->setCursor(pointerCursor());
@@ -1850,7 +1858,8 @@ WebInputEventResult EventHandler::sendContextMenuEventForKey(
   HitTestRequest request(HitTestRequest::Active);
   HitTestResult result(request, locationInRootFrame);
   result.setInnerNode(targetNode);
-  doc->updateHoverActiveState(request, result.innerElement());
+  doc->updateHoverActiveState(request, result.innerElement(),
+                              result.scrollbar());
 
   // The contextmenu event is a mouse event even when invoked using the
   // keyboard.  This is required for web compatibility.
@@ -1916,8 +1925,8 @@ void EventHandler::hoverTimerFired(TimerBase*) {
                            view->rootFrameToContents(
                                m_mouseEventManager->lastKnownMousePosition()));
       layoutItem.hitTest(result);
-      m_frame->document()->updateHoverActiveState(request,
-                                                  result.innerElement());
+      m_frame->document()->updateHoverActiveState(
+          request, result.innerElement(), result.scrollbar());
     }
   }
 }
@@ -1931,8 +1940,8 @@ void EventHandler::activeIntervalTimerFired(TimerBase*) {
     // m_lastDeferredTapElement.get() == m_frame->document()->activeElement()
     HitTestRequest request(HitTestRequest::TouchEvent |
                            HitTestRequest::Release);
-    m_frame->document()->updateHoverActiveState(request,
-                                                m_lastDeferredTapElement.get());
+    m_frame->document()->updateHoverActiveState(
+        request, m_lastDeferredTapElement.get(), nullptr);
   }
   m_lastDeferredTapElement = nullptr;
 }
@@ -1940,8 +1949,7 @@ void EventHandler::activeIntervalTimerFired(TimerBase*) {
 void EventHandler::notifyElementActivated() {
   // Since another element has been set to active, stop current timer and clear
   // reference.
-  if (m_activeIntervalTimer.isActive())
-    m_activeIntervalTimer.stop();
+  m_activeIntervalTimer.stop();
   m_lastDeferredTapElement = nullptr;
 }
 
@@ -1961,6 +1969,20 @@ void EventHandler::defaultKeyboardEventHandler(KeyboardEvent* event) {
 
 void EventHandler::dragSourceEndedAt(const PlatformMouseEvent& event,
                                      DragOperation operation) {
+  // Asides from routing the event to the correct frame, the hit test is also an
+  // opportunity for Layer to update the :hover and :active pseudoclasses.
+  HitTestRequest request(HitTestRequest::Release);
+  MouseEventWithHitTestResults mev =
+      EventHandlingUtil::performMouseEventHitTest(m_frame, request, event);
+
+  LocalFrame* targetFrame;
+  if (targetIsFrame(mev.innerNode(), targetFrame)) {
+    if (targetFrame) {
+      targetFrame->eventHandler().dragSourceEndedAt(event, operation);
+      return;
+    }
+  }
+
   m_mouseEventManager->dragSourceEndedAt(event, operation);
 }
 

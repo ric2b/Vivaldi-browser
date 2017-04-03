@@ -515,13 +515,6 @@ bool BrowserWindowCocoa::IsToolbarVisible() const {
          browser_->SupportsWindowFeature(Browser::FEATURE_LOCATIONBAR);
 }
 
-gfx::Rect BrowserWindowCocoa::GetRootWindowResizerRect() const {
-  if (IsDownloadShelfVisible())
-    return gfx::Rect();
-  NSRect tabRect = [controller_ selectedTabGrowBoxRect];
-  return gfx::Rect(NSRectToCGRect(tabRect));
-}
-
 void BrowserWindowCocoa::AddFindBar(
     FindBarCocoaController* find_bar_cocoa_controller) {
   [controller_ addFindBar:find_bar_cocoa_controller];
@@ -626,7 +619,7 @@ autofill::SaveCardBubbleView* BrowserWindowCocoa::ShowSaveCreditCardBubble(
   return new autofill::SaveCardBubbleViewBridge(controller, controller_);
 }
 
-void BrowserWindowCocoa::ShowTranslateBubble(
+ShowTranslateBubbleResult BrowserWindowCocoa::ShowTranslateBubble(
     content::WebContents* contents,
     translate::TranslateStep step,
     translate::TranslateErrors::Type error_type,
@@ -640,6 +633,8 @@ void BrowserWindowCocoa::ShowTranslateBubble(
   [controller_ showTranslateBubbleForWebContents:contents
                                             step:step
                                        errorType:error_type];
+
+  return ShowTranslateBubbleResult::SUCCESS;
 }
 
 #if BUILDFLAG(ENABLE_ONE_CLICK_SIGNIN)
@@ -685,7 +680,7 @@ void BrowserWindowCocoa::ShowWebsiteSettings(
     Profile* profile,
     content::WebContents* web_contents,
     const GURL& virtual_url,
-    const security_state::SecurityStateModel::SecurityInfo& security_info) {
+    const security_state::SecurityInfo& security_info) {
   WebsiteSettingsUIBridge::Show(window(), profile, web_contents, virtual_url,
                                 security_info);
 }

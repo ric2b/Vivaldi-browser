@@ -111,8 +111,7 @@ void QuicSentPacketManager::SetFromConfig(const QuicConfig& config) {
             min(kMaxInitialRoundTripTimeUs,
                 config.GetInitialRoundTripTimeUsToSend())));
   }
-  // TODO(ianswett): BBR is currently a server only feature.
-  if (FLAGS_quic_allow_bbr && config.HasReceivedConnectionOptions() &&
+  if (FLAGS_quic_allow_new_bbr && config.HasReceivedConnectionOptions() &&
       ContainsQuicTag(config.ReceivedConnectionOptions(), kTBBR)) {
     SetSendAlgorithm(kBBR);
   }
@@ -125,7 +124,11 @@ void QuicSentPacketManager::SetFromConfig(const QuicConfig& config) {
     }
   } else if (config.HasReceivedConnectionOptions() &&
              ContainsQuicTag(config.ReceivedConnectionOptions(), kBYTE)) {
-    SetSendAlgorithm(kCubicBytes);
+    if (FLAGS_quic_default_enable_cubic_bytes) {
+      SetSendAlgorithm(kCubic);
+    } else {
+      SetSendAlgorithm(kCubicBytes);
+    }
   }
   using_pacing_ = !FLAGS_quic_disable_pacing_for_perf_tests;
 
@@ -151,6 +154,10 @@ void QuicSentPacketManager::SetFromConfig(const QuicConfig& config) {
   if (config.HasReceivedConnectionOptions() &&
       ContainsQuicTag(config.ReceivedConnectionOptions(), kATIM)) {
     general_loss_algorithm_.SetLossDetectionType(kAdaptiveTime);
+  }
+  if (FLAGS_quic_enable_lazy_fack && config.HasReceivedConnectionOptions() &&
+      ContainsQuicTag(config.ReceivedConnectionOptions(), kLFAK)) {
+    general_loss_algorithm_.SetLossDetectionType(kLazyFack);
   }
   if (config.HasClientSentConnectionOption(kUNDO, perspective_)) {
     undo_pending_retransmits_ = true;
@@ -199,7 +206,7 @@ void QuicSentPacketManager::SetHandshakeConfirmed() {
 void QuicSentPacketManager::OnIncomingAck(const QuicAckFrame& ack_frame,
                                           QuicTime ack_receive_time) {
   DCHECK_LE(ack_frame.largest_observed, unacked_packets_.largest_sent_packet());
-  QuicByteCount bytes_in_flight = unacked_packets_.bytes_in_flight();
+  QuicByteCount prior_in_flight = unacked_packets_.bytes_in_flight();
   UpdatePacketInformationReceivedByPeer(ack_frame);
   bool rtt_updated = MaybeUpdateRTT(ack_frame, ack_receive_time);
   DCHECK_GE(ack_frame.largest_observed, unacked_packets_.largest_observed());
@@ -211,7 +218,7 @@ void QuicSentPacketManager::OnIncomingAck(const QuicAckFrame& ack_frame,
   if (consecutive_rto_count_ > 0 && !use_new_rto_) {
     packets_lost_.clear();
   }
-  MaybeInvokeCongestionEvent(rtt_updated, bytes_in_flight);
+  MaybeInvokeCongestionEvent(rtt_updated, prior_in_flight, ack_receive_time);
   unacked_packets_.RemoveObsoletePackets();
 
   sustained_bandwidth_recorder_.RecordEstimate(
@@ -270,15 +277,16 @@ void QuicSentPacketManager::UpdatePacketInformationReceivedByPeer(
 
 void QuicSentPacketManager::MaybeInvokeCongestionEvent(
     bool rtt_updated,
-    QuicByteCount bytes_in_flight) {
+    QuicByteCount prior_in_flight,
+    QuicTime event_time) {
   if (!rtt_updated && packets_acked_.empty() && packets_lost_.empty()) {
     return;
   }
   if (using_pacing_) {
-    pacing_sender_.OnCongestionEvent(rtt_updated, bytes_in_flight,
+    pacing_sender_.OnCongestionEvent(rtt_updated, prior_in_flight, event_time,
                                      packets_acked_, packets_lost_);
   } else {
-    send_algorithm_->OnCongestionEvent(rtt_updated, bytes_in_flight,
+    send_algorithm_->OnCongestionEvent(rtt_updated, prior_in_flight, event_time,
                                        packets_acked_, packets_lost_);
   }
   packets_acked_.clear();
@@ -585,9 +593,10 @@ void QuicSentPacketManager::OnRetransmissionTimeout() {
       return;
     case LOSS_MODE: {
       ++stats_->loss_timeout_count;
-      QuicByteCount bytes_in_flight = unacked_packets_.bytes_in_flight();
-      InvokeLossDetection(clock_->Now());
-      MaybeInvokeCongestionEvent(false, bytes_in_flight);
+      QuicByteCount prior_in_flight = unacked_packets_.bytes_in_flight();
+      const QuicTime now = clock_->Now();
+      InvokeLossDetection(now);
+      MaybeInvokeCongestionEvent(false, prior_in_flight, now);
       return;
     }
     case TLP_MODE:
@@ -785,10 +794,14 @@ QuicTime::Delta QuicSentPacketManager::TimeUntilSend(QuicTime now,
 }
 
 const QuicTime QuicSentPacketManager::GetRetransmissionTime() const {
-  // Don't set the timer if there are no packets in flight or we've already
+  // Don't set the timer if there is nothing to retransmit or we've already
   // queued a tlp transmission and it hasn't been sent yet.
   if (!unacked_packets_.HasInFlightPackets() ||
       pending_timer_transmission_count_ > 0) {
+    return QuicTime::Zero();
+  }
+  if (FLAGS_quic_more_conservative_retransmission_alarm &&
+      !unacked_packets_.HasUnackedRetransmittableFrames()) {
     return QuicTime::Zero();
   }
   switch (GetRetransmissionMode()) {
@@ -939,8 +952,8 @@ void QuicSentPacketManager::CancelRetransmissionsForStream(
 void QuicSentPacketManager::SetSendAlgorithm(
     CongestionControlType congestion_control_type) {
   SetSendAlgorithm(SendAlgorithmInterface::Create(
-      clock_, &rtt_stats_, congestion_control_type, stats_,
-      initial_congestion_window_));
+      clock_, &rtt_stats_, &unacked_packets_, congestion_control_type,
+      QuicRandom::GetInstance(), stats_, initial_congestion_window_));
 }
 
 void QuicSentPacketManager::SetSendAlgorithm(

@@ -13,6 +13,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/single_thread_task_runner.h"
 #include "base/threading/thread_checker.h"
 #include "remoting/codec/webrtc_video_encoder.h"
 #include "remoting/protocol/host_video_stats_dispatcher.h"
@@ -41,13 +42,14 @@ class WebrtcVideoStream : public VideoStream,
   WebrtcVideoStream();
   ~WebrtcVideoStream() override;
 
-  bool Start(std::unique_ptr<webrtc::DesktopCapturer> desktop_capturer,
+  void Start(std::unique_ptr<webrtc::DesktopCapturer> desktop_capturer,
              WebrtcTransport* webrtc_transport,
              scoped_refptr<base::SingleThreadTaskRunner> encode_task_runner);
 
   // VideoStream interface.
+  void SetEventTimestampsSource(scoped_refptr<InputEventTimestampsSource>
+                                    event_timestamps_source) override;
   void Pause(bool pause) override;
-  void OnInputEventReceived(int64_t event_timestamp) override;
   void SetLosslessEncode(bool want_lossless) override;
   void SetLosslessColor(bool want_lossless) override;
   void SetObserver(Observer* observer) override;
@@ -75,9 +77,6 @@ class WebrtcVideoStream : public VideoStream,
       std::unique_ptr<WebrtcVideoStream::FrameTimestamps> timestamps);
   void OnFrameEncoded(EncodedFrameWithTimestamps frame);
 
-  void SetKeyFrameRequest();
-  void SetTargetBitrate(int bitrate);
-
   // Capturer used to capture the screen.
   std::unique_ptr<webrtc::DesktopCapturer> capturer_;
   // Used to send across encoded frames.
@@ -87,20 +86,17 @@ class WebrtcVideoStream : public VideoStream,
   // Used to encode captured frames. Always accessed on the encode thread.
   std::unique_ptr<WebrtcVideoEncoder> encoder_;
 
+  scoped_refptr<InputEventTimestampsSource> event_timestamps_source_;
+
   scoped_refptr<webrtc::PeerConnectionInterface> peer_connection_;
   scoped_refptr<webrtc::MediaStreamInterface> stream_;
 
   HostVideoStatsDispatcher video_stats_dispatcher_;
 
-  // Timestamps for the frame to be captured next.
-  std::unique_ptr<FrameTimestamps> next_frame_timestamps_;
-
   // Timestamps for the frame that's being captured.
   std::unique_ptr<FrameTimestamps> captured_frame_timestamps_;
 
   std::unique_ptr<WebrtcFrameScheduler> scheduler_;
-
-  bool received_first_frame_request_ = false;
 
   webrtc::DesktopSize frame_size_;
   webrtc::DesktopVector frame_dpi_;

@@ -27,6 +27,7 @@
 #include "components/sessions/core/session_constants.h"
 
 #include "app/vivaldi_apptools.h"
+#include "components/sessions/vivaldi_session_service_commands.h"
 
 namespace sessions {
 
@@ -105,6 +106,7 @@ const SessionCommand::id_type kCommandSetExtensionAppID = 6;
 const SessionCommand::id_type kCommandSetWindowAppName = 7;
 const SessionCommand::id_type kCommandSetTabUserAgentOverride = 8;
 
+// Vivaldi extensions. Might be necessary to preserve these values
 const sessions::SessionCommand::id_type kCommandSetExtData = 9;
 const sessions::SessionCommand::id_type kCommandSetWindowExtData = 10;
 
@@ -235,7 +237,8 @@ class PersistentTabRestoreService::Delegate
   void OnGotPreviousSession(std::vector<std::unique_ptr<SessionWindow>> windows,
                             SessionID::id_type ignored_active_window);
 
-  void OnGotPreviousSessionActive(std::vector<std::unique_ptr<SessionWindow>> windows,
+  void OnGotPreviousSessionActive(
+                            std::vector<std::unique_ptr<SessionWindow>> windows,
                             SessionID::id_type ignored_active_window);
 
   // Converts a SessionWindow into a Window, returning true on success. We use 0
@@ -283,6 +286,9 @@ class PersistentTabRestoreService::Delegate
 
   DISALLOW_COPY_AND_ASSIGN(Delegate);
 };
+
+// Vivaldi functions. have to placed here due to the delegate function
+#include "components/sessions/vivaldi_persistent_tab_restore_service.inc"
 
 PersistentTabRestoreService::Delegate::Delegate(TabRestoreServiceClient* client)
     : client_(client),
@@ -412,7 +418,8 @@ void PersistentTabRestoreService::Delegate::LoadTabsFromLastSession() {
     // gisli@vivaldi.com:  Add this call to get the number of active tabs
     // at last session close.
     client_->GetLastSession(
-          base::Bind(&Delegate::OnGotPreviousSessionActive, base::Unretained(this)),
+          base::Bind(&Delegate::OnGotPreviousSessionActive,
+                     base::Unretained(this)),
           &cancelable_task_tracker_);
   }
 }
@@ -465,12 +472,7 @@ void PersistentTabRestoreService::Delegate::ScheduleCommandsForWindow(
         kCommandSetWindowAppName, window.id, window.app_name));
   }
 
-  if (!window.ext_data.empty()) {
-    base_session_service_->ScheduleCommand(
-        sessions::CreateSetWindowExtDataCommand(kCommandSetWindowExtData,
-                                      window.id,
-                                      window.ext_data));
-  }
+  VivaldiWindowsScheduleExtCommand(base_session_service_.get(), window);
 
   for (size_t i = 0; i < window.tabs.size(); ++i) {
     int selected_index = GetSelectedNavigationIndexToPersist(*window.tabs[i]);
@@ -514,12 +516,7 @@ void PersistentTabRestoreService::Delegate::ScheduleCommandsForTab(
         kCommandSetExtensionAppID, tab.id, tab.extension_app_id));
   }
 
-  if (!tab.ext_data.empty()) {
-    base_session_service_->ScheduleCommand(
-      sessions::CreateSetTabExtDataCommand(kCommandSetExtData,
-                                 tab.id,
-                                 tab.ext_data));
-  }
+  VivaldiTabScheduleExtCommand(base_session_service_.get(), tab);
 
   if (!tab.user_agent_override.empty()) {
     base_session_service_->ScheduleCommand(CreateSetTabUserAgentOverrideCommand(
@@ -778,24 +775,6 @@ void PersistentTabRestoreService::Delegate::CreateEntriesFromCommands(
         break;
       }
 
-      case kCommandSetWindowExtData: {
-        if (!current_window) {
-          // We should have created a window already.
-          NOTREACHED();
-          return;
-        }
-
-        SessionID::id_type window_id;
-        std::string ext_data;
-        if (!RestoreSetWindowExtDataCommand(
-              command, &window_id, &ext_data))
-          return;
-
-        current_window->ext_data.swap(ext_data);
-        break;
-      }
-
-
       case kCommandSetExtensionAppID: {
         if (!current_tab) {
           // Should be in a tab when we get this.
@@ -809,22 +788,6 @@ void PersistentTabRestoreService::Delegate::CreateEntriesFromCommands(
           return;
         }
         current_tab->extension_app_id.swap(extension_app_id);
-        break;
-      }
-
-      case kCommandSetExtData: {
-        if (!current_tab) {
-          // Should be in a tab when we get this.
-          return;
-        }
-        SessionID::id_type tab_id;
-        std::string ext_data;
-        if (!RestoreSetExtDataCommand(
-          command, &tab_id,
-          &ext_data)) {
-          return;
-        }
-        current_tab->ext_data.swap(ext_data);
         break;
       }
 
@@ -843,6 +806,9 @@ void PersistentTabRestoreService::Delegate::CreateEntriesFromCommands(
         current_tab->user_agent_override.swap(user_agent_override);
         break;
       }
+
+      // Macro defined in  vivaldi_persistent_tab_restore_service.inc
+      VIVALDI_PERSISTENT_TAB_CASES
 
       default:
         // Unknown type, usually indicates corruption of file. Ignore it.
@@ -881,24 +847,6 @@ void PersistentTabRestoreService::Delegate::OnGotPreviousSession(
                           make_move_iterator(entries.end()));
   load_state_ |= LOADED_LAST_SESSION;
   LoadStateChanged();
-}
-
-// gisli@vivaldi.com:  Added previous_active_entries.
-void PersistentTabRestoreService::Delegate::OnGotPreviousSessionActive(
-  std::vector<std::unique_ptr<SessionWindow>> windows,
-    SessionID::id_type ignored_active_window) {
-  // Keep track of many windows we need to restore, ignore popups.
-  previous_active_entries_count_ = 0;
-  for (size_t i = 0; i < windows.size(); ++i) {
-    if (windows[i]->ext_data.find("\"windowType\":\"popup\"") == std::string::npos) {
-      previous_active_entries_count_++;
-    }
-  }
-  // special case: if all the remaining windows where popups, there must have
-  // been exactly one active window.
-  if (previous_active_entries_count_ == 0 && windows.size() > 0) {
-    previous_active_entries_count_ = 1;
-  }
 }
 
 bool PersistentTabRestoreService::Delegate::ConvertSessionWindowToWindow(

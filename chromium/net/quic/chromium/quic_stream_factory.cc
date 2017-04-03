@@ -4,8 +4,6 @@
 
 #include "net/quic/chromium/quic_stream_factory.h"
 
-#include <openssl/aead.h>
-
 #include <algorithm>
 #include <tuple>
 #include <utility>
@@ -17,7 +15,6 @@
 #include "base/metrics/sparse_histogram.h"
 #include "base/rand_util.h"
 #include "base/single_thread_task_runner.h"
-#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -53,10 +50,12 @@
 #include "net/quic/core/quic_crypto_client_stream_factory.h"
 #include "net/quic/core/quic_flags.h"
 #include "net/socket/client_socket_factory.h"
+#include "net/socket/next_proto.h"
 #include "net/socket/socket_performance_watcher.h"
 #include "net/socket/socket_performance_watcher_factory.h"
+#include "net/socket/udp_client_socket.h"
 #include "net/ssl/token_binding.h"
-#include "net/udp/udp_client_socket.h"
+#include "third_party/boringssl/src/include/openssl/aead.h"
 #include "url/gurl.h"
 #include "url/url_constants.h"
 
@@ -158,7 +157,7 @@ QuicConfig InitializeQuicConfig(const QuicTagVector& connection_options,
                                 int idle_connection_timeout_seconds) {
   DCHECK_GT(idle_connection_timeout_seconds, 0);
   QuicConfig config;
-  config.SetIdleConnectionStateLifetime(
+  config.SetIdleNetworkTimeout(
       QuicTime::Delta::FromSeconds(idle_connection_timeout_seconds),
       QuicTime::Delta::FromSeconds(idle_connection_timeout_seconds));
   config.SetConnectionOptionsToSend(connection_options);
@@ -755,6 +754,7 @@ QuicStreamFactory::QuicStreamFactory(
       random_generator_(random_generator),
       clock_(clock),
       max_packet_length_(max_packet_length),
+      clock_skew_detector_(base::TimeTicks::Now(), base::Time::Now()),
       socket_performance_watcher_factory_(socket_performance_watcher_factory),
       config_(InitializeQuicConfig(connection_options,
                                    idle_connection_timeout_seconds)),
@@ -856,11 +856,7 @@ QuicStreamFactory::~QuicStreamFactory() {
     delete all_sessions_.begin()->first;
     all_sessions_.erase(all_sessions_.begin());
   }
-  while (!active_jobs_.empty()) {
-    const QuicServerId server_id = active_jobs_.begin()->first;
-    base::STLDeleteElements(&(active_jobs_[server_id]));
-    active_jobs_.erase(server_id);
-  }
+  active_jobs_.clear();
   while (!active_cert_verifier_jobs_.empty())
     active_cert_verifier_jobs_.erase(active_cert_verifier_jobs_.begin());
   if (ssl_config_service_.get())
@@ -931,6 +927,14 @@ int QuicStreamFactory::Create(const QuicServerId& server_id,
                               base::StringPiece method,
                               const NetLogWithSource& net_log,
                               QuicStreamRequest* request) {
+  if (clock_skew_detector_.ClockSkewDetected(base::TimeTicks::Now(),
+                                             base::Time::Now())) {
+    while (!active_sessions_.empty()) {
+      QuicChromiumClientSession* session = active_sessions_.begin()->second;
+      OnSessionGoingAway(session);
+      // TODO(rch): actually close the session?
+    }
+  }
   DCHECK(server_id.host_port_pair().Equals(HostPortPair::FromURL(url)));
   // Enforce session affinity for promised streams.
   QuicClientPromisedInfo* promised =
@@ -1001,15 +1005,16 @@ int QuicStreamFactory::Create(const QuicServerId& server_id,
   ignore_result(StartCertVerifyJob(server_id, cert_verify_flags, net_log));
 
   QuicSessionKey key(destination, server_id);
-  std::unique_ptr<Job> job(
-      new Job(this, host_resolver_, key, WasQuicRecentlyBroken(server_id),
-              cert_verify_flags, quic_server_info, net_log));
+  std::unique_ptr<Job> job = base::MakeUnique<Job>(
+      this, host_resolver_, key, WasQuicRecentlyBroken(server_id),
+      cert_verify_flags, quic_server_info, net_log);
   int rv = job->Run(base::Bind(&QuicStreamFactory::OnJobComplete,
                                base::Unretained(this), job.get()));
   if (rv == ERR_IO_PENDING) {
     active_requests_[request] = server_id;
     job_requests_map_[server_id].insert(request);
-    active_jobs_[server_id].insert(job.release());
+    Job* job_ptr = job.get();
+    active_jobs_[server_id][job_ptr] = std::move(job);
     return rv;
   }
   if (rv == OK) {
@@ -1050,7 +1055,7 @@ void QuicStreamFactory::CreateAuxilaryJob(const QuicSessionKey& key,
   Job* aux_job =
       new Job(this, host_resolver_, key, WasQuicRecentlyBroken(key.server_id()),
               cert_verify_flags, nullptr, net_log);
-  active_jobs_[key.server_id()].insert(aux_job);
+  active_jobs_[key.server_id()][aux_job] = base::WrapUnique(aux_job);
   task_runner_->PostTask(FROM_HERE,
                          base::Bind(&QuicStreamFactory::Job::RunAuxilaryJob,
                                     aux_job->GetWeakPtr()));
@@ -1089,7 +1094,6 @@ void QuicStreamFactory::OnJobComplete(Job* job, int rv) {
       // the other job handle the request.
       job->Cancel();
       jobs->erase(job);
-      delete job;
       return;
     }
   }
@@ -1121,12 +1125,12 @@ void QuicStreamFactory::OnJobComplete(Job* job, int rv) {
     request->OnRequestComplete(rv);
   }
 
-  for (Job* other_job : active_jobs_[server_id]) {
-    if (other_job != job)
-      other_job->Cancel();
+  for (auto& other_job : active_jobs_[server_id]) {
+    if (other_job.first != job)
+      other_job.first->Cancel();
   }
 
-  base::STLDeleteElements(&(active_jobs_[server_id]));
+  active_jobs_[server_id].clear();
   active_jobs_.erase(server_id);
   job_requests_map_.erase(server_id);
 }
@@ -1505,18 +1509,14 @@ void QuicStreamFactory::OnSSLConfigChanged() {
   CloseAllSessions(ERR_CERT_DATABASE_CHANGED, QUIC_CONNECTION_CANCELLED);
 }
 
-void QuicStreamFactory::OnCertAdded(const X509Certificate* cert) {
-  CloseAllSessions(ERR_CERT_DATABASE_CHANGED, QUIC_CONNECTION_CANCELLED);
-}
-
-void QuicStreamFactory::OnCACertChanged(const X509Certificate* cert) {
+void QuicStreamFactory::OnCertDBChanged(const X509Certificate* cert) {
   // We should flush the sessions if we removed trust from a
   // cert, because a previously trusted server may have become
   // untrusted.
   //
   // We should not flush the sessions if we added trust to a cert.
   //
-  // Since the OnCACertChanged method doesn't tell us what
+  // Since the OnCertDBChanged method doesn't tell us what
   // kind of change it is, we have to flush the socket
   // pools to be safe.
   CloseAllSessions(ERR_CERT_DATABASE_CHANGED, QUIC_CONNECTION_CANCELLED);
@@ -1750,7 +1750,7 @@ int64_t QuicStreamFactory::GetServerNetworkStatsSmoothedRttInMicroseconds(
 
 bool QuicStreamFactory::WasQuicRecentlyBroken(
     const QuicServerId& server_id) const {
-  const AlternativeService alternative_service(QUIC,
+  const AlternativeService alternative_service(kProtoQUIC,
                                                server_id.host_port_pair());
   return http_server_properties_->WasAlternativeServiceRecentlyBroken(
       alternative_service);
@@ -1844,7 +1844,7 @@ void QuicStreamFactory::MaybeInitialize() {
     HostPortPair host_port_pair(key_value.first.host(), key_value.first.port());
     for (const AlternativeServiceInfo& alternative_service_info :
          key_value.second) {
-      if (alternative_service_info.alternative_service.protocol == QUIC) {
+      if (alternative_service_info.alternative_service.protocol == kProtoQUIC) {
         quic_supported_servers_at_startup_.insert(host_port_pair);
         break;
       }
@@ -1882,7 +1882,7 @@ void QuicStreamFactory::ProcessGoingAwaySession(
     return;
 
   const QuicConnectionStats& stats = session->connection()->GetStats();
-  const AlternativeService alternative_service(QUIC,
+  const AlternativeService alternative_service(kProtoQUIC,
                                                server_id.host_port_pair());
   if (session->IsCryptoHandshakeConfirmed()) {
     http_server_properties_->ConfirmAlternativeService(alternative_service);

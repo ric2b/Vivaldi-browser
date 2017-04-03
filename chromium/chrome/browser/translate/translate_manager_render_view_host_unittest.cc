@@ -23,6 +23,7 @@
 #include "chrome/browser/renderer_context_menu/render_view_context_menu_test_util.h"
 #include "chrome/browser/translate/chrome_translate_client.h"
 #include "chrome/browser/translate/translate_service.h"
+#include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/translate/translate_bubble_factory.h"
 #include "chrome/browser/ui/translate/translate_bubble_model.h"
 #include "chrome/browser/ui/translate/translate_bubble_model_impl.h"
@@ -72,7 +73,7 @@ class MockTranslateBubbleFactory : public TranslateBubbleFactory {
  public:
   MockTranslateBubbleFactory() {}
 
-  void ShowImplementation(
+  ShowTranslateBubbleResult ShowImplementation(
       BrowserWindow* window,
       content::WebContents* web_contents,
       translate::TranslateStep step,
@@ -80,7 +81,7 @@ class MockTranslateBubbleFactory : public TranslateBubbleFactory {
     if (model_) {
       model_->SetViewState(
           TranslateBubbleModelImpl::TranslateStepToViewState(step));
-      return;
+      return ShowTranslateBubbleResult::SUCCESS;
     }
 
     ChromeTranslateClient* chrome_translate_client =
@@ -96,6 +97,7 @@ class MockTranslateBubbleFactory : public TranslateBubbleFactory {
             chrome_translate_client->GetTranslateManager()->GetWeakPtr(),
             source_language, target_language));
     model_.reset(new TranslateBubbleModelImpl(step, std::move(ui_delegate)));
+    return ShowTranslateBubbleResult::SUCCESS;
   }
 
   bool DismissBubble() {
@@ -994,7 +996,7 @@ TEST_F(TranslateManagerRenderViewHostTest, ReloadFromLocationBar) {
   int pending_id =
       web_contents()->GetController().GetPendingEntry()->GetUniqueID();
   content::RenderFrameHostTester::For(web_contents()->GetMainFrame())
-      ->SendNavigateWithTransition(0, pending_id, false, url,
+      ->SendNavigateWithTransition(pending_id, false, url,
                                    ui::PAGE_TRANSITION_TYPED);
 
   // Test that we are really getting a same page navigation, the test would be
@@ -1048,12 +1050,12 @@ TEST_F(TranslateManagerRenderViewHostTest, CloseInfoBarInSubframeNavigation) {
 
   // Simulate a sub-frame auto-navigating.
   subframe_tester->SendNavigateWithTransition(
-      0, 0, false, GURL("http://pub.com"), ui::PAGE_TRANSITION_AUTO_SUBFRAME);
+      0, false, GURL("http://pub.com"), ui::PAGE_TRANSITION_AUTO_SUBFRAME);
   EXPECT_FALSE(TranslateUiVisible());
 
   // Simulate the user navigating in a sub-frame.
   subframe_tester->SendNavigateWithTransition(
-      1, 0, true, GURL("http://pub.com"), ui::PAGE_TRANSITION_MANUAL_SUBFRAME);
+      1, true, GURL("http://pub.com"), ui::PAGE_TRANSITION_MANUAL_SUBFRAME);
   EXPECT_FALSE(TranslateUiVisible());
 
   // This is deliberately different behavior for bubbles - same language

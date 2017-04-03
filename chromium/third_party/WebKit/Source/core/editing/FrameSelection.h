@@ -44,9 +44,7 @@
 
 namespace blink {
 
-class CaretBase;
 class CharacterData;
-class CullRect;
 class LayoutBlock;
 class LocalFrame;
 class FrameCaret;
@@ -111,38 +109,36 @@ class CORE_EXPORT FrameSelection final
     return selection().isContentRichlyEditable();
   }
 
-  // TODO(xiaochengh): Remove the |moveTo(VisiblePosition)| overload.
-  void moveTo(const VisiblePosition&,
-              EUserTriggered = NotUserTriggered,
-              CursorAlignOnScroll = CursorAlignOnScroll::IfNeeded);
-  void moveTo(const Position&, TextAffinity);
+  // An implementation of |WebFrame::moveCaretSelection()|
+  void moveCaretSelection(const IntPoint&);
 
   template <typename Strategy>
   const VisibleSelectionTemplate<Strategy>& visibleSelection() const;
 
   const VisibleSelection& selection() const;
+
+  void setSelection(const SelectionInDOMTree&,
+                    SetSelectionOptions = CloseTyping | ClearTypingStyle,
+                    CursorAlignOnScroll = CursorAlignOnScroll::IfNeeded,
+                    TextGranularity = CharacterGranularity);
+
+  void setSelection(const SelectionInFlatTree&,
+                    SetSelectionOptions = CloseTyping | ClearTypingStyle,
+                    CursorAlignOnScroll = CursorAlignOnScroll::IfNeeded,
+                    TextGranularity = CharacterGranularity);
+
+  // TODO(yosin): We should use |SelectionInDOMTree| version instead of
+  // |VisibleSelection| version.
   void setSelection(const VisibleSelection&,
                     SetSelectionOptions = CloseTyping | ClearTypingStyle,
                     CursorAlignOnScroll = CursorAlignOnScroll::IfNeeded,
                     TextGranularity = CharacterGranularity);
+  // TODO(yosin): We should use |SelectionInFlatTree| version instead of
+  // |VisibleSelectionInFlatTree| version.
   void setSelection(const VisibleSelectionInFlatTree&,
                     SetSelectionOptions = CloseTyping | ClearTypingStyle,
                     CursorAlignOnScroll = CursorAlignOnScroll::IfNeeded,
                     TextGranularity = CharacterGranularity);
-  // TODO(yosin) We should get rid of two parameters version of
-  // |setSelection()| to avoid conflict of four parameters version.
-  void setSelection(const VisibleSelection& selection,
-                    TextGranularity granularity) {
-    setSelection(selection, CloseTyping | ClearTypingStyle,
-                 CursorAlignOnScroll::IfNeeded, granularity);
-  }
-  // TODO(yosin) We should get rid of |Range| version of |setSelectedRagne()|
-  // for Oilpan.
-  bool setSelectedRange(
-      Range*,
-      TextAffinity,
-      SelectionDirectionalMode = SelectionDirectionalMode::NonDirectional,
-      SetSelectionOptions = CloseTyping | ClearTypingStyle);
   bool setSelectedRange(
       const EphemeralRange&,
       TextAffinity,
@@ -168,11 +164,7 @@ class CORE_EXPORT FrameSelection final
               TextGranularity,
               EUserTriggered = NotUserTriggered);
   enum VerticalDirection { DirectionUp, DirectionDown };
-  bool modify(EAlteration,
-              unsigned verticalDistance,
-              VerticalDirection,
-              EUserTriggered = NotUserTriggered,
-              CursorAlignOnScroll = CursorAlignOnScroll::IfNeeded);
+  bool modify(EAlteration, unsigned verticalDistance, VerticalDirection);
 
   // Moves the selection extent based on the selection granularity strategy.
   // This function does not allow the selection to collapse. If the new
@@ -242,6 +234,7 @@ class CORE_EXPORT FrameSelection final
   bool isFocusedAndActive() const;
   void pageActivationChanged();
 
+  void setUseSecureKeyboardEntryWhenActive(bool);
   void updateSecureKeyboardEntryIfActive();
 
   // Returns true if a word is selected.
@@ -251,14 +244,6 @@ class CORE_EXPORT FrameSelection final
   void showTreeForThis() const;
 #endif
 
-  enum EndPointsAdjustmentMode {
-    AdjustEndpointsAtBidiBoundary,
-    DoNotAdjsutEndpoints
-  };
-  void setNonDirectionalSelectionIfNeeded(
-      const VisibleSelectionInFlatTree&,
-      TextGranularity,
-      EndPointsAdjustmentMode = DoNotAdjsutEndpoints);
   void setFocusedNodeIfNeeded();
   void notifyLayoutObjectOfSelectionChange(EUserTriggered);
 
@@ -292,11 +277,12 @@ class CORE_EXPORT FrameSelection final
   // to use updated selection, we should make |updateIfNeeded()| private.
   void updateIfNeeded();
 
-  DECLARE_VIRTUAL_TRACE();
+  DECLARE_TRACE();
 
  private:
   friend class FrameSelectionTest;
   friend class PaintControllerPaintTestForSlimmingPaintV1AndV2;
+  friend class SelectionControllerTest;
   FRIEND_TEST_ALL_PREFIXES(PaintControllerPaintTestForSlimmingPaintV1AndV2,
                            FullDocumentPaintingWithCaret);
 
@@ -305,11 +291,6 @@ class CORE_EXPORT FrameSelection final
   // Note: We have |selectionInFlatTree()| for unit tests, we should
   // use |visibleSelection<EditingInFlatTreeStrategy>()|.
   const VisibleSelectionInFlatTree& selectionInFlatTree() const;
-
-  template <typename Strategy>
-  VisiblePositionTemplate<Strategy> originalBase() const;
-  void setOriginalBase(const VisiblePosition&);
-  void setOriginalBase(const VisiblePositionInFlatTree&);
 
   template <typename Strategy>
   void setSelectionAlgorithm(const VisibleSelectionTemplate<Strategy>&,
@@ -336,10 +317,6 @@ class CORE_EXPORT FrameSelection final
                                const Position& start,
                                const Position& end);
 
-  template <typename Strategy>
-  VisibleSelectionTemplate<Strategy> validateSelection(
-      const VisibleSelectionTemplate<Strategy>&);
-
   GranularityStrategy* granularityStrategy();
 
   // For unittests
@@ -351,8 +328,6 @@ class CORE_EXPORT FrameSelection final
   const Member<PendingSelection> m_pendingSelection;
   const Member<SelectionEditor> m_selectionEditor;
 
-  // Used to store base before the adjustment at bidi boundary
-  VisiblePositionInFlatTree m_originalBaseInFlatTree;
   TextGranularity m_granularity;
   LayoutUnit m_xPosForVerticalArrowNavigation;
 
@@ -365,6 +340,7 @@ class CORE_EXPORT FrameSelection final
   std::unique_ptr<GranularityStrategy> m_granularityStrategy;
 
   const Member<FrameCaret> m_frameCaret;
+  bool m_useSecureKeyboardEntryWhenActive = false;
 };
 
 inline EditingStyle* FrameSelection::typingStyle() const {

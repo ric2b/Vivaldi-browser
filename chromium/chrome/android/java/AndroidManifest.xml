@@ -53,7 +53,8 @@ by a child template that "extends" this file.
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
     <uses-permission android:name="android.permission.WRITE_SYNC_SETTINGS"/>
     {% set enable_vr_shell = enable_vr_shell|default(0) %}
-    {% if enable_vr_shell == "true" %}
+    {% set enable_webvr = enable_webvr|default(0) %}
+    {% if enable_vr_shell == "true" or enable_webvr == "true" %}
     <!-- Required to read the paired viewer's distortion parameters. -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
     <!-- Indicates use of Android's VR-mode, available only on Android N+. -->
@@ -83,6 +84,8 @@ by a child template that "extends" this file.
     <uses-permission android:name="com.google.android.c2dm.permission.RECEIVE" />
     <uses-permission android:name="com.android.launcher.permission.INSTALL_SHORTCUT"/>
 
+    <uses-permission android:name="com.google.android.apps.now.CURRENT_ACCOUNT_ACCESS" />
+
     {% block extra_uses_permissions %}
     {% endblock %}
 
@@ -110,15 +113,16 @@ by a child template that "extends" this file.
         android:icon="@mipmap/app_icon"
         android:label="@string/app_name"
         android:largeHeap="false"
-        android:allowBackup="false"
         android:manageSpaceActivity="@string/manage_space_activity"
-        android:fullBackupContent="@xml/chromebackupscheme"
+        android:supportsRtl="true"
+        {% if backup_key is defined %}
+        android:allowBackup="true"
+        android:backupAgent="org.chromium.chrome.browser.ChromeBackupAgent"
         android:fullBackupOnly="false"
         android:restoreAnyVersion="true"
-        {% block android_backup_agent %}
-        android:backupAgent="org.chromium.chrome.browser.ChromeBackupAgent"
-        {% endblock %}
-        android:supportsRtl="true"
+        {% else %}
+        android:allowBackup="false"
+        {% endif %}
         {% if target_sdk_version|int >= 24 %}
         android:networkSecurityConfig="@xml/network_security_config"
         {% endif %}
@@ -133,6 +137,12 @@ by a child template that "extends" this file.
             android:value="singleTask" />
         <meta-data android:name="com.samsung.android.sdk.multiwindow.penwindow.enable"
             android:value="true"/>
+
+        {% if backup_key is defined %}
+        <!-- Backup keys are channel dependent -->
+        <meta-data android:name="com.google.android.backup.api_key"
+            android:value="{{ backup_key }}" />
+        {% endif %}
 
         {% if channel in ['dev', 'canary', 'default'] %}
         <meta-data android:name="com.sec.android.support.multiwindow" android:value="true" />
@@ -165,10 +175,6 @@ by a child template that "extends" this file.
                 <category android:name="android.intent.category.NOTIFICATION_PREFERENCES" />
                 {% if channel in ['dev', 'canary', 'default'] %}
                 <category android:name="android.intent.category.MULTIWINDOW_LAUNCHER" />
-                {% endif %}
-                {% if enable_vr_shell == "true" %}
-                <!-- Show icon in Daydream app launcher. -->
-                <category android:name="com.google.intent.category.DAYDREAM" />
                 {% endif %}
             </intent-filter>
             <!-- Matches the common case of intents with no MIME type.
@@ -349,13 +355,47 @@ by a child template that "extends" this file.
 
         <!-- ChromeTabbedActivity related -->
         <activity android:name="org.chromium.chrome.browser.ChromeTabbedActivity"
-             android:theme="@style/TabbedModeTheme"
-             android:exported="false"
-             android:windowSoftInputMode="adjustResize"
-             android:launchMode="singleTask"
-             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
-             android:hardwareAccelerated="false">
+            android:theme="@style/TabbedModeTheme"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize"
+            android:launchMode="singleTask"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
+            android:hardwareAccelerated="false">
+            <!--
+              See the VRChromeTabbedActivity alias below for an explanation of this dummy intent
+              filter. We need to add these filters here as well, or non-presenting webVR pages will
+              trigger a daydream incompatible app message.
+            -->
+            <intent-filter>
+                <action android:name="org.chromium.chrome.browser.dummy.action" />
+                <category android:name="com.google.intent.category.DAYDREAM" />
+                <category android:name="com.google.intent.category.CARDBOARD" />
+            </intent-filter>
         </activity>
+
+        {% if enable_vr_shell == "true" or enable_webvr == "true" %}
+        <!--
+            TODO(mthiesse): Temporarily skip ChromeLauncherActivity when returning from Daydream
+            DON flow to avoid polluting metrics.
+        -->
+        <activity-alias android:name="org.chromium.chrome.browser.VRChromeTabbedActivity"
+            android:targetActivity="org.chromium.chrome.browser.ChromeTabbedActivity"
+            android:enableVrMode="@string/gvr_vr_mode_component">
+            <!--
+              Daydream api categorizes an activity to three categories: Cardboard only, hybrid
+              or Daydream. It does so by testing if intents can be resolved by the activity
+              that requests it.
+              In Chrome, CTA is the activity that uses Daydream api and we want to be in hybrid
+              category. So add an intent filter that could pass Daydream tests here.
+            -->
+            <intent-filter>
+                <action android:name="org.chromium.chrome.browser.dummy.action" />
+                <category android:name="com.google.intent.category.DAYDREAM" />
+                <category android:name="com.google.intent.category.CARDBOARD" />
+            </intent-filter>
+        </activity-alias>
+        {% endif %}
+
         <activity android:name="org.chromium.chrome.browser.ChromeTabbedActivity2"
              android:theme="@style/TabbedModeTheme"
              android:exported="false"
@@ -393,7 +433,7 @@ by a child template that "extends" this file.
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize">
         </activity>
         <activity android:name="org.chromium.chrome.browser.signin.AccountSigninActivity"
-            android:theme="@style/MainTheme"
+            android:theme="@style/DialogWhenLarge"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize">
         </activity>
         <activity android:name="org.chromium.chrome.browser.preferences.Preferences"
@@ -414,12 +454,13 @@ by a child template that "extends" this file.
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize">
         </activity>
         <activity android:name="org.chromium.chrome.browser.bookmarks.BookmarkActivity"
-            android:theme="@style/DrawerDialog"
+            android:theme="@style/FullscreenWhiteActivityTheme"
+            android:exported="false"
             android:windowSoftInputMode="stateAlwaysHidden"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize">
         </activity>
         <activity android:name="org.chromium.chrome.browser.bookmarks.BookmarkAddActivity"
-            android:theme="@style/DrawerDialogWhite"
+            android:theme="@style/DialogWhenLarge"
             android:windowSoftInputMode="stateHidden"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize">
             <intent-filter>
@@ -428,26 +469,30 @@ by a child template that "extends" this file.
             </intent-filter>
         </activity>
         <activity android:name="org.chromium.chrome.browser.bookmarks.BookmarkEditActivity"
-            android:theme="@style/DrawerDialogWhite"
+            android:theme="@style/DialogWhenLarge"
             android:windowSoftInputMode="stateHidden"
+            android:exported="false"
             android:label="@string/edit_bookmark"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize">
         </activity>
         <activity android:name="org.chromium.chrome.browser.bookmarks.BookmarkAddEditFolderActivity"
-            android:theme="@style/DrawerDialogWhite"
+            android:theme="@style/DialogWhenLarge"
+            android:exported="false"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize">
         </activity>
         <activity android:name="org.chromium.chrome.browser.bookmarks.BookmarkFolderSelectActivity"
-            android:theme="@style/DrawerDialogWhite"
+            android:theme="@style/DialogWhenLarge"
             android:windowSoftInputMode="stateAlwaysHidden"
             android:label="@string/bookmark_choose_folder"
+            android:exported="false"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize">
         </activity>
 
         <!-- Activities for downloads. -->
         <activity android:name="org.chromium.chrome.browser.download.DownloadActivity"
-            android:theme="@style/DownloadActivityTheme"
+            android:theme="@style/FullscreenWhiteActivityTheme"
             android:windowSoftInputMode="stateAlwaysHidden"
+            android:exported="false"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize">
         </activity>
 

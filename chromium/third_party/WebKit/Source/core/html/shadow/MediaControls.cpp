@@ -32,8 +32,10 @@
 #include "core/events/MouseEvent.h"
 #include "core/frame/Settings.h"
 #include "core/html/HTMLMediaElement.h"
+#include "core/html/shadow/MediaControlsMediaEventListener.h"
 #include "core/html/shadow/MediaControlsWindowEventListener.h"
 #include "core/html/track/TextTrackContainer.h"
+#include "core/html/track/TextTrackList.h"
 #include "core/layout/LayoutObject.h"
 #include "core/layout/LayoutTheme.h"
 #include "platform/EventDispatchForbiddenScope.h"
@@ -121,6 +123,7 @@ MediaControls::MediaControls(HTMLMediaElement& mediaElement)
       m_castButton(nullptr),
       m_fullscreenButton(nullptr),
       m_downloadButton(nullptr),
+      m_mediaEventListener(new MediaControlsMediaEventListener(this)),
       m_windowEventListener(MediaControlsWindowEventListener::create(
           this,
           WTF::bind(&MediaControls::hideAllMenus, wrapWeakPersistent(this)))),
@@ -132,8 +135,6 @@ MediaControls::MediaControls(HTMLMediaElement& mediaElement)
       m_panelWidthChangedTimer(this,
                                &MediaControls::panelWidthChangedTimerFired),
       m_panelWidth(0),
-      m_allowHiddenVolumeControls(
-          RuntimeEnabledFeatures::newMediaPlaybackUiEnabled()),
       m_keepShowingUntilTimerFires(false) {}
 
 MediaControls* MediaControls::create(HTMLMediaElement& mediaElement) {
@@ -160,14 +161,10 @@ MediaControls* MediaControls::create(HTMLMediaElement& mediaElement) {
 //     |    (-webkit-media-controls-panel)
 //     +-MediaControlPlayButtonElement
 //     |    (-webkit-media-controls-play-button)
-//     | {if !RTE::newMediaPlaybackUi()}
-//     +-MediaControlTimelineElement
-//     |    (-webkit-media-controls-timeline)
 //     +-MediaControlCurrentTimeDisplayElement
 //     |    (-webkit-media-controls-current-time-display)
 //     +-MediaControlTimeRemainingDisplayElement
 //     |    (-webkit-media-controls-time-remaining-display)
-//     | {if RTE::newMediaPlaybackUi()}
 //     +-MediaControlTimelineElement
 //     |    (-webkit-media-controls-timeline)
 //     +-MediaControlMuteButtonElement
@@ -194,7 +191,6 @@ MediaControls* MediaControls::create(HTMLMediaElement& mediaElement) {
 //  +-MediaControlTextTrackListItemSubtitles
 //       (-internal-media-controls-text-track-list-kind-subtitles)
 void MediaControls::initializeControls() {
-  const bool useNewUi = RuntimeEnabledFeatures::newMediaPlaybackUiEnabled();
   MediaControlOverlayEnclosureElement* overlayEnclosure =
       MediaControlOverlayEnclosureElement::create(*this);
 
@@ -226,18 +222,10 @@ void MediaControls::initializeControls() {
   m_playButton = playButton;
   panel->appendChild(playButton);
 
-  MediaControlTimelineElement* timeline =
-      MediaControlTimelineElement::create(*this);
-  m_timeline = timeline;
-  // In old UX, timeline is before the time / duration text.
-  if (!useNewUi)
-    panel->appendChild(timeline);
-  // else we will attach it later.
-
   MediaControlCurrentTimeDisplayElement* currentTimeDisplay =
       MediaControlCurrentTimeDisplayElement::create(*this);
   m_currentTimeDisplay = currentTimeDisplay;
-  m_currentTimeDisplay->setIsWanted(useNewUi);
+  m_currentTimeDisplay->setIsWanted(true);
   panel->appendChild(currentTimeDisplay);
 
   MediaControlTimeRemainingDisplayElement* durationDisplay =
@@ -245,9 +233,10 @@ void MediaControls::initializeControls() {
   m_durationDisplay = durationDisplay;
   panel->appendChild(durationDisplay);
 
-  // Timeline is after the time / duration text if newMediaPlaybackUiEnabled.
-  if (useNewUi)
-    panel->appendChild(timeline);
+  MediaControlTimelineElement* timeline =
+      MediaControlTimelineElement::create(*this);
+  m_timeline = timeline;
+  panel->appendChild(timeline);
 
   MediaControlMuteButtonElement* muteButton =
       MediaControlMuteButtonElement::create(*this);
@@ -258,7 +247,7 @@ void MediaControls::initializeControls() {
       MediaControlVolumeSliderElement::create(*this);
   m_volumeSlider = slider;
   panel->appendChild(slider);
-  if (m_allowHiddenVolumeControls && preferHiddenVolumeControls(document()))
+  if (preferHiddenVolumeControls(document()))
     m_volumeSlider->setIsWanted(false);
 
   MediaControlFullscreenButtonElement* fullscreenButton =
@@ -323,25 +312,20 @@ void MediaControls::initializeControls() {
 
 void MediaControls::reset() {
   EventDispatchForbiddenScope::AllowUserAgentEvents allowEventsInShadow;
-  const bool useNewUi = RuntimeEnabledFeatures::newMediaPlaybackUiEnabled();
   BatchedControlUpdate batch(this);
-
-  m_allowHiddenVolumeControls = useNewUi;
 
   const double duration = mediaElement().duration();
   m_durationDisplay->setTextContent(
       LayoutTheme::theme().formatMediaControlsTime(duration));
   m_durationDisplay->setCurrentValue(duration);
 
-  if (useNewUi) {
-    // Show everything that we might hide.
-    // If we don't have a duration, then mark it to be hidden.  For the
-    // old UI case, want / don't want is the same as show / hide since
-    // it is never marked as not fitting.
-    m_durationDisplay->setIsWanted(std::isfinite(duration));
-    m_currentTimeDisplay->setIsWanted(true);
-    m_timeline->setIsWanted(true);
-  }
+  // Show everything that we might hide.
+  // If we don't have a duration, then mark it to be hidden.  For the
+  // old UI case, want / don't want is the same as show / hide since
+  // it is never marked as not fitting.
+  m_durationDisplay->setIsWanted(std::isfinite(duration));
+  m_currentTimeDisplay->setIsWanted(true);
+  m_timeline->setIsWanted(true);
 
   // If the player has entered an error state, force it into the paused state.
   if (mediaElement().error())
@@ -354,7 +338,7 @@ void MediaControls::reset() {
   m_timeline->setDuration(duration);
   m_timeline->setPosition(mediaElement().currentTime());
 
-  updateVolume();
+  onVolumeChange();
 
   refreshClosedCaptionsButtonVisibility();
 
@@ -376,13 +360,6 @@ void MediaControls::show() {
   m_panel->setIsDisplayed(true);
   if (m_overlayPlayButton)
     m_overlayPlayButton->updateDisplayType();
-}
-
-void MediaControls::mediaElementFocused() {
-  if (mediaElement().shouldShowControls()) {
-    show();
-    resetHideMediaControlsTimer();
-  }
 }
 
 void MediaControls::hide() {
@@ -444,12 +421,6 @@ bool MediaControls::shouldHideMediaControls(unsigned behaviorFlags) const {
 
 void MediaControls::playbackStarted() {
   BatchedControlUpdate batch(this);
-
-  if (!RuntimeEnabledFeatures::newMediaPlaybackUiEnabled()) {
-    m_currentTimeDisplay->setIsWanted(true);
-    m_durationDisplay->setIsWanted(false);
-  }
-
   updatePlayState();
   m_timeline->setPosition(mediaElement().currentTime());
   updateCurrentTimeDisplay();
@@ -502,54 +473,11 @@ void MediaControls::updateCurrentTimeDisplay() {
   double now = mediaElement().currentTime();
   double duration = mediaElement().duration();
 
-  // After seek, hide duration display and show current time.
-  if (!RuntimeEnabledFeatures::newMediaPlaybackUiEnabled() && now > 0) {
-    BatchedControlUpdate batch(this);
-    m_currentTimeDisplay->setIsWanted(true);
-    m_durationDisplay->setIsWanted(false);
-  }
-
   // Allow the theme to format the time.
   m_currentTimeDisplay->setInnerText(
       LayoutTheme::theme().formatMediaControlsCurrentTime(now, duration),
       IGNORE_EXCEPTION);
   m_currentTimeDisplay->setCurrentValue(now);
-}
-
-void MediaControls::updateVolume() {
-  m_muteButton->updateDisplayType();
-  // Invalidate the mute button because it paints differently according to
-  // volume.
-  invalidate(m_muteButton);
-
-  if (mediaElement().muted())
-    m_volumeSlider->setVolume(0);
-  else
-    m_volumeSlider->setVolume(mediaElement().volume());
-
-  // Update the visibility of our audio elements.
-  // We never want the volume slider if there's no audio.
-  // If there is audio, then we want it unless hiding audio is enabled and
-  // we prefer to hide it.
-  BatchedControlUpdate batch(this);
-  m_volumeSlider->setIsWanted(
-      mediaElement().hasAudio() &&
-      !(m_allowHiddenVolumeControls && preferHiddenVolumeControls(document())));
-
-  // The mute button is a little more complicated.  If enableNewMediaPlaybackUi
-  // is true, then we choose to hide or show the mute button to save space.
-  // If enableNew* is not set, then we never touch the mute button, and
-  // instead leave it to the CSS.
-  // Note that this is why m_allowHiddenVolumeControls isn't rolled into
-  // prefer...().
-  if (m_allowHiddenVolumeControls) {
-    // If there is no audio track, then hide the mute button.
-    m_muteButton->setIsWanted(mediaElement().hasAudio());
-  }
-
-  // Invalidate the volume slider because it paints differently according to
-  // volume.
-  invalidate(m_volumeSlider);
 }
 
 void MediaControls::changedClosedCaptionsVisibility() {
@@ -571,6 +499,24 @@ void MediaControls::toggleTextTrackList() {
     m_windowEventListener->start();
 
   m_textTrackList->setVisible(!m_textTrackList->isWanted());
+}
+
+void MediaControls::showTextTrackAtIndex(unsigned indexToEnable) {
+  TextTrackList* trackList = mediaElement().textTracks();
+  if (indexToEnable >= trackList->length())
+    return;
+  TextTrack* track = trackList->anonymousIndexedGetter(indexToEnable);
+  if (track && track->canBeRendered())
+    track->setMode(TextTrack::showingKeyword());
+}
+
+void MediaControls::disableShowingTextTracks() {
+  TextTrackList* trackList = mediaElement().textTracks();
+  for (unsigned i = 0; i < trackList->length(); ++i) {
+    TextTrack* track = trackList->anonymousIndexedGetter(i);
+    if (track->mode() == TextTrack::showingKeyword())
+      track->setMode(TextTrack::disabledKeyword());
+  }
 }
 
 void MediaControls::refreshCastButtonVisibility() {
@@ -607,15 +553,6 @@ void MediaControls::refreshCastButtonVisibilityWithoutUpdate() {
   } else if (mediaElement().shouldShowControls()) {
     m_overlayCastButton->setIsWanted(false);
     m_castButton->setIsWanted(true);
-    // Check that the cast button actually fits on the bar.  For the
-    // newMediaPlaybackUiEnabled case, we let computeWhichControlsFit()
-    // handle this.
-    if (!RuntimeEnabledFeatures::newMediaPlaybackUiEnabled() &&
-        m_fullscreenButton->getBoundingClientRect()->right() >
-            m_panel->getBoundingClientRect()->right()) {
-      m_castButton->setIsWanted(false);
-      m_overlayCastButton->tryShowOverlay();
-    }
   }
 }
 
@@ -652,6 +589,11 @@ void MediaControls::stoppedCasting() {
 
 void MediaControls::defaultEventHandler(Event* event) {
   HTMLDivElement::defaultEventHandler(event);
+
+  // Do not handle events to not interfere with the rest of the page if no
+  // controls should be visible.
+  if (!mediaElement().shouldShowControls())
+    return;
 
   // Add IgnoreControlsHover to m_hideTimerBehaviorFlags when we see a touch
   // event, to allow the hide-timer to do the right thing when it fires.
@@ -759,6 +701,28 @@ bool MediaControls::containsRelatedTarget(Event* event) {
   return contains(relatedTarget->toNode());
 }
 
+void MediaControls::onVolumeChange() {
+  m_muteButton->updateDisplayType();
+  m_volumeSlider->setVolume(mediaElement().muted() ? 0
+                                                   : mediaElement().volume());
+
+  // Update visibility of volume controls.
+  // TODO(mlamouri): it should not be part of the volumechange handling because
+  // it is using audio availability as input.
+  BatchedControlUpdate batch(this);
+  m_volumeSlider->setIsWanted(mediaElement().hasAudio() &&
+                              !preferHiddenVolumeControls(document()));
+  m_muteButton->setIsWanted(mediaElement().hasAudio());
+}
+
+void MediaControls::onFocusIn() {
+  if (!mediaElement().shouldShowControls())
+    return;
+
+  show();
+  resetHideMediaControlsTimer();
+}
+
 void MediaControls::notifyPanelWidthChanged(const LayoutUnit& newWidth) {
   // Don't bother to do any work if this matches the most recent panel
   // width, since we're called after layout.
@@ -766,12 +730,7 @@ void MediaControls::notifyPanelWidthChanged(const LayoutUnit& newWidth) {
   // run after the relayout / paint happens.  It would be great to improve
   // this, but it would be even greater to move this code entirely to
   // JS and fix it there.
-  const int panelWidth = newWidth.toInt();
-
-  if (!RuntimeEnabledFeatures::newMediaPlaybackUiEnabled())
-    return;
-
-  m_panelWidth = panelWidth;
+  m_panelWidth = newWidth.toInt();
 
   // Adjust for effective zoom.
   if (!m_panel->layoutObject() || !m_panel->layoutObject()->style())
@@ -790,9 +749,6 @@ void MediaControls::computeWhichControlsFit() {
   // Hide all controls that don't fit, and show the ones that do.
   // This might be better suited for a layout, but since JS media controls
   // won't benefit from that anwyay, we just do it here like JS will.
-
-  if (!RuntimeEnabledFeatures::newMediaPlaybackUiEnabled())
-    return;
 
   // Controls that we'll hide / show, in order of decreasing priority.
   MediaControlElement* elements[] = {
@@ -898,12 +854,6 @@ void MediaControls::computeWhichControlsFit() {
   }
 }
 
-void MediaControls::setAllowHiddenVolumeControls(bool allow) {
-  m_allowHiddenVolumeControls = allow;
-  // Update the controls visibility.
-  updateVolume();
-}
-
 void MediaControls::invalidate(Element* element) {
   if (!element)
     return;
@@ -964,6 +914,7 @@ DEFINE_TRACE(MediaControls) {
   visitor->trace(m_overflowList);
   visitor->trace(m_castButton);
   visitor->trace(m_overlayCastButton);
+  visitor->trace(m_mediaEventListener);
   visitor->trace(m_windowEventListener);
   HTMLDivElement::trace(visitor);
 }

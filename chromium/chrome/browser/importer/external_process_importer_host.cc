@@ -18,11 +18,11 @@
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/search_engines/template_url_service.h"
 #include "content/public/browser/browser_thread.h"
-#include "ui/base/l10n/l10n_util.h"
-#include "chrome/grit/chromium_strings.h"
-#include "chrome/common/importer/importer_type.h"
 
 #include "app/vivaldi_resources.h"
+#include "chrome/grit/chromium_strings.h"
+#include "chrome/common/importer/importer_type.h"
+#include "ui/base/l10n/l10n_util.h"
 
 using bookmarks::BookmarkModel;
 using content::BrowserThread;

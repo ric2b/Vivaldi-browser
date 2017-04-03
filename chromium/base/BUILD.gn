@@ -27,6 +27,7 @@ import("//build/config/nacl/config.gni")
 import("//build/config/sysroot.gni")
 import("//build/config/ui.gni")
 import("//build/nocompile.gni")
+import("//testing/libfuzzer/fuzzer_test.gni")
 import("//testing/test.gni")
 
 declare_args() {
@@ -38,10 +39,6 @@ declare_args() {
 
 if (is_android) {
   import("//build/config/android/rules.gni")
-}
-
-if (is_win) {
-  import("//build/config/win/visual_studio_version.gni")
 }
 
 config("base_flags") {
@@ -217,6 +214,8 @@ component("base") {
     "android/sys_utils.h",
     "android/trace_event_binding.cc",
     "android/trace_event_binding.h",
+    "android/unguessable_token_android.cc",
+    "android/unguessable_token_android.h",
     "at_exit.cc",
     "at_exit.h",
     "atomic_ref_count.h",
@@ -263,6 +262,13 @@ component("base") {
     "cpu.h",
     "critical_closure.h",
     "critical_closure_internal_ios.mm",
+
+    # This file depends on files from the "debug/allocator" target,
+    # but this target does not depend on "debug/allocator".
+    "debug/activity_analyzer.cc",
+    "debug/activity_analyzer.h",
+    "debug/activity_tracker.cc",
+    "debug/activity_tracker.h",
     "debug/alias.cc",
     "debug/alias.h",
     "debug/asan_invalid_access.cc",
@@ -279,22 +285,12 @@ component("base") {
     "debug/dump_without_crashing.h",
     "debug/gdi_debug_util_win.cc",
     "debug/gdi_debug_util_win.h",
-
-    # This file depends on files from the "debug/allocator" target,
-    # but this target does not depend on "debug/allocator" (see
-    # allocator.gyp for details).
-    "debug/activity_analyzer.cc",
-    "debug/activity_analyzer.h",
-    "debug/activity_tracker.cc",
-    "debug/activity_tracker.h",
     "debug/leak_annotations.h",
     "debug/leak_tracker.h",
     "debug/proc_maps_linux.cc",
     "debug/proc_maps_linux.h",
     "debug/profiler.cc",
     "debug/profiler.h",
-    "debug/scoped_thread_heap_usage.cc",
-    "debug/scoped_thread_heap_usage.h",
     "debug/stack_trace.cc",
     "debug/stack_trace.h",
     "debug/stack_trace_android.cc",
@@ -302,6 +298,8 @@ component("base") {
     "debug/stack_trace_win.cc",
     "debug/task_annotator.cc",
     "debug/task_annotator.h",
+    "debug/thread_heap_usage_tracker.cc",
+    "debug/thread_heap_usage_tracker.h",
     "deferred_sequenced_task_runner.cc",
     "deferred_sequenced_task_runner.h",
     "environment.cc",
@@ -383,6 +381,7 @@ component("base") {
     "hash.cc",
     "hash.h",
     "id_map.h",
+    "ios/block_types.h",
     "ios/crb_protocol_observers.h",
     "ios/crb_protocol_observers.mm",
     "ios/device_util.h",
@@ -456,6 +455,7 @@ component("base") {
     "mac/scoped_block.h",
     "mac/scoped_cftyperef.h",
     "mac/scoped_dispatch_object.h",
+    "mac/scoped_ionotificationportref.h",
     "mac/scoped_ioobject.h",
     "mac/scoped_ioplugininterface.h",
     "mac/scoped_launch_data.h",
@@ -487,9 +487,12 @@ component("base") {
     "memory/free_deleter.h",
     "memory/linked_ptr.h",
     "memory/manual_constructor.h",
+    "memory/memory_coordinator_client.cc",
     "memory/memory_coordinator_client.h",
     "memory/memory_coordinator_client_registry.cc",
     "memory/memory_coordinator_client_registry.h",
+    "memory/memory_coordinator_proxy.cc",
+    "memory/memory_coordinator_proxy.h",
     "memory/memory_pressure_listener.cc",
     "memory/memory_pressure_listener.h",
     "memory/memory_pressure_monitor.cc",
@@ -548,6 +551,8 @@ component("base") {
     "metrics/bucket_ranges.h",
     "metrics/field_trial.cc",
     "metrics/field_trial.h",
+    "metrics/field_trial_param_associator.cc",
+    "metrics/field_trial_param_associator.h",
     "metrics/histogram.cc",
     "metrics/histogram.h",
     "metrics/histogram_base.cc",
@@ -555,6 +560,8 @@ component("base") {
     "metrics/histogram_delta_serialization.cc",
     "metrics/histogram_delta_serialization.h",
     "metrics/histogram_flattener.h",
+    "metrics/histogram_functions.cc",
+    "metrics/histogram_functions.h",
     "metrics/histogram_macros.h",
     "metrics/histogram_samples.cc",
     "metrics/histogram_samples.h",
@@ -665,6 +672,7 @@ component("base") {
     #"process/process_iterator_openbsd.cc",  # Unused in Chromium build.
     "process/process_iterator_win.cc",
     "process/process_linux.cc",
+    "process/process_mac.cc",
     "process/process_metrics.cc",
     "process/process_metrics.h",
 
@@ -800,6 +808,8 @@ component("base") {
     "task_runner_util.h",
     "task_scheduler/delayed_task_manager.cc",
     "task_scheduler/delayed_task_manager.h",
+    "task_scheduler/initialization_util.cc",
+    "task_scheduler/initialization_util.h",
     "task_scheduler/post_task.cc",
     "task_scheduler/post_task.h",
     "task_scheduler/priority_queue.cc",
@@ -807,8 +817,6 @@ component("base") {
     "task_scheduler/scheduler_lock.h",
     "task_scheduler/scheduler_lock_impl.cc",
     "task_scheduler/scheduler_lock_impl.h",
-    "task_scheduler/scheduler_service_thread.cc",
-    "task_scheduler/scheduler_service_thread.h",
     "task_scheduler/scheduler_worker.cc",
     "task_scheduler/scheduler_worker.h",
     "task_scheduler/scheduler_worker_pool.h",
@@ -830,6 +838,8 @@ component("base") {
     "task_scheduler/task_scheduler_impl.h",
     "task_scheduler/task_tracker.cc",
     "task_scheduler/task_tracker.h",
+    "task_scheduler/task_tracker_posix.cc",
+    "task_scheduler/task_tracker_posix.h",
     "task_scheduler/task_traits.cc",
     "task_scheduler/task_traits.h",
     "template_util.h",
@@ -870,13 +880,10 @@ component("base") {
     "threading/thread_id_name_manager.cc",
     "threading/thread_id_name_manager.h",
     "threading/thread_local.h",
-    "threading/thread_local_android.cc",
-    "threading/thread_local_posix.cc",
     "threading/thread_local_storage.cc",
     "threading/thread_local_storage.h",
     "threading/thread_local_storage_posix.cc",
     "threading/thread_local_storage_win.cc",
-    "threading/thread_local_win.cc",
     "threading/thread_restrictions.cc",
     "threading/thread_restrictions.h",
     "threading/thread_task_runner_handle.cc",
@@ -910,8 +917,12 @@ component("base") {
     "timer/mock_timer.h",
     "timer/timer.cc",
     "timer/timer.h",
+    "trace_event/auto_open_close_event.cc",
+    "trace_event/auto_open_close_event.h",
     "trace_event/blame_context.cc",
     "trace_event/blame_context.h",
+    "trace_event/category_registry.cc",
+    "trace_event/category_registry.h",
     "trace_event/common/trace_event_common.h",
     "trace_event/heap_profiler.h",
     "trace_event/heap_profiler_allocation_context.cc",
@@ -945,6 +956,8 @@ component("base") {
     "trace_event/memory_dump_session_state.h",
     "trace_event/memory_infra_background_whitelist.cc",
     "trace_event/memory_infra_background_whitelist.h",
+    "trace_event/memory_usage_estimator.cc",
+    "trace_event/memory_usage_estimator.h",
     "trace_event/process_memory_dump.cc",
     "trace_event/process_memory_dump.h",
     "trace_event/process_memory_maps.cc",
@@ -953,6 +966,7 @@ component("base") {
     "trace_event/process_memory_totals.h",
     "trace_event/trace_buffer.cc",
     "trace_event/trace_buffer.h",
+    "trace_event/trace_category.h",
     "trace_event/trace_config.cc",
     "trace_event/trace_config.h",
     "trace_event/trace_event.h",
@@ -972,8 +986,6 @@ component("base") {
     "trace_event/trace_log.cc",
     "trace_event/trace_log.h",
     "trace_event/trace_log_constants.cc",
-    "trace_event/trace_sampling_thread.cc",
-    "trace_event/trace_sampling_thread.h",
     "trace_event/tracing_agent.cc",
     "trace_event/tracing_agent.h",
     "tracked_objects.cc",
@@ -1171,6 +1183,8 @@ component("base") {
       "synchronization/read_write_lock_posix.cc",
       "sys_info.cc",
       "sys_info_posix.cc",
+      "task_scheduler/initialization_util.cc",
+      "task_scheduler/initialization_util.h",
       "trace_event/trace_event_system_stats_monitor.cc",
     ]
 
@@ -1196,6 +1210,8 @@ component("base") {
         "process/launch.h",
         "process/launch_posix.cc",
         "rand_util_posix.cc",
+        "task_scheduler/task_tracker_posix.cc",
+        "task_scheduler/task_tracker_posix.h",
       ]
     }
   } else {
@@ -1225,6 +1241,7 @@ component("base") {
     deps += [
       "//base/trace_event/etw_manifest:chrome_events_win",
       "//base/win:base_win_features",
+      "//base/win:eventlog_messages",
     ]
 
     if (is_component_build) {
@@ -1239,61 +1256,54 @@ component("base") {
 
       # These runtime files are copied to the output directory by the
       # vs_toolchain script that runs as part of toolchain configuration.
-      if (visual_studio_version == "2015") {
-        data += [
-          "$root_out_dir/msvcp140${vcrt_suffix}.dll",
-          "$root_out_dir/vccorlib140${vcrt_suffix}.dll",
-          "$root_out_dir/vcruntime140${vcrt_suffix}.dll",
+      data += [
+        "$root_out_dir/msvcp140${vcrt_suffix}.dll",
+        "$root_out_dir/vccorlib140${vcrt_suffix}.dll",
+        "$root_out_dir/vcruntime140${vcrt_suffix}.dll",
 
-          # Universal Windows 10 CRT files
-          "$root_out_dir/api-ms-win-core-console-l1-1-0.dll",
-          "$root_out_dir/api-ms-win-core-datetime-l1-1-0.dll",
-          "$root_out_dir/api-ms-win-core-debug-l1-1-0.dll",
-          "$root_out_dir/api-ms-win-core-errorhandling-l1-1-0.dll",
-          "$root_out_dir/api-ms-win-core-file-l1-1-0.dll",
-          "$root_out_dir/api-ms-win-core-file-l1-2-0.dll",
-          "$root_out_dir/api-ms-win-core-file-l2-1-0.dll",
-          "$root_out_dir/api-ms-win-core-handle-l1-1-0.dll",
-          "$root_out_dir/api-ms-win-core-heap-l1-1-0.dll",
-          "$root_out_dir/api-ms-win-core-interlocked-l1-1-0.dll",
-          "$root_out_dir/api-ms-win-core-libraryloader-l1-1-0.dll",
-          "$root_out_dir/api-ms-win-core-localization-l1-2-0.dll",
-          "$root_out_dir/api-ms-win-core-memory-l1-1-0.dll",
-          "$root_out_dir/api-ms-win-core-namedpipe-l1-1-0.dll",
-          "$root_out_dir/api-ms-win-core-processenvironment-l1-1-0.dll",
-          "$root_out_dir/api-ms-win-core-processthreads-l1-1-0.dll",
-          "$root_out_dir/api-ms-win-core-processthreads-l1-1-1.dll",
-          "$root_out_dir/api-ms-win-core-profile-l1-1-0.dll",
-          "$root_out_dir/api-ms-win-core-rtlsupport-l1-1-0.dll",
-          "$root_out_dir/api-ms-win-core-string-l1-1-0.dll",
-          "$root_out_dir/api-ms-win-core-synch-l1-1-0.dll",
-          "$root_out_dir/api-ms-win-core-synch-l1-2-0.dll",
-          "$root_out_dir/api-ms-win-core-sysinfo-l1-1-0.dll",
-          "$root_out_dir/api-ms-win-core-timezone-l1-1-0.dll",
-          "$root_out_dir/api-ms-win-core-util-l1-1-0.dll",
-          "$root_out_dir/api-ms-win-crt-conio-l1-1-0.dll",
-          "$root_out_dir/api-ms-win-crt-convert-l1-1-0.dll",
-          "$root_out_dir/api-ms-win-crt-environment-l1-1-0.dll",
-          "$root_out_dir/api-ms-win-crt-filesystem-l1-1-0.dll",
-          "$root_out_dir/api-ms-win-crt-heap-l1-1-0.dll",
-          "$root_out_dir/api-ms-win-crt-locale-l1-1-0.dll",
-          "$root_out_dir/api-ms-win-crt-math-l1-1-0.dll",
-          "$root_out_dir/api-ms-win-crt-multibyte-l1-1-0.dll",
-          "$root_out_dir/api-ms-win-crt-private-l1-1-0.dll",
-          "$root_out_dir/api-ms-win-crt-process-l1-1-0.dll",
-          "$root_out_dir/api-ms-win-crt-runtime-l1-1-0.dll",
-          "$root_out_dir/api-ms-win-crt-stdio-l1-1-0.dll",
-          "$root_out_dir/api-ms-win-crt-string-l1-1-0.dll",
-          "$root_out_dir/api-ms-win-crt-time-l1-1-0.dll",
-          "$root_out_dir/api-ms-win-crt-utility-l1-1-0.dll",
-          "$root_out_dir/ucrtbase${vcrt_suffix}.dll",
-        ]
-      } else {
-        data += [
-          "$root_out_dir/msvcp120${vcrt_suffix}.dll",
-          "$root_out_dir/msvcr120${vcrt_suffix}.dll",
-        ]
-      }
+        # Universal Windows 10 CRT files
+        "$root_out_dir/api-ms-win-core-console-l1-1-0.dll",
+        "$root_out_dir/api-ms-win-core-datetime-l1-1-0.dll",
+        "$root_out_dir/api-ms-win-core-debug-l1-1-0.dll",
+        "$root_out_dir/api-ms-win-core-errorhandling-l1-1-0.dll",
+        "$root_out_dir/api-ms-win-core-file-l1-1-0.dll",
+        "$root_out_dir/api-ms-win-core-file-l1-2-0.dll",
+        "$root_out_dir/api-ms-win-core-file-l2-1-0.dll",
+        "$root_out_dir/api-ms-win-core-handle-l1-1-0.dll",
+        "$root_out_dir/api-ms-win-core-heap-l1-1-0.dll",
+        "$root_out_dir/api-ms-win-core-interlocked-l1-1-0.dll",
+        "$root_out_dir/api-ms-win-core-libraryloader-l1-1-0.dll",
+        "$root_out_dir/api-ms-win-core-localization-l1-2-0.dll",
+        "$root_out_dir/api-ms-win-core-memory-l1-1-0.dll",
+        "$root_out_dir/api-ms-win-core-namedpipe-l1-1-0.dll",
+        "$root_out_dir/api-ms-win-core-processenvironment-l1-1-0.dll",
+        "$root_out_dir/api-ms-win-core-processthreads-l1-1-0.dll",
+        "$root_out_dir/api-ms-win-core-processthreads-l1-1-1.dll",
+        "$root_out_dir/api-ms-win-core-profile-l1-1-0.dll",
+        "$root_out_dir/api-ms-win-core-rtlsupport-l1-1-0.dll",
+        "$root_out_dir/api-ms-win-core-string-l1-1-0.dll",
+        "$root_out_dir/api-ms-win-core-synch-l1-1-0.dll",
+        "$root_out_dir/api-ms-win-core-synch-l1-2-0.dll",
+        "$root_out_dir/api-ms-win-core-sysinfo-l1-1-0.dll",
+        "$root_out_dir/api-ms-win-core-timezone-l1-1-0.dll",
+        "$root_out_dir/api-ms-win-core-util-l1-1-0.dll",
+        "$root_out_dir/api-ms-win-crt-conio-l1-1-0.dll",
+        "$root_out_dir/api-ms-win-crt-convert-l1-1-0.dll",
+        "$root_out_dir/api-ms-win-crt-environment-l1-1-0.dll",
+        "$root_out_dir/api-ms-win-crt-filesystem-l1-1-0.dll",
+        "$root_out_dir/api-ms-win-crt-heap-l1-1-0.dll",
+        "$root_out_dir/api-ms-win-crt-locale-l1-1-0.dll",
+        "$root_out_dir/api-ms-win-crt-math-l1-1-0.dll",
+        "$root_out_dir/api-ms-win-crt-multibyte-l1-1-0.dll",
+        "$root_out_dir/api-ms-win-crt-private-l1-1-0.dll",
+        "$root_out_dir/api-ms-win-crt-process-l1-1-0.dll",
+        "$root_out_dir/api-ms-win-crt-runtime-l1-1-0.dll",
+        "$root_out_dir/api-ms-win-crt-stdio-l1-1-0.dll",
+        "$root_out_dir/api-ms-win-crt-string-l1-1-0.dll",
+        "$root_out_dir/api-ms-win-crt-time-l1-1-0.dll",
+        "$root_out_dir/api-ms-win-crt-utility-l1-1-0.dll",
+        "$root_out_dir/ucrtbase${vcrt_suffix}.dll",
+      ]
       if (is_asan) {
         if (current_cpu == "x64") {
           data += [ "$clang_base_path/lib/clang/$clang_version/lib/windows/clang_rt.asan_dynamic-x86_64.dll" ]
@@ -1771,6 +1781,7 @@ test("base_unittests") {
     "android/path_utils_unittest.cc",
     "android/scoped_java_ref_unittest.cc",
     "android/sys_utils_unittest.cc",
+    "android/unguessable_token_android_unittest.cc",
     "at_exit_unittest.cc",
     "atomicops_unittest.cc",
     "barrier_closure_unittest.cc",
@@ -1801,9 +1812,9 @@ test("base_unittests") {
     "debug/debugger_unittest.cc",
     "debug/leak_tracker_unittest.cc",
     "debug/proc_maps_linux_unittest.cc",
-    "debug/scoped_thread_heap_usage_unittest.cc",
     "debug/stack_trace_unittest.cc",
     "debug/task_annotator_unittest.cc",
+    "debug/thread_heap_usage_tracker_unittest.cc",
     "deferred_sequenced_task_runner_unittest.cc",
     "environment_unittest.cc",
     "feature_list_unittest.cc",
@@ -1863,6 +1874,7 @@ test("base_unittests") {
     "memory/memory_pressure_listener_unittest.cc",
     "memory/memory_pressure_monitor_chromeos_unittest.cc",
     "memory/memory_pressure_monitor_mac_unittest.cc",
+    "memory/memory_pressure_monitor_unittest.cc",
     "memory/memory_pressure_monitor_win_unittest.cc",
     "memory/ptr_util_unittest.cc",
     "memory/ref_counted_memory_unittest.cc",
@@ -1881,6 +1893,7 @@ test("base_unittests") {
     "metrics/field_trial_unittest.cc",
     "metrics/histogram_base_unittest.cc",
     "metrics/histogram_delta_serialization_unittest.cc",
+    "metrics/histogram_functions_unittest.cc",
     "metrics/histogram_macros_unittest.cc",
     "metrics/histogram_snapshot_manager_unittest.cc",
     "metrics/histogram_unittest.cc",
@@ -1953,19 +1966,21 @@ test("base_unittests") {
     "task_scheduler/delayed_task_manager_unittest.cc",
     "task_scheduler/priority_queue_unittest.cc",
     "task_scheduler/scheduler_lock_unittest.cc",
-    "task_scheduler/scheduler_service_thread_unittest.cc",
     "task_scheduler/scheduler_worker_pool_impl_unittest.cc",
     "task_scheduler/scheduler_worker_stack_unittest.cc",
     "task_scheduler/scheduler_worker_unittest.cc",
     "task_scheduler/sequence_sort_key_unittest.cc",
     "task_scheduler/sequence_unittest.cc",
     "task_scheduler/task_scheduler_impl_unittest.cc",
+    "task_scheduler/task_tracker_posix_unittest.cc",
     "task_scheduler/task_tracker_unittest.cc",
     "task_scheduler/task_unittest.cc",
     "task_scheduler/test_task_factory.cc",
     "task_scheduler/test_task_factory.h",
+    "task_scheduler/test_utils.h",
     "template_util_unittest.cc",
     "test/histogram_tester_unittest.cc",
+    "test/scoped_mock_time_message_loop_task_runner_unittest.cc",
     "test/test_pending_task_unittest.cc",
     "test/test_reg_util_win_unittest.cc",
     "test/trace_event_analyzer_unittest.cc",
@@ -2001,7 +2016,9 @@ test("base_unittests") {
     "trace_event/java_heap_dump_provider_android_unittest.cc",
     "trace_event/memory_allocator_dump_unittest.cc",
     "trace_event/memory_dump_manager_unittest.cc",
+    "trace_event/memory_usage_estimator_unittest.cc",
     "trace_event/process_memory_dump_unittest.cc",
+    "trace_event/trace_category_unittest.cc",
     "trace_event/trace_config_unittest.cc",
     "trace_event/trace_event_argument_unittest.cc",
     "trace_event/trace_event_synthetic_delay_unittest.cc",
@@ -2215,6 +2232,7 @@ if (enable_nocompile_tests) {
       "callback_list_unittest.nc",
       "callback_unittest.nc",
       "memory/weak_ptr_unittest.nc",
+      "metrics/histogram_unittest.nc",
     ]
 
     deps = [
@@ -2252,6 +2270,7 @@ if (is_android) {
       "android/java/src/org/chromium/base/SystemMessageHandler.java",
       "android/java/src/org/chromium/base/ThreadUtils.java",
       "android/java/src/org/chromium/base/TraceEvent.java",
+      "android/java/src/org/chromium/base/UnguessableToken.java",
       "android/java/src/org/chromium/base/library_loader/LibraryLoader.java",
       "android/java/src/org/chromium/base/metrics/RecordHistogram.java",
       "android/java/src/org/chromium/base/metrics/RecordUserAction.java",
@@ -2309,6 +2328,7 @@ if (is_android) {
       "android/java/src/org/chromium/base/LocaleUtils.java",
       "android/java/src/org/chromium/base/Log.java",
       "android/java/src/org/chromium/base/MemoryPressureListener.java",
+      "android/java/src/org/chromium/base/NonThreadSafe.java",
       "android/java/src/org/chromium/base/ObserverList.java",
       "android/java/src/org/chromium/base/PackageUtils.java",
       "android/java/src/org/chromium/base/PathService.java",
@@ -2324,6 +2344,7 @@ if (is_android) {
       "android/java/src/org/chromium/base/SystemMessageHandler.java",
       "android/java/src/org/chromium/base/ThreadUtils.java",
       "android/java/src/org/chromium/base/TraceEvent.java",
+      "android/java/src/org/chromium/base/UnguessableToken.java",
       "android/java/src/org/chromium/base/VisibleForTesting.java",
       "android/java/src/org/chromium/base/annotations/AccessedByNative.java",
       "android/java/src/org/chromium/base/annotations/CalledByNative.java",
@@ -2343,6 +2364,7 @@ if (is_android) {
       "android/java/src/org/chromium/base/library_loader/ModernLinker.java",
       "android/java/src/org/chromium/base/library_loader/NativeLibraryPreloader.java",
       "android/java/src/org/chromium/base/library_loader/ProcessInitException.java",
+      "android/java/src/org/chromium/base/metrics/CachedMetrics.java",
       "android/java/src/org/chromium/base/metrics/RecordHistogram.java",
       "android/java/src/org/chromium/base/metrics/RecordUserAction.java",
       "android/java/src/org/chromium/base/metrics/StatisticsRecorderAndroid.java",
@@ -2369,6 +2391,9 @@ if (is_android) {
       "android/javatests/src/org/chromium/base/ApiCompatibilityUtilsTest.java",
       "android/javatests/src/org/chromium/base/CommandLineInitUtilTest.java",
       "android/javatests/src/org/chromium/base/CommandLineTest.java",
+
+      # TODO(nona): move to Junit once that is built for Android N.
+      "android/javatests/src/org/chromium/base/LocaleUtilsTest.java",
       "android/javatests/src/org/chromium/base/ObserverListTest.java",
       "android/javatests/src/org/chromium/base/metrics/RecordHistogramTest.java",
     ]
@@ -2379,14 +2404,19 @@ if (is_android) {
     deps = [
       ":base_java",
       "//testing/android/reporter:reporter_java",
+      "//third_party/android_support_test_runner:exposed_instrumentation_api_publish_java",
+      "//third_party/android_support_test_runner:runner_java",
       "//third_party/hamcrest:hamcrest_core_java",
+      "//third_party/junit",
     ]
     java_files = [
       "test/android/javatests/src/org/chromium/base/test/BaseActivityInstrumentationTestCase.java",
       "test/android/javatests/src/org/chromium/base/test/BaseChromiumInstrumentationTestRunner.java",
       "test/android/javatests/src/org/chromium/base/test/BaseInstrumentationTestRunner.java",
+      "test/android/javatests/src/org/chromium/base/test/BaseJUnit4ClassRunner.java",
       "test/android/javatests/src/org/chromium/base/test/BaseTestResult.java",
       "test/android/javatests/src/org/chromium/base/test/util/AdvancedMockContext.java",
+      "test/android/javatests/src/org/chromium/base/test/util/CallbackHelper.java",
       "test/android/javatests/src/org/chromium/base/test/util/CommandLineFlags.java",
       "test/android/javatests/src/org/chromium/base/test/util/DisableIf.java",
       "test/android/javatests/src/org/chromium/base/test/util/DisableIfSkipCheck.java",
@@ -2424,6 +2454,7 @@ if (is_android) {
     java_files = [
       "android/junit/src/org/chromium/base/BaseChromiumApplicationTest.java",
       "android/junit/src/org/chromium/base/LogTest.java",
+      "android/junit/src/org/chromium/base/NonThreadSafeTest.java",
       "android/junit/src/org/chromium/base/PromiseTest.java",
       "test/android/junit/src/org/chromium/base/test/util/DisableIfTest.java",
       "test/android/junit/src/org/chromium/base/test/util/MinAndroidSdkLevelSkipCheckTest.java",
@@ -2475,4 +2506,13 @@ if (is_android) {
       "test/android/java/src/org/chromium/base/TestSystemMessageHandler.java",
     ]
   }
+}
+
+fuzzer_test("base_json_correctness_fuzzer") {
+  sources = [
+    "json/correctness_fuzzer.cc",
+  ]
+  deps = [
+    ":base",
+  ]
 }

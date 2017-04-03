@@ -17,6 +17,10 @@
 #include "ui/gfx/geometry/rect_f.h"
 #include "url/gurl.h"
 
+namespace blink {
+enum class WebRemotePlaybackAvailability;
+}
+
 // Dictates which type of media playback is being initialized.
 enum MediaPlayerHostMsg_Initialize_Type {
   MEDIA_PLAYER_TYPE_URL,
@@ -49,11 +53,13 @@ class RendererMediaPlayerInterface {
   virtual void OnConnectedToRemoteDevice(
       const std::string& remote_playback_message) = 0;
   virtual void OnDisconnectedFromRemoteDevice() = 0;
+  virtual void OnRemotePlaybackStarted() = 0;
   virtual void OnCancelledRemotePlaybackRequest() = 0;
   virtual void OnDidExitFullscreen() = 0;
   virtual void OnMediaPlayerPlay() = 0;
   virtual void OnMediaPlayerPause() = 0;
-  virtual void OnRemoteRouteAvailabilityChanged(bool routes_available) = 0;
+  virtual void OnRemoteRouteAvailabilityChanged(
+      blink::WebRemotePlaybackAvailability availability) = 0;
 
   // Getters of playback state.
   virtual bool paused() const = 0;
@@ -108,6 +114,9 @@ class RendererMediaPlayerManagerInterface {
 
   // Requests control of remote playback
   virtual void RequestRemotePlaybackControl(int player_id) = 0;
+
+  // Requests stopping remote playback
+  virtual void RequestRemotePlaybackStop(int player_id) = 0;
 
   // Registers and unregisters a RendererMediaPlayerInterface object.
   virtual int RegisterMediaPlayer(RendererMediaPlayerInterface* player) = 0;

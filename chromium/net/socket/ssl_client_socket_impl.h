@@ -5,8 +5,6 @@
 #ifndef NET_SOCKET_SSL_CLIENT_SOCKET_IMPL_H_
 #define NET_SOCKET_SSL_CLIENT_SOCKET_IMPL_H_
 
-#include <openssl/base.h>
-#include <openssl/ssl.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -26,12 +24,15 @@
 #include "net/cert/ct_verify_result.h"
 #include "net/log/net_log_with_source.h"
 #include "net/socket/client_socket_handle.h"
+#include "net/socket/next_proto.h"
+#include "net/socket/socket_bio_adapter.h"
 #include "net/socket/ssl_client_socket.h"
 #include "net/ssl/channel_id_service.h"
 #include "net/ssl/openssl_ssl_util.h"
-#include "net/ssl/scoped_openssl_types.h"
 #include "net/ssl/ssl_client_cert_type.h"
 #include "net/ssl/ssl_config_service.h"
+#include "third_party/boringssl/src/include/openssl/base.h"
+#include "third_party/boringssl/src/include/openssl/ssl.h"
 
 namespace base {
 class FilePath;
@@ -46,6 +47,7 @@ namespace net {
 
 class CertVerifier;
 class CTVerifier;
+class SocketBIOAdapter;
 class SSLCertRequestInfo;
 class SSLInfo;
 
@@ -53,7 +55,8 @@ using TokenBindingSignatureMap =
     base::MRUCache<std::pair<TokenBindingType, std::string>,
                    std::vector<uint8_t>>;
 
-class SSLClientSocketImpl : public SSLClientSocket {
+class SSLClientSocketImpl : public SSLClientSocket,
+                            public SocketBIOAdapter::Delegate {
  public:
   // Takes ownership of the transport_socket, which may already be connected.
   // The given hostname will be compared with the name(s) in the server's
@@ -122,6 +125,10 @@ class SSLClientSocketImpl : public SSLClientSocket {
   int SetReceiveBufferSize(int32_t size) override;
   int SetSendBufferSize(int32_t size) override;
 
+  // SocketBIOAdapter implementation:
+  void OnReadReady() override;
+  void OnWriteReady() override;
+
  private:
   class PeerCertificateChain;
   class SSLContext;
@@ -132,7 +139,6 @@ class SSLClientSocketImpl : public SSLClientSocket {
   void DoReadCallback(int result);
   void DoWriteCallback(int result);
 
-  bool DoTransportIO();
   int DoHandshake();
   int DoHandshakeComplete(int result);
   int DoChannelIDLookup();
@@ -143,26 +149,16 @@ class SSLClientSocketImpl : public SSLClientSocket {
   void UpdateServerCert();
 
   void OnHandshakeIOComplete(int result);
-  void OnSendComplete(int result);
-  void OnRecvComplete(int result);
 
   int DoHandshakeLoop(int last_io_result);
-  int DoReadLoop();
-  int DoWriteLoop();
   int DoPayloadRead();
   int DoPayloadWrite();
 
   // Called when an asynchronous event completes which may have blocked the
-  // pending Read or Write calls, if any. Retries both state machines and, if
-  // complete, runs the respective callbacks.
-  void PumpReadWriteEvents();
+  // pending Connect, Read or Write calls, if any. Retries all state machines
+  // and, if complete, runs the respective callbacks.
+  void RetryAllOperations();
 
-  int BufferSend();
-  int BufferRecv();
-  void BufferSendComplete(int result);
-  void BufferRecvComplete(int result);
-  void TransportWriteComplete(int result);
-  int TransportReadComplete(int result);
   int VerifyCT();
 
   // Callback from the SSL layer that indicates the remote server is requesting
@@ -173,25 +169,6 @@ class SSLClientSocketImpl : public SSLClientSocket {
   // verification after the handshake so this function only enforces that the
   // certificates don't change during renegotiation.
   int CertVerifyCallback(X509_STORE_CTX* store_ctx);
-
-  // Called during an operation on |transport_bio_|'s peer. Checks saved
-  // transport error state and, if appropriate, returns an error through
-  // OpenSSL's error system.
-  long MaybeReplayTransportError(BIO* bio,
-                                 int cmd,
-                                 const char* argp,
-                                 int argi,
-                                 long argl,
-                                 long retvalue);
-
-  // Callback from the SSL layer when an operation is performed on
-  // |transport_bio_|'s peer.
-  static long BIOCallback(BIO* bio,
-                          int cmd,
-                          const char* argp,
-                          int argi,
-                          long argl,
-                          long retvalue);
 
   // Called after the initial handshake completes and after the server
   // certificate has been verified. The order of handshake completion and
@@ -259,14 +236,6 @@ class SSLClientSocketImpl : public SSLClientSocket {
                           const crypto::OpenSSLErrStackTracer& tracer,
                           OpenSSLErrorInfo* info);
 
-  bool transport_send_busy_;
-  bool transport_recv_busy_;
-
-  // Buffers which are shared by BoringSSL and SSLClientSocketImpl.
-  // GrowableIOBuffer is used to keep ownership and setting offset.
-  scoped_refptr<GrowableIOBuffer> send_buffer_;
-  scoped_refptr<GrowableIOBuffer> recv_buffer_;
-
   CompletionCallback user_connect_callback_;
   CompletionCallback user_read_callback_;
   CompletionCallback user_write_callback_;
@@ -293,15 +262,6 @@ class SSLClientSocketImpl : public SSLClientSocket {
 
   // If there is a pending read result, the OpenSSLErrorInfo associated with it.
   OpenSSLErrorInfo pending_read_error_info_;
-
-  // Used by TransportReadComplete() to signify an error reading from the
-  // transport socket. A value of OK indicates the socket is still
-  // readable. EOFs are mapped to ERR_CONNECTION_CLOSED.
-  int transport_read_error_;
-
-  // Used by TransportWriteComplete() and TransportReadComplete() to signify an
-  // error writing to the transport socket. A value of OK indicates no error.
-  int transport_write_error_;
 
   // Set when Connect finishes.
   std::unique_ptr<PeerCertificateChain> server_cert_chain_;
@@ -336,10 +296,10 @@ class SSLClientSocketImpl : public SSLClientSocket {
   TokenBindingSignatureMap tb_signature_map_;
 
   // OpenSSL stuff
-  SSL* ssl_;
-  BIO* transport_bio_;
+  bssl::UniquePtr<SSL> ssl_;
 
   std::unique_ptr<ClientSocketHandle> transport_;
+  std::unique_ptr<SocketBIOAdapter> transport_adapter_;
   const HostPortPair host_and_port_;
   SSLConfig ssl_config_;
   // ssl_session_cache_shard_ is an opaque string that partitions the SSL
@@ -368,7 +328,7 @@ class SSLClientSocketImpl : public SSLClientSocket {
   bool channel_id_sent_;
   // If non-null, the newly-established to be inserted into the session cache
   // once certificate verification is done.
-  ScopedSSL_SESSION pending_session_;
+  bssl::UniquePtr<SSL_SESSION> pending_session_;
   // True if the initial handshake's certificate has been verified.
   bool certificate_verified_;
   // Set to true if a CertificateRequest was received.

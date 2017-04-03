@@ -62,12 +62,12 @@ void BaseButtonInputType::createShadowSubtree() {
 }
 
 void BaseButtonInputType::valueAttributeChanged() {
-  toText(element().userAgentShadowRoot()->firstChild())
+  toTextOrDie(element().userAgentShadowRoot()->firstChild())
       ->setData(displayValue());
 }
 
 String BaseButtonInputType::displayValue() const {
-  return element().valueWithDefault().removeCharacters(isHTMLLineBreak);
+  return element().valueOrDefaultLabel().removeCharacters(isHTMLLineBreak);
 }
 
 bool BaseButtonInputType::shouldSaveAndRestoreFormControlState() const {
@@ -81,8 +81,8 @@ LayoutObject* BaseButtonInputType::createLayoutObject(
   return new LayoutButton(&element());
 }
 
-bool BaseButtonInputType::storesValueSeparateFromAttribute() {
-  return false;
+InputType::ValueMode BaseButtonInputType::valueMode() const {
+  return ValueMode::kDefault;
 }
 
 void BaseButtonInputType::setValue(const String& sanitizedValue,

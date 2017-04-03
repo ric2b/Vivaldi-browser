@@ -27,13 +27,15 @@ Per obtenir informació sobre la privadesa, vegeu la Política de privadesa de G
 <translation id="1654128982815600832">S'estan activant les connexions remotes en aquest ordinador...</translation>
 <translation id="170207782578677537">No s'ha pogut registrar aquest ordinador.</translation>
 <translation id="1704090719919187045">Preferències de Chromoting Host</translation>
+<translation id="1730409684442507495">• S'ha millorat la qualitat d'imatge de l'escriptori, la capacitat de resposta i el consum de bateria.
+• S'ha millorat la capacitat de resposta de les operacions de fer clic i arrossegar.
+• S'han millorat diversos efectes d'animació de la interfície d'usuari.</translation>
 <translation id="174018511426417793">No teniu cap ordinador registrat. Per activar les connexions remotes a un ordinador, instal·leu-hi l'escriptori remot de Chrome i feu clic a <ph name="BUTTON_NAME" />.</translation>
 <translation id="1742469581923031760">S'està connectant...</translation>
 <translation id="1770394049404108959">No puc obrir l'aplicació.</translation>
 <translation id="177096447311351977">IP del canal del client: <ph name="CLIENT_GAIA_IDENTIFIER" /> ip='<ph name="CLIENT_IP_ADDRESS_AND_PORT" />' host_ip='<ph name="HOST_IP_ADDRESS_AND_PORT" />' channel='<ph name="CHANNEL_TYPE" />' connection='<ph name="CONNECTION_TYPE" />'.</translation>
 <translation id="1779766957982586368">Tanca la finestra</translation>
 <translation id="1841799852846221389">S'estan desactivant les connexions remotes en aquest ordinador...</translation>
-<translation id="189172778771606813">Tanca el tauler de navegació</translation>
 <translation id="1897488610212723051">Suprimeix</translation>
 <translation id="195619862187186579">Dissenys de teclat</translation>
 <translation id="1996161829609978754">Chrome està baixant l'instal·lador de l'amfitrió de Chromoting. Quan s'hagi completat la baixada, executeu l'instal·lador abans de continuar.</translation>
@@ -74,7 +76,6 @@ Per obtenir informació sobre la privadesa, vegeu la Política de privadesa de G
 <translation id="2699970397166997657">Chromoting</translation>
 <translation id="2747641796667576127">Les actualitzacions de programari se solen fer automàticament, però poden fallar en casos excepcionals. L'actualització del programari hauria de trigar només uns minuts i es pot fer mentre esteu connectat a l'ordinador de forma remota.</translation>
 <translation id="2841013758207633010">Hora</translation>
-<translation id="2851674870054673688">Quan hagin introduït el codi, la sessió compartida començarà.</translation>
 <translation id="2851754573186462851">Chromium App Streaming</translation>
 <translation id="2855866366045322178">sense connexió</translation>
 <translation id="2888969873284818612">S'ha produït un error a la xarxa. Reiniciarem l'aplicació quan el dispositiu torni a estar en línia.</translation>
@@ -114,6 +115,7 @@ Per obtenir informació sobre la privadesa, vegeu la Política de privadesa de G
 Host</translation>
 <translation id="3870154837782082782">Google Inc.</translation>
 <translation id="3884839335308961732">Confirmeu el vostre compte i PIN a continuació per permetre l'accés per l'escriptori remot de Chrome.</translation>
+<translation id="3897092660631435901">Menú</translation>
 <translation id="3905196214175737742">El domini del propietari de l'amfitrió no és vàlid.</translation>
 <translation id="3908017899227008678">Redueix per ajustar</translation>
 <translation id="3931191050278863510">S'ha aturat l'amfitrió.</translation>
@@ -126,6 +128,7 @@ Host</translation>
 <translation id="409800995205263688">NOTA: La configuració de la política només permet connexions entre ordinadors de la vostra xarxa.</translation>
 <translation id="4155497795971509630">Falten alguns components necessaris. Assegureu-vos que hàgiu instal·lat la versió més recent del programari i torneu-ho a provar.</translation>
 <translation id="4156740505453712750">Per protegir l'accés a aquest ordinador, trieu un PIN de <ph name="BOLD_START" />sis dígits com a mínim<ph name="BOLD_END" />. Necessitareu aquest PIN per connectar-vos a aquest ordinador des d'una altra ubicació.</translation>
+<translation id="4156741816461781891">Has iniciat la sessió com a <ph name="EMAIL_ADDRESS" />.</translation>
 <translation id="4176825807642096119">Codi d'accés</translation>
 <translation id="4207623512727273241">Executeu l'instal·lador abans de continuar.</translation>
 <translation id="4227991223508142681">Utilitat de l'administració de l'amfitrió</translation>
@@ -166,7 +169,6 @@ remot de Chrome</translation>
 <translation id="5070121137485264635">L'amfitrió remot necessita que us autentiqueu en un lloc web de tercers. Per continuar, cal que concediu permisos addicionals a l'escriptori remot de Chrome per accedir a aquesta adreça:</translation>
 <translation id="507204348399810022">Confirmes que vols desactivar les connexions remotes a <ph name="HOSTNAME" />?</translation>
 <translation id="5156271271724754543">Introduïu el mateix PIN als dos quadres.</translation>
-<translation id="5168917394043976756">Obre el tauler de navegació</translation>
 <translation id="5170982930780719864">L'identificador de l'amfitrió no és vàlid.</translation>
 <translation id="518094545883702183">Aquesta informació només s'utilitza per diagnosticar el problema de què esteu informant. Només hi poden accedir les persones que analitzen l'informe i es conserva com a màxim durant 30 dies.</translation>
 <translation id="5222676887888702881">Tanca la sessió</translation>
@@ -209,10 +211,6 @@ remot de Chrome</translation>
 <translation id="6304318647555713317">Client</translation>
 <translation id="6381670701864002291">Altres motius.</translation>
 <translation id="6398765197997659313">Surt del mode de pantalla completa</translation>
-<translation id="6408143143164565232">• Escolteu àudio des d'ordinadors Windows o Linux.
-• Suprimiu les connexions que no vulgueu mantenint premut el nom d'un ordinador.
-• Les opcions de pessigar per fer zoom i desplaçar-se amb dos dits s'han optimitzat.
-• Nova pantalla d'Ajuda i suggeriments.</translation>
 <translation id="6441316101718669559">Aquesta plataforma no admet la integració de l'escriptori. Podeu continuar utilitzant l'aplicació, però l'experiència de l'usuari no serà tan bona.</translation>
 <translation id="652218476070540101">S'està actualitzant el PIN d'aquest ordinador...</translation>
 <translation id="6527303717912515753">Comparteix</translation>
@@ -225,6 +223,7 @@ remot de Chrome</translation>
 <translation id="6640610550128933069">darrera vegada en línia: <ph name="DATE" /></translation>
 <translation id="6668065415969892472">S'ha actualitzat el vostre PIN.</translation>
 <translation id="6681800064886881394">Copyright 2013 Google Inc. Tots els drets reservats.</translation>
+<translation id="6705482892455291412">Quan introdueixin el codi, se't demanarà que acceptis la connexió i comencis la sessió compartida.</translation>
 <translation id="6746493157771801606">Esborra l'historial</translation>
 <translation id="6748108480210050150">De</translation>
 <translation id="677755392401385740">L'amfitrió ha començat per a l'usuari: <ph name="HOST_USERNAME" />.</translation>
@@ -301,6 +300,7 @@ remot de Chrome</translation>
 <translation id="9188433529406846933">Autoritza</translation>
 <translation id="9213184081240281106">La configuració de l'amfitrió no és vàlida.</translation>
 <translation id="951991426597076286">Rebutja</translation>
+<translation id="962733587145768554">Selecciona <ph name="SHARE" /> al quadre de diàleg de la connexió per completar el procés.</translation>
 <translation id="979100198331752041">L'escriptori remot de Chrome a <ph name="HOSTNAME" /> és obsolet i cal actualitzar-lo.</translation>
 <translation id="985602178874221306">Els autors de Chromium</translation>
 <translation id="992215271654996353"><ph name="HOSTNAME" /> (última connexió: <ph name="DATE_OR_TIME" />)</translation>

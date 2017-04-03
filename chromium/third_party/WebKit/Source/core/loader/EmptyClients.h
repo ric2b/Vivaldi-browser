@@ -166,8 +166,6 @@ class CORE_EXPORT EmptyChromeClient : public ChromeClient {
 
   bool tabsToLinks() override { return false; }
 
-  IntRect windowResizerRect(LocalFrame&) const override { return IntRect(); }
-
   void invalidateRect(const IntRect&) override {}
   void scheduleAnimation(Widget*) override {}
 
@@ -199,8 +197,7 @@ class CORE_EXPORT EmptyChromeClient : public ChromeClient {
   void setCursor(const Cursor&, LocalFrame* localRoot) override {}
   Cursor lastSetCursorForTesting() const override { return pointerCursor(); }
 
-  void attachRootGraphicsLayer(GraphicsLayer*, LocalFrame* localRoot) override {
-  }
+  void attachRootGraphicsLayer(GraphicsLayer*, LocalFrame* localRoot) override;
   void attachRootLayer(WebLayer*, LocalFrame* localRoot) override {}
 
   void setEventListenerProperties(WebEventListenerClass,
@@ -212,7 +209,7 @@ class CORE_EXPORT EmptyChromeClient : public ChromeClient {
   void setHasScrollEventHandlers(bool) override {}
   bool hasScrollEventHandlers() const override { return false; }
 
-  void setTouchAction(TouchAction) override {}
+  void setTouchAction(LocalFrame*, TouchAction) override {}
 
   void didAssociateFormControlsAfterLoad(LocalFrame*) override {}
 
@@ -246,10 +243,8 @@ class CORE_EXPORT EmptyFrameLoaderClient : public FrameLoaderClient {
 
   Frame* parent() const override { return 0; }
   Frame* top() const override { return 0; }
-  Frame* previousSibling() const override { return 0; }
   Frame* nextSibling() const override { return 0; }
   Frame* firstChild() const override { return 0; }
-  Frame* lastChild() const override { return 0; }
   void willBeDetached() override {}
   void detached(FrameDetachType) override {}
   void frameFocused() const override {}
@@ -263,7 +258,7 @@ class CORE_EXPORT EmptyFrameLoaderClient : public FrameLoaderClient {
   void dispatchDidHandleOnloadEvents() override {}
   void dispatchDidReceiveServerRedirectForProvisionalLoad() override {}
   void dispatchWillCommitProvisionalLoad() override {}
-  void dispatchDidStartProvisionalLoad(double triggeringEventTime) override {}
+  void dispatchDidStartProvisionalLoad() override {}
   void dispatchDidReceiveTitle(const String&) override {}
   void dispatchDidChangeIcons(IconType) override {}
   void dispatchDidCommitLoad(HistoryItem*, HistoryCommitType) override {}
@@ -279,7 +274,8 @@ class CORE_EXPORT EmptyFrameLoaderClient : public FrameLoaderClient {
                                              NavigationType,
                                              NavigationPolicy,
                                              bool,
-                                             bool) override;
+                                             bool,
+                                             HTMLFormElement*) override;
 
   void dispatchWillSendSubmitEvent(HTMLFormElement*) override;
   void dispatchWillSubmitForm(HTMLFormElement*) override;
@@ -295,7 +291,8 @@ class CORE_EXPORT EmptyFrameLoaderClient : public FrameLoaderClient {
 
   DocumentLoader* createDocumentLoader(LocalFrame*,
                                        const ResourceRequest&,
-                                       const SubstituteData&) override;
+                                       const SubstituteData&,
+                                       ClientRedirectPolicy) override;
 
   String userAgent() override { return ""; }
 
@@ -329,6 +326,8 @@ class CORE_EXPORT EmptyFrameLoaderClient : public FrameLoaderClient {
       HTMLMediaElement&,
       const WebMediaPlayerSource&,
       WebMediaPlayerClient*) override;
+  WebRemotePlaybackClient* createWebRemotePlaybackClient(
+      HTMLMediaElement&) override;
 
   ObjectContentType getObjectContentType(const KURL&,
                                          const String&,

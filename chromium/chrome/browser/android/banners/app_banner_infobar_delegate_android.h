@@ -5,15 +5,16 @@
 #ifndef CHROME_BROWSER_ANDROID_BANNERS_APP_BANNER_INFOBAR_DELEGATE_ANDROID_H_
 #define CHROME_BROWSER_ANDROID_BANNERS_APP_BANNER_INFOBAR_DELEGATE_ANDROID_H_
 
+#include <memory>
+#include <string>
+
 #include "base/android/scoped_java_ref.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
 #include "chrome/browser/android/webapk/webapk_metrics.h"
-#include "chrome/browser/banners/app_banner_manager.h"
 #include "components/infobars/core/confirm_infobar_delegate.h"
 #include "ui/gfx/image/image.h"
-#include "url/gurl.h"
 
 namespace content {
 class WebContents;
@@ -23,10 +24,11 @@ namespace infobars {
 class InfoBarManager;
 }
 
-class AppBannerInfoBar;
 struct ShortcutInfo;
 
 namespace banners {
+
+class AppBannerManager;
 
 // Manages installation of an app being promoted by a page.
 class AppBannerInfoBarDelegateAndroid : public ConfirmInfoBarDelegate {
@@ -40,10 +42,8 @@ class AppBannerInfoBarDelegateAndroid : public ConfirmInfoBarDelegate {
       std::unique_ptr<ShortcutInfo> info,
       std::unique_ptr<SkBitmap> icon,
       int event_request_id,
-      bool is_webapk,
       webapk::InstallSource webapk_install_source);
 
-  // Creates and shows the infobar for an Android app.
   // Creates an infobar and delegate for promoting the installation of an
   // Android app, and adds the infobar to the InfoBarManager for |web_contents|.
   static bool Create(
@@ -57,23 +57,26 @@ class AppBannerInfoBarDelegateAndroid : public ConfirmInfoBarDelegate {
 
   ~AppBannerInfoBarDelegateAndroid() override;
 
-  // Called when the AppBannerInfoBar's button needs to be updated.
+  // Called when the AppBannerInfoBarAndroid's button needs to be updated.
   void UpdateInstallState(JNIEnv* env,
                           const base::android::JavaParamRef<jobject>& obj);
 
-  // Called when the installation Intent has been handled and focus has been
-  // returned to Chrome.
+  // Called when the native app installation Intent has been handled and focus
+  // has been returned to Chrome.
   void OnInstallIntentReturned(JNIEnv* env,
                                const base::android::JavaParamRef<jobject>& obj,
                                jboolean jis_installing);
 
-  // Called when the InstallerDelegate task has finished.
+  // Called when the native app InstallerDelegate task has finished.
   void OnInstallFinished(JNIEnv* env,
                          const base::android::JavaParamRef<jobject>& obj,
                          jboolean success);
 
   // ConfirmInfoBarDelegate:
   bool Accept() override;
+
+  // Update the AppBannerInfoBarAndroid with installed WebAPK's information.
+  void UpdateStateForInstalledWebAPK(const std::string& webapk_package_name);
 
  private:
   // The states of a WebAPK installation, where the infobar is displayed during
@@ -93,6 +96,7 @@ class AppBannerInfoBarDelegateAndroid : public ConfirmInfoBarDelegate {
       std::unique_ptr<SkBitmap> icon,
       int event_request_id,
       bool is_webapk,
+      bool is_webapk_already_installed,
       webapk::InstallSource webapk_install_source);
 
   // Delegate for promoting an Android app.
@@ -108,16 +112,17 @@ class AppBannerInfoBarDelegateAndroid : public ConfirmInfoBarDelegate {
   bool AcceptNativeApp(content::WebContents* web_contents);
   bool AcceptWebApp(content::WebContents* web_contents);
 
-  // When user accepts to install a WebAPK, this function sends a request
-  // to the WebAPK Server to create a WebAPK and install it. It returns
-  // false to prevent infobar from disappearing when installation starts.
-  // When user clicks the Open button after the intallation is compelete, this
-  // function launches the installed WebAPK and returns true.
+  // Called when the OK button on a WebAPK infobar is pressed. If the WebAPK is
+  // already installed, opens it; otherwise, installs it. Returns whether the
+  // infobar should be closed as a result of the button press.
   bool AcceptWebApk(content::WebContents* web_contents);
 
-  void SendBannerAccepted(content::WebContents* web_contents,
-                          const std::string& platform);
-  void OnWebApkInstallFinished(bool success, const std::string& webapk_package);
+  // Returns false if this delegate is for a WebAPK and was triggered from the
+  // A2HS menu item. Otherwise returns true.
+  bool TriggeredFromBanner() const;
+  void SendBannerAccepted();
+  void OnWebApkInstallFinished(bool success,
+                               const std::string& webapk_package_name);
   void TrackWebApkInstallationDismissEvents(InstallState install_state);
 
   // ConfirmInfoBarDelegate:
@@ -145,8 +150,8 @@ class AppBannerInfoBarDelegateAndroid : public ConfirmInfoBarDelegate {
   int event_request_id_;
   bool has_user_interaction_;
 
-  std::string webapk_package_name_;
   bool is_webapk_;
+  bool is_webapk_already_installed_;
 
   // Indicates the current state of a WebAPK installation.
   InstallState install_state_;

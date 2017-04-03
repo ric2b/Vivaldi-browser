@@ -79,8 +79,8 @@ void scaleHorizontallyAndTranslate(GraphicsContext& context,
 void LayoutTextCombine::transformToInlineCoordinates(GraphicsContext& context,
                                                      const LayoutRect& boxRect,
                                                      bool clip) const {
-  ASSERT(!m_needsFontUpdate);
-  ASSERT(m_isCombined);
+  DCHECK_EQ(m_needsFontUpdate, false);
+  DCHECK(m_isCombined);
 
   // On input, the |boxRect| is:
   // 1. Horizontal flow, rotated from the main vertical flow coordinate using
@@ -100,12 +100,12 @@ void LayoutTextCombine::transformToInlineCoordinates(GraphicsContext& context,
   float width;
   if (m_scaleX >= 1.0f) {
     // Fast path, more than 90% of cases
-    ASSERT(m_scaleX == 1.0f);
+    DCHECK_EQ(m_scaleX, 1.0f);
     float offsetX = (cellHeight - m_combinedTextWidth) / 2;
     context.concatCTM(AffineTransform::translation(offsetX, offsetY));
     width = boxRect.width();
   } else {
-    ASSERT(m_scaleX > 0.0f);
+    DCHECK_GE(m_scaleX, 0.0f);
     float centerX = boxRect.x() + cellHeight / 2;
     width = m_combinedTextWidth / m_scaleX;
     float offsetX = (cellHeight - width) / 2;
@@ -144,9 +144,8 @@ void LayoutTextCombine::updateFont() {
         (TextDecorationUnderline | TextDecorationOverline)))
     emWidth *= textCombineMargin;
 
-  description.setOrientation(
-      FontOrientation::
-          Horizontal);  // We are going to draw combined text horizontally.
+  // We are going to draw combined text horizontally.
+  description.setOrientation(FontOrientation::Horizontal);
   m_combinedTextWidth = originalFont().width(run);
 
   FontSelector* fontSelector = style()->font().getFontSelector();
@@ -174,7 +173,8 @@ void LayoutTextCombine::updateFont() {
       }
     }
 
-    // If width > ~1em, shrink to fit within ~1em, otherwise render without scaling (no expansion)
+    // If width > ~1em, shrink to fit within ~1em, otherwise render without
+    // scaling (no expansion).
     // http://dev.w3.org/csswg/css-writing-modes-3/#text-combine-compression
     if (m_combinedTextWidth > emWidth) {
       m_scaleX = emWidth / m_combinedTextWidth;

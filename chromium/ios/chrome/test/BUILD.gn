@@ -2,7 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-source_set("test") {
+source_set("test_support") {
   testonly = true
   sources = [
     "block_cleanup_test.h",
@@ -19,14 +19,17 @@ source_set("test") {
 
   deps = [
     "//base",
-    "//base/test:test_support",
+    "//components/content_settings/core/common",
     "//components/network_time",
     "//components/prefs",
     "//components/prefs:test_support",
     "//ios/chrome/browser",
+    "//ios/chrome/browser/browser_state:browser_state_impl",
+    "//ios/chrome/browser/prefs",
     "//ios/public/provider/chrome/browser",
     "//ios/public/provider/chrome/browser:test_support",
     "//ios/web",
+    "//ios/web:test_support",
     "//net",
     "//testing/gmock",
     "//testing/gtest",
@@ -41,8 +44,20 @@ source_set("run_all_unittests") {
     "run_all_unittests.cc",
   ]
   deps = [
-    ":test",
+    ":test_support",
     "//base",
     "//base/test:test_support",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [
+    "google_toolbox_unittest.mm",
+  ]
+  deps = [
+    "//base",
+    "//testing/gtest",
+    "//third_party/google_toolbox_for_mac",
   ]
 }

@@ -4,7 +4,7 @@
 
 import("//build/config/android/rules.gni")
 
-android_library("system") {
+android_library("system_java") {
   java_files = [
     "system/src/org/chromium/mojo/system/Core.java",
     "system/src/org/chromium/mojo/system/DataPipe.java",
@@ -23,7 +23,7 @@ android_library("system") {
   ]
 }
 
-android_library("bindings") {
+android_library("bindings_java") {
   java_files = [
     "bindings/src/org/chromium/mojo/bindings/AssociatedInterfaceNotSupported.java",
     "bindings/src/org/chromium/mojo/bindings/AssociatedInterfaceRequestNotSupported.java",
@@ -56,7 +56,7 @@ android_library("bindings") {
   ]
 
   deps = [
-    ":system",
+    ":system_java",
     "//base:base_java",
   ]
 

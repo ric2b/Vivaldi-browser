@@ -21,11 +21,14 @@ namespace dm_protocol {
 // Name extern constants for URL query parameters.
 POLICY_EXPORT extern const char kParamAgent[];
 POLICY_EXPORT extern const char kParamAppType[];
+POLICY_EXPORT extern const char kParamCritical[];
 POLICY_EXPORT extern const char kParamDeviceID[];
 POLICY_EXPORT extern const char kParamDeviceType[];
+POLICY_EXPORT extern const char kParamLastError[];
 POLICY_EXPORT extern const char kParamOAuthToken[];
 POLICY_EXPORT extern const char kParamPlatform[];
 POLICY_EXPORT extern const char kParamRequest[];
+POLICY_EXPORT extern const char kParamRetry[];
 
 // String extern constants for the device and app type we report to the server.
 POLICY_EXPORT extern const char kValueAppType[];
@@ -50,6 +53,7 @@ POLICY_EXPORT extern const char kChromeDevicePolicyType[];
 POLICY_EXPORT extern const char kChromeUserPolicyType[];
 POLICY_EXPORT extern const char kChromePublicAccountPolicyType[];
 POLICY_EXPORT extern const char kChromeExtensionPolicyType[];
+POLICY_EXPORT extern const char kChromeSigninExtensionPolicyType[];
 
 // These codes are sent in the |error_code| field of PolicyFetchResponse.
 enum PolicyFetchStatus {
@@ -117,6 +121,7 @@ enum DeviceMode {
                                    // device.
   DEVICE_MODE_ENTERPRISE,          // The device is enrolled as an enterprise
                                    // device.
+  DEVICE_MODE_ENTERPRISE_AD,       // The device has joined AD.
   DEVICE_MODE_LEGACY_RETAIL_MODE,  // The device is enrolled as a retail kiosk
                                    // device. Even though retail mode is
                                    // deprecated, we still check for this device

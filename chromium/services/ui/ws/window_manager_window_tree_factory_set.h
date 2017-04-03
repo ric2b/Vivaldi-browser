@@ -25,10 +25,6 @@ class WindowManagerWindowTreeFactorySetObserver;
 class WindowServer;
 class WindowTree;
 
-namespace test {
-class WindowManagerWindowTreeFactorySetTestApi;
-}
-
 // WindowManagerWindowTreeFactorySet tracks the set of registered
 // WindowManagerWindowTreeHostFactories.
 class WindowManagerWindowTreeFactorySet : public UserIdTrackerObserver {
@@ -65,7 +61,6 @@ class WindowManagerWindowTreeFactorySet : public UserIdTrackerObserver {
 
  private:
   friend class WindowManagerWindowTreeFactory;
-  friend class test::WindowManagerWindowTreeFactorySetTestApi;
 
   // Called by WindowManagerWindowTreeFactory when CreateWindowTree() has
   // been called.
@@ -75,8 +70,6 @@ class WindowManagerWindowTreeFactorySet : public UserIdTrackerObserver {
   // UserIdTrackerObserver:
   void OnUserIdRemoved(const UserId& id) override;
 
-  // Set to true the first time a valid factory has been found.
-  bool got_valid_factory_ = false;
   UserIdTracker* id_tracker_;
   WindowServer* window_server_;
 

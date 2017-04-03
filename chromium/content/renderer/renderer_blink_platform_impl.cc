@@ -31,7 +31,6 @@
 #include "content/child/indexed_db/webidbfactory_impl.h"
 #include "content/child/quota_dispatcher.h"
 #include "content/child/quota_message_filter.h"
-#include "content/child/simple_webmimeregistry_impl.h"
 #include "content/child/storage_util.h"
 #include "content/child/thread_safe_sender.h"
 #include "content/child/web_database_observer_impl.h"
@@ -77,11 +76,11 @@
 #include "gpu/ipc/common/gpu_stream_constants.h"
 #include "ipc/ipc_sync_message_filter.h"
 #include "media/audio/audio_output_device.h"
-#include "media/base/mime_util.h"
 #include "media/blink/webcontentdecryptionmodule_impl.h"
 #include "media/filters/stream_parser_factory.h"
 #include "mojo/common/common_type_converters.h"
-#include "services/shell/public/cpp/interface_provider.h"
+#include "mojo/public/cpp/bindings/associated_group.h"
+#include "services/service_manager/public/cpp/interface_provider.h"
 #include "storage/common/database/database_identifier.h"
 #include "storage/common/quota/quota_types.h"
 #include "third_party/WebKit/public/platform/BlameContext.h"
@@ -97,7 +96,6 @@
 #include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
 #include "third_party/WebKit/public/platform/WebURL.h"
 #include "third_party/WebKit/public/platform/WebVector.h"
-#include "third_party/WebKit/public/platform/mime_registry.mojom.h"
 #include "third_party/WebKit/public/platform/modules/device_orientation/WebDeviceMotionListener.h"
 #include "third_party/WebKit/public/platform/modules/device_orientation/WebDeviceOrientationListener.h"
 #include "third_party/WebKit/public/platform/scheduler/renderer/renderer_scheduler.h"
@@ -130,7 +128,7 @@
 #endif
 
 #if defined(USE_AURA)
-#include "content/renderer/webscrollbarbehavior_impl_gtkoraura.h"
+#include "content/renderer/webscrollbarbehavior_impl_aura.h"
 #elif !defined(OS_MACOSX)
 #include "third_party/WebKit/public/platform/WebScrollbarBehavior.h"
 #define WebScrollbarBehaviorImpl blink::WebScrollbarBehavior
@@ -159,7 +157,6 @@ using blink::WebMediaStream;
 using blink::WebMediaStreamCenter;
 using blink::WebMediaStreamCenterClient;
 using blink::WebMediaStreamTrack;
-using blink::WebMimeRegistry;
 using blink::WebRTCPeerConnectionHandler;
 using blink::WebRTCPeerConnectionHandlerClient;
 using blink::WebStorageNamespace;
@@ -192,21 +189,6 @@ media::AudioParameters GetAudioHardwareParams() {
 }  // namespace
 
 //------------------------------------------------------------------------------
-
-class RendererBlinkPlatformImpl::MimeRegistry
-    : public SimpleWebMimeRegistryImpl {
- public:
-  blink::WebMimeRegistry::SupportsType supportsMediaMIMEType(
-      const blink::WebString& mime_type,
-      const blink::WebString& codecs) override;
-  bool supportsMediaSourceMIMEType(const blink::WebString& mime_type,
-                                   const blink::WebString& codecs) override;
-  blink::WebString mimeTypeForExtension(
-      const blink::WebString& file_extension) override;
-
- private:
-  blink::mojom::MimeRegistryPtr mime_registry_;
-};
 
 class RendererBlinkPlatformImpl::FileUtilities : public WebFileUtilitiesImpl {
  public:
@@ -252,12 +234,11 @@ class RendererBlinkPlatformImpl::SandboxSupport
 
 RendererBlinkPlatformImpl::RendererBlinkPlatformImpl(
     blink::scheduler::RendererScheduler* renderer_scheduler,
-    base::WeakPtr<shell::InterfaceProvider> remote_interfaces)
+    base::WeakPtr<service_manager::InterfaceProvider> remote_interfaces)
     : BlinkPlatformImpl(renderer_scheduler->DefaultTaskRunner()),
       main_thread_(renderer_scheduler->CreateMainThread()),
       clipboard_delegate_(new RendererClipboardDelegate),
       clipboard_(new WebClipboardImpl(clipboard_delegate_.get())),
-      mime_registry_(new RendererBlinkPlatformImpl::MimeRegistry),
       sudden_termination_disables_(0),
       plugin_refresh_allowed_(true),
       default_task_runner_(renderer_scheduler->DefaultTaskRunner()),
@@ -284,7 +265,9 @@ RendererBlinkPlatformImpl::RendererBlinkPlatformImpl(
     blob_registry_.reset(new WebBlobRegistryImpl(
         RenderThreadImpl::current()->GetIOTaskRunner().get(),
         base::ThreadTaskRunnerHandle::Get(), thread_safe_sender_.get()));
-    web_idb_factory_.reset(new WebIDBFactoryImpl(thread_safe_sender_.get()));
+    web_idb_factory_.reset(new WebIDBFactoryImpl(
+        sync_message_filter_, thread_safe_sender_,
+        RenderThreadImpl::current()->GetIOTaskRunner().get()));
     web_database_observer_impl_.reset(
         new WebDatabaseObserverImpl(sync_message_filter_.get()));
   }
@@ -311,14 +294,14 @@ void RendererBlinkPlatformImpl::Shutdown() {
 //------------------------------------------------------------------------------
 
 blink::WebURLLoader* RendererBlinkPlatformImpl::createURLLoader() {
-  if (!url_loader_factory_)
-    interfaceProvider()->getInterface(mojo::GetProxy(&url_loader_factory_));
   ChildThreadImpl* child_thread = ChildThreadImpl::current();
+  if (!url_loader_factory_ && child_thread)
+    child_thread->channel()->GetRemoteAssociatedInterface(&url_loader_factory_);
   // There may be no child thread in RenderViewTests.  These tests can still use
   // data URLs to bypass the ResourceDispatcher.
   return new content::WebURLLoaderImpl(
-      child_thread ? child_thread->resource_dispatcher() : NULL,
-      url_loader_factory_.get());
+      child_thread ? child_thread->resource_dispatcher() : nullptr,
+      url_loader_factory_.get(), url_loader_factory_.associated_group());
 }
 
 blink::WebThread* RendererBlinkPlatformImpl::currentThread() {
@@ -337,10 +320,6 @@ blink::WebClipboard* RendererBlinkPlatformImpl::clipboard() {
   if (clipboard)
     return clipboard;
   return clipboard_.get();
-}
-
-blink::WebMimeRegistry* RendererBlinkPlatformImpl::mimeRegistry() {
-  return mime_registry_.get();
 }
 
 blink::WebFileUtilities* RendererBlinkPlatformImpl::fileUtilities() {
@@ -438,7 +417,7 @@ void RendererBlinkPlatformImpl::cacheMetadataInCacheStorage(
 }
 
 WebString RendererBlinkPlatformImpl::defaultLocale() {
-  return base::ASCIIToUTF16(RenderThread::Get()->GetLocale());
+  return WebString::fromASCII(RenderThread::Get()->GetLocale());
 }
 
 void RendererBlinkPlatformImpl::suddenTerminationChanged(bool enabled) {
@@ -499,53 +478,6 @@ WebString RendererBlinkPlatformImpl::fileSystemCreateOriginIdentifier(
     const blink::WebSecurityOrigin& origin) {
   return WebString::fromUTF8(storage::GetIdentifierFromOrigin(
       WebSecurityOriginToGURL(origin)));
-}
-
-//------------------------------------------------------------------------------
-
-WebMimeRegistry::SupportsType
-RendererBlinkPlatformImpl::MimeRegistry::supportsMediaMIMEType(
-    const WebString& mime_type,
-    const WebString& codecs) {
-  const std::string mime_type_ascii = ToASCIIOrEmpty(mime_type);
-
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-  // Some containers are known to be partially supported.
-  if (media::IsPartiallySupportedMediaMimeType(mime_type_ascii))
-    return MayBeSupported;
-#endif
-
-  std::vector<std::string> codec_vector;
-  media::ParseCodecString(ToASCIIOrEmpty(codecs), &codec_vector, false);
-  return static_cast<WebMimeRegistry::SupportsType>(
-      media::IsSupportedMediaFormat(mime_type_ascii, codec_vector));
-}
-
-bool RendererBlinkPlatformImpl::MimeRegistry::supportsMediaSourceMIMEType(
-    const blink::WebString& mime_type,
-    const WebString& codecs) {
-  const std::string mime_type_ascii = ToASCIIOrEmpty(mime_type);
-  std::vector<std::string> parsed_codec_ids;
-  media::ParseCodecString(ToASCIIOrEmpty(codecs), &parsed_codec_ids, false);
-  if (mime_type_ascii.empty())
-    return false;
-  return media::StreamParserFactory::IsTypeSupported(
-      mime_type_ascii, parsed_codec_ids);
-}
-
-WebString RendererBlinkPlatformImpl::MimeRegistry::mimeTypeForExtension(
-    const WebString& file_extension) {
-  // The sandbox restricts our access to the registry, so we need to proxy
-  // these calls over to the browser process.
-  if (!mime_registry_)
-    RenderThread::Get()->GetRemoteInterfaces()->GetInterface(&mime_registry_);
-
-  mojo::String mime_type;
-  if (!mime_registry_->GetMimeTypeFromExtension(
-          mojo::String::From(base::string16(file_extension)), &mime_type)) {
-    return WebString();
-  }
-  return base::ASCIIToUTF16(mime_type.get());
 }
 
 //------------------------------------------------------------------------------

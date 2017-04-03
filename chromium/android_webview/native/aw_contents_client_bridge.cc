@@ -19,7 +19,6 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
-#include "crypto/scoped_openssl_types.h"
 #include "grit/components_strings.h"
 #include "jni/AwContentsClientBridge_jni.h"
 #include "net/cert/x509_certificate.h"
@@ -243,7 +242,7 @@ void AwContentsClientBridge::ProvideClientCertificateResponse(
 
   // Create an SSLPrivateKey wrapper for the private key JNI reference.
   scoped_refptr<net::SSLPrivateKey> private_key =
-      net::WrapJavaPrivateKey(private_key_ref);
+      net::WrapJavaPrivateKey(client_cert.get(), private_key_ref);
   if (!private_key) {
     LOG(ERROR) << "Could not create OpenSSL wrapper for private key";
     return;
@@ -357,11 +356,56 @@ bool AwContentsClientBridge::ShouldOverrideUrlLoading(const base::string16& url,
     // Tell the chromium message loop to not perform any tasks after the current
     // one - we want to make sure we return to Java cleanly without first making
     // any new JNI calls.
-    static_cast<base::MessageLoopForUI*>(base::MessageLoop::current())->Abort();
+    base::MessageLoopForUI::current()->Abort();
     // If we crashed we don't want to continue the navigation.
     return true;
   }
   return did_override;
+}
+
+void AwContentsClientBridge::NewDownload(const GURL& url,
+                                         const std::string& user_agent,
+                                         const std::string& content_disposition,
+                                         const std::string& mime_type,
+                                         int64_t content_length) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  JNIEnv* env = AttachCurrentThread();
+  ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
+  if (obj.is_null())
+    return;
+
+  ScopedJavaLocalRef<jstring> jstring_url =
+      ConvertUTF8ToJavaString(env, url.spec());
+  ScopedJavaLocalRef<jstring> jstring_user_agent =
+      ConvertUTF8ToJavaString(env, user_agent);
+  ScopedJavaLocalRef<jstring> jstring_content_disposition =
+      ConvertUTF8ToJavaString(env, content_disposition);
+  ScopedJavaLocalRef<jstring> jstring_mime_type =
+      ConvertUTF8ToJavaString(env, mime_type);
+
+  Java_AwContentsClientBridge_newDownload(
+      env, obj, jstring_url, jstring_user_agent, jstring_content_disposition,
+      jstring_mime_type, content_length);
+}
+
+void AwContentsClientBridge::NewLoginRequest(const std::string& realm,
+                                             const std::string& account,
+                                             const std::string& args) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  JNIEnv* env = AttachCurrentThread();
+  ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
+  if (obj.is_null())
+    return;
+
+  ScopedJavaLocalRef<jstring> jrealm = ConvertUTF8ToJavaString(env, realm);
+  ScopedJavaLocalRef<jstring> jargs = ConvertUTF8ToJavaString(env, args);
+
+  ScopedJavaLocalRef<jstring> jaccount;
+  if (!account.empty())
+    jaccount = ConvertUTF8ToJavaString(env, account);
+
+  Java_AwContentsClientBridge_newLoginRequest(env, obj, jrealm, jaccount,
+                                              jargs);
 }
 
 void AwContentsClientBridge::ConfirmJsResult(JNIEnv* env,

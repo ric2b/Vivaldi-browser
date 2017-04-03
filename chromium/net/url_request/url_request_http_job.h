@@ -10,7 +10,6 @@
 
 #include <memory>
 #include <string>
-#include <vector>
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
@@ -22,7 +21,7 @@
 #include "net/base/net_export.h"
 #include "net/base/sdch_manager.h"
 #include "net/cookies/cookie_store.h"
-#include "net/filter/filter.h"
+#include "net/filter/sdch_policy_delegate.h"
 #include "net/http/http_request_info.h"
 #include "net/socket/connection_attempts.h"
 #include "net/url_request/url_request_job.h"
@@ -48,6 +47,10 @@ class NET_EXPORT_PRIVATE URLRequestHttpJob : public URLRequestJob {
                                 NetworkDelegate* network_delegate,
                                 const std::string& scheme);
 
+  // Record Sdch specific packet stats. Public so that SdchPolicyDelegate can
+  // access it.
+  void RecordPacketStats(SdchPolicyDelegate::StatisticSelector statistic) const;
+
  protected:
   URLRequestHttpJob(URLRequest* request,
                     NetworkDelegate* network_delegate,
@@ -60,6 +63,7 @@ class NET_EXPORT_PRIVATE URLRequestHttpJob : public URLRequestJob {
   void Start() override;
   void Kill() override;
   void GetConnectionAttempts(ConnectionAttempts* out) const override;
+  std::unique_ptr<SourceStream> SetUpSourceStream() override;
 
   RequestPriority priority() const {
     return priority_;
@@ -73,7 +77,7 @@ class NET_EXPORT_PRIVATE URLRequestHttpJob : public URLRequestJob {
 
   typedef base::RefCountedData<bool> SharedBoolean;
 
-  class HttpFilterContext;
+  class SdchContext;
 
   // Shadows URLRequestJob's version of this method so we can grab cookies.
   void NotifyHeadersComplete();
@@ -83,10 +87,6 @@ class NET_EXPORT_PRIVATE URLRequestHttpJob : public URLRequestJob {
   void AddExtraHeaders();
   void AddCookieHeaderAndStart();
   void SaveCookiesAndNotifyHeadersComplete(int result);
-  void FetchResponseCookies(std::vector<std::string>* cookies);
-
-  // Processes a Backoff header, if one exists.
-  void ProcessBackoffHeader();
 
   // Processes the Strict-Transport-Security header, if one exists.
   void ProcessStrictTransportSecurityHeader();
@@ -120,7 +120,6 @@ class NET_EXPORT_PRIVATE URLRequestHttpJob : public URLRequestJob {
   bool GetRemoteEndpoint(IPEndPoint* endpoint) const override;
   int GetResponseCode() const override;
   void PopulateNetErrorDetails(NetErrorDetails* details) const override;
-  std::unique_ptr<Filter> SetupFilter() const override;
   bool CopyFragmentOnRedirect(const GURL& location) const override;
   bool IsSafeRedirect(const GURL& location) override;
   bool NeedsAuth() override;
@@ -145,7 +144,6 @@ class NET_EXPORT_PRIVATE URLRequestHttpJob : public URLRequestJob {
   void ResetTimer();
 
   void UpdatePacketReadTimes() override;
-  void RecordPacketStats(FilterContext::StatisticSelector statistic) const;
 
   // Starts the transaction if extensions using the webrequest API do not
   // object.
@@ -160,7 +158,6 @@ class NET_EXPORT_PRIVATE URLRequestHttpJob : public URLRequestJob {
 
   // Callback functions for Cookie Monster
   void SetCookieHeaderAndStart(const CookieList& cookie_list);
-  void DoStartTransaction();
 
   // Some servers send the body compressed, but specify the content length as
   // the uncompressed size. If this is the case, we return true in order
@@ -182,9 +179,6 @@ class NET_EXPORT_PRIVATE URLRequestHttpJob : public URLRequestJob {
   AuthState proxy_auth_state_;
   AuthState server_auth_state_;
   AuthCredentials auth_credentials_;
-
-  CompletionCallback start_callback_;
-  CompletionCallback notify_before_headers_sent_callback_;
 
   bool read_in_progress_;
 
@@ -239,10 +233,6 @@ class NET_EXPORT_PRIVATE URLRequestHttpJob : public URLRequestJob {
 
   // When the transaction finished reading the request headers.
   base::TimeTicks receive_headers_end_;
-
-  std::unique_ptr<HttpFilterContext> filter_context_;
-
-  CompletionCallback on_headers_received_callback_;
 
   // We allow the network delegate to modify a copy of the response headers.
   // This prevents modifications of headers that are shared with the underlying

@@ -12,7 +12,7 @@
 	<Tool
 		Name="VCLinkerTool"
 		DelayLoadDLLs="ole32.dll;oleaut32.dll"
-		OutputFile="$(OutDir)\vivaldi.exe"
+		OutputFile="$(OutDir)\chrome.exe"
 		ProgramDatabaseFile="$(OutDir)\$(ProjectName).pdb"
 	/>
 	<Tool

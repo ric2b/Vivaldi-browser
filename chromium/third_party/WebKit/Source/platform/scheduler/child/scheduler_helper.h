@@ -12,10 +12,6 @@
 #include "platform/scheduler/base/task_queue_manager.h"
 #include "platform/scheduler/base/task_queue_selector.h"
 
-namespace base {
-class TickClock;
-}
-
 namespace blink {
 namespace scheduler {
 
@@ -97,6 +93,8 @@ class BLINK_PLATFORM_EXPORT SchedulerHelper
   const scoped_refptr<SchedulerTqmDelegate>& scheduler_tqm_delegate() const;
   bool GetAndClearSystemIsQuiescentBit();
   TaskQueue* CurrentlyExecutingTaskQueue() const;
+
+  size_t GetNumberOfPendingTasks() const;
 
   // Test helpers.
   void SetWorkBatchSizeForTesting(size_t work_batch_size);

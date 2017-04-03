@@ -15,11 +15,8 @@
 #include "mojo/public/cpp/system/core.h"
 #include "third_party/WebKit/public/platform/WebDragOperation.h"
 
-class GURL;
-
 namespace base {
 class FilePath;
-class Value;
 }
 
 namespace blink {
@@ -34,12 +31,10 @@ class Size;
 
 namespace content {
 
-class ChildProcessSecurityPolicy;
 class RenderFrameHost;
 class RenderProcessHost;
 class RenderViewHostDelegate;
 class RenderWidgetHost;
-class SessionStorageNamespace;
 class SiteInstance;
 struct WebPreferences;
 
@@ -111,41 +106,6 @@ class CONTENT_EXPORT RenderViewHost : public IPC::Sender {
   // Tells the renderer not to add scrollbars with height and width below a
   // threshold.
   virtual void DisableScrollbarsForThreshold(const gfx::Size& size) = 0;
-
-  // Notifies the renderer that a a drag operation that it started has ended,
-  // either in a drop or by being cancelled.
-  virtual void DragSourceEndedAt(
-      int client_x, int client_y, int screen_x, int screen_y,
-      blink::WebDragOperation operation) = 0;
-
-  // Notifies the renderer that we're done with the drag and drop operation.
-  // This allows the renderer to reset some state.
-  virtual void DragSourceSystemDragEnded() = 0;
-
-  // D&d drop target messages that get sent to WebKit.
-  virtual void DragTargetDragEnter(
-      const DropData& drop_data,
-      const gfx::Point& client_pt,
-      const gfx::Point& screen_pt,
-      blink::WebDragOperationsMask operations_allowed,
-      int key_modifiers) = 0;
-  virtual void DragTargetDragEnterWithMetaData(
-      const std::vector<DropData::Metadata>& metadata,
-      const gfx::Point& client_pt,
-      const gfx::Point& screen_pt,
-      blink::WebDragOperationsMask operations_allowed,
-      int key_modifiers) = 0;
-  virtual void DragTargetDragOver(
-      const gfx::Point& client_pt,
-      const gfx::Point& screen_pt,
-      blink::WebDragOperationsMask operations_allowed,
-      int key_modifiers) = 0;
-  virtual void DragTargetDragLeave() = 0;
-  virtual void DragTargetDrop(const DropData& drop_data,
-                              const gfx::Point& client_pt,
-                              const gfx::Point& screen_pt,
-                              int key_modifiers) = 0;
-  virtual void FilterDropData(DropData* drop_data) = 0;
 
   // Instructs the RenderView to automatically resize and send back updates
   // for the new size.

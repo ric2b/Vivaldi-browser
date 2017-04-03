@@ -12,6 +12,7 @@
 #include "base/process/process_handle.h"
 #include "base/single_thread_task_runner.h"
 #include "build/build_config.h"
+#include "ipc/ipc_channel_handle.h"
 #include "ipc/ipc_sender.h"
 #include "remoting/host/audio_capturer.h"
 #include "remoting/host/chromoting_messages.h"
@@ -20,8 +21,8 @@
 #include "remoting/host/desktop_session_proxy.h"
 #include "remoting/host/input_injector.h"
 #include "remoting/host/screen_controls.h"
+#include "third_party/webrtc/modules/desktop_capture/desktop_capturer.h"
 #include "third_party/webrtc/modules/desktop_capture/mouse_cursor_monitor.h"
-#include "third_party/webrtc/modules/desktop_capture/screen_capturer.h"
 
 namespace remoting {
 
@@ -31,14 +32,12 @@ IpcDesktopEnvironment::IpcDesktopEnvironment(
     scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
     base::WeakPtr<ClientSessionControl> client_session_control,
     base::WeakPtr<DesktopSessionConnector> desktop_session_connector,
-    bool virtual_terminal,
-    bool supports_touch_events) {
+    bool virtual_terminal) {
   DCHECK(caller_task_runner->BelongsToCurrentThread());
 
   desktop_session_proxy_ = new DesktopSessionProxy(
       audio_task_runner, caller_task_runner, io_task_runner,
-      client_session_control, desktop_session_connector, virtual_terminal,
-      supports_touch_events);
+      client_session_control, desktop_session_connector, virtual_terminal);
 }
 
 IpcDesktopEnvironment::~IpcDesktopEnvironment() {}
@@ -91,19 +90,14 @@ IpcDesktopEnvironmentFactory::IpcDesktopEnvironmentFactory(
 IpcDesktopEnvironmentFactory::~IpcDesktopEnvironmentFactory() {}
 
 std::unique_ptr<DesktopEnvironment> IpcDesktopEnvironmentFactory::Create(
-    base::WeakPtr<ClientSessionControl> client_session_control) {
+    base::WeakPtr<ClientSessionControl> client_session_control,
+    const DesktopEnvironmentOptions& options) {
   DCHECK(caller_task_runner_->BelongsToCurrentThread());
 
   return base::MakeUnique<IpcDesktopEnvironment>(
       audio_task_runner_, caller_task_runner_, io_task_runner_,
-      client_session_control, connector_factory_.GetWeakPtr(), curtain_enabled_,
-      supports_touch_events_);
-}
-
-void IpcDesktopEnvironmentFactory::SetEnableCurtaining(bool enable) {
-  DCHECK(caller_task_runner_->BelongsToCurrentThread());
-
-  curtain_enabled_ = enable;
+      client_session_control, connector_factory_.GetWeakPtr(),
+      options.enable_curtaining());
 }
 
 bool IpcDesktopEnvironmentFactory::SupportsAudioCapture() const {
@@ -167,26 +161,23 @@ void IpcDesktopEnvironmentFactory::SetScreenResolution(
 
 void IpcDesktopEnvironmentFactory::OnDesktopSessionAgentAttached(
     int terminal_id,
-    base::ProcessHandle desktop_process_handle,
-    IPC::PlatformFileForTransit desktop_pipe) {
+    int session_id,
+    const IPC::ChannelHandle& desktop_pipe) {
   if (!caller_task_runner_->BelongsToCurrentThread()) {
-    caller_task_runner_->PostTask(FROM_HERE, base::Bind(
-        &IpcDesktopEnvironmentFactory::OnDesktopSessionAgentAttached,
-        base::Unretained(this), terminal_id, desktop_process_handle,
-        desktop_pipe));
+    caller_task_runner_->PostTask(
+        FROM_HERE,
+        base::Bind(&IpcDesktopEnvironmentFactory::OnDesktopSessionAgentAttached,
+                   base::Unretained(this), terminal_id, session_id,
+                   desktop_pipe));
     return;
   }
 
-  base::Process desktop_process(desktop_process_handle);
   ActiveConnectionsList::iterator i = active_connections_.find(terminal_id);
   if (i != active_connections_.end()) {
     i->second->DetachFromDesktop();
-    i->second->AttachToDesktop(std::move(desktop_process), desktop_pipe);
+    i->second->AttachToDesktop(desktop_pipe, session_id);
   } else {
-#if defined(OS_POSIX)
-    DCHECK(desktop_pipe.auto_close);
-    base::File pipe_closer(IPC::PlatformFileForTransitToFile(desktop_pipe));
-#endif  // defined(OS_POSIX)
+    mojo::ScopedMessagePipeHandle closer(desktop_pipe.mojo_handle);
   }
 }
 

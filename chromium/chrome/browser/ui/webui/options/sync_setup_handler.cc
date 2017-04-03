@@ -49,7 +49,7 @@
 #include "components/signin/core/browser/signin_metrics.h"
 #include "components/signin/core/common/profile_management_switches.h"
 #include "components/strings/grit/components_strings.h"
-#include "components/sync/driver/sync_prefs.h"
+#include "components/sync/base/sync_prefs.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_delegate.h"
@@ -332,8 +332,8 @@ void SyncSetupHandler::RegisterMessages() {
                  base::Unretained(this)));
 #if defined(OS_CHROMEOS)
   web_ui()->RegisterMessageCallback(
-      "SyncSetupDoSignOutOnAuthError",
-      base::Bind(&SyncSetupHandler::HandleDoSignOutOnAuthError,
+      "AttemptUserExit",
+      base::Bind(&SyncSetupHandler::HandleAttemptUserExit,
                  base::Unretained(this)));
 #else
   web_ui()->RegisterMessageCallback("SyncSetupStopSyncing",
@@ -640,16 +640,18 @@ void SyncSetupHandler::HandleShowSetupUI(const base::ListValue* args) {
 #if defined(OS_CHROMEOS)
 // On ChromeOS, we need to sign out the user session to fix an auth error, so
 // the user goes through the real signin flow to generate a new auth token.
-void SyncSetupHandler::HandleDoSignOutOnAuthError(const base::ListValue* args) {
-  DVLOG(1) << "Signing out the user to fix a sync error.";
+void SyncSetupHandler::HandleAttemptUserExit(const base::ListValue* args) {
   chrome::AttemptUserExit();
 }
 #endif
 
 #if !defined(OS_CHROMEOS)
 void SyncSetupHandler::HandleStartSignin(const base::ListValue* args) {
-  // Should only be called if the user is not already signed in.
-  DCHECK(!SigninManagerFactory::GetForProfile(GetProfile())->IsAuthenticated());
+  // Should only be called if the user is not already signed in or has an auth
+  // error.
+  DCHECK(
+      !SigninManagerFactory::GetForProfile(GetProfile())->IsAuthenticated() ||
+      SigninErrorControllerFactory::GetForProfile(GetProfile())->HasError());
   bool creating_supervised_user = false;
   args->GetBoolean(0, &creating_supervised_user);
   OpenSyncSetup(creating_supervised_user);

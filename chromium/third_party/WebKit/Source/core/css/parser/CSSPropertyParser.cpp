@@ -1523,6 +1523,24 @@ static CSSValue* consumeTextDecorationLine(CSSParserTokenRange& range) {
   return list;
 }
 
+static CSSValue* consumeTextDecorationSkip(CSSParserTokenRange& range) {
+  CSSValueList* list = CSSValueList::createSpaceSeparated();
+  while (true) {
+    CSSIdentifierValue* ident =
+        consumeIdent<CSSValueObjects, CSSValueInk>(range);
+    if (!ident)
+      break;
+    if (list->hasValue(*ident))
+      return nullptr;
+    list->append(*ident);
+  }
+
+  if (!list->length())
+    return nullptr;
+
+  return list;
+}
+
 // none | strict | content | [ layout || style || paint || size ]
 static CSSValue* consumeContain(CSSParserTokenRange& range) {
   CSSValueID id = range.peek().id();
@@ -1752,15 +1770,19 @@ static bool consumeNumbers(CSSParserTokenRange& args,
 }
 
 static bool consumePerspective(CSSParserTokenRange& args,
-                               CSSParserMode cssParserMode,
+                               const CSSParserContext& context,
                                CSSFunctionValue*& transformValue,
                                bool useLegacyParsing) {
   CSSPrimitiveValue* parsedValue =
-      consumeLength(args, cssParserMode, ValueRangeNonNegative);
+      consumeLength(args, context.mode(), ValueRangeNonNegative);
   if (!parsedValue && useLegacyParsing) {
     double perspective;
     if (!consumeNumberRaw(args, perspective) || perspective < 0)
       return false;
+    if (context.useCounter()) {
+      context.useCounter()->count(
+          UseCounter::UnitlessPerspectiveInTransformProperty);
+    }
     parsedValue = CSSPrimitiveValue::create(
         perspective, CSSPrimitiveValue::UnitType::Pixels);
   }
@@ -1771,7 +1793,7 @@ static bool consumePerspective(CSSParserTokenRange& args,
 }
 
 static CSSValue* consumeTransformValue(CSSParserTokenRange& range,
-                                       CSSParserMode cssParserMode,
+                                       const CSSParserContext& context,
                                        bool useLegacyParsing) {
   CSSValueID functionId = range.peek().functionId();
   if (functionId == CSSValueInvalid)
@@ -1815,27 +1837,26 @@ static CSSValue* consumeTransformValue(CSSParserTokenRange& range,
       }
       break;
     case CSSValuePerspective:
-      if (!consumePerspective(args, cssParserMode, transformValue,
-                              useLegacyParsing))
+      if (!consumePerspective(args, context, transformValue, useLegacyParsing))
         return nullptr;
       break;
     case CSSValueTranslateX:
     case CSSValueTranslateY:
     case CSSValueTranslate:
-      parsedValue = consumeLengthOrPercent(args, cssParserMode, ValueRangeAll);
+      parsedValue = consumeLengthOrPercent(args, context.mode(), ValueRangeAll);
       if (!parsedValue)
         return nullptr;
       if (functionId == CSSValueTranslate &&
           consumeCommaIncludingWhitespace(args)) {
         transformValue->append(*parsedValue);
         parsedValue =
-            consumeLengthOrPercent(args, cssParserMode, ValueRangeAll);
+            consumeLengthOrPercent(args, context.mode(), ValueRangeAll);
         if (!parsedValue)
           return nullptr;
       }
       break;
     case CSSValueTranslateZ:
-      parsedValue = consumeLength(args, cssParserMode, ValueRangeAll);
+      parsedValue = consumeLength(args, context.mode(), ValueRangeAll);
       break;
     case CSSValueMatrix:
     case CSSValueMatrix3d:
@@ -1856,7 +1877,7 @@ static CSSValue* consumeTransformValue(CSSParserTokenRange& range,
         return nullptr;
       break;
     case CSSValueTranslate3d:
-      if (!consumeTranslate3d(args, cssParserMode, transformValue))
+      if (!consumeTranslate3d(args, context.mode(), transformValue))
         return nullptr;
       break;
     default:
@@ -1870,7 +1891,7 @@ static CSSValue* consumeTransformValue(CSSParserTokenRange& range,
 }
 
 static CSSValue* consumeTransform(CSSParserTokenRange& range,
-                                  CSSParserMode cssParserMode,
+                                  const CSSParserContext& context,
                                   bool useLegacyParsing) {
   if (range.peek().id() == CSSValueNone)
     return consumeIdent(range);
@@ -1878,7 +1899,7 @@ static CSSValue* consumeTransform(CSSParserTokenRange& range,
   CSSValueList* list = CSSValueList::createSpaceSeparated();
   do {
     CSSValue* parsedTransformValue =
-        consumeTransformValue(range, cssParserMode, useLegacyParsing);
+        consumeTransformValue(range, context, useLegacyParsing);
     if (!parsedTransformValue)
       return nullptr;
     list->append(*parsedTransformValue);
@@ -2172,17 +2193,21 @@ static CSSValue* consumeContent(CSSParserTokenRange& range,
 }
 
 static CSSValue* consumePerspective(CSSParserTokenRange& range,
-                                    CSSParserMode cssParserMode,
+                                    const CSSParserContext& context,
                                     CSSPropertyID unresolvedProperty) {
   if (range.peek().id() == CSSValueNone)
     return consumeIdent(range);
   CSSPrimitiveValue* parsedValue =
-      consumeLength(range, cssParserMode, ValueRangeAll);
+      consumeLength(range, context.mode(), ValueRangeAll);
   if (!parsedValue &&
       (unresolvedProperty == CSSPropertyAliasWebkitPerspective)) {
     double perspective;
     if (!consumeNumberRaw(range, perspective))
       return nullptr;
+    if (context.useCounter()) {
+      context.useCounter()->count(
+          UseCounter::UnitlessPerspectiveInPerspectiveProperty);
+    }
     parsedValue = CSSPrimitiveValue::create(
         perspective, CSSPrimitiveValue::UnitType::Pixels);
   }
@@ -2469,16 +2494,12 @@ static CSSValue* consumeShapeOutside(CSSParserTokenRange& range,
   if (CSSValue* imageValue = consumeImageOrNone(range, context))
     return imageValue;
   CSSValueList* list = CSSValueList::createSpaceSeparated();
-  if (CSSValue* boxValue =
-          consumeIdent<CSSValueContentBox, CSSValuePaddingBox,
-                       CSSValueBorderBox, CSSValueMarginBox>(range))
+  if (CSSValue* boxValue = consumeShapeBox(range))
     list->append(*boxValue);
   if (CSSValue* shapeValue = consumeBasicShape(range, context)) {
     list->append(*shapeValue);
     if (list->length() < 2) {
-      if (CSSValue* boxValue =
-              consumeIdent<CSSValueContentBox, CSSValuePaddingBox,
-                           CSSValueBorderBox, CSSValueMarginBox>(range))
+      if (CSSValue* boxValue = consumeShapeBox(range))
         list->append(*boxValue);
     }
   }
@@ -2999,6 +3020,12 @@ static CSSValue* consumeGridLine(CSSParserTokenRange& range) {
   if (numericValue && numericValue->getIntValue() == 0)
     return nullptr;  // An <integer> value of zero makes the declaration
                      // invalid.
+
+  if (numericValue) {
+    numericValue = CSSPrimitiveValue::create(
+        clampTo(numericValue->getIntValue(), -kGridMaxTracks, kGridMaxTracks),
+        CSSPrimitiveValue::UnitType::Integer);
+  }
 
   CSSValueList* values = CSSValueList::createSpaceSeparated();
   if (spanValue)
@@ -3604,8 +3631,7 @@ const CSSValue* CSSPropertyParser::parseSingleValue(
     }
     case CSSPropertyZIndex:
       return consumeZIndex(m_range);
-    case CSSPropertyTextShadow:  // CSS2 property, dropped in CSS2.1, back in
-                                 // CSS3, so treat as CSS3
+    case CSSPropertyTextShadow:
     case CSSPropertyBoxShadow:
       return consumeShadow(m_range, m_context.mode(),
                            property == CSSPropertyBoxShadow);
@@ -3618,6 +3644,9 @@ const CSSValue* CSSPropertyParser::parseSingleValue(
     case CSSPropertyWebkitTextDecorationsInEffect:
     case CSSPropertyTextDecorationLine:
       return consumeTextDecorationLine(m_range);
+    case CSSPropertyTextDecorationSkip:
+      DCHECK(RuntimeEnabledFeatures::css3TextDecorationsEnabled());
+      return consumeTextDecorationSkip(m_range);
     case CSSPropertyOffsetAnchor:
       return consumeOffsetAnchor(m_range, m_context.mode());
     case CSSPropertyOffsetPosition:
@@ -3632,6 +3661,7 @@ const CSSValue* CSSPropertyParser::parseSingleValue(
               unresolvedProperty == CSSPropertyAliasMotionPath);
     case CSSPropertyOffsetDistance:
       return consumeLengthOrPercent(m_range, m_context.mode(), ValueRangeAll);
+    case CSSPropertyOffsetRotate:
     case CSSPropertyOffsetRotation:
       return consumeOffsetRotation(m_range);
     case CSSPropertyWebkitTextEmphasisStyle:
@@ -3644,7 +3674,7 @@ const CSSValue* CSSPropertyParser::parseSingleValue(
       return consumeLineWidth(m_range, m_context.mode(), UnitlessQuirk::Forbid);
     case CSSPropertyTransform:
       return consumeTransform(
-          m_range, m_context.mode(),
+          m_range, m_context,
           unresolvedProperty == CSSPropertyAliasWebkitTransform);
     case CSSPropertyWebkitTransformOriginX:
     case CSSPropertyWebkitPerspectiveOriginX:
@@ -3710,7 +3740,7 @@ const CSSValue* CSSPropertyParser::parseSingleValue(
     case CSSPropertyWebkitMaskBoxImageSource:
       return consumeImageOrNone(m_range, m_context);
     case CSSPropertyPerspective:
-      return consumePerspective(m_range, m_context.mode(), unresolvedProperty);
+      return consumePerspective(m_range, m_context, unresolvedProperty);
     case CSSPropertyScrollSnapCoordinate:
       return consumeScrollSnapCoordinate(m_range, m_context.mode());
     case CSSPropertyScrollSnapPointsX:
@@ -4305,8 +4335,8 @@ bool CSSPropertyParser::consumeColumns(bool important) {
 bool CSSPropertyParser::consumeShorthandGreedily(
     const StylePropertyShorthand& shorthand,
     bool important) {
-  ASSERT(shorthand.length() <=
-         6);  // Existing shorthands have at most 6 longhands.
+  // Existing shorthands have at most 6 longhands.
+  DCHECK_LE(shorthand.length(), 6u);
   const CSSValue* longhands[6] = {nullptr, nullptr, nullptr,
                                   nullptr, nullptr, nullptr};
   const CSSPropertyID* shorthandProperties = shorthand.properties();

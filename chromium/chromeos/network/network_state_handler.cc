@@ -15,6 +15,7 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
@@ -80,17 +81,19 @@ NetworkStateHandler::~NetworkStateHandler() {
 void NetworkStateHandler::Shutdown() {
   DCHECK(!did_shutdown_);
   did_shutdown_ = true;
-  FOR_EACH_OBSERVER(NetworkStateHandlerObserver, observers_, OnShuttingDown());
+  for (auto& observer : observers_)
+    observer.OnShuttingDown();
 }
 
 void NetworkStateHandler::InitShillPropertyHandler() {
-  shill_property_handler_.reset(new internal::ShillPropertyHandler(this));
+  shill_property_handler_ =
+      base::MakeUnique<internal::ShillPropertyHandler>(this);
   shill_property_handler_->Init();
 }
 
 // static
-NetworkStateHandler* NetworkStateHandler::InitializeForTest() {
-  NetworkStateHandler* handler = new NetworkStateHandler();
+std::unique_ptr<NetworkStateHandler> NetworkStateHandler::InitializeForTest() {
+  auto handler = base::WrapUnique(new NetworkStateHandler());
   handler->InitShillPropertyHandler();
   return handler;
 }
@@ -259,12 +262,9 @@ const NetworkState* NetworkStateHandler::FirstNetworkByType(
 
 std::string NetworkStateHandler::FormattedHardwareAddressForType(
     const NetworkTypePattern& type) const {
-  const DeviceState* device = nullptr;
   const NetworkState* network = ConnectedNetworkByType(type);
-  if (network)
-    device = GetDeviceState(network->device_path());
-  else
-    device = GetDeviceStateByType(type);
+  const DeviceState* device = network ? GetDeviceState(network->device_path())
+                                      : GetDeviceStateByType(type);
   if (!device)
     return std::string();
   return network_util::FormattedMacAddress(device->mac_address());
@@ -365,6 +365,14 @@ void NetworkStateHandler::RequestUpdateForNetwork(
                                              service_path);
 }
 
+void NetworkStateHandler::SendUpdateNotificationForNetwork(
+    const std::string& service_path) {
+  const NetworkState* network = GetNetworkState(service_path);
+  if (!network)
+    return;
+  NotifyNetworkPropertiesUpdated(network);
+}
+
 void NetworkStateHandler::ClearLastErrorForNetwork(
     const std::string& service_path) {
   NetworkState* network = GetModifiableNetworkState(service_path);
@@ -381,6 +389,18 @@ void NetworkStateHandler::SetCheckPortalList(
 void NetworkStateHandler::SetWakeOnLanEnabled(bool enabled) {
   NET_LOG_EVENT("SetWakeOnLanEnabled", enabled ? "true" : "false");
   shill_property_handler_->SetWakeOnLanEnabled(enabled);
+}
+
+void NetworkStateHandler::SetNetworkThrottlingStatus(
+    bool enabled,
+    uint32_t upload_rate_kbits,
+    uint32_t download_rate_kbits) {
+  NET_LOG_EVENT("SetNetworkThrottlingStatus",
+                enabled ? ("true :" + base::IntToString(upload_rate_kbits) +
+                           ", " + base::IntToString(download_rate_kbits))
+                        : "false");
+  shill_property_handler_->SetNetworkThrottlingStatus(
+      enabled, upload_rate_kbits, download_rate_kbits);
 }
 
 const NetworkState* NetworkStateHandler::GetEAPForEthernet(
@@ -695,8 +715,8 @@ void NetworkStateHandler::ManagedStateListChanged(
     // Notify observers that the list of networks has changed.
     NET_LOG_EVENT("NOTIFY:NetworkListChanged",
                   base::StringPrintf("Size:%" PRIuS, network_list_.size()));
-    FOR_EACH_OBSERVER(NetworkStateHandlerObserver, observers_,
-                      NetworkListChanged());
+    for (auto& observer : observers_)
+      observer.NetworkListChanged();
   } else if (type == ManagedState::MANAGED_TYPE_DEVICE) {
     std::string devices;
     for (auto iter = device_list_.begin(); iter != device_list_.end(); ++iter) {
@@ -838,8 +858,8 @@ void NetworkStateHandler::NotifyDeviceListChanged() {
   SCOPED_NET_LOG_IF_SLOW();
   NET_LOG_DEBUG("NOTIFY:DeviceListChanged",
                 base::StringPrintf("Size:%" PRIuS, device_list_.size()));
-  FOR_EACH_OBSERVER(NetworkStateHandlerObserver, observers_,
-                    DeviceListChanged());
+  for (auto& observer : observers_)
+    observer.DeviceListChanged();
 }
 
 DeviceState* NetworkStateHandler::GetModifiableDeviceState(
@@ -910,8 +930,8 @@ void NetworkStateHandler::OnNetworkConnectionStateChanged(
     desc = "Default" + desc;
   NET_LOG(EVENT) << "NOTIFY: " << desc << ": " << GetLogName(network) << ": "
                  << network->connection_state();
-  FOR_EACH_OBSERVER(NetworkStateHandlerObserver, observers_,
-                    NetworkConnectionStateChanged(network));
+  for (auto& observer : observers_)
+    observer.NetworkConnectionStateChanged(network);
   if (notify_default)
     NotifyDefaultNetworkChanged(network);
 }
@@ -920,31 +940,31 @@ void NetworkStateHandler::NotifyDefaultNetworkChanged(
     const NetworkState* default_network) {
   SCOPED_NET_LOG_IF_SLOW();
   NET_LOG_EVENT("NOTIFY:DefaultNetworkChanged", GetLogName(default_network));
-  FOR_EACH_OBSERVER(NetworkStateHandlerObserver, observers_,
-                    DefaultNetworkChanged(default_network));
+  for (auto& observer : observers_)
+    observer.DefaultNetworkChanged(default_network);
 }
 
 void NetworkStateHandler::NotifyNetworkPropertiesUpdated(
     const NetworkState* network) {
   SCOPED_NET_LOG_IF_SLOW();
   NET_LOG_DEBUG("NOTIFY:NetworkPropertiesUpdated", GetLogName(network));
-  FOR_EACH_OBSERVER(NetworkStateHandlerObserver, observers_,
-                    NetworkPropertiesUpdated(network));
+  for (auto& observer : observers_)
+    observer.NetworkPropertiesUpdated(network);
 }
 
 void NetworkStateHandler::NotifyDevicePropertiesUpdated(
     const DeviceState* device) {
   SCOPED_NET_LOG_IF_SLOW();
   NET_LOG_DEBUG("NOTIFY:DevicePropertiesUpdated", GetLogName(device));
-  FOR_EACH_OBSERVER(NetworkStateHandlerObserver, observers_,
-                    DevicePropertiesUpdated(device));
+  for (auto& observer : observers_)
+    observer.DevicePropertiesUpdated(device);
 }
 
 void NetworkStateHandler::NotifyScanCompleted(const DeviceState* device) {
   SCOPED_NET_LOG_IF_SLOW();
   NET_LOG_DEBUG("NOTIFY:ScanCompleted", GetLogName(device));
-  FOR_EACH_OBSERVER(NetworkStateHandlerObserver, observers_,
-                    ScanCompleted(device));
+  for (auto& observer : observers_)
+    observer.ScanCompleted(device);
 }
 
 std::string NetworkStateHandler::GetTechnologyForType(

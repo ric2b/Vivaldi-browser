@@ -57,7 +57,6 @@ defaultFixedFontSize type=int, initial=0, invalidate=Style
 
 editingBehaviorType type=EditingBehaviorType, initial=editingBehaviorTypeForPlatform()
 
-caretBrowsingEnabled initial=false
 localStorageEnabled initial=false
 allowUniversalAccessFromFileURLs initial=true
 allowFileAccessFromFileURLs initial=true
@@ -218,13 +217,10 @@ shouldReuseGlobalForUnownedMainFrame initial=false
 # crbug.com/304873 tracks removal once it's been enabled on all platforms.
 touchEditingEnabled initial=false
 
-# Settings for experimental desktop pinch-zoom support (with semantics
-# optimized for large screens).  Pinch-zoom generally is implemented mainly
-# outside of blink (in the compositor) and doesn't require any settings.
-# These settings are for an experimental modification to how pinch-zoom
-# behaves. crbug.com/304869 tracks removal.
+# If true, scrollers will use overlay scrollbars.  These do not take up any
+# layout width, are drawn using solid color quads by the compositor, and fade away
+# after a timeout.
 useSolidColorScrollbars initial=false
-pinchOverlayScrollbarThickness type=int, initial=0
 
 # Experiment to have all APIs reflect the layout viewport.
 # crbug.com/489206 tracks the experiment.
@@ -400,11 +396,6 @@ autoplayExperimentMode type=String, initial="off"
 # on frame resize assuming device rotation.
 mainFrameResizesAreOrientationChanges initial=false
 
-# If set to a positive value, emit a console warning once for each non-passive
-# event listener that caused an event to be dispatched to main thread and
-# delayed by more than the specified time (in seconds).
-blockedMainThreadEventsWarningThreshold type=double, initial=0
-
 # Ability to override the default 'passive' value in AddEventListenerOptions. This
 # is useful to demonstrate the power of passive event listeners. This can be removed
 # when there is greater adoption, interventions to force it on and associated devtools
@@ -439,3 +430,9 @@ hideScrollbars initial=false
 # Spellchecking is enabled by default for elements that do not specify it explicitly
 # using the "spellcheck" attribute.
 spellCheckEnabledByDefault initial=true
+
+# Whether download UI should be hidden for the current page content.
+hideDownloadUI initial=false
+
+# Whether or not to issue range requests for images and show placeholders.
+fetchImagePlaceholders initial=false

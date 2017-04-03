@@ -354,6 +354,7 @@ flex
 inline-flex
 grid
 inline-grid
+contents
 //none
 -webkit-flex
 -webkit-inline-flex
@@ -578,6 +579,12 @@ fit-content
 //
 clip
 ellipsis
+
+//
+// text-decoration-skip
+//
+objects
+ink
 
 //
 // -webkit-margin-collapse

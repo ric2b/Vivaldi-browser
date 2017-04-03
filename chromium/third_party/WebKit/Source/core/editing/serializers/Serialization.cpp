@@ -61,7 +61,6 @@
 #include "core/html/HTMLSpanElement.h"
 #include "core/html/HTMLTableCellElement.h"
 #include "core/html/HTMLTableElement.h"
-#include "core/html/HTMLTextFormControlElement.h"
 #include "core/layout/LayoutObject.h"
 #include "platform/weborigin/KURL.h"
 #include "wtf/StdLibExtras.h"
@@ -276,7 +275,10 @@ String CreateMarkupAlgorithm<Strategy>::createMarkup(
     return emptyString();
 
   Document* document = startPosition.document();
-  document->updateStyleAndLayoutIgnorePendingStylesheets();
+
+  DCHECK(!document->needsLayoutTreeUpdate());
+  DocumentLifecycle::DisallowTransitionScope disallowTransition(
+      document->lifecycle());
 
   HTMLElement* specialCommonAncestor = highestAncestorToWrapMarkup<Strategy>(
       startPosition, endPosition, shouldAnnotate, constrainingAncestor);

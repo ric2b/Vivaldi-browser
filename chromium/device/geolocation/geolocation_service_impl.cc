@@ -7,7 +7,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "device/geolocation/geolocation_service_context.h"
 
 namespace device {
@@ -159,9 +159,6 @@ void GeolocationServiceImpl::OnConnectionError() {
 void GeolocationServiceImpl::OnLocationUpdate(const Geoposition& position) {
   RecordGeopositionErrorCode(position.error_code);
   DCHECK(context_);
-
-  if (context_->paused())
-    return;
 
   update_callback_.Run();
 

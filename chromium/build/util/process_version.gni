@@ -2,11 +2,6 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//build/config/chrome_build.gni")
-if (is_vivaldi) {
-  import("//vivaldi/gn/config/version.gni")
-}
-
 # Runs the version processing script over the given template file to produce
 # an output file. This is used for generating various forms of files that
 # incorporate the product name and version.
@@ -70,28 +65,6 @@ template("process_version") {
     script = "//build/util/version.py"
 
     inputs = []
-    lastchange_path = "//build/util/LASTCHANGE"
-    version_path = "//chrome/VERSION"
-    if (is_chrome_branded) {
-      branding_path = "//chrome/app/theme/google_chrome/BRANDING"
-    } else if (is_vivaldi) {
-      branding_path = "//vivaldi/app/resources/theme/vivaldi/BRANDING"
-    } else {
-      branding_path = "//chrome/app/theme/chromium/BRANDING"
-    }
-
-    inputs += [
-      version_path,
-      lastchange_path,
-      branding_path,
-    ]
-    if (is_vivaldi) {
-      lastchange_vivaldi_path = "//build/util/LASTCHANGE.vivaldi"
-      inputs += [
-        vivaldi_version_path,
-        lastchange_vivaldi_path,
-      ]
-    }
     if (defined(invoker.inputs)) {
       inputs += invoker.inputs
     }

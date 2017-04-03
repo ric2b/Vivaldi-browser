@@ -476,12 +476,14 @@ bool DrmDevice::AddFramebuffer2(uint32_t width,
                                 uint32_t handles[4],
                                 uint32_t strides[4],
                                 uint32_t offsets[4],
+                                uint64_t modifiers[4],
                                 uint32_t* framebuffer,
                                 uint32_t flags) {
   DCHECK(file_.IsValid());
   TRACE_EVENT1("drm", "DrmDevice::AddFramebuffer", "handle", handles[0]);
-  return !drmModeAddFB2(file_.GetPlatformFile(), width, height, format, handles,
-                        strides, offsets, framebuffer, flags);
+  return !drmModeAddFB2WithModifiers(file_.GetPlatformFile(), width, height,
+                                     format, handles, strides, offsets,
+                                     modifiers, framebuffer, flags);
 }
 
 bool DrmDevice::RemoveFramebuffer(uint32_t framebuffer) {
@@ -670,7 +672,21 @@ bool DrmDevice::CommitProperties(drmModeAtomicReq* properties,
 
 bool DrmDevice::SetCapability(uint64_t capability, uint64_t value) {
   DCHECK(file_.IsValid());
-  return !drmSetClientCap(file_.GetPlatformFile(), capability, value);
+
+#ifndef DRM_IOCTL_SET_CLIENT_CAP
+// drmSetClientCap was introduced in a later version of libdrm than the wheezy
+// sysroot supplies.
+// TODO(thomasanderson): Remove this when support for the wheezy sysroot is
+// dropped in favor of jessie.
+#define DRM_IOCTL_SET_CLIENT_CAP DRM_IOW(0x0d, struct drm_set_client_cap)
+  struct drm_set_client_cap {
+    __u64 capability;
+    __u64 value;
+  };
+#endif
+
+  struct drm_set_client_cap cap = {capability, value};
+  return !drmIoctl(file_.GetPlatformFile(), DRM_IOCTL_SET_CLIENT_CAP, &cap);
 }
 
 bool DrmDevice::SetMaster() {

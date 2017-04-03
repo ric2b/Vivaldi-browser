@@ -16,6 +16,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ssl/cert_report_helper.h"
 #include "chrome/browser/ssl/certificate_reporting_test_utils.h"
+#include "chrome/browser/ssl/security_state_tab_helper.h"
 #include "chrome/browser/ssl/ssl_cert_reporter.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -23,6 +24,7 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "components/captive_portal/captive_portal_detector.h"
 #include "components/prefs/pref_service.h"
+#include "components/security_state/core/security_state.h"
 #include "content/public/browser/interstitial_page.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test_utils.h"
@@ -88,7 +90,8 @@ class CaptivePortalBlockingPageForTesting : public CaptivePortalBlockingPage {
 };
 
 class CaptivePortalBlockingPageTest
-    : public certificate_reporting_test_utils::CertificateReportingTest {
+    : public certificate_reporting_test_utils::CertificateReportingTest,
+      public InProcessBrowserTest {
  public:
   CaptivePortalBlockingPageTest() {}
 
@@ -137,6 +140,7 @@ void CaptivePortalBlockingPageTest::TestInterstitial(
   net::SSLInfo ssl_info;
   ssl_info.cert =
       net::ImportCertFromFile(net::GetTestCertsDirectory(), "ok_cert.pem");
+  ssl_info.cert_status = net::CERT_STATUS_COMMON_NAME_INVALID;
   // Blocking page is owned by the interstitial.
   CaptivePortalBlockingPage* blocking_page =
       new CaptivePortalBlockingPageForTesting(
@@ -163,6 +167,14 @@ void CaptivePortalBlockingPageTest::TestInterstitial(
   EXPECT_EQ(expect_login_url == EXPECT_LOGIN_URL_NO,
             IsInterstitialDisplayingText(contents->GetInterstitialPage(),
                                          kGenericLoginURLText));
+
+  // Check that a red/dangerous lock icon is showing on the interstitial.
+  SecurityStateTabHelper* helper =
+      SecurityStateTabHelper::FromWebContents(contents);
+  ASSERT_TRUE(helper);
+  security_state::SecurityInfo security_info;
+  helper->GetSecurityInfo(&security_info);
+  EXPECT_EQ(security_state::DANGEROUS, security_info.security_level);
 }
 
 void CaptivePortalBlockingPageTest::TestInterstitial(

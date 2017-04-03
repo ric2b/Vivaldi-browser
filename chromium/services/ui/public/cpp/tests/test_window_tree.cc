@@ -83,11 +83,11 @@ void TestWindowTree::SetWindowOpacity(uint32_t change_id,
   change_id_ = change_id;
 }
 
-void TestWindowTree::AttachSurface(
+void TestWindowTree::AttachCompositorFrameSink(
     uint32_t window_id,
-    mojom::SurfaceType type,
-    mojo::InterfaceRequest<mojom::Surface> surface,
-    mojom::SurfaceClientPtr client) {}
+    mojom::CompositorFrameSinkType type,
+    mojo::InterfaceRequest<cc::mojom::MojoCompositorFrameSink> surface,
+    cc::mojom::MojoCompositorFrameSinkClientPtr client) {}
 
 void TestWindowTree::AddWindow(uint32_t change_id,
                                uint32_t parent,

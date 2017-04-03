@@ -5,7 +5,7 @@
 #import <Cocoa/Cocoa.h>
 
 #include "base/mac/scoped_nsobject.h"
-#import "chrome/browser/ui/cocoa/base_bubble_controller.h"
+#import "chrome/browser/ui/cocoa/omnibox_decoration_bubble_controller.h"
 #include "chrome/browser/ui/website_settings/permission_prompt.h"
 #include "ui/base/models/simple_menu_model.h"
 
@@ -14,8 +14,8 @@ class Browser;
 class PermissionBubbleCocoa;
 class PermissionRequest;
 
-@interface PermissionBubbleController :
-    BaseBubbleController<NSTextViewDelegate> {
+@interface PermissionBubbleController
+    : OmniboxDecorationBubbleController<NSTextViewDelegate> {
  @private
   // Array of views that are the checkboxes for every requested permission.
   // Only populated if multiple requests are shown at once.
@@ -43,7 +43,7 @@ class PermissionRequest;
 // Returns true if |browser| has a visible location bar.
 + (bool)hasVisibleLocationBarForBrowser:(Browser*)browser;
 
-// Makes the bubble visible. The bubble will be popuplated with text retrieved
+// Makes the bubble visible. The bubble will be populated with text retrieved
 // from |requests|. |delegate| will receive callbacks for user actions.
 - (void)showWithDelegate:(PermissionPrompt::Delegate*)delegate
              forRequests:(const std::vector<PermissionRequest*>&)requests

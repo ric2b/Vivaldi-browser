@@ -14,15 +14,14 @@
 #include "net/quic/core/quic_server_id.h"
 #include "net/quic/core/quic_utils.h"
 #include "net/quic/test_tools/crypto_test_utils.h"
+#include "net/quic/test_tools/quic_stream_peer.h"
 #include "net/quic/test_tools/quic_stream_sequencer_peer.h"
 #include "net/quic/test_tools/quic_test_utils.h"
-#include "net/quic/test_tools/reliable_quic_stream_peer.h"
 #include "net/quic/test_tools/simple_quic_framer.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 using std::string;
-using std::vector;
 
 using testing::_;
 
@@ -119,8 +118,7 @@ TEST_F(QuicCryptoClientStreamTest, NegotiatedParameters) {
   CompleteCryptoHandshake();
 
   const QuicConfig* config = session_->config();
-  EXPECT_EQ(kMaximumIdleTimeoutSecs,
-            config->IdleConnectionStateLifetime().ToSeconds());
+  EXPECT_EQ(kMaximumIdleTimeoutSecs, config->IdleNetworkTimeout().ToSeconds());
   EXPECT_EQ(kDefaultMaxStreamsPerConnection, config->MaxStreamsPerConnection());
 
   const QuicCryptoNegotiatedParameters& crypto_params(
@@ -171,7 +169,7 @@ TEST_F(QuicCryptoClientStreamTest, InvalidCachedServerConfig) {
   QuicCryptoClientConfig::CachedState* state =
       crypto_config_.LookupOrCreate(server_id_);
 
-  vector<string> certs = state->certs();
+  std::vector<string> certs = state->certs();
   string cert_sct = state->cert_sct();
   string signature = state->signature();
   string chlo_hash = state->chlo_hash();
@@ -230,9 +228,8 @@ TEST_F(QuicCryptoClientStreamTest, ServerConfigUpdate) {
   test::CompareCharArraysWithHexError(
       "scfg", cached_scfg.data(), cached_scfg.length(),
       QuicUtils::AsChars(scfg), arraysize(scfg));
-  QuicStreamSequencer* sequencer = ReliableQuicStreamPeer::sequencer(stream());
-  EXPECT_NE(FLAGS_quic_release_crypto_stream_buffer &&
-                FLAGS_quic_reduce_sequencer_buffer_memory_life_time,
+  QuicStreamSequencer* sequencer = QuicStreamPeer::sequencer(stream());
+  EXPECT_NE(FLAGS_quic_release_crypto_stream_buffer,
             QuicStreamSequencerPeer::IsUnderlyingBufferAllocated(sequencer));
 }
 
@@ -284,6 +281,18 @@ TEST_F(QuicCryptoClientStreamTest, TokenBindingNotNegotiated) {
   EXPECT_EQ(0u, stream()->crypto_negotiated_params().token_binding_key_param);
 }
 
+TEST_F(QuicCryptoClientStreamTest, NoTokenBindingInPrivacyMode) {
+  server_options_.token_binding_params = QuicTagVector{kTB10};
+  crypto_config_.tb_key_params = QuicTagVector{kTB10};
+  server_id_ = QuicServerId(kServerHostname, kServerPort, PRIVACY_MODE_ENABLED);
+  CreateConnection();
+
+  CompleteCryptoHandshake();
+  EXPECT_TRUE(stream()->encryption_established());
+  EXPECT_TRUE(stream()->handshake_confirmed());
+  EXPECT_EQ(0u, stream()->crypto_negotiated_params().token_binding_key_param);
+}
+
 class QuicCryptoClientStreamStatelessTest : public ::testing::Test {
  public:
   QuicCryptoClientStreamStatelessTest()
@@ -329,7 +338,7 @@ class QuicCryptoClientStreamStatelessTest : public ::testing::Test {
     CryptoTestUtils::FakeServerOptions options;
     CryptoTestUtils::SetupCryptoServerConfigForTest(
         server_connection_->clock(), server_connection_->random_generator(),
-        server_session_->config(), &server_crypto_config_, options);
+        &server_crypto_config_, options);
     FLAGS_enable_quic_stateless_reject_support = true;
   }
 

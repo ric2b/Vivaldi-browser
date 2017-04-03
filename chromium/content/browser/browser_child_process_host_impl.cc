@@ -38,13 +38,16 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/child_process_data.h"
 #include "content/public/browser/content_browser_client.h"
+#include "content/public/common/connection_filter.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/mojo_channel_switches.h"
 #include "content/public/common/process_type.h"
 #include "content/public/common/result_codes.h"
-#include "ipc/attachment_broker.h"
-#include "ipc/attachment_broker_privileged.h"
+#include "content/public/common/service_manager_connection.h"
+#include "device/power_monitor/power_monitor_message_broadcaster.h"
 #include "mojo/edk/embedder/embedder.h"
+#include "services/service_manager/public/cpp/interface_registry.h"
 
 #if defined(OS_MACOSX)
 #include "content/browser/mach_broker_mac.h"
@@ -60,29 +63,46 @@ base::LazyInstance<base::ObserverList<BrowserChildProcessObserver>>
     g_observers = LAZY_INSTANCE_INITIALIZER;
 
 void NotifyProcessLaunchedAndConnected(const ChildProcessData& data) {
-  FOR_EACH_OBSERVER(BrowserChildProcessObserver, g_observers.Get(),
-                    BrowserChildProcessLaunchedAndConnected(data));
+  for (auto& observer : g_observers.Get())
+    observer.BrowserChildProcessLaunchedAndConnected(data);
 }
 
 void NotifyProcessHostConnected(const ChildProcessData& data) {
-  FOR_EACH_OBSERVER(BrowserChildProcessObserver, g_observers.Get(),
-                    BrowserChildProcessHostConnected(data));
+  for (auto& observer : g_observers.Get())
+    observer.BrowserChildProcessHostConnected(data);
 }
 
 void NotifyProcessHostDisconnected(const ChildProcessData& data) {
-  FOR_EACH_OBSERVER(BrowserChildProcessObserver, g_observers.Get(),
-                    BrowserChildProcessHostDisconnected(data));
+  for (auto& observer : g_observers.Get())
+    observer.BrowserChildProcessHostDisconnected(data);
 }
 
 void NotifyProcessCrashed(const ChildProcessData& data, int exit_code) {
-  FOR_EACH_OBSERVER(BrowserChildProcessObserver, g_observers.Get(),
-                    BrowserChildProcessCrashed(data, exit_code));
+  for (auto& observer : g_observers.Get())
+    observer.BrowserChildProcessCrashed(data, exit_code);
 }
 
 void NotifyProcessKilled(const ChildProcessData& data, int exit_code) {
-  FOR_EACH_OBSERVER(BrowserChildProcessObserver, g_observers.Get(),
-                    BrowserChildProcessKilled(data, exit_code));
+  for (auto& observer : g_observers.Get())
+    observer.BrowserChildProcessKilled(data, exit_code);
 }
+
+class ConnectionFilterImpl : public ConnectionFilter {
+ public:
+  ConnectionFilterImpl() {}
+
+ private:
+  // ConnectionFilter:
+  bool OnConnect(const service_manager::Identity& remote_identity,
+                 service_manager::InterfaceRegistry* registry,
+                 service_manager::Connector* connector) override {
+    registry->AddInterface(
+        base::Bind(&device::PowerMonitorMessageBroadcaster::Create));
+    return true;
+  }
+
+  DISALLOW_COPY_AND_ASSIGN(ConnectionFilterImpl);
+};
 
 }  // namespace
 
@@ -143,24 +163,10 @@ BrowserChildProcessHostImpl::BrowserChildProcessHostImpl(
     : data_(process_type),
       delegate_(delegate),
       child_token_(mojo::edk::GenerateRandomToken()),
-      power_monitor_message_broadcaster_(this),
       is_channel_connected_(false),
       notify_child_disconnected_(false),
       weak_factory_(this) {
   data_.id = ChildProcessHostImpl::GenerateChildProcessUniqueId();
-
-#if USE_ATTACHMENT_BROKER
-  // Construct the privileged attachment broker early in the life cycle of a
-  // child process. This ensures that when a test is being run in one of the
-  // single process modes, the global attachment broker is the privileged
-  // attachment broker, rather than an unprivileged attachment broker.
-#if defined(OS_MACOSX)
-  IPC::AttachmentBrokerPrivileged::CreateBrokerIfNeeded(
-      MachBroker::GetInstance());
-#else
-  IPC::AttachmentBrokerPrivileged::CreateBrokerIfNeeded();
-#endif  // defined(OS_MACOSX)
-#endif  // USE_ATTACHMENT_BROKER
 
   child_process_host_.reset(ChildProcessHost::Create(this));
   AddFilter(new TraceMessageFilter(data_.id));
@@ -171,14 +177,18 @@ BrowserChildProcessHostImpl::BrowserChildProcessHostImpl(
   g_child_process_list.Get().push_back(this);
   GetContentClient()->browser()->BrowserChildProcessHostCreated(this);
 
-  power_monitor_message_broadcaster_.Init();
-
   if (!service_name.empty()) {
     DCHECK_CURRENTLY_ON(BrowserThread::IO);
     child_connection_.reset(new ChildConnection(
         service_name, base::StringPrintf("%d", data_.id), child_token_,
         ServiceManagerContext::GetConnectorForIOThread(),
         base::ThreadTaskRunnerHandle::Get()));
+  }
+
+  // May be null during test execution.
+  if (ServiceManagerConnection::GetForProcess()) {
+    ServiceManagerConnection::GetForProcess()->AddConnectionFilter(
+        base::MakeUnique<ConnectionFilterImpl>());
   }
 
   // Create a persistent memory segment for subprocess histograms.
@@ -220,12 +230,8 @@ void BrowserChildProcessHostImpl::CopyFeatureAndFieldTrialFlags(
 
   // If we run base::FieldTrials, we want to pass to their state to the
   // child process so that it can act in accordance with each state.
-  std::string field_trial_states;
-  base::FieldTrialList::AllStatesToString(&field_trial_states);
-  if (!field_trial_states.empty()) {
-    cmd_line->AppendSwitchASCII(switches::kForceFieldTrials,
-                                field_trial_states);
-  }
+  base::FieldTrialList::CopyFieldTrialStateToFlags(switches::kFieldTrialHandle,
+                                                   cmd_line);
 }
 
 void BrowserChildProcessHostImpl::Launch(
@@ -258,11 +264,7 @@ void BrowserChildProcessHostImpl::Launch(
 
   notify_child_disconnected_ = true;
   child_process_.reset(new ChildProcessLauncher(
-      delegate,
-      cmd_line,
-      data_.id,
-      this,
-      child_token_,
+      delegate, cmd_line, data_.id, this, child_token_,
       base::Bind(&BrowserChildProcessHostImpl::OnMojoError,
                  weak_factory_.GetWeakPtr(),
                  base::ThreadTaskRunnerHandle::Get()),
@@ -317,7 +319,8 @@ void BrowserChildProcessHostImpl::AddFilter(BrowserMessageFilter* filter) {
   child_process_host_->AddFilter(filter->GetFilter());
 }
 
-shell::InterfaceProvider* BrowserChildProcessHostImpl::GetRemoteInterfaces() {
+service_manager::InterfaceProvider*
+BrowserChildProcessHostImpl::GetRemoteInterfaces() {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   if (!child_connection_)
     return nullptr;
@@ -477,32 +480,32 @@ void BrowserChildProcessHostImpl::CreateMetricsAllocator() {
   base::StringPiece metrics_name;
   switch (data_.process_type) {
     case PROCESS_TYPE_UTILITY:
-      memory_size = 100 << 10;  // 100 KiB
+      memory_size = 64 << 10;  // 64 KiB
       metrics_name = "UtilityMetrics";
       break;
 
     case PROCESS_TYPE_ZYGOTE:
-      memory_size = 100 << 10;  // 100 KiB
+      memory_size = 64 << 10;  // 64 KiB
       metrics_name = "ZygoteMetrics";
       break;
 
     case PROCESS_TYPE_SANDBOX_HELPER:
-      memory_size = 100 << 10;  // 100 KiB
+      memory_size = 64 << 10;  // 64 KiB
       metrics_name = "SandboxHelperMetrics";
       break;
 
     case PROCESS_TYPE_GPU:
-      memory_size = 100 << 10;  // 100 KiB
+      memory_size = 64 << 10;  // 64 KiB
       metrics_name = "GpuMetrics";
       break;
 
     case PROCESS_TYPE_PPAPI_PLUGIN:
-      memory_size = 100 << 10;  // 100 KiB
+      memory_size = 64 << 10;  // 64 KiB
       metrics_name = "PpapiPluginMetrics";
       break;
 
     case PROCESS_TYPE_PPAPI_BROKER:
-      memory_size = 100 << 10;  // 100 KiB
+      memory_size = 64 << 10;  // 64 KiB
       metrics_name = "PpapiBrokerMetrics";
       break;
 
@@ -545,6 +548,9 @@ void BrowserChildProcessHostImpl::OnProcessLaunched() {
 
   const base::Process& process = child_process_->GetProcess();
   DCHECK(process.IsValid());
+
+  if (child_connection_)
+    child_connection_->SetProcessHandle(process.Handle());
 
 #if defined(OS_WIN)
   // Start a WaitableEventWatcher that will invoke OnProcessExitedEarly if the

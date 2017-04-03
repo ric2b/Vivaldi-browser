@@ -7,6 +7,7 @@
 
 #include "base/files/scoped_file.h"
 #include "base/macros.h"
+#include "base/memory/shared_memory.h"
 #include "base/memory/weak_ptr.h"
 #include "base/process/kill.h"
 #include "base/process/launch.h"
@@ -129,7 +130,6 @@ class CONTENT_EXPORT ChildProcessLauncher : public base::NonThreadSafe {
                         mojo::edk::ScopedPlatformHandle server_handle,
                         ZygoteHandle zygote,
 #if defined(OS_ANDROID)
-                        base::ScopedFD ipcfd,
                         base::ScopedFD mojo_fd,
 #endif
                         base::Process process,
@@ -138,9 +138,6 @@ class CONTENT_EXPORT ChildProcessLauncher : public base::NonThreadSafe {
   // Notifies the client about the result of the operation.
   void Notify(ZygoteHandle zygote,
               mojo::edk::ScopedPlatformHandle server_handle,
-#if defined(OS_ANDROID)
-              base::ScopedFD ipcfd,
-#endif
               base::Process process,
               int error_code);
 

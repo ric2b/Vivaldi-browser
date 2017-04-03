@@ -37,12 +37,4 @@ DefaultWebClientState IsDefaultProtocolClient(const std::string& protocol) {
   return UNKNOWN_DEFAULT;
 }
 
-bool IsChromeDefaultBrowser() {
-  return false;
-}
-
-bool IsOperaDefaultBrowser() {
-  return false;
-}
-
 }  // namespace shell_integration

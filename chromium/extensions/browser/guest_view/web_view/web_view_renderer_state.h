@@ -21,8 +21,6 @@
 #include "base/macros.h"
 #include "base/memory/singleton.h"
 
-class VivaldiViewGuest;
-
 namespace extensions {
 
 class WebViewGuest;
@@ -36,7 +34,6 @@ class WebViewRendererState {
     std::string partition_id;
     std::string owner_host;
     std::set<int> content_script_ids;
-    std::string type;
 
     WebViewInfo();
     WebViewInfo(const WebViewInfo& other);
@@ -95,7 +92,6 @@ class WebViewRendererState {
   WebViewRendererState();
   ~WebViewRendererState();
 
-public:
   // Adds/removes a WebView guest render process to/from the set.
   void AddGuest(int render_process_host_id, int routing_id,
                 const WebViewInfo& web_view_info);

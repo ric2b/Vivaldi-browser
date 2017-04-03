@@ -4,7 +4,6 @@
 
 #include "content/child/web_url_loader_impl.h"
 
-#include <openssl/ssl.h>
 #include <stdint.h>
 
 #include <algorithm>
@@ -17,6 +16,7 @@
 #include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/optional.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -34,12 +34,12 @@
 #include "content/common/resource_messages.h"
 #include "content/common/resource_request.h"
 #include "content/common/resource_request_body_impl.h"
-#include "content/common/security_style_util.h"
 #include "content/common/service_worker/service_worker_types.h"
 #include "content/common/url_loader.mojom.h"
 #include "content/public/child/fixed_received_data.h"
 #include "content/public/child/request_peer.h"
 #include "content/public/common/browser_side_navigation_policy.h"
+#include "mojo/public/cpp/bindings/associated_group.h"
 #include "net/base/data_url.h"
 #include "net/base/filename_util.h"
 #include "net/base/net_errors.h"
@@ -53,7 +53,7 @@
 #include "net/url_request/url_request_data_job.h"
 #include "third_party/WebKit/public/platform/WebHTTPLoadInfo.h"
 #include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
-#include "third_party/WebKit/public/platform/WebTaskRunner.h"
+#include "third_party/WebKit/public/platform/WebSecurityStyle.h"
 #include "third_party/WebKit/public/platform/WebURL.h"
 #include "third_party/WebKit/public/platform/WebURLError.h"
 #include "third_party/WebKit/public/platform/WebURLLoadTiming.h"
@@ -61,6 +61,7 @@
 #include "third_party/WebKit/public/platform/WebURLRequest.h"
 #include "third_party/WebKit/public/platform/WebURLResponse.h"
 #include "third_party/WebKit/public/web/WebSecurityPolicy.h"
+#include "third_party/boringssl/src/include/openssl/ssl.h"
 
 using base::Time;
 using base::TimeTicks;
@@ -85,18 +86,31 @@ namespace content {
 
 namespace {
 
-// The list of response headers that we do not copy from the original
-// response when generating a WebURLResponse for a MIME payload.
-const char* const kReplaceHeaders[] = {
-  "content-type",
-  "content-length",
-  "content-disposition",
-  "content-range",
-  "range",
-  "set-cookie"
-};
-
 using HeadersVector = ResourceDevToolsInfo::HeadersVector;
+
+// TODO(estark): Figure out a way for the embedder to provide the
+// security style for a resource. Ideally, the logic for assigning
+// per-resource security styles should live in the same place as the
+// logic for assigning per-page security styles (which lives in the
+// embedder). It would also be nice for the embedder to have the chance
+// to control the per-resource security style beyond the simple logic
+// here. (For example, the embedder might want to mark certain resources
+// differently if they use SHA1 signatures.) https://crbug.com/648326
+blink::WebSecurityStyle GetSecurityStyleForResource(
+    const GURL& url,
+    net::CertStatus cert_status) {
+  if (!url.SchemeIsCryptographic())
+    return blink::WebSecurityStyleUnauthenticated;
+
+  // Minor errors don't lower the security style to
+  // WebSecurityStyleAuthenticationBroken.
+  if (net::IsCertStatusError(cert_status) &&
+      !net::IsCertStatusMinorError(cert_status)) {
+    return blink::WebSecurityStyleAuthenticationBroken;
+  }
+
+  return blink::WebSecurityStyleAuthenticated;
+}
 
 // Converts timing data from |load_timing| to the format used by WebKit.
 void PopulateURLLoadTiming(const net::LoadTimingInfo& load_timing,
@@ -158,6 +172,31 @@ net::RequestPriority ConvertWebKitPriorityToNetPriority(
   }
 }
 
+blink::WebReferrerPolicy NetReferrerPolicyToBlinkReferrerPolicy(
+    net::URLRequest::ReferrerPolicy net_policy) {
+  switch (net_policy) {
+    case net::URLRequest::CLEAR_REFERRER_ON_TRANSITION_FROM_SECURE_TO_INSECURE:
+      return blink::WebReferrerPolicyNoReferrerWhenDowngrade;
+    case net::URLRequest::
+        REDUCE_REFERRER_GRANULARITY_ON_TRANSITION_CROSS_ORIGIN:
+      return blink::
+          WebReferrerPolicyNoReferrerWhenDowngradeOriginWhenCrossOrigin;
+    case net::URLRequest::ORIGIN_ONLY_ON_TRANSITION_CROSS_ORIGIN:
+      return blink::WebReferrerPolicyOriginWhenCrossOrigin;
+    case net::URLRequest::NEVER_CLEAR_REFERRER:
+      return blink::WebReferrerPolicyAlways;
+    case net::URLRequest::ORIGIN:
+      return blink::WebReferrerPolicyOrigin;
+    case net::URLRequest::NO_REFERRER:
+      return blink::WebReferrerPolicyNever;
+    case net::URLRequest::MAX_REFERRER_POLICY:
+      NOTREACHED();
+      return blink::WebReferrerPolicyDefault;
+  }
+  NOTREACHED();
+  return blink::WebReferrerPolicyDefault;
+}
+
 // Extracts info from a data scheme URL |url| into |info| and |data|. Returns
 // net::OK if successful. Returns a net error code otherwise.
 int GetInfoFromDataURL(const GURL& url,
@@ -214,18 +253,18 @@ void SetSecurityStyleAndDetails(const GURL& url,
                                 WebURLResponse* response,
                                 bool report_security_info) {
   if (!report_security_info) {
-    response->setSecurityStyle(WebURLResponse::SecurityStyleUnknown);
+    response->setSecurityStyle(blink::WebSecurityStyleUnknown);
     return;
   }
   if (!url.SchemeIsCryptographic()) {
-    response->setSecurityStyle(WebURLResponse::SecurityStyleUnauthenticated);
+    response->setSecurityStyle(blink::WebSecurityStyleUnauthenticated);
     return;
   }
 
   // There are cases where an HTTPS request can come in without security
   // info attached (such as a redirect response).
   if (info.certificate.empty()) {
-    response->setSecurityStyle(WebURLResponse::SecurityStyleUnknown);
+    response->setSecurityStyle(blink::WebSecurityStyleUnknown);
     return;
   }
 
@@ -238,11 +277,17 @@ void SetSecurityStyleAndDetails(const GURL& url,
   const char* cipher;
   const char* mac;
   bool is_aead;
+  bool is_tls13;
   uint16_t cipher_suite =
       net::SSLConnectionStatusToCipherSuite(info.ssl_connection_status);
   net::SSLCipherSuiteToStrings(&key_exchange, &cipher, &mac, &is_aead,
-                               cipher_suite);
-  if (mac == NULL) {
+                               &is_tls13, cipher_suite);
+  if (key_exchange == nullptr) {
+    DCHECK(is_tls13);
+    key_exchange = "";
+  }
+
+  if (mac == nullptr) {
     DCHECK(is_aead);
     mac = "";
   }
@@ -257,30 +302,8 @@ void SetSecurityStyleAndDetails(const GURL& url,
     }
   }
 
-  SecurityStyle security_style = GetSecurityStyleForResource(
-      url, true, info.cert_status);
-
-  blink::WebURLResponse::SecurityStyle security_style_blink =
-      WebURLResponse::SecurityStyleUnknown;
-  switch (security_style) {
-    case SECURITY_STYLE_UNKNOWN:
-      security_style_blink = WebURLResponse::SecurityStyleUnknown;
-      break;
-    case SECURITY_STYLE_UNAUTHENTICATED:
-      security_style_blink = WebURLResponse::SecurityStyleUnauthenticated;
-      break;
-    case SECURITY_STYLE_AUTHENTICATION_BROKEN:
-      security_style_blink = WebURLResponse::SecurityStyleAuthenticationBroken;
-      break;
-    case SECURITY_STYLE_WARNING:
-      security_style_blink = WebURLResponse::SecurityStyleWarning;
-      break;
-    case SECURITY_STYLE_AUTHENTICATED:
-      security_style_blink = WebURLResponse::SecurityStyleAuthenticated;
-      break;
-  }
-
-  response->setSecurityStyle(security_style_blink);
+  response->setSecurityStyle(
+      GetSecurityStyleForResource(url, info.cert_status));
 
   blink::WebURLResponse::SignedCertificateTimestampList sct_list(
       info.signed_certificate_timestamps.size());
@@ -296,7 +319,7 @@ void SetSecurityStyleAndDetails(const GURL& url,
       &san);
   if (!rv) {
     NOTREACHED();
-    response->setSecurityStyle(WebURLResponse::SecurityStyleUnknown);
+    response->setSecurityStyle(blink::WebSecurityStyleUnknown);
     return;
   }
 
@@ -341,7 +364,8 @@ class WebURLLoaderImpl::Context : public base::RefCounted<Context> {
 
   Context(WebURLLoaderImpl* loader,
           ResourceDispatcher* resource_dispatcher,
-          mojom::URLLoaderFactory* factory);
+          mojom::URLLoaderFactory* factory,
+          mojo::AssociatedGroup* associated_group);
 
   WebURLLoaderClient* client() const { return client_; }
   void set_client(WebURLLoaderClient* client) { client_ = client; }
@@ -383,7 +407,6 @@ class WebURLLoaderImpl::Context : public base::RefCounted<Context> {
   WebURLLoaderClient* client_;
   ResourceDispatcher* resource_dispatcher_;
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
-  WebReferrerPolicy referrer_policy_;
   std::unique_ptr<FtpDirectoryListingResponseDelegate> ftp_listing_delegate_;
   std::unique_ptr<StreamOverrideParameters> stream_override_;
   std::unique_ptr<SharedMemoryDataConsumerHandle::Writer> body_stream_writer_;
@@ -391,7 +414,9 @@ class WebURLLoaderImpl::Context : public base::RefCounted<Context> {
   DeferState defers_loading_;
   int request_id_;
 
+  // These are owned by the Blink::Platform singleton.
   mojom::URLLoaderFactory* url_loader_factory_;
+  mojo::AssociatedGroup* associated_group_;
 };
 
 // A thin wrapper class for Context to ensure its lifetime while it is
@@ -424,15 +449,16 @@ class WebURLLoaderImpl::RequestPeerImpl : public RequestPeer {
 
 WebURLLoaderImpl::Context::Context(WebURLLoaderImpl* loader,
                                    ResourceDispatcher* resource_dispatcher,
-                                   mojom::URLLoaderFactory* url_loader_factory)
+                                   mojom::URLLoaderFactory* url_loader_factory,
+                                   mojo::AssociatedGroup* associated_group)
     : loader_(loader),
       client_(NULL),
       resource_dispatcher_(resource_dispatcher),
       task_runner_(base::ThreadTaskRunnerHandle::Get()),
-      referrer_policy_(blink::WebReferrerPolicyDefault),
       defers_loading_(NOT_DEFERRING),
       request_id_(-1),
-      url_loader_factory_(url_loader_factory) {}
+      url_loader_factory_(url_loader_factory),
+      associated_group_(associated_group) {}
 
 void WebURLLoaderImpl::Context::Cancel() {
   TRACE_EVENT_WITH_FLOW0("loading", "WebURLLoaderImpl::Context::Cancel", this,
@@ -529,11 +555,13 @@ void WebURLLoaderImpl::Context::Start(const WebURLRequest& request,
   resource_request->method = method;
   resource_request->url = url;
   resource_request->first_party_for_cookies = request.firstPartyForCookies();
-  resource_request->request_initiator = request.requestorOrigin();
+  resource_request->request_initiator =
+      request.requestorOrigin().isNull()
+          ? base::Optional<url::Origin>()
+          : base::Optional<url::Origin>(request.requestorOrigin());
   resource_request->referrer = referrer_url;
 
-  referrer_policy_ = request.referrerPolicy();
-  resource_request->referrer_policy = referrer_policy_;
+  resource_request->referrer_policy = request.referrerPolicy();
 
   resource_request->headers = GetWebURLRequestHeaders(request);
   resource_request->load_flags = GetLoadFlagsForWebURLRequest(request);
@@ -604,7 +632,7 @@ void WebURLLoaderImpl::Context::Start(const WebURLRequest& request,
       std::move(resource_request), request.requestorID(), task_runner_,
       extra_data->frame_origin(),
       base::MakeUnique<WebURLLoaderImpl::RequestPeerImpl>(this),
-      request.getLoadingIPCType(), url_loader_factory_);
+      request.getLoadingIPCType(), url_loader_factory_, associated_group_);
 
   if (defers_loading_ != NOT_DEFERRING)
     resource_dispatcher_->SetDefersLoading(request_id_, true);
@@ -635,13 +663,11 @@ bool WebURLLoaderImpl::Context::OnReceivedRedirect(
   PopulateURLResponse(request_.url(), info, &response,
                       request_.reportRawHeaders());
 
-  WebURLRequest new_request;
-  PopulateURLRequestForRedirect(
-      request_, redirect_info, referrer_policy_,
+  WebURLRequest new_request = PopulateURLRequestForRedirect(
+      request_, redirect_info,
       info.was_fetched_via_service_worker
           ? blink::WebURLRequest::SkipServiceWorker::None
-          : blink::WebURLRequest::SkipServiceWorker::All,
-      &new_request);
+          : blink::WebURLRequest::SkipServiceWorker::All);
 
   bool follow = client_->willFollowRedirect(loader_, new_request, response);
   if (!follow) {
@@ -989,8 +1015,12 @@ void WebURLLoaderImpl::RequestPeerImpl::OnCompletedRequest(
 // WebURLLoaderImpl -----------------------------------------------------------
 
 WebURLLoaderImpl::WebURLLoaderImpl(ResourceDispatcher* resource_dispatcher,
-                                   mojom::URLLoaderFactory* url_loader_factory)
-    : context_(new Context(this, resource_dispatcher, url_loader_factory)) {}
+                                   mojom::URLLoaderFactory* url_loader_factory,
+                                   mojo::AssociatedGroup* associated_group)
+    : context_(new Context(this,
+                           resource_dispatcher,
+                           url_loader_factory,
+                           associated_group)) {}
 
 WebURLLoaderImpl::~WebURLLoaderImpl() {
   cancel();
@@ -1138,34 +1168,34 @@ void WebURLLoaderImpl::PopulateURLResponse(const GURL& url,
   }
 }
 
-void WebURLLoaderImpl::PopulateURLRequestForRedirect(
+WebURLRequest WebURLLoaderImpl::PopulateURLRequestForRedirect(
     const blink::WebURLRequest& request,
     const net::RedirectInfo& redirect_info,
-    blink::WebReferrerPolicy referrer_policy,
-    blink::WebURLRequest::SkipServiceWorker skip_service_worker,
-    blink::WebURLRequest* new_request) {
+    blink::WebURLRequest::SkipServiceWorker skip_service_worker) {
   // TODO(darin): We lack sufficient information to construct the actual
   // request that resulted from the redirect.
-  new_request->setURL(redirect_info.new_url);
-  new_request->setFirstPartyForCookies(
+  WebURLRequest new_request(redirect_info.new_url);
+  new_request.setFirstPartyForCookies(
       redirect_info.new_first_party_for_cookies);
-  new_request->setDownloadToFile(request.downloadToFile());
-  new_request->setUseStreamOnResponse(request.useStreamOnResponse());
-  new_request->setRequestContext(request.getRequestContext());
-  new_request->setFrameType(request.getFrameType());
-  new_request->setSkipServiceWorker(skip_service_worker);
-  new_request->setShouldResetAppCache(request.shouldResetAppCache());
-  new_request->setFetchRequestMode(request.getFetchRequestMode());
-  new_request->setFetchCredentialsMode(request.getFetchCredentialsMode());
+  new_request.setDownloadToFile(request.downloadToFile());
+  new_request.setUseStreamOnResponse(request.useStreamOnResponse());
+  new_request.setRequestContext(request.getRequestContext());
+  new_request.setFrameType(request.getFrameType());
+  new_request.setSkipServiceWorker(skip_service_worker);
+  new_request.setShouldResetAppCache(request.shouldResetAppCache());
+  new_request.setFetchRequestMode(request.getFetchRequestMode());
+  new_request.setFetchCredentialsMode(request.getFetchCredentialsMode());
 
-  new_request->setHTTPReferrer(WebString::fromUTF8(redirect_info.new_referrer),
-                              referrer_policy);
-  new_request->setPriority(request.getPriority());
+  new_request.setHTTPReferrer(WebString::fromUTF8(redirect_info.new_referrer),
+                               NetReferrerPolicyToBlinkReferrerPolicy(
+                                   redirect_info.new_referrer_policy));
+  new_request.setPriority(request.getPriority());
 
   std::string old_method = request.httpMethod().utf8();
-  new_request->setHTTPMethod(WebString::fromUTF8(redirect_info.new_method));
+  new_request.setHTTPMethod(WebString::fromUTF8(redirect_info.new_method));
   if (redirect_info.new_method == old_method)
-    new_request->setHTTPBody(request.httpBody());
+    new_request.setHTTPBody(request.httpBody());
+  return new_request;
 }
 
 void WebURLLoaderImpl::loadSynchronously(const WebURLRequest& request,
@@ -1223,56 +1253,8 @@ void WebURLLoaderImpl::didChangePriority(WebURLRequest::Priority new_priority,
 }
 
 void WebURLLoaderImpl::setLoadingTaskRunner(
-    blink::WebTaskRunner* loading_task_runner) {
-  context_->SetTaskRunner(loading_task_runner->toSingleThreadTaskRunner());
-}
-
-// This function is implemented here because it uses net functions. it is
-// tested in
-// third_party/WebKit/Source/core/fetch/MultipartImageResourceParserTest.cpp.
-bool WebURLLoaderImpl::ParseMultipartHeadersFromBody(
-    const char* bytes,
-    size_t size,
-    blink::WebURLResponse* response,
-    size_t* end) {
-  int headers_end_pos =
-      net::HttpUtil::LocateEndOfAdditionalHeaders(bytes, size, 0);
-
-  if (headers_end_pos < 0)
-    return false;
-
-  *end = headers_end_pos;
-  // Eat headers and prepend a status line as is required by
-  // HttpResponseHeaders.
-  std::string headers("HTTP/1.1 200 OK\r\n");
-  headers.append(bytes, headers_end_pos);
-
-  scoped_refptr<net::HttpResponseHeaders> response_headers =
-      new net::HttpResponseHeaders(
-          net::HttpUtil::AssembleRawHeaders(headers.c_str(), headers.size()));
-
-  std::string mime_type;
-  response_headers->GetMimeType(&mime_type);
-  response->setMIMEType(WebString::fromUTF8(mime_type));
-
-  std::string charset;
-  response_headers->GetCharset(&charset);
-  response->setTextEncodingName(WebString::fromUTF8(charset));
-
-  // Copy headers listed in kReplaceHeaders to the response.
-  for (size_t i = 0; i < arraysize(kReplaceHeaders); ++i) {
-    std::string name(kReplaceHeaders[i]);
-    std::string value;
-    WebString webStringName(WebString::fromLatin1(name));
-    size_t iterator = 0;
-
-    response->clearHTTPHeaderField(webStringName);
-    while (response_headers->EnumerateHeader(&iterator, name, &value)) {
-      response->addHTTPHeaderField(webStringName,
-                                   WebString::fromLatin1(value));
-    }
-  }
-  return true;
+    base::SingleThreadTaskRunner* loading_task_runner) {
+  context_->SetTaskRunner(loading_task_runner);
 }
 
 }  // namespace content

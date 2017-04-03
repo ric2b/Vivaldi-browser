@@ -16,7 +16,7 @@
 #include "content/renderer/bluetooth/bluetooth_type_converters.h"
 #include "ipc/ipc_message.h"
 #include "mojo/public/cpp/bindings/array.h"
-#include "services/shell/public/cpp/interface_provider.h"
+#include "services/service_manager/public/cpp/interface_provider.h"
 #include "third_party/WebKit/public/platform/modules/bluetooth/WebBluetoothDevice.h"
 #include "third_party/WebKit/public/platform/modules/bluetooth/WebBluetoothDeviceInit.h"
 #include "third_party/WebKit/public/platform/modules/bluetooth/WebBluetoothRemoteGATTCharacteristic.h"
@@ -28,15 +28,16 @@ namespace content {
 
 namespace {
 
-// Blink can't use non-blink mojo enums like blink::mojom::WebBluetoothError, so
-// we pass it as an int32 across the boundary.
-int32_t ToInt32(blink::mojom::WebBluetoothError error) {
-  return static_cast<int32_t>(error);
+// Blink can't use non-blink mojo enums like blink::mojom::WebBluetoothResult,
+// so we pass it as an int32 across the boundary.
+int32_t ToInt32(blink::mojom::WebBluetoothResult result) {
+  return static_cast<int32_t>(result);
 }
 
 }  // namespace
 
-WebBluetoothImpl::WebBluetoothImpl(shell::InterfaceProvider* remote_interfaces)
+WebBluetoothImpl::WebBluetoothImpl(
+    service_manager::InterfaceProvider* remote_interfaces)
     : remote_interfaces_(remote_interfaces), binding_(this) {}
 
 WebBluetoothImpl::~WebBluetoothImpl() {
@@ -169,33 +170,27 @@ void WebBluetoothImpl::registerCharacteristicObject(
 }
 
 void WebBluetoothImpl::RemoteCharacteristicValueChanged(
-    const mojo::String& characteristic_instance_id,
-    mojo::Array<uint8_t> value) {
+    const std::string& characteristic_instance_id,
+    const std::vector<uint8_t>& value) {
   // We post a task so that the event is fired after any pending promises have
   // resolved.
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
       base::Bind(&WebBluetoothImpl::DispatchCharacteristicValueChanged,
-                 base::Unretained(this), characteristic_instance_id,
-                 value.PassStorage()));
+                 base::Unretained(this), characteristic_instance_id, value));
 }
 
 void WebBluetoothImpl::OnRequestDeviceComplete(
     std::unique_ptr<blink::WebBluetoothRequestDeviceCallbacks> callbacks,
-    const blink::mojom::WebBluetoothError error,
+    const blink::mojom::WebBluetoothResult result,
     blink::mojom::WebBluetoothDevicePtr device) {
-  if (error == blink::mojom::WebBluetoothError::SUCCESS) {
-    blink::WebVector<blink::WebString> uuids(device->uuids.size());
-    for (size_t i = 0; i < device->uuids.size(); ++i)
-      uuids[i] = blink::WebString::fromUTF8(device->uuids[i]);
-
+  if (result == blink::mojom::WebBluetoothResult::SUCCESS) {
     callbacks->onSuccess(base::MakeUnique<blink::WebBluetoothDeviceInit>(
         blink::WebString::fromUTF8(device->id.str()),
-        device->name.is_null() ? blink::WebString()
-                               : blink::WebString::fromUTF8(device->name),
-        uuids));
+        device->name ? blink::WebString::fromUTF8(device->name.value())
+                     : blink::WebString()));
   } else {
-    callbacks->onError(ToInt32(error));
+    callbacks->onError(ToInt32(result));
   }
 }
 
@@ -215,90 +210,93 @@ void WebBluetoothImpl::GattServerDisconnected(
 void WebBluetoothImpl::OnConnectComplete(
     std::unique_ptr<blink::WebBluetoothRemoteGATTServerConnectCallbacks>
         callbacks,
-    blink::mojom::WebBluetoothError error) {
-  if (error == blink::mojom::WebBluetoothError::SUCCESS) {
+    blink::mojom::WebBluetoothResult result) {
+  if (result == blink::mojom::WebBluetoothResult::SUCCESS) {
     callbacks->onSuccess();
   } else {
-    callbacks->onError(ToInt32(error));
+    callbacks->onError(ToInt32(result));
   }
 }
 
 void WebBluetoothImpl::OnGetPrimaryServicesComplete(
     const blink::WebString& device_id,
     std::unique_ptr<blink::WebBluetoothGetPrimaryServicesCallbacks> callbacks,
-    blink::mojom::WebBluetoothError error,
-    mojo::Array<blink::mojom::WebBluetoothRemoteGATTServicePtr> services) {
-  if (error == blink::mojom::WebBluetoothError::SUCCESS) {
+    blink::mojom::WebBluetoothResult result,
+    base::Optional<std::vector<blink::mojom::WebBluetoothRemoteGATTServicePtr>>
+        services) {
+  if (result == blink::mojom::WebBluetoothResult::SUCCESS) {
+    DCHECK(services);
     // TODO(dcheng): This WebVector should use smart pointers.
     blink::WebVector<blink::WebBluetoothRemoteGATTService*> promise_services(
-        services.size());
-
-    for (size_t i = 0; i < services.size(); i++) {
+        services->size());
+    for (size_t i = 0; i < services->size(); i++) {
       promise_services[i] = new blink::WebBluetoothRemoteGATTService(
-          blink::WebString::fromUTF8(services[i]->instance_id),
-          blink::WebString::fromUTF8(services[i]->uuid), true /* isPrimary */,
-          device_id);
+          blink::WebString::fromUTF8(services.value()[i]->instance_id),
+          blink::WebString::fromUTF8(services.value()[i]->uuid),
+          true /* isPrimary */, device_id);
     }
     callbacks->onSuccess(promise_services);
   } else {
-    callbacks->onError(ToInt32(error));
+    callbacks->onError(ToInt32(result));
   }
 }
 
 void WebBluetoothImpl::OnGetCharacteristicsComplete(
     const blink::WebString& service_instance_id,
     std::unique_ptr<blink::WebBluetoothGetCharacteristicsCallbacks> callbacks,
-    blink::mojom::WebBluetoothError error,
-    mojo::Array<blink::mojom::WebBluetoothRemoteGATTCharacteristicPtr>
+    blink::mojom::WebBluetoothResult result,
+    base::Optional<
+        std::vector<blink::mojom::WebBluetoothRemoteGATTCharacteristicPtr>>
         characteristics) {
-  if (error == blink::mojom::WebBluetoothError::SUCCESS) {
+  if (result == blink::mojom::WebBluetoothResult::SUCCESS) {
+    DCHECK(characteristics);
     // TODO(dcheng): This WebVector should use smart pointers.
     blink::WebVector<blink::WebBluetoothRemoteGATTCharacteristicInit*>
-        promise_characteristics(characteristics.size());
-
-    for (size_t i = 0; i < characteristics.size(); i++) {
+        promise_characteristics(characteristics->size());
+    for (size_t i = 0; i < characteristics->size(); i++) {
       promise_characteristics[i] =
           new blink::WebBluetoothRemoteGATTCharacteristicInit(
-              service_instance_id,
-              blink::WebString::fromUTF8(characteristics[i]->instance_id),
-              blink::WebString::fromUTF8(characteristics[i]->uuid),
-              characteristics[i]->properties);
+              service_instance_id, blink::WebString::fromUTF8(
+                                       characteristics.value()[i]->instance_id),
+              blink::WebString::fromUTF8(characteristics.value()[i]->uuid),
+              characteristics.value()[i]->properties);
     }
     callbacks->onSuccess(promise_characteristics);
   } else {
-    callbacks->onError(ToInt32(error));
+    callbacks->onError(ToInt32(result));
   }
 }
 
 void WebBluetoothImpl::OnReadValueComplete(
     std::unique_ptr<blink::WebBluetoothReadValueCallbacks> callbacks,
-    blink::mojom::WebBluetoothError error,
-    mojo::Array<uint8_t> value) {
-  if (error == blink::mojom::WebBluetoothError::SUCCESS) {
-    callbacks->onSuccess(value.PassStorage());
+    blink::mojom::WebBluetoothResult result,
+    const base::Optional<std::vector<uint8_t>>& value) {
+  if (result == blink::mojom::WebBluetoothResult::SUCCESS) {
+    DCHECK(value);
+    callbacks->onSuccess(value.value());
   } else {
-    callbacks->onError(ToInt32(error));
+    callbacks->onError(ToInt32(result));
   }
 }
 
 void WebBluetoothImpl::OnWriteValueComplete(
     const blink::WebVector<uint8_t>& value,
     std::unique_ptr<blink::WebBluetoothWriteValueCallbacks> callbacks,
-    blink::mojom::WebBluetoothError error) {
-  if (error == blink::mojom::WebBluetoothError::SUCCESS) {
+    blink::mojom::WebBluetoothResult result) {
+  if (result == blink::mojom::WebBluetoothResult::SUCCESS) {
     callbacks->onSuccess(value);
   } else {
-    callbacks->onError(ToInt32(error));
+    callbacks->onError(ToInt32(result));
   }
 }
 
 void WebBluetoothImpl::OnStartNotificationsComplete(
     std::unique_ptr<blink::WebBluetoothNotificationsCallbacks> callbacks,
-    blink::mojom::WebBluetoothError error) {
-  if (error == blink::mojom::WebBluetoothError::SUCCESS) {
+    blink::mojom::WebBluetoothResult result) {
+  if (result == blink::mojom::WebBluetoothResult::SUCCESS) {
     callbacks->onSuccess();
   } else {
-    callbacks->onError(ToInt32(error));
+    callbacks->onError(ToInt32(result));
   }
 }
 

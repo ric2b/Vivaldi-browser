@@ -38,11 +38,8 @@
 #include "../platform/WebString.h"
 #include "../platform/WebURL.h"
 #include "WebDragStatus.h"
-#include "WebWidget.h"
+#include "WebInputMethodController.h"
 #include <v8.h>
-
-struct NPObject;
-struct _NPP;
 
 namespace blink {
 
@@ -188,13 +185,16 @@ class WebPlugin {
   // Confirms an ongoing composition; holds or moves selections accroding to
   // selectionBehavior.
   virtual bool finishComposingText(
-      WebWidget::ConfirmCompositionBehavior selectionBehavior) {
+      WebInputMethodController::ConfirmCompositionBehavior selectionBehavior) {
     return false;
   }
 
   // Deletes the current selection plus the specified number of characters
   // before and after the selection or caret.
   virtual void extendSelectionAndDelete(int before, int after) {}
+  // Deletes text before and after the current cursor position, excluding the
+  // selection.
+  virtual void deleteSurroundingText(int before, int after) {}
   // If the given position is over a link, returns the absolute url.
   // Otherwise an empty url is returned.
   virtual WebURL linkAtPosition(const WebPoint& position) const {

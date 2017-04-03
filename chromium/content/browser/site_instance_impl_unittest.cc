@@ -165,7 +165,7 @@ TEST_F(SiteInstanceTest, SiteInstanceDestructor) {
   EXPECT_EQ(0, browser_client()->GetAndClearSiteInstanceDeleteCount());
 
   NavigationEntryImpl* e1 = new NavigationEntryImpl(
-      instance, 0, url, Referrer(), base::string16(), ui::PAGE_TRANSITION_LINK,
+      instance, url, Referrer(), base::string16(), ui::PAGE_TRANSITION_LINK,
       false);
 
   // Redundantly setting e1's SiteInstance shouldn't affect the ref count.
@@ -175,7 +175,7 @@ TEST_F(SiteInstanceTest, SiteInstanceDestructor) {
 
   // Add a second reference
   NavigationEntryImpl* e2 = new NavigationEntryImpl(
-      instance, 0, url, Referrer(), base::string16(), ui::PAGE_TRANSITION_LINK,
+      instance, url, Referrer(), base::string16(), ui::PAGE_TRANSITION_LINK,
       false);
 
   instance = nullptr;
@@ -220,7 +220,7 @@ TEST_F(SiteInstanceTest, CloneNavigationEntry) {
 
   std::unique_ptr<NavigationEntryImpl> e1 =
       base::WrapUnique(new NavigationEntryImpl(
-          SiteInstanceImpl::Create(nullptr), 0, url, Referrer(),
+          SiteInstanceImpl::Create(nullptr), url, Referrer(),
           base::string16(), ui::PAGE_TRANSITION_LINK, false));
 
   // Clone the entry.
@@ -813,8 +813,8 @@ TEST_F(SiteInstanceTest, DefaultSubframeSiteInstance) {
 
   EXPECT_NE(main_instance, subframe_instance);
   EXPECT_EQ(subframe_instance, main_instance->GetDefaultSubframeSiteInstance());
-  EXPECT_FALSE(main_instance->is_default_subframe_site_instance());
-  EXPECT_TRUE(subframe_instance->is_default_subframe_site_instance());
+  EXPECT_FALSE(main_instance->IsDefaultSubframeSiteInstance());
+  EXPECT_TRUE(subframe_instance->IsDefaultSubframeSiteInstance());
 
   EXPECT_EQ(0, browser_client()->GetAndClearSiteInstanceDeleteCount());
   EXPECT_EQ(0, browser_client()->GetAndClearBrowsingInstanceDeleteCount());
@@ -828,8 +828,8 @@ TEST_F(SiteInstanceTest, DefaultSubframeSiteInstance) {
   // SiteInstance with a different ID from the original.
   subframe_instance = main_instance->GetDefaultSubframeSiteInstance();
   EXPECT_NE(subframe_instance->GetId(), subframe_instance_id);
-  EXPECT_FALSE(main_instance->is_default_subframe_site_instance());
-  EXPECT_TRUE(subframe_instance->is_default_subframe_site_instance());
+  EXPECT_FALSE(main_instance->IsDefaultSubframeSiteInstance());
+  EXPECT_TRUE(subframe_instance->IsDefaultSubframeSiteInstance());
   EXPECT_EQ(subframe_instance->GetDefaultSubframeSiteInstance(),
             subframe_instance);
   EXPECT_EQ(0, browser_client()->GetAndClearSiteInstanceDeleteCount());

@@ -11,12 +11,10 @@
 
 #include "ash/ash_export.h"
 #include "ash/common/login_status.h"
-#include "ash/common/system/volume_control_delegate.h"
 #include "base/callback_forward.h"
 #include "base/files/file_path.h"
 #include "base/i18n/time_formatting.h"
 #include "base/strings/string16.h"
-#include "ui/gfx/image/image_skia.h"
 
 class AccountId;
 
@@ -25,36 +23,24 @@ class TimeDelta;
 class TimeTicks;
 }
 
+namespace device {
+enum class BluetoothDeviceType;
+}
+
 namespace ash {
 struct IMEInfo;
 struct IMEPropertyInfo;
 
 class CustodianInfoTrayObserver;
-class ShutdownPolicyObserver;
 class SystemTray;
 class SystemTrayItem;
 
 using IMEInfoList = std::vector<IMEInfo>;
 using IMEPropertyInfoList = std::vector<IMEPropertyInfo>;
 
-struct ASH_EXPORT NetworkIconInfo {
-  NetworkIconInfo();
-  ~NetworkIconInfo();
-
-  bool highlight() const { return connected || connecting; }
-
-  bool connecting;
-  bool connected;
-  bool tray_icon_visible;
-  gfx::ImageSkia image;
-  base::string16 name;
-  base::string16 description;
-  std::string service_path;
-  bool is_cellular;
-};
-
 struct ASH_EXPORT BluetoothDeviceInfo {
   BluetoothDeviceInfo();
+  BluetoothDeviceInfo(const BluetoothDeviceInfo& other);
   ~BluetoothDeviceInfo();
 
   std::string address;
@@ -62,6 +48,7 @@ struct ASH_EXPORT BluetoothDeviceInfo {
   bool connected;
   bool connecting;
   bool paired;
+  device::BluetoothDeviceType device_type;
 };
 
 using BluetoothDeviceList = std::vector<BluetoothDeviceInfo>;
@@ -88,14 +75,12 @@ class CastConfigDelegate;
 class NetworkingConfigDelegate;
 class VPNDelegate;
 
-using RebootOnShutdownCallback = base::Callback<void(bool)>;
-
 // SystemTrayDelegate is intended for delegating tasks in the System Tray to the
 // application (e.g. Chrome). These tasks should be limited to application
 // (browser) specific tasks. For non application specific tasks, where possible,
 // components/, chromeos/, device/, etc., code should be used directly. If more
 // than one related method is being added, consider adding an additional
-// specific delegate (e.g. VolumeControlDelegate).
+// specific delegate (e.g. VPNDelegate).
 //
 // These methods should all have trivial default implementations for platforms
 // that do not implement the method (e.g. return false or nullptr). This
@@ -115,6 +100,10 @@ class ASH_EXPORT SystemTrayDelegate {
 
   // Returns the domain that manages the device, if it is enterprise-enrolled.
   virtual std::string GetEnterpriseDomain() const;
+
+  // Returns the realm that manages the device, if it is enterprise enrolled
+  // with Active Directory and joined the realm (Active Directory domain).
+  virtual std::string GetEnterpriseRealm() const;
 
   // Returns notification for enterprise enrolled devices.
   virtual base::string16 GetEnterpriseMessage() const;
@@ -142,29 +131,16 @@ class ASH_EXPORT SystemTrayDelegate {
   virtual void GetSystemUpdateInfo(UpdateInfo* info) const;
 
   // Returns true if settings menu item should appear.
-  virtual bool ShouldShowSettings();
+  virtual bool ShouldShowSettings() const;
 
-  // Shows the dialog to set system time, date, and timezone.
-  virtual void ShowSetTimeDialog();
-
-  // Returns true if the notification for the display configuration change
-  // should appear.
-  virtual bool ShouldShowDisplayNotification();
+  // Returns true if notification tray should appear.
+  virtual bool ShouldShowNotificationTray() const;
 
   // Shows information about enterprise enrolled devices.
   virtual void ShowEnterpriseInfo();
 
   // Shows login UI to add other users to this session.
   virtual void ShowUserLogin();
-
-  // Attempts to sign out the user.
-  virtual void SignOut();
-
-  // Attempts to restart the system for update.
-  virtual void RequestRestartForUpdate();
-
-  // Attempts to shut down the system.
-  virtual void RequestShutdown();
 
   // Returns a list of available bluetooth devices.
   virtual void GetAvailableBluetoothDevices(BluetoothDeviceList* devices);
@@ -179,7 +155,7 @@ class ASH_EXPORT SystemTrayDelegate {
   virtual void ConnectToBluetoothDevice(const std::string& address);
 
   // Returns true if bluetooth adapter is discovering bluetooth devices.
-  virtual bool IsBluetoothDiscovering();
+  virtual bool IsBluetoothDiscovering() const;
 
   // Returns the currently selected IME.
   virtual void GetCurrentIME(IMEInfo* info);
@@ -202,10 +178,6 @@ class ASH_EXPORT SystemTrayDelegate {
   // Toggles bluetooth.
   virtual void ToggleBluetooth();
 
-  // Shows UI to connect to an unlisted network of type |type|. On Chrome OS
-  // |type| corresponds to a Shill network type.
-  virtual void ShowOtherNetworkDialog(const std::string& type);
-
   // Returns whether bluetooth capability is available.
   virtual bool GetBluetoothAvailable();
 
@@ -221,13 +193,6 @@ class ASH_EXPORT SystemTrayDelegate {
   // Returns NetworkingConfigDelegate. May return nullptr.
   virtual NetworkingConfigDelegate* GetNetworkingConfigDelegate() const;
 
-  // Returns VolumeControlDelegate. May return nullptr.
-  virtual VolumeControlDelegate* GetVolumeControlDelegate() const;
-
-  // Sets the VolumeControlDelegate.
-  virtual void SetVolumeControlDelegate(
-      std::unique_ptr<VolumeControlDelegate> delegate);
-
   // Retrieves the session start time. Returns |false| if the time is not set.
   virtual bool GetSessionStartTime(base::TimeTicks* session_start_time);
 
@@ -235,6 +200,8 @@ class ASH_EXPORT SystemTrayDelegate {
   virtual bool GetSessionLengthLimit(base::TimeDelta* session_length_limit);
 
   // Get the system tray menu size in pixels (dependent on the language).
+  // This is not used in material design and should be removed during pre-MD
+  // code cleanup. See https://crbug.com/614453.
   virtual int GetSystemTrayMenuWidth();
 
   // The active user has been changed. This will be called when the UI is ready
@@ -251,18 +218,6 @@ class ASH_EXPORT SystemTrayDelegate {
 
   virtual void RemoveCustodianInfoTrayObserver(
       CustodianInfoTrayObserver* observer);
-
-  // Adds an observer whose |OnShutdownPolicyChanged| function is called when
-  // the |DeviceRebootOnShutdown| policy changes. If this policy is set to
-  // true, a device cannot be shut down anymore but only rebooted.
-  virtual void AddShutdownPolicyObserver(ShutdownPolicyObserver* observer);
-
-  virtual void RemoveShutdownPolicyObserver(ShutdownPolicyObserver* observer);
-
-  // Determines whether the device is automatically rebooted when shut down as
-  // specified by the device policy |DeviceRebootOnShutdown|. This function
-  // asynchronously calls |callback| once a trusted policy becomes available.
-  virtual void ShouldRebootOnShutdown(const RebootOnShutdownCallback& callback);
 
   // Returns VPNDelegate. May return nullptr.
   virtual VPNDelegate* GetVPNDelegate() const;

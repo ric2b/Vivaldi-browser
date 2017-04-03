@@ -34,21 +34,9 @@ void TestSink::Close() {
   NOTIMPLEMENTED();
 }
 
-base::ProcessId TestSink::GetPeerPID() const {
-  NOTIMPLEMENTED();
-  return base::ProcessId();
-}
-
-base::ProcessId TestSink::GetSelfPID() const {
-  NOTIMPLEMENTED();
-  return base::ProcessId();
-}
-
 bool TestSink::OnMessageReceived(const Message& msg) {
-  base::ObserverListBase<Listener>::Iterator it(&filter_list_);
-  Listener* observer;
-  while ((observer = it.GetNext()) != NULL) {
-    if (observer->OnMessageReceived(msg))
+  for (auto& observer : filter_list_) {
+    if (observer.OnMessageReceived(msg))
       return true;
   }
 
@@ -96,19 +84,5 @@ void TestSink::AddFilter(Listener* filter) {
 void TestSink::RemoveFilter(Listener* filter) {
   filter_list_.RemoveObserver(filter);
 }
-
-#if defined(OS_POSIX) && !defined(OS_NACL)
-
-int TestSink::GetClientFileDescriptor() const {
-  NOTREACHED();
-  return -1;
-}
-
-base::ScopedFD TestSink::TakeClientFileDescriptor() {
-  NOTREACHED();
-  return base::ScopedFD();
-}
-
-#endif  // defined(OS_POSIX) && !defined(OS_NACL)
 
 }  // namespace IPC

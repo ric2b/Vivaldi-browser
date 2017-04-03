@@ -1,0 +1,93 @@
+// Copyright 2016 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#include "core/layout/ng/layout_ng_block_flow.h"
+#include "core/layout/ng/ng_constraint_space_builder.h"
+#include "core/layout/ng/ng_inline_box.h"
+#include "core/layout/ng/ng_inline_layout_algorithm.h"
+#include "platform/testing/RuntimeEnabledFeaturesTestHelpers.h"
+#include "platform/testing/UnitTestHelpers.h"
+#include "web/WebViewImpl.h"
+#include "web/tests/sim/SimCompositor.h"
+#include "web/tests/sim/SimDisplayItemList.h"
+#include "web/tests/sim/SimRequest.h"
+#include "web/tests/sim/SimTest.h"
+#include "wtf/CurrentTime.h"
+#include "wtf/text/CharacterNames.h"
+
+namespace blink {
+
+class NGInlineLayoutTest : public SimTest {
+ public:
+  NGConstraintSpace* constraintSpaceForElement(LayoutNGBlockFlow* blockFlow) {
+    NGConstraintSpaceBuilder builder(
+        FromPlatformWritingMode(blockFlow->style()->getWritingMode()));
+    builder.SetAvailableSize(NGLogicalSize(LayoutUnit(), LayoutUnit()));
+    builder.SetPercentageResolutionSize(
+        NGLogicalSize(LayoutUnit(), LayoutUnit()));
+    NGConstraintSpace* constraintSpace = new NGConstraintSpace(
+        FromPlatformWritingMode(blockFlow->style()->getWritingMode()),
+        blockFlow->style()->direction(), builder.ToConstraintSpace());
+    return constraintSpace;
+  }
+};
+
+TEST_F(NGInlineLayoutTest, BlockWithSingleTextNode) {
+  RuntimeEnabledFeatures::setLayoutNGEnabled(true);
+  RuntimeEnabledFeatures::setLayoutNGInlineEnabled(true);
+
+  SimRequest mainResource("https://example.com/", "text/html");
+  loadURL("https://example.com/");
+  mainResource.complete(
+      "<div id=\"target\">Hello <strong>World</strong>!</div>");
+
+  compositor().beginFrame();
+  ASSERT_FALSE(compositor().needsBeginFrame());
+
+  Element* target = document().getElementById("target");
+  LayoutNGBlockFlow* blockFlow = toLayoutNGBlockFlow(target->layoutObject());
+  NGConstraintSpace* constraintSpace = constraintSpaceForElement(blockFlow);
+
+  NGInlineBox* inlineBox =
+      new NGInlineBox(blockFlow->firstChild(), blockFlow->mutableStyle());
+  NGInlineLayoutAlgorithm* layoutAlgorithm = new NGInlineLayoutAlgorithm(
+      blockFlow->style(), inlineBox, constraintSpace);
+
+  String expectedText("Hello World!");
+  EXPECT_EQ(expectedText, inlineBox->Text(0, 12));
+
+  NGPhysicalFragmentBase* fragment;
+  layoutAlgorithm->Layout(nullptr, &fragment, nullptr);
+}
+
+TEST_F(NGInlineLayoutTest, BlockWithTextAndAtomicInline) {
+  RuntimeEnabledFeatures::setLayoutNGEnabled(true);
+  RuntimeEnabledFeatures::setLayoutNGInlineEnabled(true);
+
+  SimRequest mainResource("https://example.com/", "text/html");
+  loadURL("https://example.com/");
+  mainResource.complete("<div id=\"target\">Hello <img>.</div>");
+
+  compositor().beginFrame();
+  ASSERT_FALSE(compositor().needsBeginFrame());
+
+  Element* target = document().getElementById("target");
+  LayoutNGBlockFlow* blockFlow = toLayoutNGBlockFlow(target->layoutObject());
+  NGConstraintSpace* constraintSpace = constraintSpaceForElement(blockFlow);
+
+  NGInlineBox* inlineBox =
+      new NGInlineBox(blockFlow->firstChild(), blockFlow->mutableStyle());
+  NGInlineLayoutAlgorithm* layoutAlgorithm = new NGInlineLayoutAlgorithm(
+      blockFlow->style(), inlineBox, constraintSpace);
+
+  String expectedText("Hello ");
+  expectedText.append(objectReplacementCharacter);
+  expectedText.append(".");
+  EXPECT_EQ(expectedText, inlineBox->Text(0, 8));
+
+  NGPhysicalFragmentBase* fragment;
+  layoutAlgorithm->Layout(nullptr, &fragment, nullptr);
+}
+
+}  // namespace blink

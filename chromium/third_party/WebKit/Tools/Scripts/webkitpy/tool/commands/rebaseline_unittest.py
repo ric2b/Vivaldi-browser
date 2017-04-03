@@ -12,14 +12,13 @@ from webkitpy.common.system.outputcapture import OutputCapture
 from webkitpy.layout_tests.builder_list import BuilderList
 from webkitpy.tool.commands.rebaseline import (
     AbstractParallelRebaselineCommand, CopyExistingBaselinesInternal,
-    Rebaseline, RebaselineExpectations, RebaselineJson, RebaselineTest, ChangeSet
+    Rebaseline, RebaselineExpectations, RebaselineJson, RebaselineTest
 )
 from webkitpy.tool.mock_tool import MockWebKitPatch
 
 
 # pylint: disable=protected-access
 class BaseTestCase(unittest.TestCase):
-    MOCK_WEB_RESULT = 'MOCK Web result, convert 404 to None=True'
     WEB_PREFIX = 'https://storage.googleapis.com/chromium-layout-test-archives/MOCK_Mac10_11/results/layout-test-results'
 
     command_constructor = None
@@ -148,6 +147,9 @@ class TestCopyExistingBaselinesInternal(BaseTestCase):
                 port.layout_tests_dir(),
                 'platform/test-mac-mac10.10/failures/expected/image-expected.txt')),
             'original mac10.11 result')
+
+    def test_copying_overwritten_baseline_to_multiple_locations(self):
+        self.tool.executive = MockExecutive2()
 
     def test_copy_baseline_win7_to_linux_trusty(self):
         port = self.tool.port_factory.get('test-win-win7')
@@ -293,22 +295,7 @@ class TestRebaselineTest(BaseTestCase):
         OutputCapture().assert_outputs(
             self, self.command._rebaseline_test_and_update_expectations, args=[self.options(suffixes='png')],
             expected_logs="Cannot rebaseline image result for reftest: userscripts/another-test.html\n")
-        self.assertDictEqual(self.command._scm_changes.to_dict(), {'add': [], 'remove-lines': [], "delete": []})
-
-    def test_rebaseline_test_and_print_scm_changes(self):
-        self.command._print_scm_changes = True
-        self.command._scm_changes = ChangeSet()
-        self.tool._scm.exists = lambda x: False
-
-        self.command._rebaseline_test("MOCK Trusty", "userscripts/another-test.html", "txt", None)
-
-        self.assertDictEqual(
-            self.command._scm_changes.to_dict(),
-            {
-                'add': ['/test.checkout/LayoutTests/platform/test-linux-trusty/userscripts/another-test-expected.txt'],
-                'delete': [],
-                'remove-lines': []
-            })
+        self.assertDictEqual(self.command.expectation_line_changes.to_dict(), {'remove-lines': []})
 
     def test_rebaseline_test_internal_with_port_that_lacks_buildbot(self):
         self.tool.executive = MockExecutive2()
@@ -344,7 +331,7 @@ class TestRebaselineTest(BaseTestCase):
         self.assertFalse(self.tool.filesystem.exists(self.tool.filesystem.join(
             port.layout_tests_dir(), 'platform/test-win-win7/failures/expected/image-expected.txt')))
         self.assertMultiLineEqual(
-            out, '{"add": [], "remove-lines": [{"test": "failures/expected/image.html", "builder": "MOCK Win10"}], "delete": []}\n')
+            out, '{"remove-lines": [{"test": "failures/expected/image.html", "builder": "MOCK Win10"}]}\n')
 
 
 class TestAbstractParallelRebaselineCommand(BaseTestCase):
@@ -354,6 +341,39 @@ class TestAbstractParallelRebaselineCommand(BaseTestCase):
         builders_to_fetch = self.command._builders_to_fetch_from(
             ["MOCK Win10", "MOCK Win7 (dbg)(1)", "MOCK Win7 (dbg)(2)", "MOCK Win7"])
         self.assertEqual(builders_to_fetch, ["MOCK Win7", "MOCK Win10"])
+
+    def test_all_baseline_paths(self):
+        test_prefix_list = {
+            'passes/text.html': {
+                Build('MOCK Win7'): ('txt', 'png'),
+                Build('MOCK Win10'): ('txt',),
+            }
+        }
+        # pylint: disable=protected-access
+        baseline_paths = self.command._all_baseline_paths(test_prefix_list)
+        self.assertEqual(baseline_paths, [
+            '/test.checkout/LayoutTests/passes/text-expected.png',
+            '/test.checkout/LayoutTests/passes/text-expected.txt',
+            '/test.checkout/LayoutTests/platform/test-win-win10/passes/text-expected.txt',
+            '/test.checkout/LayoutTests/platform/test-win-win7/passes/text-expected.png',
+            '/test.checkout/LayoutTests/platform/test-win-win7/passes/text-expected.txt',
+        ])
+
+    def test_remove_all_pass_testharness_baselines(self):
+        self.tool.filesystem.write_text_file(
+            '/test.checkout/LayoutTests/passes/text-expected.txt',
+            ('This is a testharness.js-based test.\n'
+             'PASS: foo\n'
+             'Harness: the test ran to completion.\n'))
+        test_prefix_list = {
+            'passes/text.html': {
+                Build('MOCK Win7'): ('txt', 'png'),
+                Build('MOCK Win10'): ('txt',),
+            }
+        }
+        self.command._remove_all_pass_testharness_baselines(test_prefix_list)
+        self.assertFalse(self.tool.filesystem.exists(
+            '/test.checkout/LayoutTests/passes/text-expected.txt'))
 
 
 class TestRebaselineJson(BaseTestCase):
@@ -408,7 +428,7 @@ class TestRebaselineJson(BaseTestCase):
                   '--builder', 'MOCK Win7', '--test', 'userscripts/first-test.html', '--verbose']],
                 [['python', 'echo', 'rebaseline-test-internal', '--suffixes', 'txt,png',
                   '--builder', 'MOCK Win7', '--test', 'userscripts/first-test.html', '--verbose']],
-                [['python', 'echo', 'optimize-baselines', '--no-modify-scm', '--suffixes', 'txt,png',
+                [['python', 'echo', 'optimize-baselines', '--suffixes', 'txt,png',
                   'userscripts/first-test.html', '--verbose']]
             ])
 
@@ -426,7 +446,7 @@ class TestRebaselineJson(BaseTestCase):
                   '--builder', 'MOCK Win7 (dbg)', '--test', 'userscripts/first-test.html', '--verbose']],
                 [['python', 'echo', 'rebaseline-test-internal', '--suffixes', 'txt,png', '--builder',
                   'MOCK Win7 (dbg)', '--test', 'userscripts/first-test.html', '--verbose']],
-                [['python', 'echo', 'optimize-baselines', '--no-modify-scm', '--suffixes', 'txt,png',
+                [['python', 'echo', 'optimize-baselines', '--suffixes', 'txt,png',
                   'userscripts/first-test.html', '--verbose']]
             ])
 
@@ -906,7 +926,7 @@ class MockLineRemovingExecutive(MockExecutive):
         for cmd_line, cwd in commands:
             out = self.run_command(cmd_line, cwd=cwd)
             if 'rebaseline-test-internal' in cmd_line:
-                out = '{"add": [], "remove-lines": [{"test": "%s", "builder": "%s"}], "delete": []}\n' % (cmd_line[8], cmd_line[6])
+                out = '{"remove-lines": [{"test": "%s", "builder": "%s"}]}\n' % (cmd_line[8], cmd_line[6])
             command_outputs.append([0, out, ''])
 
         new_calls = self.calls[num_previous_calls:]

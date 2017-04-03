@@ -10,7 +10,7 @@
 #include "base/macros.h"
 #include "cc/base/completion_event.h"
 #include "cc/base/delayed_unique_notifier.h"
-#include "cc/input/top_controls_state.h"
+#include "cc/input/browser_controls_state.h"
 #include "cc/scheduler/scheduler.h"
 #include "cc/trees/channel_impl.h"
 #include "cc/trees/layer_tree_host_impl.h"
@@ -30,9 +30,9 @@ class CC_EXPORT ProxyImpl : public NON_EXPORTED_BASE(LayerTreeHostImplClient),
   ~ProxyImpl() override;
 
   // Virtual for testing.
-  void UpdateTopControlsStateOnImpl(TopControlsState constraints,
-                                    TopControlsState current,
-                                    bool animate);
+  void UpdateBrowserControlsStateOnImpl(BrowserControlsState constraints,
+                                        BrowserControlsState current,
+                                        bool animate);
   void InitializeCompositorFrameSinkOnImpl(
       CompositorFrameSink* compositor_frame_sink);
   void InitializeMutatorOnImpl(std::unique_ptr<LayerTreeMutator> mutator);
@@ -68,7 +68,7 @@ class CC_EXPORT ProxyImpl : public NON_EXPORTED_BASE(LayerTreeHostImplClient),
   // LayerTreeHostImplClient implementation
   void DidLoseCompositorFrameSinkOnImplThread() override;
   void SetBeginFrameSource(BeginFrameSource* source) override;
-  void DidSwapBuffersCompleteOnImplThread() override;
+  void DidReceiveCompositorFrameAckOnImplThread() override;
   void OnCanDrawStateChanged(bool can_draw) override;
   void NotifyReadyToActivate() override;
   void NotifyReadyToDraw() override;
@@ -80,7 +80,7 @@ class CC_EXPORT ProxyImpl : public NON_EXPORTED_BASE(LayerTreeHostImplClient),
   void SetNeedsCommitOnImplThread() override;
   void SetVideoNeedsBeginFrames(bool needs_begin_frames) override;
   void PostAnimationEventsToMainThreadOnImplThread(
-      std::unique_ptr<AnimationEvents> events) override;
+      std::unique_ptr<MutatorEvents> events) override;
   bool IsInsideDraw() override;
   void RenewTreePriority() override;
   void PostDelayedAnimationTaskOnImplThread(const base::Closure& task,
@@ -95,8 +95,8 @@ class CC_EXPORT ProxyImpl : public NON_EXPORTED_BASE(LayerTreeHostImplClient),
   void WillBeginImplFrame(const BeginFrameArgs& args) override;
   void DidFinishImplFrame() override;
   void ScheduledActionSendBeginMainFrame(const BeginFrameArgs& args) override;
-  DrawResult ScheduledActionDrawAndSwapIfPossible() override;
-  DrawResult ScheduledActionDrawAndSwapForced() override;
+  DrawResult ScheduledActionDrawIfPossible() override;
+  DrawResult ScheduledActionDrawForced() override;
   void ScheduledActionCommit() override;
   void ScheduledActionActivateSyncTree() override;
   void ScheduledActionBeginCompositorFrameSinkCreation() override;
@@ -104,7 +104,7 @@ class CC_EXPORT ProxyImpl : public NON_EXPORTED_BASE(LayerTreeHostImplClient),
   void ScheduledActionInvalidateCompositorFrameSink() override;
   void SendBeginMainFrameNotExpectedSoon() override;
 
-  DrawResult DrawAndSwapInternal(bool forced_draw);
+  DrawResult DrawInternal(bool forced_draw);
 
   bool IsImplThread() const;
   bool IsMainThreadBlocked() const;

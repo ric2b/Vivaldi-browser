@@ -44,6 +44,10 @@
  * additional IP rights grant found at http://polymer.github.io/PATENTS.txt.
  */
 
+if (Math.random() < 1) {
+  throw "polymer externs should not be executed";
+}
+
 /**
  * @param {!{is: string}} descriptor The Polymer descriptor of the element.
  * @see https://github.com/Polymer/polymer/blob/0.8-preview/PRIMER.md#custom-element-registration
@@ -615,6 +619,13 @@ PolymerElement.prototype.importHref = function(href, onload, onerror) {};
 PolymerElement.prototype.isLightDescendant = function(node) {};
 
 /**
+ * Checks whether an element is in this element's local DOM tree.
+ * @param {?Node} node The element to be checked.
+ * @return {boolean} true if node is in this element's local DOM tree.
+ */
+PolymerElement.prototype.isLocalDescendant = function(node) {};
+
+/**
  * Delete an element from an array.
  * @param {!Array|string} array Path to array from which to remove the item (or
  *     the array itself).
@@ -819,13 +830,18 @@ PolymerDomApi.prototype.setAttribute = function(attribute, value) {};
 PolymerDomApi.prototype.removeAttribute = function(attribute) {};
 
 /**
- * @typedef {function({
+ * @typedef {function(!PolymerDomApi.ObserveInfo)}
+ */
+PolymerDomApi.ObserveCallback;
+
+/**
+ * @typedef {{
  *   target: !Node,
  *   addedNodes: !Array<!Node>,
  *   removedNodes: !Array<!Node>
- * })}
+ * }}
  */
-PolymerDomApi.ObserveCallback;
+PolymerDomApi.ObserveInfo;
 
 /**
  * A virtual type for observer callback handles.
@@ -868,6 +884,13 @@ PolymerDomApi.prototype.classList;
 PolymerDomApi.prototype.queryDistributedElements = function(selector) {};
 
 /**
+ * Returns a list of effective child nodes for this element.
+ *
+ * @return {!Array<!HTMLElement>}
+ */
+PolymerDomApi.prototype.getEffectiveChildNodes = function() {};
+
+/**
  * A Polymer Event API.
  *
  * @constructor
@@ -888,6 +911,18 @@ PolymerEventApi.prototype.event;
 
 
 Polymer.Async;
+
+/**
+ * @param {function()} callback
+ * @param {number=} waitTime
+ * @return {number}
+ */
+Polymer.Async.run = function (callback, waitTime) {};
+
+/**
+ * @param {number} handle
+ */
+Polymer.Async.cancel = function(handle) {};
 
 /**
  * polymer-onerror experiment relies on this private API, so expose it only
@@ -1156,6 +1191,16 @@ DomRepeatElement.prototype.keyForElement = function(el) {};
 DomRepeatElement.prototype.indexForElement = function(el) {};
 
 
+/**
+ * Count of currently rendered items after `filter` (if any) has been applied.
+ * If "chunking mode" is enabled, `renderedItemCount` is updated each time a
+ * set of template instances is rendered.
+ *
+ * @type {number}
+ */
+DomRepeatElement.prototype.renderedItemCount;
+
+
 
 /**
  * @see https://github.com/Polymer/polymer/blob/master/src/lib/template/array-selector.html
@@ -1342,3 +1387,83 @@ Polymer.RenderStatus.whenReady = function(cb) {}
  * @param {...*} args The function arguments.
  */
 Polymer.RenderStatus.afterNextRender = function(element, fn, args) {}
+
+
+
+/**
+ * Static analysis for Polymer.
+ * @type {!Object}
+ */
+var hydrolysis = {};
+
+/**
+ * A database of Polymer metadata defined in HTML
+ * @param {boolean} attachAST If true, attach a parse5 compliant AST
+ * @param {Object=} opt_loader An optional FileLoader used to load
+ * external resources
+ */
+hydrolysis.Analyzer = function(attachAST, opt_loader) {};
+
+
+/**
+ * Shorthand for transitively loading and processing all imports
+ * beginning at href.
+ * @param {string} href The root import to begin loading from.
+ * @param {Object=} opt_options Any additional options for the load.
+ */
+hydrolysis.Analyzer.analyze = function(href, opt_options) {};
+
+
+
+/**
+ * Contains information useful for debugging. Should not be used in production
+ * code and the API may change on short notice.
+ * @type {!Object}
+ */
+Polymer.telemetry;
+
+/**
+ * Number of elements instantiated so far.
+ * @type {number}
+ */
+Polymer.telemetry.instanceCount;
+
+/**
+ * Array of all registered element prototypes. Being prototypes, not all runtime
+ * properties will be available, but eg. `is` is always there.
+ * @type {!Array<!PolymerElement>}
+ */
+Polymer.telemetry.registrations;
+
+Polymer.AppLayout;
+
+/** @constructor */
+Polymer.AppLayout.LocalDomWithBackground = function(){};
+/** @type {!HTMLElement} */
+Polymer.AppLayout.LocalDomWithBackground.prototype.backgroundFrontLayer;
+/** @type {!HTMLElement} */
+Polymer.AppLayout.LocalDomWithBackground.prototype.backgroundRearLayer;
+/** @type {!HTMLElement} */
+Polymer.AppLayout.LocalDomWithBackground.prototype.background;
+
+/**
+ * @constructor
+ * @extends {PolymerElement}
+ */
+Polymer.AppLayout.ElementWithBackground = function(){};
+
+// TODO(ajo): Follow up with app-layout team and remove private api from this prototype
+Polymer.AppLayout.ElementWithBackground.prototype = {
+  /** @type {!Polymer.AppLayout.LocalDomWithBackground} */
+  $: null,
+  /** @return {boolean} True if there's content below the current element */
+  isContentBelow: function(){},
+  /** Updates the elements scroll state */
+  _updateScrollState: function(){},
+  /** @return {boolean} true if the element is on screen */
+  isOnScreen: function(){},
+  /** @type {number} Internal bookkeeping to track screen position */
+  _deltaHeight: 0,
+  /** @return {?Element} Element in local dom by id. */
+  _getDOMRef: function(title){}
+}

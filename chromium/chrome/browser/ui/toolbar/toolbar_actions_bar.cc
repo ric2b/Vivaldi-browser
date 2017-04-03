@@ -35,7 +35,6 @@
 #include "extensions/browser/runtime_data.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/feature_switch.h"
-#include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/image/image_skia.h"
 
@@ -44,30 +43,6 @@ namespace {
 using WeakToolbarActions = std::vector<ToolbarActionViewController*>;
 
 enum DimensionType { WIDTH, HEIGHT };
-
-// Returns the width or height of the toolbar action icon size.
-int GetIconDimension(DimensionType type) {
-if (ui::MaterialDesignController::IsModeMaterial())
-#if defined(OS_MACOSX)
-  // On the Mac, the spec is a 24x24 button in a 28x28 space.
-    return 24;
-#else
-    return 28;
-#endif
-
-  static bool initialized = false;
-  static int icon_height = 0;
-  static int icon_width = 0;
-  if (!initialized) {
-    initialized = true;
-    gfx::ImageSkia* skia =
-        ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
-            IDR_BROWSER_ACTION);
-    icon_height = skia->height();
-    icon_width = skia->width();
-  }
-  return type == WIDTH ? icon_width : icon_height;
-}
 
 // Takes a reference vector |reference| of length n, where n is less than or
 // equal to the length of |to_sort|, and rearranges |to_sort| so that
@@ -149,19 +124,24 @@ ToolbarActionsBar::~ToolbarActionsBar() {
   // the order of deletion between the views and the ToolbarActionsBar.
   DCHECK(toolbar_actions_.empty()) <<
       "Must call DeleteActions() before destruction.";
-  FOR_EACH_OBSERVER(ToolbarActionsBarObserver, observers_,
-                    OnToolbarActionsBarDestroyed());
+  for (ToolbarActionsBarObserver& observer : observers_)
+    observer.OnToolbarActionsBarDestroyed();
 }
 
 // static
 int ToolbarActionsBar::IconWidth(bool include_padding) {
-  return GetIconDimension(WIDTH) +
+  return IconHeight() +
          (include_padding ? GetLayoutConstant(TOOLBAR_STANDARD_SPACING) : 0);
 }
 
 // static
 int ToolbarActionsBar::IconHeight() {
-  return GetIconDimension(HEIGHT);
+#if defined(OS_MACOSX)
+  // On the Mac, the spec is a 24x24 button in a 28x28 space.
+  return 24;
+#else
+  return 28;
+#endif
 }
 
 // static
@@ -336,7 +316,7 @@ ToolbarActionsBar::GetActions() const {
 }
 
 void ToolbarActionsBar::CreateActions() {
-  DCHECK(toolbar_actions_.empty());
+  CHECK(toolbar_actions_.empty());
   // If the model isn't initialized, wait for it.
   if (!model_ || !model_->actions_initialized())
     return;
@@ -453,8 +433,8 @@ void ToolbarActionsBar::OnDragEnded() {
 
   DCHECK(is_drag_in_progress_);
   is_drag_in_progress_ = false;
-  FOR_EACH_OBSERVER(ToolbarActionsBarObserver,
-                    observers_, OnToolbarActionDragDone());
+  for (ToolbarActionsBarObserver& observer : observers_)
+    observer.OnToolbarActionDragDone();
 }
 
 void ToolbarActionsBar::OnDragDrop(int dragged_index,
@@ -481,8 +461,8 @@ void ToolbarActionsBar::OnDragDrop(int dragged_index,
 void ToolbarActionsBar::OnAnimationEnded() {
   // Notify the observers now, since showing a bubble or popup could potentially
   // cause another animation to start.
-  FOR_EACH_OBSERVER(ToolbarActionsBarObserver, observers_,
-                    OnToolbarActionsBarAnimationEnded());
+  for (ToolbarActionsBarObserver& observer : observers_)
+    observer.OnToolbarActionsBarAnimationEnded();
 
   // Check if we were waiting for animation to complete to either show a
   // message bubble, or to show a popup.
@@ -633,17 +613,14 @@ void ToolbarActionsBar::set_extension_bubble_appearance_wait_time_for_testing(
 void ToolbarActionsBar::OnToolbarActionAdded(
     const ToolbarActionsModel::ToolbarItem& item,
     int index) {
-  DCHECK(GetActionForId(item.id) == nullptr)
+  CHECK(model_->actions_initialized());
+  CHECK(GetActionForId(item.id) == nullptr)
       << "Asked to add a toolbar action view for an action that already "
          "exists";
 
   toolbar_actions_.insert(toolbar_actions_.begin() + index,
                           model_->CreateActionForItem(browser_, this, item));
   delegate_->AddViewForAction(toolbar_actions_[index], index);
-
-  // If we are still initializing the container, don't bother animating.
-  if (!model_->actions_initialized())
-    return;
 
   // We may need to resize (e.g. to show the new icon, or the chevron). We don't
   // need to check if an extension is upgrading here, because ResizeDelegate()
@@ -738,8 +715,8 @@ void ToolbarActionsBar::ResizeDelegate(gfx::Tween::Type tween_type,
     delegate_->Redraw(false);
   }
 
-  FOR_EACH_OBSERVER(ToolbarActionsBarObserver,
-                    observers_, OnToolbarActionsBarDidStartResize());
+  for (ToolbarActionsBarObserver& observer : observers_)
+    observer.OnToolbarActionsBarDidStartResize();
 }
 
 void ToolbarActionsBar::OnToolbarHighlightModeChanged(bool is_highlighting) {
@@ -782,7 +759,7 @@ void ToolbarActionsBar::OnToolbarHighlightModeChanged(bool is_highlighting) {
 
 void ToolbarActionsBar::OnToolbarModelInitialized() {
   // We shouldn't have any actions before the model is initialized.
-  DCHECK(toolbar_actions_.empty());
+  CHECK(toolbar_actions_.empty());
   CreateActions();
 
   // TODO(robliao): Remove ScopedTracker below once https://crbug.com/463337 is

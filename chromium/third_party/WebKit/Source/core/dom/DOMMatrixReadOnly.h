@@ -16,6 +16,8 @@ namespace blink {
 
 class DOMMatrix;
 class DOMMatrixInit;
+class DOMPoint;
+class DOMPointInit;
 
 class CORE_EXPORT DOMMatrixReadOnly
     : public GarbageCollectedFinalized<DOMMatrixReadOnly>,
@@ -57,25 +59,40 @@ class CORE_EXPORT DOMMatrixReadOnly
   bool isIdentity() const;
 
   DOMMatrix* multiply(DOMMatrixInit&, ExceptionState&);
-  DOMMatrix* translate(double tx, double ty, double tz = 0);
-  DOMMatrix* scale(double scale, double ox = 0, double oy = 0);
-  DOMMatrix* scale3d(double scale, double ox = 0, double oy = 0, double oz = 0);
-  DOMMatrix* scaleNonUniform(double sx,
-                             double sy = 1,
-                             double sz = 1,
-                             double ox = 0,
-                             double oy = 0,
-                             double oz = 0);
+  DOMMatrix* translate(double tx = 0, double ty = 0, double tz = 0);
+  DOMMatrix* scale(double sx = 1);
+  DOMMatrix* scale(double sx,
+                   double sy,
+                   double sz = 1,
+                   double ox = 0,
+                   double oy = 0,
+                   double oz = 0);
+  DOMMatrix* scale3d(double scale = 1,
+                     double ox = 0,
+                     double oy = 0,
+                     double oz = 0);
+  DOMMatrix* rotate(double rotX);
+  DOMMatrix* rotate(double rotX, double rotY);
+  DOMMatrix* rotate(double rotX, double rotY, double rotZ);
+  DOMMatrix* rotateFromVector(double x, double y);
+  DOMMatrix* rotateAxisAngle(double x = 0,
+                             double y = 0,
+                             double z = 0,
+                             double angle = 0);
   DOMMatrix* skewX(double sx);
   DOMMatrix* skewY(double sy);
   DOMMatrix* flipX();
   DOMMatrix* flipY();
   DOMMatrix* inverse();
 
+  DOMPoint* transformPoint(const DOMPointInit&);
+
   DOMFloat32Array* toFloat32Array() const;
   DOMFloat64Array* toFloat64Array() const;
 
   const String toString() const;
+
+  ScriptValue toJSONForBinding(ScriptState*) const;
 
   const TransformationMatrix& matrix() const { return *m_matrix; }
 

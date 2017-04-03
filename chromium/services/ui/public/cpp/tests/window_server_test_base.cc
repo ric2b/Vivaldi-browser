@@ -11,10 +11,10 @@
 #include "base/single_thread_task_runner.h"
 #include "base/test/test_timeouts.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "services/shell/public/cpp/connector.h"
+#include "services/service_manager/public/cpp/connector.h"
+#include "services/service_manager/public/cpp/interface_registry.h"
 #include "services/ui/public/cpp/window.h"
 #include "services/ui/public/cpp/window_tree_client.h"
-#include "services/ui/public/cpp/window_tree_host_factory.h"
 
 namespace ui {
 namespace {
@@ -30,12 +30,12 @@ void TimeoutRunLoop(const base::Closure& timeout_task, bool* timeout) {
 }  // namespace
 
 WindowServerTestBase::WindowServerTestBase()
-    : most_recent_client_(nullptr),
-      window_manager_(nullptr),
+    : window_manager_(nullptr),
       window_manager_delegate_(nullptr),
       window_manager_client_(nullptr) {}
 
 WindowServerTestBase::~WindowServerTestBase() {
+  display::Screen::SetScreenInstance(nullptr);
   window_tree_clients_.clear();
 }
 
@@ -81,25 +81,25 @@ void WindowServerTestBase::DeleteWindowTreeClient(
 void WindowServerTestBase::SetUp() {
   WindowServerServiceTestBase::SetUp();
 
+  display::Screen::SetScreenInstance(&test_screen_);
   std::unique_ptr<WindowTreeClient> window_manager_window_tree_client =
-      CreateWindowTreeHost(connector(), this, &host_, this);
+      base::MakeUnique<WindowTreeClient>(this, this);
+  window_manager_window_tree_client->ConnectAsWindowManager(connector());
   window_manager_ = window_manager_window_tree_client.get();
   window_tree_clients_.insert(std::move(window_manager_window_tree_client));
 
   ASSERT_TRUE(DoRunLoopWithTimeout());  // RunLoop should be quit by OnEmbed().
 }
 
-bool WindowServerTestBase::OnConnect(const shell::Identity& remote_identity,
-                                     shell::InterfaceRegistry* registry) {
+bool WindowServerTestBase::OnConnect(
+    const service_manager::Identity& remote_identity,
+    service_manager::InterfaceRegistry* registry) {
   registry->AddInterface<mojom::WindowTreeClient>(this);
   return true;
 }
 
 void WindowServerTestBase::OnEmbed(Window* root) {
-  most_recent_client_ = root->window_tree();
   EXPECT_TRUE(QuitRunLoop());
-  ASSERT_TRUE(window_manager_client_);
-  window_manager_client_->AddActivationParent(root);
 }
 
 void WindowServerTestBase::OnLostConnection(WindowTreeClient* client) {
@@ -149,6 +149,10 @@ void WindowServerTestBase::OnWmClientJankinessChanged(
 
 void WindowServerTestBase::OnWmNewDisplay(Window* window,
                                           const display::Display& display) {
+  EXPECT_TRUE(QuitRunLoop());
+  ASSERT_TRUE(window_manager_client_);
+  window_manager_client_->AddActivationParent(window);
+
   if (window_manager_delegate_)
     window_manager_delegate_->OnWmNewDisplay(window, display);
 }
@@ -156,6 +160,12 @@ void WindowServerTestBase::OnWmNewDisplay(Window* window,
 void WindowServerTestBase::OnWmDisplayRemoved(Window* window) {
   if (window_manager_delegate_)
     window_manager_delegate_->OnWmDisplayRemoved(window);
+}
+
+void WindowServerTestBase::OnWmDisplayModified(
+    const display::Display& display) {
+  if (window_manager_delegate_)
+    window_manager_delegate_->OnWmDisplayModified(display);
 }
 
 void WindowServerTestBase::OnWmPerformMoveLoop(
@@ -181,8 +191,9 @@ mojom::EventResult WindowServerTestBase::OnAccelerator(uint32_t accelerator_id,
              : mojom::EventResult::UNHANDLED;
 }
 
-void WindowServerTestBase::Create(const shell::Identity& remote_identity,
-                                  mojom::WindowTreeClientRequest request) {
+void WindowServerTestBase::Create(
+    const service_manager::Identity& remote_identity,
+    mojom::WindowTreeClientRequest request) {
   window_tree_clients_.insert(
       base::MakeUnique<WindowTreeClient>(this, nullptr, std::move(request)));
 }

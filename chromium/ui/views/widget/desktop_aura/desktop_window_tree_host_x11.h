@@ -40,7 +40,6 @@ namespace views {
 class DesktopDragDropClientAuraX11;
 class DesktopWindowTreeHostObserverX11;
 class X11DesktopWindowMoveClient;
-class X11WindowEventFilter;
 
 class VIEWS_EXPORT DesktopWindowTreeHostX11
     : public DesktopWindowTreeHost,
@@ -149,8 +148,6 @@ class VIEWS_EXPORT DesktopWindowTreeHostX11
   void InitModalType(ui::ModalType modal_type) override;
   void FlashFrame(bool flash_frame) override;
   void OnRootViewLayout() override;
-  void OnNativeWidgetFocus() override;
-  void OnNativeWidgetBlur() override;
   bool IsAnimatingClosed() const override;
   bool IsTranslucentWindowOpacitySupported() const override;
   void SizeConstraintsChanged() override;

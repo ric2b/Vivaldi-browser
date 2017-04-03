@@ -30,20 +30,20 @@
 #include "components/invalidation/public/object_id_invalidation_map.h"
 #include "components/sync/base/cancelation_signal.h"
 #include "components/sync/base/fake_encryptor.h"
+#include "components/sync/base/invalidation_helper.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/base/unrecoverable_error_handler.h"
 #include "components/sync/base/weak_handle.h"
-#include "components/sync/core/base_node.h"
-#include "components/sync/core/http_bridge.h"
-#include "components/sync/core/http_post_provider_factory.h"
-#include "components/sync/core/internal_components_factory_impl.h"
-#include "components/sync/core/read_node.h"
-#include "components/sync/core/sync_manager.h"
-#include "components/sync/core/sync_manager_factory.h"
-#include "components/sync/driver/invalidation_helper.h"
+#include "components/sync/engine/engine_components_factory_impl.h"
+#include "components/sync/engine/net/http_bridge.h"
+#include "components/sync/engine/net/http_post_provider_factory.h"
 #include "components/sync/engine/passive_model_worker.h"
+#include "components/sync/engine/sync_manager.h"
+#include "components/sync/engine/sync_manager_factory.h"
 #include "components/sync/js/js_event_details.h"
 #include "components/sync/js/js_event_handler.h"
+#include "components/sync/syncable/base_node.h"
+#include "components/sync/syncable/read_node.h"
 #include "components/sync/tools/null_invalidation_state_tracker.h"
 #include "jingle/notifier/base/notification_method.h"
 #include "jingle/notifier/base/notifier_options.h"
@@ -79,7 +79,7 @@ class MyTestURLRequestContext : public net::TestURLRequestContext {
  public:
   MyTestURLRequestContext() : TestURLRequestContext(true) {
     context_storage_.set_host_resolver(
-        net::HostResolver::CreateDefaultResolver(NULL));
+        net::HostResolver::CreateDefaultResolver(nullptr));
     context_storage_.set_transport_security_state(
         base::MakeUnique<net::TransportSecurityState>());
     Init();
@@ -98,7 +98,7 @@ class MyTestURLRequestContextGetter : public net::TestURLRequestContextGetter {
     // Construct |context_| lazily so it gets constructed on the right
     // thread (the IO thread).
     if (!context_)
-      context_.reset(new MyTestURLRequestContext());
+      context_ = base::MakeUnique<MyTestURLRequestContext>();
     return context_.get();
   }
 
@@ -383,7 +383,7 @@ int SyncClientMain(int argc, char* argv[]) {
     routing_info[it.Get()] = GROUP_PASSIVE;
   }
   scoped_refptr<PassiveModelWorker> passive_model_safe_worker =
-      new PassiveModelWorker(nullptr);
+      new PassiveModelWorker();
   std::vector<scoped_refptr<ModelSafeWorker>> workers;
   workers.push_back(passive_model_safe_worker);
 
@@ -392,8 +392,8 @@ int SyncClientMain(int argc, char* argv[]) {
   std::unique_ptr<SyncManager> sync_manager =
       sync_manager_factory.CreateSyncManager("sync_client manager");
   LoggingJsEventHandler js_event_handler;
-  // Used only by InitialProcessMetadata(), so it's okay to leave this as NULL.
-  const scoped_refptr<base::TaskRunner> blocking_task_runner = NULL;
+  // Used only by InitialProcessMetadata(), so it's okay to leave this as null.
+  const scoped_refptr<base::TaskRunner> blocking_task_runner = nullptr;
   const char kUserAgent[] = "sync_client";
   // TODO(akalin): Replace this with just the context getter once
   // HttpPostProviderFactory is removed.
@@ -402,16 +402,15 @@ int SyncClientMain(int argc, char* argv[]) {
       context_getter.get(), base::Bind(&StubNetworkTimeUpdateCallback),
       &factory_cancelation_signal));
   post_factory->Init(kUserAgent, BindToTrackerCallback());
-  // Used only when committing bookmarks, so it's okay to leave this
-  // as NULL.
-  ExtensionsActivity* extensions_activity = NULL;
+  // Used only when committing bookmarks, so it's okay to leave this as null.
+  ExtensionsActivity* extensions_activity = nullptr;
   LoggingChangeDelegate change_delegate;
   const char kRestoredKeyForBootstrapping[] = "";
   const char kRestoredKeystoreKeyForBootstrapping[] = "";
   NullEncryptor null_encryptor;
-  InternalComponentsFactoryImpl::Switches factory_switches = {
-      InternalComponentsFactory::ENCRYPTION_KEYSTORE,
-      InternalComponentsFactory::BACKOFF_NORMAL};
+  EngineComponentsFactoryImpl::Switches factory_switches = {
+      EngineComponentsFactory::ENCRYPTION_KEYSTORE,
+      EngineComponentsFactory::BACKOFF_NORMAL};
   CancelationSignal scm_cancelation_signal;
 
   SyncManager::InitArgs args;
@@ -427,8 +426,8 @@ int SyncClientMain(int argc, char* argv[]) {
   args.restored_key_for_bootstrapping = kRestoredKeyForBootstrapping;
   args.restored_keystore_key_for_bootstrapping =
       kRestoredKeystoreKeyForBootstrapping;
-  args.internal_components_factory.reset(
-      new InternalComponentsFactoryImpl(factory_switches));
+  args.engine_components_factory =
+      base::MakeUnique<EngineComponentsFactoryImpl>(factory_switches);
   args.encryptor = &null_encryptor;
   args.unrecoverable_error_handler = WeakHandle<UnrecoverableErrorHandler>();
   args.report_unrecoverable_error_function =

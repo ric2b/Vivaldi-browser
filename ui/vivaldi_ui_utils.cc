@@ -114,7 +114,8 @@ bool EncodeBitmap(const SkBitmap& screen_capture,
                   extensions::api::extension_types::ImageFormat image_format,
                   gfx::Size size,
                   double scale,
-                  int image_quality) {
+                  int image_quality,
+                  bool resize) {
   SkAutoLockPixels screen_capture_lock(screen_capture);
   gfx::Size dst_size_pixels;
   if (size.width() && size.height()) {
@@ -123,13 +124,16 @@ bool EncodeBitmap(const SkBitmap& screen_capture,
     dst_size_pixels = gfx::ScaleToRoundedSize(
       gfx::Size(screen_capture.width(), screen_capture.height()), scale);
   }
-
-  SkBitmap bitmap = skia::ImageOperations::Resize(
-    screen_capture,
-    skia::ImageOperations::RESIZE_BEST,
-    dst_size_pixels.width(),
-    dst_size_pixels.height());
-
+  SkBitmap bitmap;
+  if (resize) {
+    bitmap = skia::ImageOperations::Resize(
+      screen_capture,
+      skia::ImageOperations::RESIZE_BEST,
+      dst_size_pixels.width(),
+      dst_size_pixels.height());
+  } else {
+    bitmap = screen_capture;
+  }
   bool encoded = false;
 
   SkAutoLockPixels lock(bitmap);

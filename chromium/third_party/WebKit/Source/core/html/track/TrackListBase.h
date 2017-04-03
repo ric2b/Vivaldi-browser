@@ -5,8 +5,8 @@
 #ifndef TrackListBase_h
 #define TrackListBase_h
 
+#include "bindings/core/v8/TraceWrapperMember.h"
 #include "core/events/EventTarget.h"
-
 #include "core/html/HTMLMediaElement.h"
 #include "core/html/track/TrackEvent.h"
 #include "core/html/track/TrackEventInit.h"
@@ -50,7 +50,7 @@ class TrackListBase : public EventTargetWithInlineData {
 
   void add(T* track) {
     track->setMediaElement(m_mediaElement);
-    m_tracks.append(track);
+    m_tracks.append(TraceWrapperMember<T>(this, track));
     scheduleEvent(TrackEvent::create(EventTypeNames::addtrack, track));
   }
 
@@ -91,6 +91,7 @@ class TrackListBase : public EventTargetWithInlineData {
     for (auto track : m_tracks) {
       visitor->traceWrappers(track);
     }
+    EventTargetWithInlineData::traceWrappers(visitor);
   }
 
  private:
@@ -99,7 +100,7 @@ class TrackListBase : public EventTargetWithInlineData {
     m_mediaElement->scheduleEvent(event);
   }
 
-  HeapVector<Member<T>> m_tracks;
+  HeapVector<TraceWrapperMember<T>> m_tracks;
   Member<HTMLMediaElement> m_mediaElement;
 };
 

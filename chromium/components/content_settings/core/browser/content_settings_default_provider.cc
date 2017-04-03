@@ -28,6 +28,16 @@ namespace content_settings {
 
 namespace {
 
+// These settings are no longer used, and should be deleted on profile startup.
+#if !defined(OS_IOS)
+const char kObsoleteFullscreenDefaultPref[] =
+    "profile.default_content_setting_values.fullscreen";
+#if !defined(OS_ANDROID)
+const char kObsoleteMouseLockDefaultPref[] =
+    "profile.default_content_setting_values.mouselock";
+#endif  // !defined(OS_ANDROID)
+#endif  // !defined(OS_IOS)
+
 ContentSetting GetDefaultValue(const WebsiteSettingsInfo* info) {
   const base::Value* initial_default = info->initial_default_value();
   if (!initial_default)
@@ -81,6 +91,21 @@ void DefaultProvider::RegisterProfilePrefs(
                                   GetDefaultValue(info),
                                   info->GetPrefRegistrationFlags());
   }
+
+  // Obsolete prefs -------------------------------------------------------
+
+  // These prefs have been removed, but need to be registered so they can
+  // be deleted on startup.
+#if !defined(OS_IOS)
+  registry->RegisterIntegerPref(
+      kObsoleteFullscreenDefaultPref, 0,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+#if !defined(OS_ANDROID)
+  registry->RegisterIntegerPref(
+      kObsoleteMouseLockDefaultPref, 0,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+#endif  // !defined(OS_ANDROID)
+#endif  // !defined(OS_IOS)
 }
 
 DefaultProvider::DefaultProvider(PrefService* prefs, bool incognito)
@@ -88,6 +113,9 @@ DefaultProvider::DefaultProvider(PrefService* prefs, bool incognito)
       is_incognito_(incognito),
       updating_preferences_(false) {
   DCHECK(prefs_);
+
+  // Remove the obsolete preferences from the pref file.
+  DiscardObsoletePreferences();
 
   // Read global defaults.
   ReadDefaultSettings();
@@ -112,11 +140,6 @@ DefaultProvider::DefaultProvider(PrefService* prefs, bool incognito)
       "ContentSettings.DefaultPluginsSetting",
       IntToContentSetting(prefs_->GetInteger(
           GetPrefName(CONTENT_SETTINGS_TYPE_PLUGINS))),
-      CONTENT_SETTING_NUM_SETTINGS);
-  UMA_HISTOGRAM_ENUMERATION(
-      "ContentSettings.DefaultMouseCursorSetting",
-      IntToContentSetting(prefs_->GetInteger(
-          GetPrefName(CONTENT_SETTINGS_TYPE_MOUSELOCK))),
       CONTENT_SETTING_NUM_SETTINGS);
 #endif
 
@@ -342,6 +365,17 @@ std::unique_ptr<base::Value> DefaultProvider::ReadFromPref(
     ContentSettingsType content_type) {
   int int_value = prefs_->GetInteger(GetPrefName(content_type));
   return ContentSettingToValue(IntToContentSetting(int_value));
+}
+
+void DefaultProvider::DiscardObsoletePreferences() {
+  // These prefs were never stored on iOS/Android so they don't need to be
+  // deleted.
+#if !defined(OS_IOS)
+  prefs_->ClearPref(kObsoleteFullscreenDefaultPref);
+#if !defined(OS_ANDROID)
+  prefs_->ClearPref(kObsoleteMouseLockDefaultPref);
+#endif  // !defined(OS_ANDROID)
+#endif  // !defined(OS_IOS)
 }
 
 }  // namespace content_settings

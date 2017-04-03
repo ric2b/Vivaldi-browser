@@ -32,18 +32,6 @@ QuicSimpleServerStream::QuicSimpleServerStream(QuicStreamId id,
 
 QuicSimpleServerStream::~QuicSimpleServerStream() {}
 
-void QuicSimpleServerStream::OnInitialHeadersComplete(bool fin,
-                                                      size_t frame_len) {
-  QuicSpdyStream::OnInitialHeadersComplete(fin, frame_len);
-  if (!SpdyUtils::ParseHeaders(decompressed_headers().data(),
-                               decompressed_headers().length(),
-                               &content_length_, &request_headers_)) {
-    DVLOG(1) << "Invalid headers";
-    SendErrorResponse();
-  }
-  MarkHeadersConsumed(decompressed_headers().length());
-}
-
 void QuicSimpleServerStream::OnInitialHeadersComplete(
     bool fin,
     size_t frame_len,
@@ -55,12 +43,6 @@ void QuicSimpleServerStream::OnInitialHeadersComplete(
     SendErrorResponse();
   }
   ConsumeHeaderList();
-}
-
-void QuicSimpleServerStream::OnTrailingHeadersComplete(bool fin,
-                                                       size_t frame_len) {
-  QUIC_BUG << "Server does not support receiving Trailers.";
-  SendErrorResponse();
 }
 
 void QuicSimpleServerStream::OnTrailingHeadersComplete(
@@ -103,20 +85,6 @@ void QuicSimpleServerStream::OnDataAvailable() {
     return;
   }
 
-  if (request_headers_.empty()) {
-    DVLOG(1) << "Request headers empty.";
-    SendErrorResponse();
-    return;
-  }
-
-  if (content_length_ > 0 &&
-      static_cast<uint64_t>(content_length_) != body_.size()) {
-    DVLOG(1) << "Content length (" << content_length_ << ") != body size ("
-             << body_.size() << ").";
-    SendErrorResponse();
-    return;
-  }
-
   SendResponse();
 }
 
@@ -132,10 +100,24 @@ void QuicSimpleServerStream::PushResponse(
   DVLOG(1) << "Stream " << id() << ": Ready to receive server push response.";
 
   // Set as if stream decompresed the headers and received fin.
-  QuicSpdyStream::OnInitialHeadersComplete(/*fin=*/true, 0);
+  QuicSpdyStream::OnInitialHeadersComplete(/*fin=*/true, 0, QuicHeaderList());
 }
 
 void QuicSimpleServerStream::SendResponse() {
+  if (request_headers_.empty()) {
+    DVLOG(1) << "Request headers empty.";
+    SendErrorResponse();
+    return;
+  }
+
+  if (content_length_ > 0 &&
+      static_cast<uint64_t>(content_length_) != body_.size()) {
+    DVLOG(1) << "Content length (" << content_length_ << ") != body size ("
+             << body_.size() << ").";
+    SendErrorResponse();
+    return;
+  }
+
   if (!base::ContainsKey(request_headers_, ":authority") ||
       !base::ContainsKey(request_headers_, ":path")) {
     DVLOG(1) << "Request headers do not contain :authority or :path.";
@@ -144,9 +126,13 @@ void QuicSimpleServerStream::SendResponse() {
   }
 
   // Find response in cache. If not found, send error response.
-  const QuicInMemoryCache::Response* response =
-      QuicInMemoryCache::GetInstance()->GetResponse(
-          request_headers_[":authority"], request_headers_[":path"]);
+  const QuicInMemoryCache::Response* response = nullptr;
+  auto authority = request_headers_.find(":authority");
+  auto path = request_headers_.find(":path");
+  if (authority != request_headers_.end() && path != request_headers_.end()) {
+    response = QuicInMemoryCache::GetInstance()->GetResponse(authority->second,
+                                                             path->second);
+  }
   if (response == nullptr) {
     DVLOG(1) << "Response not found in cache.";
     SendNotFoundResponse();
@@ -171,9 +157,14 @@ void QuicSimpleServerStream::SendResponse() {
   int response_code;
   const SpdyHeaderBlock& response_headers = response->headers();
   if (!ParseHeaderStatusCode(response_headers, &response_code)) {
-    LOG(WARNING) << "Illegal (non-integer) response :status from cache: "
-                 << response_headers.GetHeader(":status") << " for request "
-                 << request_url;
+    auto status = response_headers.find(":status");
+    if (status == response_headers.end()) {
+      LOG(WARNING) << ":status not present in response from cache for request "
+                   << request_url;
+    } else {
+      LOG(WARNING) << "Illegal (non-integer) response :status from cache: "
+                   << status->second << " for request " << request_url;
+    }
     SendErrorResponse();
     return;
   }
@@ -234,9 +225,7 @@ void QuicSimpleServerStream::SendHeadersAndBodyAndTrailers(
     SpdyHeaderBlock response_headers,
     StringPiece body,
     SpdyHeaderBlock response_trailers) {
-  // This server only supports SPDY and HTTP, and neither handles bidirectional
-  // streaming.
-  if (!reading_stopped()) {
+  if (!allow_bidirectional_data() && !reading_stopped()) {
     StopReading();
   }
 

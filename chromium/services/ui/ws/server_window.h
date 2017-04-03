@@ -15,22 +15,25 @@
 #include "base/macros.h"
 #include "base/observer_list.h"
 #include "mojo/public/cpp/bindings/binding.h"
-#include "services/ui/public/interfaces/surface.mojom.h"
 #include "services/ui/public/interfaces/window_tree.mojom.h"
+#include "services/ui/surfaces/surfaces_context_provider.h"
 #include "services/ui/ws/ids.h"
-#include "services/ui/ws/server_window_surface.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/vector2d.h"
 #include "ui/gfx/transform.h"
 #include "ui/platform_window/text_input_state.h"
 
+namespace gpu {
+class GpuMemoryBufferManager;
+}
+
 namespace ui {
 namespace ws {
 
 class ServerWindowDelegate;
 class ServerWindowObserver;
-class ServerWindowSurfaceManager;
+class ServerWindowCompositorFrameSinkManager;
 
 // Server side representation of a window. Delegate is informed of interesting
 // events.
@@ -56,11 +59,21 @@ class ServerWindow {
 
   void AddObserver(ServerWindowObserver* observer);
   void RemoveObserver(ServerWindowObserver* observer);
+  bool HasObserver(ServerWindowObserver* observer);
 
-  // Creates a new surface of the specified type, replacing the existing.
-  void CreateSurface(mojom::SurfaceType surface_type,
-                     mojo::InterfaceRequest<mojom::Surface> request,
-                     mojom::SurfaceClientPtr client);
+  // Creates a new CompositorFrameSink of the specified type, replacing the
+  // existing.
+  // TODO(fsamuel): We should not be passing in |gpu_memory_buffer_manager| and
+  // |context_provider|. The window server should not know anything about them.
+  // Instead, they should be a CompositorFrameSink service-side implementation
+  // detail.
+  void CreateCompositorFrameSink(
+      mojom::CompositorFrameSinkType compositor_frame_sink_type,
+      gfx::AcceleratedWidget widget,
+      gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
+      scoped_refptr<SurfacesContextProvider> context_provider,
+      cc::mojom::MojoCompositorFrameSinkRequest request,
+      cc::mojom::MojoCompositorFrameSinkClientPtr client);
 
   const WindowId& id() const { return id_; }
 
@@ -161,9 +174,6 @@ class ServerWindow {
   // visible.
   bool IsDrawn() const;
 
-  // Called when its appropriate to destroy surfaces scheduled for destruction.
-  void DestroySurfacesScheduledForDestruction();
-
   const gfx::Insets& extended_hit_test_region() const {
     return extended_hit_test_region_;
   }
@@ -171,12 +181,14 @@ class ServerWindow {
     extended_hit_test_region_ = insets;
   }
 
-  ServerWindowSurfaceManager* GetOrCreateSurfaceManager();
-  ServerWindowSurfaceManager* surface_manager() {
-    return surface_manager_.get();
+  ServerWindowCompositorFrameSinkManager*
+  GetOrCreateCompositorFrameSinkManager();
+  ServerWindowCompositorFrameSinkManager* compositor_frame_sink_manager() {
+    return compositor_frame_sink_manager_.get();
   }
-  const ServerWindowSurfaceManager* surface_manager() const {
-    return surface_manager_.get();
+  const ServerWindowCompositorFrameSinkManager* compositor_frame_sink_manager()
+      const {
+    return compositor_frame_sink_manager_.get();
   }
 
   // Offset of the underlay from the the window bounds (used for shadows).
@@ -226,7 +238,8 @@ class ServerWindow {
   gfx::Rect bounds_;
   gfx::Insets client_area_;
   std::vector<gfx::Rect> additional_client_areas_;
-  std::unique_ptr<ServerWindowSurfaceManager> surface_manager_;
+  std::unique_ptr<ServerWindowCompositorFrameSinkManager>
+      compositor_frame_sink_manager_;
   mojom::Cursor cursor_id_;
   mojom::Cursor non_client_cursor_id_;
   float opacity_;

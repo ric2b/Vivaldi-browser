@@ -16,6 +16,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -81,10 +82,12 @@ class DummyWebMediaPlayerClient : public blink::WebMediaPlayerClient {
   void removeTextTrack(blink::WebInbandTextTrack*) override {}
   void mediaSourceOpened(blink::WebMediaSource*) override {}
   void requestSeek(double) override {}
-  void remoteRouteAvailabilityChanged(bool) override {}
+  void remoteRouteAvailabilityChanged(
+      blink::WebRemotePlaybackAvailability) override {}
   void connectedToRemoteDevice() override {}
   void disconnectedFromRemoteDevice() override {}
   void cancelledRemotePlaybackRequest() override {}
+  void remotePlaybackStarted() override {}
   bool isAutoplayingMuted() override { return is_autoplaying_muted_; }
   void requestReload(const blink::WebURL& newUrl) override {}
 
@@ -139,7 +142,7 @@ class WebMediaPlayerImplTest : public testing::Test {
             scoped_refptr<SwitchableAudioRendererSink>(), media_log_,
             media_thread_.task_runner(), message_loop_.task_runner(),
             message_loop_.task_runner(), WebMediaPlayerParams::Context3DCB(),
-            base::Bind(&OnAdjustAllocatedMemory), nullptr, nullptr)));
+            base::Bind(&OnAdjustAllocatedMemory), nullptr, nullptr, nullptr)));
   }
 
   ~WebMediaPlayerImplTest() override {
@@ -184,37 +187,43 @@ class WebMediaPlayerImplTest : public testing::Test {
   WebMediaPlayerImpl::PlayState ComputePlayState() {
     wmpi_->is_idle_ = false;
     wmpi_->must_suspend_ = false;
-    return wmpi_->UpdatePlayState_ComputePlayState(false, false, false);
+    return wmpi_->UpdatePlayState_ComputePlayState(false, false, false, false);
   }
 
   WebMediaPlayerImpl::PlayState ComputePlayStateSuspended() {
     wmpi_->is_idle_ = false;
     wmpi_->must_suspend_ = false;
-    return wmpi_->UpdatePlayState_ComputePlayState(false, true, false);
+    return wmpi_->UpdatePlayState_ComputePlayState(false, false, true, false);
   }
 
   WebMediaPlayerImpl::PlayState ComputeBackgroundedPlayState() {
     wmpi_->is_idle_ = false;
     wmpi_->must_suspend_ = false;
-    return wmpi_->UpdatePlayState_ComputePlayState(false, false, true);
+    return wmpi_->UpdatePlayState_ComputePlayState(false, false, false, true);
   }
 
   WebMediaPlayerImpl::PlayState ComputeIdlePlayState() {
     wmpi_->is_idle_ = true;
     wmpi_->must_suspend_ = false;
-    return wmpi_->UpdatePlayState_ComputePlayState(false, false, false);
+    return wmpi_->UpdatePlayState_ComputePlayState(false, false, false, false);
   }
 
   WebMediaPlayerImpl::PlayState ComputeIdleSuspendedPlayState() {
     wmpi_->is_idle_ = true;
     wmpi_->must_suspend_ = false;
-    return wmpi_->UpdatePlayState_ComputePlayState(false, true, false);
+    return wmpi_->UpdatePlayState_ComputePlayState(false, false, true, false);
   }
 
   WebMediaPlayerImpl::PlayState ComputeMustSuspendPlayState() {
     wmpi_->is_idle_ = false;
     wmpi_->must_suspend_ = true;
-    return wmpi_->UpdatePlayState_ComputePlayState(false, false, false);
+    return wmpi_->UpdatePlayState_ComputePlayState(false, false, false, false);
+  }
+
+  WebMediaPlayerImpl::PlayState ComputeStreamingPlayState(bool must_suspend) {
+    wmpi_->is_idle_ = true;
+    wmpi_->must_suspend_ = must_suspend;
+    return wmpi_->UpdatePlayState_ComputePlayState(false, true, false, true);
   }
 
   void SetDelegateState(WebMediaPlayerImpl::DelegateState state) {
@@ -233,10 +242,7 @@ class WebMediaPlayerImplTest : public testing::Test {
     base::CommandLine::ForCurrentProcess()->AppendSwitch(
         switches::kEnableMediaSuspend);
 #endif  // !defined(OS_ANDROID)
-    std::unique_ptr<base::FeatureList> feature_list(new base::FeatureList);
-    feature_list->InitializeFromCommandLine(kResumeBackgroundVideo.name, "");
-    base::FeatureList::ClearInstanceForTesting();
-    base::FeatureList::SetInstance(std::move(feature_list));
+    scoped_feature_list_.InitAndEnableFeature(kResumeBackgroundVideo);
   }
 
   // "Renderer" thread.
@@ -267,6 +273,8 @@ class WebMediaPlayerImplTest : public testing::Test {
   std::unique_ptr<WebMediaPlayerImpl> wmpi_;
 
  private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+
   DISALLOW_COPY_AND_ASSIGN(WebMediaPlayerImplTest);
 };
 
@@ -562,6 +570,27 @@ TEST_F(WebMediaPlayerImplTest, ComputePlayState_Ended) {
 
   state = ComputeIdlePlayState();
   EXPECT_EQ(WebMediaPlayerImpl::DelegateState::ENDED, state.delegate_state);
+  EXPECT_FALSE(state.is_memory_reporting_enabled);
+  EXPECT_TRUE(state.is_suspended);
+}
+
+TEST_F(WebMediaPlayerImplTest, ComputePlayState_Streaming) {
+  InitializeWebMediaPlayerImpl();
+  WebMediaPlayerImpl::PlayState state;
+  SetMetadata(true, true);
+
+  SetReadyState(blink::WebMediaPlayer::ReadyStateHaveFutureData);
+  SetPaused(true);
+
+  // Streaming media should not suspend, even if paused, idle, and backgrounded.
+  state = ComputeStreamingPlayState(false);
+  EXPECT_EQ(WebMediaPlayerImpl::DelegateState::PAUSED, state.delegate_state);
+  EXPECT_FALSE(state.is_memory_reporting_enabled);
+  EXPECT_FALSE(state.is_suspended);
+
+  // Streaming media should suspend when the tab is closed, regardless.
+  state = ComputeStreamingPlayState(true);
+  EXPECT_EQ(WebMediaPlayerImpl::DelegateState::GONE, state.delegate_state);
   EXPECT_FALSE(state.is_memory_reporting_enabled);
   EXPECT_TRUE(state.is_suspended);
 }

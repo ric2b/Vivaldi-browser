@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <string>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/callback.h"
@@ -14,15 +15,20 @@
 #include "blimp/client/test/test_blimp_client_context_delegate.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
+using ::testing::_;
+using ::testing::Return;
+
 namespace blimp {
 namespace client {
 namespace {
 
 class MockIdentitySource : public IdentitySource {
  public:
-  explicit MockIdentitySource(BlimpClientContextDelegate* delegate,
-                              const IdentitySource::TokenCallback& callback)
-      : IdentitySource(delegate, callback),
+  MockIdentitySource(
+      std::unique_ptr<IdentityProvider> identity_provider,
+      base::Callback<void(const GoogleServiceAuthError&)> error_callback,
+      const IdentitySource::TokenCallback& callback)
+      : IdentitySource(std::move(identity_provider), error_callback, callback),
         success_(0),
         fail_(0),
         refresh_(0),
@@ -98,7 +104,9 @@ class IdentitySourceTest : public testing::Test {
 TEST_F(IdentitySourceTest, TestConnect) {
   TestBlimpClientContextDelegate mock_blimp_delegate;
   MockIdentitySource auth(
-      &mock_blimp_delegate,
+      mock_blimp_delegate.CreateIdentityProvider(),
+      base::Bind(&TestBlimpClientContextDelegate::OnAuthenticationError,
+                 base::Unretained(&mock_blimp_delegate)),
       base::Bind(&MockIdentitySource::MockTokenCall, base::Unretained(&auth)));
   FakeIdentityProvider* id_provider =
       static_cast<FakeIdentityProvider*>(auth.GetIdentityProvider());
@@ -184,7 +192,9 @@ TEST_F(IdentitySourceTest, TestConnect) {
 TEST_F(IdentitySourceTest, TestConnectRetry) {
   TestBlimpClientContextDelegate mock_blimp_delegate;
   MockIdentitySource auth(
-      &mock_blimp_delegate,
+      mock_blimp_delegate.CreateIdentityProvider(),
+      base::Bind(&TestBlimpClientContextDelegate::OnAuthenticationError,
+                 base::Unretained(&mock_blimp_delegate)),
       base::Bind(&MockIdentitySource::MockTokenCall, base::Unretained(&auth)));
   FakeOAuth2TokenService* token_service = mock_blimp_delegate.GetTokenService();
   FakeIdentityProvider* id_provider =
@@ -219,6 +229,64 @@ TEST_F(IdentitySourceTest, TestConnectRetry) {
   DCHECK_EQ(auth.Token(), mock_access_token);
   DCHECK_EQ(auth.TokenCallbackCount(), 1);
   DCHECK_EQ(auth.CallbackToken(), mock_access_token);
+}
+
+TEST_F(IdentitySourceTest, TestConnectFailDelegateCallback) {
+  TestBlimpClientContextDelegate mock_blimp_delegate;
+  MockIdentitySource auth(
+      mock_blimp_delegate.CreateIdentityProvider(),
+      base::Bind(&TestBlimpClientContextDelegate::OnAuthenticationError,
+                 base::Unretained(&mock_blimp_delegate)),
+      base::Bind(&MockIdentitySource::MockTokenCall, base::Unretained(&auth)));
+  FakeOAuth2TokenService* token_service = mock_blimp_delegate.GetTokenService();
+  FakeIdentityProvider* id_provider =
+      static_cast<FakeIdentityProvider*>(auth.GetIdentityProvider());
+
+  std::string account = "mock_account";
+  std::string mock_access_token = "mock_token";
+  id_provider->LogIn(account);
+
+  // Prepare refresh token.
+  FakeOAuth2TokenServiceDelegate* mock_token_service_delegate =
+      token_service->GetFakeOAuth2TokenServiceDelegate();
+  mock_token_service_delegate->UpdateCredentials(account, "mock_refresh_token");
+
+  // Expect delegate to show error message on non REQUEST_CANCELED errors.
+  auth.Connect();
+  GoogleServiceAuthError error(
+      GoogleServiceAuthError::State::CONNECTION_FAILED);
+
+  EXPECT_CALL(mock_blimp_delegate, OnAuthenticationError(error))
+      .WillOnce(Return());
+  token_service->IssueErrorForAllPendingRequestsForAccount(account, error);
+
+  DCHECK_EQ(auth.Failed(), 1);
+}
+
+TEST_F(IdentitySourceTest, CheckUserName) {
+  TestBlimpClientContextDelegate mock_blimp_delegate;
+  MockIdentitySource auth(
+      mock_blimp_delegate.CreateIdentityProvider(),
+      base::Bind(&TestBlimpClientContextDelegate::OnAuthenticationError,
+                 base::Unretained(&mock_blimp_delegate)),
+      base::Bind(&MockIdentitySource::MockTokenCall, base::Unretained(&auth)));
+
+  FakeIdentityProvider* id_provider =
+      static_cast<FakeIdentityProvider*>(auth.GetIdentityProvider());
+  std::string account = "mock_account";
+
+  // Verify the user name before the login.
+  EXPECT_EQ("", auth.GetActiveUsername());
+
+  // Log in the mock user.
+  id_provider->LogIn(account);
+
+  // Verify that the identity source can return the correct user name.
+  EXPECT_EQ(account, auth.GetActiveUsername());
+
+  // Verify the user name after the logout.
+  id_provider->LogOut();
+  EXPECT_EQ("", auth.GetActiveUsername());
 }
 
 }  // namespace

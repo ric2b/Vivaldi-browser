@@ -27,8 +27,8 @@
 #include "components/search_engines/keyword_web_data_service.h"
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_id.h"
-#include "components/sync/api/sync_change.h"
-#include "components/sync/api/syncable_service.h"
+#include "components/sync/model/sync_change.h"
+#include "components/sync/model/syncable_service.h"
 #include "components/webdata/common/web_data_service_consumer.h"
 
 class GURL;
@@ -311,8 +311,9 @@ class TemplateURLService : public WebDataServiceConsumer,
   // Notification that the keywords have been loaded.
   // This is invoked from WebDataService, and should not be directly
   // invoked.
-  void OnWebDataServiceRequestDone(KeywordWebDataService::Handle h,
-                                   const WDTypedResult* result) override;
+  void OnWebDataServiceRequestDone(
+      KeywordWebDataService::Handle h,
+      std::unique_ptr<WDTypedResult> result) override;
 
   // Returns the locale-direction-adjusted short name for the given keyword.
   // Also sets the out param to indicate whether the keyword belongs to an

@@ -46,7 +46,7 @@ class TestActivityTracker : public ThreadActivityTracker {
 
 class ActivityAnalyzerTest : public testing::Test {
  public:
-  const int kMemorySize = 1 << 10;  // 1MiB
+  const int kMemorySize = 1 << 20;  // 1MiB
   const int kStackSize  = 1 << 10;  // 1KiB
 
   ActivityAnalyzerTest() {}
@@ -98,20 +98,19 @@ class SimpleActivityThread : public SimpleThread {
   ~SimpleActivityThread() override {}
 
   void Run() override {
-    GlobalActivityTracker::Get()
-        ->GetOrCreateTrackerForCurrentThread()
-        ->PushActivity(source_, activity_, data_);
+    ThreadActivityTracker::ActivityId id =
+        GlobalActivityTracker::Get()
+            ->GetOrCreateTrackerForCurrentThread()
+            ->PushActivity(source_, activity_, data_);
 
     {
       AutoLock auto_lock(lock_);
-      ready_.store(true, std::memory_order_relaxed);
+      ready_.store(true, std::memory_order_release);
       while (!exit_.load(std::memory_order_relaxed))
         exit_condition_.Wait();
     }
 
-    GlobalActivityTracker::Get()
-        ->GetOrCreateTrackerForCurrentThread()
-        ->PopActivity();
+    GlobalActivityTracker::Get()->GetTrackerForCurrentThread()->PopActivity(id);
   }
 
   void Exit() {
@@ -121,7 +120,7 @@ class SimpleActivityThread : public SimpleThread {
   }
 
   void WaitReady() {
-    SPIN_FOR_1_SECOND_OR_UNTIL_TRUE(ready_.load(std::memory_order_relaxed));
+    SPIN_FOR_1_SECOND_OR_UNTIL_TRUE(ready_.load(std::memory_order_acquire));
   }
 
  private:

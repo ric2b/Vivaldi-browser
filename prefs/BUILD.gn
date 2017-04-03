@@ -1,17 +1,13 @@
 static_library("prefs") {
   sources = [
+    "vivaldi_browser_prefs.h",
+    "vivaldi_browser_prefs.cc",
+    "vivaldi_browser_prefs_linux.cc",
+    "vivaldi_browser_prefs_mac.mm",
+    "vivaldi_browser_prefs_win.cc",
     "vivaldi_pref_names.cc",
     "vivaldi_pref_names.h",
   ]
-  if (is_linux) {
-    sources += [ "vivaldi_browser_prefs_linux.cc" ]
-  }
-  if (is_win) {
-    sources += [ "vivaldi_browser_prefs_win.cc" ]
-  }
-  if (is_mac) {
-    sources += [ "vivaldi_browser_prefs_mac.mm" ]
-  }
   deps = [
     "//skia",
   ]
@@ -22,27 +18,15 @@ source_set("browser_prefs") {
     "native_settings_observer.cc",
     "native_settings_observer.h",
     "native_settings_observer_delegate.h",
+    "native_settings_observer_linux.cc",
+    "native_settings_observer_linux.h",
+    "native_settings_observer_mac.h",
+    "native_settings_observer_mac.mm",
+    "native_settings_observer_win.cc",
+    "native_settings_observer_win.h",
     "vivaldi_tab_zoom_pref.cc",
     "vivaldi_tab_zoom_pref.h",
   ]
-  if (is_linux) {
-    sources += [
-      "native_settings_observer_linux.cc",
-      "native_settings_observer_linux.h",
-    ]
-  }
-  if (is_mac) {
-    sources += [
-      "native_settings_observer_mac.h",
-      "native_settings_observer_mac.mm",
-    ]
-  }
-  if (is_win) {
-    sources += [
-      "native_settings_observer_win.cc",
-      "native_settings_observer_win.h",
-    ]
-  }
   deps = [
     "//content/public/browser",
     "//skia",

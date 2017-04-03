@@ -20,7 +20,7 @@ source_set("web_arc") {
     "//mojo/public/cpp/system",
     "//mojo/public/js",
     "//net",
-    "//services/shell/public/cpp",
+    "//services/service_manager/public/cpp",
     "//ui/base",
     "//ui/gfx",
     "//ui/gfx/geometry:geometry",
@@ -191,6 +191,16 @@ source_set("web_arc") {
     "web_state/js/crw_js_plugin_placeholder_manager.mm",
     "web_state/js/crw_js_post_request_loader.h",
     "web_state/js/crw_js_post_request_loader.mm",
+    "web_state/js/crw_js_window_id_manager.h",
+    "web_state/js/crw_js_window_id_manager.mm",
+    "web_state/js/page_script_util.h",
+    "web_state/js/page_script_util.mm",
+    "web_state/page_viewport_state.h",
+    "web_state/page_viewport_state.mm",
+    "web_state/ui/crw_generic_content_view.mm",
+    "web_state/ui/crw_swipe_recognizer_provider.h",
+    "web_state/ui/crw_touch_tracking_recognizer.h",
+    "web_state/ui/crw_touch_tracking_recognizer.mm",
     "web_thread_impl.cc",
     "web_thread_impl.h",
     "web_view_creation_util.mm",
@@ -239,7 +249,7 @@ source_set("web") {
     "//mojo/public/cpp/system",
     "//mojo/public/js",
     "//net",
-    "//services/shell/public/cpp",
+    "//services/service_manager/public/cpp",
     "//ui/base",
     "//ui/gfx",
     "//ui/gfx/geometry:geometry",
@@ -252,16 +262,6 @@ source_set("web") {
   ]
 
   sources = [
-    "web_state/js/crw_js_window_id_manager.h",
-    "web_state/js/crw_js_window_id_manager.mm",
-    "web_state/js/page_script_util.h",
-    "web_state/js/page_script_util.mm",
-    "web_state/page_viewport_state.h",
-    "web_state/page_viewport_state.mm",
-    "web_state/ui/crw_generic_content_view.mm",
-    "web_state/ui/crw_swipe_recognizer_provider.h",
-    "web_state/ui/crw_touch_tracking_recognizer.h",
-    "web_state/ui/crw_touch_tracking_recognizer.mm",
     "web_state/ui/crw_web_controller.h",
     "web_state/ui/crw_web_controller.mm",
     "web_state/ui/crw_web_controller_container_view.h",
@@ -294,7 +294,10 @@ source_set("web") {
     "web_state/wk_web_view_security_util.mm",
   ]
 
-  libs = [ "WebKit.framework" ]
+  libs = [
+    "CoreGraphics.framework",
+    "WebKit.framework",
+  ]
 
   allow_circular_includes_from = [ ":web_arc" ]
 }
@@ -332,6 +335,7 @@ source_set("earl_grey_test_support") {
     ":web",
     "//base",
     "//base/test:test_support",
+    "//ios/testing:ios_test_support",
     "//ios/testing/earl_grey:earl_grey_support",
     "//ios/third_party/earl_grey",
   ]
@@ -343,8 +347,6 @@ source_set("earl_grey_test_support") {
     "public/test/earl_grey/web_view_actions.mm",
     "public/test/earl_grey/web_view_matchers.h",
     "public/test/earl_grey/web_view_matchers.mm",
-    "public/test/web_view_interaction_test_util.h",
-    "public/test/web_view_interaction_test_util.mm",
   ]
 }
 
@@ -355,6 +357,7 @@ source_set("test_support") {
     ":web",
     "//base",
     "//base/test:test_support",
+    "//ios/testing:ios_test_support",
     "//ios/testing:ocmock_support",
     "//ios/third_party/gcdwebserver",
     "//ios/web/test:mojo_bindings",
@@ -416,6 +419,8 @@ source_set("test_support") {
     "public/test/web_test_suite.h",
     "public/test/web_test_with_web_state.h",
     "public/test/web_test_with_web_state.mm",
+    "public/test/web_view_interaction_test_util.h",
+    "public/test/web_view_interaction_test_util.mm",
     "test/crw_fake_web_controller_observer.h",
     "test/crw_fake_web_controller_observer.mm",
     "test/test_url_constants.cc",
@@ -472,7 +477,7 @@ test("ios_web_unittests") {
     "//ios/testing:ocmock_support",
     "//ios/web/test:mojo_bindings",
     "//net:test_support",
-    "//services/shell/public/cpp",
+    "//services/service_manager/public/cpp",
     "//testing/gmock",
     "//testing/gtest",
     "//third_party/ocmock",
@@ -549,7 +554,7 @@ test("ios_web_inttests") {
     "//ios/web/test:resources",
     "//mojo/edk/system",
     "//net:test_support",
-    "//services/shell/public/cpp",
+    "//services/service_manager/public/cpp",
     "//testing/gtest",
     "//ui/base:test_support",
   ]

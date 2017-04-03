@@ -9,7 +9,7 @@
 #include "base/containers/hash_tables.h"
 #include "base/location.h"
 #include "base/logging.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -389,8 +389,7 @@ blink::WebDocument PhishingDOMFeatureExtractor::GetNextDocument() {
   blink::WebFrame* frame = cur_document_.frame();
   // Advance to the next frame that contains a document, with no wrapping.
   if (frame) {
-    for (frame = frame->traverseNext(false); frame;
-         frame = frame->traverseNext(false)) {
+    for (frame = frame->traverseNext(); frame; frame = frame->traverseNext()) {
       if (!frame->document().isNull()) {
         return frame->document();
       }

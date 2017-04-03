@@ -4,14 +4,12 @@
 
 #include "base/test/launcher/unit_test_launcher.h"
 #include "base/test/test_suite.h"
-#include "net/socket/ssl_server_socket.h"
+#include "mojo/edk/embedder/embedder.h"
 
 int main(int argc, char** argv) {
   base::TestSuite test_suite(argc, argv);
 
-  // Enable support for SSL server sockets, which must be done while
-  // single-threaded.
-  net::EnableSSLServerSockets();
+  mojo::edk::Init();
 
   return base::LaunchUnitTests(
       argc, argv, base::Bind(&base::TestSuite::Run,

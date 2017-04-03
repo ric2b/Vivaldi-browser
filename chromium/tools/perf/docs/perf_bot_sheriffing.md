@@ -7,9 +7,9 @@ waterfall up and running, and triaging performance test failures and flakes.
 
 ## Key Responsibilities
 
-*   [Handle Device and Bot Failures](#botfailures)
-*   [Handle Test Failures](#testfailures)
-*   [Follow up on failures](#followup)
+*   [Handle Device and Bot Failures](#Handle-Device-and-Bot-Failures)
+*   [Handle Test Failures](#Handle-Test-Failures)
+*   [Follow up on failures](#Follow-up-on-failures)
 
 ## Understanding the Waterfall State
 
@@ -260,7 +260,9 @@ but please do **not** submit with NOTRY=true.
 
 ### Disabling Other Tests
 
-Non-telemetry tests are configured in [chromium.perf.json](https://code.google.com/p/chromium/codesearch#chromium/src/testing/buildbot/chromium.perf.json).
+Non-telemetry tests are configured in [chromium.perf.json](https://code.google.com/p/chromium/codesearch#chromium/src/testing/buildbot/chromium.perf.json) **But do not manually edit this file.**
+Update tools/perf/generate_perf_json.py to disable the test and rerun script to
+generate the new chromium.perf.json file.
 You can TBR any of the per-file OWNERS, but please do **not** submit with
 NOTRY=true.
 

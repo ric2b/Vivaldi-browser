@@ -57,7 +57,7 @@ namespace blink {
 PictureSnapshot::PictureSnapshot(sk_sp<const SkPicture> picture)
     : m_picture(std::move(picture)) {}
 
-class SkiaImageDecoder : public SkImageDeserializer {
+class SkiaImageDecoder final : public SkImageDeserializer {
  public:
   sk_sp<SkImage> makeFromMemory(const void* data,
                                 size_t length,
@@ -67,7 +67,7 @@ class SkiaImageDecoder : public SkImageDeserializer {
         SegmentReader::createFromSkData(SkData::MakeWithoutCopy(data, length));
     std::unique_ptr<ImageDecoder> imageDecoder = ImageDecoder::create(
         segmentReader.release(), true, ImageDecoder::AlphaPremultiplied,
-        ImageDecoder::GammaAndColorProfileIgnored);
+        ImageDecoder::ColorSpaceIgnored);
     if (!imageDecoder)
       return nullptr;
 
@@ -121,12 +121,13 @@ std::unique_ptr<Vector<char>> PictureSnapshot::replay(unsigned fromStep,
                                                       unsigned toStep,
                                                       double scale) const {
   const SkIRect bounds = m_picture->cullRect().roundOut();
+  int width = ceil(scale * bounds.width());
+  int height = ceil(scale * bounds.height());
 
   // TODO(fmalita): convert this to SkSurface/SkImage, drop the intermediate
   // SkBitmap.
   SkBitmap bitmap;
-  bitmap.allocPixels(
-      SkImageInfo::MakeN32Premul(bounds.width(), bounds.height()));
+  bitmap.allocPixels(SkImageInfo::MakeN32Premul(width, height));
   bitmap.eraseARGB(0, 0, 0, 0);
   {
     ReplayingCanvas canvas(bitmap, fromStep, toStep);
@@ -141,7 +142,7 @@ std::unique_ptr<Vector<char>> PictureSnapshot::replay(unsigned fromStep,
     canvas.resetStepCount();
     m_picture->playback(&canvas, &canvas);
   }
-  std::unique_ptr<Vector<char>> base64Data = wrapUnique(new Vector<char>());
+  std::unique_ptr<Vector<char>> base64Data = makeUnique<Vector<char>>();
   Vector<char> encodedImage;
 
   sk_sp<SkImage> image = SkImage::MakeFromBitmap(bitmap);
@@ -166,7 +167,7 @@ std::unique_ptr<PictureSnapshot::Timings> PictureSnapshot::profile(
     double minDuration,
     const FloatRect* clipRect) const {
   std::unique_ptr<PictureSnapshot::Timings> timings =
-      wrapUnique(new PictureSnapshot::Timings());
+      makeUnique<PictureSnapshot::Timings>();
   timings->reserveCapacity(minRepeatCount);
   const SkIRect bounds = m_picture->cullRect().roundOut();
   SkBitmap bitmap;

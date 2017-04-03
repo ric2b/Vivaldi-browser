@@ -40,7 +40,7 @@ static void mixImages(const char* fileName,
       SharedBuffer::create(file->data(), bytesForFirstFrame);
   std::unique_ptr<DeferredImageDecoder> decoder = DeferredImageDecoder::create(
       partialFile, false, ImageDecoder::AlphaPremultiplied,
-      ImageDecoder::GammaAndColorProfileIgnored);
+      ImageDecoder::ColorSpaceIgnored);
   ASSERT_NE(decoder, nullptr);
   sk_sp<SkImage> partialImage = decoder->createFrameAtIndex(0);
 
@@ -54,38 +54,38 @@ static void mixImages(const char* fileName,
 }
 
 TEST(DeferredImageDecoderTestWoPlatform, mixImagesGif) {
-  mixImages("/LayoutTests/fast/images/resources/animated.gif", 818u, 1u);
+  mixImages("/LayoutTests/images/resources/animated.gif", 818u, 1u);
 }
 
 TEST(DeferredImageDecoderTestWoPlatform, mixImagesPng) {
-  mixImages("/LayoutTests/fast/images/resources/mu.png", 910u, 0u);
+  mixImages("/LayoutTests/images/resources/mu.png", 910u, 0u);
 }
 
 TEST(DeferredImageDecoderTestWoPlatform, mixImagesJpg) {
-  mixImages("/LayoutTests/fast/images/resources/2-dht.jpg", 177u, 0u);
+  mixImages("/LayoutTests/images/resources/2-dht.jpg", 177u, 0u);
 }
 
 TEST(DeferredImageDecoderTestWoPlatform, mixImagesWebp) {
-  mixImages("/LayoutTests/fast/images/resources/webp-animated.webp", 142u, 1u);
+  mixImages("/LayoutTests/images/resources/webp-animated.webp", 142u, 1u);
 }
 
 TEST(DeferredImageDecoderTestWoPlatform, mixImagesBmp) {
-  mixImages("/LayoutTests/fast/images/resources/lenna.bmp", 122u, 0u);
+  mixImages("/LayoutTests/images/resources/lenna.bmp", 122u, 0u);
 }
 
 TEST(DeferredImageDecoderTestWoPlatform, mixImagesIco) {
-  mixImages("/LayoutTests/fast/images/resources/wrong-frame-dimensions.ico",
-            1376u, 1u);
+  mixImages("/LayoutTests/images/resources/wrong-frame-dimensions.ico", 1376u,
+            1u);
 }
 
 TEST(DeferredImageDecoderTestWoPlatform, fragmentedSignature) {
   const char* testFiles[] = {
-      "/LayoutTests/fast/images/resources/animated.gif",
-      "/LayoutTests/fast/images/resources/mu.png",
-      "/LayoutTests/fast/images/resources/2-dht.jpg",
-      "/LayoutTests/fast/images/resources/webp-animated.webp",
-      "/LayoutTests/fast/images/resources/lenna.bmp",
-      "/LayoutTests/fast/images/resources/wrong-frame-dimensions.ico",
+      "/LayoutTests/images/resources/animated.gif",
+      "/LayoutTests/images/resources/mu.png",
+      "/LayoutTests/images/resources/2-dht.jpg",
+      "/LayoutTests/images/resources/webp-animated.webp",
+      "/LayoutTests/images/resources/lenna.bmp",
+      "/LayoutTests/images/resources/wrong-frame-dimensions.ico",
   };
 
   for (size_t i = 0; i < SK_ARRAY_COUNT(testFiles); ++i) {
@@ -101,7 +101,7 @@ TEST(DeferredImageDecoderTestWoPlatform, fragmentedSignature) {
     EXPECT_FALSE(ImageDecoder::hasSufficientDataToSniffImageType(*buffer));
     EXPECT_EQ(nullptr, DeferredImageDecoder::create(
                            buffer, false, ImageDecoder::AlphaPremultiplied,
-                           ImageDecoder::GammaAndColorProfileIgnored));
+                           ImageDecoder::ColorSpaceIgnored));
 
     // Append the rest of the data.  We should be able to sniff the signature
     // now, even if segmented.
@@ -110,7 +110,7 @@ TEST(DeferredImageDecoderTestWoPlatform, fragmentedSignature) {
     std::unique_ptr<DeferredImageDecoder> decoder =
         DeferredImageDecoder::create(buffer, false,
                                      ImageDecoder::AlphaPremultiplied,
-                                     ImageDecoder::GammaAndColorProfileIgnored);
+                                     ImageDecoder::ColorSpaceIgnored);
     ASSERT_NE(decoder, nullptr);
     EXPECT_TRUE(String(testFiles[i]).endsWith(decoder->filenameExtension()));
   }

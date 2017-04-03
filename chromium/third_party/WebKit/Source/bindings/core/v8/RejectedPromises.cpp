@@ -13,9 +13,9 @@
 #include "core/events/EventTarget.h"
 #include "core/events/PromiseRejectionEvent.h"
 #include "core/inspector/ThreadDebugger.h"
+#include "platform/WebTaskRunner.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebScheduler.h"
-#include "public/platform/WebTaskRunner.h"
 #include "public/platform/WebThread.h"
 #include "wtf/Functional.h"
 #include "wtf/PtrUtil.h"
@@ -226,7 +226,7 @@ void RejectedPromises::handlerAdded(v8::PromiseRejectMessage data) {
 
 std::unique_ptr<RejectedPromises::MessageQueue>
 RejectedPromises::createMessageQueue() {
-  return wrapUnique(new MessageQueue());
+  return makeUnique<MessageQueue>();
 }
 
 void RejectedPromises::dispose() {

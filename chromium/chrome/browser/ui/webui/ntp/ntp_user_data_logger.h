@@ -34,8 +34,8 @@ class NTPUserDataLogger
       content::WebContents* content);
 
   // Called when an event occurs on the NTP that requires a counter to be
-  // incremented. |time| is the delta time in ms from navigation start until
-  // this event happened.
+  // incremented. |time| is the delta time from navigation start until this
+  // event happened.
   void LogEvent(NTPLoggingEventType event, base::TimeDelta time);
 
   // Logs an impression on one of the NTP tiles by a given source.
@@ -50,12 +50,6 @@ class NTPUserDataLogger
  private:
   friend class content::WebContentsUserData<NTPUserDataLogger>;
 
-  FRIEND_TEST_ALL_PREFIXES(SearchTabHelperTest,
-                           OnMostVisitedItemsChangedFromServer);
-  FRIEND_TEST_ALL_PREFIXES(SearchTabHelperTest,
-                           OnMostVisitedItemsChangedFromClient);
-  FRIEND_TEST_ALL_PREFIXES(NTPUserDataLoggerTest,
-                           TestLogging);
   FRIEND_TEST_ALL_PREFIXES(NTPUserDataLoggerTest, TestLogMostVisitedImpression);
   FRIEND_TEST_ALL_PREFIXES(NTPUserDataLoggerTest, TestNumberOfTiles);
 
@@ -89,10 +83,6 @@ class NTPUserDataLogger
 
   // True if at least one iframe came from a client-side suggestion.
   bool has_client_side_suggestions_;
-
-  // Total number of tiles rendered, no matter if it's a thumbnail, a gray tile
-  // or an external tile.
-  size_t number_of_tiles_;
 
   // Whether we have already emitted NTP stats for this web contents.
   bool has_emitted_;

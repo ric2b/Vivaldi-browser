@@ -33,14 +33,10 @@
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/transform.h"
 
-class SkCanvas;
-
 namespace cc {
-class ContentLayer;
 class CopyOutputRequest;
 class Layer;
 class NinePatchLayer;
-class ResourceUpdateQueue;
 class SolidColorLayer;
 class SurfaceLayer;
 class TextureLayer;
@@ -383,6 +379,7 @@ class COMPOSITOR_EXPORT Layer
   std::unique_ptr<base::trace_event::ConvertableToTraceFormat> TakeDebugInfo(
       cc::Layer* layer) override;
   void didUpdateMainThreadScrollingReasons() override;
+  void didChangeScrollbarsHidden(bool) override;
 
   // Triggers a call to SwitchToLayer.
   void SwitchCCLayerForTest();

@@ -47,7 +47,7 @@ class CC_EXPORT RasterSource : public base::RefCountedThreadSafe<RasterSource> {
   void PlaybackToCanvas(SkCanvas* canvas,
                         const gfx::Rect& canvas_bitmap_rect,
                         const gfx::Rect& canvas_playback_rect,
-                        float contents_scale,
+                        const gfx::SizeF& raster_scales,
                         const PlaybackSettings& settings) const;
 
   // Raster this RasterSource into the given canvas. Canvas states such as
@@ -65,7 +65,7 @@ class CC_EXPORT RasterSource : public base::RefCountedThreadSafe<RasterSource> {
   // Returns whether the given rect at given scale is of solid color in
   // this raster source, as well as the solid color value.
   bool PerformSolidColorAnalysis(const gfx::Rect& content_rect,
-                                 float contents_scale,
+                                 const gfx::SizeF& raster_scales,
                                  SkColor* color) const;
 
   // Returns true iff the whole raster source is of solid color.
@@ -82,7 +82,7 @@ class CC_EXPORT RasterSource : public base::RefCountedThreadSafe<RasterSource> {
   // rect in layer space. The returned draw images' matrices are modified as if
   // they were being using during raster at scale |raster_scale|.
   void GetDiscardableImagesInRect(const gfx::Rect& layer_rect,
-                                  float raster_scale,
+                                  const gfx::SizeF& raster_scales,
                                   std::vector<DrawImage>* images) const;
 
   // Return true iff this raster source can raster the given rect in layer
@@ -94,14 +94,6 @@ class CC_EXPORT RasterSource : public base::RefCountedThreadSafe<RasterSource> {
 
   // Valid rectangle in which everything is recorded and can be rastered from.
   virtual gfx::Rect RecordedViewport() const;
-
-  // Informs the raster source that it should attempt to use distance field text
-  // during rasterization.
-  virtual void SetShouldAttemptToUseDistanceFieldText();
-
-  // Return true iff this raster source would benefit from using distance
-  // field text.
-  virtual bool ShouldAttemptToUseDistanceFieldText() const;
 
   // Tracing functionality.
   virtual void DidBeginTracing();
@@ -153,9 +145,6 @@ class CC_EXPORT RasterSource : public base::RefCountedThreadSafe<RasterSource> {
   const gfx::Size size_;
   const bool clear_canvas_with_debug_color_;
   const int slow_down_raster_scale_factor_for_debug_;
-  // TODO(enne/vmiura): this has a read/write race between raster and compositor
-  // threads with multi-threaded Ganesh.  Make this const or remove it.
-  bool should_attempt_to_use_distance_field_text_;
 
   // In practice, this is only set once before raster begins, so it's ok with
   // respect to threading.

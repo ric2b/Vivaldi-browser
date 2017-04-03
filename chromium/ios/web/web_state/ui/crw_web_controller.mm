@@ -102,7 +102,7 @@
 #import "ios/web/webui/mojo_facade.h"
 #import "net/base/mac/url_conversions.h"
 #include "net/base/net_errors.h"
-#include "services/shell/public/cpp/interface_registry.h"
+#include "services/service_manager/public/cpp/interface_registry.h"
 #include "ui/base/page_transition_types.h"
 #include "url/gurl.h"
 #include "url/url_constants.h"
@@ -662,6 +662,14 @@ NSError* WKWebViewErrorWithSource(NSError* error, WKWebViewErrorSource source) {
 - (void)loadCompleteWithSuccess:(BOOL)loadSuccess;
 // Called after URL is finished loading and _loadPhase is set to PAGE_LOADED.
 - (void)didFinishWithURL:(const GURL&)currentURL loadSuccess:(BOOL)loadSuccess;
+// Navigates forwards or backwards by |delta| pages. No-op if delta is out of
+// bounds. Reloads if delta is 0.
+// TODO(crbug.com/661316): Move this method to NavigationManager.
+- (void)goDelta:(int)delta;
+// Loads a new URL if the current entry is not from a pushState() navigation.
+// |fromEntry| is the CRWSessionEntry that was the current entry prior to the
+// navigation.
+- (void)finishHistoryNavigationFromEntry:(CRWSessionEntry*)fromEntry;
 // Informs the native controller if web usage is allowed or not.
 - (void)setNativeControllerWebUsageEnabled:(BOOL)webUsageEnabled;
 // Called when web controller receives a new message from the web page.
@@ -1135,6 +1143,8 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
   DCHECK([NSThread isMainThread]);
   DCHECK(_isBeingDestroyed);  // 'close' must have been called already.
   DCHECK(!_webView);
+  // TODO(crbug.com/662860): Don't set the delegate to nil.
+  [_containerView setDelegate:nil];
   _touchTrackingRecognizer.get().touchTrackingDelegate = nil;
   [[_webViewProxy scrollViewProxy] removeObserver:self];
   [[NSNotificationCenter defaultCenter] removeObserver:self];
@@ -1279,7 +1289,7 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
 
 // Caller must reset the delegate before calling.
 - (void)close {
-  _webStateImpl->CancelActiveAndPendingDialogs();
+  _webStateImpl->CancelDialogs();
 
   _SSLStatusUpdater.reset();
 
@@ -1371,14 +1381,6 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
         [[result stretchableImageWithLeftCapWidth:1 topCapHeight:1] retain];
   }
   return defaultImage;
-}
-
-- (BOOL)canGoBack {
-  return _webStateImpl->GetNavigationManagerImpl().CanGoBack();
-}
-
-- (BOOL)canGoForward {
-  return _webStateImpl->GetNavigationManagerImpl().CanGoForward();
 }
 
 - (CGPoint)scrollPosition {
@@ -2275,50 +2277,17 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
   }
 }
 
-- (void)prepareForGoBack {
-  // Before changing the current session history entry, record the tab state.
-  if (!_webStateImpl->IsShowingWebInterstitial()) {
+- (void)goToItemAtIndex:(int)index {
+  NSArray* entries = self.sessionController.entries;
+  DCHECK_LT(static_cast<NSUInteger>(index), entries.count);
+  DCHECK_GE(index, 0);
+
+  if (!_webStateImpl->IsShowingWebInterstitial())
     [self recordStateInHistory];
-  }
-}
-
-- (void)goBack {
-  [self goDelta:-1];
-}
-
-- (void)goForward {
-  [self goDelta:1];
-}
-
-- (void)goDelta:(int)delta {
-  if (delta == 0) {
-    [self reload];
-    return;
-  }
-
-  // Abort if there is nothing next in the history.
-  // Note that it is NOT checked that the history depth is at least |delta|.
-  if ((delta < 0 && ![self canGoBack]) || (delta > 0 && ![self canGoForward])) {
-    return;
-  }
-
-  if (delta < 0) {
-    [self prepareForGoBack];
-  } else {
-    // Before changing the current session history entry, record the tab state.
-    [self recordStateInHistory];
-  }
-
-  CRWSessionController* sessionController =
-      _webStateImpl->GetNavigationManagerImpl().GetSessionController();
-  // fromEntry is retained because it has the potential to be released
-  // by goDelta: if it has not been committed.
-  base::scoped_nsobject<CRWSessionEntry> fromEntry(
-      [[sessionController currentEntry] retain]);
-  [sessionController goDelta:delta];
-  if (fromEntry) {
+  CRWSessionEntry* fromEntry = self.sessionController.currentEntry;
+  [self.sessionController goToEntryAtIndex:index];
+  if (fromEntry)
     [self finishHistoryNavigationFromEntry:fromEntry];
-  }
 }
 
 - (BOOL)isLoaded {
@@ -2408,11 +2377,20 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
   [_delegate webDidFinishWithURL:currentURL loadSuccess:loadSuccess];
 }
 
+- (void)goDelta:(int)delta {
+  if (delta == 0) {
+    [self reload];
+  } else if ([self.sessionController canGoDelta:delta]) {
+    [self goToItemAtIndex:[self.sessionController indexOfEntryForDelta:delta]];
+  }
+}
+
 - (void)finishHistoryNavigationFromEntry:(CRWSessionEntry*)fromEntry {
   [_delegate webWillFinishHistoryNavigationFromEntry:fromEntry];
 
-  // Only load the new URL if the current entry was not created by a JavaScript
-  // window.history.pushState() call from |fromEntry|.
+  // Only load the new URL if it has a different document than |fromEntry| to
+  // prevent extra page loads from NavigationItems created by hash changes or
+  // calls to window.history.pushState().
   BOOL shouldLoadURL =
       ![_webStateImpl->GetNavigationManagerImpl().GetSessionController()
           isSameDocumentNavigationBetweenEntry:fromEntry
@@ -2497,7 +2475,7 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
 
 - (web::MojoFacade*)mojoFacade {
   if (!_mojoFacade) {
-    shell::mojom::InterfaceProvider* interfaceProvider =
+    service_manager::mojom::InterfaceProvider* interfaceProvider =
         _webStateImpl->GetMojoInterfaceRegistry();
     _mojoFacade.reset(new web::MojoFacade(interfaceProvider, self));
   }
@@ -3042,13 +3020,13 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
 
 - (BOOL)handleWindowHistoryBackMessage:(base::DictionaryValue*)message
                                context:(NSDictionary*)context {
-  [self goBack];
+  [self goDelta:-1];
   return YES;
 }
 
 - (BOOL)handleWindowHistoryForwardMessage:(base::DictionaryValue*)message
                                   context:(NSDictionary*)context {
-  [self goForward];
+  [self goDelta:1];
   return YES;
 }
 
@@ -4373,6 +4351,10 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
     params.referrer_policy =
         web::ReferrerPolicyFromString(base::SysNSStringToUTF8(referrerPolicy));
   }
+  NSString* innerText = element[@"innerText"];
+  if ([innerText length] > 0) {
+    params.link_text.reset([innerText copy]);
+  }
   return params;
 }
 
@@ -4767,7 +4749,7 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
   SEL cancelDialogsSelector = @selector(cancelDialogsForWebController:);
   if ([self.UIDelegate respondsToSelector:cancelDialogsSelector])
     [self.UIDelegate cancelDialogsForWebController:self];
-  _webStateImpl->CancelActiveAndPendingDialogs();
+  _webStateImpl->CancelDialogs();
 
   if (allowCache)
     _expectedReconstructionURL = [self currentNavigationURL];
@@ -4786,7 +4768,7 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
   SEL cancelDialogsSelector = @selector(cancelDialogsForWebController:);
   if ([self.UIDelegate respondsToSelector:cancelDialogsSelector])
     [self.UIDelegate cancelDialogsForWebController:self];
-  _webStateImpl->CancelActiveAndPendingDialogs();
+  _webStateImpl->CancelDialogs();
 
   SEL rendererCrashSelector = @selector(webControllerWebProcessDidCrash:);
   if ([self.delegate respondsToSelector:rendererCrashSelector])
@@ -5117,10 +5099,9 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
 - (void)webView:(WKWebView*)webView
     didStartProvisionalNavigation:(WKNavigation*)navigation {
   GURL webViewURL = net::GURLWithNSURL(webView.URL);
-  if (webViewURL.is_empty() && base::ios::IsRunningOnIOS9OrLater()) {
+  if (webViewURL.is_empty()) {
     // May happen on iOS9, however in didCommitNavigation: callback the URL
-    // will be "about:blank". TODO(eugenebut): File radar for this issue
-    // (crbug.com/523549).
+    // will be "about:blank".
     webViewURL = GURL(url::kAboutBlankURL);
   }
 
@@ -5150,6 +5131,19 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
       [self registerLoadRequest:webViewURL];
     }
   }
+
+  if (![self currentSessionEntry]) {
+    // In this state CRWWebController will crash in |didCommitNavigation:|
+    // (crbug.com/676458). It's unclear if web controller could get into this
+    // state but it's one of the guesses for crbug.com/676458 root cause. Report
+    // UMA historgam if that happens.
+    // TODO(crbug.com/677552): Remove this historgam.
+    UMA_HISTOGRAM_BOOLEAN(
+        "WebController."
+        "StartProvisionalNavigationExitedWithEmptyNavigationManager",
+        true);
+  }
+
   // Ensure the URL is registered and loadPhase is as expected.
   DCHECK(_lastRegisteredRequestURL == webViewURL);
   DCHECK(self.loadPhase == web::LOAD_REQUESTED);

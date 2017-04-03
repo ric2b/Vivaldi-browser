@@ -104,8 +104,10 @@ static bool updateYUVComponentSizes(ImageDecoder* decoder,
 }
 
 ImageFrameGenerator::ImageFrameGenerator(const SkISize& fullSize,
+                                         sk_sp<SkColorSpace> colorSpace,
                                          bool isMultiFrame)
     : m_fullSize(fullSize),
+      m_colorSpace(std::move(colorSpace)),
       m_isMultiFrame(isMultiFrame),
       m_decodeFailed(false),
       m_yuvDecodingFailed(false),
@@ -174,13 +176,13 @@ bool ImageFrameGenerator::decodeToYUV(SegmentReader* data,
 
   std::unique_ptr<ImageDecoder> decoder =
       ImageDecoder::create(data, true, ImageDecoder::AlphaPremultiplied,
-                           ImageDecoder::GammaAndColorProfileApplied);
+                           ImageDecoder::ColorSpaceApplied);
   // getYUVComponentSizes was already called and was successful, so
   // ImageDecoder::create must succeed.
   ASSERT(decoder);
 
   std::unique_ptr<ImagePlanes> imagePlanes =
-      wrapUnique(new ImagePlanes(planes, rowBytes));
+      makeUnique<ImagePlanes>(planes, rowBytes);
   decoder->setImagePlanes(std::move(imagePlanes));
 
   ASSERT(decoder->canDecodeToYUV());
@@ -296,7 +298,7 @@ bool ImageFrameGenerator::decode(SegmentReader* data,
     if (!*decoder) {
       *decoder = ImageDecoder::create(data, allDataReceived,
                                       ImageDecoder::AlphaPremultiplied,
-                                      ImageDecoder::GammaAndColorProfileApplied)
+                                      ImageDecoder::ColorSpaceApplied)
                      .release();
       // The newly created decoder just grabbed the data.  No need to reset it.
       shouldCallSetData = false;
@@ -366,7 +368,7 @@ bool ImageFrameGenerator::getYUVComponentSizes(SegmentReader* data,
 
   std::unique_ptr<ImageDecoder> decoder =
       ImageDecoder::create(data, true, ImageDecoder::AlphaPremultiplied,
-                           ImageDecoder::GammaAndColorProfileApplied);
+                           ImageDecoder::ColorSpaceApplied);
   if (!decoder)
     return false;
 

@@ -31,7 +31,6 @@ class MenuModel;
 }
 
 namespace views {
-class MenuModelAdapter;
 class MenuRunner;
 class View;
 }
@@ -86,10 +85,6 @@ class BrowserFrame
   // Returns |true| if we should use the custom frame.
   bool UseCustomFrame() const;
 
-  // Returns whether we should custom draw the titlebar even if we're using the
-  // native frame. Only applicable to Windows.
-  bool CustomDrawSystemTitlebar() const;
-
   // Returns true when the window placement should be saved.
   bool ShouldSaveWindowPlacement() const;
 
@@ -143,7 +138,6 @@ class BrowserFrame
 
   // Used to show the system menu. Only used if
   // NativeBrowserFrame::UsesNativeSystemMenu() returns false.
-  std::unique_ptr<views::MenuModelAdapter> menu_model_adapter_;
   std::unique_ptr<views::MenuRunner> menu_runner_;
 
   std::unique_ptr<ui::EventHandler> browser_command_handler_;

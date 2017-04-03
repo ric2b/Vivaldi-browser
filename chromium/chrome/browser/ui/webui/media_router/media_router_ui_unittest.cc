@@ -65,6 +65,11 @@ class MockRoutesUpdatedCallback {
 
 class MediaRouterUITest : public ::testing::Test {
  public:
+  MediaRouterUITest() {
+    ON_CALL(mock_router_, GetCurrentRoutes())
+        .WillByDefault(Return(std::vector<MediaRoute>()));
+  }
+
   ~MediaRouterUITest() override {
     EXPECT_CALL(mock_router_, UnregisterMediaSinksObserver(_))
         .Times(AnyNumber());
@@ -155,9 +160,9 @@ TEST_F(MediaRouterUITest, RouteCreationTimeoutForDesktop) {
 
 TEST_F(MediaRouterUITest, RouteCreationTimeoutForPresentation) {
   CreateMediaRouterUI(&profile_);
-  PresentationRequest presentation_request(RenderFrameHostId(0, 0),
-                                           {"https://presentationurl.fakeurl"},
-                                           GURL("https://frameurl.fakeurl"));
+  PresentationRequest presentation_request(
+      RenderFrameHostId(0, 0), {GURL("https://presentationurl.com")},
+      GURL("https://frameurl.fakeurl"));
   media_router_ui_->OnDefaultPresentationChanged(presentation_request);
   std::vector<MediaRouteResponseCallback> callbacks;
   EXPECT_CALL(
@@ -195,8 +200,9 @@ TEST_F(MediaRouterUITest, RouteCreationParametersCantBeCreated) {
 TEST_F(MediaRouterUITest, RouteRequestFromIncognito) {
   CreateMediaRouterUI(profile_.GetOffTheRecordProfile());
 
-  PresentationRequest presentation_request(
-      RenderFrameHostId(0, 0), {"https://fooUrl"}, GURL("https://frameUrl"));
+  PresentationRequest presentation_request(RenderFrameHostId(0, 0),
+                                           {GURL("https://foo.url.com/")},
+                                           GURL("https://frameUrl"));
   media_router_ui_->OnDefaultPresentationChanged(presentation_request);
 
   EXPECT_CALL(
@@ -270,16 +276,10 @@ TEST_F(MediaRouterUITest, SortSinksByIconType) {
   EXPECT_EQ(sink3.sink.id(), sorted_sinks[5].sink.id());
 }
 
-TEST_F(MediaRouterUITest, UIMediaRoutesObserverFiltersNonDisplayRoutes) {
-  EXPECT_CALL(mock_router_, RegisterMediaRoutesObserver(_)).Times(1);
-  MediaSource media_source("mediaSource");
-  MockRoutesUpdatedCallback mock_callback;
-  std::unique_ptr<MediaRouterUI::UIMediaRoutesObserver> observer(
-      new MediaRouterUI::UIMediaRoutesObserver(
-          &mock_router_, media_source.id(),
-          base::Bind(&MockRoutesUpdatedCallback::OnRoutesUpdated,
-                     base::Unretained(&mock_callback))));
+TEST_F(MediaRouterUITest, FilterNonDisplayRoutes) {
+  CreateMediaRouterUI(&profile_);
 
+  MediaSource media_source("mediaSource");
   MediaRoute display_route_1("routeId1", media_source, "sinkId1", "desc 1",
                              true, "", true);
   MediaRoute non_display_route_1("routeId2", media_source, "sinkId2", "desc 2",
@@ -291,32 +291,18 @@ TEST_F(MediaRouterUITest, UIMediaRoutesObserverFiltersNonDisplayRoutes) {
   routes.push_back(non_display_route_1);
   routes.push_back(display_route_2);
 
-  std::vector<MediaRoute> filtered_routes;
-  EXPECT_CALL(mock_callback, OnRoutesUpdated(_, _))
-      .WillOnce(SaveArg<0>(&filtered_routes));
-  observer->OnRoutesUpdated(routes, std::vector<MediaRoute::Id>());
-
-  ASSERT_EQ(2u, filtered_routes.size());
-  EXPECT_TRUE(display_route_1.Equals(filtered_routes[0]));
-  EXPECT_TRUE(filtered_routes[0].for_display());
-  EXPECT_TRUE(display_route_2.Equals(filtered_routes[1]));
-  EXPECT_TRUE(filtered_routes[1].for_display());
-
-  EXPECT_CALL(mock_router_, UnregisterMediaRoutesObserver(_)).Times(1);
-  observer.reset();
+  media_router_ui_->OnRoutesUpdated(routes, std::vector<MediaRoute::Id>());
+  ASSERT_EQ(2u, media_router_ui_->routes_.size());
+  EXPECT_TRUE(display_route_1.Equals(media_router_ui_->routes_[0]));
+  EXPECT_TRUE(media_router_ui_->routes_[0].for_display());
+  EXPECT_TRUE(display_route_2.Equals(media_router_ui_->routes_[1]));
+  EXPECT_TRUE(media_router_ui_->routes_[1].for_display());
 }
 
-TEST_F(MediaRouterUITest,
-    UIMediaRoutesObserverFiltersNonDisplayJoinableRoutes) {
-  EXPECT_CALL(mock_router_, RegisterMediaRoutesObserver(_)).Times(1);
-  MediaSource media_source("mediaSource");
-  MockRoutesUpdatedCallback mock_callback;
-  std::unique_ptr<MediaRouterUI::UIMediaRoutesObserver> observer(
-      new MediaRouterUI::UIMediaRoutesObserver(
-          &mock_router_, media_source.id(),
-          base::Bind(&MockRoutesUpdatedCallback::OnRoutesUpdated,
-                     base::Unretained(&mock_callback))));
+TEST_F(MediaRouterUITest, FilterNonDisplayJoinableRoutes) {
+  CreateMediaRouterUI(&profile_);
 
+  MediaSource media_source("mediaSource");
   MediaRoute display_route_1("routeId1", media_source, "sinkId1", "desc 1",
                              true, "", true);
   MediaRoute non_display_route_1("routeId2", media_source, "sinkId2", "desc 2",
@@ -333,18 +319,12 @@ TEST_F(MediaRouterUITest,
   joinable_route_ids.push_back("routeId2");
   joinable_route_ids.push_back("routeId3");
 
-  std::vector<MediaRoute::Id> filtered_joinable_route_ids;
-  // Save the filtered joinable routes.
-  EXPECT_CALL(mock_callback, OnRoutesUpdated(_, _))
-      .WillOnce(SaveArg<1>(&filtered_joinable_route_ids));
-  observer->OnRoutesUpdated(routes, joinable_route_ids);
-
-  ASSERT_EQ(2u, filtered_joinable_route_ids.size());
-  EXPECT_EQ(display_route_1.media_route_id(), filtered_joinable_route_ids[0]);
-  EXPECT_EQ(display_route_2.media_route_id(), filtered_joinable_route_ids[1]);
-
-  EXPECT_CALL(mock_router_, UnregisterMediaRoutesObserver(_)).Times(1);
-  observer.reset();
+  media_router_ui_->OnRoutesUpdated(routes, joinable_route_ids);
+  ASSERT_EQ(2u, media_router_ui_->joinable_route_ids_.size());
+  EXPECT_EQ(display_route_1.media_route_id(),
+            media_router_ui_->joinable_route_ids_[0]);
+  EXPECT_EQ(display_route_2.media_route_id(),
+            media_router_ui_->joinable_route_ids_[1]);
 }
 
 TEST_F(MediaRouterUITest, UIMediaRoutesObserverAssignsCurrentCastModes) {
@@ -380,7 +360,7 @@ TEST_F(MediaRouterUITest, UIMediaRoutesObserverAssignsCurrentCastModes) {
   EXPECT_TRUE(display_route_2.Equals(filtered_routes[1]));
   EXPECT_TRUE(filtered_routes[1].for_display());
 
-  const auto& current_cast_modes = media_router_ui_->current_cast_modes();
+  const auto& current_cast_modes = media_router_ui_->routes_and_cast_modes();
   ASSERT_EQ(2u, current_cast_modes.size());
   auto cast_mode_entry =
       current_cast_modes.find(display_route_1.media_route_id());
@@ -429,7 +409,7 @@ TEST_F(MediaRouterUITest, UIMediaRoutesObserverSkipsUnavailableCastModes) {
   EXPECT_TRUE(display_route_2.Equals(filtered_routes[1]));
   EXPECT_TRUE(filtered_routes[1].for_display());
 
-  const auto& current_cast_modes = media_router_ui_->current_cast_modes();
+  const auto& current_cast_modes = media_router_ui_->routes_and_cast_modes();
   ASSERT_EQ(1u, current_cast_modes.size());
   auto cast_mode_entry =
       current_cast_modes.find(display_route_1.media_route_id());
@@ -487,7 +467,7 @@ TEST_F(MediaRouterUITest, NotFoundErrorOnCloseWithNoSinks) {
       "No screens found.");
   PresentationRequestCallbacks request_callbacks(expected_error);
   create_session_request_.reset(new CreatePresentationConnectionRequest(
-      RenderFrameHostId(0, 0), std::string("http://google.com/presentation"),
+      RenderFrameHostId(0, 0), GURL("http://google.com/presentation"),
       GURL("http://google.com"),
       base::Bind(&PresentationRequestCallbacks::Success,
                  base::Unretained(&request_callbacks)),
@@ -504,7 +484,7 @@ TEST_F(MediaRouterUITest, NotFoundErrorOnCloseWithNoCompatibleSinks) {
       content::PresentationErrorType::PRESENTATION_ERROR_NO_AVAILABLE_SCREENS,
       "No screens found.");
   PresentationRequestCallbacks request_callbacks(expected_error);
-  std::string presentation_url("http://google.com/presentation");
+  GURL presentation_url("http://google.com/presentation");
   create_session_request_.reset(new CreatePresentationConnectionRequest(
       RenderFrameHostId(0, 0), presentation_url, GURL("http://google.com"),
       base::Bind(&PresentationRequestCallbacks::Success,
@@ -519,7 +499,7 @@ TEST_F(MediaRouterUITest, NotFoundErrorOnCloseWithNoCompatibleSinks) {
   sinks.emplace_back("sink id", "sink name", MediaSink::GENERIC);
   std::vector<GURL> origins;
   for (auto* observer : media_sinks_observers_) {
-    if (observer->source().id() != presentation_url) {
+    if (observer->source().id() != presentation_url.spec()) {
       observer->OnSinksUpdated(sinks, origins);
     }
   }
@@ -534,7 +514,7 @@ TEST_F(MediaRouterUITest, AbortErrorOnClose) {
           PRESENTATION_ERROR_SESSION_REQUEST_CANCELLED,
       "Dialog closed.");
   PresentationRequestCallbacks request_callbacks(expected_error);
-  std::string presentation_url("http://google.com/presentation");
+  GURL presentation_url("http://google.com/presentation");
   create_session_request_.reset(new CreatePresentationConnectionRequest(
       RenderFrameHostId(0, 0), presentation_url, GURL("http://google.com"),
       base::Bind(&PresentationRequestCallbacks::Success,
@@ -548,8 +528,10 @@ TEST_F(MediaRouterUITest, AbortErrorOnClose) {
   std::vector<MediaSink> sinks;
   sinks.emplace_back("sink id", "sink name", MediaSink::GENERIC);
   std::vector<GURL> origins;
+  MediaSource::Id presentation_source_id =
+      MediaSourceForPresentationUrl(presentation_url).id();
   for (auto* observer : media_sinks_observers_) {
-    if (observer->source().id() == presentation_url) {
+    if (observer->source().id() == presentation_source_id) {
       observer->OnSinksUpdated(sinks, origins);
     }
   }

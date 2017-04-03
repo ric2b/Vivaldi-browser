@@ -10,6 +10,8 @@ source_set("common") {
     "material_timing.mm",
     "string_util.h",
     "string_util.mm",
+    "x_callback_url.cc",
+    "x_callback_url.h",
   ]
 
   deps = [
@@ -17,10 +19,24 @@ source_set("common") {
     "//components/version_info",
     "//ios/chrome/common/app_group:main_app",
     "//ios/chrome/common/physical_web:physical_web",
+    "//net",
+    "//url",
   ]
 
-  libs = [
-    "CoreGraphics.framework",
-    "Foundation.framework",
+  libs = [ "QuartzCore.framework" ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [
+    "block_unittest.mm",
+    "ns_regular_expression_unittest.mm",
+    "string_util_unittest.mm",
+    "x_callback_url_unittest.cc",
+  ]
+  deps = [
+    ":common",
+    "//base",
+    "//testing/gtest",
   ]
 }

@@ -27,7 +27,9 @@
 
 #include "core/loader/EmptyClients.h"
 
+#include "core/frame/FrameHost.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/VisualViewport.h"
 #include "core/html/HTMLFormElement.h"
 #include "core/html/forms/ColorChooser.h"
 #include "core/html/forms/DateTimeChooser.h"
@@ -107,13 +109,21 @@ void EmptyChromeClient::openTextDataListChooser(HTMLInputElement&) {}
 
 void EmptyChromeClient::openFileChooser(LocalFrame*, PassRefPtr<FileChooser>) {}
 
+void EmptyChromeClient::attachRootGraphicsLayer(GraphicsLayer* layer,
+                                                LocalFrame* localRoot) {
+  Page* page = localRoot ? localRoot->page() : nullptr;
+  if (!page)
+    return;
+  page->frameHost().visualViewport().attachToLayerTree(layer);
+}
+
 String EmptyChromeClient::acceptLanguages() {
   return String();
 }
 
 std::unique_ptr<WebFrameScheduler> EmptyChromeClient::createFrameScheduler(
     BlameContext*) {
-  return wrapUnique(new EmptyFrameScheduler());
+  return makeUnique<EmptyFrameScheduler>();
 }
 
 NavigationPolicy EmptyFrameLoaderClient::decidePolicyForNavigation(
@@ -122,7 +132,8 @@ NavigationPolicy EmptyFrameLoaderClient::decidePolicyForNavigation(
     NavigationType,
     NavigationPolicy,
     bool,
-    bool) {
+    bool,
+    HTMLFormElement*) {
   return NavigationPolicyIgnore;
 }
 
@@ -133,8 +144,10 @@ void EmptyFrameLoaderClient::dispatchWillSubmitForm(HTMLFormElement*) {}
 DocumentLoader* EmptyFrameLoaderClient::createDocumentLoader(
     LocalFrame* frame,
     const ResourceRequest& request,
-    const SubstituteData& substituteData) {
-  return DocumentLoader::create(frame, request, substituteData);
+    const SubstituteData& substituteData,
+    ClientRedirectPolicy clientRedirectPolicy) {
+  return DocumentLoader::create(frame, request, substituteData,
+                                clientRedirectPolicy);
 }
 
 LocalFrame* EmptyFrameLoaderClient::createFrame(const FrameLoadRequest&,
@@ -157,6 +170,11 @@ std::unique_ptr<WebMediaPlayer> EmptyFrameLoaderClient::createWebMediaPlayer(
     HTMLMediaElement&,
     const WebMediaPlayerSource&,
     WebMediaPlayerClient*) {
+  return nullptr;
+}
+
+WebRemotePlaybackClient* EmptyFrameLoaderClient::createWebRemotePlaybackClient(
+    HTMLMediaElement&) {
   return nullptr;
 }
 

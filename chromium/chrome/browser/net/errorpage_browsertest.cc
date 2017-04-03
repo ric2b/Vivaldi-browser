@@ -43,6 +43,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_types.h"
 #include "content/public/browser/render_frame_host.h"
@@ -507,14 +508,10 @@ class TestFailProvisionalLoadObserver : public content::WebContentsObserver {
       : content::WebContentsObserver(contents) {}
   ~TestFailProvisionalLoadObserver() override {}
 
-  // This method is invoked when the provisional load failed.
-  void DidFailProvisionalLoad(
-      content::RenderFrameHost* render_frame_host,
-      const GURL& validated_url,
-      int error_code,
-      const base::string16& error_description,
-      bool was_ignored_by_handler) override {
-    fail_url_ = validated_url;
+  void DidFinishNavigation(
+      content::NavigationHandle* navigation_handle) override {
+    if (navigation_handle->IsErrorPage())
+      fail_url_ = navigation_handle->GetURL();
   }
 
   const GURL& fail_url() const { return fail_url_; }
@@ -1301,8 +1298,7 @@ class ErrorPageOfflineTest : public ErrorPageTest {
       // Set up fake install attributes.
       std::unique_ptr<chromeos::StubInstallAttributes> attributes =
           base::MakeUnique<chromeos::StubInstallAttributes>();
-      attributes->SetDomain("example.com");
-      attributes->SetRegistrationUser("user@example.com");
+      attributes->SetEnterprise("example.com", "fake-id");
       policy::BrowserPolicyConnectorChromeOS::SetInstallAttributesForTesting(
           attributes.release());
     }
@@ -1498,12 +1494,14 @@ IN_PROC_BROWSER_TEST_F(ErrorPageForIDNTest, IDN) {
   EXPECT_TRUE(IsDisplayingText(browser(), kHostnameJSUnicode));
 }
 
-// Make sure HTTP/0.9 is disabled on non-default ports by default.
+// Make sure HTTP/0.9 is enabled on non-default ports by default.
 IN_PROC_BROWSER_TEST_F(ErrorPageTest, Http09WeirdPort) {
+  const char kHttp09Response[] = "JumboShrimp";
   ASSERT_TRUE(embedded_test_server()->Start());
   ui_test_utils::NavigateToURL(
-      browser(), embedded_test_server()->GetURL("/echo-raw?spam"));
-  ExpectDisplayingLocalErrorPage(browser(), net::ERR_INVALID_HTTP_RESPONSE);
+      browser(), embedded_test_server()->GetURL(std::string("/echo-raw?") +
+                                                kHttp09Response));
+  EXPECT_TRUE(IsDisplayingText(browser(), kHttp09Response));
 }
 
 class ErrorPageWithHttp09OnNonDefaultPortsTest : public InProcessBrowserTest {

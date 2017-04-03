@@ -4,8 +4,6 @@
 
 package org.chromium.content_public.browser;
 
-import org.chromium.content_public.common.MediaMetadata;
-
 import java.lang.ref.WeakReference;
 
 /**
@@ -81,6 +79,16 @@ public abstract class WebContentsObserver {
      * Called when the page had painted something non-empty.
      */
     public void didFirstVisuallyNonEmptyPaint() {}
+
+    /**
+     * The web contents was shown.
+     */
+    public void wasShown() {}
+
+    /**
+     * The web contents was hidden.
+     */
+    public void wasHidden() {}
 
     /**
      * Similar to didNavigateMainFrame but also called on subframe navigations.
@@ -161,15 +169,6 @@ public abstract class WebContentsObserver {
      * @param url        The URL that we are navigating to.
      */
     public void didStartNavigationToPendingEntry(String url) {}
-
-    /**
-     * Called when the media session state changed.
-     * @param isControllable if the session can be resumed or suspended.
-     * @param isSuspended if the session currently suspended or not.
-     * @param metadata of the media session.
-     */
-    public void mediaSessionStateChanged(
-            boolean isControllable, boolean isSuspended, MediaMetadata metadata) {}
 
     /**
      * Stop observing the web contents and clean up associated references.

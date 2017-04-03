@@ -473,7 +473,14 @@ IN_PROC_BROWSER_TEST_F(SamlTest, MAYBE_SamlUI) {
 }
 
 // Tests the sign-in flow when the credentials passing API is used.
-IN_PROC_BROWSER_TEST_F(SamlTest, CredentialPassingAPI) {
+//
+// Flaky. See http://crbug.com/659992
+#if defined(OS_LINUX)
+#define MAYBE_CredentialPassingAPI DISABLED_CredentialPassingAPI
+#else
+#define MAYBE_CredentialPassingAPI CredentialPassingAPI
+#endif
+IN_PROC_BROWSER_TEST_F(SamlTest, MAYBE_CredentialPassingAPI) {
   fake_saml_idp()->SetLoginHTMLTemplate("saml_api_login.html");
   fake_saml_idp()->SetLoginAuthHTMLTemplate("saml_api_login_auth.html");
   StartSamlAndWaitForIdpPageLoad(kFirstSAMLUserEmail);
@@ -637,7 +644,7 @@ IN_PROC_BROWSER_TEST_F(SamlTest, UseAutenticatedUserEmailAddress) {
   const user_manager::User* user =
       user_manager::UserManager::Get()->GetActiveUser();
   ASSERT_TRUE(user);
-  EXPECT_EQ(kFirstSAMLUserEmail, user->email());
+  EXPECT_EQ(kFirstSAMLUserEmail, user->GetAccountId().GetUserEmail());
 }
 
 // Verifies that if the authenticated user's e-mail address cannot be retrieved,

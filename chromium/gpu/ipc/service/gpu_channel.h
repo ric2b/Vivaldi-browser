@@ -100,8 +100,6 @@ class GPU_EXPORT GpuChannel
     return preempted_flag_;
   }
 
-  const std::string& channel_id() const { return channel_id_; }
-
   virtual base::ProcessId GetClientPID() const;
 
   int client_id() const { return client_id_; }
@@ -116,6 +114,7 @@ class GPU_EXPORT GpuChannel
 
   // IPC::Listener implementation:
   bool OnMessageReceived(const IPC::Message& msg) override;
+  void OnChannelConnected(int32_t peer_pid) override;
   void OnChannelError() override;
 
   // IPC::Sender implementation:
@@ -238,9 +237,6 @@ class GPU_EXPORT GpuChannel
 
   IPC::Listener* unhandled_message_listener_;
 
-  // Uniquely identifies the channel within this GPU process.
-  std::string channel_id_;
-
   // Used to implement message routing functionality to CommandBuffer objects
   IPC::MessageRouter router_;
 
@@ -284,6 +280,8 @@ class GPU_EXPORT GpuChannel
 
   // Can real time streams be created on this channel.
   const bool allow_real_time_streams_;
+
+  base::ProcessId peer_pid_;
 
   // Member variables should appear before the WeakPtrFactory, to ensure
   // that any WeakPtrs to Controller are invalidated before its members

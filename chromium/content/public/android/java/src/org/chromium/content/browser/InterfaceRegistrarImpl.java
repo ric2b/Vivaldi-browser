@@ -8,6 +8,8 @@ import android.content.Context;
 
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
+import org.chromium.blink.mojom.ShapeDetection;
+import org.chromium.content.browser.shapedetection.ShapeDetectionFactory;
 import org.chromium.content_public.browser.InterfaceRegistrar;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.device.BatteryMonitor;
@@ -16,7 +18,7 @@ import org.chromium.device.battery.BatteryMonitorFactory;
 import org.chromium.device.nfc.mojom.Nfc;
 import org.chromium.device.vibration.VibrationManagerImpl;
 import org.chromium.mojo.system.impl.CoreImpl;
-import org.chromium.services.shell.InterfaceRegistry;
+import org.chromium.services.service_manager.InterfaceRegistry;
 
 @JNINamespace("content")
 class InterfaceRegistrarImpl {
@@ -56,6 +58,8 @@ class ContentContextInterfaceRegistrar implements InterfaceRegistrar<Context> {
                 VibrationManager.MANAGER, new VibrationManagerImpl.Factory(applicationContext));
         registry.addInterface(
                 BatteryMonitor.MANAGER, new BatteryMonitorFactory(applicationContext));
+        registry.addInterface(
+                ShapeDetection.MANAGER, new ShapeDetectionFactory(applicationContext));
         // TODO(avayvod): Register the PresentationService implementation here.
     }
 }

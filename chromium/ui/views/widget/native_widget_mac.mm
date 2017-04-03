@@ -96,19 +96,14 @@ BridgedNativeWidget* NativeWidgetMac::GetBridgeForNativeWindow(
 }
 
 bool NativeWidgetMac::IsWindowModalSheet() const {
-  return GetWidget()->widget_delegate()->GetModalType() ==
-         ui::MODAL_TYPE_WINDOW;
+  return bridge_ && bridge_->parent() &&
+         GetWidget()->widget_delegate()->GetModalType() ==
+             ui::MODAL_TYPE_WINDOW;
 }
 
-void NativeWidgetMac::OnWindowWillClose() {
-  // Note: If closed via CloseNow(), |bridge_| will already be reset. If closed
-  // by the user, or via Close() and a RunLoop, notify observers while |bridge_|
-  // is still a valid pointer, then reset it.
-  if (bridge_) {
-    delegate_->OnNativeWidgetDestroying();
-    [GetNativeWindow() setDelegate:nil];
-    bridge_.reset();
-  }
+void NativeWidgetMac::OnWindowDestroyed() {
+  DCHECK(bridge_);
+  bridge_.reset();
   delegate_->OnNativeWidgetDestroyed();
   if (ownership_ == Widget::InitParams::NATIVE_WIDGET_OWNS_WIDGET)
     delete this;
@@ -148,7 +143,9 @@ void NativeWidgetMac::InitNativeWidget(const Widget::InitParams& params) {
   bridge_->CreateLayer(params.layer_type, translucent);
 }
 
-void NativeWidgetMac::OnWidgetInitDone() {}
+void NativeWidgetMac::OnWidgetInitDone() {
+  OnSizeConstraintsChanged();
+}
 
 NonClientFrameView* NativeWidgetMac::CreateNonClientFrameView() {
   return new NativeFrameView(GetWidget());
@@ -292,8 +289,13 @@ void NativeWidgetMac::InitModalType(ui::ModalType modal_type) {
 
   // System modal windows not implemented (or used) on Mac.
   DCHECK_NE(ui::MODAL_TYPE_SYSTEM, modal_type);
-  DCHECK(bridge_->parent());
-  // Everyhing happens upon show.
+
+  // A peculiarity of the constrained window framework is that it permits a
+  // dialog of MODAL_TYPE_WINDOW to have a null parent window; falling back to
+  // a non-modal window in this case.
+  DCHECK(bridge_->parent() || modal_type == ui::MODAL_TYPE_WINDOW);
+
+  // Everything happens upon show.
 }
 
 gfx::Rect NativeWidgetMac::GetWindowBoundsInScreen() const {
@@ -341,7 +343,10 @@ void NativeWidgetMac::Close() {
   if (!bridge_)
     return;
 
+  // Keep |window| on the stack so that the ObjectiveC block below can capture
+  // it and properly increment the reference count bound to the posted task.
   NSWindow* window = GetNativeWindow();
+
   if (IsWindowModalSheet()) {
     // Sheets can't be closed normally. This starts the sheet closing. Once the
     // sheet has finished animating, it will call sheetDidEnd: on the parent
@@ -379,10 +384,18 @@ void NativeWidgetMac::CloseNow() {
   if (!bridge_)
     return;
 
-  // Notify observers while |bridged_| is still valid.
-  delegate_->OnNativeWidgetDestroying();
-  // Reset |bridge_| to NULL before destroying it.
-  std::unique_ptr<BridgedNativeWidget> bridge(std::move(bridge_));
+  // Cocoa ignores -close calls on open sheets, so they should be closed
+  // asynchronously, using Widget::Close().
+  DCHECK(!IsWindowModalSheet());
+
+  // NSWindows must be retained until -[NSWindow close] returns.
+  base::scoped_nsobject<NSWindow> window(GetNativeWindow(),
+                                         base::scoped_policy::RETAIN);
+
+  // If there's a bridge at this point, it means there must be a window as well.
+  DCHECK(window);
+  [window close];
+  // Note: |this| is deleted here when ownership_ == NATIVE_WIDGET_OWNS_WIDGET.
 }
 
 void NativeWidgetMac::Show() {
@@ -590,11 +603,7 @@ ui::NativeTheme* NativeWidgetMac::GetNativeTheme() const {
   return ui::NativeThemeMac::instance();
 }
 
-void NativeWidgetMac::OnRootViewLayout() {
-  // Ensure possible changes to the non-client view (e.g. Minimum/Maximum size)
-  // propagate through to the NSWindow properties.
-  OnSizeConstraintsChanged();
-}
+void NativeWidgetMac::OnRootViewLayout() {}
 
 bool NativeWidgetMac::IsTranslucentWindowOpacitySupported() const {
   return false;

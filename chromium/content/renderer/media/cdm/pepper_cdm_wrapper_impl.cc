@@ -2,7 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#if defined(ENABLE_PEPPER_CDMS)
+#include "ppapi/features/features.h"
+
+#if BUILDFLAG(ENABLE_PEPPER_CDMS)
 #include "content/renderer/media/cdm/pepper_cdm_wrapper_impl.h"
 
 #include <utility>
@@ -19,6 +21,7 @@
 #include "third_party/WebKit/public/web/WebPlugin.h"
 #include "third_party/WebKit/public/web/WebPluginContainer.h"
 #include "third_party/WebKit/public/web/WebView.h"
+#include "url/origin.h"
 
 namespace content {
 
@@ -37,8 +40,7 @@ std::unique_ptr<PepperCdmWrapper> PepperCdmWrapperImpl::Create(
   // Note: The code will continue after navigation to the "same" origin, even
   // though the CDM is no longer necessary.
   // TODO: Consider avoiding this possibility entirely. http://crbug.com/575236
-  GURL frame_security_origin(
-      blink::WebStringToGURL(frame->getSecurityOrigin().toString()));
+  GURL frame_security_origin(url::Origin(frame->getSecurityOrigin()).GetURL());
   if (frame_security_origin != security_origin) {
     LOG(ERROR) << "Frame has a different origin than the EME call.";
     return std::unique_ptr<PepperCdmWrapper>();
@@ -94,4 +96,4 @@ ContentDecryptorDelegate* PepperCdmWrapperImpl::GetCdmDelegate() {
 
 }  // namespace content
 
-#endif  // defined(ENABLE_PEPPER_CDMS)
+#endif  // BUILDFLAG(ENABLE_PEPPER_CDMS)

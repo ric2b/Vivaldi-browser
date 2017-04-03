@@ -70,7 +70,7 @@ void SavePageRequest::MarkAttemptStarted(const base::Time& start_time) {
   // other cases.
   last_attempt_time_ = start_time;
   ++started_attempt_count_;
-  state_ = RequestState::PRERENDERING;
+  state_ = RequestState::OFFLINING;
 }
 
 void SavePageRequest::MarkAttemptCompleted() {
@@ -83,7 +83,8 @@ void SavePageRequest::MarkAttemptAborted() {
   // We intentinally do not increment the completed_attempt_count_, since this
   // was killed before it completed, so we could use the phone or browser for
   // other things.
-  state_ = RequestState::AVAILABLE;
+  if (state_ == RequestState::OFFLINING)
+    state_ = RequestState::AVAILABLE;
 }
 
 void SavePageRequest::MarkAttemptPaused() {

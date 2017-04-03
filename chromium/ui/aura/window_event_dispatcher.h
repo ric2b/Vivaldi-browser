@@ -27,24 +27,16 @@
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/native_widget_types.h"
 
-namespace gfx {
-class Size;
-class Transform;
-}
-
 namespace ui {
 class GestureEvent;
 class GestureRecognizer;
-class KeyEvent;
 class MouseEvent;
-class ScrollEvent;
 class TouchEvent;
 }
 
 namespace aura {
 class TestScreen;
 class EnvInputStateController;
-class WindowTargeter;
 class WindowTreeHost;
 
 namespace test {
@@ -63,8 +55,6 @@ class AURA_EXPORT WindowEventDispatcher : public ui::EventProcessor,
  public:
   explicit WindowEventDispatcher(WindowTreeHost* host);
   ~WindowEventDispatcher() override;
-
-  void set_transform_events(bool value) { transform_events_ = value; }
 
   Window* mouse_pressed_handler() { return mouse_pressed_handler_; }
   Window* mouse_moved_handler() { return mouse_moved_handler_; }
@@ -265,8 +255,6 @@ class AURA_EXPORT WindowEventDispatcher : public ui::EventProcessor,
   ui::LocatedEvent* dispatching_held_event_;
 
   ScopedObserver<aura::Window, aura::WindowObserver> observer_manager_;
-
-  bool transform_events_;
 
   std::unique_ptr<EnvInputStateController> env_controller_;
 

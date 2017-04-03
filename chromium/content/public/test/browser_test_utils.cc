@@ -21,6 +21,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/test/test_timeouts.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "cc/surfaces/surface.h"
@@ -59,8 +60,9 @@
 #include "content/test/accessibility_browser_test_utils.h"
 #include "net/base/filename_util.h"
 #include "net/cookies/cookie_store.h"
-#include "net/filter/filter.h"
 #include "net/filter/gzip_header.h"
+#include "net/filter/gzip_source_stream.h"
+#include "net/filter/mock_source_stream.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
@@ -90,49 +92,6 @@
 
 namespace content {
 namespace {
-
-class DOMOperationObserver : public NotificationObserver,
-                             public WebContentsObserver {
- public:
-  explicit DOMOperationObserver(RenderFrameHost* rfh)
-      : WebContentsObserver(WebContents::FromRenderFrameHost(rfh)),
-        did_respond_(false) {
-    registrar_.Add(this, NOTIFICATION_DOM_OPERATION_RESPONSE,
-                   Source<WebContents>(web_contents()));
-    message_loop_runner_ = new MessageLoopRunner;
-  }
-
-  void Observe(int type,
-               const NotificationSource& source,
-               const NotificationDetails& details) override {
-    DCHECK(type == NOTIFICATION_DOM_OPERATION_RESPONSE);
-    Details<std::string> dom_op_result(details);
-    if (!did_respond_) {
-      response_ = *dom_op_result.ptr();
-      did_respond_ = true;
-      message_loop_runner_->Quit();
-    }
-  }
-
-  // Overridden from WebContentsObserver:
-  void RenderProcessGone(base::TerminationStatus status) override {
-    message_loop_runner_->Quit();
-  }
-
-  bool WaitAndGetResponse(std::string* response) WARN_UNUSED_RESULT {
-    message_loop_runner_->Run();
-    *response = response_;
-    return did_respond_;
-  }
-
- private:
-  NotificationRegistrar registrar_;
-  std::string response_;
-  bool did_respond_;
-  scoped_refptr<MessageLoopRunner> message_loop_runner_;
-
-  DISALLOW_COPY_AND_ASSIGN(DOMOperationObserver);
-};
 
 class InterstitialObserver : public content::WebContentsObserver {
  public:
@@ -172,12 +131,14 @@ bool ExecuteScriptHelper(RenderFrameHost* render_frame_host,
   //                automation id.
   std::string script =
       "window.domAutomationController.setAutomationId(0);" + original_script;
-  DOMOperationObserver dom_op_observer(render_frame_host);
+  // TODO(lukasza): Only get messages from the specific |render_frame_host|.
+  DOMMessageQueue dom_message_queue(
+      WebContents::FromRenderFrameHost(render_frame_host));
   render_frame_host->ExecuteJavaScriptWithUserGestureForTests(
       base::UTF8ToUTF16(script));
   std::string json;
-  if (!dom_op_observer.WaitAndGetResponse(&json)) {
-    DLOG(ERROR) << "Cannot communicate with DOMOperationObserver.";
+  if (!dom_message_queue.WaitForMessage(&json)) {
+    DLOG(ERROR) << "Cannot communicate with DOMMessageQueue.";
     return false;
   }
 
@@ -206,15 +167,19 @@ bool ExecuteScriptInIsolatedWorldHelper(RenderFrameHost* render_frame_host,
                                         const int world_id,
                                         const std::string& original_script,
                                         std::unique_ptr<base::Value>* result) {
+  // TODO(jcampan): we should make the domAutomationController not require an
+  //                automation id.
   std::string script =
       "window.domAutomationController.setAutomationId(0);" + original_script;
-  DOMOperationObserver dom_op_observer(render_frame_host);
+  // TODO(lukasza): Only get messages from the specific |render_frame_host|.
+  DOMMessageQueue dom_message_queue(
+      WebContents::FromRenderFrameHost(render_frame_host));
   render_frame_host->ExecuteJavaScriptInIsolatedWorld(
       base::UTF8ToUTF16(script),
       content::RenderFrameHost::JavaScriptResultCallback(), world_id);
   std::string json;
-  if (!dom_op_observer.WaitAndGetResponse(&json)) {
-    DLOG(ERROR) << "Cannot communicate with DOMOperationObserver.";
+  if (!dom_message_queue.WaitForMessage(&json)) {
+    DLOG(ERROR) << "Cannot communicate with DOMMessageQueue.";
     return false;
   }
 
@@ -310,7 +275,7 @@ void SetCookieOnIOThread(const GURL& url,
 }
 
 std::unique_ptr<net::test_server::HttpResponse>
-CrossSiteRedirectResponseHandler(const GURL& server_base_url,
+CrossSiteRedirectResponseHandler(const net::EmbeddedTestServer* test_server,
                                  const net::test_server::HttpRequest& request) {
   net::HttpStatusCode http_status_code;
 
@@ -341,7 +306,8 @@ CrossSiteRedirectResponseHandler(const GURL& server_base_url,
   // Replace the host of the URL with the one passed in the URL.
   GURL::Replacements replace_host;
   replace_host.SetHostStr(base::StringPiece(params).substr(0, slash));
-  GURL redirect_server = server_base_url.ReplaceComponents(replace_host);
+  GURL redirect_server =
+      test_server->base_url().ReplaceComponents(replace_host);
 
   // Append the real part of the path to the new URL.
   std::string path = params.substr(slash + 1);
@@ -362,9 +328,11 @@ CrossSiteRedirectResponseHandler(const GURL& server_base_url,
 class TestNavigationManagerThrottle : public NavigationThrottle {
  public:
   TestNavigationManagerThrottle(NavigationHandle* handle,
-                                base::Closure on_will_start_request_closure)
+                                base::Closure on_will_start_request_closure,
+                                base::Closure on_will_process_response_closure)
       : NavigationThrottle(handle),
-        on_will_start_request_closure_(on_will_start_request_closure) {}
+        on_will_start_request_closure_(on_will_start_request_closure),
+        on_will_process_response_closure_(on_will_process_response_closure) {}
   ~TestNavigationManagerThrottle() override {}
 
  private:
@@ -375,7 +343,14 @@ class TestNavigationManagerThrottle : public NavigationThrottle {
     return NavigationThrottle::DEFER;
   }
 
+  NavigationThrottle::ThrottleCheckResult WillProcessResponse() override {
+    BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
+                            on_will_process_response_closure_);
+    return NavigationThrottle::DEFER;
+  }
+
   base::Closure on_will_start_request_closure_;
+  base::Closure on_will_process_response_closure_;
 };
 
 bool HasGzipHeader(const base::RefCountedMemory& maybe_gzipped) {
@@ -392,21 +367,25 @@ bool HasGzipHeader(const base::RefCountedMemory& maybe_gzipped) {
 
 void AppendGzippedResource(const base::RefCountedMemory& encoded,
                            std::string* to_append) {
-  std::unique_ptr<net::Filter> filter = net::Filter::GZipFactory();
-  memcpy(filter->stream_buffer()->data(), encoded.front_as<char>(),
-         encoded.size());
-  filter->FlushStreamBuffer(encoded.size());
-
-  const int kBufferSize = 4096;
-  char dest_buffer[kBufferSize];
-
-  net::Filter::FilterStatus status;
-  do {
-    int read_size = kBufferSize;
-    status = filter->ReadData(dest_buffer, &read_size);
-    ASSERT_NE(status, net::Filter::FILTER_ERROR);
-    to_append->append(dest_buffer, read_size);
-  } while (status != net::Filter::FILTER_DONE);
+  std::unique_ptr<net::MockSourceStream> source_stream(
+      new net::MockSourceStream());
+  source_stream->AddReadResult(encoded.front_as<char>(), encoded.size(),
+                               net::OK, net::MockSourceStream::SYNC);
+  // Add an EOF.
+  source_stream->AddReadResult(encoded.front_as<char>() + encoded.size(), 0,
+                               net::OK, net::MockSourceStream::SYNC);
+  std::unique_ptr<net::GzipSourceStream> filter = net::GzipSourceStream::Create(
+      std::move(source_stream), net::SourceStream::TYPE_GZIP);
+  scoped_refptr<net::IOBufferWithSize> dest_buffer =
+      new net::IOBufferWithSize(4096);
+  net::CompletionCallback callback;
+  while (true) {
+    int rv = filter->Read(dest_buffer.get(), dest_buffer->size(), callback);
+    ASSERT_LE(0, rv);
+    if (rv <= 0)
+      break;
+    to_append->append(dest_buffer->data(), rv);
+  }
 }
 
 // Queries for video input devices on the current system using the getSources
@@ -973,8 +952,7 @@ void FetchHistogramsFromChildProcesses() {
   scoped_refptr<content::MessageLoopRunner> runner = new MessageLoopRunner;
 
   FetchHistogramsAsynchronously(
-      base::MessageLoop::current(),
-      runner->QuitClosure(),
+      base::ThreadTaskRunnerHandle::Get(), runner->QuitClosure(),
       // If this call times out, it means that a child process is not
       // responding, which is something we should not ignore.  The timeout is
       // set to be longer than the normal browser test timeout so that it will
@@ -984,9 +962,8 @@ void FetchHistogramsFromChildProcesses() {
 }
 
 void SetupCrossSiteRedirector(net::EmbeddedTestServer* embedded_test_server) {
-   embedded_test_server->RegisterRequestHandler(
-       base::Bind(&CrossSiteRedirectResponseHandler,
-                  embedded_test_server->base_url()));
+  embedded_test_server->RegisterRequestHandler(
+      base::Bind(&CrossSiteRedirectResponseHandler, embedded_test_server));
 }
 
 void WaitForInterstitialAttach(content::WebContents* web_contents) {
@@ -1175,7 +1152,7 @@ namespace {
 
 bool ContainsSurfaceId(cc::SurfaceId container_surface_id,
                        RenderWidgetHostViewChildFrame* target_view) {
-  if (container_surface_id.is_null())
+  if (!container_surface_id.is_valid())
     return false;
   for (cc::SurfaceId id :
        GetSurfaceManager()->GetSurfaceForId(container_surface_id)
@@ -1303,6 +1280,12 @@ DOMMessageQueue::DOMMessageQueue() {
                  NotificationService::AllSources());
 }
 
+DOMMessageQueue::DOMMessageQueue(WebContents* web_contents)
+    : WebContentsObserver(web_contents) {
+  registrar_.Add(this, NOTIFICATION_DOM_OPERATION_RESPONSE,
+                 Source<WebContents>(web_contents));
+}
+
 DOMMessageQueue::~DOMMessageQueue() {}
 
 void DOMMessageQueue::Observe(int type,
@@ -1312,6 +1295,17 @@ void DOMMessageQueue::Observe(int type,
   message_queue_.push(*dom_op_result.ptr());
   if (message_loop_runner_.get())
     message_loop_runner_->Quit();
+}
+
+void DOMMessageQueue::RenderProcessGone(base::TerminationStatus status) {
+  switch (status) {
+    case base::TERMINATION_STATUS_NORMAL_TERMINATION:
+    case base::TERMINATION_STATUS_STILL_RUNNING:
+      break;
+    default:
+      message_loop_runner_->Quit();
+      break;
+  }
 }
 
 void DOMMessageQueue::ClearQueue() {
@@ -1490,17 +1484,20 @@ InputMsgWatcher::InputMsgWatcher(RenderWidgetHost* render_widget_host,
                                  blink::WebInputEvent::Type type)
     : BrowserMessageFilter(InputMsgStart),
       wait_for_type_(type),
-      ack_result_(INPUT_EVENT_ACK_STATE_UNKNOWN) {
+      ack_result_(INPUT_EVENT_ACK_STATE_UNKNOWN),
+      ack_source_(static_cast<uint32_t>(InputEventAckSource::UNKNOWN)) {
   render_widget_host->GetProcess()->AddFilter(this);
 }
 
 InputMsgWatcher::~InputMsgWatcher() {}
 
 void InputMsgWatcher::ReceivedAck(blink::WebInputEvent::Type ack_type,
-                                  uint32_t ack_state) {
+                                  uint32_t ack_state,
+                                  uint32_t ack_source) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (wait_for_type_ == ack_type) {
     ack_result_ = ack_state;
+    ack_source_ = ack_source;
     if (!quit_.is_null())
       quit_.Run();
   }
@@ -1513,9 +1510,11 @@ bool InputMsgWatcher::OnMessageReceived(const IPC::Message& message) {
     InputHostMsg_HandleInputEvent_ACK::Read(&message, &params);
     blink::WebInputEvent::Type ack_type = std::get<0>(params).type;
     InputEventAckState ack_state = std::get<0>(params).state;
+    InputEventAckSource ack_source = std::get<0>(params).source;
     BrowserThread::PostTask(
         BrowserThread::UI, FROM_HERE,
-        base::Bind(&InputMsgWatcher::ReceivedAck, this, ack_type, ack_state));
+        base::Bind(&InputMsgWatcher::ReceivedAck, this, ack_type, ack_state,
+                   static_cast<uint32_t>(ack_source)));
   }
   return false;
 }
@@ -1637,41 +1636,34 @@ TestNavigationManager::TestNavigationManager(WebContents* web_contents,
                                              const GURL& url)
     : WebContentsObserver(web_contents),
       url_(url),
-      navigation_paused_(false),
       handle_(nullptr),
-      handled_navigation_(false),
+      navigation_paused_(false),
+      current_state_(NavigationState::INITIAL),
+      desired_state_(NavigationState::STARTED),
       weak_factory_(this) {}
 
 TestNavigationManager::~TestNavigationManager() {
-  ResumeNavigation();
+  if (navigation_paused_)
+    handle_->Resume();
 }
 
-bool TestNavigationManager::WaitForWillStartRequest() {
-  DCHECK(!did_finish_loop_runner_);
-  if (!handle_ && handled_navigation_)
-    return true;
-  if (navigation_paused_)
-    return true;
-  will_start_loop_runner_ = new MessageLoopRunner();
-  will_start_loop_runner_->Run();
-  will_start_loop_runner_ = nullptr;
+bool TestNavigationManager::WaitForRequestStart() {
+  // This is the default desired state. In PlzNavigate, a browser-initiated
+  // navigation can reach this state synchronously, so the TestNavigationManager
+  // is set to always pause navigations at WillStartRequest. This ensures the
+  // user can always call WaitForWillStartRequest.
+  DCHECK(desired_state_ == NavigationState::STARTED);
+  return WaitForDesiredState();
+}
 
-  // This will only be false if DidFinishNavigation is called before
-  // OnWillStartRequest, which could occur if a throttle cancels the navigation
-  // before the TestNavigationManagerThrottle's method is called.
-  return !handled_navigation_;
+bool TestNavigationManager::WaitForResponse() {
+  desired_state_ = NavigationState::RESPONSE;
+  return WaitForDesiredState();
 }
 
 void TestNavigationManager::WaitForNavigationFinished() {
-  DCHECK(!will_start_loop_runner_);
-  if (!handle_ && handled_navigation_)
-    return;
-  // Ensure the navigation is resumed if the manager paused it previously.
-  if (navigation_paused_)
-    ResumeNavigation();
-  did_finish_loop_runner_ = new MessageLoopRunner();
-  did_finish_loop_runner_->Run();
-  did_finish_loop_runner_ = nullptr;
+  desired_state_ = NavigationState::FINISHED;
+  WaitForDesiredState();
 }
 
 void TestNavigationManager::DidStartNavigation(NavigationHandle* handle) {
@@ -1682,47 +1674,73 @@ void TestNavigationManager::DidStartNavigation(NavigationHandle* handle) {
   std::unique_ptr<NavigationThrottle> throttle(
       new TestNavigationManagerThrottle(
           handle_, base::Bind(&TestNavigationManager::OnWillStartRequest,
-                              weak_factory_.GetWeakPtr())));
+                              weak_factory_.GetWeakPtr()),
+          base::Bind(&TestNavigationManager::OnWillProcessResponse,
+                     weak_factory_.GetWeakPtr())));
   handle_->RegisterThrottleForTesting(std::move(throttle));
 }
 
 void TestNavigationManager::DidFinishNavigation(NavigationHandle* handle) {
   if (handle != handle_)
     return;
-  handle_ = nullptr;
-  handled_navigation_ = true;
+  current_state_ = NavigationState::FINISHED;
   navigation_paused_ = false;
-
-  // Resume any clients that are waiting for the end of the navigation. Note
-  // that |will_start_loop_runner_| can be running if the navigation was
-  // cancelled while it was deferred.
-  if (did_finish_loop_runner_)
-    did_finish_loop_runner_->Quit();
-  if (will_start_loop_runner_)
-    will_start_loop_runner_->Quit();
+  handle_ = nullptr;
+  OnNavigationStateChanged();
 }
 
 void TestNavigationManager::OnWillStartRequest() {
+  current_state_ = NavigationState::STARTED;
   navigation_paused_ = true;
-  if (will_start_loop_runner_)
-    will_start_loop_runner_->Quit();
-
-  // If waiting for the navigation to finish, resume the navigation.
-  if (did_finish_loop_runner_)
-    ResumeNavigation();
+  OnNavigationStateChanged();
 }
 
-void TestNavigationManager::ResumeNavigation() {
-  if (!navigation_paused_ || !handle_)
+void TestNavigationManager::OnWillProcessResponse() {
+  current_state_ = NavigationState::RESPONSE;
+  navigation_paused_ = true;
+  OnNavigationStateChanged();
+}
+
+bool TestNavigationManager::WaitForDesiredState() {
+  // If the desired state has laready been reached, just return.
+  if (current_state_ == desired_state_)
+    return true;
+
+  // Resume the navigation if it was paused.
+  if (navigation_paused_)
+     handle_->Resume();
+
+  // Wait for the desired state if needed.
+  if (current_state_ < desired_state_) {
+    DCHECK(!loop_runner_);
+    loop_runner_ = new MessageLoopRunner();
+    loop_runner_->Run();
+    loop_runner_ = nullptr;
+  }
+
+  // Return false if the navigation did not reach the state specified by the
+  // user.
+  return current_state_ == desired_state_;
+}
+
+void TestNavigationManager::OnNavigationStateChanged() {
+  // If the state the user was waiting for has been reached, exit the message
+  // loop.
+  if (current_state_ >= desired_state_) {
+    if (loop_runner_)
+      loop_runner_->Quit();
     return;
-  navigation_paused_ = false;
-  handle_->Resume();
+  }
+
+  // Otherwise, the navigation should be resumed if it was previously paused.
+  if (navigation_paused_)
+    handle_->Resume();
 }
 
 bool TestNavigationManager::ShouldMonitorNavigation(NavigationHandle* handle) {
   if (handle_ || handle->GetURL() != url_)
     return false;
-  if (handled_navigation_)
+  if (current_state_ != NavigationState::INITIAL)
     return false;
   return true;
 }
@@ -1739,7 +1757,7 @@ void ConsoleObserverDelegate::Wait() {
   message_loop_runner_->Run();
 }
 
-bool ConsoleObserverDelegate::AddMessageToConsole(
+bool ConsoleObserverDelegate::DidAddMessageToConsole(
     WebContents* source,
     int32_t level,
     const base::string16& message,

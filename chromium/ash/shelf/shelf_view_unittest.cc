@@ -21,21 +21,22 @@
 #include "ash/common/shelf/shelf_widget.h"
 #include "ash/common/shelf/wm_shelf.h"
 #include "ash/common/shelf/wm_shelf_observer.h"
-#include "ash/common/shell_window_ids.h"
 #include "ash/common/system/web_notification/web_notification_tray.h"
 #include "ash/common/test/material_design_controller_test_api.h"
+#include "ash/common/test/test_shelf_delegate.h"
+#include "ash/common/test/test_shelf_item_delegate.h"
+#include "ash/common/test/test_system_tray_delegate.h"
+#include "ash/common/wm_lookup.h"
 #include "ash/common/wm_root_window_controller.h"
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
+#include "ash/public/cpp/shell_window_ids.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/ash_test_helper.h"
 #include "ash/test/overflow_bubble_view_test_api.h"
 #include "ash/test/shelf_view_test_api.h"
-#include "ash/test/test_shelf_delegate.h"
-#include "ash/test/test_shelf_item_delegate.h"
 #include "ash/test/test_shell_delegate.h"
-#include "ash/test/test_system_tray_delegate.h"
 #include "base/i18n/rtl.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
@@ -165,23 +166,21 @@ class ShelfItemSelectionTracker : public TestShelfItemDelegate {
 };
 
 TEST_F(WmShelfObserverIconTest, AddRemove) {
-  TestShelfDelegate* shelf_delegate = TestShelfDelegate::instance();
-  ASSERT_TRUE(shelf_delegate);
-
   views::Widget::InitParams params(views::Widget::InitParams::TYPE_WINDOW);
   params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
   params.bounds = gfx::Rect(0, 0, 200, 200);
   params.context = CurrentContext();
+  views::Widget widget;
+  widget.Init(params);
 
-  std::unique_ptr<views::Widget> widget(new views::Widget());
-  widget->Init(params);
-  shelf_delegate->AddShelfItem(widget->GetNativeWindow());
+  TestShelfDelegate::instance()->AddShelfItem(
+      WmLookup::Get()->GetWindowForWidget(&widget));
   shelf_view_test()->RunMessageLoopUntilAnimationsDone();
   EXPECT_TRUE(observer()->icon_positions_changed());
   observer()->Reset();
 
-  widget->Show();
-  widget->GetNativeWindow()->parent()->RemoveChild(widget->GetNativeWindow());
+  widget.Show();
+  widget.GetNativeWindow()->parent()->RemoveChild(widget.GetNativeWindow());
   shelf_view_test()->RunMessageLoopUntilAnimationsDone();
   EXPECT_TRUE(observer()->icon_positions_changed());
   observer()->Reset();
@@ -198,24 +197,22 @@ TEST_F(WmShelfObserverIconTest, AddRemoveWithMultipleDisplays) {
   WmShelf* second_shelf = second_root->GetRootWindowController()->GetShelf();
   TestWmShelfObserver second_observer(second_shelf);
 
-  TestShelfDelegate* shelf_delegate = TestShelfDelegate::instance();
-  ASSERT_TRUE(shelf_delegate);
-
   views::Widget::InitParams params(views::Widget::InitParams::TYPE_WINDOW);
   params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
   params.bounds = gfx::Rect(0, 0, 200, 200);
   params.context = CurrentContext();
+  views::Widget widget;
+  widget.Init(params);
 
-  std::unique_ptr<views::Widget> widget(new views::Widget());
-  widget->Init(params);
-  shelf_delegate->AddShelfItem(widget->GetNativeWindow());
+  TestShelfDelegate::instance()->AddShelfItem(
+      WmLookup::Get()->GetWindowForWidget(&widget));
   shelf_view_test()->RunMessageLoopUntilAnimationsDone();
   EXPECT_TRUE(observer()->icon_positions_changed());
   EXPECT_TRUE(second_observer.icon_positions_changed());
   observer()->Reset();
   second_observer.Reset();
 
-  widget->GetNativeWindow()->parent()->RemoveChild(widget->GetNativeWindow());
+  widget.GetNativeWindow()->parent()->RemoveChild(widget.GetNativeWindow());
   shelf_view_test()->RunMessageLoopUntilAnimationsDone();
   EXPECT_TRUE(observer()->icon_positions_changed());
   EXPECT_TRUE(second_observer.icon_positions_changed());
@@ -250,18 +247,6 @@ class TestShelfDelegateForShelfView : public ShelfDelegate {
   void set_is_app_pinned(bool is_pinned) { is_app_pinned_ = is_pinned; }
 
   // ShelfDelegate overrides:
-  void OnShelfCreated(WmShelf* shelf) override {}
-
-  void OnShelfDestroyed(WmShelf* shelf) override {}
-
-  void OnShelfAlignmentChanged(WmShelf* shelf) override {}
-
-  void OnShelfAutoHideBehaviorChanged(WmShelf* shelf) override {}
-
-  void OnShelfAutoHideStateChanged(WmShelf* shelf) override {}
-
-  void OnShelfVisibilityStateChanged(WmShelf* shelf) override {}
-
   ShelfID GetShelfIDForAppID(const std::string& app_id) override {
     ShelfID id = 0;
     EXPECT_TRUE(base::StringToInt(app_id, &id));
@@ -473,7 +458,7 @@ class ShelfViewTest : public AshTestBase {
                                  ui::EventTimeForNow(), 0, 0);
     test_api_->ButtonPressed(
         button, release_event,
-        views::test::InkDropHostViewTestApi(button).ink_drop());
+        views::test::InkDropHostViewTestApi(button).GetInkDrop());
     shelf_view_->PointerReleasedOnButton(button, ShelfView::MOUSE, false);
   }
 
@@ -486,7 +471,7 @@ class ShelfViewTest : public AshTestBase {
                                  0);
     test_api_->ButtonPressed(
         button, release_event,
-        views::test::InkDropHostViewTestApi(button).ink_drop());
+        views::test::InkDropHostViewTestApi(button).GetInkDrop());
     shelf_view_->PointerReleasedOnButton(button, ShelfView::MOUSE, false);
   }
 
@@ -1650,8 +1635,9 @@ TEST_F(ShelfViewTest, CheckDragInsertBoundsOfScrolledOverflowBubble) {
   // Add more buttons until OverflowBubble is scrollable and it has 3 invisible
   // items.
   while (bubble_view_api.GetContentsSize().width() <
-         (bubble_view->GetContentsBounds().width() + 3 * item_width))
+         (bubble_view->GetContentsBounds().width() + 3 * item_width)) {
     AddAppShortcut();
+  }
 
   ASSERT_TRUE(test_api_->IsShowingOverflowBubble());
 
@@ -1669,8 +1655,9 @@ TEST_F(ShelfViewTest, CheckDragInsertBoundsOfScrolledOverflowBubble) {
   EXPECT_TRUE(drag_reinsert_bounds.Contains(first_point));
   EXPECT_FALSE(drag_reinsert_bounds.Contains(last_point));
 
-  // Scrolls sufficiently to show last item.
-  bubble_view_api.ScrollByXOffset(3 * item_width);
+  // Scroll sufficiently to completely show last item.
+  bubble_view_api.ScrollByXOffset(bubble_view_api.GetContentsSize().width() -
+                                  bubble_view->GetContentsBounds().width());
   drag_reinsert_bounds =
       test_for_overflow_view.GetBoundsForDragInsertInScreen();
   first_point = first_button->GetBoundsInScreen().CenterPoint();
@@ -1969,7 +1956,14 @@ TEST_P(ShelfViewVisibleBoundsTest, ItemsAreInBounds) {
 }
 
 INSTANTIATE_TEST_CASE_P(LtrRtl, ShelfViewTextDirectionTest, testing::Bool());
-INSTANTIATE_TEST_CASE_P(VisibleBounds,
+
+// This test seems to be flaky with material design shelf (see
+// https://crbug.com/625671) and even in non-material mode (see
+// https://crbug.com/619344 which is fixed using a hack). Disabling for now.
+// TODO(mohsen): Hopefully, the fix for https://crbug.com/634128 that fixes
+// issues with shelf spacing, will fix this flake, too. Re-enable when that
+// issue is fixed.
+INSTANTIATE_TEST_CASE_P(DISABLED_VisibleBounds,
                         ShelfViewVisibleBoundsTest,
                         testing::Bool());
 
@@ -1992,6 +1986,9 @@ class InkDropSpy : public views::InkDrop {
   }
 
   // views::InkDrop:
+  void HostSizeChanged(const gfx::Size& new_size) override {
+    ink_drop_->HostSizeChanged(new_size);
+  }
   views::InkDropState GetTargetInkDropState() const override {
     return ink_drop_->GetTargetInkDropState();
   }
@@ -2146,8 +2143,9 @@ class ShelfViewInkDropTest : public ShelfViewTest {
   void InitAppListButtonInkDrop() {
     app_list_button_ = shelf_view_->GetAppListButton();
 
-    auto app_list_button_ink_drop = base::MakeUnique<InkDropSpy>(
-        base::MakeUnique<views::InkDropImpl>(app_list_button_));
+    auto app_list_button_ink_drop =
+        base::MakeUnique<InkDropSpy>(base::MakeUnique<views::InkDropImpl>(
+            app_list_button_, app_list_button_->size()));
     app_list_button_ink_drop_ = app_list_button_ink_drop.get();
     views::test::InkDropHostViewTestApi(app_list_button_)
         .SetInkDrop(std::move(app_list_button_ink_drop), false);
@@ -2156,8 +2154,9 @@ class ShelfViewInkDropTest : public ShelfViewTest {
   void InitBrowserButtonInkDrop() {
     browser_button_ = test_api_->GetButton(browser_index_);
 
-    auto browser_button_ink_drop = base::MakeUnique<InkDropSpy>(
-        base::MakeUnique<views::InkDropImpl>(browser_button_));
+    auto browser_button_ink_drop =
+        base::MakeUnique<InkDropSpy>(base::MakeUnique<views::InkDropImpl>(
+            browser_button_, browser_button_->size()));
     browser_button_ink_drop_ = browser_button_ink_drop.get();
     views::test::InkDropHostViewTestApi(browser_button_)
         .SetInkDrop(std::move(browser_button_ink_drop));
@@ -2658,8 +2657,9 @@ class OverflowButtonInkDropTest : public ShelfViewInkDropTest {
 
     overflow_button_ = test_api_->overflow_button();
 
-    auto overflow_button_ink_drop = base::MakeUnique<InkDropSpy>(
-        base::MakeUnique<views::InkDropImpl>(overflow_button_));
+    auto overflow_button_ink_drop =
+        base::MakeUnique<InkDropSpy>(base::MakeUnique<views::InkDropImpl>(
+            overflow_button_, overflow_button_->size()));
     overflow_button_ink_drop_ = overflow_button_ink_drop.get();
     views::test::InkDropHostViewTestApi(overflow_button_)
         .SetInkDrop(std::move(overflow_button_ink_drop));

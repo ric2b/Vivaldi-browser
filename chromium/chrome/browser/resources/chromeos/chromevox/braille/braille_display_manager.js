@@ -67,7 +67,8 @@ cvox.BrailleDisplayManager = function(translatorManager) {
    * @type {!cvox.BrailleDisplayState}
    * @private
    */
-  this.displayState_ = {available: false, textCellCount: undefined};
+  this.displayState_ = {available: false, textRowCount: undefined,
+      textColumnCount: undefined};
   /**
    * State reported from the chrome api, reflecting a real hardware
    * display.
@@ -157,7 +158,8 @@ cvox.BrailleDisplayManager.prototype.setCommandListener = function(func) {
  */
 cvox.BrailleDisplayManager.prototype.refreshDisplayState_ = function(
     newState) {
-  var oldSize = this.displayState_.textCellCount || 0;
+  var oldSize = this.displayState_.textColumnCount *
+                this.displayState_.textRowCount || 0;
   this.realDisplayState_ = newState;
   if (newState.available) {
     this.displayState_ = newState;
@@ -165,7 +167,8 @@ cvox.BrailleDisplayManager.prototype.refreshDisplayState_ = function(
     this.displayState_ =
         cvox.BrailleCaptionsBackground.getVirtualDisplayState();
   }
-  var newSize = this.displayState_.textCellCount || 0;
+  var newSize = this.displayState_.textColumnCount *
+                this.displayState_.textRowCount || 0;
   if (oldSize != newSize) {
     this.panStrategy_.setDisplaySize(newSize);
   }
@@ -193,13 +196,14 @@ cvox.BrailleDisplayManager.prototype.refresh_ = function() {
   var viewPort = this.panStrategy_.viewPort;
   var buf = this.displayedContent_.slice(viewPort.start, viewPort.end);
   if (this.realDisplayState_.available) {
-    chrome.brailleDisplayPrivate.writeDots(buf);
+    chrome.brailleDisplayPrivate.writeDots(buf, buf.byteLength, 1);
   }
   if (cvox.BrailleCaptionsBackground.isEnabled()) {
     var start = this.brailleToTextPosition_(viewPort.start);
     var end = this.brailleToTextPosition_(viewPort.end);
     cvox.BrailleCaptionsBackground.setContent(
-        this.content_.text.toString().substring(start, end), buf);
+        this.content_.text.toString().substring(start, end), buf,
+        this.brailleToText_);
   }
 };
 
@@ -244,7 +248,7 @@ cvox.BrailleDisplayManager.prototype.translateContent_ = function(
         translatedEndIndex = textToBraille[endIndex];
       }
       this.translatedContent_ = cells;
-      // Copy the transalted content to a separate buffer and  add the cursor
+      // Copy the translated content to a separate buffer and  add the cursor
       // to it.
       this.displayedContent_ = new ArrayBuffer(cells.byteLength);
       new Uint8Array(this.displayedContent_).set(new Uint8Array(cells));
@@ -387,7 +391,7 @@ cvox.BrailleDisplayManager.prototype.brailleToTextPosition_ =
 cvox.BrailleDisplayManager.prototype.updatePanStrategy_ = function(wordWrap) {
   var newStrategy = wordWrap ? new cvox.WrappingPanStrategy() :
       new cvox.FixedPanStrategy();
-  newStrategy.setDisplaySize(this.displayState_.textCellCount || 0);
+  newStrategy.setDisplaySize(this.displayState_.textColumnCount || 0);
   newStrategy.setContent(this.translatedContent_,
                          this.panStrategy_.viewPort.start);
   this.panStrategy_ = newStrategy;

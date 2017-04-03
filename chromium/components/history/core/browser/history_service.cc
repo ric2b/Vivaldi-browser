@@ -48,7 +48,7 @@
 #include "components/history/core/browser/visit_delegate.h"
 #include "components/history/core/browser/web_history_service.h"
 #include "components/history/core/common/thumbnail_score.h"
-#include "components/sync/api/sync_error_factory.h"
+#include "components/sync/model/sync_error_factory.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 
 #if defined(OS_IOS)
@@ -329,8 +329,8 @@ void HistoryService::SetOnBackendDestroyTask(const base::Closure& task) {
   DCHECK(thread_checker_.CalledOnValidThread());
   ScheduleTask(
       PRIORITY_NORMAL,
-      base::Bind(&HistoryBackend::SetOnBackendDestroyTask,
-                 history_backend_, base::MessageLoop::current(), task));
+      base::Bind(&HistoryBackend::SetOnBackendDestroyTask, history_backend_,
+                 base::ThreadTaskRunnerHandle::Get(), task));
 }
 
 void HistoryService::TopHosts(size_t num_hosts,
@@ -355,7 +355,6 @@ void HistoryService::TopUrlsPerDay(
 }
 
 void HistoryService::VisitSearch(
-    const std::string& text_query,
     const QueryOptions& options,
     const Visit::VisitsCallback& callback) const {
   DCHECK(thread_) << "History service being called after cleanup";
@@ -364,8 +363,7 @@ void HistoryService::VisitSearch(
   PostTaskAndReplyWithResult(
       thread_->task_runner().get(), FROM_HERE,
       base::Bind(&HistoryBackend::VisitSearch, history_backend_.get(),
-                 text_query, options),
-      callback);
+                 options), callback);
 }
 
 void HistoryService::GetCountsAndLastVisitForOrigins(
@@ -1105,14 +1103,14 @@ void HistoryService::NotifyURLVisited(ui::PageTransition transition,
                                       const RedirectList& redirects,
                                       base::Time visit_time) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  FOR_EACH_OBSERVER(HistoryServiceObserver, observers_,
-                    OnURLVisited(this, transition, row, redirects, visit_time));
+  for (HistoryServiceObserver& observer : observers_)
+    observer.OnURLVisited(this, transition, row, redirects, visit_time);
 }
 
 void HistoryService::NotifyURLsModified(const URLRows& changed_urls) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  FOR_EACH_OBSERVER(HistoryServiceObserver, observers_,
-                    OnURLsModified(this, changed_urls));
+  for (HistoryServiceObserver& observer : observers_)
+    observer.OnURLsModified(this, changed_urls);
 }
 
 void HistoryService::NotifyURLsDeleted(bool all_history,
@@ -1143,21 +1141,22 @@ void HistoryService::NotifyURLsDeleted(bool all_history,
     }
   }
 
-  FOR_EACH_OBSERVER(
-      HistoryServiceObserver, observers_,
-      OnURLsDeleted(this, all_history, expired, deleted_rows, favicon_urls));
+  for (HistoryServiceObserver& observer : observers_) {
+    observer.OnURLsDeleted(this, all_history, expired, deleted_rows,
+                           favicon_urls);
+  }
 }
 
 void HistoryService::NotifyHistoryServiceLoaded() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  FOR_EACH_OBSERVER(HistoryServiceObserver, observers_,
-                    OnHistoryServiceLoaded(this));
+  for (HistoryServiceObserver& observer : observers_)
+    observer.OnHistoryServiceLoaded(this);
 }
 
 void HistoryService::NotifyHistoryServiceBeingDeleted() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  FOR_EACH_OBSERVER(HistoryServiceObserver, observers_,
-                    HistoryServiceBeingDeleted(this));
+  for (HistoryServiceObserver& observer : observers_)
+    observer.HistoryServiceBeingDeleted(this);
 }
 
 void HistoryService::NotifyKeywordSearchTermUpdated(
@@ -1165,14 +1164,14 @@ void HistoryService::NotifyKeywordSearchTermUpdated(
     KeywordID keyword_id,
     const base::string16& term) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  FOR_EACH_OBSERVER(HistoryServiceObserver, observers_,
-                    OnKeywordSearchTermUpdated(this, row, keyword_id, term));
+  for (HistoryServiceObserver& observer : observers_)
+    observer.OnKeywordSearchTermUpdated(this, row, keyword_id, term);
 }
 
 void HistoryService::NotifyKeywordSearchTermDeleted(URLID url_id) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  FOR_EACH_OBSERVER(HistoryServiceObserver, observers_,
-                    OnKeywordSearchTermDeleted(this, url_id));
+  for (HistoryServiceObserver& observer : observers_)
+    observer.OnKeywordSearchTermDeleted(this, url_id);
 }
 
 std::unique_ptr<

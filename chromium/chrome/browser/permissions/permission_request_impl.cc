@@ -13,6 +13,10 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/vector_icons_public.h"
 
+#if defined(OS_ANDROID)
+#include "chrome/browser/android/android_theme_resources.h"
+#endif
+
 PermissionRequestImpl::PermissionRequestImpl(
     const GURL& request_origin,
     content::PermissionType permission_type,
@@ -38,6 +42,24 @@ PermissionRequestImpl::~PermissionRequestImpl() {
 }
 
 PermissionRequest::IconId PermissionRequestImpl::GetIconId() const {
+#if defined(OS_ANDROID)
+  switch (permission_type_) {
+    case content::PermissionType::GEOLOCATION:
+      return IDR_ANDROID_INFOBAR_GEOLOCATION;
+#if defined(ENABLE_NOTIFICATIONS)
+    case content::PermissionType::NOTIFICATIONS:
+    case content::PermissionType::PUSH_MESSAGING:
+      return IDR_ANDROID_INFOBAR_NOTIFICATIONS;
+#endif
+    case content::PermissionType::MIDI_SYSEX:
+      return IDR_ANDROID_INFOBAR_MIDI;
+    case content::PermissionType::PROTECTED_MEDIA_IDENTIFIER:
+      return IDR_ANDROID_INFOBAR_PROTECTED_MEDIA_IDENTIFIER;
+    default:
+      NOTREACHED();
+      return IDR_ANDROID_INFOBAR_WARNING;
+  }
+#else
   switch (permission_type_) {
     case content::PermissionType::GEOLOCATION:
       return gfx::VectorIconId::LOCATION_ON;
@@ -59,6 +81,7 @@ PermissionRequest::IconId PermissionRequestImpl::GetIconId() const {
       NOTREACHED();
       return gfx::VectorIconId::VECTOR_ICON_NONE;
   }
+#endif
 }
 
 base::string16 PermissionRequestImpl::GetMessageTextFragment() const {
@@ -122,31 +145,33 @@ bool PermissionRequestImpl::ShouldShowPersistenceToggle() const {
 
 PermissionRequestType PermissionRequestImpl::GetPermissionRequestType()
     const {
-  switch (permission_type_) {
-    case content::PermissionType::GEOLOCATION:
-      return PermissionRequestType::PERMISSION_GEOLOCATION;
-#if defined(ENABLE_NOTIFICATIONS)
-    case content::PermissionType::NOTIFICATIONS:
-      return PermissionRequestType::PERMISSION_NOTIFICATIONS;
-#endif
-    case content::PermissionType::MIDI_SYSEX:
-      return PermissionRequestType::PERMISSION_MIDI_SYSEX;
-    case content::PermissionType::PUSH_MESSAGING:
-      return PermissionRequestType::PERMISSION_PUSH_MESSAGING;
-#if defined(OS_CHROMEOS)
-    case content::PermissionType::PROTECTED_MEDIA_IDENTIFIER:
-      return PermissionRequestType::PERMISSION_PROTECTED_MEDIA_IDENTIFIER;
-#endif
-    case content::PermissionType::FLASH:
-      return PermissionRequestType::PERMISSION_FLASH;
-    default:
-      NOTREACHED();
-      return PermissionRequestType::UNKNOWN;
-  }
+  return PermissionUtil::GetRequestType(permission_type_);
 }
 
 PermissionRequestGestureType PermissionRequestImpl::GetGestureType()
     const {
-  return has_gesture_ ? PermissionRequestGestureType::GESTURE
-                      : PermissionRequestGestureType::NO_GESTURE;
+  return PermissionUtil::GetGestureType(has_gesture_);
+}
+
+ContentSettingsType PermissionRequestImpl::GetContentSettingsType() const {
+  switch (permission_type_) {
+    case content::PermissionType::GEOLOCATION:
+      return CONTENT_SETTINGS_TYPE_GEOLOCATION;
+    case content::PermissionType::PUSH_MESSAGING:
+#if defined(ENABLE_NOTIFICATIONS)
+    case content::PermissionType::NOTIFICATIONS:
+#endif
+      return CONTENT_SETTINGS_TYPE_NOTIFICATIONS;
+    case content::PermissionType::MIDI_SYSEX:
+      return CONTENT_SETTINGS_TYPE_MIDI_SYSEX;
+#if defined(OS_CHROMEOS)
+    case content::PermissionType::PROTECTED_MEDIA_IDENTIFIER:
+      return CONTENT_SETTINGS_TYPE_PROTECTED_MEDIA_IDENTIFIER;
+#endif
+    case content::PermissionType::FLASH:
+      return CONTENT_SETTINGS_TYPE_PLUGINS;
+    default:
+      NOTREACHED();
+      return CONTENT_SETTINGS_TYPE_DEFAULT;
+  }
 }

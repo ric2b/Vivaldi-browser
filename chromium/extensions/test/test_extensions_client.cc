@@ -8,6 +8,7 @@
 #include "extensions/common/api/generated_schemas.h"
 #include "extensions/common/common_manifest_handlers.h"
 #include "extensions/common/extension_urls.h"
+#include "extensions/common/extensions_aliases.h"
 #include "extensions/common/features/api_feature.h"
 #include "extensions/common/features/behavior_feature.h"
 #include "extensions/common/features/feature_provider.h"
@@ -36,8 +37,8 @@ SimpleFeature* CreateFeature() {
 
 }  // namespace
 
-TestExtensionsClient::TestExtensionsClient() {
-}
+TestExtensionsClient::TestExtensionsClient()
+    : webstore_update_url_(extension_urls::kChromeWebstoreUpdateURL) {}
 
 TestExtensionsClient::~TestExtensionsClient() {
 }
@@ -62,7 +63,8 @@ void TestExtensionsClient::Initialize() {
 
   // Allow the core API permissions.
   static ExtensionsAPIPermissions extensions_api_permissions;
-  PermissionsInfo::GetInstance()->AddProvider(extensions_api_permissions);
+  PermissionsInfo::GetInstance()->AddProvider(extensions_api_permissions,
+                                              GetExtensionsPermissionAliases());
 }
 
 const PermissionMessageProvider&
@@ -149,12 +151,12 @@ std::string TestExtensionsClient::GetWebstoreBaseURL() const {
   return extension_urls::kChromeWebstoreBaseURL;
 }
 
-std::string TestExtensionsClient::GetWebstoreUpdateURL() const {
-  return extension_urls::kChromeWebstoreUpdateURL;
+const GURL& TestExtensionsClient::GetWebstoreUpdateURL() const {
+  return webstore_update_url_;
 }
 
 bool TestExtensionsClient::IsBlacklistUpdateURL(const GURL& url) const {
-  return true;
+  return false;
 }
 
 std::set<base::FilePath> TestExtensionsClient::GetBrowserImagePaths(

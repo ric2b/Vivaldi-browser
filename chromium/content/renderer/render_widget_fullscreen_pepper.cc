@@ -20,6 +20,7 @@
 #include "skia/ext/platform_canvas.h"
 #include "third_party/WebKit/public/platform/WebCanvas.h"
 #include "third_party/WebKit/public/platform/WebCursorInfo.h"
+#include "third_party/WebKit/public/platform/WebGestureEvent.h"
 #include "third_party/WebKit/public/platform/WebLayer.h"
 #include "third_party/WebKit/public/platform/WebSize.h"
 #include "third_party/WebKit/public/web/WebWidget.h"
@@ -252,26 +253,29 @@ class PepperWidget : public WebWidget {
 
 // static
 RenderWidgetFullscreenPepper* RenderWidgetFullscreenPepper::Create(
+    int32_t routing_id,
     int32_t opener_id,
     CompositorDependencies* compositor_deps,
     PepperPluginInstanceImpl* plugin,
     const GURL& active_url,
     const ScreenInfo& screen_info) {
+  DCHECK_NE(MSG_ROUTING_NONE, routing_id);
   DCHECK_NE(MSG_ROUTING_NONE, opener_id);
   scoped_refptr<RenderWidgetFullscreenPepper> widget(
-      new RenderWidgetFullscreenPepper(compositor_deps, plugin, active_url,
-                                       screen_info));
+      new RenderWidgetFullscreenPepper(routing_id, compositor_deps, plugin,
+                                       active_url, screen_info));
   widget->Init(opener_id);
   widget->AddRef();
   return widget.get();
 }
 
 RenderWidgetFullscreenPepper::RenderWidgetFullscreenPepper(
+    int32_t routing_id,
     CompositorDependencies* compositor_deps,
     PepperPluginInstanceImpl* plugin,
     const GURL& active_url,
     const ScreenInfo& screen_info)
-    : RenderWidgetFullscreen(compositor_deps, screen_info),
+    : RenderWidgetFullscreen(routing_id, compositor_deps, screen_info),
       active_url_(active_url),
       plugin_(plugin),
       layer_(NULL),
@@ -346,9 +350,6 @@ bool RenderWidgetFullscreenPepper::OnMessageReceived(const IPC::Message& msg) {
 void RenderWidgetFullscreenPepper::DidInitiatePaint() {
   if (plugin_)
     plugin_->ViewInitiatedPaint();
-}
-
-void RenderWidgetFullscreenPepper::DidFlushPaint() {
 }
 
 void RenderWidgetFullscreenPepper::Close() {

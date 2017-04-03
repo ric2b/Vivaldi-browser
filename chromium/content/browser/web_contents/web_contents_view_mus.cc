@@ -13,7 +13,7 @@
 #include "services/ui/public/cpp/window.h"
 #include "services/ui/public/cpp/window_tree_client.h"
 #include "third_party/WebKit/public/platform/WebDragOperation.h"
-#include "ui/aura/client/window_tree_client.h"
+#include "ui/aura/client/window_parenting_client.h"
 #include "ui/aura/window.h"
 #include "ui/base/hit_test.h"
 
@@ -207,7 +207,8 @@ void WebContentsViewMus::StartDragging(const DropData& drop_data,
                                        WebDragOperationsMask ops,
                                        const gfx::ImageSkia& image,
                                        const gfx::Vector2d& image_offset,
-                                       const DragEventSourceInfo& event_info) {
+                                       const DragEventSourceInfo& event_info,
+                                       RenderWidgetHostImpl* source_rwh) {
   // TODO(fsamuel): Implement drag and drop.
 }
 

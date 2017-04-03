@@ -64,7 +64,7 @@ void BinaryTargetGenerator::DoRun() {
     return;
 
   if(!FillTargetPool())
-  	return;
+    return;
 
   // Config values (compiler flags, etc.) set directly on this target.
   ConfigValuesGenerator gen(&target_->config_values(), scope_,

@@ -25,36 +25,27 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-
 /**
  * @interface
  */
-WebInspector.AuditCategory = function()
-{
-}
+Audits.AuditCategory = function() {};
 
-WebInspector.AuditCategory.prototype = {
-    /**
-     * @return {string}
-     */
-    get id()
-    {
-    },
+Audits.AuditCategory.prototype = {
+  /**
+   * @return {string}
+   */
+  get id() {},
 
-    /**
-     * @return {string}
-     */
-    get displayName()
-    {
-    },
+  /**
+   * @return {string}
+   */
+  get displayName() {},
 
-    /**
-     * @param {!WebInspector.Target} target
-     * @param {!Array.<!WebInspector.NetworkRequest>} requests
-     * @param {function(!WebInspector.AuditRuleResult)} ruleResultCallback
-     * @param {!WebInspector.Progress} progress
-     */
-    run: function(target, requests, ruleResultCallback, progress)
-    {
-    }
-}
+  /**
+   * @param {!SDK.Target} target
+   * @param {!Array.<!SDK.NetworkRequest>} requests
+   * @param {function(!Audits.AuditRuleResult)} ruleResultCallback
+   * @param {!Common.Progress} progress
+   */
+  run: function(target, requests, ruleResultCallback, progress) {}
+};

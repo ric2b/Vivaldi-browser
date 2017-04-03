@@ -43,7 +43,6 @@ class TestingProfile;
 struct ThumbnailScore;
 
 namespace base {
-class MessageLoop;
 class SingleThreadTaskRunner;
 }
 
@@ -222,8 +221,7 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
   // available. Returns an empty list if db_ is not initialized.
   UrlVisitCount::TopUrlsPerDayList TopUrlsPerDay(size_t num_hosts) const;
 
-  Visit::VisitsList VisitSearch(const std::string& text_query,
-    const QueryOptions& options) const;
+  Visit::VisitsList VisitSearch(const QueryOptions& options) const;
 
   // Gets the counts and last last time of URLs that belong to |origins| in the
   // history database. Origins that are not in the history database will be in
@@ -470,8 +468,9 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
   // Sets the task to run and the message loop to run it on when this object
   // is destroyed. See HistoryService::SetOnBackendDestroyTask for a more
   // complete description.
-  void SetOnBackendDestroyTask(base::MessageLoop* message_loop,
-                               const base::Closure& task);
+  void SetOnBackendDestroyTask(
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner,
+      const base::Closure& task);
 
   // Adds the given rows to the database if it doesn't exist. A visit will be
   // added for each given URL at the last visit time in the URLRow if the
@@ -865,7 +864,7 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
   base::Time first_recorded_time_;
 
   // When set, this is the task that should be invoked on destruction.
-  base::MessageLoop* backend_destroy_message_loop_;
+  scoped_refptr<base::SingleThreadTaskRunner> backend_destroy_task_runner_;
   base::Closure backend_destroy_task_;
 
   // Tracks page transition types.

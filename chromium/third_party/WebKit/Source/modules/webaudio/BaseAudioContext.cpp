@@ -50,6 +50,7 @@
 #include "modules/webaudio/BiquadFilterNode.h"
 #include "modules/webaudio/ChannelMergerNode.h"
 #include "modules/webaudio/ChannelSplitterNode.h"
+#include "modules/webaudio/ConstantSourceNode.h"
 #include "modules/webaudio/ConvolverNode.h"
 #include "modules/webaudio/DefaultAudioDestinationNode.h"
 #include "modules/webaudio/DelayNode.h"
@@ -107,6 +108,7 @@ BaseAudioContext::BaseAudioContext(Document* document)
   if (document->settings() &&
       document->settings()->mediaPlaybackRequiresUserGesture() &&
       document->frame() && document->frame()->isCrossOriginSubframe()) {
+    m_autoplayStatus = AutoplayStatus::AutoplayStatusFailed;
     m_userGestureRequired = true;
   }
 
@@ -144,6 +146,7 @@ BaseAudioContext::~BaseAudioContext() {
   DCHECK(!m_finishedSourceHandlers.size());
   DCHECK(!m_isResolvingResumePromises);
   DCHECK(!m_resumeResolvers.size());
+  DCHECK(!m_autoplayStatus.has_value());
 }
 
 void BaseAudioContext::initialize() {
@@ -187,6 +190,8 @@ void BaseAudioContext::uninitialize() {
 
   DCHECK(m_listener);
   m_listener->waitForHRTFDatabaseLoaderThreadCompletion();
+
+  recordAutoplayStatus();
 
   clear();
 }
@@ -237,8 +242,9 @@ AudioBuffer* BaseAudioContext::createBuffer(unsigned numberOfChannels,
     // AudioUtilities::minAudioBufferSampleRate() and
     // AudioUtilities::maxAudioBufferSampleRate().  The number of buckets is
     // fairly arbitrary.
-    DEFINE_STATIC_LOCAL(CustomCountHistogram, audioBufferSampleRateHistogram,
-                        ("WebAudio.AudioBuffer.SampleRate", 3000, 192000, 60));
+    DEFINE_STATIC_LOCAL(
+        CustomCountHistogram, audioBufferSampleRateHistogram,
+        ("WebAudio.AudioBuffer.SampleRate384kHz", 3000, 384000, 60));
 
     audioBufferChannelsHistogram.sample(numberOfChannels);
     audioBufferLengthHistogram.count(numberOfFrames);
@@ -250,13 +256,13 @@ AudioBuffer* BaseAudioContext::createBuffer(unsigned numberOfChannels,
     // integer.  If the context is closed, don't record this because we
     // don't have a sample rate for closed context.
     if (!isContextClosed()) {
-      // The limits are choosen from 100*(3000/192000) = 1.5625 and
-      // 100*(192000/3000) = 6400, where 3000 and 192000 are the current
+      // The limits are choosen from 100*(3000/384000) = 0.78125 and
+      // 100*(384000/3000) = 12800, where 3000 and 384000 are the current
       // min and max sample rates possible for an AudioBuffer.  The number
       // of buckets is fairly arbitrary.
       DEFINE_STATIC_LOCAL(
           CustomCountHistogram, audioBufferSampleRateRatioHistogram,
-          ("WebAudio.AudioBuffer.SampleRateRatio", 1, 6400, 50));
+          ("WebAudio.AudioBuffer.SampleRateRatio384kHz", 1, 12800, 50));
       float ratio = 100 * sampleRate / this->sampleRate();
       audioBufferSampleRateRatioHistogram.count(static_cast<int>(0.5 + ratio));
     }
@@ -325,6 +331,13 @@ AudioBufferSourceNode* BaseAudioContext::createBufferSource(
   // when start() is called.
 
   return node;
+}
+
+ConstantSourceNode* BaseAudioContext::createConstantSource(
+    ExceptionState& exceptionState) {
+  DCHECK(isMainThread());
+
+  return ConstantSourceNode::create(*this, exceptionState);
 }
 
 MediaElementAudioSourceNode* BaseAudioContext::createMediaElementSource(
@@ -553,6 +566,15 @@ PeriodicWave* BaseAudioContext::periodicWave(int type) {
   }
 }
 
+void BaseAudioContext::maybeRecordStartAttempt() {
+  if (!m_userGestureRequired || !UserGestureIndicator::processingUserGesture())
+    return;
+
+  DCHECK(!m_autoplayStatus.has_value() ||
+         m_autoplayStatus != AutoplayStatus::AutoplayStatusSucceeded);
+  m_autoplayStatus = AutoplayStatus::AutoplayStatusFailedWithStart;
+}
+
 String BaseAudioContext::state() const {
   // These strings had better match the strings for AudioContextState in
   // AudioContext.idl.
@@ -775,8 +797,12 @@ void BaseAudioContext::maybeUnlockUserGesture() {
   if (!m_userGestureRequired || !UserGestureIndicator::processingUserGesture())
     return;
 
+  DCHECK(!m_autoplayStatus.has_value() ||
+         m_autoplayStatus != AutoplayStatus::AutoplayStatusSucceeded);
+
   UserGestureIndicator::utilizeUserGesture();
   m_userGestureRequired = false;
+  m_autoplayStatus = AutoplayStatus::AutoplayStatusSucceeded;
 }
 
 bool BaseAudioContext::isAllowedToStart() const {
@@ -805,6 +831,18 @@ void BaseAudioContext::rejectPendingResolvers() {
   m_isResolvingResumePromises = false;
 
   rejectPendingDecodeAudioDataResolvers();
+}
+
+void BaseAudioContext::recordAutoplayStatus() {
+  if (!m_autoplayStatus.has_value())
+    return;
+
+  DEFINE_STATIC_LOCAL(
+      EnumerationHistogram, autoplayHistogram,
+      ("WebAudio.Autoplay.CrossOrigin", AutoplayStatus::AutoplayStatusCount));
+  autoplayHistogram.count(m_autoplayStatus.value());
+
+  m_autoplayStatus.reset();
 }
 
 const AtomicString& BaseAudioContext::interfaceName() const {

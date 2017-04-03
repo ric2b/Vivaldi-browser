@@ -214,7 +214,7 @@ class Tab : public gfx::AnimationDelegate,
   void OnMouseEntered(const ui::MouseEvent& event) override;
   void OnMouseMoved(const ui::MouseEvent& event) override;
   void OnMouseExited(const ui::MouseEvent& event) override;
-  void GetAccessibleState(ui::AXViewState* state) override;
+  void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
 
   // ui::EventHandler:
   void OnGestureEvent(ui::GestureEvent* event) override;
@@ -226,20 +226,23 @@ class Tab : public gfx::AnimationDelegate,
   // Invoked from SetData after |data_| has been updated to the new data.
   void DataChanged(const TabRendererData& old);
 
-  // Paint with the normal tab style.  If |clip| is non-empty, the tab border
+  // Paints with the normal tab style.  If |clip| is non-empty, the tab border
   // should be clipped against it.
   void PaintTab(gfx::Canvas* canvas, const gfx::Path& clip);
 
-  // Paint with the "immersive mode" light-bar style.
+  // Paints with the "immersive mode" light-bar style.
   void PaintImmersiveTab(gfx::Canvas* canvas);
 
-  // Paint various portions of the Tab.
+  // Paints the background of an inactive tab.
   void PaintInactiveTabBackground(gfx::Canvas* canvas, const gfx::Path& clip);
+
+  // Paints a tab background using the image defined by |fill_id| at the
+  // provided offset. If |fill_id| is 0, it will fall back to using the solid
+  // color defined by the theme provider and ignore the offset.
   void PaintTabBackgroundUsingFillId(gfx::Canvas* fill_canvas,
                                      gfx::Canvas* stroke_canvas,
                                      bool is_active,
                                      int fill_id,
-                                     bool has_custom_image,
                                      int y_offset);
 
   // Paints the pinned tab title changed indicator and |favicon_|. |favicon_|

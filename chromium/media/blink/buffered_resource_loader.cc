@@ -22,14 +22,16 @@
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/platform/WebURLError.h"
 #include "third_party/WebKit/public/platform/WebURLResponse.h"
+#include "third_party/WebKit/public/web/WebAssociatedURLLoader.h"
+#include "third_party/WebKit/public/web/WebAssociatedURLLoaderOptions.h"
 #include "third_party/WebKit/public/web/WebKit.h"
-#include "third_party/WebKit/public/web/WebURLLoaderOptions.h"
 
+using blink::WebAssociatedURLLoader;
+using blink::WebAssociatedURLLoaderOptions;
 using blink::WebFrame;
 using blink::WebString;
 using blink::WebURLError;
 using blink::WebURLLoader;
-using blink::WebURLLoaderOptions;
 using blink::WebURLRequest;
 using blink::WebURLResponse;
 
@@ -199,21 +201,21 @@ void BufferedResourceLoader::Start(
       WebString::fromUTF8("identity;q=1, *;q=0"));
 
   // Check for our test WebURLLoader.
-  std::unique_ptr<WebURLLoader> loader;
+  std::unique_ptr<WebAssociatedURLLoader> loader;
   if (test_loader_) {
     loader = std::move(test_loader_);
   } else {
-    WebURLLoaderOptions options;
+    WebAssociatedURLLoaderOptions options;
     if (cors_mode_ == kUnspecified) {
       options.allowCredentials = true;
       options.crossOriginRequestPolicy =
-          WebURLLoaderOptions::CrossOriginRequestPolicyAllow;
+          WebAssociatedURLLoaderOptions::CrossOriginRequestPolicyAllow;
     } else {
       options.exposeAllResponseHeaders = true;
       // The author header set is empty, no preflight should go ahead.
-      options.preflightPolicy = WebURLLoaderOptions::PreventPreflight;
+      options.preflightPolicy = WebAssociatedURLLoaderOptions::PreventPreflight;
       options.crossOriginRequestPolicy =
-          WebURLLoaderOptions::CrossOriginRequestPolicyUseAccessControl;
+          WebAssociatedURLLoaderOptions::CrossOriginRequestPolicyUseAccessControl;
       if (cors_mode_ == kUseCredentials)
         options.allowCredentials = true;
     }
@@ -351,14 +353,11 @@ bool BufferedResourceLoader::range_supported() {
 /////////////////////////////////////////////////////////////////////////////
 // blink::WebURLLoaderClient implementation.
 bool BufferedResourceLoader::willFollowRedirect(
-    WebURLLoader* loader,
-    WebURLRequest& newRequest,
+    const WebURLRequest& newRequest,
     const WebURLResponse& redirectResponse) {
   // The load may have been stopped and |start_cb| is destroyed.
   // In this case we shouldn't do anything.
   if (start_cb_.is_null()) {
-    // Set the url in the request to an invalid value (empty url).
-    newRequest.setURL(blink::WebURL());
     return false;
   }
 
@@ -371,14 +370,12 @@ bool BufferedResourceLoader::willFollowRedirect(
 }
 
 void BufferedResourceLoader::didSendData(
-    WebURLLoader* loader,
     unsigned long long bytes_sent,
     unsigned long long total_bytes_to_be_sent) {
   NOTIMPLEMENTED();
 }
 
 void BufferedResourceLoader::didReceiveResponse(
-    WebURLLoader* loader,
     const WebURLResponse& response) {
   DVLOG(1) << "didReceiveResponse: HTTP/"
            << (response.httpVersion() == WebURLResponse::HTTPVersion_0_9
@@ -484,11 +481,8 @@ void BufferedResourceLoader::didReceiveResponse(
   DoneStart(kOk);
 }
 
-void BufferedResourceLoader::didReceiveData(WebURLLoader* loader,
-                                            const char* data,
-                                            int data_length,
-                                            int encoded_data_length,
-                                            int encoded_body_length) {
+void BufferedResourceLoader::didReceiveData(const char* data,
+                                            int data_length) {
   DVLOG(1) << "didReceiveData: " << data_length << " bytes";
   DCHECK(active_loader_.get());
   DCHECK_GT(data_length, 0);
@@ -516,23 +510,17 @@ void BufferedResourceLoader::didReceiveData(WebURLLoader* loader,
 }
 
 void BufferedResourceLoader::didDownloadData(
-    blink::WebURLLoader* loader,
-    int dataLength,
-    int encoded_data_length) {
+    int dataLength) {
   NOTIMPLEMENTED();
 }
 
 void BufferedResourceLoader::didReceiveCachedMetadata(
-    WebURLLoader* loader,
-    const char* data,
-    int data_length) {
+    const char* data, int dataLength) {
   NOTIMPLEMENTED();
 }
 
 void BufferedResourceLoader::didFinishLoading(
-    WebURLLoader* loader,
-    double finishTime,
-    int64_t total_encoded_data_length) {
+    double finishTime) {
   DVLOG(1) << "didFinishLoading";
   DCHECK(active_loader_.get());
 
@@ -564,7 +552,6 @@ void BufferedResourceLoader::didFinishLoading(
 }
 
 void BufferedResourceLoader::didFail(
-    WebURLLoader* loader,
     const WebURLError& error) {
   DVLOG(1) << "didFail: reason=" << error.reason
            << ", isCancellation=" << error.isCancellation

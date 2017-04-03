@@ -23,14 +23,15 @@ namespace {
 // Minimum preload buffer.
 const int64_t kMinBufferPreload = 2 << 20;  // 2 Mb
 // Maxmimum preload buffer.
-const int64_t kMaxBufferPreload = 20 << 20;  // 20 Mb
+const int64_t kMaxBufferPreload = 50 << 20;  // 50 Mb
 
 // Preload this much extra, then stop preloading until we fall below the
 // kTargetSecondsBufferedAhead.
 const int64_t kPreloadHighExtra = 1 << 20;  // 1 Mb
 
-// Total size of the pinned region in the cache.
-const int64_t kMaxBufferSize = 25 << 20;  // 25 Mb
+// Default pin region size.
+// Note that we go over this if preload is calculated high enough.
+const int64_t kDefaultPinSize = 25 << 20;  // 25 Mb
 
 // If bitrate is not known, use this.
 const int64_t kDefaultBitrate = 200 * 8 << 10;  // 200 Kbps.
@@ -177,6 +178,14 @@ void MultibufferDataSource::Initialize(const InitializeCB& init_cb) {
     render_task_runner_->PostTask(
         FROM_HERE,
         base::Bind(&MultibufferDataSource::StartCallback, weak_ptr_));
+
+    // When the entire file is already in the cache, we won't get any more
+    // progress callbacks, which breaks some expectations. Post a task to
+    // make sure that the client gets at least one call each for the progress
+    // and loading callbacks.
+    render_task_runner_->PostTask(
+        FROM_HERE, base::Bind(&MultibufferDataSource::UpdateProgress,
+                              weak_factory_.GetWeakPtr()));
   } else {
     reader_->Wait(1,
                   base::Bind(&MultibufferDataSource::StartCallback, weak_ptr_));
@@ -266,7 +275,6 @@ bool MultibufferDataSource::DidPassCORSAccessCheck() const {
 
 void MultibufferDataSource::MediaPlaybackRateChanged(double playback_rate) {
   DCHECK(render_task_runner_->BelongsToCurrentThread());
-  DCHECK(reader_.get());
 
   if (playback_rate < 0.0)
     return;
@@ -558,6 +566,15 @@ void MultibufferDataSource::UpdateLoadingState_Locked(bool force_loading) {
   }
 }
 
+void MultibufferDataSource::UpdateProgress() {
+  DCHECK(render_task_runner_->BelongsToCurrentThread());
+  if (reader_) {
+    uint64_t available = reader_->Available();
+    uint64_t pos = reader_->Tell();
+    ProgressCallback(pos, pos + available);
+  }
+}
+
 void MultibufferDataSource::UpdateBufferSizes() {
   DVLOG(1) << __func__;
   if (!reader_)
@@ -589,22 +606,32 @@ void MultibufferDataSource::UpdateBufferSizes() {
 
   int64_t bytes_per_second = (bitrate / 8.0) * playback_rate;
 
+  // Preload 10 seconds of data, clamped to some min/max value.
   int64_t preload = clamp(kTargetSecondsBufferedAhead * bytes_per_second,
                           kMinBufferPreload, kMaxBufferPreload);
+  // We preload this much, then we stop unil we read |preload| before resuming.
   int64_t preload_high = preload + kPreloadHighExtra;
 
-  // Assert that kMaxBufferSize is big enough that the subtraction on the next
-  // line cannot go negative.
-  static_assert(kMaxBufferSize > kMaxBufferPreload + kPreloadHighExtra,
-                "kMaxBufferSize too small to contain preload.");
-  int64_t back_buffer = clamp(kTargetSecondsBufferedBehind * bytes_per_second,
-                              kMinBufferPreload, kMaxBufferSize - preload_high);
+  // We pin a few seconds of data behind the current reading position.
+  int64_t pin_backward = clamp(kTargetSecondsBufferedBehind * bytes_per_second,
+                               kMinBufferPreload, kMaxBufferPreload);
+
+  // We always pin at least kDefaultPinSize ahead of the read position.
+  // Normally, the extra space between preload_high and kDefaultPinSize will
+  // not actually have any data in it, but if it does, we don't want to throw it
+  // away right before we need it.
+  int64_t pin_forward = std::max(preload_high, kDefaultPinSize);
+
+  // Note that the buffer size is advisory as only non-pinned data is allowed
+  // to be thrown away. Most of the time we pin a region that is larger than
+  // |buffer_size|, which only makes sense because most of the time, some of
+  // the data in pinned region is not present in the cache.
   int64_t buffer_size =
       std::min((kTargetSecondsBufferedAhead + kTargetSecondsBufferedBehind) *
                    bytes_per_second,
-               kMaxBufferSize);
+               preload_high + pin_backward);
   reader_->SetMaxBuffer(buffer_size);
-  reader_->SetPinRange(back_buffer, kMaxBufferPreload + kPreloadHighExtra);
+  reader_->SetPinRange(pin_backward, pin_forward);
 
   if (preload_ == METADATA) {
     reader_->SetPreload(0, 0);

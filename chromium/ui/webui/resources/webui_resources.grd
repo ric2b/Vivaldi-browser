@@ -19,7 +19,7 @@ without changes to the corresponding grd file. -->
       <!-- Roboto Font. Roboto-Regular and Roboto-Light is already available on
            Android, and Roboto-Medium is not used on Android. All 6 weights of
            Roboto are available on Chrome OS.-->
-      <if expr="not android and not chromeos">
+      <if expr="not is_android and not chromeos">
         <include name="IDR_WEBUI_ROBOTO_ROBOTO_REGULAR_WOFF2" file="roboto/roboto-regular.woff2" type="BINDATA" />
         <include name="IDR_WEBUI_ROBOTO_ROBOTO_MEDIUM_WOFF2" file="roboto/roboto-medium.woff2" type="BINDATA" />
         <include name="IDR_WEBUI_ROBOTO_ROBOTO_BOLD_WOFF2" file="roboto/roboto-bold.woff2" type="BINDATA" />
@@ -277,6 +277,8 @@ without changes to the corresponding grd file. -->
                  file="html/cr/ui.html" type="chrome_html" />
       <structure name="IDR_WEBUI_HTML_CR_UI_ALERT_OVERLAY"
                  file="html/cr/ui/alert_overlay.html" type="chrome_html" />
+      <structure name="IDR_WEBUI_HTML_CR_UI_ARRAY_DATA_MODEL"
+                 file="html/cr/ui/array_data_model.html" type="chrome_html" />
       <structure name="IDR_WEBUI_HTML_CR_UI_COMMAND"
                  file="html/cr/ui/command.html" type="chrome_html" />
       <structure name="IDR_WEBUI_HTML_CR_UI_CONTEXT_MENU_BUTTON"
@@ -312,6 +314,9 @@ without changes to the corresponding grd file. -->
                  file="html/icon.html" type="chrome_html" />
       <structure name="IDR_WEBUI_HTML_I18N_TEMPLATE"
                  file="html/i18n_template.html" type="chrome_html" />
+      <structure name="IDR_WEBUI_HTML_MD_SELECT_CSS_HTML"
+                 file="html/md_select_css.html" type="chrome_html"
+                 flattenhtml="true" />
       <structure name="IDR_WEBUI_HTML_LOAD_TIME_DATA"
                  file="html/load_time_data.html" type="chrome_html" />
       <structure name="IDR_WEBUI_HTML_PARSE_HTML_SUBSET"
@@ -468,8 +473,8 @@ without changes to the corresponding grd file. -->
                    file="js/chromeos/ui_account_tweaks.js"
                    type="chrome_html" />
       </if>
-      <part file="cr_elements_resources.grdp" />
       <if expr="not is_android">
+        <part file="cr_elements_resources.grdp" />
         <part file="polymer_resources.grdp" />
       </if>
     </structures>

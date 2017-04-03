@@ -10,9 +10,10 @@ cr.define('settings', function() {
     /**
      * @param {boolean} sendSettings Whether the user gave consent to upload
      *     broken settings to Google for analysis.
+     * @param {string} requestOrigin The origin of the reset request.
      * @return {!Promise} A promise firing once resetting has completed.
      */
-    performResetProfileSettings: function(sendSettings) {},
+    performResetProfileSettings: function(sendSettings, requestOrigin) {},
 
     /**
      * A method to be called when the reset profile dialog is hidden.
@@ -34,6 +35,13 @@ cr.define('settings', function() {
      * to Google for analysis, in a new tab.
      */
     showReportedSettings: function() {},
+
+    /**
+     * Retrieves the triggered reset tool name.
+     * @return {!Promise<string>} A promise firing with the tool name, once it
+     *     has been retrieved.
+     */
+    getTriggeredResetToolName: function() {},
 
 <if expr="chromeos">
     /**
@@ -57,8 +65,9 @@ cr.define('settings', function() {
 
   ResetBrowserProxyImpl.prototype = {
     /** @override */
-    performResetProfileSettings: function(sendSettings) {
-      return cr.sendWithPromise('performResetProfileSettings', sendSettings);
+    performResetProfileSettings: function(sendSettings, requestOrigin) {
+      return cr.sendWithPromise('performResetProfileSettings',
+                                sendSettings, requestOrigin);
     },
 
     /** @override */
@@ -88,6 +97,11 @@ cr.define('settings', function() {
         div.style.whiteSpace = 'pre';
         win.document.body.appendChild(div);
       });
+    },
+
+    /** @override */
+    getTriggeredResetToolName: function() {
+      return cr.sendWithPromise('getTriggeredResetToolName');
     },
 
 <if expr="chromeos">

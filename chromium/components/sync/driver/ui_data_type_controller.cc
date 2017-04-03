@@ -11,16 +11,16 @@
 #include "base/memory/ptr_util.h"
 #include "base/profiler/scoped_tracker.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "components/sync/api/data_type_error_handler_impl.h"
-#include "components/sync/api/sync_error.h"
-#include "components/sync/api/sync_merge_result.h"
-#include "components/sync/api/syncable_service.h"
 #include "components/sync/base/data_type_histogram.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/driver/generic_change_processor_factory.h"
 #include "components/sync/driver/shared_change_processor_ref.h"
 #include "components/sync/driver/sync_client.h"
 #include "components/sync/driver/sync_service.h"
+#include "components/sync/model/data_type_error_handler_impl.h"
+#include "components/sync/model/sync_error.h"
+#include "components/sync/model/sync_merge_result.h"
+#include "components/sync/model/syncable_service.h"
 
 namespace syncer {
 
@@ -57,7 +57,7 @@ void UIDataTypeController::LoadModels(
     return;
   }
   // Since we can't be called multiple times before Stop() is called,
-  // |shared_change_processor_| must be NULL here.
+  // |shared_change_processor_| must be null here.
   DCHECK(!shared_change_processor_.get());
   shared_change_processor_ = new SharedChangeProcessor(type());
 
@@ -236,7 +236,7 @@ void UIDataTypeController::AbortModelLoad() {
   state_ = NOT_RUNNING;
 
   if (shared_change_processor_.get()) {
-    shared_change_processor_ = NULL;
+    shared_change_processor_ = nullptr;
   }
 
   // We don't want to continue loading models (e.g OnModelLoaded should never be
@@ -267,7 +267,7 @@ void UIDataTypeController::StartDone(
 
     if (shared_change_processor_.get()) {
       shared_change_processor_->Disconnect();
-      shared_change_processor_ = NULL;
+      shared_change_processor_ = nullptr;
     }
   }
 
@@ -286,7 +286,7 @@ void UIDataTypeController::Stop() {
 
   if (shared_change_processor_.get()) {
     shared_change_processor_->Disconnect();
-    shared_change_processor_ = NULL;
+    shared_change_processor_ = nullptr;
   }
 
   // If Stop() is called while Start() is waiting for the datatype model to

@@ -28,13 +28,14 @@
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "base/values.h"
+#include "extensions/common/extension_id.h"
 
 class ExtensionFunction;
 
 namespace extensions {
 class QuotaLimitHeuristic;
 
-typedef std::list<QuotaLimitHeuristic*> QuotaLimitHeuristics;
+using QuotaLimitHeuristics = std::list<std::unique_ptr<QuotaLimitHeuristic>>;
 
 // The QuotaService takes care that calls to certain extension
 // functions do not exceed predefined quotas.
@@ -73,16 +74,14 @@ class QuotaService : public base::NonThreadSafe {
   };
 
  private:
-  typedef std::string ExtensionId;
-  typedef std::string FunctionName;
+  using FunctionName = std::string;
   // All QuotaLimitHeuristic instances in this map are owned by us.
-  typedef std::map<FunctionName, QuotaLimitHeuristics> FunctionHeuristicsMap;
+  using FunctionHeuristicsMap = std::map<FunctionName, QuotaLimitHeuristics>;
 
   // Purge resets all accumulated data as if the service was just created.
   // Called periodically so we don't consume an unbounded amount of memory
   // while tracking quota.
   void Purge();
-  void PurgeFunctionHeuristicsMap(FunctionHeuristicsMap* map);
   base::RepeatingTimer purge_timer_;
 
   // Our quota tracking state for extensions that have invoked quota limited
@@ -143,7 +142,7 @@ class QuotaLimitHeuristic {
     int64_t num_tokens_;
     DISALLOW_COPY_AND_ASSIGN(Bucket);
   };
-  typedef std::list<Bucket*> BucketList;
+  using BucketList = std::list<Bucket*>;
 
   // A helper interface to retrieve the bucket corresponding to |args| from
   // the set of buckets (which is typically stored in the BucketMapper itself)

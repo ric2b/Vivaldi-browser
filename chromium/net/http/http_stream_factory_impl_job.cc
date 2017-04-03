@@ -140,8 +140,7 @@ std::unique_ptr<base::Value> NetLogHttpStreamProtoCallback(
     NetLogCaptureMode /* capture_mode */) {
   std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
 
-  dict->SetString("proto",
-                  SSLClientSocket::NextProtoToString(negotiated_protocol));
+  dict->SetString("proto", NextProtoToString(negotiated_protocol));
   return std::move(dict);
 }
 
@@ -214,14 +213,14 @@ HttpStreamFactoryImpl::Job::Job(Delegate* delegate,
   // the same time since alternative services are used for requests that are
   // fetched directly, while the alternative proxy server is used for requests
   // that should be fetched using proxy.
-  DCHECK(alternative_service_.protocol == UNINITIALIZED_ALTERNATE_PROTOCOL ||
+  DCHECK(alternative_service_.protocol == kProtoUnknown ||
          !alternative_proxy_server_.is_valid());
   DCHECK(!alternative_proxy_server_.is_valid() ||
          !(IsSpdyAlternative() || IsQuicAlternative()));
   // If either the alternative service protocol is specified or if the
   // alternative proxy server is valid, then the job type must be set to
   // either ALTERNATIVE or PRECONNECT.
-  DCHECK((alternative_service_.protocol == UNINITIALIZED_ALTERNATE_PROTOCOL &&
+  DCHECK((alternative_service_.protocol == kProtoUnknown &&
           !alternative_proxy_server_.is_valid()) ||
          (job_type_ == ALTERNATIVE || job_type_ == PRECONNECT));
   // If the alternative proxy server is valid, then the job type must be
@@ -1009,7 +1008,7 @@ int HttpStreamFactoryImpl::Job::DoInitConnectionComplete(int result) {
   if (ssl_started && (result == OK || IsCertificateError(result))) {
     if (using_quic_ && result == OK) {
       was_alpn_negotiated_ = true;
-      negotiated_protocol_ = kProtoQUIC1SPDY3;
+      negotiated_protocol_ = kProtoQUIC;
     } else {
       SSLClientSocket* ssl_socket =
           static_cast<SSLClientSocket*>(connection_->socket());
@@ -1312,11 +1311,11 @@ bool HttpStreamFactoryImpl::Job::IsHttpsProxyAndHttpUrl() const {
 }
 
 bool HttpStreamFactoryImpl::Job::IsSpdyAlternative() const {
-  return alternative_service_.protocol == NPN_HTTP_2;
+  return alternative_service_.protocol == kProtoHTTP2;
 }
 
 bool HttpStreamFactoryImpl::Job::IsQuicAlternative() const {
-  return alternative_service_.protocol == QUIC;
+  return alternative_service_.protocol == kProtoQUIC;
 }
 
 void HttpStreamFactoryImpl::Job::InitSSLConfig(SSLConfig* ssl_config,

@@ -5,6 +5,7 @@
 #include "core/inspector/InspectorLogAgent.h"
 
 #include "bindings/core/v8/SourceLocation.h"
+#include "core/frame/PerformanceMonitor.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/inspector/ConsoleMessageStorage.h"
 #include "core/inspector/IdentifiersFactory.h"
@@ -13,6 +14,7 @@ namespace blink {
 
 namespace LogAgentState {
 static const char logEnabled[] = "logEnabled";
+static const char logViolations[] = "logViolations";
 }
 
 namespace {
@@ -40,6 +42,8 @@ String messageSourceValue(MessageSource source) {
       return protocol::Log::LogEntry::SourceEnum::Deprecation;
     case WorkerMessageSource:
       return protocol::Log::LogEntry::SourceEnum::Worker;
+    case ViolationMessageSource:
+      return protocol::Log::LogEntry::SourceEnum::Violation;
     default:
       return protocol::Log::LogEntry::SourceEnum::Other;
   }
@@ -63,21 +67,33 @@ String messageLevelValue(MessageLevel level) {
 
 }  // namespace
 
-InspectorLogAgent::InspectorLogAgent(ConsoleMessageStorage* storage)
-    : m_enabled(false), m_storage(storage) {}
+using protocol::Log::ViolationSetting;
+
+InspectorLogAgent::InspectorLogAgent(ConsoleMessageStorage* storage,
+                                     PerformanceMonitor* performanceMonitor)
+    : m_enabled(false),
+      m_storage(storage),
+      m_performanceMonitor(performanceMonitor) {}
 
 InspectorLogAgent::~InspectorLogAgent() {}
 
 DEFINE_TRACE(InspectorLogAgent) {
   visitor->trace(m_storage);
+  visitor->trace(m_performanceMonitor);
   InspectorBaseAgent::trace(visitor);
+  PerformanceMonitor::Client::trace(visitor);
 }
 
 void InspectorLogAgent::restore() {
   if (!m_state->booleanProperty(LogAgentState::logEnabled, false))
     return;
-  ErrorString ignored;
-  enable(&ignored);
+  enable();
+  protocol::Value* config = m_state->get(LogAgentState::logViolations);
+  if (config) {
+    protocol::ErrorSupport errors;
+    startViolationsReport(
+        protocol::Array<ViolationSetting>::parse(config, &errors));
+  }
 }
 
 void InspectorLogAgent::consoleMessageAdded(ConsoleMessage* message) {
@@ -109,9 +125,9 @@ void InspectorLogAgent::consoleMessageAdded(ConsoleMessage* message) {
   frontend()->flush();
 }
 
-void InspectorLogAgent::enable(ErrorString*) {
+Response InspectorLogAgent::enable() {
   if (m_enabled)
-    return;
+    return Response::OK();
   m_instrumentingAgents->addInspectorLogAgent(this);
   m_state->setBoolean(LogAgentState::logEnabled, true);
   m_enabled = true;
@@ -130,18 +146,95 @@ void InspectorLogAgent::enable(ErrorString*) {
   }
   for (size_t i = 0; i < m_storage->size(); ++i)
     consoleMessageAdded(m_storage->at(i));
+  return Response::OK();
 }
 
-void InspectorLogAgent::disable(ErrorString*) {
+Response InspectorLogAgent::disable() {
   if (!m_enabled)
-    return;
+    return Response::OK();
   m_state->setBoolean(LogAgentState::logEnabled, false);
+  stopViolationsReport();
   m_enabled = false;
   m_instrumentingAgents->removeInspectorLogAgent(this);
+  return Response::OK();
 }
 
-void InspectorLogAgent::clear(ErrorString*) {
+Response InspectorLogAgent::clear() {
   m_storage->clear();
+  return Response::OK();
 }
+
+static PerformanceMonitor::Violation parseViolation(const String& name) {
+  if (name == ViolationSetting::NameEnum::LongTask)
+    return PerformanceMonitor::kLongTask;
+  if (name == ViolationSetting::NameEnum::LongLayout)
+    return PerformanceMonitor::kLongLayout;
+  if (name == ViolationSetting::NameEnum::BlockedEvent)
+    return PerformanceMonitor::kBlockedEvent;
+  if (name == ViolationSetting::NameEnum::BlockedParser)
+    return PerformanceMonitor::kBlockedParser;
+  if (name == ViolationSetting::NameEnum::Handler)
+    return PerformanceMonitor::kHandler;
+  if (name == ViolationSetting::NameEnum::RecurringHandler)
+    return PerformanceMonitor::kRecurringHandler;
+  return PerformanceMonitor::kAfterLast;
+}
+
+Response InspectorLogAgent::startViolationsReport(
+    std::unique_ptr<protocol::Array<ViolationSetting>> settings) {
+  if (!m_enabled)
+    return Response::Error("Log is not enabled");
+  m_state->setValue(LogAgentState::logViolations, settings->serialize());
+  if (!m_performanceMonitor)
+    return Response::Error("Violations are not supported for this target");
+  m_performanceMonitor->unsubscribeAll(this);
+  for (size_t i = 0; i < settings->length(); ++i) {
+    PerformanceMonitor::Violation violation =
+        parseViolation(settings->get(i)->getName());
+    if (violation == PerformanceMonitor::kAfterLast)
+      continue;
+    m_performanceMonitor->subscribe(
+        violation, settings->get(i)->getThreshold() / 1000, this);
+  }
+  return Response::OK();
+}
+
+Response InspectorLogAgent::stopViolationsReport() {
+  m_state->remove(LogAgentState::logViolations);
+  if (!m_performanceMonitor)
+    return Response::Error("Violations are not supported for this target");
+  m_performanceMonitor->unsubscribeAll(this);
+  return Response::OK();
+}
+
+void InspectorLogAgent::reportLongTask(
+    double startTime,
+    double endTime,
+    const HeapHashSet<Member<Frame>>& contextFrames) {
+  double time = (endTime - startTime) * 1000;
+  String messageText =
+      String::format("Long running JavaScript task took %ldms", lround(time));
+  ConsoleMessage* message = ConsoleMessage::create(
+      ViolationMessageSource, WarningMessageLevel, messageText);
+  consoleMessageAdded(message);
+}
+
+void InspectorLogAgent::reportLongLayout(double duration) {
+  String messageText =
+      String::format("Forced reflow while executing JavaScript took %ldms",
+                     lround(duration * 1000));
+  ConsoleMessage* message = ConsoleMessage::create(
+      ViolationMessageSource, WarningMessageLevel, messageText);
+  consoleMessageAdded(message);
+}
+
+void InspectorLogAgent::reportGenericViolation(PerformanceMonitor::Violation,
+                                               const String& text,
+                                               double time,
+                                               SourceLocation* location) {
+  ConsoleMessage* message = ConsoleMessage::create(
+      ViolationMessageSource, WarningMessageLevel, text, location->clone());
+  consoleMessageAdded(message);
+};
 
 }  // namespace blink

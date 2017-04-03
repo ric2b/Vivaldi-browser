@@ -102,6 +102,15 @@ class LayerTestCommon {
       return ptr;
     }
 
+    template <typename T, typename A, typename B, typename C>
+    T* AddChildToRoot(const A& a, const B& b, const C& c) {
+      std::unique_ptr<T> layer = T::Create(host_->host_impl()->active_tree(),
+                                           layer_impl_id_++, a, b, c);
+      T* ptr = layer.get();
+      root_layer_for_testing()->test_properties()->AddChild(std::move(layer));
+      return ptr;
+    }
+
     template <typename T, typename A, typename B, typename C, typename D>
     T* AddChildToRoot(const A& a, const B& b, const C& c, const D& d) {
       std::unique_ptr<T> layer = T::Create(host_->host_impl()->active_tree(),
@@ -166,6 +175,7 @@ class LayerTestCommon {
     FakeLayerTreeHostClient client_;
     TestTaskGraphRunner task_graph_runner_;
     std::unique_ptr<CompositorFrameSink> compositor_frame_sink_;
+    std::unique_ptr<AnimationHost> animation_host_;
     std::unique_ptr<FakeLayerTreeHost> host_;
     std::unique_ptr<RenderPass> render_pass_;
     scoped_refptr<AnimationTimeline> timeline_;

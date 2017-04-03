@@ -25,8 +25,6 @@ std::string GetVersionNumber();
 // Returns a version control specific identifier of this release.
 std::string GetLastChange();
 
-std::string VivaldiLastChange();
-
 // Returns whether this is an "official" release of the current version, i.e.
 // whether kwnowing GetVersionNumber() is enough to completely determine what
 // GetLastChange() is.

@@ -8,8 +8,8 @@
 #include <string>
 
 #include "base/macros.h"
-#include "components/arc/arc_bridge_service.h"
 #include "components/arc/arc_service.h"
+#include "components/arc/common/clipboard.mojom.h"
 #include "components/arc/instance_holder.h"
 #include "mojo/public/cpp/bindings/binding.h"
 
@@ -27,7 +27,7 @@ class ArcClipboardBridge
   void OnInstanceReady() override;
 
   // mojom::ClipboardHost overrides.
-  void SetTextContent(const mojo::String& text) override;
+  void SetTextContent(const std::string& text) override;
   void GetTextContent() override;
 
  private:

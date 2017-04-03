@@ -32,6 +32,7 @@
 #include "chrome/browser/ui/ash/ash_util.h"
 #include "chrome/browser/ui/webui/about_ui.h"
 #include "chrome/browser/ui/webui/chromeos/login/app_launch_splash_screen_handler.h"
+#include "chrome/browser/ui/webui/chromeos/login/arc_terms_of_service_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/auto_enrollment_check_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/base_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/controller_pairing_screen_handler.h"
@@ -67,6 +68,7 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/browser_resources.h"
 #include "chrome/grit/chrome_unscaled_resources.h"
+#include "chrome/grit/component_extension_resources.h"
 #include "chromeos/chromeos_switches.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "components/prefs/pref_service.h"
@@ -113,6 +115,8 @@ const char kCustomElementsPinKeyboardJSPath[] =
 const char kEnrollmentHTMLPath[] = "enrollment.html";
 const char kEnrollmentCSSPath[] = "enrollment.css";
 const char kEnrollmentJSPath[] = "enrollment.js";
+const char kArcPlaystoreCSSPath[] = "playstore.css";
+const char kArcPlaystoreJSPath[] = "playstore.js";
 
 // Creates a WebUIDataSource for chrome://oobe
 content::WebUIDataSource* CreateOobeUIDataSource(
@@ -151,6 +155,11 @@ content::WebUIDataSource* CreateOobeUIDataSource(
     source->AddResourcePath(kCustomElementsUserPodHTMLPath,
                             IDR_CUSTOM_ELEMENTS_USER_POD_HTML);
   }
+
+  // Required for postprocessing of Goolge PlayStore Terms.
+  source->AddResourcePath(kArcPlaystoreCSSPath, IDR_ARC_SUPPORT_PLAYSTORE_CSS);
+  source->AddResourcePath(kArcPlaystoreJSPath, IDR_ARC_SUPPORT_PLAYSTORE_JS);
+
   source->AddResourcePath(kKeyboardUtilsJSPath, IDR_KEYBOARD_UTILS_JS);
   source->OverrideContentSecurityPolicyChildSrc(
       base::StringPrintf(
@@ -284,6 +293,11 @@ OobeUI::OobeUI(content::WebUI* web_ui, const GURL& url)
   terms_of_service_screen_actor_ = terms_of_service_screen_handler;
   AddScreenHandler(terms_of_service_screen_handler);
 
+  ArcTermsOfServiceScreenHandler* arc_terms_of_service_screen_handler =
+      new ArcTermsOfServiceScreenHandler();
+  arc_terms_of_service_screen_actor_ = arc_terms_of_service_screen_handler;
+  AddScreenHandler(arc_terms_of_service_screen_handler);
+
   UserImageScreenHandler* user_image_screen_handler =
       new UserImageScreenHandler();
   user_image_view_ = user_image_screen_handler;
@@ -408,6 +422,10 @@ TermsOfServiceScreenActor* OobeUI::GetTermsOfServiceScreenActor() {
   return terms_of_service_screen_actor_;
 }
 
+ArcTermsOfServiceScreenActor* OobeUI::GetArcTermsOfServiceScreenActor() {
+  return arc_terms_of_service_screen_actor_;
+}
+
 WrongHWIDScreenActor* OobeUI::GetWrongHWIDScreenActor() {
   return wrong_hwid_screen_actor_;
 }
@@ -521,8 +539,7 @@ void OobeUI::InitializeHandlers() {
       new ShutdownPolicyHandler(CrosSettings::Get(), this));
 
   // Trigger an initial update.
-  shutdown_policy_handler_->CheckIfRebootOnShutdown(
-      base::Bind(&OobeUI::OnShutdownPolicyChanged, base::Unretained(this)));
+  shutdown_policy_handler_->NotifyDelegateWithShutdownPolicy();
 }
 
 void OobeUI::OnScreenAssetsLoaded(const std::string& async_assets_load_id) {
@@ -601,9 +618,8 @@ void OobeUI::OnCurrentScreenChanged(const std::string& screen) {
   }
 
   current_screen_ = new_screen;
-  FOR_EACH_OBSERVER(Observer,
-                    observer_list_,
-                    OnCurrentScreenChanged(current_screen_, new_screen));
+  for (Observer& observer : observer_list_)
+    observer.OnCurrentScreenChanged(current_screen_, new_screen);
 }
 
 }  // namespace chromeos

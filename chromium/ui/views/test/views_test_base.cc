@@ -64,6 +64,11 @@ bool ViewsTestBase::IsMus() {
   return PlatformTestHelper::IsMus();
 }
 
+// static
+bool ViewsTestBase::IsAuraMusClient() {
+  return PlatformTestHelper::IsAuraMusClient();
+}
+
 void ViewsTestBase::SetUp() {
   testing::Test::SetUp();
   // ContentTestSuiteBase might have already initialized
@@ -101,12 +106,16 @@ Widget::InitParams ViewsTestBase::CreateParams(
   return params;
 }
 
-gfx::NativeWindow ViewsTestBase::GetContext() {
-  return test_helper_->GetContext();
-}
-
 bool ViewsTestBase::HasCompositingManager() const {
   return has_compositing_manager_;
+}
+
+void ViewsTestBase::SimulateNativeDestroy(Widget* widget) {
+  test_helper_->platform_test_helper()->SimulateNativeDestroy(widget);
+}
+
+gfx::NativeWindow ViewsTestBase::GetContext() {
+  return test_helper_->GetContext();
 }
 
 }  // namespace views

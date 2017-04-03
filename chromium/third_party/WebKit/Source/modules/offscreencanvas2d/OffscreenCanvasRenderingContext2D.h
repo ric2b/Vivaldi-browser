@@ -37,7 +37,7 @@ class MODULES_EXPORT OffscreenCanvasRenderingContext2D final
     }
   };
 
-  void commit(ExceptionState&);
+  void commit(ScriptState*, ExceptionState&);
 
   // CanvasRenderingContext implementation
   ~OffscreenCanvasRenderingContext2D() override;
@@ -51,6 +51,8 @@ class MODULES_EXPORT OffscreenCanvasRenderingContext2D final
     BaseRenderingContext2D::clearRect(x, y, width, height);
   }
   PassRefPtr<Image> getImage(AccelerationHint, SnapshotReason) const final;
+  ImageData* toImageData(SnapshotReason) const override;
+  void reset() override;
 
   // BaseRenderingContext2D implementation
   bool originClean() const final;
@@ -73,7 +75,7 @@ class MODULES_EXPORT OffscreenCanvasRenderingContext2D final
   void didDraw(const SkIRect& dirtyRect) final;
 
   bool stateHasFilter() final;
-  SkImageFilter* stateGetFilter() final;
+  sk_sp<SkImageFilter> stateGetFilter() final;
   void snapshotStateForFilter() final {}
 
   void validateStateStack() const final;
@@ -81,7 +83,7 @@ class MODULES_EXPORT OffscreenCanvasRenderingContext2D final
   bool hasAlpha() const final { return creationAttributes().alpha(); }
   bool isContextLost() const override;
 
-  ImageBitmap* transferToImageBitmap(ExceptionState&) final;
+  ImageBitmap* transferToImageBitmap(ScriptState*) final;
 
  protected:
   OffscreenCanvasRenderingContext2D(

@@ -70,6 +70,7 @@
 #include "net/url_request/url_request_context_getter.h"
 #include "ppapi/shared_impl/file_type_conversion.h"
 #include "url/gurl.h"
+#include "url/origin.h"
 
 #if defined(OS_MACOSX)
 #include "content/common/mac/font_descriptor.h"
@@ -161,16 +162,13 @@ RenderMessageFilter::~RenderMessageFilter() {
       BrowserGpuMemoryBufferManager::current();
   if (gpu_memory_buffer_manager)
     gpu_memory_buffer_manager->ProcessRemoved(PeerHandle(), render_process_id_);
-  HostDiscardableSharedMemoryManager::current()->ProcessRemoved(
+  discardable_memory::DiscardableSharedMemoryManager::current()->ClientRemoved(
       render_process_id_);
 }
 
 bool RenderMessageFilter::OnMessageReceived(const IPC::Message& message) {
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP(RenderMessageFilter, message)
-    IPC_MESSAGE_HANDLER(ViewHostMsg_CreateWidget, OnCreateWidget)
-    IPC_MESSAGE_HANDLER(ViewHostMsg_CreateFullscreenWidget,
-                        OnCreateFullscreenWidget)
 #if defined(OS_MACOSX)
     // On Mac, the IPCs ViewHostMsg_SwapCompositorFrame, ViewHostMsg_UpdateRect,
     // and GpuCommandBufferMsg_SwapBuffersCompleted need to be handled in a
@@ -185,11 +183,9 @@ bool RenderMessageFilter::OnMessageReceived(const IPC::Message& message) {
         ViewHostMsg_SetNeedsBeginFrames,
         ResizeHelperPostMsgToUIThread(render_process_id_, message))
 #endif
-    // NB: The SyncAllocateSharedMemory, SyncAllocateGpuMemoryBuffer, and
-    // DeletedGpuMemoryBuffer IPCs are handled here for renderer processes. For
-    // non-renderer child processes, they are handled in ChildProcessHostImpl.
-    IPC_MESSAGE_HANDLER_DELAY_REPLY(
-        ChildProcessHostMsg_SyncAllocateSharedMemory, OnAllocateSharedMemory)
+    // NB: The SyncAllocateGpuMemoryBuffer and DeletedGpuMemoryBuffer IPCs are
+    // handled here for renderer processes. For non-renderer child processes,
+    // they are handled in ChildProcessHostImpl.
     IPC_MESSAGE_HANDLER_DELAY_REPLY(
         ChildProcessHostMsg_SyncAllocateSharedBitmap, OnAllocateSharedBitmap)
     IPC_MESSAGE_HANDLER_DELAY_REPLY(
@@ -239,17 +235,6 @@ void RenderMessageFilter::OverrideThreadForMessage(const IPC::Message& message,
                                                    BrowserThread::ID* thread) {
   if (message.type() == ViewHostMsg_MediaLogEvents::ID)
     *thread = BrowserThread::UI;
-}
-
-void RenderMessageFilter::OnCreateWidget(int opener_id,
-                                         blink::WebPopupType popup_type,
-                                         int* route_id) {
-  render_widget_helper_->CreateNewWidget(opener_id, popup_type, route_id);
-}
-
-void RenderMessageFilter::OnCreateFullscreenWidget(int opener_id,
-                                                   int* route_id) {
-  render_widget_helper_->CreateNewFullscreenWidget(opener_id, route_id);
 }
 
 void RenderMessageFilter::GenerateRoutingID(
@@ -302,6 +287,23 @@ void RenderMessageFilter::CreateNewWindow(
   callback.Run(std::move(reply));
 }
 
+void RenderMessageFilter::CreateNewWidget(
+    int32_t opener_id,
+    blink::WebPopupType popup_type,
+    const CreateNewWidgetCallback& callback) {
+  int route_id = MSG_ROUTING_NONE;
+  render_widget_helper_->CreateNewWidget(opener_id, popup_type, &route_id);
+  callback.Run(route_id);
+}
+
+void RenderMessageFilter::CreateFullscreenWidget(
+    int opener_id,
+    const CreateFullscreenWidgetCallback& callback) {
+  int route_id = 0;
+  render_widget_helper_->CreateNewFullscreenWidget(opener_id, &route_id);
+  callback.Run(route_id);
+}
+
 #if defined(OS_MACOSX)
 
 void RenderMessageFilter::OnLoadFont(const FontDescriptor& font,
@@ -331,25 +333,6 @@ void RenderMessageFilter::SendLoadFontReply(IPC::Message* reply,
 }
 
 #endif  // defined(OS_MACOSX)
-
-void RenderMessageFilter::AllocateSharedMemoryOnFileThread(
-    uint32_t buffer_size,
-    IPC::Message* reply_msg) {
-  base::SharedMemoryHandle handle;
-  ChildProcessHostImpl::AllocateSharedMemory(buffer_size, PeerHandle(),
-                                             &handle);
-  ChildProcessHostMsg_SyncAllocateSharedMemory::WriteReplyParams(reply_msg,
-                                                                 handle);
-  Send(reply_msg);
-}
-
-void RenderMessageFilter::OnAllocateSharedMemory(uint32_t buffer_size,
-                                                 IPC::Message* reply_msg) {
-  BrowserThread::PostTask(
-      BrowserThread::FILE_USER_BLOCKING, FROM_HERE,
-      base::Bind(&RenderMessageFilter::AllocateSharedMemoryOnFileThread, this,
-                 buffer_size, reply_msg));
-}
 
 void RenderMessageFilter::AllocateSharedBitmapOnFileThread(
     uint32_t buffer_size,
@@ -389,11 +372,11 @@ void RenderMessageFilter::OnDeletedSharedBitmap(const cc::SharedBitmapId& id) {
 
 void RenderMessageFilter::AllocateLockedDiscardableSharedMemoryOnFileThread(
     uint32_t size,
-    DiscardableSharedMemoryId id,
+    discardable_memory::DiscardableSharedMemoryId id,
     IPC::Message* reply_msg) {
   base::SharedMemoryHandle handle;
-  HostDiscardableSharedMemoryManager::current()
-      ->AllocateLockedDiscardableSharedMemoryForChild(
+  discardable_memory::DiscardableSharedMemoryManager::current()
+      ->AllocateLockedDiscardableSharedMemoryForClient(
           PeerHandle(), render_process_id_, size, id, &handle);
   ChildProcessHostMsg_SyncAllocateLockedDiscardableSharedMemory::
       WriteReplyParams(reply_msg, handle);
@@ -402,7 +385,7 @@ void RenderMessageFilter::AllocateLockedDiscardableSharedMemoryOnFileThread(
 
 void RenderMessageFilter::OnAllocateLockedDiscardableSharedMemory(
     uint32_t size,
-    DiscardableSharedMemoryId id,
+    discardable_memory::DiscardableSharedMemoryId id,
     IPC::Message* reply_msg) {
   BrowserThread::PostTask(
       BrowserThread::FILE_USER_BLOCKING, FROM_HERE,
@@ -412,13 +395,13 @@ void RenderMessageFilter::OnAllocateLockedDiscardableSharedMemory(
 }
 
 void RenderMessageFilter::DeletedDiscardableSharedMemoryOnFileThread(
-    DiscardableSharedMemoryId id) {
-  HostDiscardableSharedMemoryManager::current()
-      ->ChildDeletedDiscardableSharedMemory(id, render_process_id_);
+    discardable_memory::DiscardableSharedMemoryId id) {
+  discardable_memory::DiscardableSharedMemoryManager::current()
+      ->ClientDeletedDiscardableSharedMemory(id, render_process_id_);
 }
 
 void RenderMessageFilter::OnDeletedDiscardableSharedMemory(
-    DiscardableSharedMemoryId id) {
+    discardable_memory::DiscardableSharedMemoryId id) {
   BrowserThread::PostTask(
       BrowserThread::FILE_USER_BLOCKING, FROM_HERE,
       base::Bind(
@@ -488,7 +471,7 @@ void RenderMessageFilter::OnCacheableMetadataAvailableForCacheStorage(
     memcpy(buf->data(), &data.front(), data.size());
 
   cache_storage_context_->cache_manager()->OpenCache(
-      GURL(cache_storage_origin.Serialize()), cache_storage_cache_name,
+      cache_storage_origin.GetURL(), cache_storage_cache_name,
       base::Bind(&RenderMessageFilter::OnCacheStorageOpenCallback,
                  weak_ptr_factory_.GetWeakPtr(), url, expected_response_time,
                  buf, data.size()));

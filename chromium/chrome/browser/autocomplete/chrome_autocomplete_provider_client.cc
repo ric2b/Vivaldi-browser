@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include "base/feature_list.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -22,6 +23,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "components/browser_sync/profile_sync_service.h"
@@ -30,8 +32,9 @@
 #include "components/prefs/pref_service.h"
 #include "components/sync/driver/sync_service_utils.h"
 #include "content/public/browser/notification_service.h"
+#include "extensions/features/features.h"
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "chrome/browser/autocomplete/keyword_extensions_delegate_impl.h"
 #endif
 
@@ -44,7 +47,6 @@ const char* const kChromeSettingsSubPages[] = {
     chrome::kAutofillSubPage,
     chrome::kClearBrowserDataSubPage,
     chrome::kContentSettingsSubPage,
-    chrome::kContentSettingsExceptionsSubPage,
     chrome::kImportDataSubPage,
     chrome::kLanguageOptionsSubPage,
     chrome::kPasswordManagerSubPage,
@@ -141,7 +143,7 @@ ChromeAutocompleteProviderClient::GetShortcutsBackendIfExists() {
 std::unique_ptr<KeywordExtensionsDelegate>
 ChromeAutocompleteProviderClient::GetKeywordExtensionsDelegate(
     KeywordProvider* keyword_provider) {
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   return base::MakeUnique<KeywordExtensionsDelegateImpl>(profile_,
                                                          keyword_provider);
 #else
@@ -181,6 +183,13 @@ std::vector<base::string16> ChromeAutocompleteProviderClient::GetBuiltinURLs() {
   for (size_t i = 0; i < arraysize(kChromeSettingsSubPages); i++) {
     builtins.push_back(settings +
                        base::ASCIIToUTF16(kChromeSettingsSubPages[i]));
+  }
+
+  if (!base::FeatureList::IsEnabled(features::kMaterialDesignSettings)) {
+    builtins.push_back(
+        settings +
+        base::ASCIIToUTF16(
+            chrome::kDeprecatedOptionsContentSettingsExceptionsSubPage));
   }
 #endif
 

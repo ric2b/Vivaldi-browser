@@ -21,9 +21,9 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
-#include "base/stl_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -258,9 +258,6 @@ class TestObserver : public ProfileWriter,
     // https://crbug.com/257100
     // EXPECT_EQ(1, password_count_);
   }
-  void ImportItemFailed(importer::ImportItem item,
-                        const std::string& error) override {
-  }
 
   // ProfileWriter:
   bool BookmarkModelIsLoaded() const override {
@@ -319,14 +316,6 @@ class TestObserver : public ProfileWriter,
                                  kIEBookmarks[bookmark_count_])) << i;
       ++bookmark_count_;
     }
-  }
-
-  virtual void AddKeyword(std::vector<TemplateURL*> template_url,
-                          int default_keyword_index) {
-    // TODO(jcampan): bug 1169230: we should test keyword importing for IE.
-    // In order to do that we'll probably need to mock the Windows registry.
-    NOTREACHED();
-    base::STLDeleteContainerPointers(template_url.begin(), template_url.end());
   }
 
   void AddFavicons(const favicon_base::FaviconUsageDataList& usage) override {
@@ -396,9 +385,6 @@ class MalformedFavoritesRegistryTestObserver
   void ImportEnded() override {
     base::MessageLoop::current()->QuitWhenIdle();
     EXPECT_EQ(arraysize(kIESortedBookmarks), bookmark_count_);
-  }
-  void ImportItemFailed(importer::ImportItem item,
-                        const std::string& error) override {
   }
 
   // ProfileWriter:

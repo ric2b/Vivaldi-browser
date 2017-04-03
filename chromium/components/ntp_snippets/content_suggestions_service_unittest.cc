@@ -19,6 +19,8 @@
 #include "components/ntp_snippets/category_status.h"
 #include "components/ntp_snippets/content_suggestion.h"
 #include "components/ntp_snippets/content_suggestions_provider.h"
+#include "components/ntp_snippets/user_classifier.h"
+#include "components/prefs/testing_pref_service.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/image/image.h"
@@ -58,7 +60,9 @@ class MockProvider : public ContentSuggestionsProvider {
 
   CategoryInfo GetCategoryInfo(Category category) override {
     return CategoryInfo(base::ASCIIToUTF16("Section title"),
-                        ContentSuggestionsCardLayout::FULL_CARD, true, true);
+                        ContentSuggestionsCardLayout::FULL_CARD, true, false,
+                        true, false,
+                        base::ASCIIToUTF16("No suggestions message"));
   }
 
   void FireSuggestionsChanged(
@@ -85,6 +89,10 @@ class MockProvider : public ContentSuggestionsProvider {
                void(base::Time begin,
                     base::Time end,
                     const base::Callback<bool(const GURL& url)>& filter));
+  MOCK_METHOD3(Fetch,
+               void(const Category&,
+                    const std::set<std::string>&,
+                    const FetchDoneCallback&));
   MOCK_METHOD1(ClearCachedSuggestions, void(Category category));
   MOCK_METHOD2(GetDismissedSuggestionsForDebugging,
                void(Category category,
@@ -121,9 +129,11 @@ class MockServiceObserver : public ContentSuggestionsService::Observer {
 
 class ContentSuggestionsServiceTest : public testing::Test {
  public:
-  ContentSuggestionsServiceTest() {}
+  ContentSuggestionsServiceTest()
+      : pref_service_(new TestingPrefServiceSimple()) {}
 
   void SetUp() override {
+    RegisterPrefs();
     CreateContentSuggestionsService(ContentSuggestionsService::State::ENABLED);
   }
 
@@ -164,6 +174,11 @@ class ContentSuggestionsServiceTest : public testing::Test {
     return service()->providers_by_category_;
   }
 
+  const std::map<Category, ContentSuggestionsProvider*, Category::CompareByID>&
+  dismissed_providers() {
+    return service()->dismissed_providers_by_category_;
+  }
+
   CategoryFactory* category_factory() { return service()->category_factory(); }
 
   Category FromKnownCategory(KnownCategories known_category) {
@@ -190,12 +205,22 @@ class ContentSuggestionsServiceTest : public testing::Test {
   MOCK_METHOD1(OnImageFetched, void(const gfx::Image&));
 
  protected:
+  void RegisterPrefs() {
+    ContentSuggestionsService::RegisterProfilePrefs(pref_service_->registry());
+    UserClassifier::RegisterProfilePrefs(pref_service_->registry());
+  }
+
   void CreateContentSuggestionsService(
       ContentSuggestionsService::State enabled) {
     ASSERT_FALSE(service_);
-    service_.reset(new ContentSuggestionsService(enabled,
-                                                 nullptr /* history_service */,
-                                                 nullptr /* pref_service */));
+    service_.reset(new ContentSuggestionsService(
+        enabled, /*history_service=*/nullptr, pref_service_.get()));
+  }
+
+  void ResetService() {
+    service_->Shutdown();
+    service_.reset();
+    CreateContentSuggestionsService(ContentSuggestionsService::State::ENABLED);
   }
 
   ContentSuggestionsService* service() { return service_.get(); }
@@ -219,6 +244,7 @@ class ContentSuggestionsServiceTest : public testing::Test {
 
  private:
   std::unique_ptr<ContentSuggestionsService> service_;
+  std::unique_ptr<TestingPrefServiceSimple> pref_service_;
 
   DISALLOW_COPY_AND_ASSIGN(ContentSuggestionsServiceTest);
 };
@@ -227,6 +253,7 @@ class ContentSuggestionsServiceDisabledTest
     : public ContentSuggestionsServiceTest {
  public:
   void SetUp() override {
+    RegisterPrefs();
     CreateContentSuggestionsService(ContentSuggestionsService::State::DISABLED);
   }
 };
@@ -455,7 +482,9 @@ TEST_F(ContentSuggestionsServiceTest, ShouldReturnCategoryInfo) {
   const CategoryInfo& actual = result.value();
   EXPECT_THAT(expected.title(), Eq(actual.title()));
   EXPECT_THAT(expected.card_layout(), Eq(actual.card_layout()));
-  EXPECT_THAT(expected.has_more_button(), Eq(actual.has_more_button()));
+  EXPECT_THAT(expected.has_more_action(), Eq(actual.has_more_action()));
+  EXPECT_THAT(expected.has_reload_action(), Eq(actual.has_reload_action()));
+  EXPECT_THAT(expected.has_view_all_action(), Eq(actual.has_view_all_action()));
 }
 
 TEST_F(ContentSuggestionsServiceTest,
@@ -543,54 +572,6 @@ TEST_F(ContentSuggestionsServiceTest, ShouldRemoveCategoryWhenNotProvided) {
   service()->RemoveObserver(&observer);
 }
 
-// This tests the temporary special-casing of the bookmarks section: If it is
-// empty, it should appear at the end; see crbug.com/640568.
-TEST_F(ContentSuggestionsServiceTest, ShouldPutBookmarksAtEndIfEmpty) {
-  // Register a bookmarks provider and an arbitrary remote provider.
-  Category bookmarks = FromKnownCategory(KnownCategories::BOOKMARKS);
-  MockProvider* bookmarks_provider = RegisterProvider(bookmarks);
-  bookmarks_provider->FireCategoryStatusChangedWithCurrentStatus(bookmarks);
-  Category remote = FromRemoteCategory(123);
-  MockProvider* remote_provider = RegisterProvider(remote);
-  remote_provider->FireCategoryStatusChangedWithCurrentStatus(remote);
-
-  // By default, the bookmarks category is empty, so it should be at the end.
-  EXPECT_THAT(service()->GetCategories(), ElementsAre(remote, bookmarks));
-
-  // Add two bookmark suggestions; now bookmarks should be in the front.
-  bookmarks_provider->FireSuggestionsChanged(
-      bookmarks, CreateSuggestions(bookmarks, {1, 2}));
-  EXPECT_THAT(service()->GetCategories(), ElementsAre(bookmarks, remote));
-  // Dismiss the first suggestion; bookmarks should stay in the front.
-  service()->DismissSuggestion(CreateSuggestion(bookmarks, 1).id());
-  EXPECT_THAT(service()->GetCategories(), ElementsAre(bookmarks, remote));
-  // Dismiss the second suggestion; now bookmarks should go back to the end.
-  service()->DismissSuggestion(CreateSuggestion(bookmarks, 2).id());
-  EXPECT_THAT(service()->GetCategories(), ElementsAre(remote, bookmarks));
-
-  // Same thing, but invalidate instead of dismissing.
-  bookmarks_provider->FireSuggestionsChanged(
-      bookmarks, CreateSuggestions(bookmarks, {1, 2}));
-  EXPECT_THAT(service()->GetCategories(), ElementsAre(bookmarks, remote));
-  bookmarks_provider->FireSuggestionInvalidated(
-      ContentSuggestion::ID(bookmarks, "1"));
-  EXPECT_THAT(service()->GetCategories(), ElementsAre(bookmarks, remote));
-  bookmarks_provider->FireSuggestionInvalidated(
-      ContentSuggestion::ID(bookmarks, "2"));
-  EXPECT_THAT(service()->GetCategories(), ElementsAre(remote, bookmarks));
-
-  // Same thing, but now the bookmarks category updates "naturally".
-  bookmarks_provider->FireSuggestionsChanged(
-      bookmarks, CreateSuggestions(bookmarks, {1, 2}));
-  EXPECT_THAT(service()->GetCategories(), ElementsAre(bookmarks, remote));
-  bookmarks_provider->FireSuggestionsChanged(bookmarks,
-                                             CreateSuggestions(bookmarks, {1}));
-  EXPECT_THAT(service()->GetCategories(), ElementsAre(bookmarks, remote));
-  bookmarks_provider->FireSuggestionsChanged(
-      bookmarks, CreateSuggestions(bookmarks, std::vector<int>()));
-  EXPECT_THAT(service()->GetCategories(), ElementsAre(remote, bookmarks));
-}
-
 TEST_F(ContentSuggestionsServiceTest, ShouldForwardClearHistory) {
   Category category = FromKnownCategory(KnownCategories::DOWNLOADS);
   MockProvider* provider = RegisterProvider(category);
@@ -599,6 +580,129 @@ TEST_F(ContentSuggestionsServiceTest, ShouldForwardClearHistory) {
   EXPECT_CALL(*provider, ClearHistory(begin, end, _));
   base::Callback<bool(const GURL& url)> filter;
   service()->ClearHistory(begin, end, filter);
+}
+
+TEST_F(ContentSuggestionsServiceTest, ShouldForwardFetch) {
+  Category category = FromKnownCategory(KnownCategories::ARTICLES);
+  std::set<std::string> known_suggestions;
+  MockProvider* provider = RegisterProvider(category);
+  provider->FireCategoryStatusChangedWithCurrentStatus(category);
+  EXPECT_CALL(*provider, Fetch(category, known_suggestions, _));
+  service()->Fetch(category, known_suggestions, FetchDoneCallback());
+}
+
+TEST_F(ContentSuggestionsServiceTest, DismissAndRestoreCategory) {
+  // Register a category with one suggestion.
+  Category category = FromKnownCategory(KnownCategories::ARTICLES);
+  MockProvider* provider = RegisterProvider(category);
+  provider->FireCategoryStatusChangedWithCurrentStatus(category);
+  provider->FireSuggestionsChanged(category, CreateSuggestions(category, {42}));
+
+  EXPECT_THAT(service()->GetCategories(), ElementsAre(category));
+  EXPECT_THAT(service()->GetCategoryStatus(category),
+              Eq(CategoryStatus::AVAILABLE));
+  ExpectThatSuggestionsAre(category, {42});
+  EXPECT_THAT(providers().count(category), Eq(1ul));
+  EXPECT_THAT(dismissed_providers(), IsEmpty());
+
+  // Dismissing the category clears the suggestions for it.
+  service()->DismissCategory(category);
+
+  EXPECT_THAT(service()->GetCategories(), IsEmpty());
+  EXPECT_THAT(service()->GetCategoryStatus(category),
+              Eq(CategoryStatus::NOT_PROVIDED));
+  EXPECT_THAT(service()->GetSuggestionsForCategory(category), IsEmpty());
+  EXPECT_THAT(providers(), IsEmpty());
+  EXPECT_THAT(dismissed_providers().count(category), Eq(1ul));
+
+  // Restoring the dismissed category makes it available again but it is still
+  // empty.
+  service()->RestoreDismissedCategories();
+
+  EXPECT_THAT(service()->GetCategories(), ElementsAre(category));
+  EXPECT_THAT(service()->GetCategoryStatus(category),
+              Eq(CategoryStatus::AVAILABLE));
+  EXPECT_THAT(service()->GetSuggestionsForCategory(category), IsEmpty());
+  EXPECT_THAT(providers().count(category), Eq(1ul));
+  EXPECT_THAT(dismissed_providers(), IsEmpty());
+}
+
+TEST_F(ContentSuggestionsServiceTest, ShouldRestoreDismissedCategories) {
+  // Create and register provider.
+  Category category1 = service()->category_factory()->FromIDValue(1);
+  Category category2 = service()->category_factory()->FromIDValue(2);
+
+  // Setup and verify initial state.
+  MockProvider* provider = RegisterProvider({category1, category2});
+  provider->FireCategoryStatusChangedWithCurrentStatus(category1);
+  provider->FireCategoryStatusChangedWithCurrentStatus(category2);
+
+  ASSERT_THAT(service()->GetCategoryStatus(category1),
+              Eq(CategoryStatus::AVAILABLE));
+  ASSERT_THAT(service()->GetCategoryStatus(category2),
+              Eq(CategoryStatus::AVAILABLE));
+
+  // Dismiss all the categories. None should be provided now.
+  service()->DismissCategory(category1);
+  service()->DismissCategory(category2);
+
+  ASSERT_THAT(service()->GetCategoryStatus(category1),
+              Eq(CategoryStatus::NOT_PROVIDED));
+  ASSERT_THAT(service()->GetCategoryStatus(category2),
+              Eq(CategoryStatus::NOT_PROVIDED));
+
+  // Receiving a status change notification should not change anything.
+  provider->FireCategoryStatusChanged(category1, CategoryStatus::AVAILABLE);
+
+  EXPECT_THAT(service()->GetCategoryStatus(category1),
+              Eq(CategoryStatus::NOT_PROVIDED));
+  EXPECT_THAT(service()->GetCategoryStatus(category2),
+              Eq(CategoryStatus::NOT_PROVIDED));
+
+  // Receiving a notification without suggestions should not change anything.
+  provider->FireSuggestionsChanged(category1, std::vector<ContentSuggestion>());
+
+  EXPECT_THAT(service()->GetCategoryStatus(category1),
+              Eq(CategoryStatus::NOT_PROVIDED));
+  EXPECT_THAT(service()->GetCategoryStatus(category2),
+              Eq(CategoryStatus::NOT_PROVIDED));
+
+  // Receiving suggestions should make the notified category available.
+  provider->FireSuggestionsChanged(category1,
+                                   CreateSuggestions(category1, {1, 2}));
+
+  EXPECT_THAT(service()->GetCategoryStatus(category1),
+              Eq(CategoryStatus::AVAILABLE));
+  EXPECT_THAT(service()->GetCategoryStatus(category2),
+              Eq(CategoryStatus::NOT_PROVIDED));
+}
+
+TEST_F(ContentSuggestionsServiceTest, ShouldRestoreDismissalsFromPrefs) {
+  // Register a category with one suggestion.
+  Category category = FromKnownCategory(KnownCategories::ARTICLES);
+  MockProvider* provider = RegisterProvider(category);
+  provider->FireCategoryStatusChangedWithCurrentStatus(category);
+
+  // For a regular initialisation, the category is not dismissed.
+  ASSERT_FALSE(service()->IsCategoryDismissed(category));
+
+  // Dismiss the category.
+  service()->DismissCategory(category);
+  ASSERT_TRUE(service()->IsCategoryDismissed(category));
+
+  // Simulate a Chrome restart. The category should still be dismissed.
+  ResetService();
+  EXPECT_TRUE(service()->IsCategoryDismissed(category));
+
+  // Ensure that the provider registered at initialisation is used after
+  // restoration.
+  provider = RegisterProvider(category);
+  provider->FireCategoryStatusChangedWithCurrentStatus(category);
+  EXPECT_TRUE(service()->IsCategoryDismissed(category));
+
+  service()->RestoreDismissedCategories();
+  EXPECT_FALSE(service()->IsCategoryDismissed(category));
+  EXPECT_THAT(providers().find(category)->second, Eq(provider));
 }
 
 }  // namespace ntp_snippets

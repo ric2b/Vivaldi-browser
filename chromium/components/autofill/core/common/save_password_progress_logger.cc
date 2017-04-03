@@ -113,8 +113,7 @@ void SavePasswordProgressLogger::LogNumber(
 void SavePasswordProgressLogger::LogNumber(
     SavePasswordProgressLogger::StringID label,
     size_t unsigned_number) {
-  int signed_number = checked_cast<int, size_t>(unsigned_number);
-  LogNumber(label, signed_number);
+  LogNumber(label, checked_cast<int>(unsigned_number));
 }
 
 void SavePasswordProgressLogger::LogMessage(
@@ -385,6 +384,10 @@ std::string SavePasswordProgressLogger::GetStringFromID(
       return "Form name";
     case SavePasswordProgressLogger::STRING_FIELDS:
       return "Form fields";
+    case SavePasswordProgressLogger::STRING_SERVER_PREDICTIONS:
+      return "Server predictions";
+    case SavePasswordProgressLogger::STRING_FORM_VOTES:
+      return "Form votes";
     case SavePasswordProgressLogger::STRING_INVALID:
       return "INVALID";
       // Intentionally no default: clause here -- all IDs need to get covered.

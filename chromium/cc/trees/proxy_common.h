@@ -14,12 +14,6 @@
 
 namespace cc {
 
-namespace proto {
-class BeginMainFrameAndCommitState;
-}
-
-class LayerTreeHost;
-
 using BeginFrameCallbackList = std::vector<base::Closure>;
 
 struct CC_EXPORT BeginMainFrameAndCommitState {
@@ -32,9 +26,6 @@ struct CC_EXPORT BeginMainFrameAndCommitState {
   std::unique_ptr<ScrollAndScaleSet> scroll_info;
   size_t memory_allocation_limit_bytes = 0;
   bool evicted_ui_resources = false;
-
-  void ToProtobuf(proto::BeginMainFrameAndCommitState* proto) const;
-  void FromProtobuf(const proto::BeginMainFrameAndCommitState& proto);
 };
 
 }  // namespace cc

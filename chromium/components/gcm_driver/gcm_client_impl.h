@@ -28,6 +28,7 @@
 #include "google_apis/gcm/engine/unregistration_request.h"
 #include "google_apis/gcm/protocol/android_checkin.pb.h"
 #include "google_apis/gcm/protocol/checkin.pb.h"
+#include "net/http/http_status_code.h"
 #include "net/url_request/url_request_context_getter.h"
 
 class GURL;
@@ -174,6 +175,16 @@ class GCMClientImpl
     std::set<std::string> last_checkin_accounts;
   };
 
+  // Reasons for resetting the GCM Store.
+  // Note: this enum is recorded into a histogram. Do not change enum value
+  // or order.
+  enum ResetReason {
+    LOAD_FAILURE,      // GCM store failed to load, but the store exists.
+    CHECKIN_REJECTED,  // Checkin was rejected by server.
+
+    RESET_REASON_COUNT,
+  };
+
   // Collection of pending registration requests. Keys are RegistrationInfo
   // instance, while values are pending registration requests to obtain a
   // registration ID for requesting application.
@@ -230,6 +241,7 @@ class GCMClientImpl
   // Completes the device checkin request by parsing the |checkin_response|.
   // Function also cleans up the pending checkin.
   void OnCheckinCompleted(
+      net::HttpStatusCode response_code,
       const checkin_proto::AndroidCheckinResponse& checkin_response);
 
   // Callback passed to GCMStore::SetGServicesSettings.
@@ -285,6 +297,13 @@ class GCMClientImpl
   void HandleIncomingDataMessage(
       const std::string& app_id,
       bool was_subtype,
+      const mcs_proto::DataMessageStanza& data_message_stanza,
+      MessageData& message_data);
+
+  // Fires OnMessagesDeleted event on the delegate of this class, based on the
+  // details in |data_message_stanza| and |message_data|.
+  void HandleIncomingDeletedMessages(
+      const std::string& app_id,
       const mcs_proto::DataMessageStanza& data_message_stanza,
       MessageData& message_data);
 

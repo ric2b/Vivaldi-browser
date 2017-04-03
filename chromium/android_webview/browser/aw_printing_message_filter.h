@@ -8,6 +8,10 @@
 #include "base/macros.h"
 #include "content/public/browser/browser_message_filter.h"
 
+namespace base {
+struct FileDescriptor;
+}
+
 namespace android_webview {
 
 // This class filters out incoming printing related IPC messages for the
@@ -26,10 +30,10 @@ class AwPrintingMessageFilter : public content::BrowserMessageFilter {
 
   // Used to ask the browser allocate a temporary file for the renderer
   // to fill in resulting PDF in renderer.
-  void OnAllocateTempFileForPrinting(int render_view_id,
+  void OnAllocateTempFileForPrinting(int render_frame_id,
                                      base::FileDescriptor* temp_file_fd,
                                      int* sequence_number);
-  void OnTempFileForPrintingWritten(int render_view_id, int sequence_number);
+  void OnTempFileForPrintingWritten(int render_frame_id, int sequence_number);
 
   const int render_process_id_;
 

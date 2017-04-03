@@ -112,19 +112,12 @@ class MockLayoutHost implements LayoutManagerHost, LayoutRenderHost {
     }
 
     @Override
-    public Rect getVisibleViewport(Rect rect) {
-        if (rect == null) rect = new Rect();
-        rect.set(0, 0, getWidth(), getHeight());
-        return rect;
-    }
-
-    @Override
     public int getTopControlsHeightPixels() {
         return 0;
     }
 
     @Override
-    public boolean areTopControlsPermanentlyHidden() {
+    public boolean areBrowserControlsPermanentlyHidden() {
         return false;
     }
 
@@ -143,12 +136,12 @@ class MockLayoutHost implements LayoutManagerHost, LayoutRenderHost {
     public void onContentChanged() { }
 
     @Override
-    public int getTopControlsBackgroundColor() {
+    public int getBrowserControlsBackgroundColor() {
         return 0;
     }
 
     @Override
-    public float getTopControlsUrlBarAlpha() {
+    public float getBrowserControlsUrlBarAlpha() {
         return 1f;
     }
 

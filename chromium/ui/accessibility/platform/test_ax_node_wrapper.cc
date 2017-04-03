@@ -119,11 +119,16 @@ TestAXNodeWrapper::GetTargetForNativeAccessibilityEvent() {
 void TestAXNodeWrapper::DoDefaultAction() {
 }
 
-bool TestAXNodeWrapper::SetStringValue(const base::string16& new_value) {
+bool TestAXNodeWrapper::SetStringValue(const base::string16& new_value,
+                                       bool clear_first) {
   return false;
 }
 
 bool TestAXNodeWrapper::CanSetStringValue() {
+  return false;
+}
+
+bool TestAXNodeWrapper::SetFocused(bool focused) {
   return false;
 }
 

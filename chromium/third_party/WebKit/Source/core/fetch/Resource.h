@@ -26,6 +26,7 @@
 
 #include "core/CoreExport.h"
 #include "core/fetch/CachedMetadataHandler.h"
+#include "core/fetch/IntegrityMetadata.h"
 #include "core/fetch/ResourceLoaderOptions.h"
 #include "platform/MemoryCoordinator.h"
 #include "platform/SharedBuffer.h"
@@ -34,10 +35,10 @@
 #include "platform/network/ResourceLoadPriority.h"
 #include "platform/network/ResourceRequest.h"
 #include "platform/network/ResourceResponse.h"
-#include "platform/scheduler/CancellableTaskFactory.h"
 #include "platform/tracing/web_process_memory_dump.h"
 #include "public/platform/WebDataConsumerHandle.h"
 #include "wtf/Allocator.h"
+#include "wtf/AutoReset.h"
 #include "wtf/HashCountedSet.h"
 #include "wtf/HashSet.h"
 #include "wtf/text/WTFString.h"
@@ -159,15 +160,30 @@ class CORE_EXPORT Resource : public GarbageCollectedFinalized<Resource>,
     PreloadReferencedWhileLoading,
     PreloadReferencedWhileComplete
   };
-  PreloadResult getPreloadResult() const {
-    return static_cast<PreloadResult>(m_preloadResult);
-  }
+  PreloadResult getPreloadResult() const { return m_preloadResult; }
 
-  Status getStatus() const { return static_cast<Status>(m_status); }
+  Status getStatus() const { return m_status; }
   void setStatus(Status status) { m_status = status; }
 
   size_t size() const { return encodedSize() + decodedSize() + overheadSize(); }
+
+  // Returns the size of content (response body) before decoding. Adding a new
+  // usage of this function is not recommended (See the TODO below).
+  //
+  // TODO(hiroshige): Now encodedSize/decodedSize states are inconsistent and
+  // need to be refactored (crbug/643135).
   size_t encodedSize() const { return m_encodedSize; }
+
+  // Returns the current memory usage for the encoded data. Adding a new usage
+  // of this function is not recommended as the same reason as |encodedSize()|.
+  //
+  // |encodedSize()| and |encodedSizeMemoryUsageForTesting()| can return
+  // different values, e.g., when ImageResource purges encoded image data after
+  // finishing loading.
+  size_t encodedSizeMemoryUsageForTesting() const {
+    return m_encodedSizeMemoryUsage;
+  }
+
   size_t decodedSize() const { return m_decodedSize; }
   size_t overheadSize() const { return m_overheadSize; }
 
@@ -193,8 +209,6 @@ class CORE_EXPORT Resource : public GarbageCollectedFinalized<Resource>,
   bool passesAccessControlCheck(SecurityOrigin*) const;
   bool passesAccessControlCheck(SecurityOrigin*,
                                 String& errorDescription) const;
-
-  bool isEligibleForIntegrityCheck(SecurityOrigin*) const;
 
   virtual PassRefPtr<const SharedBuffer> resourceBuffer() const {
     return m_data;
@@ -227,7 +241,7 @@ class CORE_EXPORT Resource : public GarbageCollectedFinalized<Resource>,
   bool errorOccurred() const {
     return m_status == LoadError || m_status == DecodeError;
   }
-  bool loadFailedOrCanceled() { return !m_error.isNull(); }
+  bool loadFailedOrCanceled() const { return !m_error.isNull(); }
 
   DataBufferingPolicy getDataBufferingPolicy() const {
     return m_options.dataBufferingPolicy;
@@ -253,10 +267,21 @@ class CORE_EXPORT Resource : public GarbageCollectedFinalized<Resource>,
   bool isCacheValidator() const { return m_isRevalidating; }
   bool hasCacheControlNoStoreHeader() const;
   bool hasVaryHeader() const;
-  virtual bool mustRefetchDueToIntegrityMetadata(
-      const FetchRequest& request) const {
-    return false;
+
+  bool isEligibleForIntegrityCheck(SecurityOrigin*) const;
+
+  void setIntegrityMetadata(const IntegrityMetadataSet& metadata) {
+    m_integrityMetadata = metadata;
   }
+  const IntegrityMetadataSet& integrityMetadata() const {
+    return m_integrityMetadata;
+  }
+  // The argument must never be |NotChecked|.
+  void setIntegrityDisposition(ResourceIntegrityDisposition);
+  ResourceIntegrityDisposition integrityDisposition() const {
+    return m_integrityDisposition;
+  }
+  bool mustRefetchDueToIntegrityMetadata(const FetchRequest&) const;
 
   double currentAge() const;
   double freshnessLifetime();
@@ -284,6 +309,19 @@ class CORE_EXPORT Resource : public GarbageCollectedFinalized<Resource>,
 
   virtual bool canReuse(const ResourceRequest&) const { return true; }
 
+  // If cache-aware loading is activated, this callback is called when the first
+  // disk-cache-only request failed due to cache miss. After this callback,
+  // cache-aware loading is deactivated and a reload with original request will
+  // be triggered right away in ResourceLoader.
+  virtual void willReloadAfterDiskCacheMiss() {}
+
+  // TODO(shaochuan): This is for saving back the actual ResourceRequest sent
+  // in ResourceFetcher::startLoad() for retry in cache-aware loading, remove
+  // once ResourceRequest is not modified in startLoad(). crbug.com/632580
+  void setResourceRequest(const ResourceRequest& resourceRequest) {
+    m_resourceRequest = resourceRequest;
+  }
+
   // Used by the MemoryCache to reduce the memory consumption of the entry.
   void prune();
 
@@ -309,14 +347,12 @@ class CORE_EXPORT Resource : public GarbageCollectedFinalized<Resource>,
 
   void setEncodedSize(size_t);
   void setDecodedSize(size_t);
-  void didAccessDecodedData();
 
   void finishPendingClients();
 
   virtual void didAddClient(ResourceClient*);
   void willAddClientOrObserver(PreloadReferencePolicy);
 
-  // |this| object may be dead after didRemoveClientOrObserver().
   void didRemoveClientOrObserver();
   virtual void allClientsAndObserversRemoved();
 
@@ -353,9 +389,16 @@ class CORE_EXPORT Resource : public GarbageCollectedFinalized<Resource>,
 
   void setCachePolicyBypassingCache();
   void setLoFiStateOff();
+  void clearRangeRequestHeader();
 
   SharedBuffer* data() const { return m_data.get(); }
-  void clearData() { m_data.clear(); }
+  void clearData();
+
+  class ProhibitAddRemoveClientInScope : public AutoReset<bool> {
+   public:
+    ProhibitAddRemoveClientInScope(Resource* resource)
+        : AutoReset(&resource->m_isAddRemoveClientProhibited, true) {}
+  };
 
  private:
   class ResourceCallback;
@@ -372,7 +415,7 @@ class CORE_EXPORT Resource : public GarbageCollectedFinalized<Resource>,
   String reasonNotDeletable() const;
 
   // MemoryCoordinatorClient overrides:
-  void prepareToSuspend() override;
+  void onMemoryStateChange(MemoryState) override;
 
   Member<CachedMetadataHandlerImpl> m_cacheHandler;
   RefPtr<SecurityOrigin> m_fetcherSecurityOrigin;
@@ -384,6 +427,7 @@ class CORE_EXPORT Resource : public GarbageCollectedFinalized<Resource>,
   unsigned long m_identifier;
 
   size_t m_encodedSize;
+  size_t m_encodedSizeMemoryUsage;
   size_t m_decodedSize;
 
   // Resource::calculateOverheadSize() is affected by changes in
@@ -398,14 +442,18 @@ class CORE_EXPORT Resource : public GarbageCollectedFinalized<Resource>,
 
   String m_cacheIdentifier;
 
-  unsigned m_preloadResult : 2;  // PreloadResult
-  unsigned m_type : 4;           // Type
-  unsigned m_status : 3;         // Status
+  PreloadResult m_preloadResult;
+  Type m_type;
+  Status m_status;
 
-  unsigned m_needsSynchronousCacheHit : 1;
-  unsigned m_linkPreload : 1;
-  bool m_isRevalidating : 1;
-  bool m_isAlive : 1;
+  bool m_needsSynchronousCacheHit;
+  bool m_linkPreload;
+  bool m_isRevalidating;
+  bool m_isAlive;
+  bool m_isAddRemoveClientProhibited;
+
+  ResourceIntegrityDisposition m_integrityDisposition;
+  IntegrityMetadataSet m_integrityMetadata;
 
   // Ordered list of all redirects followed while fetching this resource.
   Vector<RedirectPair> m_redirectChain;

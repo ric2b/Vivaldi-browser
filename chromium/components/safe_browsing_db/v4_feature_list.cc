@@ -14,17 +14,27 @@ const base::Feature kLocalDatabaseManagerEnabled{
     "SafeBrowsingV4LocalDatabaseManagerEnabled",
     base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kParallelCheckEnabled{"SafeBrowingV4ParallelCheckEnabled",
-                                          base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kV4HybridEnabled{"SafeBrowsingV4HybridEnabled",
+                                     base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kV4OnlyEnabled{"SafeBrowsingV4OnlyEnabled",
+                                   base::FEATURE_DISABLED_BY_DEFAULT};
+
 }  // namespace
 
 bool IsLocalDatabaseManagerEnabled() {
-  return IsParallelCheckEnabled() ||
-         base::FeatureList::IsEnabled(kLocalDatabaseManagerEnabled);
+  return base::FeatureList::IsEnabled(kLocalDatabaseManagerEnabled) ||
+         IsV4HybridEnabled() || IsV4OnlyEnabled();
 }
 
-bool IsParallelCheckEnabled() {
-  return base::FeatureList::IsEnabled(kParallelCheckEnabled);
+bool IsV4HybridEnabled() {
+  return base::FeatureList::IsEnabled(kV4HybridEnabled);
+}
+
+bool IsV4OnlyEnabled() {
+  // TODO(vakh): Enable this only when all the lists can be synced from the
+  // server. See http://b/33182208
+  return base::FeatureList::IsEnabled(kV4OnlyEnabled);
 }
 
 }  // namespace V4FeatureList

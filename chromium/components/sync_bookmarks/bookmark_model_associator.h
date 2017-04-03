@@ -22,9 +22,9 @@
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
 #include "base/threading/thread_checker.h"
-#include "components/sync/api/data_type_error_handler.h"
 #include "components/sync/base/unrecoverable_error_handler.h"
 #include "components/sync/driver/model_associator.h"
+#include "components/sync/model/data_type_error_handler.h"
 
 class GURL;
 
@@ -88,7 +88,7 @@ class BookmarkModelAssociator
   int64_t GetSyncIdFromChromeId(const int64_t& node_id) override;
 
   // Returns the bookmark node for the given sync id.
-  // Returns NULL if no bookmark node is found for the given sync id.
+  // Returns null if no bookmark node is found for the given sync id.
   const bookmarks::BookmarkNode* GetChromeNodeFromSyncId(
       int64_t sync_id) override;
 

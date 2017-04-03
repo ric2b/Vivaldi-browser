@@ -9,16 +9,11 @@
 
 namespace ash {
 
-NetworkIconInfo::NetworkIconInfo()
-    : connecting(false),
-      connected(false),
-      tray_icon_visible(true),
-      is_cellular(false) {}
-
-NetworkIconInfo::~NetworkIconInfo() {}
-
 BluetoothDeviceInfo::BluetoothDeviceInfo()
     : connected(false), connecting(false), paired(false) {}
+
+BluetoothDeviceInfo::BluetoothDeviceInfo(const BluetoothDeviceInfo& other) =
+    default;
 
 BluetoothDeviceInfo::~BluetoothDeviceInfo() {}
 
@@ -40,6 +35,10 @@ LoginStatus SystemTrayDelegate::GetUserLoginStatus() const {
 }
 
 std::string SystemTrayDelegate::GetEnterpriseDomain() const {
+  return std::string();
+}
+
+std::string SystemTrayDelegate::GetEnterpriseRealm() const {
   return std::string();
 }
 
@@ -73,25 +72,17 @@ void SystemTrayDelegate::GetSystemUpdateInfo(UpdateInfo* info) const {
   info->factory_reset_required = false;
 }
 
-bool SystemTrayDelegate::ShouldShowSettings() {
+bool SystemTrayDelegate::ShouldShowSettings() const {
   return false;
 }
 
-void SystemTrayDelegate::ShowSetTimeDialog() {}
-
-bool SystemTrayDelegate::ShouldShowDisplayNotification() {
+bool SystemTrayDelegate::ShouldShowNotificationTray() const {
   return false;
 }
 
 void SystemTrayDelegate::ShowEnterpriseInfo() {}
 
 void SystemTrayDelegate::ShowUserLogin() {}
-
-void SystemTrayDelegate::SignOut() {}
-
-void SystemTrayDelegate::RequestRestartForUpdate() {}
-
-void SystemTrayDelegate::RequestShutdown() {}
 
 void SystemTrayDelegate::GetAvailableBluetoothDevices(
     BluetoothDeviceList* list) {}
@@ -116,11 +107,9 @@ void SystemTrayDelegate::ManageBluetoothDevices() {}
 
 void SystemTrayDelegate::ToggleBluetooth() {}
 
-bool SystemTrayDelegate::IsBluetoothDiscovering() {
+bool SystemTrayDelegate::IsBluetoothDiscovering() const {
   return false;
 }
-
-void SystemTrayDelegate::ShowOtherNetworkDialog(const std::string& type) {}
 
 bool SystemTrayDelegate::GetBluetoothAvailable() {
   return false;
@@ -142,13 +131,6 @@ NetworkingConfigDelegate* SystemTrayDelegate::GetNetworkingConfigDelegate()
     const {
   return nullptr;
 }
-
-VolumeControlDelegate* SystemTrayDelegate::GetVolumeControlDelegate() const {
-  return nullptr;
-}
-
-void SystemTrayDelegate::SetVolumeControlDelegate(
-    std::unique_ptr<VolumeControlDelegate> delegate) {}
 
 bool SystemTrayDelegate::GetSessionStartTime(
     base::TimeTicks* session_start_time) {
@@ -175,15 +157,6 @@ void SystemTrayDelegate::AddCustodianInfoTrayObserver(
 
 void SystemTrayDelegate::RemoveCustodianInfoTrayObserver(
     CustodianInfoTrayObserver* observer) {}
-
-void SystemTrayDelegate::AddShutdownPolicyObserver(
-    ShutdownPolicyObserver* observer) {}
-
-void SystemTrayDelegate::RemoveShutdownPolicyObserver(
-    ShutdownPolicyObserver* observer) {}
-
-void SystemTrayDelegate::ShouldRebootOnShutdown(
-    const RebootOnShutdownCallback& callback) {}
 
 VPNDelegate* SystemTrayDelegate::GetVPNDelegate() const {
   return nullptr;

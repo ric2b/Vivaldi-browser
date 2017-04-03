@@ -136,8 +136,12 @@ class NavigationManager {
   // Navigation relative to the current item.
   virtual bool CanGoBack() const = 0;
   virtual bool CanGoForward() const = 0;
+  virtual bool CanGoToOffset(int offset) const = 0;
   virtual void GoBack() = 0;
   virtual void GoForward() = 0;
+
+  // Navigates to the specified absolute index.
+  virtual void GoToIndex(int index) = 0;
 
   // Reloads the current entry. If |check_for_repost| is true and the current
   // entry has POST data the user is prompted to see if they really want to

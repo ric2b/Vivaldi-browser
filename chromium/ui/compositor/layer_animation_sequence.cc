@@ -8,7 +8,6 @@
 #include <iterator>
 
 #include "base/trace_event/trace_event.h"
-#include "cc/animation/animation_events.h"
 #include "cc/animation/animation_id_provider.h"
 #include "ui/compositor/layer_animation_delegate.h"
 #include "ui/compositor/layer_animation_element.h"
@@ -38,9 +37,8 @@ LayerAnimationSequence::LayerAnimationSequence(LayerAnimationElement* element)
 }
 
 LayerAnimationSequence::~LayerAnimationSequence() {
-  FOR_EACH_OBSERVER(LayerAnimationObserver,
-                    observers_,
-                    DetachedFromSequence(this, true));
+  for (auto& observer : observers_)
+    observer.DetachedFromSequence(this, true);
 }
 
 void LayerAnimationSequence::Start(LayerAnimationDelegate* delegate) {
@@ -49,10 +47,12 @@ void LayerAnimationSequence::Start(LayerAnimationDelegate* delegate) {
   if (elements_.empty())
     return;
 
-  NotifyStarted();
-
   elements_[0]->set_requested_start_time(start_time_);
   elements_[0]->Start(delegate, animation_group_id_);
+
+  NotifyStarted();
+
+  // This may have been aborted.
 }
 
 void LayerAnimationSequence::Progress(base::TimeTicks now,
@@ -232,15 +232,11 @@ void LayerAnimationSequence::OnScheduled() {
 }
 
 void LayerAnimationSequence::OnAnimatorDestroyed() {
-  if (observers_.might_have_observers()) {
-    base::ObserverListBase<LayerAnimationObserver>::Iterator it(&observers_);
-    LayerAnimationObserver* obs;
-    while ((obs = it.GetNext()) != NULL) {
-      if (!obs->RequiresNotificationWhenAnimatorDestroyed()) {
-        // Remove the observer, but do not allow notifications to be sent.
-        observers_.RemoveObserver(obs);
-        obs->DetachedFromSequence(this, false);
-      }
+  for (LayerAnimationObserver& observer : observers_) {
+    if (!observer.RequiresNotificationWhenAnimatorDestroyed()) {
+      // Remove the observer, but do not allow notifications to be sent.
+      observers_.RemoveObserver(&observer);
+      observer.DetachedFromSequence(this, false);
     }
   }
 }
@@ -258,26 +254,23 @@ LayerAnimationElement* LayerAnimationSequence::FirstElement() const {
 }
 
 void LayerAnimationSequence::NotifyScheduled() {
-  FOR_EACH_OBSERVER(LayerAnimationObserver,
-                    observers_,
-                    OnLayerAnimationScheduled(this));
+  for (auto& observer : observers_)
+    observer.OnLayerAnimationScheduled(this);
 }
 
 void LayerAnimationSequence::NotifyStarted() {
-  FOR_EACH_OBSERVER(LayerAnimationObserver, observers_,
-                    OnLayerAnimationStarted(this));
+  for (auto& observer : observers_)
+    observer.OnLayerAnimationStarted(this);
 }
 
 void LayerAnimationSequence::NotifyEnded() {
-  FOR_EACH_OBSERVER(LayerAnimationObserver,
-                    observers_,
-                    OnLayerAnimationEnded(this));
+  for (auto& observer : observers_)
+    observer.OnLayerAnimationEnded(this);
 }
 
 void LayerAnimationSequence::NotifyAborted() {
-  FOR_EACH_OBSERVER(LayerAnimationObserver,
-                    observers_,
-                    OnLayerAnimationAborted(this));
+  for (auto& observer : observers_)
+    observer.OnLayerAnimationAborted(this);
 }
 
 LayerAnimationElement* LayerAnimationSequence::CurrentElement() const {

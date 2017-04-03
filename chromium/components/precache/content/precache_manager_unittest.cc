@@ -28,12 +28,17 @@
 #include "components/precache/core/precache_database.h"
 #include "components/precache/core/precache_switches.h"
 #include "components/precache/core/proto/unfinished_work.pb.h"
+#include "components/variations/variations_associated_data.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/storage_partition.h"
 #include "content/public/test/test_browser_context.h"
 #include "content/public/test/test_browser_thread_bundle.h"
+#include "net/base/test_completion_callback.h"
+#include "net/disk_cache/simple/simple_backend_impl.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_response_info.h"
 #include "net/http/http_status_code.h"
+#include "net/test/gtest_util.h"
 #include "net/url_request/test_url_fetcher_factory.h"
 #include "net/url_request/url_request_status.h"
 #include "net/url_request/url_request_test_util.h"
@@ -52,6 +57,7 @@ using ::testing::Invoke;
 using ::testing::IsEmpty;
 using ::testing::Pair;
 using ::testing::SaveArg;
+using variations::testing::VariationParamsManager;
 
 const char kConfigURL[] = "http://config-url.com";
 const char kManifestURLPrefix[] = "http://manifest-url-prefix.com/";
@@ -127,14 +133,18 @@ class TestPrecacheCompletionCallback {
 
 class PrecacheManagerUnderTest : public PrecacheManager {
  public:
-  PrecacheManagerUnderTest(content::BrowserContext* browser_context,
-                           const syncer::SyncService* const sync_service,
-                           const history::HistoryService* const history_service,
-                           const base::FilePath& db_path,
-                           std::unique_ptr<PrecacheDatabase> precache_database)
+  PrecacheManagerUnderTest(
+      content::BrowserContext* browser_context,
+      const syncer::SyncService* sync_service,
+      const history::HistoryService* history_service,
+      const data_reduction_proxy::DataReductionProxySettings*
+          data_reduction_proxy_settings,
+      const base::FilePath& db_path,
+      std::unique_ptr<PrecacheDatabase> precache_database)
       : PrecacheManager(browser_context,
                         sync_service,
                         history_service,
+                        data_reduction_proxy_settings,
                         db_path,
                         std::move(precache_database)),
         control_group_(false) {}
@@ -173,26 +183,44 @@ class PrecacheManagerTest : public testing::Test {
         switches::kPrecacheConfigSettingsURL, kConfigURL);
     base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
         switches::kPrecacheManifestURLPrefix, kManifestURLPrefix);
-    std::unique_ptr<PrecacheDatabase> precache_database(
-        new PrecacheDatabase());
-    precache_database_ = precache_database.get();
 
     ASSERT_TRUE(scoped_temp_dir_.CreateUniqueTempDir());
-    base::FilePath db_path = scoped_temp_dir_.GetPath().Append(
-        base::FilePath(FILE_PATH_LITERAL("precache_database")));
+    precache_database_ = new PrecacheDatabase;
+    Reset(precache_database_);
+    base::RunLoop().RunUntilIdle();
 
     // Make the fetch of the precache configuration settings fail. Precaching
     // should still complete normally in this case.
     factory_.SetFakeResponse(GURL(kConfigURL), "",
                              net::HTTP_INTERNAL_SERVER_ERROR,
                              net::URLRequestStatus::FAILED);
-    precache_manager_.reset(
-        new PrecacheManagerUnderTest(
-            &browser_context_, nullptr /* sync_service */,
-            &history_service_, db_path, std::move(precache_database)));
-    base::RunLoop().RunUntilIdle();
-
     info_.headers = new net::HttpResponseHeaders("");
+  }
+
+  // precache_manager_ assumes ownership of precache_database.
+  void Reset(PrecacheDatabase* precache_database) {
+    base::FilePath db_path = scoped_temp_dir_.GetPath().Append(
+        base::FilePath(FILE_PATH_LITERAL("precache_database")));
+    precache_manager_.reset(new PrecacheManagerUnderTest(
+        &browser_context_, nullptr /* sync_service */, &history_service_,
+        nullptr /* data_reduction_proxy_settings */, db_path,
+        base::WrapUnique(precache_database)));
+  }
+
+  void Flush() { precache_database_->Flush(); }
+
+  void RecordStatsForFetch(const GURL& url,
+                           const std::string& referrer_host,
+                           const base::TimeDelta& latency,
+                           const base::Time& fetch_time,
+                           const net::HttpResponseInfo& info,
+                           int64_t size,
+                           base::Time last_precache_time) {
+    precache_manager_->RecordStatsForFetch(
+        url, GURL(referrer_host), latency, fetch_time, info, size,
+        base::Bind(&PrecacheManagerTest::RegisterSyntheticFieldTrial,
+                   base::Unretained(this)),
+        last_precache_time);
   }
 
   void RecordStatsForPrecacheFetch(const GURL& url,
@@ -200,12 +228,16 @@ class PrecacheManagerTest : public testing::Test {
                                    const base::TimeDelta& latency,
                                    const base::Time& fetch_time,
                                    const net::HttpResponseInfo& info,
-                                   int64_t size) {
-    precache_manager_->RecordStatsForFetch(url, GURL(referrer_host), latency,
-                                           fetch_time, info, size);
+                                   int64_t size,
+                                   base::Time last_precache_time) {
+    RecordStatsForFetch(url, referrer_host, latency, fetch_time, info, size,
+                        last_precache_time);
     precache_database_->RecordURLPrefetch(url, referrer_host, fetch_time,
                                           info.was_cached, size);
   }
+
+  MOCK_METHOD1(RegisterSyntheticFieldTrial,
+               void(base::Time last_precache_time));
 
   // Must be declared first so that it is destroyed last.
   content::TestBrowserThreadBundle test_browser_thread_bundle_;
@@ -247,6 +279,75 @@ TEST_F(PrecacheManagerTest, StartAndFinishPrecaching) {
   expected_requested_urls.insert(GURL(kConfigURL));
   expected_requested_urls.insert(GURL(kGoodManifestURL));
   EXPECT_EQ(expected_requested_urls, url_callback_.requested_urls());
+}
+
+TEST_F(PrecacheManagerTest, StartPrecachingWithGoodSizedCache) {
+  VariationParamsManager variation_params(kPrecacheFieldTrialName,
+                                          {{kMinCacheSizeParam, "1"}});
+
+  // Let's store something in the cache so we pass the min_cache_size threshold.
+  disk_cache::Backend* cache_backend;
+  {
+    // Get the CacheBackend.
+    net::TestCompletionCallback cb;
+    net::HttpCache* cache =
+        content::BrowserContext::GetDefaultStoragePartition(&browser_context_)
+            ->GetURLRequestContext()
+            ->GetURLRequestContext()
+            ->http_transaction_factory()
+            ->GetCache();
+    CHECK_NE(nullptr, cache);
+    int rv = cache->GetBackend(&cache_backend, cb.callback());
+    CHECK_EQ(net::OK, cb.GetResult(rv));
+    CHECK_NE(nullptr, cache_backend);
+    CHECK_EQ(cache_backend, cache->GetCurrentBackend());
+  }
+  disk_cache::Entry* entry = nullptr;
+  {
+    // Create a cache Entry.
+    net::TestCompletionCallback cb;
+    int rv = cache_backend->CreateEntry("key", &entry, cb.callback());
+    CHECK_EQ(net::OK, cb.GetResult(rv));
+    CHECK_NE(nullptr, entry);
+  }
+  {
+    // Store some data in the cache Entry.
+    const std::string data(1, 'a');
+    scoped_refptr<net::StringIOBuffer> buffer(new net::StringIOBuffer(data));
+    net::TestCompletionCallback cb;
+    int rv = entry->WriteData(0, 0, buffer.get(), buffer->size(), cb.callback(),
+                              false);
+    entry->Close();
+    CHECK_EQ(buffer->size(), cb.GetResult(rv));
+  }
+  {
+    // Make sure everything went according to plan.
+    net::TestCompletionCallback cb;
+    int rv = cache_backend->CalculateSizeOfAllEntries(cb.callback());
+    CHECK_LE(1, cb.GetResult(rv));
+  }
+  EXPECT_FALSE(precache_manager_->IsPrecaching());
+
+  precache_manager_->StartPrecaching(precache_callback_.GetCallback());
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_TRUE(precache_manager_->IsPrecaching());
+  // Now it should be waiting for the top hosts.
+}
+
+TEST_F(PrecacheManagerTest, StartPrecachingStopsOnSmallCaches) {
+  // We don't have any entry in the cache, so the reported cache_size = 0 and
+  // thus it will fall below the threshold of 1.
+  VariationParamsManager variation_params(kPrecacheFieldTrialName,
+                                          {{kMinCacheSizeParam, "1"}});
+  EXPECT_FALSE(precache_manager_->IsPrecaching());
+
+  precache_manager_->StartPrecaching(precache_callback_.GetCallback());
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_FALSE(precache_manager_->IsPrecaching());
+  EXPECT_TRUE(precache_callback_.was_on_done_called());
+  EXPECT_TRUE(url_callback_.requested_urls().empty());
 }
 
 TEST_F(PrecacheManagerTest, StartAndFinishPrecachingWithUnfinishedHosts) {
@@ -351,7 +452,9 @@ TEST_F(PrecacheManagerTest, StartAndCancelPrecachingAfterURLsReceived) {
 
   EXPECT_TRUE(precache_manager_->IsPrecaching());
   // Run a task to get unfinished work, and to get hosts.
-  for (int i = 0; i < 2; ++i) {
+  // We need to call run_loop.Run as many times as needed to go through the
+  // chain of callbacks :-(.
+  for (int i = 0; i < 4; ++i) {
     base::RunLoop run_loop;
     base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
                                                   run_loop.QuitClosure());
@@ -374,28 +477,29 @@ TEST_F(PrecacheManagerTest, StartAndCancelPrecachingAfterURLsReceived) {
 // PrecacheUtil::UpdatePrecacheMetricsAndState() for more test coverage.
 TEST_F(PrecacheManagerTest, RecordStatsForFetchWithSizeZero) {
   // Fetches with size 0 should be ignored.
-  precache_manager_->RecordStatsForFetch(GURL("http://url.com"), GURL(),
-                                         base::TimeDelta(), base::Time(), info_,
-                                         0);
+  RecordStatsForPrecacheFetch(GURL("http://url.com"), "", base::TimeDelta(),
+                              base::Time(), info_, 0, base::Time());
   base::RunLoop().RunUntilIdle();
-  EXPECT_THAT(histograms_.GetTotalCountsForPrefix("Precache."), IsEmpty());
+  histograms_.ExpectTotalCount("Precache.Latency.Prefetch", 0);
+  histograms_.ExpectTotalCount("Precache.Freshness.Prefetch", 0);
 }
 
 TEST_F(PrecacheManagerTest, RecordStatsForFetchWithNonHTTP) {
   // Fetches for URLs with schemes other than HTTP or HTTPS should be ignored.
-  precache_manager_->RecordStatsForFetch(GURL("ftp://ftp.com"), GURL(),
-                                         base::TimeDelta(), base::Time(), info_,
-                                         1000);
+  RecordStatsForPrecacheFetch(GURL("ftp://ftp.com"), "", base::TimeDelta(),
+                              base::Time(), info_, 1000, base::Time());
   base::RunLoop().RunUntilIdle();
-  EXPECT_THAT(histograms_.GetTotalCountsForPrefix("Precache."), IsEmpty());
+  histograms_.ExpectTotalCount("Precache.Latency.Prefetch", 0);
+  histograms_.ExpectTotalCount("Precache.Freshness.Prefetch", 0);
 }
 
 TEST_F(PrecacheManagerTest, RecordStatsForFetchWithEmptyURL) {
   // Fetches for empty URLs should be ignored.
-  precache_manager_->RecordStatsForFetch(GURL(), GURL(), base::TimeDelta(),
-                                         base::Time(), info_, 1000);
+  RecordStatsForPrecacheFetch(GURL(), "", base::TimeDelta(), base::Time(),
+                              info_, 1000, base::Time());
   base::RunLoop().RunUntilIdle();
-  EXPECT_THAT(histograms_.GetTotalCountsForPrefix("Precache."), IsEmpty());
+  histograms_.ExpectTotalCount("Precache.Latency.Prefetch", 0);
+  histograms_.ExpectTotalCount("Precache.Freshness.Prefetch", 0);
 }
 
 TEST_F(PrecacheManagerTest, RecordStatsForFetchDuringPrecaching) {
@@ -406,7 +510,8 @@ TEST_F(PrecacheManagerTest, RecordStatsForFetchDuringPrecaching) {
 
   EXPECT_TRUE(precache_manager_->IsPrecaching());
   RecordStatsForPrecacheFetch(GURL("http://url.com"), std::string(),
-                              base::TimeDelta(), base::Time(), info_, 1000);
+                              base::TimeDelta(), base::Time(), info_, 1000,
+                              base::Time());
   base::RunLoop().RunUntilIdle();
   precache_manager_->CancelPrecaching();
 
@@ -414,7 +519,9 @@ TEST_F(PrecacheManagerTest, RecordStatsForFetchDuringPrecaching) {
   base::RunLoop().RunUntilIdle();
   EXPECT_THAT(
       histograms_.GetTotalCountsForPrefix("Precache."),
-      UnorderedElementsAre(Pair("Precache.DownloadedPrecacheMotivated", 1),
+      UnorderedElementsAre(Pair("Precache.CacheStatus.Prefetch", 1),
+                           Pair("Precache.CacheSize.AllEntries", 1),
+                           Pair("Precache.DownloadedPrecacheMotivated", 1),
                            Pair("Precache.Fetch.PercentCompleted", 1),
                            Pair("Precache.Fetch.ResponseBytes.Network", 1),
                            Pair("Precache.Fetch.ResponseBytes.Total", 1),
@@ -423,10 +530,26 @@ TEST_F(PrecacheManagerTest, RecordStatsForFetchDuringPrecaching) {
                            Pair("Precache.Freshness.Prefetch", 1)));
 }
 
+TEST_F(PrecacheManagerTest, RegistersSyntheticFieldTrial) {
+  base::Time now = base::Time::Now();
+
+  EXPECT_CALL(history_service_, TopHosts(NumTopHosts(), _))
+      .WillOnce(ReturnHosts(history::TopHostsList()));
+  EXPECT_CALL(*this, RegisterSyntheticFieldTrial(now));
+
+  precache_manager_->StartPrecaching(precache_callback_.GetCallback());
+
+  EXPECT_TRUE(precache_manager_->IsPrecaching());
+  RecordStatsForPrecacheFetch(GURL("http://url.com"), std::string(),
+                              base::TimeDelta(), base::Time(), info_, 1000,
+                              now /* last_precache_time */);
+  base::RunLoop().RunUntilIdle();
+  precache_manager_->CancelPrecaching();
+}
+
 TEST_F(PrecacheManagerTest, RecordStatsForFetchHTTP) {
-  precache_manager_->RecordStatsForFetch(GURL("http://http-url.com"), GURL(),
-                                         base::TimeDelta(), base::Time(), info_,
-                                         1000);
+  RecordStatsForFetch(GURL("http://http-url.com"), "", base::TimeDelta(),
+                      base::Time(), info_, 1000, base::Time());
   base::RunLoop().RunUntilIdle();
 
   EXPECT_THAT(histograms_.GetTotalCountsForPrefix("Precache."),
@@ -438,9 +561,8 @@ TEST_F(PrecacheManagerTest, RecordStatsForFetchHTTP) {
 }
 
 TEST_F(PrecacheManagerTest, RecordStatsForFetchHTTPS) {
-  precache_manager_->RecordStatsForFetch(GURL("https://https-url.com"), GURL(),
-                                         base::TimeDelta(), base::Time(), info_,
-                                         1000);
+  RecordStatsForFetch(GURL("https://https-url.com"), "", base::TimeDelta(),
+                      base::Time(), info_, 1000, base::Time());
   base::RunLoop().RunUntilIdle();
 
   EXPECT_THAT(histograms_.GetTotalCountsForPrefix("Precache."),
@@ -458,9 +580,9 @@ TEST_F(PrecacheManagerTest, RecordStatsForFetchInTopHosts) {
           [](const GURL& url, const base::Callback<void(int)>& callback) {
             callback.Run(0);
           }));
-  precache_manager_->RecordStatsForFetch(
-      GURL("http://http-url.com"), GURL("http://referrer.com"),
-      base::TimeDelta(), base::Time(), info_, 1000);
+  RecordStatsForFetch(GURL("http://http-url.com"), "http://referrer.com",
+                      base::TimeDelta(), base::Time(), info_, 1000,
+                      base::Time());
   base::RunLoop().RunUntilIdle();
 
   EXPECT_THAT(
@@ -487,13 +609,15 @@ TEST_F(PrecacheManagerTest, DeleteExpiredPrecacheHistory) {
   // Precache a bunch of URLs, with different fetch times.
   RecordStatsForPrecacheFetch(
       GURL("http://old-fetch.com"), std::string(), base::TimeDelta(),
-      kCurrentTime - base::TimeDelta::FromDays(61), info_, 1000);
+      kCurrentTime - base::TimeDelta::FromDays(61), info_, 1000, base::Time());
   RecordStatsForPrecacheFetch(
       GURL("http://recent-fetch.com"), std::string(), base::TimeDelta(),
-      kCurrentTime - base::TimeDelta::FromDays(59), info_, 1000);
+      kCurrentTime - base::TimeDelta::FromDays(59), info_, 1000, base::Time());
   RecordStatsForPrecacheFetch(
       GURL("http://yesterday-fetch.com"), std::string(), base::TimeDelta(),
-      kCurrentTime - base::TimeDelta::FromDays(1), info_, 1000);
+      kCurrentTime - base::TimeDelta::FromDays(1), info_, 1000, base::Time());
+  expected_histogram_count_map["Precache.CacheStatus.Prefetch"] += 3;
+  expected_histogram_count_map["Precache.CacheSize.AllEntries"]++;
   expected_histogram_count_map["Precache.DownloadedPrecacheMotivated"] += 3;
   expected_histogram_count_map["Precache.Fetch.PercentCompleted"]++;
   expected_histogram_count_map["Precache.Fetch.ResponseBytes.Network"]++;
@@ -523,6 +647,7 @@ TEST_F(PrecacheManagerTest, DeleteExpiredPrecacheHistory) {
   // The precache fetcher runs until done, which records these histograms,
   // and then cancels precaching, which records these histograms again.
   // In practice
+  expected_histogram_count_map["Precache.CacheSize.AllEntries"]++;
   expected_histogram_count_map["Precache.Fetch.PercentCompleted"]++;
   expected_histogram_count_map["Precache.Fetch.ResponseBytes.Network"]++;
   expected_histogram_count_map["Precache.Fetch.ResponseBytes.Total"]++;
@@ -534,9 +659,8 @@ TEST_F(PrecacheManagerTest, DeleteExpiredPrecacheHistory) {
   // but it isn't reported as saved bytes because it had expired in the precache
   // history.
   info_.was_cached = true;  // From now on all fetches are cached.
-  precache_manager_->RecordStatsForFetch(GURL("http://old-fetch.com"), GURL(),
-                                         base::TimeDelta(), kCurrentTime, info_,
-                                         1000);
+  RecordStatsForFetch(GURL("http://old-fetch.com"), "", base::TimeDelta(),
+                      kCurrentTime, info_, 1000, base::Time());
   expected_histogram_count_map["Precache.Fetch.TimeToComplete"]++;
   expected_histogram_count_map["Precache.CacheStatus.NonPrefetch"]++;
   expected_histogram_count_map["Precache.Latency.NonPrefetch"]++;
@@ -549,12 +673,10 @@ TEST_F(PrecacheManagerTest, DeleteExpiredPrecacheHistory) {
 
   // The other precaches should not have expired, so the following fetches from
   // the cache should count as saved bytes.
-  precache_manager_->RecordStatsForFetch(GURL("http://recent-fetch.com"),
-                                         GURL(), base::TimeDelta(),
-                                         kCurrentTime, info_, 1000);
-  precache_manager_->RecordStatsForFetch(GURL("http://yesterday-fetch.com"),
-                                         GURL(), base::TimeDelta(),
-                                         kCurrentTime, info_, 1000);
+  RecordStatsForFetch(GURL("http://recent-fetch.com"), "", base::TimeDelta(),
+                      kCurrentTime, info_, 1000, base::Time());
+  RecordStatsForFetch(GURL("http://yesterday-fetch.com"), "", base::TimeDelta(),
+                      kCurrentTime, info_, 1000, base::Time());
   expected_histogram_count_map["Precache.CacheStatus.NonPrefetch"] += 2;
   expected_histogram_count_map
       ["Precache.CacheStatus.NonPrefetch.FromPrecache"] += 2;

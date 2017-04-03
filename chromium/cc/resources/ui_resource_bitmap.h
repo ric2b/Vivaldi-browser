@@ -20,8 +20,6 @@ class SkBitmap;
 
 namespace cc {
 
-class ETC1PixelRef;
-
 // A bitmap class that contains a ref-counted reference to a SkPixelRef that
 // holds the content of the bitmap (cannot use SkBitmap because of ETC1).
 // Thread-safety (by ways of SkPixelRef) ensures that both main and impl threads
@@ -50,6 +48,11 @@ class CC_EXPORT UIResourceBitmap {
   UIResourceBitmap(sk_sp<SkPixelRef> pixel_ref, const gfx::Size& size);
   UIResourceBitmap(const UIResourceBitmap& other);
   ~UIResourceBitmap();
+
+  // Returns the memory usage of the bitmap.
+  size_t EstimateMemoryUsage() const {
+    return pixel_ref_ ? pixel_ref_->rowBytes() * size_.height() : 0;
+  }
 
  private:
   friend class AutoLockUIResourceBitmap;

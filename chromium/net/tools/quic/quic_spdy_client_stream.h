@@ -32,9 +32,6 @@ class QuicSpdyClientStream : public QuicSpdyStream {
   void OnStreamFrame(const QuicStreamFrame& frame) override;
 
   // Override the base class to parse and store headers.
-  void OnInitialHeadersComplete(bool fin, size_t frame_len) override;
-
-  // Override the base class to parse and store headers.
   void OnInitialHeadersComplete(bool fin,
                                 size_t frame_len,
                                 const QuicHeaderList& header_list) override;
@@ -45,16 +42,11 @@ class QuicSpdyClientStream : public QuicSpdyStream {
                                  const QuicHeaderList& header_list) override;
 
   // Override the base class to handle creation of the push stream.
-  void OnPromiseHeadersComplete(QuicStreamId promised_stream_id,
-                                size_t frame_len) override;
-
-  // Override the base class to handle creation of the push stream.
   void OnPromiseHeaderList(QuicStreamId promised_id,
                            size_t frame_len,
                            const QuicHeaderList& header_list) override;
 
-  // ReliableQuicStream implementation called by the session when there's
-  // data for us.
+  // QuicStream implementation called by the session when there's data for us.
   void OnDataAvailable() override;
 
   // Serializes the headers and body, sends it to the server, and
@@ -71,19 +63,11 @@ class QuicSpdyClientStream : public QuicSpdyStream {
 
   size_t header_bytes_written() const { return header_bytes_written_; }
 
-  size_t trailer_bytes_read() const { return header_bytes_read_; }
-
   int response_code() const { return response_code_; }
 
   // While the server's SetPriority shouldn't be called externally, the creator
   // of client-side streams should be able to set the priority.
   using QuicSpdyStream::SetPriority;
-
-  void set_allow_bidirectional_data(bool value) {
-    allow_bidirectional_data_ = value;
-  }
-
-  bool allow_bidirectional_data() const { return allow_bidirectional_data_; }
 
  private:
   // The parsed headers received from the server.
@@ -95,9 +79,6 @@ class QuicSpdyClientStream : public QuicSpdyStream {
   std::string data_;
   size_t header_bytes_read_;
   size_t header_bytes_written_;
-  // When true allows the sending of a request to continue while the response is
-  // arriving.
-  bool allow_bidirectional_data_;
 
   QuicClientSession* session_;
 

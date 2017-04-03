@@ -15,15 +15,12 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/synchronization/waitable_event.h"
+#include "base/unguessable_token.h"
 #include "cc/output/buffer_to_texture_target_map.h"
 #include "content/child/thread_safe_sender.h"
 #include "content/common/content_export.h"
 #include "media/renderers/gpu_video_accelerator_factories.h"
 #include "ui/gfx/geometry/size.h"
-
-namespace base {
-class WaitableEvent;
-}
 
 namespace gpu {
 class GpuChannelHost;
@@ -58,6 +55,7 @@ class CONTENT_EXPORT RendererGpuVideoAcceleratorFactories
 
   // media::GpuVideoAcceleratorFactories implementation.
   bool IsGpuVideoAcceleratorEnabled() override;
+  base::UnguessableToken GetChannelToken() override;
   std::unique_ptr<media::VideoDecodeAccelerator> CreateVideoDecodeAccelerator()
       override;
   std::unique_ptr<media::VideoEncodeAccelerator> CreateVideoEncodeAccelerator()
@@ -80,7 +78,7 @@ class CONTENT_EXPORT RendererGpuVideoAcceleratorFactories
 
   bool ShouldUseGpuMemoryBuffersForVideoFrames() const override;
   unsigned ImageTextureTarget(gfx::BufferFormat format) override;
-  media::VideoPixelFormat VideoFrameOutputFormat() override;
+  OutputFormat VideoFrameOutputFormat() override;
   std::unique_ptr<media::GpuVideoAcceleratorFactories::ScopedGLContextLock>
   GetGLContextLock() override;
   bool CheckContextLost();
@@ -122,6 +120,8 @@ class CONTENT_EXPORT RendererGpuVideoAcceleratorFactories
 
   // Raw pointer to a context provider accessed from the media thread.
   ContextProviderCommandBuffer* context_provider_;
+
+  base::UnguessableToken channel_token_;
 
   // Whether gpu memory buffers should be used to hold video frames data.
   bool enable_gpu_memory_buffer_video_frames_;

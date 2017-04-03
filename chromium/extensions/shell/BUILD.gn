@@ -5,6 +5,7 @@
 import("//build/config/features.gni")
 import("//build/config/ui.gni")
 import("//build/util/process_version.gni")
+import("//extensions/features/features.gni")
 import("//testing/test.gni")
 import("//tools/grit/grit_rule.gni")
 
@@ -37,15 +38,15 @@ source_set("app_shell_lib") {
     "//components/web_cache/renderer",
     "//content",
     "//content/shell:content_shell_lib",
-    "//device/core",
+    "//device/base",
     "//device/hid",
     "//extensions:extensions_resources",
     "//extensions:shell_and_test_pak",
     "//extensions/browser",
+    "//extensions/browser/api:api_registration",
     "//extensions/browser/kiosk",
     "//extensions/common",
     "//extensions/common/api",
-    "//extensions/common/api:api_registration",
     "//extensions/renderer",
     "//extensions/shell/common/api",
     "//extensions/shell/common/api:api_registration",
@@ -116,6 +117,8 @@ source_set("app_shell_lib") {
     "browser/shell_native_app_window.h",
     "browser/shell_native_app_window_mac.h",
     "browser/shell_native_app_window_mac.mm",
+    "browser/shell_navigation_ui_data.cc",
+    "browser/shell_navigation_ui_data.h",
     "browser/shell_network_controller_chromeos.cc",
     "browser/shell_network_controller_chromeos.h",
     "browser/shell_network_delegate.cc",

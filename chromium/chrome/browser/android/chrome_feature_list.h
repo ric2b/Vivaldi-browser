@@ -12,10 +12,15 @@
 namespace chrome {
 namespace android {
 
+// Alphabetical:
 extern const base::Feature kAndroidPayIntegrationV1;
+extern const base::Feature kCCTExternalLinkHandling;
+extern const base::Feature kCCTPostMessageAPI;
+extern const base::Feature kChromeHomeFeature;
+extern const base::Feature kContextualSearchSingleActions;
 extern const base::Feature kDownloadsUiFeature;
 extern const base::Feature kImportantSitesInCBD;
-extern const base::Feature kNTPMaterialDesign;
+extern const base::Feature kNoCreditCardAbort;
 extern const base::Feature kNTPOfflinePagesFeature;
 extern const base::Feature kNTPFakeOmniboxTextFeature;
 extern const base::Feature kPhysicalWebFeature;
@@ -23,8 +28,8 @@ extern const base::Feature kPhysicalWebIgnoreOtherClientsFeature;
 extern const base::Feature kSpecialLocaleFeature;
 extern const base::Feature kSpecialLocaleWrapper;
 extern const base::Feature kTabReparenting;
-extern const base::Feature kCCTExternalLinkHandling;
 extern const base::Feature kUserMediaScreenCapturing;
+extern const base::Feature kWebApks;
 
 bool RegisterChromeFeatureListJni(JNIEnv* env);
 

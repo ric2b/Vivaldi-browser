@@ -43,15 +43,17 @@
 #include "base/win/message_window.h"
 #include "base/win/windows_version.h"
 #include "device/usb/usb_ids.h"
+#include "media/midi/message_util.h"
 #include "media/midi/midi_manager_winrt.h"
 #include "media/midi/midi_message_queue.h"
-#include "media/midi/midi_message_util.h"
 #include "media/midi/midi_port_info.h"
 #include "media/midi/midi_switches.h"
 
-namespace media {
 namespace midi {
 namespace {
+
+using mojom::PortState;
+using mojom::Result;
 
 static const size_t kBufferLength = 32 * 1024;
 
@@ -85,6 +87,10 @@ std::string GetOutErrorMessage(MMRESULT result) {
 
 std::string MmversionToString(MMVERSION version) {
   return base::StringPrintf("%d.%d", HIBYTE(version), LOBYTE(version));
+}
+
+void CloseOutputPortOnTaskThread(HMIDIOUT midi_out_handle) {
+  midiOutClose(midi_out_handle);
 }
 
 class MIDIHDRDeleter {
@@ -680,7 +686,7 @@ class MidiServiceWinImpl : public MidiServiceWin,
           GetManufacturerName(state_device_info),
           base::WideToUTF8(state_device_info.product_name),
           MmversionToString(state_device_info.driver_version),
-          MIDI_PORT_OPENED);
+          PortState::OPENED);
       task_thread_.task_runner()->PostTask(
           FROM_HERE, base::Bind(&MidiServiceWinImpl::AddInputPortOnTaskThread,
                                 base::Unretained(this), port_info));
@@ -689,7 +695,7 @@ class MidiServiceWinImpl : public MidiServiceWin,
           FROM_HERE,
           base::Bind(&MidiServiceWinImpl::SetInputPortStateOnTaskThread,
                      base::Unretained(this), port_number,
-                     MidiPortState::MIDI_PORT_CONNECTED));
+                     PortState::CONNECTED));
     }
   }
 
@@ -704,7 +710,7 @@ class MidiServiceWinImpl : public MidiServiceWin,
     const uint8_t second_data_byte =
         static_cast<uint8_t>((param1 >> 16) & 0xff);
     const DWORD elapsed_ms = param2;
-    const size_t len = GetMidiMessageLength(status_byte);
+    const size_t len = GetMessageLength(status_byte);
     const uint8_t kData[] = {status_byte, first_data_byte, second_data_byte};
     std::vector<uint8_t> data;
     data.assign(kData, kData + len);
@@ -781,7 +787,7 @@ class MidiServiceWinImpl : public MidiServiceWin,
         FROM_HERE,
         base::Bind(&MidiServiceWinImpl::SetInputPortStateOnTaskThread,
                    base::Unretained(this), port_number,
-                   MIDI_PORT_DISCONNECTED));
+                   PortState::DISCONNECTED));
   }
 
   static void CALLBACK
@@ -826,8 +832,11 @@ class MidiServiceWinImpl : public MidiServiceWin,
         make_scoped_refptr(new MidiOutputDeviceState(MidiDeviceInfo(caps)));
     state->midi_handle = midi_out_handle;
     const auto& state_device_info = state->device_info;
-    if (IsUnsupportedDevice(state_device_info))
+    if (IsUnsupportedDevice(state_device_info)) {
+      task_thread_.task_runner()->PostTask(
+          FROM_HERE, base::Bind(&CloseOutputPortOnTaskThread, midi_out_handle));
       return;
+    }
     bool add_new_port = false;
     uint32_t port_number = 0;
     {
@@ -858,7 +867,7 @@ class MidiServiceWinImpl : public MidiServiceWin,
           GetManufacturerName(state_device_info),
           base::WideToUTF8(state_device_info.product_name),
           MmversionToString(state_device_info.driver_version),
-          MIDI_PORT_OPENED);
+          PortState::OPENED);
       task_thread_.task_runner()->PostTask(
           FROM_HERE, base::Bind(&MidiServiceWinImpl::AddOutputPortOnTaskThread,
                                 base::Unretained(this), port_info));
@@ -866,7 +875,8 @@ class MidiServiceWinImpl : public MidiServiceWin,
       task_thread_.task_runner()->PostTask(
           FROM_HERE,
           base::Bind(&MidiServiceWinImpl::SetOutputPortStateOnTaskThread,
-                     base::Unretained(this), port_number, MIDI_PORT_CONNECTED));
+                     base::Unretained(this), port_number,
+                     PortState::CONNECTED));
     }
   }
 
@@ -904,7 +914,7 @@ class MidiServiceWinImpl : public MidiServiceWin,
         FROM_HERE,
         base::Bind(&MidiServiceWinImpl::SetOutputPortStateOnTaskThread,
                    base::Unretained(this), port_number,
-                   MIDI_PORT_DISCONNECTED));
+                   PortState::DISCONNECTED));
   }
 
   /////////////////////////////////////////////////////////////////////////////
@@ -1076,13 +1086,12 @@ class MidiServiceWinImpl : public MidiServiceWin,
     delegate_->OnAddOutputPort(info);
   }
 
-  void SetInputPortStateOnTaskThread(uint32_t port_index, MidiPortState state) {
+  void SetInputPortStateOnTaskThread(uint32_t port_index, PortState state) {
     AssertOnTaskThread();
     delegate_->OnSetInputPortState(port_index, state);
   }
 
-  void SetOutputPortStateOnTaskThread(uint32_t port_index,
-                                      MidiPortState state) {
+  void SetOutputPortStateOnTaskThread(uint32_t port_index, PortState state) {
     AssertOnTaskThread();
     delegate_->OnSetOutputPortState(port_index, state);
   }
@@ -1176,13 +1185,12 @@ void MidiManagerWin::OnAddOutputPort(MidiPortInfo info) {
   AddOutputPort(info);
 }
 
-void MidiManagerWin::OnSetInputPortState(uint32_t port_index,
-                                         MidiPortState state) {
+void MidiManagerWin::OnSetInputPortState(uint32_t port_index, PortState state) {
   SetInputPortState(port_index, state);
 }
 
 void MidiManagerWin::OnSetOutputPortState(uint32_t port_index,
-                                          MidiPortState state) {
+                                          PortState state) {
   SetOutputPortState(port_index, state);
 }
 
@@ -1200,4 +1208,3 @@ MidiManager* MidiManager::Create() {
 }
 
 }  // namespace midi
-}  // namespace media

@@ -4,18 +4,16 @@
 
 #include "net/cert/jwk_serializer.h"
 
-#include <openssl/bn.h>
-#include <openssl/bytestring.h>
-#include <openssl/ec.h>
-#include <openssl/ec_key.h>
-#include <openssl/evp.h>
-
 #include "base/base64url.h"
 #include "base/logging.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
 #include "crypto/openssl_util.h"
-#include "crypto/scoped_openssl_types.h"
+#include "third_party/boringssl/src/include/openssl/bn.h"
+#include "third_party/boringssl/src/include/openssl/bytestring.h"
+#include "third_party/boringssl/src/include/openssl/ec.h"
+#include "third_party/boringssl/src/include/openssl/ec_key.h"
+#include "third_party/boringssl/src/include/openssl/evp.h"
 
 namespace net {
 
@@ -26,10 +24,10 @@ namespace {
 bool ConvertEcKeyToJwk(EVP_PKEY* pkey,
                        base::DictionaryValue* public_key_jwk,
                        const crypto::OpenSSLErrStackTracer& err_tracer) {
-  crypto::ScopedEC_KEY ec_key(EVP_PKEY_get1_EC_KEY(pkey));
+  EC_KEY* ec_key = EVP_PKEY_get0_EC_KEY(pkey);
   if (!ec_key)
     return false;
-  const EC_GROUP* ec_group = EC_KEY_get0_group(ec_key.get());
+  const EC_GROUP* ec_group = EC_KEY_get0_group(ec_key);
   if (!ec_group)
     return false;
 
@@ -47,12 +45,12 @@ bool ConvertEcKeyToJwk(EVP_PKEY* pkey,
 
   int degree_bytes = (EC_GROUP_get_degree(ec_group) + 7) / 8;
 
-  const EC_POINT* ec_point = EC_KEY_get0_public_key(ec_key.get());
+  const EC_POINT* ec_point = EC_KEY_get0_public_key(ec_key);
   if (!ec_point)
     return false;
 
-  crypto::ScopedBIGNUM x(BN_new());
-  crypto::ScopedBIGNUM y(BN_new());
+  bssl::UniquePtr<BIGNUM> x(BN_new());
+  bssl::UniquePtr<BIGNUM> y(BN_new());
   if (!EC_POINT_get_affine_coordinates_GFp(ec_group, ec_point, x.get(), y.get(),
                                            NULL)) {
     return false;
@@ -98,7 +96,7 @@ bool ConvertSpkiFromDerToJwk(const base::StringPiece& spki_der,
   CBS cbs;
   CBS_init(&cbs, reinterpret_cast<const uint8_t*>(spki_der.data()),
            spki_der.size());
-  crypto::ScopedEVP_PKEY pubkey(EVP_parse_public_key(&cbs));
+  bssl::UniquePtr<EVP_PKEY> pubkey(EVP_parse_public_key(&cbs));
   if (!pubkey || CBS_len(&cbs) != 0)
     return false;
 

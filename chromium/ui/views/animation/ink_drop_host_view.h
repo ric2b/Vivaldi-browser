@@ -15,29 +15,16 @@
 #include "ui/views/view.h"
 
 namespace views {
+class InkDropImpl;
+class InkDropMask;
 
 namespace test {
 class InkDropHostViewTestApi;
 }  // namespace test
 
-class InkDropRipple;
-class InkDropHighlight;
-
 // A view that provides InkDropHost functionality.
 class VIEWS_EXPORT InkDropHostView : public View, public InkDropHost {
  public:
-  InkDropHostView();
-  ~InkDropHostView() override;
-
-  // Overridden from InkDropHost:
-  void AddInkDropLayer(ui::Layer* ink_drop_layer) override;
-  void RemoveInkDropLayer(ui::Layer* ink_drop_layer) override;
-  std::unique_ptr<InkDropRipple> CreateInkDropRipple() const override;
-  std::unique_ptr<InkDropHighlight> CreateInkDropHighlight() const override;
-
-  void set_ink_drop_size(const gfx::Size& size) { ink_drop_size_ = size; }
-
- protected:
   // Used in SetInkDropMode() to specify whether the ink drop effect is enabled
   // or not for the view. In case of having an ink drop, it also specifies
   // whether the default gesture event handler for the ink drop should be
@@ -48,7 +35,31 @@ class VIEWS_EXPORT InkDropHostView : public View, public InkDropHost {
     ON_NO_GESTURE_HANDLER,
   };
 
+  InkDropHostView();
+  ~InkDropHostView() override;
+
+  // Overridden from InkDropHost:
+  void AddInkDropLayer(ui::Layer* ink_drop_layer) override;
+  void RemoveInkDropLayer(ui::Layer* ink_drop_layer) override;
+  std::unique_ptr<InkDrop> CreateInkDrop() override;
+  std::unique_ptr<InkDropRipple> CreateInkDropRipple() const override;
+  std::unique_ptr<InkDropHighlight> CreateInkDropHighlight() const override;
+
+  // Toggle to enable/disable an InkDrop on this View.  Descendants can override
+  // CreateInkDropHighlight() and CreateInkDropRipple() to change the look/feel
+  // of the InkDrop.
+  //
+  // TODO(bruthig): Add an easier mechanism than overriding functions to allow
+  // subclasses/clients to specify the flavor of ink drop.
+  void SetInkDropMode(InkDropMode ink_drop_mode);
+
+ protected:
   static const int kInkDropSmallCornerRadius;
+  static const int kInkDropLargeCornerRadius;
+
+  // Returns a large ink drop size based on the |small_size| that works well
+  // with the SquareInkDropRipple animation durations.
+  static gfx::Size CalculateLargeInkDropSize(const gfx::Size& small_size);
 
   void set_ink_drop_visible_opacity(float visible_opacity) {
     ink_drop_visible_opacity_ = visible_opacity;
@@ -77,6 +88,7 @@ class VIEWS_EXPORT InkDropHostView : public View, public InkDropHost {
   void AnimateInkDrop(InkDropState state, const ui::LocatedEvent* event);
 
   // View:
+  void OnBoundsChanged(const gfx::Rect& previous_bounds) override;
   void VisibilityChanged(View* starting_from, bool is_visible) override;
   void OnFocus() override;
   void OnBlur() override;
@@ -86,15 +98,24 @@ class VIEWS_EXPORT InkDropHostView : public View, public InkDropHost {
   // ink drop.
   virtual SkColor GetInkDropBaseColor() const;
 
-  // Should return true if the ink drop is also used to depict focus.
-  virtual bool ShouldShowInkDropForFocus() const;
+  // Subclasses can override to return a mask for the ink drop. By default,
+  // returns nullptr (i.e no mask).
+  virtual std::unique_ptr<views::InkDropMask> CreateInkDropMask() const;
 
-  InkDrop* ink_drop() { return ink_drop_.get(); }
+  // Provides access to |ink_drop_|. Implements lazy initialization of
+  // |ink_drop_| so as to avoid virtual method calls during construction since
+  // subclasses should be able to call SetInkDropMode() during construction.
+  InkDrop* GetInkDrop();
 
-  // Toggle to enable/disable an InkDrop on this View.  Descendants can override
-  // CreateInkDropHighlight() and CreateInkDropRipple() to change the look/feel
-  // of the InkDrop.
-  void SetInkDropMode(InkDropMode ink_drop_mode);
+  // Returns an InkDropImpl configured to work well with a
+  // flood-fill ink drop ripple.
+  std::unique_ptr<InkDropImpl> CreateDefaultFloodFillInkDropImpl();
+
+  // Returns an InkDropImpl with default configuration. The base implementation
+  // of CreateInkDrop() delegates to this function.
+  std::unique_ptr<InkDropImpl> CreateDefaultInkDropImpl();
+
+  InkDropMode ink_drop_mode() const { return ink_drop_mode_; }
 
  private:
   class InkDropGestureHandler;
@@ -104,13 +125,15 @@ class VIEWS_EXPORT InkDropHostView : public View, public InkDropHost {
   // The last user Event to trigger an ink drop ripple animation.
   std::unique_ptr<ui::LocatedEvent> last_ripple_triggering_event_;
 
+  // Defines what type of |ink_drop_| to create.
+  InkDropMode ink_drop_mode_;
+
+  // Should not be accessed directly. Use GetInkDrop() instead.
   std::unique_ptr<InkDrop> ink_drop_;
 
   // Intentionally declared after |ink_drop_| so that it doesn't access a
   // destroyed |ink_drop_| during destruction.
   std::unique_ptr<InkDropGestureHandler> gesture_handler_;
-
-  gfx::Size ink_drop_size_;
 
   float ink_drop_visible_opacity_;
 
@@ -119,6 +142,8 @@ class VIEWS_EXPORT InkDropHostView : public View, public InkDropHost {
   bool old_paint_to_layer_;
 
   bool destroying_;
+
+  std::unique_ptr<views::InkDropMask> ink_drop_mask_;
 
   DISALLOW_COPY_AND_ASSIGN(InkDropHostView);
 };

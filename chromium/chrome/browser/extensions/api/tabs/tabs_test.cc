@@ -1059,6 +1059,8 @@ IN_PROC_BROWSER_TEST_F(ExtensionWindowLastFocusedTest,
 
 IN_PROC_BROWSER_TEST_F(ExtensionWindowCreateTest, AcceptState) {
 #if defined(OS_MACOSX)
+  if (base::mac::IsOS10_10())
+    return;  // Fails when swarmed. http://crbug.com/660582
   ui::test::ScopedFakeNSWindowFullscreen fake_fullscreen;
 #endif
 
@@ -2114,6 +2116,35 @@ IN_PROC_BROWSER_TEST_F(ExtensionTabsZoomTest, CannotZoomInvalidTab) {
   error = RunSetZoomSettingsExpectError(tab_id, "manual", "per-tab");
   EXPECT_TRUE(
       base::MatchPattern(error, manifest_errors::kCannotAccessChromeUrl));
+}
+
+// Regression test for crbug.com/660498.
+IN_PROC_BROWSER_TEST_F(ExtensionApiTest, Foo) {
+  ASSERT_TRUE(StartEmbeddedTestServer());
+  content::WebContents* first_web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  ASSERT_TRUE(first_web_contents);
+  chrome::NewTab(browser());
+  content::WebContents* second_web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  ASSERT_NE(first_web_contents, second_web_contents);
+  GURL url = embedded_test_server()->GetURL(
+      "/extensions/api_test/tabs/pdf_extension_test.html");
+  content::TestNavigationManager navigation_manager(
+      second_web_contents, GURL("http://www.facebook.com:83"));
+  ui_test_utils::NavigateToURLWithDisposition(
+      browser(), url, WindowOpenDisposition::CURRENT_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
+  EXPECT_TRUE(navigation_manager.WaitForRequestStart());
+
+  browser()->tab_strip_model()->ActivateTabAt(0, true);
+  EXPECT_EQ(first_web_contents,
+            browser()->tab_strip_model()->GetActiveWebContents());
+  browser()->tab_strip_model()->ActivateTabAt(1, true);
+  EXPECT_EQ(second_web_contents,
+            browser()->tab_strip_model()->GetActiveWebContents());
+
+  EXPECT_EQ(url, second_web_contents->GetVisibleURL());
 }
 
 }  // namespace extensions

@@ -52,8 +52,8 @@ class CC_EXPORT PictureLayerTilingSet {
 
   const PictureLayerTilingClient* client() const { return client_; }
 
-  void CleanUpTilings(float min_acceptable_high_res_scale,
-                      float max_acceptable_high_res_scale,
+  void CleanUpTilings(float min_acceptable_high_res_scale_key,
+                      float max_acceptable_high_res_scale_key,
                       const std::vector<PictureLayerTiling*>& needed_tilings,
                       PictureLayerTilingSet* twin_set);
   void RemoveNonIdealTilings();
@@ -63,22 +63,22 @@ class CC_EXPORT PictureLayerTilingSet {
       scoped_refptr<RasterSource> raster_source,
       const PictureLayerTilingSet* pending_twin_set,
       const Region& layer_invalidation,
-      float minimum_contents_scale,
-      float maximum_contents_scale);
+      float minimum_contents_scale_key,
+      float maximum_contents_scale_key);
 
   // This function is called on the sync tree during commit.
   void UpdateTilingsToCurrentRasterSourceForCommit(
       scoped_refptr<RasterSource> raster_source,
       const Region& layer_invalidation,
-      float minimum_contents_scale,
-      float maximum_contents_scale);
+      float minimum_contents_scale_key,
+      float maximum_contents_scale_key);
 
   // This function is called on the sync tree right after commit.
   void UpdateRasterSourceDueToLCDChange(
       scoped_refptr<RasterSource> raster_source,
       const Region& layer_invalidation);
 
-  PictureLayerTiling* AddTiling(float contents_scale,
+  PictureLayerTiling* AddTiling(float contents_scale_key,
                                 scoped_refptr<RasterSource> raster_source);
   size_t num_tilings() const { return tilings_.size(); }
   int NumHighResTilings() const;
@@ -88,7 +88,7 @@ class CC_EXPORT PictureLayerTilingSet {
   }
   WhichTree tree() const { return tree_; }
 
-  PictureLayerTiling* FindTilingWithScale(float scale) const;
+  PictureLayerTiling* FindTilingWithScaleKey(float scale_key) const;
   PictureLayerTiling* FindTilingWithResolution(TileResolution resolution) const;
 
   void MarkAllTilingsNonIdeal();
@@ -97,18 +97,19 @@ class CC_EXPORT PictureLayerTilingSet {
   // ratio of |start_scale|, then return that tiling's scale. Otherwise, return
   // |start_scale|. If multiple tilings match the criteria, return the one with
   // the least ratio to |start_scale|.
-  float GetSnappedContentsScale(float start_scale,
-                                float snap_to_existing_tiling_ratio) const;
+  float GetSnappedContentsScaleKey(float start_scale,
+                                   float snap_to_existing_tiling_ratio) const;
 
   // Returns the maximum contents scale of all tilings, or 0 if no tilings
-  // exist.
+  // exist. Note that this returns the maximum of x and y scales depending on
+  // the aspect ratio.
   float GetMaximumContentsScale() const;
 
-  // Removes all tilings with a contents scale < |minimum_scale|.
-  void RemoveTilingsBelowScale(float minimum_scale);
+  // Removes all tilings with a contents scale key < |minimum_scale_key|.
+  void RemoveTilingsBelowScaleKey(float minimum_scale_key);
 
-  // Removes all tilings with a contents scale > |maximum_scale|.
-  void RemoveTilingsAboveScale(float maximum_scale);
+  // Removes all tilings with a contents scale key > |maximum_scale_key|.
+  void RemoveTilingsAboveScaleKey(float maximum_scale);
 
   // Remove all tilings.
   void RemoveAllTilings();
@@ -124,6 +125,9 @@ class CC_EXPORT PictureLayerTilingSet {
                             const Occlusion& occlusion_in_layer_space,
                             bool can_require_tiles_for_activation);
 
+  void SetAspectRatio(float ratio);
+  float aspect_ratio() const { return aspect_ratio_; }
+
   void GetAllPrioritizedTilesForTracing(
       std::vector<PrioritizedTile>* prioritized_tiles) const;
 
@@ -134,16 +138,24 @@ class CC_EXPORT PictureLayerTilingSet {
   // exactly fill rect with no overlap.
   class CC_EXPORT CoverageIterator {
    public:
+    // |coverage_scale| is the scale at which we want to produce the coverage.
+    // This is the scale at which |coverage_rect| is specified (relative to
+    // identity).
+    // |coverage_rect| is a rect that we want to cover during this iteration.
+    // |ideal_contents_scale| is the ideal scale that we want, which determines
+    // the order in which tilings are processed to get the best ("crispest")
+    // coverage.
     CoverageIterator(const PictureLayerTilingSet* set,
-      float contents_scale,
-      const gfx::Rect& content_rect,
-      float ideal_contents_scale);
+                     float coverage_scale,
+                     const gfx::Rect& coverage_rect,
+                     float ideal_contents_scale);
     ~CoverageIterator();
 
-    // Visible rect (no borders), always in the space of rect,
-    // regardless of the relative contents scale of the tiling.
+    // Visible rect (no borders), in the space of |coverage_rect| (ie at
+    // |coverage_scale| from identity). This is clipped to the coverage_rect.
     gfx::Rect geometry_rect() const;
-    // Texture rect (in texels) for geometry_rect
+    // A geometry_rect scaled to the tiling's contents scale, which represents
+    // the texture rect in texels.
     gfx::RectF texture_rect() const;
 
     Tile* operator->() const;
@@ -159,8 +171,7 @@ class CC_EXPORT PictureLayerTilingSet {
     size_t NextTiling() const;
 
     const PictureLayerTilingSet* set_;
-    float contents_scale_;
-    float ideal_contents_scale_;
+    float coverage_scale_;
     PictureLayerTiling::CoverageIterator tiling_iter_;
     size_t current_tiling_;
     size_t ideal_tiling_;
@@ -250,6 +261,8 @@ class CC_EXPORT PictureLayerTilingSet {
   gfx::Rect skewport_in_layer_space_;
   gfx::Rect soon_border_rect_in_layer_space_;
   gfx::Rect eventually_rect_in_layer_space_;
+
+  float aspect_ratio_ = 1.f;
 
   friend class Iterator;
 

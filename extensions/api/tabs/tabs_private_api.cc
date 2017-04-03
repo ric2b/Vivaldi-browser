@@ -556,8 +556,12 @@ bool TabsPrivateStartDragFunction::RunAsync() {
             gfx::JPEGCodec::Decode(data, string_data.length()));
         if (decoded_jpeg) {
           bitmap = *decoded_jpeg;
+        } else {
+          LOG(WARNING) << "Error decoding png or jpg image data";
         }
       }
+    } else {
+      LOG(WARNING) << "Error decoding base64 image data";
     }
     image_offset.set_x(params->drag_image->cursor_x);
     image_offset.set_y(params->drag_image->cursor_y);
@@ -606,7 +610,8 @@ bool TabsPrivateStartDragFunction::RunAsync() {
   api->SetDropDataBackup(backup_drop_data);
 
   ::vivaldi::SetTabDragInProgress(true);
-  view->StartDragging(drop_data, allowed_ops, image, image_offset, event_info);
+  view->StartDragging(drop_data, allowed_ops, image, image_offset, event_info,
+                      rvh->GetWidget());
   SendResponse(true);
   return true;
 }

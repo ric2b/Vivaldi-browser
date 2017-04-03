@@ -61,8 +61,6 @@ const size_t kNumberOfAckBlocksSize = 1;
 const size_t kMaxNackRanges = (1 << (kNumberOfNackRangesSize * 8)) - 1;
 // Maximum number of ack blocks that can fit within an ack frame.
 const size_t kMaxAckBlocks = (1 << (kNumberOfAckBlocksSize * 8)) - 1;
-// Size in bytes reserved for the number of revived packets in ack frames.
-const size_t kNumberOfRevivedPacketsSize = 1;
 
 // This class receives callbacks from the framer when packets
 // are processed.
@@ -281,12 +279,12 @@ class NET_EXPORT_PRIVATE QuicFramer {
                          char* buffer,
                          size_t packet_length);
 
-  // Returns a new public reset packet, owned by the caller.
-  static QuicEncryptedPacket* BuildPublicResetPacket(
+  // Returns a new public reset packet.
+  static std::unique_ptr<QuicEncryptedPacket> BuildPublicResetPacket(
       const QuicPublicResetPacket& packet);
 
-  // Returns a new version negotiation packet, owned by the caller.
-  static QuicEncryptedPacket* BuildVersionNegotiationPacket(
+  // Returns a new version negotiation packet.
+  static std::unique_ptr<QuicEncryptedPacket> BuildVersionNegotiationPacket(
       QuicConnectionId connection_id,
       const QuicVersionVector& versions);
 
@@ -568,11 +566,6 @@ class NET_EXPORT_PRIVATE QuicFramer {
   // TODO(fayang): this set is never cleaned up. A possible improvement is to
   // use intervals.
   std::unordered_set<QuicPathId> closed_paths_;
-  // Map mapping path id to packet number of last successfully decrypted
-  // received packet.
-  // TODO(ianswett): Remove when
-  // gfe2_reloadable_flag_quic_packet_numbers_largest_received is deprecated.
-  std::unordered_map<QuicPathId, QuicPacketNumber> last_packet_numbers_;
   // Updated by ProcessPacketHeader when it succeeds.
   QuicPacketNumber last_packet_number_;
   // Map mapping path id to packet number of largest successfully decrypted

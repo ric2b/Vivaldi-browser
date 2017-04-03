@@ -36,7 +36,6 @@
 #include "platform/network/ContentSecurityPolicyParsers.h"
 #include "platform/network/HTTPParsers.h"
 #include "platform/network/ResourceRequest.h"
-#include "platform/weborigin/ReferrerPolicy.h"
 #include "public/platform/WebInsecureRequestPolicy.h"
 #include "wtf/HashSet.h"
 #include "wtf/Vector.h"
@@ -62,6 +61,7 @@ class FrameLoaderClient;
 class KURL;
 class ResourceRequest;
 class SecurityOrigin;
+class SecurityPolicyViolationEventInit;
 
 typedef int SandboxFlags;
 typedef HeapVector<Member<CSPDirectiveList>> CSPDirectiveListVector;
@@ -91,12 +91,10 @@ class CORE_EXPORT ContentSecurityPolicy
   static const char FormAction[];
   static const char FrameAncestors[];
   static const char PluginTypes[];
-  static const char ReflectedXSS[];
-  static const char Referrer[];
 
-  // Manifest Directives (to be merged into CSP Level 2)
-  // https://w3c.github.io/manifest/#content-security-policy
+  // CSP Level 3 Directives
   static const char ManifestSrc[];
+  static const char WorkerSrc[];
 
   // Mixed Content Directive
   // https://w3c.github.io/webappsec/specs/mixedcontent/#strict-mode
@@ -143,10 +141,20 @@ class CORE_EXPORT ContentSecurityPolicy
 
   std::unique_ptr<Vector<CSPHeaderAndType>> headers() const;
 
-  bool allowJavaScriptURLs(const String& contextURL,
+  // |element| will not be present for navigations to javascript URLs,
+  // as those checks happen in the middle of the navigation algorithm,
+  // and we generally don't have access to the responsible element.
+  bool allowJavaScriptURLs(Element*,
+                           const String& contextURL,
                            const WTF::OrdinalNumber& contextLine,
                            ReportingStatus = SendReport) const;
-  bool allowInlineEventHandler(const String& source,
+
+  // |element| will be present almost all of the time, but because of
+  // strangeness around targeting handlers for '<body>', '<svg>', and
+  // '<frameset>', it will be 'nullptr' for handlers on those
+  // elements.
+  bool allowInlineEventHandler(Element*,
+                               const String& source,
                                const String& contextURL,
                                const WTF::OrdinalNumber& contextLine,
                                ReportingStatus = SendReport) const;
@@ -174,9 +182,9 @@ class CORE_EXPORT ContentSecurityPolicy
   bool allowObjectFromSource(const KURL&,
                              RedirectStatus = RedirectStatus::NoRedirect,
                              ReportingStatus = SendReport) const;
-  bool allowChildFrameFromSource(const KURL&,
-                                 RedirectStatus = RedirectStatus::NoRedirect,
-                                 ReportingStatus = SendReport) const;
+  bool allowFrameFromSource(const KURL&,
+                            RedirectStatus = RedirectStatus::NoRedirect,
+                            ReportingStatus = SendReport) const;
   bool allowImageFromSource(const KURL&,
                             RedirectStatus = RedirectStatus::NoRedirect,
                             ReportingStatus = SendReport) const;
@@ -214,13 +222,14 @@ class CORE_EXPORT ContentSecurityPolicy
                             const String& nonce,
                             RedirectStatus = RedirectStatus::NoRedirect,
                             ReportingStatus = SendReport) const;
-  bool allowInlineScript(const String& contextURL,
+  bool allowInlineScript(Element*,
+                         const String& contextURL,
                          const String& nonce,
-                         ParserDisposition,
                          const WTF::OrdinalNumber& contextLine,
                          const String& scriptContent,
                          ReportingStatus = SendReport) const;
-  bool allowInlineStyle(const String& contextURL,
+  bool allowInlineStyle(Element*,
+                        const String& contextURL,
                         const String& nonce,
                         const WTF::OrdinalNumber& contextLine,
                         const String& styleContent,
@@ -265,10 +274,6 @@ class CORE_EXPORT ContentSecurityPolicy
   void usesScriptHashAlgorithms(uint8_t ContentSecurityPolicyHashAlgorithm);
   void usesStyleHashAlgorithms(uint8_t ContentSecurityPolicyHashAlgorithm);
 
-  ReflectedXSSDisposition getReflectedXSSDisposition() const;
-
-  bool didSetReferrerPolicy() const;
-
   void setOverrideAllowInlineStyle(bool);
   void setOverrideURLForSelf(const KURL&);
 
@@ -292,12 +297,10 @@ class CORE_EXPORT ContentSecurityPolicy
   void reportInvalidSandboxFlags(const String&);
   void reportInvalidSourceExpression(const String& directiveName,
                                      const String& source);
-  void reportInvalidReflectedXSS(const String&);
   void reportMissingReportURI(const String&);
   void reportUnsupportedDirective(const String&);
   void reportInvalidInReportOnly(const String&);
   void reportInvalidDirectiveInMeta(const String& directiveName);
-  void reportInvalidReferrer(const String&);
   void reportReportOnlyInMeta(const String&);
   void reportMetaOutsideHead(const String&);
   void reportValueForEmptyDirective(const String& directiveName,
@@ -313,10 +316,12 @@ class CORE_EXPORT ContentSecurityPolicy
                        const KURL& blockedURL,
                        const Vector<String>& reportEndpoints,
                        const String& header,
+                       ContentSecurityPolicyHeaderType,
                        ViolationType,
                        LocalFrame* = nullptr,
                        RedirectStatus = RedirectStatus::FollowedRedirect,
-                       int contextLine = 0);
+                       int contextLine = 0,
+                       Element* = nullptr);
 
   // Called when mixed content is detected on a page; will trigger a violation
   // report if the 'block-all-mixed-content' directive is specified for a
@@ -353,6 +358,12 @@ class CORE_EXPORT ContentSecurityPolicy
 
   static bool isNonceableElement(const Element*);
 
+  // This method checks whether the request should be allowed for an
+  // experimental EmbeddingCSP feature
+  // Please, see https://w3c.github.io/webappsec-csp/embedded/#origin-allowed.
+  static bool shouldEnforceEmbeddersPolicy(const ResourceResponse&,
+                                           SecurityOrigin*);
+
   Document* document() const;
 
  private:
@@ -374,6 +385,11 @@ class CORE_EXPORT ContentSecurityPolicy
 
   bool shouldSendViolationReport(const String&) const;
   void didSendViolationReport(const String&);
+  void dispatchViolationEvents(const SecurityPolicyViolationEventInit&,
+                               Element*);
+  void postViolationReport(const SecurityPolicyViolationEventInit&,
+                           LocalFrame*,
+                           const Vector<String>& reportEndpoints);
 
   Member<ExecutionContext> m_executionContext;
   bool m_overrideInlineStyleAllowed;
@@ -390,7 +406,6 @@ class CORE_EXPORT ContentSecurityPolicy
 
   // State flags used to configure the environment after parsing a policy.
   SandboxFlags m_sandboxMask;
-  ReferrerPolicy m_referrerPolicy;
   bool m_treatAsPublicAddress;
   String m_disableEvalErrorMessage;
   WebInsecureRequestPolicy m_insecureRequestPolicy;

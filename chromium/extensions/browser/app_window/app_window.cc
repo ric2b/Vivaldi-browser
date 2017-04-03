@@ -20,11 +20,6 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "build/build_config.h"
-#include "browser/vivaldi_download_status.h"
-#include "chrome/browser/ui/tabs/tab_utils.h"
-#include "components/guest_view/browser/guest_view_base.h"
-#include "components/guest_view/browser/guest_view_event.h"
-#include "components/zoom/zoom_controller.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/invalidate_type.h"
@@ -70,6 +65,12 @@
 #include "components/prefs/pref_service.h"
 #include "extensions/browser/pref_names.h"
 #endif
+
+#include "browser/vivaldi_download_status.h"
+#include "chrome/browser/ui/tabs/tab_utils.h"
+#include "components/guest_view/browser/guest_view_base.h"
+#include "components/guest_view/browser/guest_view_event.h"
+#include "components/zoom/zoom_controller.h"
 
 #if defined(OS_WIN)
 #include "base/win/windows_version.h"
@@ -569,7 +570,14 @@ void AppWindow::SetOnFirstCommitCallback(const base::Closure& callback) {
 }
 
 void AppWindow::OnReadyToCommitFirstNavigation() {
-  CHECK(content::IsBrowserSideNavigationEnabled());
+  if (!content::IsBrowserSideNavigationEnabled())
+    return;
+
+  // PlzNavigate: execute renderer-side setup now that there is a renderer
+  // process assigned to the navigation. With renderer-side navigation, this
+  // would happen before the navigation starts, but PlzNavigate must wait until
+  // this point in time in the navigation.
+
   WindowEventsReady();
   if (on_first_commit_callback_.is_null())
     return;

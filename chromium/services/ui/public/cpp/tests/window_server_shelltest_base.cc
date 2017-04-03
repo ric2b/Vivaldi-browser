@@ -9,8 +9,8 @@
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "services/shell/public/cpp/service.h"
-#include "services/shell/public/cpp/service_test.h"
+#include "services/service_manager/public/cpp/service.h"
+#include "services/service_manager/public/cpp/service_test.h"
 #include "services/ui/common/switches.h"
 #include "ui/gl/gl_switches.h"
 
@@ -18,19 +18,20 @@ namespace ui {
 
 namespace {
 
-const char kTestAppName[] = "service:mus_ws_unittests_app";
+const char kTestAppName[] = "mus_ws_unittests_app";
 
-class WindowServerServiceTestClient : public shell::test::ServiceTestClient {
+class WindowServerServiceTestClient
+    : public service_manager::test::ServiceTestClient {
  public:
   explicit WindowServerServiceTestClient(WindowServerServiceTestBase* test)
       : ServiceTestClient(test), test_(test) {}
   ~WindowServerServiceTestClient() override {}
 
  private:
-  // shell::test::ServiceTestClient:
-  bool OnConnect(const shell::Identity& remote_identity,
-                 shell::InterfaceRegistry* registry) override {
-    return test_->OnConnect(remote_identity, registry);
+  // service_manager::test::ServiceTestClient:
+  bool OnConnect(const service_manager::ServiceInfo& remote_info,
+                 service_manager::InterfaceRegistry* registry) override {
+    return test_->OnConnect(remote_info.identity, registry);
   }
 
   WindowServerServiceTestBase* test_;
@@ -54,7 +55,7 @@ WindowServerServiceTestBase::WindowServerServiceTestBase()
 
 WindowServerServiceTestBase::~WindowServerServiceTestBase() {}
 
-std::unique_ptr<shell::Service>
+std::unique_ptr<service_manager::Service>
 WindowServerServiceTestBase::CreateService() {
   return base::MakeUnique<WindowServerServiceTestClient>(this);
 }

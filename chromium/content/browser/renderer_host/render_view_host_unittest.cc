@@ -70,7 +70,7 @@ class RenderViewHostTest : public RenderViewHostImplTestHarness {
 // See RenderViewHost::OnNavigate for a discussion.
 TEST_F(RenderViewHostTest, FilterAbout) {
   main_test_rfh()->NavigateAndCommitRendererInitiated(
-      1, true, GURL("about:cache"));
+      true, GURL("about:cache"));
   ASSERT_TRUE(controller().GetVisibleEntry());
   EXPECT_EQ(GURL(url::kAboutBlankURL),
             controller().GetVisibleEntry()->GetURL());
@@ -100,7 +100,8 @@ class MockDraggingRenderViewHostDelegateView
                      blink::WebDragOperationsMask allowed_ops,
                      const gfx::ImageSkia& image,
                      const gfx::Vector2d& image_offset,
-                     const DragEventSourceInfo& event_info) override {
+                     const DragEventSourceInfo& event_info,
+                     RenderWidgetHostImpl* source_rwh) override {
     drag_url_ = drop_data.url;
     html_base_url_ = drop_data.html_base_url;
   }
@@ -173,9 +174,11 @@ TEST_F(RenderViewHostTest, DragEnteredFileURLsStillBlocked) {
   dropped_data.filenames.push_back(
       ui::FileInfo(dragged_file_path, base::FilePath()));
 
-  rvh()->FilterDropData(&dropped_data);
-  rvh()->DragTargetDragEnter(dropped_data, client_point, screen_point,
-                              blink::WebDragOperationNone, 0);
+  // TODO(paulmeyer): These will need to target the correct specific
+  // RenderWidgetHost to work with OOPIFs. See crbug.com/647249.
+  rvh()->GetWidget()->FilterDropData(&dropped_data);
+  rvh()->GetWidget()->DragTargetDragEnter(
+      dropped_data, client_point, screen_point, blink::WebDragOperationNone, 0);
 
   int id = process()->GetID();
   ChildProcessSecurityPolicyImpl* policy =
@@ -195,12 +198,12 @@ TEST_F(RenderViewHostTest, MessageWithBadHistoryItemFiles) {
   EXPECT_TRUE(PathService::Get(base::DIR_TEMP, &file_path));
   file_path = file_path.AppendASCII("foo");
   EXPECT_EQ(0, process()->bad_msg_count());
-  test_rvh()->TestOnUpdateStateWithFile(-1, file_path);
+  test_rvh()->TestOnUpdateStateWithFile(file_path);
   EXPECT_EQ(1, process()->bad_msg_count());
 
   ChildProcessSecurityPolicyImpl::GetInstance()->GrantReadFile(
       process()->GetID(), file_path);
-  test_rvh()->TestOnUpdateStateWithFile(-1, file_path);
+  test_rvh()->TestOnUpdateStateWithFile(file_path);
   EXPECT_EQ(1, process()->bad_msg_count());
 }
 
@@ -224,7 +227,7 @@ TEST_F(RenderViewHostTest, NavigationWithBadHistoryItemFiles) {
   main_test_rfh()->SendRendererInitiatedNavigationRequest(url, false);
   main_test_rfh()->PrepareForCommit();
   contents()->GetMainFrame()->SendNavigateWithModificationCallback(
-      1, 1, true, url, set_bad_file_path_callback);
+      1, true, url, set_bad_file_path_callback);
   EXPECT_EQ(1, process()->bad_msg_count());
 
   ChildProcessSecurityPolicyImpl::GetInstance()->GrantReadFile(
@@ -232,7 +235,7 @@ TEST_F(RenderViewHostTest, NavigationWithBadHistoryItemFiles) {
   main_test_rfh()->SendRendererInitiatedNavigationRequest(url, false);
   main_test_rfh()->PrepareForCommit();
   contents()->GetMainFrame()->SendNavigateWithModificationCallback(
-      2, 2, true, url, set_bad_file_path_callback);
+      2, true, url, set_bad_file_path_callback);
   EXPECT_EQ(1, process()->bad_msg_count());
 }
 

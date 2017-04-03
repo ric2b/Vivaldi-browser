@@ -18,6 +18,7 @@
 #include "chrome/browser/ui/views/apps/app_info_dialog/app_info_summary_panel.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/extensions/extension_constants.h"
+#include "chrome/common/features.h"
 #include "components/constrained_window/constrained_window_views.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/extension_registry.h"
@@ -70,7 +71,7 @@ gfx::Size GetAppInfoNativeDialogSize() {
   return gfx::Size(380, 490);
 }
 
-#if defined(ENABLE_APP_LIST)
+#if BUILDFLAG(ENABLE_APP_LIST)
 void ShowAppInfoInAppList(gfx::NativeWindow parent,
                           const gfx::Rect& app_list_bounds,
                           Profile* profile,
@@ -121,11 +122,11 @@ AppInfoDialog::AppInfoDialog(gfx::NativeWindow parent_window,
 
   const int kHorizontalSeparatorHeight = 1;
   dialog_header_ = new AppInfoHeaderPanel(profile, app);
-  dialog_header_->SetBorder(views::Border::CreateSolidSidedBorder(
+  dialog_header_->SetBorder(views::CreateSolidSidedBorder(
       0, 0, kHorizontalSeparatorHeight, 0, kDialogSeparatorColor));
 
   dialog_footer_ = new AppInfoFooterPanel(parent_window, profile, app);
-  dialog_footer_->SetBorder(views::Border::CreateSolidSidedBorder(
+  dialog_footer_->SetBorder(views::CreateSolidSidedBorder(
       kHorizontalSeparatorHeight, 0, 0, 0, kDialogSeparatorColor));
   if (!dialog_footer_->has_children()) {
     // If there are no controls in the footer, don't add it to the dialog.

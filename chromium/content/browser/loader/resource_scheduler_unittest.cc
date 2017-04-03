@@ -8,18 +8,17 @@
 
 #include "base/memory/ptr_util.h"
 #include "base/memory/scoped_vector.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/timer/mock_timer.h"
 #include "base/timer/timer.h"
-#include "content/browser/browser_thread_impl.h"
-#include "content/browser/loader/resource_dispatcher_host_impl.h"
 #include "content/public/browser/resource_context.h"
 #include "content/public/browser/resource_controller.h"
 #include "content/public/browser/resource_throttle.h"
 #include "content/public/test/mock_render_process_host.h"
 #include "content/public/test/test_browser_context.h"
+#include "content/public/test/test_browser_thread_bundle.h"
 #include "content/test/test_render_view_host_factory.h"
 #include "content/test/test_web_contents.h"
 #include "net/base/host_port_pair.h"
@@ -45,6 +44,9 @@ const int kChildId2 = 43;
 const int kRouteId2 = 67;
 const int kBackgroundChildId = 35;
 const int kBackgroundRouteId = 43;
+
+const char kPrioritySupportedRequestsDelayable[] =
+    "PrioritySupportedRequestsDelayable";
 
 class TestRequest : public ResourceController {
  public:
@@ -126,9 +128,7 @@ class FakeResourceContext : public ResourceContext {
 
 class ResourceSchedulerTest : public testing::Test {
  protected:
-  ResourceSchedulerTest()
-      : ui_thread_(BrowserThread::UI, &message_loop_),
-        io_thread_(BrowserThread::IO, &message_loop_) {
+  ResourceSchedulerTest() {
     InitializeScheduler();
     context_.set_http_server_properties(&http_server_properties_);
   }
@@ -244,10 +244,7 @@ class ResourceSchedulerTest : public testing::Test {
     return scheduler_.get();
   }
 
-  base::MessageLoopForIO message_loop_;
-  BrowserThreadImpl ui_thread_;
-  BrowserThreadImpl io_thread_;
-  ResourceDispatcherHostImpl rdh_;
+  TestBrowserThreadBundle thread_bundle_;
   std::unique_ptr<ResourceScheduler> scheduler_;
   base::MockTimer* mock_timer_;
   net::HttpServerPropertiesImpl http_server_properties_;
@@ -316,6 +313,11 @@ TEST_F(ResourceSchedulerTest, MediumDoesNotBlockCriticalComplete) {
 }
 
 TEST_F(ResourceSchedulerTest, OneLowLoadsUntilBodyInsertedExceptSpdy) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitFromCommandLine("",
+                                          kPrioritySupportedRequestsDelayable);
+  InitializeScheduler();
+
   http_server_properties_.SetSupportsSpdy(
       url::SchemeHostPort("https", "spdyhost", 443), true);
   std::unique_ptr<TestRequest> high(
@@ -328,6 +330,32 @@ TEST_F(ResourceSchedulerTest, OneLowLoadsUntilBodyInsertedExceptSpdy) {
   EXPECT_TRUE(low->started());
   EXPECT_FALSE(low2->started());
   EXPECT_TRUE(low_spdy->started());
+
+  scheduler()->OnWillInsertBody(kChildId, kRouteId);
+  high.reset();
+  base::RunLoop().RunUntilIdle();
+  EXPECT_TRUE(low2->started());
+}
+
+TEST_F(ResourceSchedulerTest,
+       OneLowLoadsUntilBodyInsertedEvenSpdyWhenDelayable) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitFromCommandLine(kPrioritySupportedRequestsDelayable,
+                                          "");
+
+  InitializeScheduler();
+  http_server_properties_.SetSupportsSpdy(
+      url::SchemeHostPort("https", "spdyhost", 443), true);
+  std::unique_ptr<TestRequest> high(
+      NewRequest("http://host/high", net::HIGHEST));
+  std::unique_ptr<TestRequest> low(NewRequest("http://host/low", net::LOWEST));
+  std::unique_ptr<TestRequest> low2(NewRequest("http://host/low", net::LOWEST));
+  std::unique_ptr<TestRequest> low_spdy(
+      NewRequest("https://spdyhost/low", net::LOWEST));
+  EXPECT_TRUE(high->started());
+  EXPECT_TRUE(low->started());
+  EXPECT_FALSE(low2->started());
+  EXPECT_FALSE(low_spdy->started());
 
   scheduler()->OnWillInsertBody(kChildId, kRouteId);
   high.reset();
@@ -633,6 +661,11 @@ TEST_F(ResourceSchedulerTest, NonHTTPSchedulesImmediately) {
 }
 
 TEST_F(ResourceSchedulerTest, SpdyProxySchedulesImmediately) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitFromCommandLine("",
+                                          kPrioritySupportedRequestsDelayable);
+  InitializeScheduler();
+
   std::unique_ptr<TestRequest> high(
       NewRequest("http://host/high", net::HIGHEST));
   std::unique_ptr<TestRequest> low(NewRequest("http://host/low", net::LOWEST));
@@ -650,7 +683,35 @@ TEST_F(ResourceSchedulerTest, SpdyProxySchedulesImmediately) {
   EXPECT_TRUE(after->started());
 }
 
+TEST_F(ResourceSchedulerTest, SpdyProxyDelayable) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitFromCommandLine(kPrioritySupportedRequestsDelayable,
+                                          "");
+  InitializeScheduler();
+
+  std::unique_ptr<TestRequest> high(
+      NewRequest("http://host/high", net::HIGHEST));
+  std::unique_ptr<TestRequest> low(NewRequest("http://host/low", net::LOWEST));
+
+  std::unique_ptr<TestRequest> request(
+      NewRequest("http://host/req", net::IDLE));
+  EXPECT_FALSE(request->started());
+
+  scheduler()->OnReceivedSpdyProxiedHttpResponse(kChildId, kRouteId);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_FALSE(request->started());
+
+  std::unique_ptr<TestRequest> after(
+      NewRequest("http://host/after", net::IDLE));
+  EXPECT_FALSE(after->started());
+}
+
 TEST_F(ResourceSchedulerTest, NewSpdyHostInDelayableRequests) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitFromCommandLine("",
+                                          kPrioritySupportedRequestsDelayable);
+  InitializeScheduler();
+
   scheduler()->OnWillInsertBody(kChildId, kRouteId);
   const int kMaxNumDelayableRequestsPerClient = 10;  // Should match the .cc.
 
@@ -682,6 +743,45 @@ TEST_F(ResourceSchedulerTest, NewSpdyHostInDelayableRequests) {
   base::RunLoop().RunUntilIdle();
   std::unique_ptr<TestRequest> low2(NewRequest("http://host/low", net::LOWEST));
   EXPECT_TRUE(low2->started());
+}
+
+TEST_F(ResourceSchedulerTest, NewDelayableSpdyHostInDelayableRequests) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitFromCommandLine(kPrioritySupportedRequestsDelayable,
+                                          "");
+  InitializeScheduler();
+
+  scheduler()->OnWillInsertBody(kChildId, kRouteId);
+  const int kMaxNumDelayableRequestsPerClient = 10;  // Should match the .cc.
+
+  std::unique_ptr<TestRequest> low1_spdy(
+      NewRequest("http://spdyhost1:8080/low", net::LOWEST));
+  // Cancel a request after we learn the server supports SPDY.
+  ScopedVector<TestRequest> lows;
+  for (int i = 0; i < kMaxNumDelayableRequestsPerClient - 1; ++i) {
+    string url = "http://host" + base::IntToString(i) + "/low";
+    lows.push_back(NewRequest(url.c_str(), net::LOWEST));
+  }
+  std::unique_ptr<TestRequest> low1(NewRequest("http://host/low", net::LOWEST));
+  EXPECT_FALSE(low1->started());
+  http_server_properties_.SetSupportsSpdy(
+      url::SchemeHostPort("http", "spdyhost1", 8080), true);
+  low1_spdy.reset();
+  base::RunLoop().RunUntilIdle();
+  EXPECT_TRUE(low1->started());
+
+  low1.reset();
+  base::RunLoop().RunUntilIdle();
+  std::unique_ptr<TestRequest> low2_spdy(
+      NewRequest("http://spdyhost2:8080/low", net::IDLE));
+  // Reprioritize a request after we learn the server supports SPDY.
+  EXPECT_TRUE(low2_spdy->started());
+  http_server_properties_.SetSupportsSpdy(
+      url::SchemeHostPort("http", "spdyhost2", 8080), true);
+  ChangeRequestPriority(low2_spdy.get(), net::LOWEST);
+  base::RunLoop().RunUntilIdle();
+  std::unique_ptr<TestRequest> low2(NewRequest("http://host/low", net::LOWEST));
+  EXPECT_FALSE(low2->started());
 }
 
 // Async revalidations which are not started when the tab is closed must be

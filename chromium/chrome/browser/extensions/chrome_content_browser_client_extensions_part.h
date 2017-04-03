@@ -8,8 +8,10 @@
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "chrome/browser/chrome_content_browser_client_parts.h"
+#include "ui/base/page_transition_types.h"
 
 namespace content {
+struct Referrer;
 class ResourceContext;
 class VpnServiceProxy;
 }
@@ -44,7 +46,7 @@ class ChromeContentBrowserClientExtensionsPart
       const GURL& current_url,
       const GURL& new_url);
   static bool ShouldSwapProcessesForRedirect(
-      content::ResourceContext* resource_context,
+      content::BrowserContext* browser_context,
       const GURL& current_url,
       const GURL& new_url);
   static bool AllowServiceWorker(const GURL& scope,
@@ -52,6 +54,10 @@ class ChromeContentBrowserClientExtensionsPart
                                  content::ResourceContext* context,
                                  int render_process_id,
                                  int render_frame_id);
+  static void OverrideNavigationParams(content::SiteInstance* site_instance,
+                                       ui::PageTransition* transition,
+                                       bool* is_renderer_initiated,
+                                       content::Referrer* referrer);
 
   // Similiar to ChromeContentBrowserClient::ShouldAllowOpenURL(), but the
   // return value indicates whether to use |result| or not.

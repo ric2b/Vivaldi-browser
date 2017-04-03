@@ -29,6 +29,7 @@
 #define HTMLCanvasElement_h
 
 #include "bindings/core/v8/ScriptValue.h"
+#include "bindings/core/v8/ScriptWrappableVisitor.h"
 #include "core/CoreExport.h"
 #include "core/dom/ContextLifecycleObserver.h"
 #include "core/dom/DOMTypedArray.h"
@@ -45,12 +46,11 @@
 #include "platform/graphics/GraphicsTypes.h"
 #include "platform/graphics/GraphicsTypes3D.h"
 #include "platform/graphics/ImageBufferClient.h"
+#include "platform/graphics/OffscreenCanvasPlaceholder.h"
 #include "platform/heap/Handle.h"
 #include <memory>
 
 #define CanvasDefaultInterpolationQuality InterpolationLow
-
-class SkColorSpace;
 
 namespace blink {
 
@@ -67,7 +67,6 @@ class ImageBuffer;
 class ImageBufferSurface;
 class ImageData;
 class IntSize;
-class WebGraphicsContext3DProvider;
 
 class
     CanvasRenderingContext2DOrWebGLRenderingContextOrWebGL2RenderingContextOrImageBitmapRenderingContext;
@@ -79,7 +78,8 @@ class CORE_EXPORT HTMLCanvasElement final : public HTMLElement,
                                             public PageVisibilityObserver,
                                             public CanvasImageSource,
                                             public ImageBufferClient,
-                                            public ImageBitmapSource {
+                                            public ImageBitmapSource,
+                                            public OffscreenCanvasPlaceholder {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(HTMLCanvasElement);
   USING_PRE_FINALIZER(HTMLCanvasElement, dispose);
@@ -99,7 +99,7 @@ class CORE_EXPORT HTMLCanvasElement final : public HTMLElement,
   void setWidth(int, ExceptionState&);
   void setHeight(int, ExceptionState&);
 
-  void setSize(const IntSize& newSize);
+  void setSize(const IntSize& newSize) override;
 
   // Called by Document::getCSSCanvasContext as well as above getContext().
   CanvasRenderingContext* getCanvasRenderingContext(
@@ -108,12 +108,6 @@ class CORE_EXPORT HTMLCanvasElement final : public HTMLElement,
 
   bool isPaintable() const;
 
-  enum EncodeReason {
-    EncodeReasonToDataURL = 0,
-    EncodeReasonToBlobCallback = 1,
-    NumberOfEncodeReasons
-  };
-  static String toEncodingMimeType(const String& mimeType, const EncodeReason);
   String toDataURL(const String& mimeType,
                    const ScriptValue& qualityArgument,
                    ExceptionState&) const;
@@ -261,17 +255,14 @@ class CORE_EXPORT HTMLCanvasElement final : public HTMLElement,
 
   std::unique_ptr<ImageBufferSurface> createWebGLImageBufferSurface(
       const IntSize& deviceSize,
-      OpacityMode,
-      sk_sp<SkColorSpace>);
+      OpacityMode);
   std::unique_ptr<ImageBufferSurface> createAcceleratedImageBufferSurface(
       const IntSize& deviceSize,
       OpacityMode,
-      sk_sp<SkColorSpace>,
       int* msaaSampleCount);
   std::unique_ptr<ImageBufferSurface> createUnacceleratedImageBufferSurface(
       const IntSize& deviceSize,
-      OpacityMode,
-      sk_sp<SkColorSpace>);
+      OpacityMode);
   void createImageBuffer();
   void createImageBufferInternal(
       std::unique_ptr<ImageBufferSurface> externalSurface);
@@ -291,7 +282,7 @@ class CORE_EXPORT HTMLCanvasElement final : public HTMLElement,
 
   IntSize m_size;
 
-  Member<CanvasRenderingContext> m_context;
+  TraceWrapperMember<CanvasRenderingContext> m_context;
 
   bool m_ignoreReset;
   FloatRect m_dirtyRect;

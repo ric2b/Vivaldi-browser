@@ -27,13 +27,15 @@
 <translation id="1654128982815600832">正在对此计算机启用远程连接…</translation>
 <translation id="170207782578677537">无法注册此计算机。</translation>
 <translation id="1704090719919187045">Chrome 远程访问主机偏好设置</translation>
+<translation id="1730409684442507495">• 提高了桌面设备图片质量、响应速度，降低了电池消耗。
+• 提高了点击拖动操作的响应速度。
+• 改进了多种界面动画效果。</translation>
 <translation id="174018511426417793">您未注册任何计算机。要启用到某台计算机的远程连接，请在该计算机上安装 Chrome 远程桌面并点击“<ph name="BUTTON_NAME" />”。</translation>
 <translation id="1742469581923031760">正在连接…</translation>
 <translation id="1770394049404108959">我无法打开此应用。</translation>
 <translation id="177096447311351977">客户端信道 IP：<ph name="CLIENT_GAIA_IDENTIFIER" /> ip='<ph name="CLIENT_IP_ADDRESS_AND_PORT" />' host_ip='<ph name="HOST_IP_ADDRESS_AND_PORT" />' channel='<ph name="CHANNEL_TYPE" />' connection='<ph name="CONNECTION_TYPE" />'。</translation>
 <translation id="1779766957982586368">关闭窗口</translation>
 <translation id="1841799852846221389">正在对此计算机停用远程连接…</translation>
-<translation id="189172778771606813">关闭抽屉式导航栏</translation>
 <translation id="1897488610212723051">删除</translation>
 <translation id="195619862187186579">键盘布局</translation>
 <translation id="1996161829609978754">Chrome 正在下载 Chrome 远程访问主机安装程序。下载完成后，请先运行该安装程序，再继续操作。</translation>
@@ -74,7 +76,6 @@
 <translation id="2699970397166997657">Chrome 远程访问</translation>
 <translation id="2747641796667576127">系统通常会自动执行软件更新，但在极少数情况下，更新可能会失败。更新软件应该只需要几分钟，而且可在远程连接到计算机时执行。</translation>
 <translation id="2841013758207633010">时间</translation>
-<translation id="2851674870054673688">他们输入访问代码后，您的共享会话就会立即开始。</translation>
 <translation id="2851754573186462851">Chromium App Streaming</translation>
 <translation id="2855866366045322178">离线</translation>
 <translation id="2888969873284818612">出现网络错误。当您的设备重新联网后，系统将重新启动该应用。</translation>
@@ -114,6 +115,7 @@
 访问主机</translation>
 <translation id="3870154837782082782">Google Inc.</translation>
 <translation id="3884839335308961732">请在下方确认您的帐号和 PIN，以便允许通过 Chrome 远程桌面进行访问。</translation>
+<translation id="3897092660631435901">菜单</translation>
 <translation id="3905196214175737742">主机所有者所在网域无效。</translation>
 <translation id="3908017899227008678">缩小以适合浏览器窗口大小</translation>
 <translation id="3931191050278863510">主机已停止运行。</translation>
@@ -126,6 +128,7 @@
 <translation id="409800995205263688">注意：策略设置仅允许您网络内的计算机之间建立连接。</translation>
 <translation id="4155497795971509630">缺少某些必需的组件。请确保您已安装该软件的最新版本，然后重试。</translation>
 <translation id="4156740505453712750">为防止他人擅自访问此计算机，请选用一个<ph name="BOLD_START" />至少 6 位数<ph name="BOLD_END" />的 PIN。当从其他位置连接时，将需要输入此 PIN。</translation>
+<translation id="4156741816461781891">以 <ph name="EMAIL_ADDRESS" /> 的身份登录。</translation>
 <translation id="4176825807642096119">访问代码</translation>
 <translation id="4207623512727273241">请先运行该安装程序，再继续操作。</translation>
 <translation id="4227991223508142681">主机配置实用程序</translation>
@@ -166,7 +169,6 @@
 <translation id="5070121137485264635">远程主机要求您对第三方网站进行身份验证。要继续操作，您必须向 Chrome 远程桌面授予访问以下地址的额外权限：</translation>
 <translation id="507204348399810022">确定要停用与“<ph name="HOSTNAME" />”的远程连接吗？</translation>
 <translation id="5156271271724754543">请在两个框中输入相同的 PIN。</translation>
-<translation id="5168917394043976756">打开抽屉式导航栏</translation>
 <translation id="5170982930780719864">主机 ID 无效。</translation>
 <translation id="518094545883702183">这些信息仅用于诊断您报告的问题，并且只有负责对您报告的问题进行调查的人员才可使用。这些信息的保留时间不会超过 30 天。</translation>
 <translation id="5222676887888702881">退出</translation>
@@ -209,10 +211,6 @@
 <translation id="6304318647555713317">客户端</translation>
 <translation id="6381670701864002291">其他。</translation>
 <translation id="6398765197997659313">退出全屏模式</translation>
-<translation id="6408143143164565232">• 聆听 Windows 或 Linux 计算机中的音频内容。
-• 长按相应的计算机名称即可移除不需要的连接。
-• 双指张合缩放和双指滚动操作更顺畅。
-• 全新的“帮助和反馈”屏幕。</translation>
 <translation id="6441316101718669559">该平台不支持桌面集成。您仍可以使用该应用，但用户体验将会受到影响。</translation>
 <translation id="652218476070540101">正在更新此计算机的 PIN…</translation>
 <translation id="6527303717912515753">分享</translation>
@@ -225,6 +223,7 @@
 <translation id="6640610550128933069">上次联网日期：<ph name="DATE" /></translation>
 <translation id="6668065415969892472">您的 PIN 已更新。</translation>
 <translation id="6681800064886881394">版权所有2013 Google Inc。保留所有权利。</translation>
+<translation id="6705482892455291412">他们输入访问代码后，系统会提示您接受连接并开始共享会话。</translation>
 <translation id="6746493157771801606">清除历史记录</translation>
 <translation id="6748108480210050150">发件人</translation>
 <translation id="677755392401385740">已为用户<ph name="HOST_USERNAME" />启动主机。</translation>
@@ -301,6 +300,7 @@
 <translation id="9188433529406846933">授权</translation>
 <translation id="9213184081240281106">主机配置无效。</translation>
 <translation id="951991426597076286">拒绝</translation>
+<translation id="962733587145768554">请在连接对话框中选择“<ph name="SHARE" />”以完成此过程。</translation>
 <translation id="979100198331752041"><ph name="HOSTNAME" />上的 Chrome 远程桌面已过期，需要更新。</translation>
 <translation id="985602178874221306">The Chromium Authors</translation>
 <translation id="992215271654996353"><ph name="HOSTNAME" />（上次联网时间：<ph name="DATE_OR_TIME" />）</translation>

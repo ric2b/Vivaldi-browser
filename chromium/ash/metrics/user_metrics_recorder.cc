@@ -10,12 +10,12 @@
 #include "ash/common/shelf/shelf_model.h"
 #include "ash/common/shelf/shelf_view.h"
 #include "ash/common/shelf/wm_shelf.h"
-#include "ash/common/shell_window_ids.h"
 #include "ash/common/system/tray/system_tray_delegate.h"
 #include "ash/common/wm/window_state.h"
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
 #include "ash/metrics/desktop_task_switch_metric_recorder.h"
+#include "ash/public/cpp/shell_window_ids.h"
 #include "ash/shell.h"
 #include "ash/wm/window_state_aura.h"
 #include "base/memory/ptr_util.h"
@@ -92,6 +92,12 @@ bool IsKioskModeActive() {
          LoginStatus::KIOSK_APP;
 }
 
+// Returns true if ARC kiosk mode is active.
+bool IsArcKioskModeActive() {
+  return WmShell::Get()->system_tray_delegate()->GetUserLoginStatus() ==
+         LoginStatus::ARC_KIOSK_APP;
+}
+
 // Returns true if there is an active user and their session isn't currently
 // locked.
 bool IsUserActive() {
@@ -105,6 +111,7 @@ bool IsUserActive() {
     case LoginStatus::PUBLIC:
     case LoginStatus::SUPERVISED:
     case LoginStatus::KIOSK_APP:
+    case LoginStatus::ARC_KIOSK_APP:
       return true;
   }
   NOTREACHED();
@@ -324,12 +331,6 @@ void UserMetricsRecorder::RecordUserMetricsAction(UserMetricsAction action) {
       break;
     case UMA_STATUS_AREA_BRIGHTNESS_CHANGED:
       RecordAction(UserMetricsAction("StatusArea_BrightnessChanged"));
-      break;
-    case UMA_STATUS_AREA_BLUETOOTH_CONNECT_KNOWN_DEVICE:
-      RecordAction(UserMetricsAction("StatusArea_Bluetooth_Connect_Known"));
-      break;
-    case UMA_STATUS_AREA_BLUETOOTH_CONNECT_UNKNOWN_DEVICE:
-      RecordAction(UserMetricsAction("StatusArea_Bluetooth_Connect_Unknown"));
       break;
     case UMA_STATUS_AREA_BLUETOOTH_DISABLED:
       RecordAction(UserMetricsAction("StatusArea_Bluetooth_Disabled"));
@@ -649,7 +650,7 @@ void UserMetricsRecorder::RecordPeriodicMetrics() {
 }
 
 bool UserMetricsRecorder::IsUserInActiveDesktopEnvironment() const {
-  return IsUserActive() && !IsKioskModeActive();
+  return IsUserActive() && !IsKioskModeActive() && !IsArcKioskModeActive();
 }
 
 void UserMetricsRecorder::StartTimer() {

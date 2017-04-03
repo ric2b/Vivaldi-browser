@@ -32,6 +32,7 @@
 #define TestingPlatformSupport_h
 
 #include "platform/PlatformExport.h"
+#include "platform/WebTaskRunner.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebCompositorSupport.h"
 #include "public/platform/WebScheduler.h"
@@ -58,11 +59,27 @@ class RendererScheduler;
 class RendererSchedulerImpl;
 }
 class TestingPlatformMockWebTaskRunner;
-class TestingPlatformMockWebThread;
 class WebCompositorSupport;
 class WebThread;
 
-class TestingCompositorSupport : public WebCompositorSupport {};
+class TestingCompositorSupport : public WebCompositorSupport {
+  std::unique_ptr<WebLayer> createLayer() override;
+  std::unique_ptr<WebLayer> createLayerFromCCLayer(cc::Layer*) override;
+  std::unique_ptr<WebContentLayer> createContentLayer(
+      WebContentLayerClient*) override;
+  std::unique_ptr<WebExternalTextureLayer> createExternalTextureLayer(
+      cc::TextureLayerClient*) override;
+  std::unique_ptr<WebImageLayer> createImageLayer() override;
+  std::unique_ptr<WebScrollbarLayer> createScrollbarLayer(
+      std::unique_ptr<WebScrollbar>,
+      WebScrollbarThemePainter,
+      std::unique_ptr<WebScrollbarThemeGeometry>) override;
+  std::unique_ptr<WebScrollbarLayer> createSolidColorScrollbarLayer(
+      WebScrollbar::Orientation,
+      int thumbThickness,
+      int trackStart,
+      bool isLeftSideVerticalScrollbar) override;
+};
 
 class TestingPlatformMockScheduler : public WebScheduler {
   WTF_MAKE_NONCOPYABLE(TestingPlatformMockScheduler);
@@ -84,7 +101,8 @@ class TestingPlatformMockScheduler : public WebScheduler {
   void postNonNestableIdleTask(const WebTraceLocation&,
                                WebThread::IdleTask*) override {}
   std::unique_ptr<WebViewScheduler> createWebViewScheduler(
-      InterventionReporter*) override {
+      InterventionReporter*,
+      WebViewScheduler::WebViewSchedulerSettings*) override {
     return nullptr;
   }
   void suspendTimerQueue() override {}
@@ -119,16 +137,18 @@ class TestingPlatformSupport : public Platform {
   WebClipboard* clipboard() override;
   WebFileUtilities* fileUtilities() override;
   WebIDBFactory* idbFactory() override;
-  WebMimeRegistry* mimeRegistry() override;
   WebURLLoaderMockFactory* getURLLoaderMockFactory() override;
   blink::WebURLLoader* createURLLoader() override;
-
   WebData loadResource(const char* name) override;
   WebURLError cancelledError(const WebURL&) const override;
+  InterfaceProvider* interfaceProvider() override;
 
  protected:
+  class TestingInterfaceProvider;
+
   const Config m_config;
   Platform* const m_oldPlatform;
+  std::unique_ptr<TestingInterfaceProvider> m_interfaceProvider;
 };
 
 class TestingPlatformSupportWithMockScheduler : public TestingPlatformSupport {
@@ -154,8 +174,9 @@ class TestingPlatformSupportWithMockScheduler : public TestingPlatformSupport {
   // instead.
   void runUntilIdle();
 
-  // Runs for |seconds|. Note we use a testing clock rather than the wall clock
-  // here.
+  // Runs for |seconds| the testing clock is advanced by |seconds|.  Note real
+  // time elapsed will typically much less than |seconds| because delays between
+  // timers are fast forwarded.
   void runForPeriodSeconds(double seconds);
 
   // Advances |m_clock| by |seconds|.

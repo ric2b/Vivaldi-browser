@@ -19,6 +19,7 @@ using Command = DataConsumerHandleTestUtil::Command;
 using Checkpoint = ::testing::StrictMock<::testing::MockFunction<void(int)>>;
 using ReplayingHandle = DataConsumerHandleTestUtil::ReplayingHandle;
 using Result = BytesConsumer::Result;
+using ::testing::ByMove;
 using ::testing::InSequence;
 using ::testing::Return;
 
@@ -85,7 +86,7 @@ class MockDataConsumerHandle final : public WebDataConsumerHandle {
 
   std::unique_ptr<WebDataConsumerHandle::Reader> obtainReader(
       Client*) override {
-    return wrapUnique(new Reader(m_proxy));
+    return makeUnique<Reader>(m_proxy);
   }
   Persistent<MockReaderProxy> m_proxy;
 };

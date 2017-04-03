@@ -4,19 +4,21 @@
 
 #include "net/quic/core/crypto/p256_key_exchange.h"
 
-#include <openssl/ec.h>
-#include <openssl/ecdh.h>
-#include <openssl/evp.h>
+#include <utility>
 
 #include "base/logging.h"
+#include "third_party/boringssl/src/include/openssl/ec.h"
+#include "third_party/boringssl/src/include/openssl/ecdh.h"
+#include "third_party/boringssl/src/include/openssl/evp.h"
 
 using base::StringPiece;
 using std::string;
 
 namespace net {
 
-P256KeyExchange::P256KeyExchange(EC_KEY* private_key, const uint8_t* public_key)
-    : private_key_(private_key) {
+P256KeyExchange::P256KeyExchange(bssl::UniquePtr<EC_KEY> private_key,
+                                 const uint8_t* public_key)
+    : private_key_(std::move(private_key)) {
   memcpy(public_key_, public_key, sizeof(public_key_));
 }
 
@@ -30,7 +32,7 @@ P256KeyExchange* P256KeyExchange::New(StringPiece key) {
   }
 
   const uint8_t* keyp = reinterpret_cast<const uint8_t*>(key.data());
-  crypto::ScopedEC_KEY private_key(
+  bssl::UniquePtr<EC_KEY> private_key(
       d2i_ECPrivateKey(nullptr, &keyp, key.size()));
   if (!private_key.get() || !EC_KEY_check_key(private_key.get())) {
     DVLOG(1) << "Private key is invalid.";
@@ -46,12 +48,12 @@ P256KeyExchange* P256KeyExchange::New(StringPiece key) {
     return nullptr;
   }
 
-  return new P256KeyExchange(private_key.release(), public_key);
+  return new P256KeyExchange(std::move(private_key), public_key);
 }
 
 // static
 string P256KeyExchange::NewPrivateKey() {
-  crypto::ScopedEC_KEY key(EC_KEY_new_by_curve_name(NID_X9_62_prime256v1));
+  bssl::UniquePtr<EC_KEY> key(EC_KEY_new_by_curve_name(NID_X9_62_prime256v1));
   if (!key.get() || !EC_KEY_generate_key(key.get())) {
     DVLOG(1) << "Can't generate a new private key.";
     return string();
@@ -84,7 +86,7 @@ bool P256KeyExchange::CalculateSharedKey(StringPiece peer_public_value,
     return false;
   }
 
-  crypto::ScopedEC_POINT point(
+  bssl::UniquePtr<EC_POINT> point(
       EC_POINT_new(EC_KEY_get0_group(private_key_.get())));
   if (!point ||
       !EC_POINT_oct2point(/* also test if point is on curve */

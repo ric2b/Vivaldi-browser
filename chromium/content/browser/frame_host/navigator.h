@@ -7,13 +7,13 @@
 
 #include "base/memory/ref_counted.h"
 #include "base/time/time.h"
+#include "content/browser/frame_host/navigation_handle_impl.h"
 #include "content/browser/frame_host/navigator_delegate.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/navigation_controller.h"
 #include "ui/base/window_open_disposition.h"
 
 class GURL;
-struct FrameHostMsg_BeginNavigation_Params;
 struct FrameHostMsg_DidCommitProvisionalLoad_Params;
 struct FrameHostMsg_DidFailProvisionalLoadWithError_Params;
 
@@ -25,16 +25,11 @@ namespace content {
 
 class FrameNavigationEntry;
 class FrameTreeNode;
-class NavigationControllerImpl;
-class NavigationEntryImpl;
-class NavigationHandleImpl;
 class NavigationRequest;
 class RenderFrameHostImpl;
 class ResourceRequestBodyImpl;
-class StreamHandle;
 struct BeginNavigationParams;
 struct CommonNavigationParams;
-struct ResourceResponse;
 
 // Implementations of this interface are responsible for performing navigations
 // in a node of the FrameTree. Its lifetime is bound to all FrameTreeNode
@@ -72,18 +67,23 @@ class CONTENT_EXPORT Navigator : public base::RefCounted<Navigator> {
       const base::string16& error_description,
       bool was_ignored_by_handler) {}
 
-  // The RenderFrameHostImpl has committed a navigation.
+  // The RenderFrameHostImpl has committed a navigation. The Navigator is
+  // responsible for resetting |navigation_handle| at the end of this method and
+  // should not attempt to keep it alive.
+  // Note: it is possible that |navigation_handle| is not the NavigationHandle
+  // stored in the RenderFrameHost that just committed. This happens for example
+  // when a same-page navigation commits while another navigation is ongoing.
+  // The Navigator should use the NavigationHandle provided by this method and
+  // not attempt to access the RenderFrameHost's NavigationsHandle.
   virtual void DidNavigate(
       RenderFrameHostImpl* render_frame_host,
-      const FrameHostMsg_DidCommitProvisionalLoad_Params& params) {}
+      const FrameHostMsg_DidCommitProvisionalLoad_Params& params,
+      std::unique_ptr<NavigationHandleImpl> navigation_handle) {}
 
   // Called by the NavigationController to cause the Navigator to navigate
   // to the current pending entry. The NavigationController should be called
   // back with RendererDidNavigate on success or DiscardPendingEntry on failure.
   // The callbacks can be inside of this function, or at some future time.
-  //
-  // The entry has a PageID of -1 if newly created (corresponding to navigation
-  // to a new URL).
   //
   // If this method returns false, then the navigation is discarded (equivalent
   // to calling DiscardPendingEntry on the NavigationController).
@@ -117,7 +117,7 @@ class CONTENT_EXPORT Navigator : public base::RefCounted<Navigator> {
       const GURL& url,
       bool uses_post,
       const scoped_refptr<ResourceRequestBodyImpl>& body,
-      SiteInstance* source_site_instance,
+      const std::string& extra_headers,
       const Referrer& referrer,
       WindowOpenDisposition disposition,
       bool should_replace_current_entry,
@@ -137,7 +137,8 @@ class CONTENT_EXPORT Navigator : public base::RefCounted<Navigator> {
       const GlobalRequestID& transferred_global_request_id,
       bool should_replace_current_entry,
       const std::string& method,
-      scoped_refptr<ResourceRequestBodyImpl> post_body) {}
+      scoped_refptr<ResourceRequestBodyImpl> post_body,
+      const std::string& extra_headers) {}
 
   // PlzNavigate
   // Called after receiving a BeforeUnloadACK IPC from the renderer. If
@@ -182,14 +183,6 @@ class CONTENT_EXPORT Navigator : public base::RefCounted<Navigator> {
   virtual void LogBeforeUnloadTime(
       const base::TimeTicks& renderer_before_unload_start_time,
       const base::TimeTicks& renderer_before_unload_end_time) {}
-
-  // Returns the NavigationHandle associated with a navigation in
-  // |render_frame_host|. Normally, each frame can have its own
-  // NavigationHandle. However, in the case of a navigation to an interstitial
-  // page, there's just one NavigationHandle for the whole page (since it's
-  // assumed to only have one RenderFrameHost and navigate once).
-  virtual NavigationHandleImpl* GetNavigationHandleForFrameHost(
-      RenderFrameHostImpl* render_frame_host);
 
   // Called when a navigation has failed or the response is 204/205 to discard
   // the pending entry in order to avoid url spoofs.

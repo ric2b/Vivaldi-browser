@@ -44,7 +44,7 @@ namespace {
 const uint32_t kAccessCapabilityReadWrite = 0;
 const uint32_t kFilesystemTypeGenericHierarchical = 2;
 const char kFileManagerMTPMountNamePrefix[] = "fileman-mtp-";
-const char kMtpVolumeIdPrefix [] = "mtp:";
+const char kMtpVolumeIdPrefix[] = "mtp:";
 const char kRootPath[] = "/";
 
 // Registers |path| as the "Downloads" folder to the FileSystem API backend.
@@ -151,6 +151,7 @@ Volume::Volume()
       mount_context_(MOUNT_CONTEXT_UNKNOWN),
       is_parent_(false),
       is_read_only_(false),
+      is_read_only_removable_device_(false),
       has_media_(false),
       configurable_(false),
       watchable_(false) {
@@ -207,6 +208,7 @@ Volume* Volume::CreateForRemovable(
     volume->system_path_prefix_ = base::FilePath(disk->system_path_prefix());
     volume->is_parent_ = disk->is_parent();
     volume->is_read_only_ = disk->is_read_only();
+    volume->is_read_only_removable_device_ = disk->is_read_only_hardware();
     volume->has_media_ = disk->has_media();
   } else {
     volume->device_type_ = chromeos::DEVICE_TYPE_UNKNOWN;
@@ -369,6 +371,10 @@ void VolumeManager::Initialize() {
       prefs::kExternalStorageDisabled,
       base::Bind(&VolumeManager::OnExternalStorageDisabledChanged,
                  weak_ptr_factory_.GetWeakPtr()));
+  pref_change_registrar_.Add(
+      prefs::kExternalStorageReadOnly,
+      base::Bind(&VolumeManager::OnExternalStorageReadOnlyChanged,
+                 weak_ptr_factory_.GetWeakPtr()));
 
   // Subscribe to storage monitor for MTP notifications.
   if (storage_monitor::StorageMonitor::GetInstance()) {
@@ -508,8 +514,8 @@ void VolumeManager::OnDiskEvent(
       }
 
       // Notify to observers.
-      FOR_EACH_OBSERVER(VolumeManagerObserver, observers_,
-                        OnDiskAdded(*disk, mounting));
+      for (auto& observer : observers_)
+        observer.OnDiskAdded(*disk, mounting);
       return;
     }
 
@@ -523,8 +529,8 @@ void VolumeManager::OnDiskEvent(
       }
 
       // Notify to observers.
-      FOR_EACH_OBSERVER(VolumeManagerObserver, observers_,
-                        OnDiskRemoved(*disk));
+      for (auto& observer : observers_)
+        observer.OnDiskRemoved(*disk);
       return;
   }
   NOTREACHED();
@@ -538,12 +544,12 @@ void VolumeManager::OnDeviceEvent(
   DVLOG(1) << "OnDeviceEvent: " << event << ", " << device_path;
   switch (event) {
     case chromeos::disks::DiskMountManager::DEVICE_ADDED:
-      FOR_EACH_OBSERVER(VolumeManagerObserver, observers_,
-                        OnDeviceAdded(device_path));
+      for (auto& observer : observers_)
+        observer.OnDeviceAdded(device_path);
       return;
     case chromeos::disks::DiskMountManager::DEVICE_REMOVED: {
-      FOR_EACH_OBSERVER(
-          VolumeManagerObserver, observers_, OnDeviceRemoved(device_path));
+      for (auto& observer : observers_)
+        observer.OnDeviceRemoved(device_path);
       return;
     }
     case chromeos::disks::DiskMountManager::DEVICE_SCANNED:
@@ -605,10 +611,10 @@ void VolumeManager::OnFormatEvent(
 
   switch (event) {
     case chromeos::disks::DiskMountManager::FORMAT_STARTED:
-      FOR_EACH_OBSERVER(
-          VolumeManagerObserver, observers_,
-          OnFormatStarted(device_path,
-                          error_code == chromeos::FORMAT_ERROR_NONE));
+      for (auto& observer : observers_) {
+        observer.OnFormatStarted(device_path,
+                                 error_code == chromeos::FORMAT_ERROR_NONE);
+      }
       return;
     case chromeos::disks::DiskMountManager::FORMAT_COMPLETED:
       if (error_code == chromeos::FORMAT_ERROR_NONE) {
@@ -622,10 +628,10 @@ void VolumeManager::OnFormatEvent(
                                        GetExternalStorageAccessMode(profile_));
       }
 
-      FOR_EACH_OBSERVER(
-          VolumeManagerObserver, observers_,
-          OnFormatCompleted(device_path,
-                            error_code == chromeos::FORMAT_ERROR_NONE));
+      for (auto& observer : observers_) {
+        observer.OnFormatCompleted(device_path,
+                                   error_code == chromeos::FORMAT_ERROR_NONE);
+      }
 
       return;
   }
@@ -714,6 +720,11 @@ void VolumeManager::OnExternalStorageDisabledChanged() {
             &VolumeManager::OnExternalStorageDisabledChangedUnmountCallback,
             weak_ptr_factory_.GetWeakPtr()));
   }
+}
+
+void VolumeManager::OnExternalStorageReadOnlyChanged() {
+  disk_mount_manager_->RemountAllRemovableDrives(
+      GetExternalStorageAccessMode(profile_));
 }
 
 void VolumeManager::OnRemovableStorageAttached(
@@ -893,8 +904,8 @@ void VolumeManager::DoMountEvent(chromeos::MountError error_code,
                               NUM_VOLUME_TYPE);
   }
 
-  FOR_EACH_OBSERVER(VolumeManagerObserver, observers_,
-                    OnVolumeMounted(error_code, *volume));
+  for (auto& observer : observers_)
+    observer.OnVolumeMounted(error_code, *volume);
 }
 
 void VolumeManager::DoUnmountEvent(chromeos::MountError error_code,
@@ -904,8 +915,8 @@ void VolumeManager::DoUnmountEvent(chromeos::MountError error_code,
   if (error_code == chromeos::MOUNT_ERROR_NONE)
     mounted_volumes_.erase(volume->volume_id());
 
-  FOR_EACH_OBSERVER(VolumeManagerObserver, observers_,
-                    OnVolumeUnmounted(error_code, *volume.get()));
+  for (auto& observer : observers_)
+    observer.OnVolumeUnmounted(error_code, *volume.get());
 }
 
 }  // namespace file_manager

@@ -38,6 +38,7 @@ namespace blink {
 class DocumentStyleSheetCollector;
 class StyleEngine;
 class TreeScope;
+class ViewportStyleResolver;
 
 class DocumentStyleSheetCollection final
     : public TreeScopeStyleSheetCollection {
@@ -50,12 +51,11 @@ class DocumentStyleSheetCollection final
 
   void updateActiveStyleSheets(StyleEngine&, StyleResolverUpdateMode);
   void collectStyleSheets(StyleEngine&, DocumentStyleSheetCollector&);
+  void collectViewportRules(ViewportStyleResolver&);
 
   DEFINE_INLINE_VIRTUAL_TRACE() {
     TreeScopeStyleSheetCollection::trace(visitor);
   }
-
-  DECLARE_VIRTUAL_TRACE_WRAPPERS();
 
  private:
   explicit DocumentStyleSheetCollection(TreeScope&);

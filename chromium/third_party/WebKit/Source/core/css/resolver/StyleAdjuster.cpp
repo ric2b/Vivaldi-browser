@@ -85,8 +85,9 @@ static EDisplay equivalentBlockDisplay(EDisplay display) {
     case EDisplay::TableCaption:
       return EDisplay::Block;
     case EDisplay::None:
+    case EDisplay::Contents:
       ASSERT_NOT_REACHED();
-      return EDisplay::None;
+      return display;
   }
   ASSERT_NOT_REACHED();
   return EDisplay::Block;
@@ -199,9 +200,10 @@ static void adjustStyleForHTMLElement(ComputedStyle& style,
   if (isHTMLTableElement(element)) {
     // Tables never support the -webkit-* values for text-align and will reset
     // back to the default.
-    if (style.textAlign() == WEBKIT_LEFT ||
-        style.textAlign() == WEBKIT_CENTER || style.textAlign() == WEBKIT_RIGHT)
-      style.setTextAlign(TASTART);
+    if (style.textAlign() == ETextAlign::WebkitLeft ||
+        style.textAlign() == ETextAlign::WebkitCenter ||
+        style.textAlign() == ETextAlign::WebkitRight)
+      style.setTextAlign(ETextAlign::Start);
     return;
   }
 
@@ -374,7 +376,8 @@ static void adjustStyleForDisplay(ComputedStyle& style,
 void StyleAdjuster::adjustComputedStyle(ComputedStyle& style,
                                         const ComputedStyle& parentStyle,
                                         Element* element) {
-  if (style.display() != EDisplay::None) {
+  if (style.display() != EDisplay::None &&
+      style.display() != EDisplay::Contents) {
     if (element && element->isHTMLElement())
       adjustStyleForHTMLElement(style, toHTMLElement(*element));
 

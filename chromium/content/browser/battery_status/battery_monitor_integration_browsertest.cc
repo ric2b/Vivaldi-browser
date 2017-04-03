@@ -20,7 +20,7 @@
 #include "content/shell/browser/shell_content_browser_client.h"
 #include "device/battery/battery_monitor.mojom.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
-#include "services/shell/public/cpp/interface_registry.h"
+#include "services/service_manager/public/cpp/interface_registry.h"
 
 // These tests run against a dummy implementation of the BatteryMonitor service.
 // That is, they verify that the service implementation is correctly exposed to
@@ -89,7 +89,7 @@ class FakeBatteryMonitor : public device::BatteryMonitor {
 class TestContentBrowserClient : public ContentBrowserClient {
  public:
   void ExposeInterfacesToRenderer(
-      shell::InterfaceRegistry* registry,
+      service_manager::InterfaceRegistry* registry,
       RenderProcessHost* render_process_host) override {
     scoped_refptr<base::SingleThreadTaskRunner> ui_task_runner =
         BrowserThread::GetTaskRunnerForThread(BrowserThread::UI);

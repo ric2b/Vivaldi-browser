@@ -11,7 +11,7 @@
 #include "base/optional.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
-#include "content/browser/bluetooth/bluetooth_blacklist.h"
+#include "content/browser/bluetooth/bluetooth_blocklist.h"
 #include "content/common/bluetooth/web_bluetooth_device_id.h"
 
 using device::BluetoothUUID;
@@ -115,11 +115,27 @@ const std::string& BluetoothAllowedDevicesMap::GetDeviceAddress(
                                                    : id_iter->second;
 }
 
+bool BluetoothAllowedDevicesMap::IsOriginAllowedToAccessAtLeastOneService(
+    const url::Origin& origin,
+    const WebBluetoothDeviceId& device_id) const {
+  auto id_map_iter = origin_to_device_id_to_services_map_.find(origin);
+  if (id_map_iter == origin_to_device_id_to_services_map_.end()) {
+    return false;
+  }
+
+  const auto& device_id_to_services_map = id_map_iter->second;
+
+  auto id_iter = device_id_to_services_map.find(device_id);
+
+  return id_iter == device_id_to_services_map.end() ? false
+                                                    : !id_iter->second.empty();
+}
+
 bool BluetoothAllowedDevicesMap::IsOriginAllowedToAccessService(
     const url::Origin& origin,
     const WebBluetoothDeviceId& device_id,
     const BluetoothUUID& service_uuid) const {
-  if (BluetoothBlacklist::Get().IsExcluded(service_uuid)) {
+  if (BluetoothBlocklist::Get().IsExcluded(service_uuid)) {
     return false;
   }
 
@@ -150,13 +166,20 @@ void BluetoothAllowedDevicesMap::AddUnionOfServicesTo(
     const blink::mojom::WebBluetoothRequestDeviceOptionsPtr& options,
     std::unordered_set<BluetoothUUID, device::BluetoothUUIDHash>*
         unionOfServices) {
-  for (const auto& filter : options->filters) {
-    for (const base::Optional<BluetoothUUID>& uuid : filter->services) {
-      unionOfServices->insert(uuid.value());
+  if (options->filters) {
+    for (const auto& filter : options->filters.value()) {
+      if (!filter->services) {
+        continue;
+      }
+
+      for (const BluetoothUUID& uuid : filter->services.value()) {
+        unionOfServices->insert(uuid);
+      }
     }
   }
-  for (const base::Optional<BluetoothUUID>& uuid : options->optional_services) {
-    unionOfServices->insert(uuid.value());
+
+  for (const BluetoothUUID& uuid : options->optional_services) {
+    unionOfServices->insert(uuid);
   }
 }
 

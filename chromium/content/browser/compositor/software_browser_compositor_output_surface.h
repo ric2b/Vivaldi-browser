@@ -27,14 +27,20 @@ class CONTENT_EXPORT SoftwareBrowserCompositorOutputSurface
   SoftwareBrowserCompositorOutputSurface(
       std::unique_ptr<cc::SoftwareOutputDevice> software_device,
       const scoped_refptr<ui::CompositorVSyncManager>& vsync_manager,
-      cc::SyntheticBeginFrameSource* begin_frame_source);
+      cc::SyntheticBeginFrameSource* begin_frame_source,
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner);
 
   ~SoftwareBrowserCompositorOutputSurface() override;
 
   // OutputSurface implementation.
+  void BindToClient(cc::OutputSurfaceClient* client) override;
   void EnsureBackbuffer() override;
   void DiscardBackbuffer() override;
   void BindFramebuffer() override;
+  void Reshape(const gfx::Size& size,
+               float device_scale_factor,
+               const gfx::ColorSpace& color_space,
+               bool has_alpha) override;
   void SwapBuffers(cc::OutputSurfaceFrame frame) override;
   bool IsDisplayedAsOverlayPlane() const override;
   unsigned GetOverlayTextureId() const override;
@@ -43,15 +49,14 @@ class CONTENT_EXPORT SoftwareBrowserCompositorOutputSurface
 
  private:
   // BrowserCompositorOutputSurface implementation.
-  void OnGpuSwapBuffersCompleted(
-      const std::vector<ui::LatencyInfo>& latency_info,
-      gfx::SwapResult result,
-      const gpu::GpuProcessHostedCALayerTreeParamsMac* params_mac) override;
-
 #if defined(OS_MACOSX)
   void SetSurfaceSuspendedForRecycle(bool suspended) override;
 #endif
 
+  void SwapBuffersCallback();
+
+  cc::OutputSurfaceClient* client_ = nullptr;
+  scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
   base::WeakPtrFactory<SoftwareBrowserCompositorOutputSurface> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(SoftwareBrowserCompositorOutputSurface);

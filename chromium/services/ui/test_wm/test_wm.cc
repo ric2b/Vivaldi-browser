@@ -6,31 +6,40 @@
 #include <utility>
 
 #include "mojo/public/cpp/bindings/binding.h"
-#include "services/shell/public/c/main.h"
-#include "services/shell/public/cpp/connector.h"
-#include "services/shell/public/cpp/service.h"
-#include "services/shell/public/cpp/service_runner.h"
+#include "services/service_manager/public/c/main.h"
+#include "services/service_manager/public/cpp/connector.h"
+#include "services/service_manager/public/cpp/service.h"
+#include "services/service_manager/public/cpp/service_context.h"
+#include "services/service_manager/public/cpp/service_runner.h"
 #include "services/ui/public/cpp/window.h"
 #include "services/ui/public/cpp/window_manager_delegate.h"
 #include "services/ui/public/cpp/window_tree_client.h"
 #include "services/ui/public/cpp/window_tree_client_delegate.h"
 #include "ui/display/display.h"
+#include "ui/display/test/test_screen.h"
 
 namespace ui {
 namespace test {
 
-class TestWM : public shell::Service,
+class TestWM : public service_manager::Service,
                public ui::WindowTreeClientDelegate,
                public ui::WindowManagerDelegate {
  public:
   TestWM() {}
-  ~TestWM() override {}
+  ~TestWM() override { display::Screen::SetScreenInstance(nullptr); }
 
  private:
-  // shell::Service:
-  void OnStart(const shell::Identity& identity) override {
+  // service_manager::Service:
+  void OnStart() override {
+    test_screen_ = base::MakeUnique<display::test::TestScreen>();
+    display::Screen::SetScreenInstance(test_screen_.get());
     window_tree_client_.reset(new ui::WindowTreeClient(this, this));
-    window_tree_client_->ConnectAsWindowManager(connector());
+    window_tree_client_->ConnectAsWindowManager(context()->connector());
+  }
+
+  bool OnConnect(const service_manager::ServiceInfo& remote_info,
+                 service_manager::InterfaceRegistry* registry) override {
+    return false;
   }
 
   // ui::WindowTreeClientDelegate:
@@ -90,6 +99,7 @@ class TestWM : public shell::Service,
         std::move(frame_decoration_values));
   }
   void OnWmDisplayRemoved(ui::Window* window) override { window->Destroy(); }
+  void OnWmDisplayModified(const display::Display& display) override {}
   void OnWmPerformMoveLoop(Window* window,
                            mojom::MoveLoopSource source,
                            const gfx::Point& cursor_location,
@@ -97,6 +107,9 @@ class TestWM : public shell::Service,
     // Don't care.
   }
   void OnWmCancelMoveLoop(Window* window) override {}
+
+  // Dummy screen required to be the screen instance.
+  std::unique_ptr<display::test::TestScreen> test_screen_;
 
   ui::Window* root_ = nullptr;
   ui::WindowManagerClient* window_manager_client_ = nullptr;
@@ -109,6 +122,6 @@ class TestWM : public shell::Service,
 }  // namespace ui
 
 MojoResult ServiceMain(MojoHandle service_request_handle) {
-  shell::ServiceRunner runner(new ui::test::TestWM);
+  service_manager::ServiceRunner runner(new ui::test::TestWM);
   return runner.Run(service_request_handle);
 }

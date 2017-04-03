@@ -19,6 +19,9 @@
       Ja šai politikai ir iestatīta vērtība “Nepatiesa” vai nav iestatīta nekāda vērtība, identitātes nodrošinātāja iestatītie sīkfaili tiek pārsūtīti uz lietotāja profilu tikai pirmajā reizē, kad lietotājs piesakās kādā ierīcē.
 
       Šī politika attiecas tikai uz tiem lietotājiem, kuru domēns ir tāds pats kā ierīces reģistrācijas domēns. Visiem citiem lietotājiem identitātes nodrošinātāja iestatītie sīkfaili tiek pārsūtīti uz lietotāja profilu tikai pirmajā reizē, kad lietotājs piesakās kādā ierīcē.</translation>
+<translation id="1029536946382325801">Ja ir iestatīta vērtība “true”, lietotājs var izmantot aparatūru Chrome ierīcēs, lai attālināti apstiprinātu tās identitāti konfidencialitātes sertificēšanas CA, izmantojot uzņēmumu platformu atslēgu (Enterprise Platform Keys) API chrome.enterprise.platformKeys.challengeUserKey().
+
+          Ja ir iestatīta vērtība “false” vai ja politika nav iestatīta, API izsaukumi neizdosies un tiks rādīts kļūdas kods.</translation>
 <translation id="1040446814317236570">Iespējot PAC URL noņemšanu (protokolam https://)</translation>
 <translation id="1044878202534415707">Tiek ziņota aparatūras statistika, piemēram, centrālā procesora/RAM lietojums.
 
@@ -54,6 +57,25 @@
 <translation id="1152117524387175066">Ziņot par ierīces izstrādes slēdža statusu sāknēšanas brīdī.
 
       Ja šai politikai ir norādīta vērtība “False”, netiks ziņots par izstrādes slēdža stāvokli.</translation>
+<translation id="1156080716265314451">Konfigurē printeru sarakstu.
+
+      Izmantojot šo politiku, administratori var nodrošināt printeru konfigurāciju
+      lietotājiem.
+
+      “<ph name="PRINTER_DISPLAY_NAME" />” un “<ph name="PRINTER_DESCRIPTION" />” ir brīvas formas virknes,
+      ko var pielāgot ērtai printera atlasei. Laukiem “<ph name="PRINTER_MANUFACTURER" />” un “<ph name="PRINTER_MODEL" />” ir jāatbilst vienam no <ph name="PRODUCT_NAME" /> atbalstītajiem
+      printeriem. Laukā “<ph name="PRINTER_URI" />” ir jābūt adresei, ko var sasniegt
+      no klienta datora, tostarp “<ph name="URI_SCHEME" />”,
+      “<ph name="URI_PORT" />” un “<ph name="URI_QUEUE" />”. Lauks “<ph name="PRINTER_UUID" />” nav jāaizpilda obligāti. Ja tas ir aizpildīts, to izmanto, lai
+      palīdzētu noņemt dublētus <ph name="ZEROCONF_DISCOVERY" /> printerus.
+
+      Printera iestatīšana ir pabeigta līdz ar printera pirmo lietošanas reizi. PPD faili netiek
+      lejupielādēti, kamēr netiek izmantots printeris. Pēc tam bieži izmantoti
+      PPD faili tiek saglabāti kešatmiņā.
+
+      Šī politika neietekmē to, vai lietotāji var konfigurēt printerus
+      atsevišķās ierīcēs. Tā ir paredzēta kā papildu politika printeru
+      konfigurācijai, ko veic atsevišķi lietotāji.</translation>
 <translation id="1160939557934457296">Aizliegums turpināt pārlūkošanu no Drošas pārlūkošanas brīdinājuma lapas</translation>
 <translation id="1198465924256827162">Ierīces statusa augšupielāžu sūtīšanas biežums milisekundēs.
 
@@ -159,7 +181,6 @@
       nevar izmantot ARC.</translation>
 <translation id="1561424797596341174">Politikas ignorēšana attālās piekļuves saimniekdatora atkļūdošanas versijām</translation>
 <translation id="1583248206450240930">Pēc noklusējuma lietot <ph name="PRODUCT_FRAME_NAME" /></translation>
-<translation id="1606958238518590302">Ja šī politika ir iestatīta kā patiesa, lietotāji nevar neko rakstīt ārējās atmiņas ierīcēs.</translation>
 <translation id="1608755754295374538">Vietrāži URL, kuriem tiks nodrošināta piekļuve audio tveršanas ierīcēm bez uzvednes parādīšanas.</translation>
 <translation id="1617235075406854669">Iespējot pārlūka un lejupielādes vēstures dzēšanu</translation>
 <translation id="1617384279878333801">Personas pievienošanas iespējošana profilu pārvaldniekā</translation>
@@ -214,15 +235,6 @@
       Ja šī politika nav konfigurēta vai ir iestatīta uz “tls1.2”, pārlūkā <ph name="PRODUCT_NAME" /> vairs netiek veikts šis atkāpšanās process. Ņemiet vērā, ka šādi netiek atspējots vecāku TLS versiju atbalsts, bet tikai tas, vai <ph name="PRODUCT_NAME" /> apies kļūdainos serverus, kuri nevar pareizi saskaņot versijas.
 
       Pretējā gadījumā, ja ir jāuztur saderība ar kļūdainu serveri, šo politiku var iestatīt uz “tls1.1”. Tas ir pagaidu risinājums, un serveris ir steidzami jālabo.</translation>
-<translation id="1861037019115362154">Norāda atspējoto spraudņu sarakstu pārlūkā <ph name="PRODUCT_NAME" /> un neļauj lietotājiem mainīt šo iestatījumu.
-
-      Var lietot aizstājējzīmes “*” un “?”, lai aizstātu dažādas rakstzīmes. Rakstzīme “*” atbilst vairāku rakstzīmju virknei, bet rakstzīme “?” var norādīt vienu noteiktu rakstzīmi, t.i., var atbilst vienai rakstzīmei vai neatbilst nevienai. Atsoļa rakstzīme ir “\”, tādējādi, lai veidotu atbilstību faktiskajām rakstzīmēm “*”, “?” un “\”, pirms tām jāievieto rakstzīme “\”.
-
-      Ja šis iestatījums ir iespējots, pārlūkā <ph name="PRODUCT_NAME" /> nekad netiek lietoti sarakstā iekļautie spraudņi. Lapā “about:plugins” norādītie spraudņi tiek atzīmēti kā atspējoti, un lietotāji nevar tos iespējot.
-
-      Ņemiet vērā, ka šo politiku var ignorēt, iestatot politikas EnabledPlugins un DisabledPluginsExceptions.
-
-      Ja šī politika nav iestatīta, lietotājs var izmantot jebkuru datorā instalēto spraudni, izņemot nesaderīgus, novecojušus vai bīstamus spraudņus.</translation>
 <translation id="1864269674877167562">Ja kā šīs politikas vērtība tiek iestatīta tukša virkne vai ja politika nav konfigurēta, operētājsistēmā <ph name="PRODUCT_OS_NAME" /> lietotāja pierakstīšanās plūsmā netiks rādīta automātiskās pabeigšanas opcija.
       Ja kā šīs politikas vērtība tiek iestatīta virkne ar domēna nosaukumu, operētājsistēmā <ph name="PRODUCT_OS_NAME" /> lietotāja pierakstīšanās plūsmā tiks parādīta automātiskās pabeigšanas opcija, ļaujot lietotājam ievadīt tikai lietotājvārdu bez domēna nosaukuma paplašinājuma. Lietotājs varēs pārrakstīt šo domēna nosaukuma paplašinājumu.</translation>
 <translation id="1865417998205858223">Atslēgu atļaujas</translation>
@@ -364,13 +376,6 @@
 <translation id="2337466621458842053">Ļauj iestatīt URL rakstu sarakstu, kurā ir norādītas vietnes, kurām ir atļauts attēlot attēlus.
 
           Ja šī politika nav iestatīta, visām vietnēm tiks izmantota globālā noklusējuma vērtība no politikas DefaultImagesSetting (ja tā ir iestatīta) vai pretējā gadījumā no lietotāja personīgās konfigurācijas.</translation>
-<translation id="2359612025446382967">Ja šai politikai ir iestatīta vērtība “Nepatiesa”, <ph name="PRODUCT_OS_NAME" /> atspējos Bluetooth un lietotājs nevarēs to iespējot.
-
-      Ja šai politikai ir iestatīta vērtība “Patiesa” vai tā nav iestatīta, lietotājs varēs pēc izvēles iespējot vai atspējot Bluetooth.
-
-      Ja šī politika ir iestatīta, lietotājs to nevar mainīt vai ignorēt.
-
-      Pēc Bluetooth iespējošanas ierīce ir atkārtoti jāpalaiž, lai izmaiņas stātos spēkā (atspējojot Bluetooth, ierīce nav atkārtoti jāpalaiž).</translation>
 <translation id="2366415278352956652">Iespējo apraidi</translation>
 <translation id="2372547058085956601">Aizkave līdz automātiskajai piekļuvei publiskajai sesijai.
 
@@ -470,6 +475,7 @@
       Ja šis iestatījums nav iestatīts, lietotāji var izlemt, vai izmantot šo funkciju.
 
       Šis iestatījums ir noņemts pārlūkā <ph name="PRODUCT_NAME" /> 29 un jaunākās versijās.</translation>
+<translation id="2432116014157020512">Parole ir jāievada katru nedēļu (ik pēc 168 stundām).</translation>
 <translation id="2436445024487698630">Ļauj pierakstīties pārlūkā <ph name="PRODUCT_NAME" /></translation>
 <translation id="243972079416668391">Norāda darbību, kas ir jāveic, kad ir aizritējis laiks līdz dīkstāvei un kad ierīce tiek darbināta ar maiņstrāvu.
 
@@ -528,6 +534,13 @@
           Google dinamiskās meklēšanas rezultātu vietrādi URL var norādīt šādi: <ph name="GOOGLE_INSTANT_SEARCH_URL" />.
 
           Šī politika tiek ievērota tikai tad, ja ir iespējota politika DefaultSearchProviderEnabled.</translation>
+<translation id="2569647487017692047">Ja šai politikai ir iestatīta vērtība “Nepatiesa”, <ph name="PRODUCT_OS_NAME" /> atspējos Bluetooth un lietotājs nevarēs to iespējot.
+
+      Ja šai politikai ir iestatīta vērtība “Patiesa” vai tā nav iestatīta, lietotājs varēs pēc izvēles iespējot vai atspējot Bluetooth.
+
+      Ja šī politika ir iestatīta, lietotājs to nevar mainīt vai ignorēt.
+
+      Pēc Bluetooth iespējošanas lietotājam ir jāatsakās un vēlreiz jāpiesakās ierīcē, lai izmaiņas stātos spēkā (atspējojot Bluetooth, ierīcē nav atkārtoti jāatsakās un jāpiesakās).</translation>
 <translation id="2571066091915960923">Iespējo vai atspējo datu saspiešanas starpniekserveri un neļauj lietotājiem mainīt šo iestatījumu.
 
       Ja šis iestatījums ir iespējots vai atspējots, lietotāji nevar mainīt vai ignorēt šo iestatījumu.
@@ -650,6 +663,15 @@
 <translation id="2884728160143956392">Atļauj izmantot tikai sesijai lietojamos sīkfailus šajās vietnēs</translation>
 <translation id="2893546967669465276">Sistēmas žurnālu sūtīšana pārvaldības serverim</translation>
 <translation id="2899002520262095963">Android lietotnes var izmantot tīkla konfigurācijas un CA sertifikātus, kas iestatīti, izmantojot šo politiku, bet lietotnēm nav piekļuves dažām konfigurācijas opcijām.</translation>
+<translation id="2901399514673504930">Izmantot ārējās atmiņas ierīces kā tikai lasāmas.
+
+      Šī politika ir spēkā tikai tad, ja iestatījums ExternalStorageDisabled ir iestatīts kā aplams vai nav konfigurēts.
+
+      Ja šī politika ir iestatīta kā patiesa, lietotāji nevar neko rakstīt ārējās atmiņas ierīcēs.
+
+      Ja šis iestatījums ir atspējots vai nav konfigurēts, lietotāji var izveidot un modificēt failus ārējās atmiņas ierīcēs, kas ir fiziski rakstāmas.
+
+      Šīs politikas dinamiskā atsvaidzināšana tiek atbalstīta versijā M56 vai jaunākās versijās.</translation>
 <translation id="2906874737073861391">AppPack paplašinājumu saraksts</translation>
 <translation id="2908277604670530363">Maksimālais vienlaikus iespējamais savienojumu skaits ar starpniekserveri</translation>
 <translation id="2948087343485265211">Tiek norādīts, vai audio darbība ietekmē jaudas pārvaldību.
@@ -696,9 +718,6 @@
           Šī politika nav jāiestata obligāti. Ja tā nebūs iestatīta, meklēšanas vienumu aizstāšana nenotiks.
 
           Šī politika ir spēkā tikai tad, ja ir iespējota politika “DefaultSearchProviderEnabled”.</translation>
-<translation id="3067188277482006117">Ja ir iestatīta vērtība “true”, lietotājs var izmantot aparatūru Chrome ierīcēs, lai attālināti apstiprinātu tās identitāti konfidencialitātes sertificēšanas CA, izmantojot uzņēmumu platformu atslēgu (Enterprise Platform Keys) API chrome.enterprise.platformKeysPrivate.challengeUserKey().
-
-          Ja ir iestatīta vērtība “false” vai ja politika nav iestatīta, API izsaukumi neizdosies un tiks rādīts kļūdas kods.</translation>
 <translation id="3069958900488014740">Pārlūkā <ph name="PRODUCT_NAME" /> tiek atļauta WPAD (Web Proxy Auto-Discovery — tīmekļa starpniekservera automātiskā atklāšana) optimizācijas izslēgšana.
 
       Ja šai politikai ir iestatīta vērtība Nepatiesa, WPAD optimizācija ir atspējota, tādējādi pārlūkā <ph name="PRODUCT_NAME" /> tiek ilgāk gaidīts uz DNS WPAD serveriem. Ja politika nav iestatīta vai ir iespējota, WPAD optimizācija ir iespējota.
@@ -821,6 +840,7 @@
 <translation id="3322902067538988734">Ja politikai ir iestatīta vērtība Patiesa, lietotājam pirms pārlūkprogrammas <ph name="PRODUCT_NAME" /> lietošanas ir jāpierakstās profilā. Šādā gadījumā politikai BrowserGuestModeEnabled tiek iestatīta noklusējuma vērtība Aplama.
 
 Ja politikai ir iestatīta vērtība Aplama vai politika nav konfigurēta, lietotājs var lietot pārlūkprogrammu <ph name="PRODUCT_NAME" /> bez pierakstīšanās.</translation>
+<translation id="3347687541825006165">Iestata, cik bieži lietotājam ir jāievada parole, lai izmantotu ātro atbloķēšanu.</translation>
 <translation id="3381968327636295719">Pēc noklusējuma lieto saimniekdatora pārlūku</translation>
 <translation id="3417418267404583991">Ja šī politika ir iestatīta uz Patiesa vai nav konfigurēta, produkts <ph name="PRODUCT_OS_NAME" /> iespējo viesu pieteikšanās sesijas. Viesu pieteikšanās sesijas ir anonīmu lietotāju sesijas, un tām nav jāizmanto parole.
 
@@ -1010,6 +1030,9 @@ Ja šis iestatījums ir atspējots vai tam nav iestatīta vērtība, drošā mek
 
       Ja politikai ir iestatīta vērtība “Patiesa”, pārraudzības tīkla paketes (tā saucamie <ph name="HEARTBEATS_TERM" />) tiek sūtītas.
       Ja ir iestatīta vērtība “Nepatiesa” vai nav iestatīta nekāda vērtība, tīkla paketes netiek sūtītas.</translation>
+<translation id="3963602271515417124">Ja politika ir iestatīta uz “true”, ierīcei ir atļauta attālā apstiprināšana un tiks automātiski izveidots sertifikāts, kas tiks augšupielādēts ierīču pārvaldības serverī.
+
+          Ja ir iestatīta vērtība “false” vai ja politika nav iestatīta, netiks izveidots sertifikāts un neizdosies izsaukums enterprise.platformKeys API.</translation>
 <translation id="3964909636571393861">Ļauj piekļūt vietrāžu URL sarakstam</translation>
 <translation id="3965339130942650562">Noildze, līdz dīkstāves lietotāja atteikšanās tiek izpildīta</translation>
 <translation id="3967075520570946456">Sveiciena lapas rādīšanas iespējošana pirmajā pārlūka palaišanas reizē pēc operētājsistēmas jaunināšanas</translation>
@@ -1055,6 +1078,17 @@ Ja šis iestatījums ir atspējots vai tam nav iestatīta vērtība, drošā mek
 
           Ja šī politika nav iestatīta, tiek izmantota politika AllowCookies, un lietotājs var to mainīt.</translation>
 <translation id="4103289232974211388">Pēc lietotāja apstiprinājuma saņemšanas novirzīt uz SAML identitātes nodrošinātāju</translation>
+<translation id="4103941930938018145">Šī politika ir novecojusi. Lūdzu, izmantojiet politiku <ph name="DEFAULT_PLUGINS_SETTING_POLICY" />, lai kontrolētu Flash spraudņa pieejamību, un politiku <ph name="ALWAYS_OPEN_PDF_EXTERNALLY_POLICY" />, lai kontrolētu, vai izmantot integrēto PDF skatīšanas programmu PDF failu skatīšanai.
+
+Norāda spraudņu sarakstu, kas ir iespējoti pārlūkā <ph name="PRODUCT_NAME" />, un neļauj lietotājiem mainīt šo iestatījumu.
+
+Aizstājējzīmes “*” un “?” var izmantot, lai veidotu atbilstību mainīgu rakstzīmju virknēm. “*” atbilst mainīgu rakstzīmju virknei, bet “?” norāda vienu noteiktu rakstzīmi, piemēram, atbilst nullei vai vienai rakstzīmei. Atsoļa rakstzīme ir “\”, tādēļ, lai veidotu atbilstību faktiskajām rakstzīmēm “*”, “?” un “\”, to sākumā var ievadīt “\”.
+
+Ja šis iestatījums ir iespējots, pārlūkā <ph name="PRODUCT_NAME" /> nekad netiek lietoti norādītā saraksta spraudņi. Politikā about:plugins norādītie spraudņi ir atzīmēti kā atspējoti, un lietotāji tos nevar iespējot.
+
+Ņemiet vērā, ka šī politika var tikt ignorēta ar politikām EnabledPlugins un DisabledPluginsExceptions.
+
+Ja šī politika nav iestatīta, lietotājs var izmantot jebkuru sistēmā instalēto spraudni, izņemot nesaderīgus, novecojušus vai bīstamus spraudņus.</translation>
 <translation id="410478022164847452">Tiek norādīts laika periods, kurā lietotājam ir jāveic kāda darbība, pretējā gadījumā rodas dīkstāve (ja ierīce darbojas ar maiņstrāvu).
 
           Ja šī politika ir iestatīta, tā norāda laika periodu, kurā lietotājam ir jāveic kāda darbība, pretējā gadījumā rodas operētājsistēmas <ph name="PRODUCT_OS_NAME" /> dīkstāve, ko var konfigurēt atsevišķi.
@@ -1113,6 +1147,7 @@ Ja šis iestatījums ir atspējots vai tam nav iestatīta vērtība, drošā mek
 <translation id="4372704773119750918">Neatļaut korporatīvajam lietotājam piedalīties vairākprofilu sesijā (ne kā primārajam, ne sekundārajam lietotājam)</translation>
 <translation id="4377599627073874279">Atļauj visām vietnēm rādīt visus attēlus</translation>
 <translation id="4389091865841123886">Konfigurē attālināto apstiprināšanu, izmantojot TPM mehānismu.</translation>
+<translation id="4397469093966511008">Ja šai politikai ir iestatīta vērtība Nepatiesa, lietotājiem tiek liegta iespēja nosūtīt sistēmas informāciju un lapu saturu Google serveriem. Ja šī vērtība ir Patiesa vai nav konfigurēta, lietotāji varēs nosūtīt sistēmas informāciju un lapu saturu funkcijai Droša pārlūkošana, lai palīdzētu noteikt bīstamas lietotnes un vietnes.</translation>
 <translation id="4423597592074154136">Manuāli norādīt starpniekservera iestatījumus</translation>
 <translation id="4429220551923452215">Iespējo vai atspējo lietotņu saīsni grāmatzīmju joslā.
 
@@ -1329,6 +1364,12 @@ Ja šis iestatījums ir atspējots vai tam nav iestatīta vērtība, drošā mek
 <translation id="5208240613060747912">Ļauj iestatīt URL rakstu sarakstu, kurā ir norādītas vietnes, kurām nav atļauts attēlot paziņojumus.
 
           Ja šī politika nav iestatīta, visām vietnēm tiks izmantota globālā noklusējuma vērtība no politikas DefaultNotificationsSetting (ja tā ir iestatīta) vai pretējā gadījumā no lietotāja personīgās konfigurācijas.</translation>
+<translation id="5209594095390052164">Ļauj izvēlēties, vai iespējot tīkla ierobežošanu.
+      Tas attiecas uz visiem lietotājiem un uz visām saskarnēm ierīcē. Esot iestatītai šai politikai,
+      ierobežošana ir spēkā, līdz tiek mainīta politika, lai to atspējotu.
+
+      Ja ir iestatīta vērtība “Nepatiesa”, sistēma netiek ierobežota.
+      Ja ir iestatīta vērtība “Patiesa”, sistēma tiek ierobežota, lai sasniegtu nodrošināto augšupielāžu un lejupielāžu ātrumu (Kb/s).</translation>
 <translation id="5219844027738217407">Android lietotnēs šī politika ietekmē tikai mikrofonu. Kad šī politika ir iestatīta kā patiesa, mikrofons tiek izslēgts visās Android lietotnēs bez izņēmuma.</translation>
 <translation id="5226033722357981948">Norāda, vai ir jāatspējo spraudņu meklētājs</translation>
 <translation id="523505283826916779">Pieejamības iestatījumi</translation>
@@ -1405,12 +1446,18 @@ Ja šis iestatījums ir atspējots vai tam nav iestatīta vērtība, pārlūkā 
           Ja šī politika nav iestatīta, visām vietnēm tiks izmantota globālā noklusējuma vērtība no politikas DefaultCookiesSetting (ja tā ir iestatīta) vai pretējā gadījumā no lietotāja personīgās konfigurācijas.</translation>
 <translation id="5469825884154817306">Bloķē attēlus šajās vietnēs</translation>
 <translation id="5475361623548884387">Iespējo drukāšanu</translation>
-<translation id="5496487987837463732">Politikai iestatot vērtību Nepatiesa, lietotājiem tiek liegta iespēja Google serveriem nosūtīt informāciju par drošības kļūdām. Ja šis iestatījums ir Patiesa vai nav konfigurēts, lietotāji varēs nosūtīt informāciju, kad tiks parādīta SSL kļūda vai Drošas pārlūkošanas brīdinājums.</translation>
 <translation id="5499375345075963939">Šī politika ir aktīva tikai mazumtirdzniecības režīmā.
 
       Ja ir iestatīta šīs politikas vērtība un tā nav 0, lietotājam, kas pašlaik ir pieteicies demonstrācijā, automātiski tiks veikta atteikšanās, tiklīdz būs pagājis noteiktais neaktivitātes laiks.
 
       Politikas vērtība ir jānorāda milisekundēs.</translation>
+<translation id="5506213378070007377">Informācija par Android statusu tiek nosūtīta atpakaļ uz
+      serveri.
+
+      Ja politikai ir iestatīta vērtība “Nepatiesa”, netiek ziņota statusa informācija.
+      Ja ir iestatīta vērtība “Patiesa” vai politika nav iestatīta, tiek ziņota statusa informācija.
+
+      Šī politika ir spēkā tikai tad, ja ir iespējotas Android lietotnes.</translation>
 <translation id="5511702823008968136">Iespējo grāmatzīmju joslu</translation>
 <translation id="5512418063782665071">Sākumlapas URL</translation>
 <translation id="5523812257194833591">Publiska sesija, kurā pēc aizkaves veikt automātisku pieteikšanos.
@@ -1462,6 +1509,11 @@ Ja šis iestatījums ir atspējots vai tam nav iestatīta vērtība, pārlūkā 
           Ja šis iestatījums ir iespējots, attālās piekļuves saimniekdatorā tiek salīdzināts lokālā lietotāja vārds (ar kuru ir saistīts saimniekdators) ar tā Google konta vārdu, kas ir reģistrēts kā saimniekdatora īpašnieks (piemēram, ja saimniekdators pieder Google konta janisberzins@example.com lietotājam, lokālā lietotāja vārdam ir jābūt “janisberzins”). Ja saimniekdatora īpašnieka vārds atšķiras no lokālā lietotāja vārda, ar kuru ir saistīts saimniekdators, attālās piekļuves saimniekdators netiek startēts. Politika RemoteAccessHostMatchUsername ir jāizmanto kopā ar politiku RemoteAccessHostDomain, lai ieviestu arī saimniekdatora īpašnieka Google konta saistīšanu ar konkrētu domēnu (piemēram, example.com).
 
           Ja šis iestatījums ir atspējots vai nav iestatīts, attālās piekļuves saimniekdatoru var saistīt ar jebkuru lokālo lietotāju.</translation>
+<translation id="5694594914843889579">Ja politika ir iestatīta kā patiesa, ārējā krātuve nav pieejama failu pārlūkā.
+
+      Šī politika attiecas uz visiem datu nesēju veidiem, piemēram, USB zibatmiņas diskiem, ārējiem cietajiem diskiem, SD un citām atmiņas kartēm, optiskajām krātuvēm u. c. Uz iekšējo krātuvi politika neattiecas, tādēļ failiem, kas saglabāti mapē Lejupielādes, joprojām var piekļūt. Šī politika neattiecas arī uz pakalpojumu Google disks.
+
+      Ja šis iestatījums ir atspējots vai nav konfigurēts, lietotāji savās ierīcēs var izmantot visus atbalstītos ārējo krātuvju veidus.</translation>
 <translation id="5697306356229823047">Ziņošana par ierīces lietotājiem</translation>
 <translation id="570062449808736508">Ja šai politikai ir iestatīta virkne, kas nav tukša, komponents WebView lasīs URL ierobežojumus no satura nodrošinātāja ar norādīto iestādes nosaukumu.</translation>
 <translation id="5703863730741917647">Darbība, kas ir jāveic, kad ir aizritējis laiks līdz dīkstāvei.
@@ -1491,6 +1543,19 @@ Ja šis iestatījums ir atspējots vai tam nav iestatīta vērtība, pārlūkā 
           Ja šī politika nav iestatīta, tiek izmantots noklusējuma laika periods.
 
           Politikas vērtību nedrīkst norādīt milisekundēs.</translation>
+<translation id="5783595563813359339">Šī politika ir novecojusi. Lūdzu, izmantojiet politiku <ph name="DEFAULT_PLUGINS_SETTING_POLICY" />, lai kontrolētu Flash spraudņa pieejamību, un politiku <ph name="ALWAYS_OPEN_PDF_EXTERNALLY_POLICY" />, lai kontrolētu, vai izmantot integrēto PDF skatīšanas programmu PDF failu atvēršanai.
+
+Norāda to spraudņu sarakstu, kurus lietotājs var iespējot vai atspējot pārlūkā <ph name="PRODUCT_NAME" />.
+
+Var izmantot aizstājējzīmes “*” un “?”, lai veidotu atbilstību mainīgām rakstzīmēm. “*” atbilst mainīgu rakstzīmju virknei, bet “?” norāda vienu noteiktu rakstzīmi, piemēram, atbilst nullei vai vienai rakstzīmei. Atsoļa rakstzīme ir “\”, tādēļ, lai veidotu atbilstību faktiskajām rakstzīmēm “*”, “?” un “\”, to sākumā var ievadīt “\”.
+
+Ja šis iestatījums ir iespējots, pārlūkā <ph name="PRODUCT_NAME" /> vienmēr var tikt izmantoti norādītā saraksta spraudņi. Lietotāji tos var iespējot vai atspējot politikā about:plugins arī tad, ja spraudnis struktūrai, kas norādīta politikā DisabledPlugins. Lietotāji var iespējot vai atspējot arī spraudņus, kas neatbilst nevienai struktūrai, kas norādīta politikās DisabledPlugins, DisabledPluginsExceptions un EnabledPlugins.
+
+Šī politika ir paredzēta, lai nodrošinātu stingru spraudņu uzraudzību ar melnā saraksta palīdzību, iekļaujot DisabledPlugins sarakstā aizstājējzīmju ierakstus, piemēram, lai atspējotu visus spraudņus (*) vai visus Java spraudņus (*Java*), kamēr administrators vēlas iespējot kādu konkrētu versiju, piemēram, IcedTea Java 2.3. Šīs konkrētās versijas var tikt norādītas šajā politikā.
+
+Ņemiet vērā, ka ir jāizslēdz gan spraudņa nosaukums, gan spraudņa grupas nosaukums. Katra spraudņu grupa tiek attēlota atsevišķā about:plugins sadaļā. Katrā sadaļā var būt viens vai vairāki spraudņi. Piemēram, spraudnis Shockwave Flash ir ietverts grupā Adobe Flash Player, tāpēc, lai šis spraudnis tiktu izņemts no melnā saraksta, abiem nosaukumiem ir jāatbilst ierakstiem izņēmumu sarakstā.
+
+Ja šī politika nav iestatīta, jebkurš spraudnis, kas atbilst politikā DisabledPlugins norādītajām struktūrām, tiek atspējots un lietotājs nevar to iespējot.</translation>
 <translation id="5795001131770861387">Iespējo HTTP/0.9 atbalstu portos, kas nav noklusējuma porti</translation>
 <translation id="5809728392451418079">Ierīces lokālo kontu parādāmā vārda iestatīšana</translation>
 <translation id="5814301096961727113">Mutisko atsauksmju noklusējuma statusa iestatīšana pieteikšanās ekrānā</translation>
@@ -1562,12 +1627,6 @@ Ja šis iestatījums ir atspējots vai tam nav iestatīta vērtība, pārlūkā 
 
       Ja šī politika nav iestatīta vai tai ir iestatīta vērtība Nepatiesa, pārlūks <ph name="PRODUCT_NAME" /> neveic atsaukšanas pārbaudes tiešsaistē pārlūkā <ph name="PRODUCT_NAME" /> 19 vai jaunākā versijā.</translation>
 <translation id="5966615072639944554">Paplašinājumi, kuriem atļauts izmantot attālinātās apstiprināšanas API.</translation>
-<translation id="5974970919245996815">Ziņojumu informācija par Android statusu tiek sūtīta atpakaļ uz serveri.
-
-Ja politikai ir iestatīta vērtība “Nepatiesa”, informācija netiek sūtīta.
-Ja ir iestatīta vērtība “Patiesa” vai nav iestatīta nekāda vērtība, informācija netiek sūtīta.
-
-Šī politika ir spēkā tikai tad, ja ir iespējotas Android lietotnes.</translation>
 <translation id="5983708779415553259">Noklusējuma darbība vietnēm, kas nav iekļautas nevienā satura pakotnē</translation>
 <translation id="5997543603646547632">Pēc noklusējuma izmantot 24 stundu pulksteni</translation>
 <translation id="6009903244351574348">Ļauj sarakstā iekļauto satura veidu apstrādi veikt produktam <ph name="PRODUCT_FRAME_NAME" />.
@@ -1588,16 +1647,20 @@ Ja ir iestatīta vērtība “Patiesa” vai nav iestatīta nekāda vērtība, i
 
       Ja šai politikai ir iestatīta vērtība Nepatiesa, paātrināta aparatūras darbība tiek atspējota.</translation>
 <translation id="6074963268421707432">Neatļauj nevienai vietnei rādīt paziņojumus darbvirsmā</translation>
-<translation id="6076008833763548615">Atspējo ārējās krātuves uzstādīšanu.
-
-      Kad politika ir iestatīta uz Patiesa, failu pārlūkā nav pieejama ārējā krātuve.
-
-      Šī politika attiecas uz visiem datu nesēju veidiem, piemēram, USB zibatmiņas diskiem, ārējiem cietajiem diskiem, SD un citām atmiņas kartēm, optiskajām krātuvēm u.c. Uz iekšējo krātuvi politika neattiecas, tādēļ failiem, kas saglabāti mapē Downloads, joprojām var piekļūt. Šī politika neattiecas arī uz pakalpojumu Google disks.
-
-      Ja šis iestatījums ir atspējots vai nav konfigurēts, lietotāji savās ierīcēs var izmantot visus atbalstītos ārējo krātuvju veidus.</translation>
 <translation id="6076099373507468537">Definē USB ierīces, kuras ir atļauts atvienot no kodola draiveriem, lai tās izmantotu ar chrome.usb API tieši tīmekļa lietojumprogrammā. Katru ierakstu veido USB pakalpojumu sniedzēja identifikators un produkta identifikators, kas identificē aparatūru.
 
       Ja šī politika netiek konfigurēta, atvienojamo USB ierīču saraksts ir tukšs.</translation>
+<translation id="608377055310226486">Šī politika ir novecojusi. Lūdzu, izmantojiet politiku <ph name="DEFAULT_PLUGINS_SETTING_POLICY" />, lai kontrolētu Flash spraudņa pieejamību, un politiku <ph name="ALWAYS_OPEN_PDF_EXTERNALLY_POLICY" />, lai kontrolētu, vai izmantot integrēto PDF skatīšanas programmu PDF failu atvēršanai.
+
+Norāda spraudņu sarakstu, kas ir iespējoti pārlūkā <ph name="PRODUCT_NAME" />, un neļauj lietotājiem mainīt šo iestatījumu.
+
+Var izmantot aizstājējzīmes “*” un “?”, lai veidotu atbilstību mainīgām rakstzīmēm. “*” atbilst mainīgu rakstzīmju virknei, bet “?” norāda vienu noteiktu rakstzīmi, piemēram, atbilst nullei vai vienai rakstzīmei. Atsoļa rakstzīme ir “\”, tādēļ, lai veidotu atbilstību faktiskajām rakstzīmēm “*”, “?” un “\”, to sākumā var ievadīt “\”.
+
+Norādītais spraudņu saraksts vienmēr tiek izmantots pārlūkā <ph name="PRODUCT_NAME" />, ja tas ir instalēts. Spraudņi ir atzīmēti kā iespējoti politikā about:plugins, un lietotāji nevar tos atspējot.
+
+Ņemiet vērā, ka ar šo politiku tiek ignorētas politikas DisabledPlugins un DisabledPluginsExceptions.
+
+Ja šī politika nav iestatīta, lietotājs var atspējot jebkuru sistēmā instalēto spraudni.</translation>
 <translation id="6093156968240188330">Atļaut attālajiem lietotājiem veikt darbības ar privileģētajiem logiem attālās palīdzības sesijās</translation>
 <translation id="6095999036251797924">Norāda lietotāja neaktivitātes laiku, pēc kura ekrāns tiek bloķēts, kad ierīce darbojas ar maiņstrāvas barošanu vai akumulatoru.
 
@@ -1631,6 +1694,12 @@ Ja ir iestatīta vērtība “Patiesa” vai nav iestatīta nekāda vērtība, i
 <translation id="6155936611791017817">Lielā kursora noklusējuma stāvokļa iestatīšana pieteikšanās ekrānā</translation>
 <translation id="6157537876488211233">Ar komatu atdalītu starpniekserveru apiešanas kārtulu saraksts</translation>
 <translation id="6158324314836466367">Uzņēmuma interneta veikala nosaukums (darbība ir pārtraukta)</translation>
+<translation id="6166832345529129545">Kontrolē, kurus ātrās atbloķēšanas režīmus var iestatīt un izmantot.
+      Šis iestatījums iekļauj baltajā sarakstā atļautos ātrās atbloķēšanas režīmus, kurus var iestatīt un izmantot bloķēšanas ekrāna atbloķēšanai. Vērtība ir virkņu saraksts, un pieļaujamās virkņu opcijas ir “visi” vai “PIN”. Ja ir atlasīta virkne “visi”, ir pieejami visi atbalstītie ātrās atbloķēšanas režīmi; pretējā gadījumā ir pieejami sarakstā norādītie režīmi.
+
+      Ja šis iestatījums ir konfigurēts, ātrās atbloķēšanas režīmus, kuru veids nav norādīts sarakstā, nevar iestatīt vai izmantot.
+
+      Ja šis iestatījums netiek konfigurēts, tiks iespējots režīms “PIN”, un visi pārējie režīmi tiks atspējoti.</translation>
 <translation id="6167074305866468481">Brīdinājums: pēc 43. versijas (apmēram 2015. gada jūlijā) pārlūkā <ph name="PRODUCT_NAME" /> tiks pilnībā noņemts SSLv3 atbalsts, kā arī tajā pašā laikā tiks noņemta šī politika.
 
       Ja šī politika nav konfigurēta, pārlūkā <ph name="PRODUCT_NAME" /> tiek izmantota noklusējuma minimālā versija. Pārlūka <ph name="PRODUCT_NAME" /> 39. versijā tā ir versija SSLv3, bet vēlākās versijās — TLS 1.0.
@@ -1697,6 +1766,7 @@ Ja ir iestatīta vērtība “Patiesa” vai nav iestatīta nekāda vērtība, i
       Ja šis iestatījums ir iespējots vai tam nav iestatīta vērtība, lietotāji varēs pārvaldīt funkcijas Automātiskā aizpilde lietošanu. Tādējādi lietotāji varēs konfigurēt funkcijas Automātiskā aizpilde profilus un pēc saviem ieskatiem ieslēgt/izslēgt funkciju Automātiskā aizpilde.</translation>
 <translation id="6394350458541421998">Šīs politikas darbība tika pārtraukta ar <ph name="PRODUCT_OS_NAME" /> versiju 29. Lūdzu, tās vietā izmantojiet politiku PresentationScreenDimDelayScale.</translation>
 <translation id="6401669939808766804">Atteikt lietotāju</translation>
+<translation id="6413263121045928260">Parole ir jāievada katru dienu (ik pēc 24 stundām).</translation>
 <translation id="6417861582779909667">Ļauj iestatīt URL rakstu sarakstu, kurā ir norādītas vietnes, kurām nav atļauts iestatīt sīkfailus.
 
           Ja šī politika nav iestatīta, visām vietnēm tiks izmantota globālā noklusējuma vērtība no politikas DefaultCookiesSetting (ja tā ir iestatīta) vai pretējā gadījumā no lietotāja personīgās konfigurācijas.</translation>
@@ -1916,6 +1986,7 @@ Ja ir iestatīta vērtība “Patiesa” vai nav iestatīta nekāda vērtība, i
           Active Directory domēnam.</translation>
 <translation id="7063895219334505671">Atļauj uznirstošos logus šajās vietnēs</translation>
 <translation id="706669471845501145">Atļaut vietnēm rādīt paziņojumus darbvirsmā</translation>
+<translation id="7072406291414141328">Iespējo tīkla joslas platuma ierobežošanu</translation>
 <translation id="7079519252486108041">Bloķēt uznirstošos logus šajās vietnēs</translation>
 <translation id="7091198954851103976">Vienmēr izpilda spraudņus, kuriem nepieciešama autorizācija</translation>
 <translation id="7106631983877564505">Blokatora iespējošana, ja <ph name="PRODUCT_OS_NAME" /> ierīces ir neaktīvas vai to darbība tiek apturēta.
@@ -1967,9 +2038,6 @@ Ja ir iestatīta vērtība “Patiesa” vai nav iestatīta nekāda vērtība, i
 <translation id="7132877481099023201">Vietrāži URL, kuriem tiks nodrošināta piekļuve video tveršanas ierīcēm bez uzvednes parādīšanas.</translation>
 <translation id="7167436895080860385">Atļauj rādīt paroles paroļu pārvaldniekā (atspējota)</translation>
 <translation id="7173856672248996428">Īslaicīgs profils</translation>
-<translation id="7187256234726597551">Ja politika ir iestatīta uz “true”, ierīcei ir atļauta attālā apstiprināšana un tiks automātiski izveidots sertifikāts, kas tiks augšupielādēts ierīču pārvaldības serverī.
-
-          Ja politika ir iestatīta uz “false” vai nav iestatīta, netiks izveidots sertifikāts un neizdosies zvani uz paplašinājuma enterprise.platformKeysPrivate saskarni API.</translation>
 <translation id="718956142899066210">Savienojumu veidi, kuru laikā ir atļauts veikt atjaunināšanu</translation>
 <translation id="7194407337890404814">Noklusējuma meklētājprogrammas nosaukums</translation>
 <translation id="7195064223823777550">Tiek norādīta darbība, kas jāveic pēc vāka aizvēršanas.
@@ -2095,6 +2163,7 @@ Ja ir iestatīta vērtība “Patiesa” vai nav iestatīta nekāda vērtība, i
 
       Ja šī politika nav iestatīta, tiks izmantots noklusējuma kešatmiņas lielums, kuru lietotājs varēs ignorēt, izmantojot atzīmi “--disk-cache-size”.</translation>
 <translation id="7604169113182304895">Android lietotnēs var tikt brīvi izvēlēts izmantot šo sarakstu. Jūs nevarat likt lietotnēm izmantot šo sarakstu.</translation>
+<translation id="7611372873040492235">Parole ir jāievada ik pēc 12 stundām.</translation>
 <translation id="7612157962821894603">Visas sistēmas atzīmes, kas jālieto, startējot pārlūku <ph name="PRODUCT_NAME" /></translation>
 <translation id="7614663184588396421">Atspējoto protokolu shēmu saraksts</translation>
 <translation id="7625444193696794922">Norāda atbrīvošanas kanālu, pie kura jābūt piesaistītai šai ierīcei.</translation>
@@ -2257,6 +2326,9 @@ Ja ir iestatīta vērtība “Patiesa” vai nav iestatīta nekāda vērtība, i
           Active Directory domēnam.</translation>
 <translation id="7937766917976512374">Video tveršanas ļaušana vai noraidīšana</translation>
 <translation id="7941975817681987555">Neprognozēt tīkla darbības nevienā tīkla savienojumā</translation>
+<translation id="7942429005743031780">Šajā politikā ir norādīti paplašinājumi, kuros atļauts attālinātajai apstiprināšanai izmantot uzņēmumu platformu atslēgu (Enterprise Platform Keys) API chrome.enterprise.platformKeys.challengeUserKey(). Lai izmantotu šo API, paplašinājumiem ir jābūt pievienotiem šajā sarakstā.
+
+          Ja paplašinājums nav iekļauts sarakstā vai ja saraksts nav iestatīts, API izsaukumi neizdosies un tiks rādīts kļūdas kods.</translation>
 <translation id="7953256619080733119">Pārvaldīto lietotāju manuālo izņēmumu saimniekdatori</translation>
 <translation id="7971839631300653352">SSL 3.0</translation>
 <translation id="7974114691960514888">Šī politika vairs netiek atbalstīta.
@@ -2268,6 +2340,7 @@ Ja ir iestatīta vērtība “Patiesa” vai nav iestatīta nekāda vērtība, i
 <translation id="7986374692540430898">Jūs nevarat likt Android lietotnēm izmantot starpniekserveri. Android lietotnēm ir pieejama starpniekservera iestatījumu apakškopa, ko lietotnes var izmantot, ja tas ir nepieciešams. Lai iegūtu plašāku informāciju, skatiet politiku <ph name="PROXY_MODE_POLICY" />.</translation>
 <translation id="802147957407376460">Pagriezt ekrānu par 0 grādiem</translation>
 <translation id="8044493735196713914">Ziņot par ierīces sāknēšanas režīmu</translation>
+<translation id="8050080920415773384">Vietējā drukāšana</translation>
 <translation id="8059164285174960932">URL, kurā attālās piekļuves klientiem ir jāiegūst autentifikācijas pilnvara</translation>
 <translation id="8071636581296916773">Ļauj izmantot pārraides serverus, kad attālie klienti mēģina izveidot savienojumu ar šo ierīci.
 
@@ -2345,9 +2418,6 @@ Ja ir iestatīta vērtība “Patiesa” vai nav iestatīta nekāda vērtība, i
 
       Ja šī politika nav iestatīta, netiek lietots neviens politikas URLBlacklist melnā saraksta izņēmums.</translation>
 <translation id="8176035528522326671">Atļaut korporatīvajam lietotājam būt tikai primārajam vairākprofilu lietotājam (noklusējuma rīcība attiecībā uz uzņēmuma pārvaldītiem lietotājiem)</translation>
-<translation id="8197918588508433925">Šajā politikā ir norādīti paplašinājumi, kuros atļauts attālinātajai apstiprināšanai izmantot uzņēmumu platformu atslēgu (Enterprise Platform Keys) API chrome.enterprise.platformKeysPrivate.challengeUserKey(). Lai izmantotu šo API, paplašinājumiem ir jābūt pievienotiem šajā sarakstā.
-
-          Ja paplašinājums nav iekļauts sarakstā vai ja saraksts nav iestatīts, API izsaukumi neizdosies un tiks rādīts kļūdas kods.</translation>
 <translation id="8214600119442850823">Konfigurē paroļu pārvaldnieku.</translation>
 <translation id="8244525275280476362">Maksimāla ieneses aizkave pēc politikas atzīšanas par nederīgu</translation>
 <translation id="8256688113167012935">Kontrolējiet konta nosaukumu, kas tiek rādīts <ph name="PRODUCT_OS_NAME" /> pieteikšanās ekrānā attiecīgajam ierīces lokālajam kontam.
@@ -2442,17 +2512,6 @@ Ja ir iestatīta vērtība “Patiesa” vai nav iestatīta nekāda vērtība, i
           Šablonu piemērus skatiet šeit: https://www.chromium.org/developers/how-tos/chrome-frame-getting-started.</translation>
 <translation id="8493645415242333585">Atspējo pārlūkošanas vēstures saglabāšanu</translation>
 <translation id="8499172469244085141">Noklusējuma iestatījumi (lietotāji var ignorēt)</translation>
-<translation id="8501011084242226370">Tiek norādīts saraksts ar spraudņiem, kurus lietotājs var iespējot vai atspējot pārlūkā <ph name="PRODUCT_NAME" />.
-
-      Aizstājējzīmes “*” un “?” var tikt izmantotas, lai meklētu atbilstības brīvi noteiktām rakstzīmēm. Aizstājējzīme “*” atbilst brīvi noteiktam rakstzīmju skaitam, turpretī “?” norāda vienu izvēles rakstzīmi, t.i., atbilst vienai rakstzīmei vai neatbilst nevienai. “\” ir atsoļa rakstzīme. Lai tiktu atrasta atbilstība rakstzīmēm “*”, “?” vai “\”, varat pirms tām ievietot rakstzīmi “\”.
-
-      Iespējojot šo iestatījumu, norādītos spraudņus var izmantot pārlūkā <ph name="PRODUCT_NAME" />. Lietotāji var iespējot vai atspējojot šos spraudņus, dodoties uz about:plugins, pat ja spraudnis atbilst arī saraksta DisabledPlugins rakstiem. Turklāt lietotāji var iespējot un atspējot spraudņus, kas neatbilst nevienam sarakstu DisabledPlugins, DisabledPluginsExceptions un EnabledPlugins rakstam.
-
-      Šī politika tiek izmantota, lai atļautu spraudņu melnos sarakstus gadījumos, kad sarakstā DisabledPlugins ir ieraksti ar aizstājējzīmēm, piemēram, “*” (atspējot visus spraudņus) vai “*Java*” (atspējot visus Java spraudņus), taču administrators vēlas iespējot konkrētu spraudņa versiju, piemēram, “IcedTea Java 2.3”. Šīs konkrētās versijas var norādīt šajā politikā.
-
-      Ņemiet vērā, ka ir jāizslēdz gan spraudņa nosaukums, gan spraudņa grupas nosaukums. Katra spraudņu grupa tiek attēlota atsevišķā about:plugins sadaļā. Katrā sadaļā var būt viens vai vairāki spraudņi. Piemēram, spraudnis Shockwave Flash ir ietverts grupā Adobe Flash Player, tāpēc, lai šis spraudnis tiktu izslēgts no melnā saraksta, abiem nosaukumiem ir jāatbilst ierakstiem izņēmumu sarakstā.
-
-      Ja šī politika netiek iestatīta, jebkurš spraudnis, kas atbildīs saraksta DisabledPlugins rakstiem, tiks atspējots un lietotājs nevarēs to iespējot.</translation>
 <translation id="8519264904050090490">Pārvaldīto lietotāju manuālo izņēmumu vietrāži URL</translation>
 <translation id="8544375438507658205"><ph name="PRODUCT_FRAME_NAME" /> noklusējuma HTML renderētājs</translation>
 <translation id="8549772397068118889">Brīdināt, kad tiek apmeklētas satura pakotnēs neiekļautas vietnes.</translation>
@@ -2489,15 +2548,6 @@ Ja ir iestatīta vērtība “Patiesa” vai nav iestatīta nekāda vērtība, i
           Serveru nosaukumus atdaliet ar komatu. Ir atļautas aizstājējzīmes (*).
 
           Ja neiestatīsiet šo politiku, <ph name="PRODUCT_NAME" /> mēģinās noteikt, vai serveris darbojas iekštīklā, un tikai pēc tam atbildēs IWA pieprasījumiem. Ja serveris ir atzīts par iekštīklu, <ph name="PRODUCT_NAME" /> ignorēs no tā nosūtītos IWA pieprasījumus.</translation>
-<translation id="8668394701842594241">Norāda produktā <ph name="PRODUCT_NAME" /> iespējoto spraudņu sarakstu un neļauj lietotājiem mainīt šo iestatījumu.
-
-      Var lietot aizstājējzīmes * un ?, lai veidotu atbilstību mainīgām rakstzīmēm. * atbilst mainīgu rakstzīmju virknei, bet ? norāda vienu noteiktu rakstzīmi, piemēram, atbilst nullei vai vienai rakstzīmei. Atsoļa rakstzīme ir \, tādējādi, lai veidotu atbilstību faktiskajām rakstzīmēm *, ? un \, to sākumā var ievadīt \.
-
-      Produktā <ph name="PRODUCT_NAME" /> vienmēr tiek lietoti sarakstā iekļautie spraudņi, ja tie ir instalēti. Politikā about:plugins norādītie spraudņi tiek atzīmēti kā iespējoti, un lietotāji tos nevar atspējot.
-
-      Ņemiet vērā, ka šī politika ignorē gan politiku DisabledPlugins, gan DisabledPluginsExceptions.
-
-      Ja šī politika nav iestatīta, lietotājs var atspējot jebkuru datorā instalēto spraudni.</translation>
 <translation id="8672321184841719703">Automātiskā atjauninājuma vēlamā versija</translation>
 <translation id="868068801094828689">Iespējo anonīmu pārskatu sūtīšanu Google serveriem ar lietojuma un avāriju datiem pārlūkā <ph name="PRODUCT_NAME" />, kā arī neļauj lietotājiem mainīt šo iestatījumu.
 
@@ -2651,6 +2701,7 @@ definēts Atvērta tīkla konfigurācijas formātā, kas aprakstīts šeit: <ph 
 <translation id="9088433379343318874">Iespējot uzraudzītā lietotāja satura nodrošinātāju</translation>
 <translation id="9088444059179765143">Automātiskās laika joslas noteikšanas metodes konfigurēšana</translation>
 <translation id="9096086085182305205">Autentifikācijas serveru baltais saraksts</translation>
+<translation id="9098186110082719131">Parole ir jāievada ik pēc sešām stundām.</translation>
 <translation id="9098553063150791878">HTTP autentifikācijas politikas</translation>
 <translation id="9105265795073104888">Android lietotnēm ir pieejama tikai starpniekservera konfigurācijas opciju apakškopa. Android lietotnes šo starpniekserveri var izmantot, ja tas ir nepieciešams. Jūs nevarat likt lietotnēm izmantot starpniekserveri.</translation>
 <translation id="9112897538922695510">Ļauj reģistrēt protokolu apdarinātāju sarakstu. Šī var būt tikai ieteicama politika. Rekvizītā |protocol| ir jāiestata shēma, piemēram “mailto”, un rekvizītā |url| ir jāiestata tās lietojumprogrammas URL raksts, kura apstrādā shēmu. Parametrā var iekļaut “%s”, kas tiks aizstāts ar apstrādāto URL.
@@ -2685,5 +2736,11 @@ definēts Atvērta tīkla konfigurācijas formātā, kas aprakstīts šeit: <ph 
 <translation id="922540222991413931">Konfigurē paplašinājumu, lietotņu un lietotāja skriptu instalēšanas avotus</translation>
 <translation id="924557436754151212">Saglabāto paroļu importēšana no noklusējuma pārlūka pirmajā palaišanas reizē</translation>
 <translation id="930930237275114205">Iestatīt <ph name="PRODUCT_FRAME_NAME" /> lietotāja datu direktoriju</translation>
+<translation id="944607242500063080">Konfigurējiet atļautos ātrās atbloķēšanas režīmus.</translation>
 <translation id="944817693306670849">Iestatīt diska kešatmiņas lielumu</translation>
+<translation id="969164417253718105">Šis iestatījums kontrolē, cik bieži bloķēšanas ekrānā tiek pieprasīta paroles ievade, lai varētu turpināt izmantot ātro atbloķēšanu. Ja tiek atvērts bloķēšanas ekrāns un kopš pēdējās paroles ievades reizes ir pagājis ilgāks laiks, nekā iestatītā vērtība, bloķēšanas ekrānā ātrā atbloķēšana nav pieejama. Ja lietotājs paliks bloķēšanas ekrānā ilgāk par šo periodu, nākamajā reizē, kad lietotājs ievadīs nepareizu kodu vai atkārtoti atvērs bloķēšanas ekrānu, tiks pieprasīts ievadīt paroli (neatkarīgi no tā, kurš nosacījums tiks izpildīts vispirms).
+
+      Ja šis iestatījums ir konfigurēts, lietotājiem, kuri izmanto ātro atbloķēšanu, atbilstoši šim iestatījumam bloķēšanas ekrānā būs jāievada parole.
+
+      Ja šis iestatījums nav konfigurēts, lietotājiem, kuri izmanto ātro bloķēšanu, bloķēšanas ekrānā būs jāievada parole katru dienu.</translation>
 </translationbundle>

@@ -57,7 +57,6 @@ class BasePage;
 class CallbackStack;
 struct GCInfo;
 class GarbageCollectedMixinConstructorMarker;
-class HeapObjectHeader;
 class PersistentNode;
 class PersistentRegion;
 class BaseArena;
@@ -293,11 +292,19 @@ class PLATFORM_EXPORT ThreadState {
   }
   void enterNoAllocationScope() { m_noAllocationCount++; }
   void leaveNoAllocationScope() { m_noAllocationCount--; }
-  bool isGCForbidden() const { return m_gcForbiddenCount; }
+  bool isGCForbidden() const {
+    return m_gcForbiddenCount || isMixinInConstruction();
+  }
   void enterGCForbiddenScope() { m_gcForbiddenCount++; }
   void leaveGCForbiddenScope() {
-    ASSERT(m_gcForbiddenCount > 0);
+    DCHECK_GE(m_gcForbiddenCount, 0u);
     m_gcForbiddenCount--;
+  }
+  bool isMixinInConstruction() const { return m_mixinsBeingConstructedCount; }
+  void enterMixinConstructionScope() { m_mixinsBeingConstructedCount++; }
+  void leaveMixinConstructionScope() {
+    DCHECK_GT(m_mixinsBeingConstructedCount, 0u);
+    m_mixinsBeingConstructedCount--;
   }
   bool sweepForbidden() const { return m_sweepForbidden; }
 
@@ -462,7 +469,7 @@ class PLATFORM_EXPORT ThreadState {
       GarbageCollectedMixinConstructorMarker* gcMixinMarker) {
     ASSERT(checkThread());
     if (!m_gcMixinMarker) {
-      enterGCForbiddenScope();
+      enterMixinConstructionScope();
       m_gcMixinMarker = gcMixinMarker;
     }
   }
@@ -470,7 +477,7 @@ class PLATFORM_EXPORT ThreadState {
       GarbageCollectedMixinConstructorMarker* gcMixinMarker) {
     ASSERT(checkThread());
     if (m_gcMixinMarker == gcMixinMarker) {
-      leaveGCForbiddenScope();
+      leaveMixinConstructionScope();
       m_gcMixinMarker = nullptr;
     }
   }
@@ -669,6 +676,7 @@ class PLATFORM_EXPORT ThreadState {
   bool m_sweepForbidden;
   size_t m_noAllocationCount;
   size_t m_gcForbiddenCount;
+  size_t m_mixinsBeingConstructedCount;
   double m_accumulatedSweepingTime;
 
   BaseArena* m_arenas[BlinkGC::NumberOfArenas];

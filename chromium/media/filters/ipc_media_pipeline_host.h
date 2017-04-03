@@ -10,14 +10,11 @@
 #include <string>
 
 #include "base/callback_forward.h"
+#include "base/sequenced_task_runner.h"
 #include "base/time/time.h"
 #include "media/base/demuxer_stream.h"
 #include "media/base/pipeline_status.h"
 #include "media/filters/platform_media_pipeline_types.h"
-
-namespace base {
-class SequencedTaskRunner;
-}
 
 namespace media {
 

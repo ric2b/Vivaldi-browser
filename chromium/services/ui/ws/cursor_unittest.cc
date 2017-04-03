@@ -17,7 +17,7 @@
 #include "services/ui/ws/platform_display.h"
 #include "services/ui/ws/platform_display_factory.h"
 #include "services/ui/ws/server_window.h"
-#include "services/ui/ws/server_window_surface_manager_test_api.h"
+#include "services/ui/ws/server_window_compositor_frame_sink_manager_test_api.h"
 #include "services/ui/ws/test_utils.h"
 #include "services/ui/ws/window_manager_display_root.h"
 #include "services/ui/ws/window_manager_state.h"
@@ -49,12 +49,10 @@ class CursorTest : public testing::Test {
  protected:
   // testing::Test:
   void SetUp() override {
-    window_server_delegate()->set_num_displays_to_create(1);
+    window_server_delegate()->CreateDisplays(1);
 
     // As a side effect, this allocates Displays.
-    WindowManagerWindowTreeFactorySetTestApi(
-        window_server()->window_manager_window_tree_factory_set())
-        .Add(kTestId1);
+    AddWindowManager(window_server(), kTestId1);
     window_server()->user_id_tracker()->AddUserId(kTestId1);
     window_server()->user_id_tracker()->SetActiveUserId(kTestId1);
   }
@@ -83,8 +81,9 @@ class CursorTest : public testing::Test {
     w->SetClientArea(gfx::Insets(10, 10), std::vector<gfx::Rect>());
     w->SetVisible(true);
 
-    ServerWindowSurfaceManagerTestApi test_api(w->GetOrCreateSurfaceManager());
-    test_api.CreateEmptyDefaultSurface();
+    ServerWindowCompositorFrameSinkManagerTestApi test_api(
+        w->GetOrCreateCompositorFrameSinkManager());
+    test_api.CreateEmptyDefaultCompositorFrameSink();
 
     return w;
   }

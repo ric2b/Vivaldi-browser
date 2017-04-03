@@ -60,22 +60,28 @@ const char kHostId[] = "ABC123";
 const char kHostPin[] = "123456";
 
 struct NetworkPerformanceParams {
-  NetworkPerformanceParams(int bandwidth,
-                           int max_buffers,
+  // |buffer_s| defines buffer size in seconds. actual buffer size is calculated
+  // based on bandwidth_kbps
+  NetworkPerformanceParams(int bandwidth_kbps,
+                           double buffer_s,
                            double latency_average_ms,
                            double latency_stddev_ms,
-                           double out_of_order_rate)
-      : bandwidth(bandwidth),
-        max_buffers(max_buffers),
+                           double out_of_order_rate,
+                           double signaling_latency_ms)
+      : bandwidth_kbps(bandwidth_kbps),
+        max_buffers(buffer_s * bandwidth_kbps * 1000 / 8),
         latency_average(base::TimeDelta::FromMillisecondsD(latency_average_ms)),
         latency_stddev(base::TimeDelta::FromMillisecondsD(latency_stddev_ms)),
-        out_of_order_rate(out_of_order_rate) {}
+        out_of_order_rate(out_of_order_rate),
+        signaling_latency(
+            base::TimeDelta::FromMillisecondsD(signaling_latency_ms)) {}
 
-  int bandwidth;
+  int bandwidth_kbps;
   int max_buffers;
   base::TimeDelta latency_average;
   base::TimeDelta latency_stddev;
   double out_of_order_rate;
+  base::TimeDelta signaling_latency;
 };
 
 class FakeCursorShapeStub : public protocol::CursorShapeStub {
@@ -163,6 +169,10 @@ class ProtocolPerfTest
 
   // FrameStatsConsumer interface.
   void OnVideoFrameStats(const protocol::FrameStats& frame_stats) override {
+    // Ignore store stats for empty frames.
+    if (!frame_stats.host_stats.frame_size)
+      return;
+
     frame_stats_.push_back(frame_stats);
 
     if (waiting_frame_stats_loop_ &&
@@ -172,6 +182,14 @@ class ProtocolPerfTest
   }
 
   // HostStatusObserver interface.
+  void OnClientAuthenticated(const std::string& jid) override {
+    if (event_timestamp_source_) {
+      auto& session = host_->client_sessions_for_tests().front();
+      session->SetEventTimestampsSourceForTests(
+          std::move(event_timestamp_source_));
+    }
+  }
+
   void OnClientConnected(const std::string& jid) override {
     message_loop_.task_runner()->PostTask(
         FROM_HERE, base::Bind(&ProtocolPerfTest::OnHostConnectedMainThread,
@@ -244,6 +262,7 @@ class ProtocolPerfTest
     jingle_glue::JingleThreadWrapper::EnsureForCurrentMessageLoop();
 
     host_signaling_.reset(new FakeSignalStrategy(kHostJid));
+    host_signaling_->set_send_delay(GetParam().signaling_latency);
     host_signaling_->ConnectTo(client_signaling_.get());
 
     protocol::NetworkSettings network_settings(
@@ -252,7 +271,7 @@ class ProtocolPerfTest
     std::unique_ptr<FakePortAllocatorFactory> port_allocator_factory(
         new FakePortAllocatorFactory(fake_network_dispatcher_));
     port_allocator_factory->socket_factory()->SetBandwidth(
-        GetParam().bandwidth, GetParam().max_buffers);
+        GetParam().bandwidth_kbps * 1000 / 8, GetParam().max_buffers);
     port_allocator_factory->socket_factory()->SetLatency(
         GetParam().latency_average, GetParam().latency_stddev);
     port_allocator_factory->socket_factory()->set_out_of_order_rate(
@@ -302,6 +321,7 @@ class ProtocolPerfTest
   }
 
   void StartClientAfterHost() {
+    client_signaling_->set_send_delay(GetParam().signaling_latency);
     client_signaling_->ConnectTo(host_signaling_.get());
 
     protocol::NetworkSettings network_settings(
@@ -316,7 +336,7 @@ class ProtocolPerfTest
         new FakePortAllocatorFactory(fake_network_dispatcher_));
     client_socket_factory_ = port_allocator_factory->socket_factory();
     port_allocator_factory->socket_factory()->SetBandwidth(
-        GetParam().bandwidth, GetParam().max_buffers);
+        GetParam().bandwidth_kbps * 1000 / 8, GetParam().max_buffers);
     port_allocator_factory->socket_factory()->SetLatency(
         GetParam().latency_average, GetParam().latency_stddev);
     port_allocator_factory->socket_factory()->set_out_of_order_rate(
@@ -360,6 +380,8 @@ class ProtocolPerfTest
   base::Thread decode_thread_;
   std::unique_ptr<FakeDesktopEnvironmentFactory> desktop_environment_factory_;
 
+  scoped_refptr<protocol::InputEventTimestampsSource> event_timestamp_source_;
+
   FakeCursorShapeStub cursor_shape_stub_;
 
   std::unique_ptr<protocol::CandidateSessionConfig> protocol_config_;
@@ -396,38 +418,45 @@ class ProtocolPerfTest
 INSTANTIATE_TEST_CASE_P(
     NoDelay,
     ProtocolPerfTest,
-    ::testing::Values(NetworkPerformanceParams(0, 0, 0, 0, 0.0)));
+    ::testing::Values(NetworkPerformanceParams(0, 0, 0, 0, 0.0, 0)));
 
 INSTANTIATE_TEST_CASE_P(
     HighLatency,
     ProtocolPerfTest,
-    ::testing::Values(NetworkPerformanceParams(0, 0, 300, 30, 0.0),
-                      NetworkPerformanceParams(0, 0, 30, 10, 0.0)));
+    ::testing::Values(NetworkPerformanceParams(0, 0, 300, 30, 0.0, 0),
+                      NetworkPerformanceParams(0, 0, 30, 10, 0.0, 0)));
 
 INSTANTIATE_TEST_CASE_P(
     OutOfOrder,
     ProtocolPerfTest,
-    ::testing::Values(NetworkPerformanceParams(0, 0, 2, 0, 0.01),
-                      NetworkPerformanceParams(0, 0, 30, 1, 0.01),
-                      NetworkPerformanceParams(0, 0, 30, 1, 0.1),
-                      NetworkPerformanceParams(0, 0, 300, 20, 0.01),
-                      NetworkPerformanceParams(0, 0, 300, 20, 0.1)));
+    ::testing::Values(NetworkPerformanceParams(0, 0, 2, 0, 0.01, 0),
+                      NetworkPerformanceParams(0, 0, 30, 1, 0.01, 0),
+                      NetworkPerformanceParams(0, 0, 30, 1, 0.1, 0),
+                      NetworkPerformanceParams(0, 0, 300, 20, 0.01, 0),
+                      NetworkPerformanceParams(0, 0, 300, 20, 0.1, 0)));
 
 INSTANTIATE_TEST_CASE_P(
     LimitedBandwidth,
     ProtocolPerfTest,
     ::testing::Values(
         // 100 Mbps
-        NetworkPerformanceParams(12500000, 12500000, 2, 1, 0.0),
+        NetworkPerformanceParams(100000, 0.25, 2, 1, 0.0, 0),
+        NetworkPerformanceParams(100000, 1.0, 2, 1, 0.0, 0),
         // 8 Mbps
-        NetworkPerformanceParams(1000000, 300000, 30, 5, 0.01),
-        NetworkPerformanceParams(1000000, 2000000, 30, 5, 0.01),
+        NetworkPerformanceParams(8000, 0.25, 30, 5, 0.01, 0),
+        NetworkPerformanceParams(8000, 1.0, 30, 5, 0.01, 0),
         // 2 Mbps
-        NetworkPerformanceParams(250000, 300000, 30, 5, 0.01),
-        NetworkPerformanceParams(250000, 2000000, 30, 5, 0.01),
-        // 800 kBps
-        NetworkPerformanceParams(100000, 30000, 130, 5, 0.00),
-        NetworkPerformanceParams(100000, 200000, 130, 5, 0.00)));
+        NetworkPerformanceParams(2000, 0.25, 30, 5, 0.01, 0),
+        NetworkPerformanceParams(2000, 1.0, 30, 5, 0.01, 0),
+        // 800 kbps
+        NetworkPerformanceParams(800, 0.25, 130, 5, 0.00, 0),
+        NetworkPerformanceParams(800, 1.0, 130, 5, 0.00, 0)));
+
+INSTANTIATE_TEST_CASE_P(
+    SlowSignaling,
+    ProtocolPerfTest,
+    ::testing::Values(NetworkPerformanceParams(8000, 0.25, 30, 0, 0.0, 50),
+                      NetworkPerformanceParams(8000, 0.25, 30, 0, 0.0, 500)));
 
 // TotalLatency[Ice|Webrtc] tests measure video latency in the case when the
 // whole screen is updated occasionally. It's intended to simulate the case when
@@ -436,59 +465,89 @@ INSTANTIATE_TEST_CASE_P(
 void ProtocolPerfTest::MeasureTotalLatency(bool use_webrtc) {
   scoped_refptr<test::CyclicFrameGenerator> frame_generator =
       test::CyclicFrameGenerator::Create();
-  frame_generator->set_draw_barcode(true);
-
   desktop_environment_factory_->set_frame_generator(
       base::Bind(&test::CyclicFrameGenerator::GenerateFrame, frame_generator));
+  event_timestamp_source_ = frame_generator;
 
   StartHostAndClient(use_webrtc);
   ASSERT_NO_FATAL_FAILURE(WaitConnected());
 
-  int skipped_frames = 0;
-  while (skipped_frames < 10) {
-    std::unique_ptr<webrtc::DesktopFrame> frame = ReceiveFrame();
-    test::CyclicFrameGenerator::ChangeInfoList changes =
-        frame_generator->GetChangeList(frame.get());
-    skipped_frames += changes.size();
+  int total_frames = 0;
+
+  const base::TimeDelta kWarmUpTime = base::TimeDelta::FromSeconds(2);
+  const base::TimeDelta kTestTime = base::TimeDelta::FromSeconds(5);
+
+  base::TimeTicks start_time = base::TimeTicks::Now();
+  while ((base::TimeTicks::Now() - start_time) < (kWarmUpTime + kTestTime)) {
+    ReceiveFrame();
+    ++total_frames;
   }
 
-  base::TimeDelta total_latency_big_frames;
-  int big_frame_count = 0;
-  base::TimeDelta total_latency_small_frames;
-  int small_frame_count = 0;
+  WaitFrameStats(total_frames);
 
-  while (big_frame_count + small_frame_count < 30) {
-    std::unique_ptr<webrtc::DesktopFrame> frame = ReceiveFrame();
-    base::TimeTicks frame_received_time = base::TimeTicks::Now();
+  int warm_up_frames = 0;
+
+  int big_update_count = 0;
+  base::TimeDelta total_latency_big_updates;
+  int small_update_count = 0;
+  base::TimeDelta total_latency_small_updates;
+  for (int i = 0; i < total_frames; ++i) {
+    const protocol::FrameStats& stats = frame_stats_[i];
+
+    // CyclicFrameGenerator::TakeLastEventTimestamps() always returns non-null
+    // timestamps.
+    CHECK(!stats.host_stats.latest_event_timestamp.is_null());
+
     test::CyclicFrameGenerator::ChangeInfoList changes =
-        frame_generator->GetChangeList(frame.get());
+        frame_generator->GetChangeList(stats.host_stats.latest_event_timestamp);
+
+    // Allow 2 seconds for the connection to warm-up, e.g. to get bandwidth
+    // estimate, etc. These frames are ignored when calculating stats below.
+    if (stats.client_stats.time_rendered < (start_time + kWarmUpTime)) {
+      ++warm_up_frames;
+      continue;
+    }
+
     for (auto& change_info : changes) {
-      base::TimeDelta latency = frame_received_time - change_info.timestamp;
+      base::TimeDelta latency =
+          stats.client_stats.time_rendered - change_info.timestamp;
       switch (change_info.type) {
         case test::CyclicFrameGenerator::ChangeType::NO_CHANGES:
           NOTREACHED();
           break;
         case test::CyclicFrameGenerator::ChangeType::FULL:
-          total_latency_big_frames += latency;
-          ++big_frame_count;
+          total_latency_big_updates += latency;
+          ++big_update_count;
           break;
         case test::CyclicFrameGenerator::ChangeType::CURSOR:
-          total_latency_small_frames += latency;
-          ++small_frame_count;
+          total_latency_small_updates += latency;
+          ++small_update_count;
           break;
       }
     }
   }
 
-  CHECK(big_frame_count);
-  VLOG(0) << "Average latency for big frames: "
-          << (total_latency_big_frames / big_frame_count).InMillisecondsF();
+  WaitFrameStats(total_frames);
 
-  if (small_frame_count) {
+  CHECK(big_update_count);
+  VLOG(0) << "Average latency for big updates: "
+          << (total_latency_big_updates / big_update_count).InMillisecondsF();
+
+  if (small_update_count) {
     VLOG(0)
-        << "Average latency for small frames: "
-        << (total_latency_small_frames / small_frame_count).InMillisecondsF();
+        << "Average latency for small updates: "
+        << (total_latency_small_updates / small_update_count).InMillisecondsF();
   }
+
+  double average_bwe =
+      std::accumulate(frame_stats_.begin() + warm_up_frames,
+                      frame_stats_.begin() + total_frames, 0.0,
+                      [](double sum, const protocol::FrameStats& stats) {
+                        return sum + stats.host_stats.bandwidth_estimate_kbps;
+                      }) /
+      (total_frames - warm_up_frames);
+  VLOG(0) << "Average BW estimate: " << average_bwe
+          << " (actual: " << GetParam().bandwidth_kbps << ")";
 }
 
 TEST_P(ProtocolPerfTest, TotalLatencyIce) {
@@ -504,34 +563,29 @@ TEST_P(ProtocolPerfTest, TotalLatencyWebrtc) {
 void ProtocolPerfTest::MeasureScrollPerformance(bool use_webrtc) {
   scoped_refptr<test::ScrollFrameGenerator> frame_generator =
       new test::ScrollFrameGenerator();
-
   desktop_environment_factory_->set_frame_generator(
       base::Bind(&test::ScrollFrameGenerator::GenerateFrame, frame_generator));
+  event_timestamp_source_ = frame_generator;
 
   StartHostAndClient(use_webrtc);
   ASSERT_NO_FATAL_FAILURE(WaitConnected());
 
-  int warm_up_frames = 0;
-
-  base::TimeTicks start_time = base::TimeTicks::Now();
   const base::TimeDelta kWarmUpTime = base::TimeDelta::FromSeconds(2);
-  while ((base::TimeTicks::Now() - start_time) < kWarmUpTime) {
-    ReceiveFrame();
-    ++warm_up_frames;
-  }
-
-  client_socket_factory_->ResetStats();
-
-  // Run the test for 2 seconds.
   const base::TimeDelta kTestTime = base::TimeDelta::FromSeconds(2);
 
   int num_frames = 0;
-  base::TimeDelta latency_sum;
-  start_time = base::TimeTicks::Now();
-  while ((base::TimeTicks::Now() - start_time) < kTestTime) {
-    std::unique_ptr<webrtc::DesktopFrame> frame = ReceiveFrame();
+  int warm_up_frames = 0;
+  base::TimeTicks start_time = base::TimeTicks::Now();
+  while ((base::TimeTicks::Now() - start_time) < (kTestTime + kWarmUpTime)) {
+    ReceiveFrame();
     ++num_frames;
-    latency_sum += frame_generator->GetFrameLatency(*frame);
+
+    // Allow 2 seconds for the connection to warm-up, e.g. to get bandwidth
+    // estimate, etc. These frames are ignored when calculating stats below.
+    if ((base::TimeTicks::Now() - start_time) < kWarmUpTime) {
+      ++warm_up_frames;
+      client_socket_factory_->ResetStats();
+    }
   }
 
   base::TimeDelta total_time = (base::TimeTicks::Now() - start_time);
@@ -545,12 +599,29 @@ void ProtocolPerfTest::MeasureScrollPerformance(bool use_webrtc) {
                         return sum + stats.host_stats.frame_size;
                       });
 
+  base::TimeDelta latency_sum = std::accumulate(
+      frame_stats_.begin() + warm_up_frames,
+      frame_stats_.begin() + warm_up_frames + num_frames, base::TimeDelta(),
+      [](base::TimeDelta sum, const protocol::FrameStats& stats) {
+        return sum + (stats.client_stats.time_rendered -
+                      stats.host_stats.latest_event_timestamp);
+      });
+
+  double average_bwe =
+      std::accumulate(frame_stats_.begin() + warm_up_frames,
+                      frame_stats_.begin() + warm_up_frames + num_frames, 0.0,
+                      [](double sum, const protocol::FrameStats& stats) {
+                        return sum + stats.host_stats.bandwidth_estimate_kbps;
+                      }) /
+      num_frames;
+
   VLOG(0) << "FPS: " << num_frames / total_time.InSecondsF();
   VLOG(0) << "Average latency: " << latency_sum.InMillisecondsF() / num_frames
           << " ms";
   VLOG(0) << "Total size: " << total_size << " bytes";
   VLOG(0) << "Bandwidth utilization: "
-          << 100 * total_size / (total_time.InSecondsF() * GetParam().bandwidth)
+          << 100 * total_size / (total_time.InSecondsF() *
+                                 GetParam().bandwidth_kbps * 1000 / 8)
           << "%";
   VLOG(0) << "Network buffer delay (bufferbloat), average: "
           << client_socket_factory_->average_buffer_delay().InMilliseconds()
@@ -558,6 +629,8 @@ void ProtocolPerfTest::MeasureScrollPerformance(bool use_webrtc) {
           << client_socket_factory_->max_buffer_delay().InMilliseconds()
           << " ms";
   VLOG(0) << "Packet drop rate: " << client_socket_factory_->drop_rate();
+  VLOG(0) << "Average BW estimate: " << average_bwe
+          << " (actual: " << GetParam().bandwidth_kbps << ")";
 }
 
 TEST_P(ProtocolPerfTest, ScrollPerformanceIce) {

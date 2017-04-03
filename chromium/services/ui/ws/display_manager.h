@@ -51,7 +51,7 @@ class DisplayManager : public UserIdTrackerObserver,
 
   // Returns the Display that contains |window|, or null if |window| is not
   // attached to a display.
-  Display* GetDisplayContaining(ServerWindow* window);
+  Display* GetDisplayContaining(const ServerWindow* window);
   const Display* GetDisplayContaining(const ServerWindow* window) const;
 
   // Returns the display with the specified display id, or null if there is no
@@ -83,14 +83,11 @@ class DisplayManager : public UserIdTrackerObserver,
 
   // display::PlatformScreenDelegate:
   void OnDisplayAdded(int64_t id,
-                      const gfx::Rect& bounds,
-                      const gfx::Size& pixel_size,
-                      float scale_factor) override;
+                      const display::ViewportMetrics& metrics) override;
   void OnDisplayRemoved(int64_t id) override;
   void OnDisplayModified(int64_t id,
-                         const gfx::Rect& bounds,
-                         const gfx::Size& pixel_size,
-                         float scale_factor) override;
+                         const display::ViewportMetrics& metrics) override;
+  void OnPrimaryDisplayChanged(int64_t primary_display_id) override;
 
   WindowServer* window_server_;
   UserIdTracker* user_id_tracker_;

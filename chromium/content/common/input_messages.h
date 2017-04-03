@@ -13,6 +13,7 @@
 #include "content/common/edit_command.h"
 #include "content/common/input/input_event.h"
 #include "content/common/input/input_event_ack.h"
+#include "content/common/input/input_event_ack_source.h"
 #include "content/common/input/input_event_ack_state.h"
 #include "content/common/input/input_event_dispatch_type.h"
 #include "content/common/input/input_param_traits.h"
@@ -25,7 +26,7 @@
 #include "content/common/input/synthetic_tap_gesture_params.h"
 #include "content/common/input/touch_action.h"
 #include "ipc/ipc_message_macros.h"
-#include "third_party/WebKit/public/web/WebInputEvent.h"
+#include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "ui/events/blink/did_overscroll_params.h"
 #include "ui/events/ipc/latency_info_param_traits.h"
 #include "ui/gfx/geometry/point.h"
@@ -44,6 +45,8 @@
 
 #define IPC_MESSAGE_START InputMsgStart
 
+IPC_ENUM_TRAITS_MAX_VALUE(content::InputEventAckSource,
+                          content::InputEventAckSource::MAX)
 IPC_ENUM_TRAITS_MAX_VALUE(
     content::SyntheticGestureParams::GestureSourceType,
     content::SyntheticGestureParams::GESTURE_SOURCE_TYPE_MAX)
@@ -115,6 +118,7 @@ IPC_STRUCT_TRAITS_BEGIN(content::SyntheticPointerActionParams)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(content::InputEventAck)
+  IPC_STRUCT_TRAITS_MEMBER(source)
   IPC_STRUCT_TRAITS_MEMBER(type)
   IPC_STRUCT_TRAITS_MEMBER(state)
   IPC_STRUCT_TRAITS_MEMBER(latency)
@@ -142,6 +146,12 @@ IPC_MESSAGE_ROUTED3(InputMsg_SetCompositionFromExistingText,
 // Deletes the current selection plus the specified number of characters before
 // and after the selection or caret.
 IPC_MESSAGE_ROUTED2(InputMsg_ExtendSelectionAndDelete,
+                    int /* before */,
+                    int /* after */)
+
+// Deletes text before and after the current cursor position, excluding the
+// selection.
+IPC_MESSAGE_ROUTED2(InputMsg_DeleteSurroundingText,
                     int /* before */,
                     int /* after */)
 

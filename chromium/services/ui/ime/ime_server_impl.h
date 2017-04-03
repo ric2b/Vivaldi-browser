@@ -8,9 +8,10 @@
 #include <utility>
 
 #include "mojo/public/cpp/bindings/binding_set.h"
+#include "services/catalog/public/interfaces/catalog.mojom.h"
 #include "services/ui/public/interfaces/ime.mojom.h"
 
-namespace shell {
+namespace service_manager {
 class Connector;
 }
 
@@ -21,7 +22,7 @@ class IMEServerImpl : public mojom::IMEServer {
   IMEServerImpl();
   ~IMEServerImpl() override;
 
-  void Init(shell::Connector* connector);
+  void Init(service_manager::Connector* connector, bool is_test_config);
   void AddBinding(mojom::IMEServerRequest request);
   void OnDriverChanged(mojom::IMEDriverPtr driver);
 
@@ -30,6 +31,10 @@ class IMEServerImpl : public mojom::IMEServer {
   void StartSession(mojom::TextInputClientPtr client,
                     mojom::InputMethodRequest input_method) override;
 
+  void OnGotCatalogEntries(std::vector<catalog::mojom::EntryPtr> entries);
+
+  service_manager::Connector* connector_;
+  catalog::mojom::CatalogPtr catalog_;
   mojo::BindingSet<mojom::IMEServer> bindings_;
   mojom::IMEDriverPtr driver_;
   int current_id_;

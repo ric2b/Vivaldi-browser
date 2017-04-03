@@ -29,13 +29,14 @@
 
 #include "core/CoreExport.h"
 #include "core/dom/ActiveDOMObject.h"
+#include "core/dom/TaskRunnerHelper.h"
 #include "platform/Timer.h"
 
 namespace blink {
 
 class CORE_EXPORT SuspendableTimer : public TimerBase, public ActiveDOMObject {
  public:
-  explicit SuspendableTimer(ExecutionContext*);
+  explicit SuspendableTimer(ExecutionContext*, TaskType);
   ~SuspendableTimer() override;
 
   // ActiveDOMObject

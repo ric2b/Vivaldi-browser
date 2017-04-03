@@ -8,7 +8,7 @@
 
 #include <utility>
 
-#include "ui/accessibility/ax_view_state.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/canvas.h"
@@ -16,8 +16,8 @@
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/vector_icons_public.h"
 #include "ui/resources/grit/ui_resources.h"
-#include "ui/views/animation/ink_drop_highlight.h"
 #include "ui/views/animation/ink_drop_ripple.h"
+#include "ui/views/animation/square_ink_drop_ripple.h"
 #include "ui/views/controls/button/label_button_border.h"
 #include "ui/views/painter.h"
 #include "ui/views/resources/grit/views_resources.h"
@@ -39,8 +39,6 @@ Checkbox::Checkbox(const base::string16& label)
     SetInkDropMode(PlatformStyle::kUseRipples ? InkDropMode::ON
                                               : InkDropMode::OFF);
     set_has_ink_drop_action_on_click(true);
-    // The "small" size is 21dp, the large size is 1.33 * 21dp = 28dp.
-    set_ink_drop_size(gfx::Size(21, 21));
     SetFocusPainter(nullptr);
   } else {
     std::unique_ptr<LabelButtonBorder> button_border(new LabelButtonBorder());
@@ -122,11 +120,11 @@ const char* Checkbox::GetClassName() const {
   return kViewClassName;
 }
 
-void Checkbox::GetAccessibleState(ui::AXViewState* state) {
-  LabelButton::GetAccessibleState(state);
-  state->role = ui::AX_ROLE_CHECK_BOX;
+void Checkbox::GetAccessibleNodeData(ui::AXNodeData* node_data) {
+  LabelButton::GetAccessibleNodeData(node_data);
+  node_data->role = ui::AX_ROLE_CHECK_BOX;
   if (checked())
-    state->AddStateFlag(ui::AX_STATE_CHECKED);
+    node_data->AddStateFlag(ui::AX_STATE_CHECKED);
 }
 
 void Checkbox::OnPaint(gfx::Canvas* canvas) {
@@ -165,11 +163,13 @@ void Checkbox::OnNativeThemeChanged(const ui::NativeTheme* theme) {
 }
 
 std::unique_ptr<InkDropRipple> Checkbox::CreateInkDropRipple() const {
-  return CreateDefaultInkDropRipple(image()->bounds().CenterPoint());
-}
-
-std::unique_ptr<InkDropHighlight> Checkbox::CreateInkDropHighlight() const {
-  return nullptr;
+  // The "small" size is 21dp, the large size is 1.33 * 21dp = 28dp.
+  const gfx::Size size(21, 21);
+  std::unique_ptr<InkDropRipple> ripple(new SquareInkDropRipple(
+      CalculateLargeInkDropSize(size), kInkDropLargeCornerRadius, size,
+      kInkDropSmallCornerRadius, image()->GetMirroredBounds().CenterPoint(),
+      GetInkDropBaseColor(), ink_drop_visible_opacity()));
+  return ripple;
 }
 
 SkColor Checkbox::GetInkDropBaseColor() const {

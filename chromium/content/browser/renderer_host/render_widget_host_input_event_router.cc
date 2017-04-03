@@ -12,10 +12,12 @@
 #include "cc/surfaces/surface_id_allocator.h"
 #include "cc/surfaces/surface_manager.h"
 #include "content/browser/frame_host/render_widget_host_view_child_frame.h"
+#include "content/browser/frame_host/render_widget_host_view_guest.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "content/common/frame_messages.h"
-#include "third_party/WebKit/public/web/WebInputEvent.h"
+#include "third_party/WebKit/public/platform/WebInputEvent.h"
+#include "ui/events/blink/web_input_event_traits.h"
 
 namespace {
 
@@ -169,7 +171,8 @@ RenderWidgetHostViewBase* RenderWidgetHostInputEventRouter::FindEventTarget(
 
 void RenderWidgetHostInputEventRouter::RouteMouseEvent(
     RenderWidgetHostViewBase* root_view,
-    blink::WebMouseEvent* event) {
+    blink::WebMouseEvent* event,
+    const ui::LatencyInfo& latency) {
   RenderWidgetHostViewBase* target;
   gfx::Point transformed_point;
   const int mouse_button_modifiers = blink::WebInputEvent::LeftButtonDown |
@@ -180,8 +183,9 @@ void RenderWidgetHostInputEventRouter::RouteMouseEvent(
       (event->type == blink::WebInputEvent::MouseUp ||
        event->modifiers & mouse_button_modifiers)) {
     target = mouse_capture_target_.target;
-    transformed_point = root_view->TransformPointToCoordSpaceForView(
-        gfx::Point(event->x, event->y), target);
+    if (!root_view->TransformPointToCoordSpaceForView(
+            gfx::Point(event->x, event->y), target, &transformed_point))
+      return;
     if (event->type == blink::WebInputEvent::MouseUp)
       mouse_capture_target_.target = nullptr;
   } else {
@@ -194,7 +198,29 @@ void RenderWidgetHostInputEventRouter::RouteMouseEvent(
   // the embedding renderer and then BrowserPluginGuest.
   if (target && target->IsRenderWidgetHostViewGuest()) {
     ui::LatencyInfo latency_info;
-    root_view->ProcessMouseEvent(*event, latency_info);
+    RenderWidgetHostViewBase* owner_view =
+        static_cast<RenderWidgetHostViewGuest*>(target)
+            ->GetOwnerRenderWidgetHostView();
+    // In case there is nested RenderWidgetHostViewGuests (i.e., PDF inside
+    // <webview>), we will need the owner view of the top-most guest for input
+    // routing.
+    while (owner_view->IsRenderWidgetHostViewGuest()) {
+      owner_view = static_cast<RenderWidgetHostViewGuest*>(owner_view)
+                       ->GetOwnerRenderWidgetHostView();
+    }
+
+    if (owner_view != root_view) {
+      // This happens when the view is embedded inside a cross-process frame
+      // (i.e., owner view is a RenderWidgetHostViewChildFrame).
+      gfx::Point owner_point;
+      if (!root_view->TransformPointToCoordSpaceForView(
+              gfx::Point(event->x, event->y), owner_view, &owner_point)) {
+        return;
+      }
+      event->x = owner_point.x();
+      event->y = owner_point.y();
+    }
+    owner_view->ProcessMouseEvent(*event, latency_info);
     return;
   }
 
@@ -214,15 +240,13 @@ void RenderWidgetHostInputEventRouter::RouteMouseEvent(
 
   event->x = transformed_point.x();
   event->y = transformed_point.y();
-  // TODO(wjmaclean): Initialize latency info correctly for OOPIFs.
-  // https://crbug.com/613628
-  ui::LatencyInfo latency_info;
-  target->ProcessMouseEvent(*event, latency_info);
+  target->ProcessMouseEvent(*event, latency);
 }
 
 void RenderWidgetHostInputEventRouter::RouteMouseWheelEvent(
     RenderWidgetHostViewBase* root_view,
-    blink::WebMouseWheelEvent* event) {
+    blink::WebMouseWheelEvent* event,
+    const ui::LatencyInfo& latency) {
   gfx::Point transformed_point;
   RenderWidgetHostViewBase* target = FindEventTarget(
       root_view, gfx::Point(event->x, event->y), &transformed_point);
@@ -231,10 +255,7 @@ void RenderWidgetHostInputEventRouter::RouteMouseWheelEvent(
 
   event->x = transformed_point.x();
   event->y = transformed_point.y();
-  // TODO(wjmaclean): Initialize latency info correctly for OOPIFs.
-  // https://crbug.com/613628
-  ui::LatencyInfo latency_info;
-  target->ProcessMouseWheelEvent(*event, latency_info);
+  target->ProcessMouseWheelEvent(*event, latency);
 }
 
 void RenderWidgetHostInputEventRouter::RouteGestureEvent(
@@ -432,8 +453,13 @@ void RenderWidgetHostInputEventRouter::SendMouseEnterOrLeaveEvents(
   for (auto view : exited_views) {
     blink::WebMouseEvent mouse_leave(*event);
     mouse_leave.type = blink::WebInputEvent::MouseLeave;
-    transformed_point = root_view->TransformPointToCoordSpaceForView(
-        gfx::Point(event->x, event->y), view);
+    // There is a chance of a race if the last target has recently created a
+    // new compositor surface. The SurfaceID for that might not have
+    // propagated to its embedding surface, which makes it impossible to
+    // compute the transformation for it
+    if (!root_view->TransformPointToCoordSpaceForView(
+            gfx::Point(event->x, event->y), view, &transformed_point))
+      transformed_point = gfx::Point();
     mouse_leave.x = transformed_point.x();
     mouse_leave.y = transformed_point.y();
     view->ProcessMouseEvent(mouse_leave, ui::LatencyInfo());
@@ -443,8 +469,10 @@ void RenderWidgetHostInputEventRouter::SendMouseEnterOrLeaveEvents(
   if (common_ancestor && common_ancestor != target) {
     blink::WebMouseEvent mouse_move(*event);
     mouse_move.type = blink::WebInputEvent::MouseMove;
-    transformed_point = root_view->TransformPointToCoordSpaceForView(
-        gfx::Point(event->x, event->y), common_ancestor);
+    if (!root_view->TransformPointToCoordSpaceForView(
+            gfx::Point(event->x, event->y), common_ancestor,
+            &transformed_point))
+      transformed_point = gfx::Point();
     mouse_move.x = transformed_point.x();
     mouse_move.y = transformed_point.y();
     common_ancestor->ProcessMouseEvent(mouse_move, ui::LatencyInfo());
@@ -456,8 +484,9 @@ void RenderWidgetHostInputEventRouter::SendMouseEnterOrLeaveEvents(
       continue;
     blink::WebMouseEvent mouse_enter(*event);
     mouse_enter.type = blink::WebInputEvent::MouseMove;
-    transformed_point = root_view->TransformPointToCoordSpaceForView(
-        gfx::Point(event->x, event->y), view);
+    if (!root_view->TransformPointToCoordSpaceForView(
+            gfx::Point(event->x, event->y), view, &transformed_point))
+      transformed_point = gfx::Point();
     mouse_enter.x = transformed_point.x();
     mouse_enter.y = transformed_point.y();
     view->ProcessMouseEvent(mouse_enter, ui::LatencyInfo());
@@ -483,11 +512,14 @@ void RenderWidgetHostInputEventRouter::BubbleScrollEvent(
   DCHECK(!first_bubbling_scroll_target_.target ==
          !bubbling_gesture_scroll_target_.target);
 
+  ui::LatencyInfo latency_info =
+      ui::WebInputEventTraits::CreateLatencyInfoForWebGestureEvent(event);
+
   // If target_view is already set up for bubbled scrolls, we forward
   // the event to the current scroll target without further consideration.
   if (target_view == first_bubbling_scroll_target_.target) {
-    bubbling_gesture_scroll_target_.target->ProcessGestureEvent(
-        event, ui::LatencyInfo());
+    bubbling_gesture_scroll_target_.target->ProcessGestureEvent(event,
+                                                                latency_info);
     if (event.type == blink::WebInputEvent::GestureScrollEnd) {
       first_bubbling_scroll_target_.target = nullptr;
       bubbling_gesture_scroll_target_.target = nullptr;
@@ -505,8 +537,8 @@ void RenderWidgetHostInputEventRouter::BubbleScrollEvent(
   // have been sent to a renderer before the first one was ACKed, and the ACK
   // caused a bubble retarget. In this case they all get forwarded.
   if (target_view == bubbling_gesture_scroll_target_.target) {
-    bubbling_gesture_scroll_target_.target->ProcessGestureEvent(
-        event, ui::LatencyInfo());
+    bubbling_gesture_scroll_target_.target->ProcessGestureEvent(event,
+                                                                latency_info);
     return;
   }
 
@@ -531,7 +563,7 @@ void RenderWidgetHostInputEventRouter::BubbleScrollEvent(
   bubbling_gesture_scroll_target_.target = target_view;
 
   SendGestureScrollBegin(target_view, event);
-  target_view->ProcessGestureEvent(event, ui::LatencyInfo());
+  target_view->ProcessGestureEvent(event, latency_info);
 }
 
 void RenderWidgetHostInputEventRouter::SendGestureScrollBegin(
@@ -545,7 +577,9 @@ void RenderWidgetHostInputEventRouter::SendGestureScrollBegin(
   scroll_begin.data.scrollBegin.deltaYHint = event.data.scrollUpdate.deltaY;
   scroll_begin.data.scrollBegin.deltaHintUnits =
       event.data.scrollUpdate.deltaUnits;
-  view->ProcessGestureEvent(scroll_begin, ui::LatencyInfo());
+  view->ProcessGestureEvent(
+      scroll_begin,
+      ui::WebInputEventTraits::CreateLatencyInfoForWebGestureEvent(event));
 }
 
 void RenderWidgetHostInputEventRouter::SendGestureScrollEnd(
@@ -560,7 +594,9 @@ void RenderWidgetHostInputEventRouter::SendGestureScrollEnd(
   scroll_end.data.scrollEnd.inertialPhase =
       event.data.scrollUpdate.inertialPhase;
   scroll_end.data.scrollEnd.deltaUnits = event.data.scrollUpdate.deltaUnits;
-  view->ProcessGestureEvent(scroll_end, ui::LatencyInfo());
+  view->ProcessGestureEvent(
+      scroll_end,
+      ui::WebInputEventTraits::CreateLatencyInfoForWebGestureEvent(event));
 }
 
 void RenderWidgetHostInputEventRouter::CancelScrollBubbling(
@@ -613,6 +649,8 @@ RenderWidgetHostInputEventRouter::GetRenderWidgetHostAtPoint(
     RenderWidgetHostViewBase* root_view,
     const gfx::Point& point,
     gfx::Point* transformed_point) {
+  if (!root_view)
+    return nullptr;
   return RenderWidgetHostImpl::From(
       FindEventTarget(root_view, point, transformed_point)
           ->GetRenderWidgetHost());

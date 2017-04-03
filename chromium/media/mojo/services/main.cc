@@ -6,33 +6,21 @@
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
-#include "media/mojo/services/mojo_media_application_factory.h"
-#include "services/shell/public/c/main.h"
-#include "services/shell/public/cpp/service_runner.h"
-
-namespace {
-
-shell::ServiceRunner* g_runner = nullptr;
-
-void QuitApplication() {
-  DCHECK(g_runner);
-  g_runner->Quit();
-}
-
-}  // namespace
+#include "media/mojo/services/media_service_factory.h"
+#include "services/service_manager/public/c/main.h"
+#include "services/service_manager/public/cpp/service_runner.h"
 
 MojoResult ServiceMain(MojoHandle mojo_handle) {
   // Enable logging.
   base::AtExitManager at_exit;
-  shell::ServiceRunner::InitBaseCommandLine();
+  service_manager::ServiceRunner::InitBaseCommandLine();
 
   logging::LoggingSettings settings;
   settings.logging_dest = logging::LOG_TO_SYSTEM_DEBUG_LOG;
   logging::InitLogging(settings);
 
-  std::unique_ptr<shell::Service> service =
-      media::CreateMojoMediaApplication(base::Bind(&QuitApplication));
-  shell::ServiceRunner runner(service.release());
-  g_runner = &runner;
+  std::unique_ptr<service_manager::Service> service =
+      media::CreateMediaServiceForTesting();
+  service_manager::ServiceRunner runner(service.release());
   return runner.Run(mojo_handle, false /* init_base */);
 }

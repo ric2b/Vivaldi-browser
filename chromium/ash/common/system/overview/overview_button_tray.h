@@ -37,11 +37,12 @@ class ASH_EXPORT OverviewButtonTray : public TrayBackgroundView,
   bool PerformAction(const ui::Event& event) override;
 
   // SessionStateObserver:
-  void SessionStateChanged(SessionStateDelegate::SessionState state) override;
+  void SessionStateChanged(session_manager::SessionState state) override;
 
   // ShellObserver:
   void OnMaximizeModeStarted() override;
   void OnMaximizeModeEnded() override;
+  void OnOverviewModeStarting() override;
   void OnOverviewModeEnded() override;
 
   // TrayBackgroundView:

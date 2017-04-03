@@ -19,14 +19,14 @@ message SignedData {
   optional int32 extra_data_bytes = 3;
 }
 
-// Request from device to server to register device.
+// Request from device to server to register a device, user or browser.
 message DeviceRegisterRequest {
   // Reregister device without erasing server state.  It can be used
   // to refresh dmtoken etc.  Client MUST set this value to true if it
   // reuses an existing device id.
   optional bool reregister = 1;
 
-  // Device register type.  This field does not exist for TT release.
+  // Register type.  This field does not exist for TT release.
   // When a client requests for policies, server should verify the
   // client has been registered properly.  For example, a client must
   // register with type DEVICE in order to retrieve device policies.
@@ -125,8 +125,16 @@ message DeviceRegisterResponse {
     // settings from the cloud, but additionally this mode enables the demo
     // account on the device.
     RETAIL = 1;
+    // Devices in CHROME_AD mode are in enterprises with AD.  Device settings
+    // are controlled through the AD policy infrastructure.
+    CHROME_AD = 2;
   }
   optional DeviceMode enrollment_type = 3 [default = ENTERPRISE];
+
+  // An opaque configuration string for devices that require it.  CHROME_AD
+  // devices, for example, may use this string for AD discovery.  Must be at
+  // most a few kBytes.
+  optional string configuration_seed = 4;
 }
 
 // Request from device to server to unregister device.
@@ -163,10 +171,6 @@ message DeviceServiceApiAccessRequest {
 message DeviceServiceApiAccessResponse {
   // The OAuth2 authorization code for the requested scope(s).
   // This can be exchanged for a refresh token.
-  //
-  // The server may send a successful response but not set this field or set an
-  // empty string to reject the auth code request and instruct the client to
-  // skip robot account auth setup.
   optional string auth_code = 1;
 }
 
@@ -180,6 +184,7 @@ message PolicyFetchRequest {
   //   google/chromeos/user => ChromeSettingsProto
   //   google/chromeos/publicaccount => ChromeSettingsProto
   //   google/chrome/extension => ExternalPolicyData
+  //   google/chromeos/signinextension => ExternalPolicyData
   //   google/android/user => ChromeSettingsProto
   //   google/ios/user => ChromeSettingsProto
   optional string policy_type = 1;
@@ -262,9 +267,8 @@ message DeviceState {
   optional DisabledState disabled_state = 2;
 }
 
-// This message is included in serialized form in PolicyFetchResponse
-// below.  It may also be signed, with the signature being created for
-// the serialized form.
+// This message is included in serialized form in PolicyFetchResponse below. It
+// may also be signed, with the signature being created for the serialized form.
 message PolicyData {
   // See PolicyFetchRequest.policy_type.
   optional string policy_type = 1;
@@ -349,7 +353,7 @@ message PolicyData {
 
   // Server-provided identifier of the fetched policy. This is to be used
   // by the client when requesting Policy Posture assertion through an API
-  // call or SAML flow.
+  // call or SAML flow. For details, see http://go/chrome-nac-server-design.
   optional string policy_token = 15;
 
   // Indicates the management mode of the device. Note that old policies do not
@@ -410,10 +414,9 @@ message PolicyData {
 }
 
 message PolicyFetchResponse {
-  // Since a single policy request may ask for multiple policies, we
-  // provide separate error code for each individual policy fetch.
-
-  // We will use standard HTTP Status Code as error code.
+  // Since a single policy request may ask for multiple policies, DM server
+  // provides separate error codes (making use of standard HTTP Status Codes)
+  // for each individual policy fetch.
   optional int32 error_code = 1;
 
   // Human readable error message for customer support purpose.
@@ -434,32 +437,76 @@ message PolicyFetchResponse {
   optional bytes new_public_key = 5;
   optional bytes new_public_key_signature = 6;
 
-  // If new_public_key is specified, this field contains a signature
-  // of a PolicyPublicKeyAndDomain protobuf, signed using a key only
-  // available to DMServer. The public key portion of this well-known key is
-  // embedded into the Chrome binary. The hash of that embedded key is passed
-  // to DMServer as verification_key_hash field in PolicyFetchRequest. DMServer
-  // will pick a private key on the server which matches the hash (matches
-  // public key on the client). If DMServer is unable to find matching key, it
-  // will return an error instead of policy data.
-  // In case hash was not specified, DMServer will leave verification signature
-  // field empty (legacy behavior).
-  // In addition to the checks between new_public_key
-  // and new_public_key_signature described above, Chrome also verifies
-  // new_public_key with the embedded public key and
-  // new_public_key_verification_signature.
-  optional bytes new_public_key_verification_signature = 7;
+  // DEPRECATED: Exists only to support older clients. This signature is similar
+  // to new_public_key_verification_data_signature, but is computed over
+  // DEPRECATEDPolicyPublicKeyAndDomain (which is equivalent to
+  // PublicKeyVerificationData proto with version field unset).
+  optional bytes new_public_key_verification_signature_deprecated = 7
+      [deprecated = true];
+
+  // This is a serialized |PublicKeyVerificationData| protobuf (defined
+  // below). See comments for |new_public_key_verification_data_signature| field
+  // for details on how this data is signed.
+  // Please note that |new_public_key| is also included inside this data
+  // field. Thus we have new public key signed with old version of private key
+  // (if client indicated to us that it has old key version), and
+  // new public key data signed by master verification key (if client told
+  // us that it has public verification key - see |verification_key_id| field
+  // of |PolicyFetchRequest|). In most cases, both signatures will be provided.
+  // However, client might not have old policy signing key - for example, when
+  // new profile is being set up. In this case, only verification signature
+  // is supplied.
+  // Or, client might not have verification public key (legacy Chrome build
+  // before verification key was introduced, or outdated build which has
+  // old/compromised verification key). In that case, verification signature
+  // cannot be provided.
+  // If client is missing both public keys (old signing key and verification
+  // key), then we are unable to produce any valid signature and client must
+  // drop such PolicyFetchResponse.
+  optional bytes new_public_key_verification_data = 8;
+
+  // If new_public_key is specified, this field contains the signature of a
+  // PublicKeyVerificationData protobuf, signed using a key only available to
+  // DMServer. The public key portion of this well-known key is embedded into
+  // the Chrome binary. The hash of that embedded key is passed to DMServer as
+  // verification_key_hash field in PolicyFetchRequest. DMServer picks a private
+  // key on the server which matches the hash (matches public key on the
+  // client). If DMServer is unable to find matching key, it returns an error
+  // instead of policy data. In case a hash was not specified, DMServer leaves
+  // the verification signature field empty (legacy behavior).
+  // This signature is provided to better protect first key delivery (since the
+  // browser does not possess the previous signing key, DMServer cannot compute
+  // new_public_key_signature).
+  // See http://go/chrome-nac-server-design for more information.
+  optional bytes new_public_key_verification_data_signature = 9;
 }
 
-// Protobuf used to generate the new_public_key_verification_signature field.
-message PolicyPublicKeyAndDomain {
+// DEPRECATED: Protobuf used to generate the deprecated
+// new_public_key_verification_signature field.
+message DEPRECATEDPolicyPublicKeyAndDomain {
   // The public key to sign (taken from the |new_public_key| field in
   // PolicyFetchResponse).
   optional bytes new_public_key = 1;
 
-  // The domain associated with this key (should match the domain portion of
-  // the username field of the policy).
+  // The domain associated with this key (should match the domain portion of the
+  // username field of the policy).
   optional string domain = 2;
+}
+
+// This message contains the information which is signed by the verification key
+// during policy key rotation. It is included in serialized form in
+// PolicyFetchResponse above. A signature of the serialized form is included in
+// the new_public_key_verification_data_signature field.
+message PublicKeyVerificationData {
+  // The new public policy key after a key rotation.
+  optional bytes new_public_key = 1;
+
+  // The domain of the device/user.
+  optional string domain = 2;
+
+  // The version number of the new_public_key. This must be monotonically
+  // increasing (within a domain).
+  optional int32 new_public_key_version = 3;
 }
 
 // Request from device to server for reading policies.
@@ -506,8 +553,8 @@ message InstallableLaunch {
   optional int64 total_count = 4;
 }
 
-// Used to report the device location.
-message DeviceLocation {
+// OBSOLETE: Used to report the device location.
+message OBSOLETE_DeviceLocation {
   enum ErrorCode {
     ERROR_CODE_NONE                 = 0;
     ERROR_CODE_POSITION_UNAVAILABLE = 1;
@@ -656,9 +703,9 @@ message DeviceStatusReportRequest {
   // If the mode is unknown, this field should not be set.
   optional string boot_mode = 3;
 
-  // Device active times collection since last report rpc call.
+  // OBSOLETE: Device active times collection since last report rpc call.
   // No longer used -- use active_period instead.
-  repeated TimePeriod active_time = 4 [deprecated = true];
+  repeated TimePeriod OBSOLETE_active_time = 4 [deprecated = true];
 
   // The browser version string as shown in the About dialog.
   // e.g. 17.0.963.18.
@@ -667,8 +714,9 @@ message DeviceStatusReportRequest {
   // A list of periods when the device was active, aggregated by day.
   repeated ActiveTimePeriod active_period = 6;
 
-  // The device location.
-  optional DeviceLocation deprecated_device_location = 7 [deprecated = true];
+  // OBSOLETE: The device location.
+  optional OBSOLETE_DeviceLocation OBSOLETE_device_location = 7
+    [deprecated = true];
 
   // List of network interfaces.
   repeated NetworkInterface network_interface = 8;
@@ -685,8 +733,8 @@ message DeviceStatusReportRequest {
   // Samples of CPU utilization (0-100), sampled once every 120 seconds.
   repeated int32 cpu_utilization_pct = 12;
 
-  // Free RAM (unreliable due to GC).
-  optional int64 deprecated_system_ram_free = 13 [deprecated = true];
+  // OBSOLETE: Free RAM (unreliable due to GC).
+  optional int64 OBSOLETE_system_ram_free = 13 [deprecated = true];
 
   // Total RAM on the device.
   optional int64 system_ram_total = 14;
@@ -756,13 +804,13 @@ message AndroidStatus {
 
 // Report current active session (a user on one device) level status.
 message SessionStatusReportRequest {
-  // Installed apps for this user on this device.
+  // OBSOLETE: Installed apps for this user on this device.
   // No longer used -- use installed_apps instead.
-  repeated string installed_app_id = 1 [deprecated = true];
+  repeated string OBSOLETE_installed_app_id = 1 [deprecated = true];
 
-  // Installed extensions for this user on this device.
+  // OBSOLETE: Installed extensions for this user on this device.
   // No longer used -- use installed_extensions instead.
-  repeated string installed_extension_id = 2 [deprecated = true];
+  repeated string OBSOLETE_installed_extension_id = 2 [deprecated = true];
 
   // One stat per app for top 30 apps.
   repeated InstallableLaunch app_launch_stat = 3;
@@ -996,14 +1044,17 @@ message RemoteCommand {
   // The command type.
   optional Type type = 1;
 
-  // An opaque unique identifier for the command.
-  optional int64 unique_id = 2;
+  // An opaque unique identifier for the command. The client processes
+  // the commands in the order of the command list it receives.
+  optional int64 command_id = 2;
 
   // The age of the command (in milliseconds) when it is sent from server to
   // client, defined as current_server_time - command_generated_time.
   optional int64 age_of_command = 3;
 
   // Extra parameters for this command, expected to be a JSON string.
+  // If the command type is DEVICE_SCREENSHOT, the format of the JSON payload
+  // is: {"fileUploadUrl" : url_string}
   optional string payload = 4;
 }
 
@@ -1021,7 +1072,7 @@ message RemoteCommandResult {
 
   // The opaque unique identifier of the command. This value is copied from the
   // RemoteCommand protobuf that contained the command.
-  optional int64 unique_id = 2;
+  optional int64 command_id = 2;
 
   // The time at which the command was executed, if the the result is
   // RESULT_SUCCESS.
@@ -1105,7 +1156,7 @@ message CheckAndroidManagementRequest {}
 message CheckAndroidManagementResponse {}
 
 // Request to register a new device (authenticated by enterprise enrollment
-// certificate).
+// certificate). See http://go/zero-touch-chrome for details.
 // The response message will be the DeviceRegisterReponse.
 message CertificateBasedDeviceRegisterRequest {
   // Signed request to register with a certificate. The signed_request.data
@@ -1165,7 +1216,7 @@ message CertificateBasedDeviceRegistrationData {
 //   * devicetype: MUST BE "1" for Android or "2" for Chrome OS.
 //   * apptype: MUST BE Android or Chrome.
 //   * deviceid: MUST BE no more than 64-char in [\x21-\x7E].
-//   * agent: MUST BE a string of characters.
+//   * agent: MUST BE no more than 64-char long.
 // * HTTP Authorization header MUST be in the following formats:
 //   * For register, ping and check_android_management requests
 //     Authorization: GoogleLogin auth=<auth cookie for Mobile Sync>
@@ -1197,7 +1248,7 @@ message CertificateBasedDeviceRegistrationData {
 //   attribute_update: device_attribute_update_request
 //   gcm_id_update: gcm_id_update_request
 //   check_android_management: check_android_management_request
-//   certificate_based_register: cert_based_register_request
+//   certificate_based_register: certificate_based_register_request
 //
 message DeviceManagementRequest {
   // Register request.
@@ -1253,14 +1304,18 @@ message DeviceManagementRequest {
 
   // Request to register with a registration certificate.
   optional CertificateBasedDeviceRegisterRequest
-      cert_based_register_request = 18;
+      certificate_based_register_request = 18;
 
 }
 
 // Response from server to device.
 //
-// The server uses the following numbers as HTTP status codes
-// to report top-level errors.
+// For release clients, DMServer returns errors using HTTP Status Code, so that
+// clients only need to check one place for all error codes.  It is also easier
+// to perform log analysis and customer support since HTTP Status Code is easily
+// visible in the logs.
+//
+// The following list defines the error code returned by this API:
 //
 // 200 OK: valid response is returned to client.
 // 400 Bad Request: invalid argument.
@@ -1271,9 +1326,37 @@ message DeviceManagementRequest {
 // 491 Request Pending: the request is pending approval.
 // 500 Internal Server Error: most likely a bug in DM server.
 // 503 Service Unavailable: most likely a backend error.
-// 901 Device Not Found: the device id is not found.
 // 902 Policy Not Found: the policy is not found.
 message DeviceManagementResponse {
+  // TODO(hong): move error handling to HTTP level.
+  // Error code to client.
+  enum ErrorCode {
+    SUCCESS = 0;
+    // Returned for register request when device management is not supported
+    // for the domain.
+    DEVICE_MANAGEMENT_NOT_SUPPORTED = 1;
+    // Returned when the device is not found.
+    DEVICE_NOT_FOUND  = 2;
+    // Returned when passed in device management token doesn't match the token
+    // on server side.
+    DEVICE_MANAGEMENT_TOKEN_INVALID  = 3;
+    // Returned when device registration is pending approval (if required).
+    ACTIVATION_PENDING = 4;
+    // Returned when the policy is not found.
+    POLICY_NOT_FOUND  = 5;
+  }
+
+  // Error code for this reponse.
+  //
+  // For responses to TT clients, this field MUST be set, since it WAS
+  // a required field.  For special error code listed above, we return
+  // 200 in HTTP Status Code and set the real error code here.
+  //
+  // For release clients, we plan to move all error code to HTTP
+  // Status Code, so it is much easier for log analysis.  If possible,
+  // we plan to remove this field once Chrome OS TT phase is over.
+  optional ErrorCode error = 1 [default = SUCCESS];
+
   // Error message.
   optional string error_message = 2;
 

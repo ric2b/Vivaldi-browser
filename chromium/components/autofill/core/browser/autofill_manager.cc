@@ -21,6 +21,7 @@
 #include "base/files/file_util.h"
 #include "base/guid.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "base/strings/string16.h"
@@ -527,10 +528,12 @@ void AutofillManager::OnQueryFormFieldAutofill(int query_id,
 
   // Logging interactions of forms that are autofillable.
   if (got_autofillable_form) {
-    if (autofill_field->Type().group() == CREDIT_CARD)
+    if (autofill_field->Type().group() == CREDIT_CARD) {
+      driver_->DidInteractWithCreditCardForm();
       credit_card_form_event_logger_->OnDidInteractWithAutofillableForm();
-    else
+    } else {
       address_form_event_logger_->OnDidInteractWithAutofillableForm();
+    }
   }
 
   if (is_autofill_possible &&
@@ -552,7 +555,9 @@ void AutofillManager::OnQueryFormFieldAutofill(int query_id,
     }
     if (!suggestions.empty()) {
       bool is_context_secure =
-          client_->IsContextSecure(form_structure->source_url());
+          client_->IsContextSecure(form_structure->source_url()) &&
+          (!form_structure->target_url().is_valid() ||
+           !form_structure->target_url().SchemeIs("http"));
       if (is_filling_credit_card)
         AutofillMetrics::LogIsQueriedCreditCardFormSecure(is_context_secure);
 
@@ -560,10 +565,23 @@ void AutofillManager::OnQueryFormFieldAutofill(int query_id,
       // provide them for secure pages with passive mixed content (see impl. of
       // IsContextSecure).
       if (is_filling_credit_card && !is_context_secure) {
+        // Replace the suggestion content with a warning message explaining why
+        // Autofill is disabled for a website.
         Suggestion warning_suggestion(l10n_util::GetStringUTF16(
             IDS_AUTOFILL_WARNING_INSECURE_CONNECTION));
         warning_suggestion.frontend_id = POPUP_ITEM_ID_WARNING_MESSAGE;
         suggestions.assign(1, warning_suggestion);
+
+        // On top of the explanation message, first show a "Payment not secure"
+        // message.
+        if (IsCreditCardAutofillHttpWarningEnabled()) {
+          Suggestion cc_field_http_warning_suggestion(l10n_util::GetStringUTF16(
+              IDS_AUTOFILL_CREDIT_CARD_HTTP_WARNING_MESSAGE));
+          cc_field_http_warning_suggestion.frontend_id =
+              POPUP_ITEM_ID_WARNING_MESSAGE;
+          suggestions.insert(suggestions.begin(),
+                             cc_field_http_warning_suggestion);
+        }
       } else {
         bool section_is_autofilled =
             SectionIsAutofilled(*form_structure, form,
@@ -878,8 +896,9 @@ bool AutofillManager::IsShowingUnmaskPrompt() {
   return full_card_request_ && full_card_request_->IsGettingFullCard();
 }
 
-const std::vector<FormStructure*>& AutofillManager::GetFormStructures() {
-  return form_structures_.get();
+const std::vector<std::unique_ptr<FormStructure>>&
+AutofillManager::GetFormStructures() {
+  return form_structures_;
 }
 
 payments::FullCardRequest* AutofillManager::GetOrCreateFullCardRequest() {
@@ -913,9 +932,9 @@ void AutofillManager::OnLoadedServerPredictions(
   // the end of the list (and reverse the resulting pointer vector).
   std::vector<FormStructure*> queried_forms;
   for (const std::string& signature : base::Reversed(form_signatures)) {
-    for (FormStructure* cur_form : base::Reversed(form_structures_)) {
+    for (auto& cur_form : base::Reversed(form_structures_)) {
       if (cur_form->FormSignatureAsStr() == signature) {
-        queried_forms.push_back(cur_form);
+        queried_forms.push_back(cur_form.get());
         break;
       }
     }
@@ -1586,9 +1605,9 @@ bool AutofillManager::FindCachedForm(const FormData& form,
   // protocol with the crowdsourcing server does not permit us to discard the
   // original versions of the forms.
   *form_structure = NULL;
-  for (FormStructure* cur_form : base::Reversed(form_structures_)) {
+  for (auto& cur_form : base::Reversed(form_structures_)) {
     if (*cur_form == form) {
-      *form_structure = cur_form;
+      *form_structure = cur_form.get();
 
       // The same form might be cached with multiple field counts: in some
       // cases, non-autofillable fields are filtered out, whereas in other cases
@@ -1673,8 +1692,8 @@ bool AutofillManager::UpdateCachedForm(const FormData& live_form,
     return false;
 
   // Add the new or updated form to our cache.
-  form_structures_.push_back(new FormStructure(live_form));
-  *updated_form = *form_structures_.rbegin();
+  form_structures_.push_back(base::MakeUnique<FormStructure>(live_form));
+  *updated_form = form_structures_.rbegin()->get();
   (*updated_form)->DetermineHeuristicTypes();
 
   // If we have cached data, propagate it to the updated form.
@@ -1763,7 +1782,8 @@ void AutofillManager::ParseForms(const std::vector<FormData>& forms) {
   for (const FormData& form : forms) {
     const auto parse_form_start_time = base::TimeTicks::Now();
 
-    std::unique_ptr<FormStructure> form_structure(new FormStructure(form));
+    std::unique_ptr<FormStructure> form_structure =
+        base::MakeUnique<FormStructure>(form);
     form_structure->ParseFieldTypesFromAutocompleteAttributes();
     if (!form_structure->ShouldBeParsed())
       continue;
@@ -1776,9 +1796,9 @@ void AutofillManager::ParseForms(const std::vector<FormData>& forms) {
     form_structures_.push_back(std::move(form_structure));
 
     if (form_structures_.back()->ShouldBeCrowdsourced())
-      queryable_forms.push_back(form_structures_.back());
+      queryable_forms.push_back(form_structures_.back().get());
     else
-      non_queryable_forms.push_back(form_structures_.back());
+      non_queryable_forms.push_back(form_structures_.back().get());
 
     AutofillMetrics::LogParseFormTiming(base::TimeTicks::Now() -
                                         parse_form_start_time);
@@ -1804,7 +1824,7 @@ void AutofillManager::ParseForms(const std::vector<FormData>& forms) {
   // prompt for credit card assisted filling. Upon accepting the infobar, the
   // form will automatically be filled with the user's information through this
   // class' FillCreditCardForm().
-  if (autofill_assistant_.CanShowCreditCardAssist(form_structures_.get())) {
+  if (autofill_assistant_.CanShowCreditCardAssist(form_structures_)) {
     const std::vector<CreditCard*> cards =
         personal_data_->GetCreditCardsToSuggest();
     // Expired cards are last in the sorted order, so if the first one is

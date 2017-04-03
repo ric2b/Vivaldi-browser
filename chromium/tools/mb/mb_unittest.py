@@ -22,12 +22,15 @@ class FakeMBW(mb.MetaBuildWrapper):
     if win32:
       self.chromium_src_dir = 'c:\\fake_src'
       self.default_config = 'c:\\fake_src\\tools\\mb\\mb_config.pyl'
+      self.default_isolate_map = ('c:\\fake_src\\testing\\buildbot\\'
+                                  'gn_isolate_map.pyl')
       self.platform = 'win32'
       self.executable = 'c:\\python\\python.exe'
       self.sep = '\\'
     else:
       self.chromium_src_dir = '/fake_src'
       self.default_config = '/fake_src/tools/mb/mb_config.pyl'
+      self.default_isolate_map = '/fake_src/testing/buildbot/gn_isolate_map.pyl'
       self.executable = '/usr/bin/python'
       self.platform = 'linux2'
       self.sep = '/'
@@ -114,7 +117,7 @@ TEST_CONFIG = """\
       'fake_gn_debug_builder': 'gn_debug_goma',
       'fake_gyp_builder': 'gyp_debug',
       'fake_gn_args_bot': '//build/args/bots/fake_master/fake_gn_args_bot.gn',
-      'fake_multi_phase': ['gn_phase_1', 'gn_phase_2'],
+      'fake_multi_phase': { 'phase_1': 'gn_phase_1', 'phase_2': 'gn_phase_2'},
     },
   },
   'configs': {
@@ -362,6 +365,34 @@ class UnitTest(unittest.TestCase):
     self.assertIn('/fake_src/out/Default/base_unittests.isolated.gen.json',
                   mbw.files)
 
+  def test_gn_gen_swarming_script(self):
+    files = {
+      '/tmp/swarming_targets': 'cc_perftests\n',
+      '/fake_src/testing/buildbot/gn_isolate_map.pyl': (
+          "{'cc_perftests': {"
+          "  'label': '//cc:cc_perftests',"
+          "  'type': 'script',"
+          "  'script': '/fake_src/out/Default/test_script.py',"
+          "  'args': [],"
+          "}}\n"
+      ),
+      'c:\\fake_src\out\Default\cc_perftests.exe.runtime_deps': (
+          "cc_perftests\n"
+      ),
+    }
+    mbw = self.fake_mbw(files=files, win32=True)
+    self.check(['gen',
+                '-c', 'gn_debug_goma',
+                '--swarming-targets-file', '/tmp/swarming_targets',
+                '--isolate-map-file',
+                '/fake_src/testing/buildbot/gn_isolate_map.pyl',
+                '//out/Default'], mbw=mbw, ret=0)
+    self.assertIn('c:\\fake_src\\out\\Default\\cc_perftests.isolate',
+                  mbw.files)
+    self.assertIn('c:\\fake_src\\out\\Default\\cc_perftests.isolated.gen.json',
+                  mbw.files)
+
+
   def test_gn_isolate(self):
     files = {
       '/fake_src/out/Default/toolchain.ninja': "",
@@ -468,26 +499,22 @@ class UnitTest(unittest.TestCase):
 
     # Check that passing a --phase to a single-phase builder fails.
     mbw = self.check(['lookup', '-m', 'fake_master', '-b', 'fake_gn_builder',
-                      '--phase', '1'],
-                     ret=1)
+                      '--phase', 'phase_1'], ret=1)
     self.assertIn('Must not specify a build --phase', mbw.out)
 
-    # Check different ranges; 0 and 3 are out of bounds, 1 and 2 should work.
+    # Check that passing a wrong phase key to a multi-phase builder fails.
     mbw = self.check(['lookup', '-m', 'fake_master', '-b', 'fake_multi_phase',
-                      '--phase', '0'], ret=1)
-    self.assertIn('Phase 0 out of bounds', mbw.out)
+                      '--phase', 'wrong_phase'], ret=1)
+    self.assertIn('Phase wrong_phase doesn\'t exist', mbw.out)
 
+    # Check that passing a correct phase key to a multi-phase builder passes.
     mbw = self.check(['lookup', '-m', 'fake_master', '-b', 'fake_multi_phase',
-                      '--phase', '1'], ret=0)
+                      '--phase', 'phase_1'], ret=0)
     self.assertIn('phase = 1', mbw.out)
 
     mbw = self.check(['lookup', '-m', 'fake_master', '-b', 'fake_multi_phase',
-                      '--phase', '2'], ret=0)
+                      '--phase', 'phase_2'], ret=0)
     self.assertIn('phase = 2', mbw.out)
-
-    mbw = self.check(['lookup', '-m', 'fake_master', '-b', 'fake_multi_phase',
-                      '--phase', '3'], ret=1)
-    self.assertIn('Phase 3 out of bounds', mbw.out)
 
   def test_validate(self):
     mbw = self.fake_mbw()

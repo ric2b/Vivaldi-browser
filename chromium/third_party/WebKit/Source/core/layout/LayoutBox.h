@@ -26,7 +26,6 @@
 #include "core/CoreExport.h"
 #include "core/layout/LayoutBoxModelObject.h"
 #include "core/layout/OverflowModel.h"
-#include "core/layout/ScrollEnums.h"
 #include "platform/scroll/ScrollTypes.h"
 #include "wtf/PtrUtil.h"
 #include <memory>
@@ -51,12 +50,6 @@ enum MarginDirection { BlockDirection, InlineDirection };
 enum BackgroundRectType { BackgroundClipRect, BackgroundKnownOpaqueRect };
 
 enum ShouldComputePreferred { ComputeActual, ComputePreferred };
-
-enum ApplyOverflowClipFlag {
-  ApplyOverflowClip,
-  // Don't apply overflow clipping or scrolling.
-  ApplyNonScrollOverflowClip
-};
 
 using SnapAreaSet = HashSet<const LayoutBox*>;
 
@@ -87,7 +80,8 @@ struct LayoutBoxRareData {
   LayoutUnit m_overrideContainingBlockContentLogicalWidth;
   LayoutUnit m_overrideContainingBlockContentLogicalHeight;
 
-  LayoutUnit m_pageLogicalOffset;
+  LayoutUnit m_offsetToNextPage;
+
   LayoutUnit m_paginationStrut;
 
   LayoutBlock* m_percentHeightContainer;
@@ -207,6 +201,7 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
 
   // Use this with caution! No type checking is done!
   LayoutBox* firstChildBox() const;
+  LayoutBox* firstInFlowChildBox() const;
   LayoutBox* lastChildBox() const;
 
   int pixelSnappedWidth() const { return m_frameRect.pixelSnappedWidth(); }
@@ -255,6 +250,10 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
     return style()->isHorizontalWritingMode() ? m_frameRect.height()
                                               : m_frameRect.width();
   }
+
+  // Logical height of the object, including content overflowing the
+  // border-after edge.
+  virtual LayoutUnit logicalHeightWithVisibleOverflow() const;
 
   LayoutUnit constrainLogicalWidthByMinMax(LayoutUnit,
                                            LayoutUnit,
@@ -563,9 +562,9 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   virtual void setScrollLeft(LayoutUnit);
   virtual void setScrollTop(LayoutUnit);
 
-  void scrollToOffset(const DoubleSize&,
-                      ScrollBehavior = ScrollBehaviorInstant);
-  void scrollByRecursively(const DoubleSize& delta);
+  void scrollToPosition(const FloatPoint&,
+                        ScrollBehavior = ScrollBehaviorInstant);
+  void scrollByRecursively(const ScrollOffset& delta);
   // If makeVisibleInVisualViewport is set, the visual viewport will be scrolled
   // if required to make the rect visible.
   void scrollRectToVisible(const LayoutRect&,
@@ -669,11 +668,6 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   void absoluteQuads(Vector<FloatQuad>&) const override;
   FloatRect localBoundingBoxRectForAccessibility() const final;
 
-  int reflectionOffset() const;
-  // Given a rect in the object's coordinate space, returns the corresponding
-  // rect in the reflection.
-  LayoutRect reflectedRect(const LayoutRect&) const;
-
   void layout() override;
   void paint(const PaintInfo&, const LayoutPoint&) const override;
   bool nodeAtPoint(HitTestResult&,
@@ -772,13 +766,13 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
 
   LayoutUnit offsetFromLogicalTopOfFirstPage() const;
 
-  // The page logical offset is the object's offset from the top of the page in
-  // the page progression direction (so an x-offset in vertical text and a
-  // y-offset for horizontal text).
-  LayoutUnit pageLogicalOffset() const {
-    return m_rareData ? m_rareData->m_pageLogicalOffset : LayoutUnit();
+  // The block offset from the logical top of this object to the end of the
+  // first fragmentainer it lives in. If it only lives in one fragmentainer, 0
+  // is returned.
+  LayoutUnit offsetToNextPage() const {
+    return m_rareData ? m_rareData->m_offsetToNextPage : LayoutUnit();
   }
-  void setPageLogicalOffset(LayoutUnit);
+  void setOffsetToNextPage(LayoutUnit);
 
   // Specify which page or column to associate with an offset, if said offset is
   // exactly at a page or column boundary.
@@ -786,6 +780,8 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   LayoutUnit pageLogicalHeightForOffset(LayoutUnit) const;
   LayoutUnit pageRemainingLogicalHeightForOffset(LayoutUnit,
                                                  PageBoundaryRule) const;
+
+  bool crossesPageBoundary(LayoutUnit offset, LayoutUnit logicalHeight) const;
 
   // Calculate the strut to insert in order fit content of size
   // |contentLogicalHeight|. |strutToNextPage| is the strut to add to |offset|
@@ -873,7 +869,7 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   bool needsForcedBreakBefore(EBreak previousBreakAfterValue) const;
 
   bool paintedOutputOfObjectHasNoEffectRegardlessOfSize() const override;
-  LayoutRect localOverflowRectForPaintInvalidation() const override;
+  LayoutRect localVisualRect() const override;
   bool mapToVisualRectInAncestorSpace(
       const LayoutBoxModelObject* ancestor,
       LayoutRect&,
@@ -890,6 +886,7 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
 
   virtual void updateLogicalWidth();
   void updateLogicalHeight();
+  void computeLogicalHeight(LogicalExtentComputedValues&) const;
   virtual void computeLogicalHeight(LayoutUnit logicalHeight,
                                     LayoutUnit logicalTop,
                                     LogicalExtentComputedValues&) const;
@@ -1001,7 +998,6 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   IntSize calculateAutoscrollDirection(const IntPoint& pointInRootFrame) const;
   static LayoutBox* findAutoscrollable(LayoutObject*);
   virtual void stopAutoscroll() {}
-  virtual void middleClickAutoscroll(const IntPoint&);
 
   DISABLE_CFI_PERF bool hasAutoVerticalScrollbar() const {
     return hasOverflowClip() && (style()->overflowY() == OverflowAuto ||
@@ -1054,7 +1050,7 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
     AvoidBreaks    // Preferably avoid breaks. If not possible, examine children
                    // to find possible break points.
   };
-  PaginationBreakability getPaginationBreakability() const;
+  virtual PaginationBreakability getPaginationBreakability() const;
 
   LayoutRect localCaretRect(
       InlineBox*,
@@ -1099,9 +1095,11 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
 
   bool shrinkToAvoidFloats() const;
   virtual bool avoidsFloats() const;
+  bool shouldBeConsideredAsReplaced() const;
 
-  void markChildForPaginationRelayoutIfNeeded(LayoutBox& child,
-                                              SubtreeLayoutScope&);
+  void updateFragmentationInfoForChild(LayoutBox&);
+  bool childNeedsRelayoutForPagination(const LayoutBox&) const;
+  void markChildForPaginationRelayoutIfNeeded(LayoutBox&, SubtreeLayoutScope&);
 
   bool isWritingModeRoot() const {
     return !parent() ||
@@ -1219,7 +1217,6 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   // may return true even if the resulting rect has zero area.
   bool mapScrollingContentsRectToBoxSpace(
       LayoutRect&,
-      ApplyOverflowClipFlag,
       VisualRectFlags = DefaultVisualRectFlags) const;
 
   virtual bool hasRelativeLogicalWidth() const;
@@ -1277,7 +1274,7 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
                           TransformState&,
                           MapCoordinatesFlags) const override;
 
-  void clearPreviousPaintInvalidationRects() override;
+  void clearPreviousVisualRects() override;
 
   LayoutBlock* percentHeightContainer() const {
     return m_rareData ? m_rareData->m_percentHeightContainer : nullptr;
@@ -1306,6 +1303,8 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   bool intersectsVisibleViewport() const;
 
   bool hasNonCompositedScrollbars() const final;
+
+  void ensureIsReadyForPaintInvalidation() override;
 
  protected:
   void willBeDestroyed() override;
@@ -1484,7 +1483,7 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
 
   LayoutBoxRareData& ensureRareData() {
     if (!m_rareData)
-      m_rareData = wrapUnique(new LayoutBoxRareData());
+      m_rareData = makeUnique<LayoutBoxRareData>();
     return *m_rareData.get();
   }
 
@@ -1577,6 +1576,13 @@ inline LayoutBox* LayoutBox::nextInFlowSiblingBox() const {
 
 inline LayoutBox* LayoutBox::parentBox() const {
   return toLayoutBox(parent());
+}
+
+inline LayoutBox* LayoutBox::firstInFlowChildBox() const {
+  LayoutBox* first = firstChildBox();
+  return (first && first->isOutOfFlowPositioned())
+             ? first->nextInFlowSiblingBox()
+             : first;
 }
 
 inline LayoutBox* LayoutBox::firstChildBox() const {

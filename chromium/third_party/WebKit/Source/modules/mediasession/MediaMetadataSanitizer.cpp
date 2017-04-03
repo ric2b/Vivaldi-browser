@@ -4,11 +4,14 @@
 
 #include "modules/mediasession/MediaMetadataSanitizer.h"
 
-#include "modules/mediasession/MediaArtwork.h"
+#include "core/dom/ExecutionContext.h"
+#include "core/inspector/ConsoleMessage.h"
+#include "modules/mediasession/MediaImage.h"
 #include "modules/mediasession/MediaMetadata.h"
 #include "public/platform/WebIconSizesParser.h"
 #include "public/platform/WebSize.h"
 #include "url/url_constants.h"
+#include "wtf/text/StringOperators.h"
 
 namespace blink {
 
@@ -20,47 +23,65 @@ namespace {
 // Maximum length of all strings inside MediaMetadata when it is sent over mojo.
 const size_t kMaxStringLength = 4 * 1024;
 
-// Maximum type length of MediaArtwork, which conforms to RFC 4288
+// Maximum type length of MediaImage, which conforms to RFC 4288
 // (https://tools.ietf.org/html/rfc4288).
-const size_t kMaxArtworkTypeLength = 2 * 127 + 1;
+const size_t kMaxImageTypeLength = 2 * 127 + 1;
 
-// Maximum number of artwork images inside the MediaMetadata.
-const size_t kMaxNumberOfArtworkImages = 10;
+// Maximum number of MediaImages inside the MediaMetadata.
+const size_t kMaxNumberOfMediaImages = 10;
 
-// Maximum of sizes in an artwork image.
-const size_t kMaxNumberOfArtworkSizes = 10;
+// Maximum of sizes in a MediaImage.
+const size_t kMaxNumberOfImageSizes = 10;
 
-bool checkArtworkSrcSanity(const KURL& src) {
+bool checkMediaImageSrcSanity(const KURL& src, ExecutionContext* context) {
+  // Console warning for invalid src is printed upon MediaImage creation.
   if (!src.isValid())
     return false;
+
   if (!src.protocolIs(url::kHttpScheme) && !src.protocolIs(url::kHttpsScheme) &&
       !src.protocolIs(url::kDataScheme)) {
+    context->addConsoleMessage(ConsoleMessage::create(
+        JSMessageSource, WarningMessageLevel,
+        "MediaImage src can only be of http/https/data scheme: " +
+            src.getString()));
     return false;
   }
   DCHECK(src.getString().is8Bit());
-  if (src.getString().length() > url::kMaxURLChars)
+  if (src.getString().length() > url::kMaxURLChars) {
+    context->addConsoleMessage(ConsoleMessage::create(
+        JSMessageSource, WarningMessageLevel,
+        "MediaImage src exceeds maximum URL length: " + src.getString()));
     return false;
+  }
   return true;
 }
 
-blink::mojom::blink::MediaImagePtr sanitizeArtworkAndConvertToMojo(
-    const MediaArtwork* artwork) {
-  DCHECK(artwork);
+// Sanitize MediaImage and do mojo serialization. Returns null when
+// |image.src()| is bad.
+blink::mojom::blink::MediaImagePtr sanitizeMediaImageAndConvertToMojo(
+    const MediaImage* image,
+    ExecutionContext* context) {
+  DCHECK(image);
 
   blink::mojom::blink::MediaImagePtr mojoImage;
 
-  KURL url = KURL(ParsedURLString, artwork->src());
-  if (!checkArtworkSrcSanity(url))
+  KURL url = KURL(ParsedURLString, image->src());
+  if (!checkMediaImageSrcSanity(url, context))
     return mojoImage;
 
   mojoImage = blink::mojom::blink::MediaImage::New();
   mojoImage->src = url;
-  mojoImage->type = artwork->type().left(kMaxArtworkTypeLength);
+  mojoImage->type = image->type().left(kMaxImageTypeLength);
   for (const auto& webSize :
-       WebIconSizesParser::parseIconSizes(artwork->sizes())) {
+       WebIconSizesParser::parseIconSizes(image->sizes())) {
     mojoImage->sizes.append(webSize);
-    if (mojoImage->sizes.size() == kMaxNumberOfArtworkSizes)
+    if (mojoImage->sizes.size() == kMaxNumberOfImageSizes) {
+      context->addConsoleMessage(ConsoleMessage::create(
+          JSMessageSource, WarningMessageLevel,
+          "The number of MediaImage sizes exceeds the upper limit. "
+          "All remaining MediaImage will be ignored"));
       break;
+    }
   }
   return mojoImage;
 }
@@ -68,8 +89,8 @@ blink::mojom::blink::MediaImagePtr sanitizeArtworkAndConvertToMojo(
 }  // anonymous namespace
 
 blink::mojom::blink::MediaMetadataPtr
-MediaMetadataSanitizer::sanitizeAndConvertToMojo(
-    const MediaMetadata* metadata) {
+MediaMetadataSanitizer::sanitizeAndConvertToMojo(const MediaMetadata* metadata,
+                                                 ExecutionContext* context) {
   blink::mojom::blink::MediaMetadataPtr mojoMetadata;
   if (!metadata)
     return mojoMetadata;
@@ -80,13 +101,18 @@ MediaMetadataSanitizer::sanitizeAndConvertToMojo(
   mojoMetadata->artist = metadata->artist().left(kMaxStringLength);
   mojoMetadata->album = metadata->album().left(kMaxStringLength);
 
-  for (const auto artwork : metadata->artwork()) {
+  for (const auto image : metadata->artwork()) {
     blink::mojom::blink::MediaImagePtr mojoImage =
-        sanitizeArtworkAndConvertToMojo(artwork.get());
+        sanitizeMediaImageAndConvertToMojo(image.get(), context);
     if (!mojoImage.is_null())
       mojoMetadata->artwork.append(std::move(mojoImage));
-    if (mojoMetadata->artwork.size() == kMaxNumberOfArtworkImages)
+    if (mojoMetadata->artwork.size() == kMaxNumberOfMediaImages) {
+      context->addConsoleMessage(ConsoleMessage::create(
+          JSMessageSource, WarningMessageLevel,
+          "The number of MediaImage sizes exceeds the upper limit. "
+          "All remaining MediaImage will be ignored"));
       break;
+    }
   }
   return mojoMetadata;
 }

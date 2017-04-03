@@ -278,36 +278,24 @@ void AudioOutputDevice::SetVolumeOnIOThread(double volume) {
     ipc_->SetVolume(volume);
 }
 
-void AudioOutputDevice::OnStateChanged(AudioOutputIPCDelegateState state) {
+void AudioOutputDevice::OnError() {
   DCHECK(task_runner()->BelongsToCurrentThread());
 
   // Do nothing if the stream has been closed.
   if (state_ < CREATING_STREAM)
     return;
 
-  // TODO(miu): Clean-up inconsistent and incomplete handling here.
-  // http://crbug.com/180640
-  switch (state) {
-    case AUDIO_OUTPUT_IPC_DELEGATE_STATE_PLAYING:
-    case AUDIO_OUTPUT_IPC_DELEGATE_STATE_PAUSED:
-      break;
-    case AUDIO_OUTPUT_IPC_DELEGATE_STATE_ERROR:
-      DLOG(WARNING) << "AudioOutputDevice::OnStateChanged(ERROR)";
-      // Don't dereference the callback object if the audio thread
-      // is stopped or stopping.  That could mean that the callback
-      // object has been deleted.
-      // TODO(tommi): Add an explicit contract for clearing the callback
-      // object.  Possibly require calling Initialize again or provide
-      // a callback object via Start() and clear it in Stop().
-      {
-        base::AutoLock auto_lock_(audio_thread_lock_);
-        if (audio_thread_)
-          callback_->OnRenderError();
-      }
-      break;
-    default:
-      NOTREACHED();
-      break;
+  DLOG(WARNING) << "AudioOutputDevice::OnError()";
+  // Don't dereference the callback object if the audio thread
+  // is stopped or stopping.  That could mean that the callback
+  // object has been deleted.
+  // TODO(tommi): Add an explicit contract for clearing the callback
+  // object.  Possibly require calling Initialize again or provide
+  // a callback object via Start() and clear it in Stop().
+  {
+    base::AutoLock auto_lock_(audio_thread_lock_);
+    if (audio_thread_)
+      callback_->OnRenderError();
   }
 }
 
@@ -338,8 +326,11 @@ void AudioOutputDevice::OnDeviceAuthorized(
   // different from OUTPUT_DEVICE_STATUS_OK, so the AudioOutputDevice
   // will enter the IPC_CLOSED state anyway, which is the safe thing to do.
   // This is preferable to holding a lock.
-  if (!did_receive_auth_.IsSignaled())
+  if (!did_receive_auth_.IsSignaled()) {
     device_status_ = device_status;
+    UMA_HISTOGRAM_ENUMERATION("Media.Audio.Render.OutputDeviceStatus",
+                              device_status, OUTPUT_DEVICE_STATUS_MAX + 1);
+  }
 
   if (device_status == OUTPUT_DEVICE_STATUS_OK) {
     state_ = AUTHORIZED;

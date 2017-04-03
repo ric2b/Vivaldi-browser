@@ -10,6 +10,7 @@
 #include "WebFrameLoadType.h"
 #include "WebHistoryItem.h"
 #include "public/platform/WebCachePolicy.h"
+#include "public/platform/WebURLError.h"
 
 namespace blink {
 
@@ -23,7 +24,6 @@ class WebFrameWidget;
 class WebRange;
 class WebScriptExecutionCallback;
 class WebSuspendableTask;
-enum class WebAppBannerPromptReply;
 enum class WebCachePolicy;
 enum class WebSandboxFlags;
 enum class WebTreeScopeType;
@@ -123,6 +123,10 @@ class WebLocalFrame : public WebFrame {
                         WebHistoryLoadType = WebHistoryDifferentDocumentLoad,
                         bool isClientRedirect = false) = 0;
 
+  // On load failure, attempts to make frame's parent rendering fallback content
+  // and stop this frame loading.
+  virtual bool maybeRenderFallbackContent(const WebURLError&) const = 0;
+
   // Navigation State -------------------------------------------------------
 
   // Returns true if the current frame's load event has not completed.
@@ -147,6 +151,10 @@ class WebLocalFrame : public WebFrame {
   // in this frame. Used to propagate state when this frame has navigated
   // cross process.
   virtual void setCommittedFirstRealLoad() = 0;
+
+  // Mark this frame's document as having received a user gesture, based on
+  // one of its descendants having processed a user gesture.
+  virtual void setHasReceivedUserGesture() = 0;
 
   // Orientation Changes ----------------------------------------------------
 
@@ -296,27 +304,19 @@ class WebLocalFrame : public WebFrame {
   virtual void moveRangeSelectionExtent(const WebPoint&) = 0;
   // Replaces the selection with the input string.
   virtual void replaceSelection(const WebString&) = 0;
+  // Deletes text before and after the current cursor position, excluding the
+  // selection.
+  virtual void deleteSurroundingText(int before, int after) = 0;
 
   // Spell-checking support -------------------------------------------------
   virtual void replaceMisspelledRange(const WebString&) = 0;
   virtual void enableSpellChecking(bool) = 0;
   virtual bool isSpellCheckingEnabled() const = 0;
-  virtual void requestTextChecking(const WebElement&) = 0;
   virtual void removeSpellingMarkers() = 0;
 
   // Content Settings -------------------------------------------------------
 
   virtual void setContentSettingsClient(WebContentSettingsClient*) = 0;
-
-  // App banner -------------------------------------------------------------
-
-  // Request to show an application install banner for the given |platforms|.
-  // The implementation can request the embedder to cancel the call by setting
-  // |cancel| to true.
-  virtual void willShowInstallBannerPrompt(
-      int requestId,
-      const WebVector<WebString>& platforms,
-      WebAppBannerPromptReply*) = 0;
 
   // Image reload -----------------------------------------------------------
 

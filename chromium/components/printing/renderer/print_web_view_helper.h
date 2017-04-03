@@ -15,8 +15,9 @@
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
-#include "content/public/renderer/render_view_observer.h"
-#include "content/public/renderer/render_view_observer_tracker.h"
+#include "content/public/renderer/render_frame_observer.h"
+#include "content/public/renderer/render_frame_observer_tracker.h"
+#include "printing/features/features.h"
 #include "printing/pdf_metafile_skia.h"
 #include "third_party/WebKit/public/platform/WebCanvas.h"
 #include "third_party/WebKit/public/web/WebNode.h"
@@ -71,23 +72,24 @@ class FrameReference {
  private:
   blink::WebView* view_;
   blink::WebLocalFrame* frame_;
+
+  DISALLOW_COPY_AND_ASSIGN(FrameReference);
 };
 
 // PrintWebViewHelper handles most of the printing grunt work for RenderView.
 // We plan on making print asynchronous and that will require copying the DOM
 // of the document and creating a new WebView with the contents.
 class PrintWebViewHelper
-    : public content::RenderViewObserver,
-      public content::RenderViewObserverTracker<PrintWebViewHelper> {
+    : public content::RenderFrameObserver,
+      public content::RenderFrameObserverTracker<PrintWebViewHelper> {
  public:
   class Delegate {
    public:
     virtual ~Delegate() {}
 
-    // Cancels prerender if it's currently in progress and returns |true| if
-    // the cancellation was done with success.
-    virtual bool CancelPrerender(content::RenderView* render_view,
-                                 int routing_id) = 0;
+    // Cancels prerender if it's currently in progress and returns true if the
+    // cancellation succeeded.
+    virtual bool CancelPrerender(content::RenderFrame* render_frame) = 0;
 
     // Returns the element to be printed. Returns a null WebElement if
     // a pdf plugin element can't be extracted from the frame.
@@ -108,15 +110,20 @@ class PrintWebViewHelper
     virtual bool OverridePrint(blink::WebLocalFrame* frame) = 0;
   };
 
-  PrintWebViewHelper(content::RenderView* render_view,
+  PrintWebViewHelper(content::RenderFrame* render_frame,
                      std::unique_ptr<Delegate> delegate);
   ~PrintWebViewHelper() override;
+
+  // Minimum valid value for scaling. Since scaling is originally an integer
+  // representing a percentage, it should never be less than this if it is
+  // valid.
+  static constexpr double kEpsilon = 0.01f;
 
   // Disable print preview and switch to system dialog printing even if full
   // printing is build-in. This method is used by CEF.
   static void DisablePreview();
 
-  bool IsPrintingEnabled();
+  bool IsPrintingEnabled() const;
 
   void PrintNode(const blink::WebNode& node);
 
@@ -138,7 +145,7 @@ class PrintWebViewHelper
     OK,
     FAIL_PRINT_INIT,
     FAIL_PRINT,
-#if defined(ENABLE_PRINT_PREVIEW)
+#if BUILDFLAG(ENABLE_PRINT_PREVIEW)
     FAIL_PREVIEW,
 #endif
   };
@@ -162,23 +169,24 @@ class PrintWebViewHelper
     PRINT_PREVIEW_SCRIPTED  // triggered by window.print().
   };
 
-  // RenderViewObserver implementation.
-  bool OnMessageReceived(const IPC::Message& message) override;
-  void PrintPage(blink::WebLocalFrame* frame, bool user_initiated) override;
-  void DidStartLoading() override;
-  void DidStopLoading() override;
+  // RenderFrameObserver implementation.
   void OnDestruct() override;
+  void DidStartProvisionalLoad() override;
+  void DidFailProvisionalLoad(const blink::WebURLError& error) override;
+  void DidFinishLoad() override;
+  void ScriptedPrint(bool user_initiated) override;
+  bool OnMessageReceived(const IPC::Message& message) override;
 
   // Message handlers ---------------------------------------------------------
-#if defined(ENABLE_BASIC_PRINTING)
+#if BUILDFLAG(ENABLE_BASIC_PRINTING)
   void OnPrintPages();
   void OnPrintForSystemDialog();
   void OnPrintForPrintPreview(const base::DictionaryValue& job_settings);
-#endif  // defined(ENABLE_BASIC_PRINTING)
-#if defined(ENABLE_PRINT_PREVIEW)
-  void OnInitiatePrintPreview(bool selection_only);
+#endif  // BUILDFLAG(ENABLE_BASIC_PRINTING)
+#if BUILDFLAG(ENABLE_PRINT_PREVIEW)
+  void OnInitiatePrintPreview(bool has_selection);
   void OnPrintPreview(const base::DictionaryValue& settings);
-#endif  // defined(ENABLE_PRINT_PREVIEW)
+#endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
   void OnPrintingDone(bool success);
 
   // Get |page_size| and |content_area| information from
@@ -191,7 +199,7 @@ class PrintWebViewHelper
   // Update |ignore_css_margins_| based on settings.
   void UpdateFrameMarginsCssInfo(const base::DictionaryValue& settings);
 
-#if defined(ENABLE_PRINT_PREVIEW)
+#if BUILDFLAG(ENABLE_PRINT_PREVIEW)
   // Prepare frame for creating preview document.
   void PrepareFrameForPreviewDocument();
 
@@ -208,20 +216,21 @@ class PrintWebViewHelper
 
   // Finalize the print ready preview document.
   bool FinalizePrintReadyDocument();
-#endif  // defined(ENABLE_PRINT_PREVIEW)
+#endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
 
-  // Enable/Disable window.print calls.  If |blocked| is true window.print
-  // calls will silently fail.  Call with |blocked| set to false to reenable.
-  void SetScriptedPrintBlocked(bool blocked);
+  // Enable/Disable printing.
+  void OnSetPrintingEnabled(bool enabled);
 
   // Main printing code -------------------------------------------------------
 
-#if defined(ENABLE_BASIC_PRINTING)
-  // |is_scripted| should be true when the call is coming from window.print()
+#if BUILDFLAG(ENABLE_BASIC_PRINTING)
+  // Print with the system dialog.
+  // |is_scripted| should be true when the call is coming from window.print().
+  // WARNING: |this| may be gone after this method returns.
   void Print(blink::WebLocalFrame* frame,
              const blink::WebNode& node,
              bool is_scripted);
-#endif  // defined(ENABLE_BASIC_PRINTING)
+#endif  // BUILDFLAG(ENABLE_BASIC_PRINTING)
 
   // Notification when printing is done - signal tear-down/free resources.
   void DidFinishPrinting(PrintingResult result);
@@ -237,7 +246,7 @@ class PrintWebViewHelper
                               const blink::WebNode& node,
                               int* number_of_pages);
 
-#if defined(ENABLE_PRINT_PREVIEW)
+#if BUILDFLAG(ENABLE_PRINT_PREVIEW)
   // Set options for print preset from source PDF document.
   bool SetOptionsFromPdfDocument(
       PrintHostMsg_SetOptionsFromDocument_Params* options);
@@ -248,18 +257,21 @@ class PrintWebViewHelper
   bool UpdatePrintSettings(blink::WebLocalFrame* frame,
                            const blink::WebNode& node,
                            const base::DictionaryValue& passed_job_settings);
-#endif  // defined(ENABLE_PRINT_PREVIEW)
+#endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
 
+#if BUILDFLAG(ENABLE_BASIC_PRINTING)
   // Get final print settings from the user.
-  // Return false if the user cancels or on error.
-  bool GetPrintSettingsFromUser(blink::WebLocalFrame* frame,
-                                const blink::WebNode& node,
-                                int expected_pages_count,
-                                bool is_scripted);
+  // WARNING: |this| may be gone after this method returns.
+  void GetPrintSettingsFromUser(
+      blink::WebLocalFrame* frame,
+      const blink::WebNode& node,
+      int expected_pages_count,
+      bool is_scripted,
+      PrintMsg_PrintPages_Params* print_settings);
+#endif  // BUILDFLAG(ENABLE_BASIC_PRINTING)
 
   // Page Printing / Rendering ------------------------------------------------
-
-#if defined(ENABLE_BASIC_PRINTING)
+#if BUILDFLAG(ENABLE_BASIC_PRINTING)
   void OnFramePreparedForPrintPages();
   void PrintPages();
   bool PrintPagesNative(blink::WebLocalFrame* frame, int page_count);
@@ -267,7 +279,7 @@ class PrintWebViewHelper
   // Render the frame for printing.
   bool RenderPagesForPrint(blink::WebLocalFrame* frame,
                            const blink::WebNode& node);
-#endif  // defined(ENABLE_BASIC_PRINTING)
+#endif  // BUILDFLAG(ENABLE_BASIC_PRINTING)
 
   // Prints the page listed in |params|.
 #if defined(OS_MACOSX)
@@ -323,7 +335,7 @@ class PrintWebViewHelper
       const PrintMsg_PrintPages_Params& params,
       int page_count);
 
-#if defined(ENABLE_PRINT_PREVIEW)
+#if BUILDFLAG(ENABLE_PRINT_PREVIEW)
   // Given the |device| and |canvas| to draw on, prints the appropriate headers
   // and footers using strings from |header_footer_info| on to the canvas.
   static void PrintHeaderAndFooter(blink::WebCanvas* canvas,
@@ -333,9 +345,7 @@ class PrintWebViewHelper
                                    float webkit_scale_factor,
                                    const PageSizeMargins& page_layout_in_points,
                                    const PrintMsg_Print_Params& params);
-#endif  // defined(ENABLE_PRINT_PREVIEW)
-
-  bool GetPrintFrame(blink::WebLocalFrame** frame);
+#endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
 
   // Script Initiated Printing ------------------------------------------------
 
@@ -345,10 +355,12 @@ class PrintWebViewHelper
   bool IsScriptInitiatedPrintAllowed(blink::WebFrame* frame,
                                      bool user_initiated);
 
-#if defined(ENABLE_PRINT_PREVIEW)
+#if BUILDFLAG(ENABLE_PRINT_PREVIEW)
   // Shows scripted print preview when options from plugin are available.
   void ShowScriptedPrintPreview();
 
+  // WARNING: |this| may be gone after this method returns when |type| is
+  // PRINT_PREVIEW_SCRIPTED.
   void RequestPrintPreview(PrintPreviewRequestType type);
 
   // Checks whether print preview should continue or not.
@@ -361,7 +373,7 @@ class PrintWebViewHelper
   // |metafile| is the rendered page. Otherwise |metafile| is NULL.
   // Returns true if print preview should continue, false on failure.
   bool PreviewPageRendered(int page_number, PdfMetafileSkia* metafile);
-#endif  // defined(ENABLE_PRINT_PREVIEW)
+#endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
 
   void SetPrintPagesParams(const PrintMsg_PrintPages_Params& settings);
 
@@ -373,8 +385,7 @@ class PrintWebViewHelper
   bool is_print_ready_metafile_sent_;
   bool ignore_css_margins_;
 
-  // Used for scripted initiated printing blocking.
-  bool is_scripted_printing_blocked_;
+  bool is_printing_enabled_;
 
   // Let the browser process know of a printing failure. Only set to false when
   // the failure came from the browser in the first place.

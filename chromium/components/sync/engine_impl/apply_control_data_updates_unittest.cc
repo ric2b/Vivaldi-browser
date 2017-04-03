@@ -13,12 +13,13 @@
 #include "base/format_macros.h"
 #include "base/location.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/stringprintf.h"
 #include "components/sync/base/cryptographer.h"
-#include "components/sync/core/test/test_entry_factory.h"
 #include "components/sync/engine_impl/syncer.h"
 #include "components/sync/engine_impl/syncer_util.h"
+#include "components/sync/engine_impl/test_entry_factory.h"
 #include "components/sync/protocol/nigori_specifics.pb.h"
 #include "components/sync/syncable/directory.h"
 #include "components/sync/syncable/mutable_entry.h"
@@ -46,7 +47,7 @@ class ApplyControlDataUpdatesTest : public ::testing::Test {
 
   void SetUp() override {
     dir_maker_.SetUp();
-    entry_factory_.reset(new TestEntryFactory(directory()));
+    entry_factory_ = base::MakeUnique<TestEntryFactory>(directory());
   }
 
   void TearDown() override { dir_maker_.TearDown(); }
@@ -132,20 +133,20 @@ TEST_F(ApplyControlDataUpdatesTest, EncryptUnsyncedChanges) {
   // First item is a folder
   Id folder_id = id_factory_.NewLocalId();
   entry_factory_->CreateUnsyncedItem(folder_id, id_factory_.root(), "folder",
-                                     true, BOOKMARKS, NULL);
+                                     true, BOOKMARKS, nullptr);
   // Next five items are children of the folder
   size_t i;
   size_t batch_s = 5;
   for (i = 0; i < batch_s; ++i) {
     entry_factory_->CreateUnsyncedItem(id_factory_.NewLocalId(), folder_id,
                                        base::StringPrintf("Item %" PRIuS "", i),
-                                       false, BOOKMARKS, NULL);
+                                       false, BOOKMARKS, nullptr);
   }
   // Next five items are children of the root.
   for (; i < 2 * batch_s; ++i) {
     entry_factory_->CreateUnsyncedItem(
         id_factory_.NewLocalId(), id_factory_.root(),
-        base::StringPrintf("Item %" PRIuS "", i), false, BOOKMARKS, NULL);
+        base::StringPrintf("Item %" PRIuS "", i), false, BOOKMARKS, nullptr);
   }
 
   KeyParams params = {"localhost", "dummy", "foobar"};
@@ -243,20 +244,20 @@ TEST_F(ApplyControlDataUpdatesTest, CannotEncryptUnsyncedChanges) {
   // First item is a folder
   Id folder_id = id_factory_.NewLocalId();
   entry_factory_->CreateUnsyncedItem(folder_id, id_factory_.root(), "folder",
-                                     true, BOOKMARKS, NULL);
+                                     true, BOOKMARKS, nullptr);
   // Next five items are children of the folder
   size_t i;
   size_t batch_s = 5;
   for (i = 0; i < batch_s; ++i) {
     entry_factory_->CreateUnsyncedItem(id_factory_.NewLocalId(), folder_id,
                                        base::StringPrintf("Item %" PRIuS "", i),
-                                       false, BOOKMARKS, NULL);
+                                       false, BOOKMARKS, nullptr);
   }
   // Next five items are children of the root.
   for (; i < 2 * batch_s; ++i) {
     entry_factory_->CreateUnsyncedItem(
         id_factory_.NewLocalId(), id_factory_.root(),
-        base::StringPrintf("Item %" PRIuS "", i), false, BOOKMARKS, NULL);
+        base::StringPrintf("Item %" PRIuS "", i), false, BOOKMARKS, nullptr);
   }
 
   // We encrypt with new keys, triggering the local cryptographer to be unready

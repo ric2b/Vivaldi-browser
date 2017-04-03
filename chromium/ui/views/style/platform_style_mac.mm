@@ -11,9 +11,7 @@
 #include "ui/gfx/vector_icons_public.h"
 #include "ui/resources/grit/ui_resources.h"
 #include "ui/views/controls/button/label_button.h"
-#include "ui/views/controls/focusable_rounded_border_mac.h"
 #import "ui/views/controls/scrollbar/cocoa_scroll_bar.h"
-#include "ui/views/style/mac/combobox_background_mac.h"
 
 #import <Cocoa/Cocoa.h>
 
@@ -24,7 +22,8 @@ const int PlatformStyle::kMinLabelButtonWidth = 32;
 const int PlatformStyle::kMinLabelButtonHeight = 30;
 const bool PlatformStyle::kDefaultLabelButtonHasBoldFont = false;
 const bool PlatformStyle::kDialogDefaultButtonCanBeCancel = false;
-const bool PlatformStyle::kTextfieldDragVerticallyDragsToEnd = true;
+const bool PlatformStyle::kTextDragVerticallyDragsToEnd = true;
+const bool PlatformStyle::kTreeViewHasFocusRing = true;
 const bool PlatformStyle::kTreeViewSelectionPaintsEntireRow = true;
 const bool PlatformStyle::kUseRipples = false;
 
@@ -45,17 +44,6 @@ gfx::ImageSkia PlatformStyle::CreateComboboxArrow(bool is_enabled,
       is_enabled ? gfx::VectorIconId::COMBOBOX_ARROW_MAC_ENABLED
                  : gfx::VectorIconId::COMBOBOX_ARROW_MAC_DISABLED,
       kComboboxArrowWidth, SK_ColorBLACK);
-}
-
-// static
-std::unique_ptr<FocusableBorder> PlatformStyle::CreateComboboxBorder() {
-  return base::WrapUnique(new FocusableRoundedBorder);
-}
-
-// static
-std::unique_ptr<Background> PlatformStyle::CreateComboboxBackground(
-    int shoulder_width) {
-  return base::MakeUnique<ComboboxBackgroundMac>(shoulder_width);
 }
 
 // static
@@ -85,7 +73,7 @@ void PlatformStyle::ApplyLabelButtonTextStyle(
 }
 
 // static
-void PlatformStyle::OnTextfieldKeypressUnhandled() {
+void PlatformStyle::OnTextfieldEditFailed() {
   NSBeep();
 }
 

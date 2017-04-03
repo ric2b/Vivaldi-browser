@@ -35,7 +35,6 @@
 #include "net/websockets/websocket_handshake_request_info.h"
 #include "net/websockets/websocket_handshake_response_info.h"
 #include "net/websockets/websocket_handshake_stream_create_helper.h"
-#include "net/websockets/websocket_mux.h"
 #include "net/websockets/websocket_stream.h"
 #include "url/origin.h"
 
@@ -174,6 +173,10 @@ class WebSocketChannel::ConnectDelegate
     : public WebSocketStream::ConnectDelegate {
  public:
   explicit ConnectDelegate(WebSocketChannel* creator) : creator_(creator) {}
+
+  void OnCreateRequest(net::URLRequest* request) override {
+    creator_->OnCreateURLRequest(request);
+  }
 
   void OnSuccess(std::unique_ptr<WebSocketStream> stream) override {
     creator_->OnConnectSuccess(std::move(stream));
@@ -601,6 +604,10 @@ void WebSocketChannel::SendAddChannelRequestWithSuppliedCallback(
                                  url_request_context_, NetLogWithSource(),
                                  std::move(connect_delegate));
   SetState(CONNECTING);
+}
+
+void WebSocketChannel::OnCreateURLRequest(URLRequest* request) {
+  event_interface_->OnCreateURLRequest(request);
 }
 
 void WebSocketChannel::OnConnectSuccess(

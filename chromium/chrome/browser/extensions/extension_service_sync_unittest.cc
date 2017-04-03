@@ -11,13 +11,13 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
-#include "base/feature_list.h"
 #include "base/files/file_util.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/field_trial.h"
 #include "base/test/mock_entropy_provider.h"
+#include "base/test/scoped_feature_list.h"
 #include "chrome/browser/extensions/api/webstore_private/webstore_private_api.h"
 #include "chrome/browser/extensions/component_loader.h"
 #include "chrome/browser/extensions/extension_service.h"
@@ -31,13 +31,14 @@
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/extensions/sync_helper.h"
+#include "chrome/common/features.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/browser_sync/profile_sync_service.h"
 #include "components/crx_file/id_util.h"
-#include "components/sync/api/fake_sync_change_processor.h"
-#include "components/sync/api/sync_change_processor_wrapper_for_test.h"
-#include "components/sync/api/sync_data.h"
-#include "components/sync/api/sync_error_factory_mock.h"
+#include "components/sync/model/fake_sync_change_processor.h"
+#include "components/sync/model/sync_change_processor_wrapper_for_test.h"
+#include "components/sync/model/sync_data.h"
+#include "components/sync/model/sync_error_factory_mock.h"
 #include "components/variations/variations_associated_data.h"
 #include "extensions/browser/api_test_utils.h"
 #include "extensions/browser/app_sorting.h"
@@ -53,7 +54,7 @@
 #include "extensions/common/value_builder.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-#if defined(ENABLE_SUPERVISED_USERS)
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
 #include "chrome/browser/supervised_user/permission_request_creator.h"
 #include "chrome/browser/supervised_user/supervised_user_constants.h"
 #include "chrome/browser/supervised_user/supervised_user_features.h"
@@ -704,8 +705,8 @@ TEST_F(ExtensionServiceSyncTest, GetSyncExtensionDataUserSettings) {
 
 TEST_F(ExtensionServiceSyncTest, SyncForUninstalledExternalExtension) {
   InitializeEmptyExtensionService();
-  InstallCRXWithLocation(
-      data_dir().AppendASCII("good.crx"), Manifest::EXTERNAL_PREF, INSTALL_NEW);
+  InstallCRX(data_dir().AppendASCII("good.crx"), Manifest::EXTERNAL_PREF,
+             INSTALL_NEW, Extension::NO_FLAGS);
   const Extension* extension = service()->GetInstalledExtension(good_crx);
   ASSERT_TRUE(extension);
 
@@ -1556,7 +1557,7 @@ TEST_F(ExtensionServiceSyncTest, DontSyncThemes) {
   EXPECT_TRUE(processor->changes().empty());
 }
 
-#if defined(ENABLE_SUPERVISED_USERS)
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
 
 class ExtensionServiceTestSupervised : public ExtensionServiceSyncTest,
                                        public SupervisedUserService::Delegate {
@@ -1582,13 +1583,10 @@ class ExtensionServiceTestSupervised : public ExtensionServiceSyncTest,
 
  protected:
   void InitSupervisedUserInitiatedExtensionInstallFeature(bool enabled) {
-    base::FeatureList::ClearInstanceForTesting();
-    std::unique_ptr<base::FeatureList> feature_list(new base::FeatureList);
     if (enabled) {
-      feature_list->InitializeFromCommandLine(
-          "SupervisedUserInitiatedExtensionInstall", std::string());
+      scoped_feature_list_.InitAndEnableFeature(
+          supervised_users::kSupervisedUserInitiatedExtensionInstall);
     }
-    base::FeatureList::SetInstance(std::move(feature_list));
   }
 
   bool IsPendingCustodianApproval(const std::string& extension_id) {
@@ -1737,6 +1735,7 @@ class ExtensionServiceTestSupervised : public ExtensionServiceSyncTest,
   }
 
   base::FieldTrialList field_trial_list_;
+  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 class MockPermissionRequestCreator : public PermissionRequestCreator {
@@ -2380,7 +2379,7 @@ TEST_F(ExtensionServiceSyncTest, SyncExtensionHasAllhostsWithheld) {
   EXPECT_TRUE(modifier.HasSetAllowedOnAllUrls());
 }
 
-#endif  // defined(ENABLE_SUPERVISED_USERS)
+#endif  // BUILDFLAG(ENABLE_SUPERVISED_USERS)
 
 // Tests sync behavior in the case of an item that starts out as an app and
 // gets updated to become an extension.

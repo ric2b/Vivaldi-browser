@@ -14,8 +14,7 @@ namespace gpu {
 
 // static
 scoped_refptr<gl::GLSurface> ImageTransportSurface::CreateNativeSurface(
-    GpuChannelManager* manager,
-    GpuCommandBufferStub* stub,
+    base::WeakPtr<ImageTransportSurfaceDelegate> delegate,
     SurfaceHandle surface_handle,
     gl::GLSurface::Format format) {
   if (gl::GetGLImplementation() == gl::kGLImplementationMockGL)
@@ -37,7 +36,7 @@ scoped_refptr<gl::GLSurface> ImageTransportSurface::CreateNativeSurface(
     return scoped_refptr<gl::GLSurface>();
 
   return scoped_refptr<gl::GLSurface>(
-      new PassThroughImageTransportSurface(manager, stub, surface.get()));
+      new PassThroughImageTransportSurface(delegate, surface.get()));
 }
 
 }  // namespace gpu

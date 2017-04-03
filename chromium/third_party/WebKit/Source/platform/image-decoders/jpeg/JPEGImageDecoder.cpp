@@ -46,12 +46,7 @@
 extern "C" {
 #include <stdio.h>  // jpeglib.h needs stdio FILE.
 #include "jpeglib.h"
-#if USE(ICCJPEG)
 #include "iccjpeg.h"
-#endif
-#if USE(QCMSLIB)
-#include "qcms.h"
-#endif
 #include <setjmp.h>
 }
 
@@ -73,15 +68,9 @@ inline J_COLOR_SPACE rgbOutputColorSpace() {
 inline bool turboSwizzled(J_COLOR_SPACE colorSpace) {
   return colorSpace == JCS_EXT_RGBA || colorSpace == JCS_EXT_BGRA;
 }
-inline bool colorSpaceHasAlpha(J_COLOR_SPACE colorSpace) {
-  return turboSwizzled(colorSpace);
-}
 #else
 inline J_COLOR_SPACE rgbOutputColorSpace() {
   return JCS_RGB;
-}
-inline bool colorSpaceHasAlpha(J_COLOR_SPACE) {
-  return false;
 }
 #endif
 
@@ -277,6 +266,17 @@ static yuv_subsampling yuvSubsampling(const jpeg_decompress_struct& info) {
   return YUV_UNKNOWN;
 }
 
+static void progressMonitor(j_common_ptr info) {
+  int scan = ((j_decompress_ptr)info)->input_scan_number;
+  // Progressive images with a very large number of scans can cause the
+  // decoder to hang.  Here we use the progress monitor to abort on
+  // a very large number of scans.  100 is arbitrary, but much larger
+  // than the number of scans we might expect in a normal image.
+  if (scan >= 100) {
+    error_exit(info);
+  }
+}
+
 class JPEGImageReader final {
   USING_FAST_MALLOC(JPEGImageReader);
   WTF_MAKE_NONCOPYABLE(JPEGImageReader);
@@ -311,10 +311,13 @@ class JPEGImageReader final {
     m_src.pub.term_source = term_source;
     m_src.reader = this;
 
-#if USE(ICCJPEG)
+    // Set up a progress monitor.
+    m_info.progress = &m_progressMgr;
+    m_progressMgr.progress_monitor = progressMonitor;
+
     // Retain ICC color profile markers for color management.
     setup_read_icc_profile(&m_info);
-#endif
+
     // Keep APP1 blocks, for obtaining exif data.
     jpeg_save_markers(&m_info, exifMarker, 0xFFFF);
   }
@@ -414,14 +417,6 @@ class JPEGImageReader final {
           case JCS_RGB:
             // libjpeg can convert GRAYSCALE image pixels to RGB.
             m_info.out_color_space = rgbOutputColorSpace();
-#if defined(TURBO_JPEG_RGB_SWIZZLE)
-            if (m_info.saw_JFIF_marker)
-              break;
-            // FIXME: Swizzle decoding does not support Adobe transform=0
-            // images (yet), so revert to using JSC_RGB in that case.
-            if (m_info.saw_Adobe_marker && !m_info.Adobe_transform)
-              m_info.out_color_space = JCS_RGB;
-#endif
             break;
           case JCS_CMYK:
           case JCS_YCCK:
@@ -464,28 +459,17 @@ class JPEGImageReader final {
         m_decoder->setOrientation(readImageOrientation(info()));
 
         // Allow color management of the decoded RGBA pixels if possible.
-        if (!m_decoder->ignoresGammaAndColorProfile()) {
-#if USE(ICCJPEG)
+        if (!m_decoder->ignoresColorSpace()) {
           JOCTET* profile = nullptr;
           unsigned profileLength = 0;
           if (read_icc_profile(info(), &profile, &profileLength)) {
             decoder()->setColorProfileAndComputeTransform(
-                reinterpret_cast<char*>(profile), profileLength,
-                colorSpaceHasAlpha(info()->out_color_space),
-                false /* useSRGB */);
+                reinterpret_cast<char*>(profile), profileLength);
             free(profile);
           }
-#endif  // USE(ICCJPEG)
-#if USE(QCMSLIB)
           if (decoder()->colorTransform()) {
             overrideColorSpace = JCS_UNKNOWN;
-#if defined(TURBO_JPEG_RGB_SWIZZLE)
-            // Input RGBA data to qcms. Note: restored to BGRA on output.
-            if (m_info.out_color_space == JCS_EXT_BGRA)
-              m_info.out_color_space = JCS_EXT_RGBA;
-#endif  // defined(TURBO_JPEG_RGB_SWIZZLE)
           }
-#endif  // USE(QCMSLIB)
         }
         if (overrideColorSpace == JCS_YCbCr) {
           m_info.out_color_space = JCS_YCbCr;
@@ -688,6 +672,7 @@ class JPEGImageReader final {
   jpeg_decompress_struct m_info;
   decoder_error_mgr m_err;
   decoder_source_mgr m_src;
+  jpeg_progress_mgr m_progressMgr;
   jstate m_state;
 
   JSAMPARRAY m_samples;
@@ -736,7 +721,7 @@ void term_source(j_decompress_ptr jd) {
 }
 
 JPEGImageDecoder::JPEGImageDecoder(AlphaOption alphaOption,
-                                   GammaAndColorProfileOption colorOptions,
+                                   ColorSpaceOption colorOptions,
                                    size_t maxDecodedBytes)
     : ImageDecoder(alphaOption, colorOptions, maxDecodedBytes) {}
 
@@ -822,6 +807,7 @@ void setPixel(ImageFrame& buffer,
   ASSERT_NOT_REACHED();
 }
 
+// Used only for debugging with libjpeg (instead of libjpeg-turbo).
 template <>
 void setPixel<JCS_RGB>(ImageFrame& buffer,
                        ImageFrame::PixelData* pixel,
@@ -852,6 +838,8 @@ void setPixel<JCS_CMYK>(ImageFrame& buffer,
                     jsample[2] * k / 255, 255);
 }
 
+// Used only for JCS_CMYK and JCS_RGB output.  Note that JCS_RGB is used only
+// for debugging with libjpeg (instead of libjpeg-turbo).
 template <J_COLOR_SPACE colorSpace>
 bool outputRows(JPEGImageReader* reader, ImageFrame& buffer) {
   JSAMPARRAY samples = reader->samples();
@@ -865,14 +853,17 @@ bool outputRows(JPEGImageReader* reader, ImageFrame& buffer) {
     // Request one scanline: returns 0 or 1 scanlines.
     if (jpeg_read_scanlines(info, samples, 1) != 1)
       return false;
-#if USE(QCMSLIB)
-    if (reader->decoder()->colorTransform() && colorSpace == JCS_RGB)
-      qcms_transform_data(reader->decoder()->colorTransform(), *samples,
-                          *samples, width);
-#endif
+
     ImageFrame::PixelData* pixel = buffer.getAddr(0, y);
     for (int x = 0; x < width; ++pixel, ++x)
       setPixel<colorSpace>(buffer, pixel, samples, x);
+
+    SkColorSpaceXform* xform = reader->decoder()->colorTransform();
+    if (JCS_RGB == colorSpace && xform) {
+      ImageFrame::PixelData* row = buffer.getAddr(0, y);
+      xform->apply(xformColorFormat(), row, xformColorFormat(), row, width,
+                   kOpaque_SkAlphaType);
+    }
   }
 
   buffer.setPixelsChanged(true);
@@ -953,8 +944,8 @@ bool JPEGImageDecoder::outputScanlines() {
     ASSERT(info->output_height ==
            static_cast<JDIMENSION>(m_decodedSize.height()));
 
-    if (!buffer.setSizeAndColorProfile(info->output_width, info->output_height,
-                                       colorProfile()))
+    if (!buffer.setSizeAndColorSpace(info->output_width, info->output_height,
+                                     colorSpace()))
       return setFailed();
 
     // The buffer is transparent outside the decoded area while the image is
@@ -973,13 +964,12 @@ bool JPEGImageDecoder::outputScanlines() {
           buffer.getAddr(0, info->output_scanline));
       if (jpeg_read_scanlines(info, &row, 1) != 1)
         return false;
-#if USE(QCMSLIB)
-      if (qcms_transform* transform = colorTransform())
-        qcms_transform_data_type(transform, row, row, info->output_width,
-                                 rgbOutputColorSpace() == JCS_EXT_BGRA
-                                     ? QCMS_OUTPUT_BGRX
-                                     : QCMS_OUTPUT_RGBX);
-#endif
+
+      SkColorSpaceXform* xform = colorTransform();
+      if (xform) {
+        xform->apply(xformColorFormat(), row, xformColorFormat(), row,
+                     info->output_width, kOpaque_SkAlphaType);
+      }
     }
     buffer.setPixelsChanged(true);
     return true;
@@ -1018,7 +1008,7 @@ void JPEGImageDecoder::decode(bool onlySize) {
     return;
 
   if (!m_reader) {
-    m_reader = wrapUnique(new JPEGImageReader(this));
+    m_reader = makeUnique<JPEGImageReader>(this);
     m_reader->setData(m_data.get());
   }
 

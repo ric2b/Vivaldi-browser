@@ -44,10 +44,11 @@ function registerServiceWorker() {
   // The base dir used to resolve service_worker.js and the scope depends on
   // whether this script is included from an html file in ./, subscope1/, or
   // subscope2/.
-  navigator.serviceWorker.register('service_worker.js', {scope: './'}).then(
-      function(swRegistration) {
-        sendResultToTest('ok - service worker registered');
-      }, sendErrorToTest);
+  navigator.serviceWorker.register('service_worker.js', {
+    scope: './'
+  }).then(swRegistrationReady).then(() => {
+    sendResultToTest('ok - service worker registered');
+  }).catch(sendErrorToTest);
 }
 
 function unregisterServiceWorker() {
@@ -118,13 +119,11 @@ function documentSubscribePush() {
   }).catch(sendErrorToTest);
 }
 
-function documentSubscribePushBadKey() {
+function documentSubscribePushWithNumericKey() {
   navigator.serviceWorker.ready.then(function(swRegistration) {
-    var invalidApplicationServerKey = new Uint8Array(300);
-    invalidApplicationServerKey.fill('0x05', 1, 300);
     return swRegistration.pushManager.subscribe({
           userVisibleOnly: true,
-          applicationServerKey: invalidApplicationServerKey.buffer
+          applicationServerKey: new TextEncoder().encode('1234567890')
         })
         .then(function(subscription) {
           sendResultToTest(subscription.endpoint);
@@ -143,6 +142,12 @@ function workerSubscribePushNoKey() {
   // and fail otherwise.
   navigator.serviceWorker.controller.postMessage(
       {command: 'workerSubscribeNoKey'});
+}
+
+function workerSubscribePushWithNumericKey(numericKey = '1234567890') {
+  // Send the message to the worker for it to subscribe with the given key
+  navigator.serviceWorker.controller.postMessage(
+      {command: 'workerSubscribeWithNumericKey', key: numericKey});
 }
 
 function GetP256dh() {

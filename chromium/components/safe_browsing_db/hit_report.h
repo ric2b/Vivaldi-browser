@@ -7,6 +7,7 @@
 #ifndef COMPONENTS_SAFE_BROWSING_DB_HIT_REPORT_H_
 #define COMPONENTS_SAFE_BROWSING_DB_HIT_REPORT_H_
 
+#include "components/safe_browsing_db/safe_browsing_prefs.h"
 #include "components/safe_browsing_db/util.h"
 #include "url/gurl.h"
 
@@ -16,9 +17,9 @@ namespace safe_browsing {
 enum class ThreatSource {
   UNKNOWN,
   DATA_SAVER,             // From the Data Reduction service.
-  LOCAL_PVER3,            // From LocalSafeBrowingDatabaseManager, protocol v3
-  LOCAL_PVER4,            // From LocalSafeBrowingDatabaseManager, protocol v4
-  REMOTE,                 // From RemoteSafeBrowingDatabaseManager
+  LOCAL_PVER3,            // From LocalSafeBrowsingDatabaseManager, protocol v3
+  LOCAL_PVER4,            // From V4LocalDatabaseManager, protocol v4
+  REMOTE,                 // From RemoteSafeBrowsingDatabaseManager
   CLIENT_SIDE_DETECTION,  // From ClientSideDetectionHost
 };
 
@@ -41,7 +42,7 @@ struct HitReport {
   // Opaque string used for tracking Pver4-based experiments
   std::string population_id;
 
-  bool is_extended_reporting;
+  ExtendedReportingLevel extended_reporting_level;
   bool is_metrics_reporting_active;
 
   std::string post_data;

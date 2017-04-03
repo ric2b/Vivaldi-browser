@@ -115,9 +115,9 @@ struct CONTENT_EXPORT ContextMenuParams {
   // This is the suggested filename to be used when saving file through "Save
   // Link As" option of context menu.
   base::string16 suggested_filename;
-  //Controls if Paste and go context menu should be displayed in input field
-  // To turn on the input field should contain the className "url"
-  bool isVivaldiAddressfield;
+
+  // Field that identifies special input types used in Vivaldi.
+  std::string vivaldi_input_type;
 
   // The misspelled word under the cursor, if any. Used to generate the
   // |dictionary_suggestions| list.

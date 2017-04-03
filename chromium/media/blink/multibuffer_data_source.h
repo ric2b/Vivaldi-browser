@@ -162,6 +162,9 @@ class MEDIA_BLINK_EXPORT MultibufferDataSource : public DataSource {
   // MultiBufferReader progress callback.
   void ProgressCallback(int64_t begin, int64_t end);
 
+  // Update progress based on current reader state.
+  void UpdateProgress();
+
   // call downloading_cb_ if needed.
   // If |force_loading| is true, we call downloading_cb_ and tell it that
   // we are currently loading, regardless of what reader_->IsLoading() says.

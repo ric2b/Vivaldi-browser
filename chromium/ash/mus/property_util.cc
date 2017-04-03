@@ -9,6 +9,7 @@
 #include "ash/mus/shadow.h"
 #include "services/ui/public/cpp/property_type_converters.h"
 #include "services/ui/public/cpp/window_property.h"
+#include "services/ui/public/interfaces/window_manager.mojom.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 
@@ -72,13 +73,13 @@ gfx::Size GetWindowPreferredSize(const ui::Window* window) {
   return gfx::Size();
 }
 
-bool GetRequestedContainer(const ui::Window* window,
-                           mojom::Container* container) {
-  if (!window->HasSharedProperty(mojom::kWindowContainer_Property))
+bool GetRequestedContainer(const ui::Window* window, int* container_id) {
+  if (!window->HasSharedProperty(
+          ui::mojom::WindowManager::kInitialContainerId_Property))
     return false;
 
-  *container = static_cast<mojom::Container>(
-      window->GetSharedProperty<int32_t>(mojom::kWindowContainer_Property));
+  *container_id = window->GetSharedProperty<int32_t>(
+      ui::mojom::WindowManager::kInitialContainerId_Property);
   return true;
 }
 
@@ -263,6 +264,18 @@ int64_t GetInitialDisplayId(const ui::Window::SharedProperties& properties) {
       properties.find(ui::mojom::WindowManager::kInitialDisplayId_Property);
   return iter == properties.end() ? display::Display::kInvalidDisplayID
                                   : mojo::ConvertTo<int64_t>(iter->second);
+}
+
+void SetExcludeFromMru(ui::Window* window, bool value) {
+  window->SetSharedProperty<bool>(
+      ui::mojom::WindowManager::kExcludeFromMru_Property, value);
+}
+
+bool GetExcludeFromMru(const ui::Window* window) {
+  return window->HasSharedProperty(
+             ui::mojom::WindowManager::kExcludeFromMru_Property) &&
+         window->GetSharedProperty<bool>(
+             ui::mojom::WindowManager::kExcludeFromMru_Property);
 }
 
 }  // namespace mus

@@ -13,7 +13,7 @@ namespace {
 
 class PostTaskAndReplyTaskRunner : public internal::PostTaskAndReplyImpl {
  public:
-  explicit PostTaskAndReplyTaskRunner(TaskTraits traits)
+  explicit PostTaskAndReplyTaskRunner(const TaskTraits& traits)
       : traits_(traits) {}
 
  private:
@@ -40,23 +40,32 @@ void PostTaskAndReply(const tracked_objects::Location& from_here,
 }
 
 void PostTaskWithTraits(const tracked_objects::Location& from_here,
-                        TaskTraits traits,
+                        const TaskTraits& traits,
                         const Closure& task) {
   TaskScheduler::GetInstance()->PostTaskWithTraits(from_here, traits, task);
 }
 
 void PostTaskWithTraitsAndReply(const tracked_objects::Location& from_here,
-                                TaskTraits traits,
+                                const TaskTraits& traits,
                                 const Closure& task,
                                 const Closure& reply) {
   PostTaskAndReplyTaskRunner(traits).PostTaskAndReply(from_here, task, reply);
 }
 
-scoped_refptr<TaskRunner> CreateTaskRunnerWithTraits(
-    TaskTraits traits,
-    ExecutionMode execution_mode) {
-  return TaskScheduler::GetInstance()->CreateTaskRunnerWithTraits(
-      traits, execution_mode);
+scoped_refptr<TaskRunner> CreateTaskRunnerWithTraits(const TaskTraits& traits) {
+  return TaskScheduler::GetInstance()->CreateTaskRunnerWithTraits(traits);
+}
+
+scoped_refptr<SequencedTaskRunner> CreateSequencedTaskRunnerWithTraits(
+    const TaskTraits& traits) {
+  return TaskScheduler::GetInstance()->CreateSequencedTaskRunnerWithTraits(
+      traits);
+}
+
+scoped_refptr<SingleThreadTaskRunner> CreateSingleThreadTaskRunnerWithTraits(
+    const TaskTraits& traits) {
+  return TaskScheduler::GetInstance()->CreateSingleThreadTaskRunnerWithTraits(
+      traits);
 }
 
 }  // namespace base

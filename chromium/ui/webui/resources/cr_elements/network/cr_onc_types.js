@@ -138,6 +138,7 @@ CrOnc.Source = {
   DEVICE_POLICY: 'DevicePolicy',
   USER: 'User',
   USER_POLICY: 'UserPolicy',
+  ACTIVE_EXTENSION: 'ActiveExtension',
 };
 
 /**
@@ -168,6 +169,12 @@ CrOnc.getActiveValue = function(property) {
     if (effective in property)
       return property[effective];
   }
+
+  // If no Effective value, return the UserSetting or DeviceSetting.
+  if ('UserSetting' in property)
+    return property['UserSetting'];
+  if ('DeviceSetting' in property)
+    return property['DeviceSetting'];
 
   console.error(
       'getActiveValue called on invalid ONC object: ' +

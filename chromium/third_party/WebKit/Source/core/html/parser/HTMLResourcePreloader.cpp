@@ -38,7 +38,7 @@
 
 namespace blink {
 
-inline HTMLResourcePreloader::HTMLResourcePreloader(Document& document)
+HTMLResourcePreloader::HTMLResourcePreloader(Document& document)
     : m_document(document) {}
 
 HTMLResourcePreloader* HTMLResourcePreloader::create(Document& document) {
@@ -77,11 +77,10 @@ void HTMLResourcePreloader::preload(
   if (!m_document->loader())
     return;
   FetchRequest request = preload->resourceRequest(m_document);
-  // TODO(dgozman): This check should go to HTMLPreloadScanner, but this
-  // requires making Document::completeURLWithOverride logic to be statically
-  // accessible.
-  if (request.url().protocolIsData())
-    return;
+
+  // Data URLs are filtered out in the preload scanner.
+  DCHECK(!request.url().protocolIsData());
+
   if (preload->resourceType() == Resource::Script ||
       preload->resourceType() == Resource::CSSStyleSheet ||
       preload->resourceType() == Resource::ImportResource)
@@ -95,14 +94,10 @@ void HTMLResourcePreloader::preload(
                       ("WebCore.PreloadDelayMs", 0, 2000, 20));
   preloadDelayHistogram.count(duration);
 
-  if (preload->scriptHasInvalidTypeOrLanguage()) {
-    Deprecation::countDeprecation(m_document,
-                                  UseCounter::ScriptInvalidTypeOrLanguage);
-  }
-
   Resource* resource =
       m_document->loader()->startPreload(preload->resourceType(), request);
-  if (resource && preload->resourceType() == Resource::CSSStyleSheet) {
+  if (resource && !resource->isLoaded() &&
+      preload->resourceType() == Resource::CSSStyleSheet) {
     Settings* settings = m_document->settings();
     if (settings && (settings->cssExternalScannerNoPreload() ||
                      settings->cssExternalScannerPreload()))

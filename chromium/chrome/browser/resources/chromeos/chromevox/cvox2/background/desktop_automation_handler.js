@@ -109,25 +109,21 @@ DesktopAutomationHandler.prototype = {
     if (!node)
       return;
 
+    // Decide whether to announce and sync this event.
+    if (!DesktopAutomationHandler.announceActions && evt.eventFrom == 'action')
+      return;
+
     var prevRange = ChromeVoxState.instance.currentRange;
 
     ChromeVoxState.instance.setCurrentRange(cursors.Range.fromNode(node));
 
-    // Don't process nodes inside of web content if ChromeVox Next is inactive.
-    if (node.root.role != RoleType.desktop &&
-        ChromeVoxState.instance.mode === ChromeVoxMode.CLASSIC) {
-      chrome.accessibilityPrivate.setFocusRing([]);
+    if (!this.shouldOutput_(evt))
       return;
-    }
 
     // Don't output if focused node hasn't changed.
     if (prevRange &&
         evt.type == 'focus' &&
         ChromeVoxState.instance.currentRange.equals(prevRange))
-      return;
-
-    // Decide whether to announce this event.
-    if (!DesktopAutomationHandler.announceActions && evt.eventFrom == 'action')
       return;
 
     var output = new Output();
@@ -147,13 +143,16 @@ DesktopAutomationHandler.prototype = {
    * @param {!AutomationEvent} evt
    */
   onEventIfInRange: function(evt) {
-    if (evt.target.root.role != RoleType.desktop &&
-        ChromeVoxState.instance.mode === ChromeVoxMode.CLASSIC)
+    if (!this.shouldOutput_(evt))
       return;
 
     var prev = ChromeVoxState.instance.currentRange;
     if (prev.contentEquals(cursors.Range.fromNode(evt.target)) ||
         evt.target.state.focused) {
+      // Category flush here since previous focus events via navigation can
+      // cause double speak.
+      Output.forceModeForNextSpeechUtterance(cvox.QueueMode.CATEGORY_FLUSH);
+
       // Intentionally skip setting range.
       new Output()
           .withRichSpeechAndBraille(cursors.Range.fromNode(evt.target),
@@ -216,14 +215,8 @@ DesktopAutomationHandler.prototype = {
    */
   onAlert: function(evt) {
     var node = evt.target;
-    if (!node)
+    if (!node || !this.shouldOutput_(evt))
       return;
-
-    // Don't process nodes inside of web content if ChromeVox Next is inactive.
-    if (node.root.role != RoleType.desktop &&
-        ChromeVoxState.instance.mode === ChromeVoxMode.CLASSIC) {
-      return;
-    }
 
     var range = cursors.Range.fromNode(node);
 
@@ -238,6 +231,7 @@ DesktopAutomationHandler.prototype = {
     if (!AutomationPredicate.checkable(evt.target))
       return;
 
+    Output.forceModeForNextSpeechUtterance(cvox.QueueMode.CATEGORY_FLUSH);
     this.onEventIfInRange(
         new chrome.automation.AutomationEvent(
             EventType.checkedStateChanged, evt.target, evt.eventFrom));
@@ -263,6 +257,28 @@ DesktopAutomationHandler.prototype = {
     // views.
     if (evt.eventFrom == '')
       Output.forceModeForNextSpeechUtterance(cvox.QueueMode.CATEGORY_FLUSH);
+    if (!node.root)
+      return;
+
+    var root = AutomationUtil.getTopLevelRoot(node.root);
+
+    // If we're crossing out of a root, save it in case it needs recovering.
+    var prevRange = ChromeVoxState.instance.currentRange;
+    var prevNode = prevRange ? prevRange.start.node : null;
+    if (prevNode) {
+    var prevRoot = AutomationUtil.getTopLevelRoot(prevNode);
+      if (prevRoot && prevRoot !== root)
+      ChromeVoxState.instance.focusRecoveryMap.set(prevRoot, prevRange);
+    }
+
+    // If a previous node was saved for this focus, restore it.
+    var savedRange = ChromeVoxState.instance.focusRecoveryMap.get(root);
+    ChromeVoxState.instance.focusRecoveryMap.delete(root);
+    if (savedRange) {
+      ChromeVoxState.instance.navigateToRange(savedRange, false);
+      return;
+    }
+
     this.onEventDefault(new chrome.automation.AutomationEvent(
         EventType.focus, node, evt.eventFrom));
   },
@@ -272,11 +288,6 @@ DesktopAutomationHandler.prototype = {
    * @param {!AutomationEvent} evt
    */
   onLoadComplete: function(evt) {
-    // Don't process nodes inside of web content if ChromeVox Next is inactive.
-    if (evt.target.root.role != RoleType.desktop &&
-        ChromeVoxState.instance.mode === ChromeVoxMode.CLASSIC)
-      return;
-
     chrome.automation.getFocus(function(focus) {
       if (!focus || !AutomationUtil.isDescendantOf(focus, evt.target))
         return;
@@ -306,6 +317,10 @@ DesktopAutomationHandler.prototype = {
         }
       }
       ChromeVoxState.instance.setCurrentRange(cursors.Range.fromNode(focus));
+      if (!this.shouldOutput_(evt))
+        return;
+
+      Output.forceModeForNextSpeechUtterance(cvox.QueueMode.FLUSH);
       o.withRichSpeechAndBraille(
           ChromeVoxState.instance.currentRange, null, evt.type).go();
     }.bind(this));
@@ -335,11 +350,6 @@ DesktopAutomationHandler.prototype = {
    * @private
    */
   onEditableChanged_: function(evt) {
-    // Don't process nodes inside of web content if ChromeVox Next is inactive.
-    if (evt.target.root.role != RoleType.desktop &&
-        ChromeVoxState.instance.mode === ChromeVoxMode.CLASSIC)
-      return;
-
     var topRoot = AutomationUtil.getTopLevelRoot(evt.target);
     if (!evt.target.state.focused ||
         (topRoot &&
@@ -386,9 +396,7 @@ DesktopAutomationHandler.prototype = {
       return;
     }
 
-    // Don't process nodes inside of web content if ChromeVox Next is inactive.
-    if (evt.target.root.role != RoleType.desktop &&
-        ChromeVoxState.instance.mode === ChromeVoxMode.CLASSIC)
+    if (!this.shouldOutput_(evt))
       return;
 
     var t = evt.target;
@@ -416,11 +424,8 @@ DesktopAutomationHandler.prototype = {
    * @param {!AutomationEvent} evt
    */
   onScrollPositionChanged: function(evt) {
-    if (ChromeVoxState.instance.mode === ChromeVoxMode.CLASSIC)
-      return;
-
     var currentRange = ChromeVoxState.instance.currentRange;
-    if (currentRange && currentRange.isValid())
+    if (currentRange && currentRange.isValid() && this.shouldOutput_(evt))
       new Output().withLocation(currentRange, null, evt.type).go();
   },
 
@@ -428,7 +433,20 @@ DesktopAutomationHandler.prototype = {
    * @param {!AutomationEvent} evt
    */
   onSelection: function(evt) {
+    // Invalidate any previous editable text handler state since some nodes,
+    // like menuitems, can receive selection while focus remains on an editable
+    // leading to braille output routing to the editable.
+    this.textEditHandler_ = null;
+
     chrome.automation.getFocus(function(focus) {
+      // Desktop tabs get "selection" when there's a focused webview during tab
+      // switching.
+      if (focus.role == RoleType.webView && evt.target.role == RoleType.tab) {
+        ChromeVoxState.instance.setCurrentRange(
+            cursors.Range.fromNode(focus.firstChild));
+        return;
+      }
+
       // Some cases (e.g. in overview mode), require overriding the assumption
       // that focus is an ancestor of a selection target.
       var override = evt.target.role == RoleType.menuItem ||
@@ -445,7 +463,7 @@ DesktopAutomationHandler.prototype = {
    * @param {!AutomationEvent} evt
    */
   onMenuStart: function(evt) {
-    ChromeVoxState.instance.startExcursion();
+    ChromeVoxState.instance.markCurrentRange();
     this.onEventDefault(evt);
   },
 
@@ -455,7 +473,16 @@ DesktopAutomationHandler.prototype = {
    */
   onMenuEnd: function(evt) {
     this.onEventDefault(evt);
-    ChromeVoxState.instance.endExcursion();
+
+    // This is a work around for Chrome context menus not firing a focus event
+    // after you close them.
+    chrome.automation.getFocus(function(focus) {
+      if (focus) {
+        this.onFocus(
+            new chrome.automation.AutomationEvent(
+                EventType.focus, focus, 'page'));
+      }
+    }.bind(this));
   },
 
   /**
@@ -467,6 +494,20 @@ DesktopAutomationHandler.prototype = {
         this.textEditHandler_.node !== node) {
       this.textEditHandler_ = editing.TextEditHandler.createForNode(node);
     }
+  },
+
+  /**
+   * Once an event handler updates ChromeVox's range based on |evt|
+   * which updates mode, returns whether |evt| should be outputted.
+   * @return {boolean}
+   */
+  shouldOutput_: function(evt) {
+    var mode = ChromeVoxState.instance.mode;
+    // Only output desktop rooted nodes or web nodes for next engine modes.
+    return evt.target.root.role == RoleType.desktop ||
+        (mode == ChromeVoxMode.NEXT ||
+         mode == ChromeVoxMode.FORCE_NEXT ||
+         mode == ChromeVoxMode.CLASSIC_COMPAT);
   }
 };
 

@@ -6,8 +6,8 @@
 
 #include <memory>
 
+#include "base/memory/ptr_util.h"
 #include "base/sha1.h"
-#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "net/quic/core/crypto/crypto_framer.h"
 #include "net/quic/core/crypto/crypto_handshake.h"
@@ -98,7 +98,10 @@ QuicPacket* BuildUnsizedDataPacket(QuicFramer* framer,
 }
 
 QuicFlagSaver::QuicFlagSaver() {
-#define QUIC_FLAG(type, flag, value) CHECK_EQ(value, flag);
+#define QUIC_FLAG(type, flag, value)                                          \
+  CHECK_EQ(value, flag) << "Flag set to an expected value.  A prior test is " \
+                           "likely setting a flag "                           \
+                        << "without using a QuicFlagSaver";
 #include "net/quic/core/quic_flags_list.h"
 #undef QUIC_FLAG
 }
@@ -356,12 +359,10 @@ PacketSavingConnection::PacketSavingConnection(
                          perspective,
                          supported_versions) {}
 
-PacketSavingConnection::~PacketSavingConnection() {
-  base::STLDeleteElements(&encrypted_packets_);
-}
+PacketSavingConnection::~PacketSavingConnection() {}
 
 void PacketSavingConnection::SendOrQueuePacket(SerializedPacket* packet) {
-  encrypted_packets_.push_back(new QuicEncryptedPacket(
+  encrypted_packets_.push_back(base::MakeUnique<QuicEncryptedPacket>(
       QuicUtils::CopyBuffer(*packet), packet->encrypted_length, true));
   // Transfer ownership of the packet to the SentPacketManager and the
   // ack notifier to the AckNotifierManager.
@@ -371,7 +372,7 @@ void PacketSavingConnection::SendOrQueuePacket(SerializedPacket* packet) {
 }
 
 MockQuicSession::MockQuicSession(QuicConnection* connection)
-    : QuicSession(connection, DefaultQuicConfig()) {
+    : QuicSession(connection, nullptr, DefaultQuicConfig()) {
   crypto_stream_.reset(new QuicCryptoStream(this));
   Initialize();
   ON_CALL(*this, WritevData(_, _, _, _, _, _))
@@ -384,7 +385,7 @@ MockQuicSession::~MockQuicSession() {
 
 // static
 QuicConsumedData MockQuicSession::ConsumeAllData(
-    ReliableQuicStream* /*stream*/,
+    QuicStream* /*stream*/,
     QuicStreamId /*id*/,
     const QuicIOVector& data,
     QuicStreamOffset /*offset*/,
@@ -394,7 +395,7 @@ QuicConsumedData MockQuicSession::ConsumeAllData(
 }
 
 MockQuicSpdySession::MockQuicSpdySession(QuicConnection* connection)
-    : QuicSpdySession(connection, DefaultQuicConfig()) {
+    : QuicSpdySession(connection, nullptr, DefaultQuicConfig()) {
   crypto_stream_.reset(new QuicCryptoStream(this));
   Initialize();
   ON_CALL(*this, WritevData(_, _, _, _, _, _))
@@ -440,6 +441,22 @@ TestQuicSpdyServerSession::CreateQuicCryptoServerStream(
 QuicCryptoServerStream* TestQuicSpdyServerSession::GetCryptoStream() {
   return static_cast<QuicCryptoServerStream*>(
       QuicServerSessionBase::GetCryptoStream());
+}
+
+TestPushPromiseDelegate::TestPushPromiseDelegate(bool match)
+    : match_(match), rendezvous_fired_(false), rendezvous_stream_(nullptr) {}
+
+bool TestPushPromiseDelegate::CheckVary(
+    const SpdyHeaderBlock& client_request,
+    const SpdyHeaderBlock& promise_request,
+    const SpdyHeaderBlock& promise_response) {
+  DVLOG(1) << "match " << match_;
+  return match_;
+}
+
+void TestPushPromiseDelegate::OnRendezvousResult(QuicSpdyStream* stream) {
+  rendezvous_fired_ = true;
+  rendezvous_stream_ = stream;
 }
 
 TestQuicSpdyClientSession::TestQuicSpdyClientSession(
@@ -630,7 +647,6 @@ QuicEncryptedPacket* ConstructEncryptedPacket(
   header.packet_number = packet_number;
   header.entropy_flag = false;
   header.entropy_hash = 0;
-  header.fec_flag = false;
   QuicStreamFrame stream_frame(1, false, 0, StringPiece(data));
   QuicFrame frame(&stream_frame);
   QuicFrames frames;
@@ -681,7 +697,6 @@ QuicEncryptedPacket* ConstructMisFramedEncryptedPacket(
   header.packet_number = packet_number;
   header.entropy_flag = false;
   header.entropy_hash = 0;
-  header.fec_flag = false;
   QuicStreamFrame stream_frame(1, false, 0, StringPiece(data));
   QuicFrame frame(&stream_frame);
   QuicFrames frames;
@@ -775,7 +790,6 @@ static QuicPacket* ConstructPacketFromHandshakeMessage(
   header.packet_number = 1;
   header.entropy_flag = false;
   header.entropy_hash = 0;
-  header.fec_flag = false;
 
   QuicStreamFrame stream_frame(kCryptoStreamId, false, 0,
                                data->AsStringPiece());

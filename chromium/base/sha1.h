@@ -6,66 +6,12 @@
 #define BASE_SHA1_H_
 
 #include <stddef.h>
-#include <stdint.h>
 
 #include <string>
 
 #include "base/base_export.h"
 
 namespace base {
-
-// Implementation of SHA-1. Only handles data in byte-sized blocks,
-// which simplifies the code a fair bit.
-
-// Identifier names follow notation in FIPS PUB 180-3, where you'll
-// also find a description of the algorithm:
-// http://csrc.nist.gov/publications/fips/fips180-3/fips180-3_final.pdf
-
-// Usage example:
-//
-// SecureHashAlgorithm sha;
-// while(there is data to hash)
-//   sha.Update(moredata, size of data);
-// sha.Final();
-// memcpy(somewhere, sha.Digest(), 20);
-//
-// to reuse the instance of sha, call sha.Init();
-
-// TODO(jhawkins): Replace this implementation with a per-platform
-// implementation using each platform's crypto library.  See
-// http://crbug.com/47218
-
-class SecureHashAlgorithm {
- public:
-  BASE_EXPORT SecureHashAlgorithm();
-
-  static const int kDigestSizeBytes;
-
-  BASE_EXPORT void Init();
-  BASE_EXPORT void Update(const void* data, size_t nbytes);
-  BASE_EXPORT void Final();
-
-  // 20 bytes of message digest.
-  const unsigned char* Digest() const {
-    return reinterpret_cast<const unsigned char*>(H);
-  }
-
- private:
-  void Pad();
-  void Process();
-
-  uint32_t A, B, C, D, E;
-
-  uint32_t H[5];
-
-  union {
-    uint32_t W[80];
-    uint8_t M[64];
-  };
-
-  uint32_t cursor;
-  uint64_t l;
-};
 
 // These functions perform SHA-1 operations.
 

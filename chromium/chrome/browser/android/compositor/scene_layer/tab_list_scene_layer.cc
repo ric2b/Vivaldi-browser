@@ -70,13 +70,13 @@ void TabListSceneLayer::UpdateLayer(
     const JavaParamRef<jobject>& jtab_content_manager,
     const JavaParamRef<jobject>& jresource_manager) {
   // TODO(changwan): move these to constructor if possible
-  if (resource_manager_ == nullptr) {
+  if (!resource_manager_) {
     resource_manager_ =
         ui::ResourceManagerImpl::FromJavaObject(jresource_manager);
   }
-  if (layer_title_cache_ == nullptr)
+  if (!layer_title_cache_)
     layer_title_cache_ = LayerTitleCache::FromJavaObject(jlayer_title_cache);
-  if (tab_content_manager_ == nullptr) {
+  if (!tab_content_manager_) {
     tab_content_manager_ =
         TabContentManager::FromJavaObject(jtab_content_manager);
   }
@@ -98,6 +98,7 @@ void TabListSceneLayer::PutTabLayer(
     jint border_resource_id,
     jint border_inner_shadow_resource_id,
     jboolean can_use_live_layer,
+    jboolean browser_controls_at_bottom,
     jint tab_background_color,
     jint back_logo_color,
     jboolean incognito,
@@ -139,7 +140,6 @@ void TabListSceneLayer::PutTabLayer(
     jfloat toolbar_alpha,
     jfloat toolbar_y_offset,
     jfloat side_border_scale,
-    jboolean attach_content,
     jboolean inset_border) {
   scoped_refptr<TabLayer> layer;
   auto iter = tab_map_.find(id);
@@ -161,7 +161,8 @@ void TabListSceneLayer::PutTabLayer(
   DCHECK(layer);
   if (layer) {
     layer->SetProperties(
-        id, can_use_live_layer, toolbar_resource_id, close_button_resource_id,
+        id, can_use_live_layer, browser_controls_at_bottom,
+        toolbar_resource_id, close_button_resource_id,
         shadow_resource_id, contour_resource_id, back_logo_resource_id,
         border_resource_id, border_inner_shadow_resource_id,
         tab_background_color, back_logo_color, is_portrait, x, y, width, height,
@@ -173,15 +174,13 @@ void TabListSceneLayer::PutTabLayer(
         default_theme_color, toolbar_background_color,
         close_button_color, anonymize_toolbar, toolbar_textbox_resource_id,
         toolbar_textbox_background_color, toolbar_textbox_alpha, toolbar_alpha,
-        toolbar_y_offset, side_border_scale, attach_content, inset_border);
+        toolbar_y_offset, side_border_scale, inset_border);
   }
 
-  if (attach_content) {
-    gfx::RectF self(own_tree_->position(), gfx::SizeF(own_tree_->bounds()));
-    gfx::RectF content(x, y, width, height);
+  gfx::RectF self(own_tree_->position(), gfx::SizeF(own_tree_->bounds()));
+  gfx::RectF content(x, y, width, height);
 
-    content_obscures_self_ |= content.Contains(self);
-  }
+  content_obscures_self_ |= content.Contains(self);
 }
 
 base::android::ScopedJavaLocalRef<jobject> TabListSceneLayer::GetJavaObject(

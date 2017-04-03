@@ -27,13 +27,15 @@ Adatvédelmi információkért tekintse meg a Google adatvédelmi irányelveit (
 <translation id="1654128982815600832">Távoli kapcsolatok engedélyezése ezen a számítógépen...</translation>
 <translation id="170207782578677537">Nem sikerült regisztrálni a számítógépet.</translation>
 <translation id="1704090719919187045">Chromoting gazdagép-beállítások</translation>
+<translation id="1730409684442507495">• Jobb képminőség asztali rendszeren, nagyobb érzékenység és jobb akkumulátoros üzemidő.
+• Nagyobb érzékenységű kattintási és húzási műveletek.
+• A kezelőfelület néhány animált effektusának továbbfejlesztése.</translation>
 <translation id="174018511426417793">Önnek nincs regisztrált számítógépe. Ahhoz, hogy engedélyezhesse a távoli kapcsolatokat egy számítógépen, telepítse a gépre a Chrome távoliasztal-szolgáltatást, majd kattintson a következő gombra: „<ph name="BUTTON_NAME" />”.</translation>
 <translation id="1742469581923031760">Csatlakozás…</translation>
 <translation id="1770394049404108959">Nem tudom megnyitni az alkalmazást.</translation>
 <translation id="177096447311351977">Kliens csatorna-IP-je: <ph name="CLIENT_GAIA_IDENTIFIER" /> ip='<ph name="CLIENT_IP_ADDRESS_AND_PORT" />' host_ip='<ph name="HOST_IP_ADDRESS_AND_PORT" />' channel='<ph name="CHANNEL_TYPE" />' connection='<ph name="CONNECTION_TYPE" />'.</translation>
 <translation id="1779766957982586368">Ablak bezárása</translation>
 <translation id="1841799852846221389">Távoli kapcsolatok letiltása ezen a számítógépen...</translation>
-<translation id="189172778771606813">Navigációs fiók bezárása</translation>
 <translation id="1897488610212723051">Törlés</translation>
 <translation id="195619862187186579">Billentyűzetkiosztások</translation>
 <translation id="1996161829609978754">A Chrome letölti a Chromoting gazdagépekhez való telepítőjét. Miután a letöltés befejeződött, futtassa a telepítőt a folytatás előtt.</translation>
@@ -74,7 +76,6 @@ Adatvédelmi információkért tekintse meg a Google adatvédelmi irányelveit (
 <translation id="2699970397166997657">Chromoting</translation>
 <translation id="2747641796667576127">A szoftverfrissítések általában automatikusan történnek, ám egyes ritka esetekben sikertelenek lehetnek. A szoftverfrissítés nem szokott pár percnél több időt igénybe venni, és a számítógéphez távolról csatlakozva is elvégezhető.</translation>
 <translation id="2841013758207633010">Idő</translation>
-<translation id="2851674870054673688">Miután beírják a kódot, megkezdődik a megosztási munkamenet.</translation>
 <translation id="2851754573186462851">Chromium alkalmazás internetes megjelenítése</translation>
 <translation id="2855866366045322178">offline</translation>
 <translation id="2888969873284818612">Hálózati hiba történt. Újraindítjuk az alkalmazást, amint eszköze ismét online lesz.</translation>
@@ -114,6 +115,7 @@ Adatvédelmi információkért tekintse meg a Google adatvédelmi irányelveit (
 gazdagép</translation>
 <translation id="3870154837782082782">Google Inc.</translation>
 <translation id="3884839335308961732">Kérjük, erősítse meg a fiókot és a PIN kódot alább a Chrome távoliasztal-szolgáltatás hozzáférésének engedélyezéséhez.</translation>
+<translation id="3897092660631435901">Menü</translation>
 <translation id="3905196214175737742">A gazdagép tulajdonosi domainje érvénytelen.</translation>
 <translation id="3908017899227008678">Méretre igazítás</translation>
 <translation id="3931191050278863510">Gazdagép leállítva.</translation>
@@ -126,6 +128,7 @@ gazdagép</translation>
 <translation id="409800995205263688">MEGJEGYZÉS: az irányelv-beállítások a csatlakozást csak a saját hálózaton belül található számítógépek között teszik lehetővé.</translation>
 <translation id="4155497795971509630">Hiányzik néhány szükséges összetevő. Kérjük, ellenőrizze, hogy a szoftver legfrissebb verzióját telepítette-e, majd próbálja újra.</translation>
 <translation id="4156740505453712750">A számítógép hozzáférésének védelméhez válasszon egy <ph name="BOLD_START" />legalább hat számjegyből álló<ph name="BOLD_END" /> PIN kódot. Ezt a PIN kódot kéri a rendszer, ha más helyről kísérlik meg a kapcsolódást.</translation>
+<translation id="4156741816461781891">Bejelentkezve a következőként: <ph name="EMAIL_ADDRESS" />.</translation>
 <translation id="4176825807642096119">Elérési kód</translation>
 <translation id="4207623512727273241">Kérjük, futtassa a telepítőt a folytatás előtt.</translation>
 <translation id="4227991223508142681">Gazdagép-ellátási segédprogram</translation>
@@ -166,7 +169,6 @@ gazdagép</translation>
 <translation id="5070121137485264635">A távoli gazdagép hitelesítést kér egy harmadik féltől származó webhelyhez. A folytatáshoz további engedélyeket kell adnia a Chrome távoliasztal-szolgáltatásnak a cím eléréséhez:</translation>
 <translation id="507204348399810022">Biztosan szeretné letiltani a távoli kapcsolatokat a(z) <ph name="HOSTNAME" /> gazdagéppel?</translation>
 <translation id="5156271271724754543">Kérjük, ugyanazt a PIN kódot adja meg mindkét mezőben.</translation>
-<translation id="5168917394043976756">Navigációs fiók megnyitása</translation>
 <translation id="5170982930780719864">Érvénytelen gazdagép-azonosító</translation>
 <translation id="518094545883702183">Ezt az információt csak az Ön által jelentett probléma diagnosztizálására használjuk. Az adatok csak a jelentés vizsgálója számára érhetők el, és a rendszerünk nem őrzi meg őket 30 napnál tovább.</translation>
 <translation id="5222676887888702881">Kijelentkezés</translation>
@@ -209,14 +211,10 @@ gazdagép</translation>
 <translation id="6304318647555713317">Kliens</translation>
 <translation id="6381670701864002291">Valami más.</translation>
 <translation id="6398765197997659313">Kilépés a teljes képernyős módból</translation>
-<translation id="6408143143164565232">• Audió hallgatása Windows vagy Linux rendszerű számítógépről.
-• A nem kívánt csatlakozások eltávolítása a számítógép nevének hosszan tartó lenyomásával.
-• Finomabb kétujjas nagyítás és görgetés.
-• Új képernyő a súgó és a visszajelzések számára.</translation>
 <translation id="6441316101718669559">Ez az operációs rendszer nem támogatja az asztali integrációt. Az alkalmazást használhatja, de a felhasználói élmény nem lesz teljes.</translation>
 <translation id="652218476070540101">A számítógéphez tartozó PIN-kód frissítése folyamatban...</translation>
 <translation id="6527303717912515753">Megosztás</translation>
-<translation id="6541219117979389420">Az alkalmazásnaplók tartalmazhatnak privát adatokat, többek között az Ön személyazonosságát (e-mail címét), valamint a Google Drive-on lévő fájlok és mappák neveit és tulajdonságait.</translation>
+<translation id="6541219117979389420">Az alkalmazásnaplók tartalmazhatnak privát adatokat, többek között az Ön személyazonosságát (e-mail-címét), valamint a Google Drive-on lévő fájlok és mappák neveit és tulajdonságait.</translation>
 <translation id="6542902059648396432">Hiba bejelentése…</translation>
 <translation id="6550675742724504774">Beállítások</translation>
 <translation id="6570205395680337606">Alkalmazás visszaállítása. A nem mentett munkája el fog veszni.</translation>
@@ -225,6 +223,7 @@ gazdagép</translation>
 <translation id="6640610550128933069">utoljára ekkor volt online: <ph name="DATE" /></translation>
 <translation id="6668065415969892472">A PIN-kód frissült.</translation>
 <translation id="6681800064886881394">Copyright 2013 – Google Inc. Minden jog fenntartva.</translation>
+<translation id="6705482892455291412">Miután az illető megadta a kódot, a rendszer a kapcsolat elfogadására kéri, majd megkezdi a megosztási munkamenetet.</translation>
 <translation id="6746493157771801606">Előzmények törlése</translation>
 <translation id="6748108480210050150">Feladó</translation>
 <translation id="677755392401385740">Gazdagép elindítva a következő felhasználó számára: <ph name="HOST_USERNAME" />.</translation>
@@ -272,7 +271,7 @@ gazdagép</translation>
 <translation id="8116630183974937060">Hálózati hiba történt. Ellenőrizze, hogy eszköze online állapotban van-e, majd próbálja újra.</translation>
 <translation id="8178433417677596899">Felhasználók közötti képernyőmegosztás, amely tökéletes a távoli műszaki támogatáshoz.</translation>
 <translation id="8187079423890319756">Copyright 2013 – A Chromium szerzői. Minden jog fenntartva.</translation>
-<translation id="8196755618196986400">Ha szeretné, hogy további információkért felvegyük Önnel a kapcsolatot, e-mail címét tartalmazni fogják az Ön által küldött visszajelzések.</translation>
+<translation id="8196755618196986400">Ha szeretné, hogy további információkért felvegyük Önnel a kapcsolatot, e-mail-címét tartalmazni fogják az Ön által küldött visszajelzések.</translation>
 <translation id="8244400547700556338">Tudja meg, hogyan.</translation>
 <translation id="8261506727792406068">Törlés</translation>
 <translation id="8355326866731426344">Ez az elérési kód lejár a következő időtartamon belül: <ph name="TIMEOUT" /></translation>
@@ -301,6 +300,7 @@ gazdagép</translation>
 <translation id="9188433529406846933">Engedélyezés</translation>
 <translation id="9213184081240281106">A gazdagép beállítása érvénytelen.</translation>
 <translation id="951991426597076286">Elutasítás</translation>
+<translation id="962733587145768554">A folyamat befejezéséhez válassza a(z) „<ph name="SHARE" />” lehetőséget a kapcsolódási párbeszédablakban.</translation>
 <translation id="979100198331752041">A(z) <ph name="HOSTNAME" /> Chrome távoliasztal-szolgáltatása elavult, frissíteni kell.</translation>
 <translation id="985602178874221306">A Chromium szerzői</translation>
 <translation id="992215271654996353"><ph name="HOSTNAME" /> (utolsó online tevékenység: <ph name="DATE_OR_TIME" />)</translation>

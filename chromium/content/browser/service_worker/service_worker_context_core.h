@@ -30,7 +30,6 @@ class GURL;
 
 namespace base {
 class FilePath;
-class SequencedTaskRunner;
 class SingleThreadTaskRunner;
 }
 
@@ -293,8 +292,8 @@ class CONTENT_EXPORT ServiceWorkerContextCore
   }
 
  private:
-  friend class ServiceWorkerContextCoreTest;
-  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerContextCoreTest, FailureInfo);
+  friend class ServiceWorkerContextCoreTestP;
+  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerContextCoreTestP, FailureInfo);
 
   typedef std::map<int64_t, ServiceWorkerRegistration*> RegistrationsMap;
   typedef std::map<int64_t, ServiceWorkerVersion*> VersionMap;

@@ -284,9 +284,11 @@ ClientMessageLoopAdapter* ClientMessageLoopAdapter::s_instance = nullptr;
 WebDevToolsAgentImpl* WebDevToolsAgentImpl::create(
     WebLocalFrameImpl* frame,
     WebDevToolsAgentClient* client) {
+  InspectorOverlay* overlay = new InspectorOverlay(frame);
+
   if (!isMainFrame(frame)) {
     WebDevToolsAgentImpl* agent =
-        new WebDevToolsAgentImpl(frame, client, nullptr, false);
+        new WebDevToolsAgentImpl(frame, client, overlay, false);
     if (frame->frameWidget())
       agent->layerTreeViewChanged(
           toWebFrameWidgetImpl(frame->frameWidget())->layerTreeView());
@@ -294,8 +296,8 @@ WebDevToolsAgentImpl* WebDevToolsAgentImpl::create(
   }
 
   WebViewImpl* view = frame->viewImpl();
-  WebDevToolsAgentImpl* agent = new WebDevToolsAgentImpl(
-      frame, client, InspectorOverlay::create(view), true);
+  WebDevToolsAgentImpl* agent =
+      new WebDevToolsAgentImpl(frame, client, overlay, true);
   agent->layerTreeViewChanged(view->layerTreeView());
   return agent;
 }
@@ -397,7 +399,7 @@ void WebDevToolsAgentImpl::initializeSession(int sessionId,
   m_session->append(cssAgent);
 
   m_session->append(new InspectorAnimationAgent(
-      m_inspectedFrames.get(), m_domAgent, cssAgent, m_session->v8Session()));
+      m_inspectedFrames.get(), cssAgent, m_session->v8Session()));
 
   m_session->append(InspectorMemoryAgent::create());
 
@@ -428,7 +430,8 @@ void WebDevToolsAgentImpl::initializeSession(int sessionId,
   m_session->append(pageAgent);
 
   m_session->append(new InspectorLogAgent(
-      &m_inspectedFrames->root()->host()->consoleMessageStorage()));
+      &m_inspectedFrames->root()->host()->consoleMessageStorage(),
+      m_inspectedFrames->root()->performanceMonitor()));
 
   m_tracingAgent->setLayerTreeId(m_layerTreeId);
   m_networkAgent->setHostId(hostId);

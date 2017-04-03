@@ -86,6 +86,7 @@ class MEDIA_EXPORT VideoDecoderConfig {
   // the bitstream.
   ColorSpace color_space() const { return color_space_; }
 
+  // Deprecated. TODO(wolenetz): Remove. See https://crbug.com/665539.
   // Width and height of video frame immediately post-decode. Not all pixels
   // in this region are valid.
   gfx::Size coded_size() const { return coded_size_; }
@@ -99,6 +100,7 @@ class MEDIA_EXPORT VideoDecoderConfig {
 
   // Optional byte data required to initialize video decoders, such as H.264
   // AVCC data.
+  void SetExtraData(const std::vector<uint8_t>& extra_data);
   const std::vector<uint8_t>& extra_data() const { return extra_data_; }
 
   // Whether the video stream is potentially encrypted.
@@ -126,7 +128,9 @@ class MEDIA_EXPORT VideoDecoderConfig {
   // TODO(servolk): Deprecated, use color_space_info_ instead.
   ColorSpace color_space_;
 
+  // Deprecated. TODO(wolenetz): Remove. See https://crbug.com/665539.
   gfx::Size coded_size_;
+
   gfx::Rect visible_rect_;
   gfx::Size natural_size_;
 

@@ -15,57 +15,70 @@ class PhotoCapabilities {
     public final int maxIso;
     public final int minIso;
     public final int currentIso;
+    public final int stepIso;
     public final int maxHeight;
     public final int minHeight;
     public final int currentHeight;
+    public final int stepHeight;
     public final int maxWidth;
     public final int minWidth;
     public final int currentWidth;
-    public final int maxZoom;
-    public final int minZoom;
-    public final int currentZoom;
+    public final int stepWidth;
+    public final double maxZoom;
+    public final double minZoom;
+    public final double currentZoom;
+    public final double stepZoom;
     public final int focusMode;
     public final int exposureMode;
-    public final int maxExposureCompensation;
-    public final int minExposureCompensation;
-    public final int currentExposureCompensation;
+    public final double maxExposureCompensation;
+    public final double minExposureCompensation;
+    public final double currentExposureCompensation;
+    public final double stepExposureCompensation;
     public final int whiteBalanceMode;
     public final int fillLightMode;
     public final boolean redEyeReduction;
     public final int maxColorTemperature;
     public final int minColorTemperature;
     public final int currentColorTemperature;
+    public final int stepColorTemperature;
 
-    PhotoCapabilities(int maxIso, int minIso, int currentIso, int maxHeight, int minHeight,
-            int currentHeight, int maxWidth, int minWidth, int currentWidth, int maxZoom,
-            int minZoom, int currentZoom, int focusMode, int exposureMode,
-            int maxExposureCompensation, int minExposureCompensation,
-            int currentExposureCompensation, int whiteBalanceMode, int fillLightMode,
+    PhotoCapabilities(int maxIso, int minIso, int currentIso, int stepIso, int maxHeight,
+            int minHeight, int currentHeight, int stepHeight, int maxWidth, int minWidth,
+            int currentWidth, int stepWidth, double maxZoom, double minZoom, double currentZoom,
+            double stepZoom, int focusMode, int exposureMode, double maxExposureCompensation,
+            double minExposureCompensation, double currentExposureCompensation,
+            double stepExposureCompensation, int whiteBalanceMode, int fillLightMode,
             boolean redEyeReduction, int maxColorTemperature, int minColorTemperature,
-            int currentColorTemperature) {
+            int currentColorTemperature, int stepColorTemperature) {
         this.maxIso = maxIso;
         this.minIso = minIso;
         this.currentIso = currentIso;
+        this.stepIso = stepIso;
         this.maxHeight = maxHeight;
         this.minHeight = minHeight;
         this.currentHeight = currentHeight;
+        this.stepHeight = stepHeight;
         this.maxWidth = maxWidth;
         this.minWidth = minWidth;
         this.currentWidth = currentWidth;
+        this.stepWidth = stepWidth;
         this.maxZoom = maxZoom;
         this.minZoom = minZoom;
         this.currentZoom = currentZoom;
+        this.stepZoom = stepZoom;
         this.focusMode = focusMode;
         this.exposureMode = exposureMode;
         this.maxExposureCompensation = maxExposureCompensation;
         this.minExposureCompensation = minExposureCompensation;
         this.currentExposureCompensation = currentExposureCompensation;
+        this.stepExposureCompensation = stepExposureCompensation;
         this.whiteBalanceMode = whiteBalanceMode;
         this.fillLightMode = fillLightMode;
         this.redEyeReduction = redEyeReduction;
         this.maxColorTemperature = maxColorTemperature;
         this.minColorTemperature = minColorTemperature;
         this.currentColorTemperature = currentColorTemperature;
+        this.stepColorTemperature = stepColorTemperature;
     }
 
     @CalledByNative
@@ -84,6 +97,11 @@ class PhotoCapabilities {
     }
 
     @CalledByNative
+    public int getStepIso() {
+        return stepIso;
+    }
+
+    @CalledByNative
     public int getMinHeight() {
         return minHeight;
     }
@@ -96,6 +114,11 @@ class PhotoCapabilities {
     @CalledByNative
     public int getCurrentHeight() {
         return currentHeight;
+    }
+
+    @CalledByNative
+    public int getStepHeight() {
+        return stepHeight;
     }
 
     @CalledByNative
@@ -114,18 +137,28 @@ class PhotoCapabilities {
     }
 
     @CalledByNative
-    public int getMinZoom() {
+    public int getStepWidth() {
+        return stepWidth;
+    }
+
+    @CalledByNative
+    public double getMinZoom() {
         return minZoom;
     }
 
     @CalledByNative
-    public int getMaxZoom() {
+    public double getMaxZoom() {
         return maxZoom;
     }
 
     @CalledByNative
-    public int getCurrentZoom() {
+    public double getCurrentZoom() {
         return currentZoom;
+    }
+
+    @CalledByNative
+    public double getStepZoom() {
+        return stepZoom;
     }
 
     @CalledByNative
@@ -139,18 +172,23 @@ class PhotoCapabilities {
     }
 
     @CalledByNative
-    public int getMinExposureCompensation() {
+    public double getMinExposureCompensation() {
         return minExposureCompensation;
     }
 
     @CalledByNative
-    public int getMaxExposureCompensation() {
+    public double getMaxExposureCompensation() {
         return maxExposureCompensation;
     }
 
     @CalledByNative
-    public int getCurrentExposureCompensation() {
+    public double getCurrentExposureCompensation() {
         return currentExposureCompensation;
+    }
+
+    @CalledByNative
+    public double getStepExposureCompensation() {
+        return stepExposureCompensation;
     }
 
     @CalledByNative
@@ -183,30 +221,41 @@ class PhotoCapabilities {
         return currentColorTemperature;
     }
 
+    @CalledByNative
+    public int getStepColorTemperature() {
+        return stepColorTemperature;
+    }
+
     public static class Builder {
         public int maxIso;
         public int minIso;
         public int currentIso;
+        public int stepIso;
         public int maxHeight;
         public int minHeight;
         public int currentHeight;
+        public int stepHeight;
         public int maxWidth;
         public int minWidth;
         public int currentWidth;
-        public int maxZoom;
-        public int minZoom;
-        public int currentZoom;
+        public int stepWidth;
+        public double maxZoom;
+        public double minZoom;
+        public double currentZoom;
+        public double stepZoom;
         public int focusMode;
         public int exposureMode;
-        public int maxExposureCompensation;
-        public int minExposureCompensation;
-        public int currentExposureCompensation;
+        public double maxExposureCompensation;
+        public double minExposureCompensation;
+        public double currentExposureCompensation;
+        public double stepExposureCompensation;
         public int whiteBalanceMode;
         public int fillLightMode;
         public boolean redEyeReduction;
         public int maxColorTemperature;
         public int minColorTemperature;
         public int currentColorTemperature;
+        public int stepColorTemperature;
 
         public Builder() {}
 
@@ -225,6 +274,11 @@ class PhotoCapabilities {
             return this;
         }
 
+        public Builder setStepIso(int stepIso) {
+            this.stepIso = stepIso;
+            return this;
+        }
+
         public Builder setMaxHeight(int maxHeight) {
             this.maxHeight = maxHeight;
             return this;
@@ -237,6 +291,11 @@ class PhotoCapabilities {
 
         public Builder setCurrentHeight(int currentHeight) {
             this.currentHeight = currentHeight;
+            return this;
+        }
+
+        public Builder setStepHeight(int stepHeight) {
+            this.stepHeight = stepHeight;
             return this;
         }
 
@@ -255,18 +314,28 @@ class PhotoCapabilities {
             return this;
         }
 
-        public Builder setMaxZoom(int maxZoom) {
+        public Builder setStepWidth(int stepWidth) {
+            this.stepWidth = stepWidth;
+            return this;
+        }
+
+        public Builder setMaxZoom(double maxZoom) {
             this.maxZoom = maxZoom;
             return this;
         }
 
-        public Builder setMinZoom(int minZoom) {
+        public Builder setMinZoom(double minZoom) {
             this.minZoom = minZoom;
             return this;
         }
 
-        public Builder setCurrentZoom(int currentZoom) {
+        public Builder setCurrentZoom(double currentZoom) {
             this.currentZoom = currentZoom;
+            return this;
+        }
+
+        public Builder setStepZoom(double stepZoom) {
+            this.stepZoom = stepZoom;
             return this;
         }
 
@@ -280,18 +349,23 @@ class PhotoCapabilities {
             return this;
         }
 
-        public Builder setMaxExposureCompensation(int maxExposureCompensation) {
+        public Builder setMaxExposureCompensation(double maxExposureCompensation) {
             this.maxExposureCompensation = maxExposureCompensation;
             return this;
         }
 
-        public Builder setMinExposureCompensation(int minExposureCompensation) {
+        public Builder setMinExposureCompensation(double minExposureCompensation) {
             this.minExposureCompensation = minExposureCompensation;
             return this;
         }
 
-        public Builder setCurrentExposureCompensation(int currentExposureCompensation) {
+        public Builder setCurrentExposureCompensation(double currentExposureCompensation) {
             this.currentExposureCompensation = currentExposureCompensation;
+            return this;
+        }
+
+        public Builder setStepExposureCompensation(double stepExposureCompensation) {
+            this.stepExposureCompensation = stepExposureCompensation;
             return this;
         }
 
@@ -325,12 +399,19 @@ class PhotoCapabilities {
             return this;
         }
 
+        public Builder setStepColorTemperature(int stepColorTemperature) {
+            this.stepColorTemperature = stepColorTemperature;
+            return this;
+        }
+
         public PhotoCapabilities build() {
-            return new PhotoCapabilities(maxIso, minIso, currentIso, maxHeight, minHeight,
-                    currentHeight, maxWidth, minWidth, currentWidth, maxZoom, minZoom, currentZoom,
-                    focusMode, exposureMode, maxExposureCompensation, minExposureCompensation,
-                    currentExposureCompensation, whiteBalanceMode, fillLightMode, redEyeReduction,
-                    maxColorTemperature, minColorTemperature, currentColorTemperature);
+            return new PhotoCapabilities(maxIso, minIso, currentIso, stepIso, maxHeight, minHeight,
+                    currentHeight, stepHeight, maxWidth, minWidth, currentWidth, stepWidth, maxZoom,
+                    minZoom, currentZoom, stepZoom, focusMode, exposureMode,
+                    maxExposureCompensation, minExposureCompensation, currentExposureCompensation,
+                    stepExposureCompensation, whiteBalanceMode, fillLightMode, redEyeReduction,
+                    maxColorTemperature, minColorTemperature, currentColorTemperature,
+                    stepColorTemperature);
         }
     }
 }

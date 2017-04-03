@@ -7,16 +7,19 @@
 #include <algorithm>
 #include <utility>
 
+#include "ash/common/material_design/material_design_controller.h"
 #include "ash/common/multi_profile_uma.h"
 #include "ash/common/popup_message.h"
 #include "ash/common/session/session_state_delegate.h"
 #include "ash/common/shell_delegate.h"
-#include "ash/common/shell_window_ids.h"
 #include "ash/common/system/tray/system_tray.h"
+#include "ash/common/system/tray/system_tray_controller.h"
 #include "ash/common/system/tray/system_tray_delegate.h"
 #include "ash/common/system/tray/tray_constants.h"
+#include "ash/common/system/tray/tray_popup_item_style.h"
 #include "ash/common/system/tray/tray_popup_label_button.h"
 #include "ash/common/system/tray/tray_popup_label_button_border.h"
+#include "ash/common/system/tray/tray_popup_utils.h"
 #include "ash/common/system/user/button_from_view.h"
 #include "ash/common/system/user/login_status.h"
 #include "ash/common/system/user/rounded_image_view.h"
@@ -25,19 +28,33 @@
 #include "ash/common/wm_root_window_controller.h"
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
+#include "ash/public/cpp/shell_window_ids.h"
+#include "ash/resources/vector_icons/vector_icons.h"
+#include "base/optional.h"
 #include "components/signin/core/account_id/account_id.h"
 #include "components/user_manager/user_info.h"
 #include "grit/ash_resources.h"
 #include "grit/ash_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/gfx/canvas.h"
+#include "ui/gfx/geometry/insets.h"
+#include "ui/gfx/paint_vector_icon.h"
+#include "ui/views/controls/button/label_button.h"
+#include "ui/views/controls/label.h"
+#include "ui/views/controls/separator.h"
 #include "ui/views/layout/fill_layout.h"
+#include "ui/views/mouse_watcher_view_host.h"
 #include "ui/views/painter.h"
 
 namespace ash {
 namespace tray {
 
 namespace {
+
+bool UseMd() {
+  return MaterialDesignController::IsSystemTrayMenuMaterial();
+}
 
 const int kPublicAccountLogoutButtonBorderImagesNormal[] = {
     IDR_AURA_TRAY_POPUP_PUBLIC_ACCOUNT_LOGOUT_BUTTON_BORDER,
@@ -88,6 +105,73 @@ bool IsMultiProfileSupportedAndUserActive() {
          !WmShell::Get()->GetSessionStateDelegate()->IsUserSessionBlocked();
 }
 
+// Creates the view shown in the user switcher popup ("AddUserMenuOption").
+views::View* CreateAddUserView(
+    base::Optional<SessionStateDelegate::AddUserError> error,
+    views::ButtonListener* listener) {
+  DCHECK(UseMd());
+  auto view = new views::View;
+  const int icon_padding = (kMenuButtonSize - kMenuIconSize) / 2;
+  auto layout =
+      new views::BoxLayout(views::BoxLayout::kHorizontal, 0, 0,
+                           kTrayPopupLabelHorizontalPadding + icon_padding);
+  layout->set_minimum_cross_axis_size(
+      GetTrayConstant(TRAY_POPUP_ITEM_MIN_HEIGHT));
+  view->SetLayoutManager(layout);
+  view->set_background(
+      views::Background::CreateSolidBackground(kBackgroundColor));
+
+  if (!error) {
+    auto icon = new views::ImageView();
+    icon->SetImage(
+        gfx::CreateVectorIcon(kSystemMenuNewUserIcon, kMenuIconColor));
+    view->AddChildView(icon);
+  }
+
+  int message_id = IDS_ASH_STATUS_TRAY_SIGN_IN_ANOTHER_ACCOUNT;
+  if (error) {
+    switch (*error) {
+      case SessionStateDelegate::ADD_USER_ERROR_NOT_ALLOWED_PRIMARY_USER:
+        message_id = IDS_ASH_STATUS_TRAY_MESSAGE_NOT_ALLOWED_PRIMARY_USER;
+        break;
+      case SessionStateDelegate::ADD_USER_ERROR_MAXIMUM_USERS_REACHED:
+        message_id = IDS_ASH_STATUS_TRAY_MESSAGE_CANNOT_ADD_USER;
+        break;
+      case SessionStateDelegate::ADD_USER_ERROR_OUT_OF_USERS:
+        message_id = IDS_ASH_STATUS_TRAY_MESSAGE_OUT_OF_USERS;
+        break;
+    }
+  }
+
+  auto command_label = new views::Label(l10n_util::GetStringUTF16(message_id));
+  command_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+  command_label->SetMultiLine(true);
+
+  TrayPopupItemStyle label_style(
+      TrayPopupItemStyle::FontStyle::DETAILED_VIEW_LABEL);
+  int vertical_padding = kMenuSeparatorVerticalPadding;
+  if (error) {
+    label_style.set_font_style(TrayPopupItemStyle::FontStyle::CAPTION);
+    label_style.set_color_style(TrayPopupItemStyle::ColorStyle::INACTIVE);
+    vertical_padding += kMenuSeparatorVerticalPadding;
+  }
+  label_style.SetupLabel(command_label);
+  view->AddChildView(command_label);
+  view->SetBorder(views::CreateEmptyBorder(vertical_padding, icon_padding,
+                                           vertical_padding,
+                                           kTrayPopupLabelHorizontalPadding));
+  if (!error) {
+    auto button =
+        new ButtonFromView(view, listener, TrayPopupInkDropStyle::INSET_BOUNDS,
+                           false, gfx::Insets());
+    button->SetAccessibleName(
+        l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_SIGN_IN_ANOTHER_ACCOUNT));
+    return button;
+  }
+
+  return view;
+}
+
 class UserViewMouseWatcherHost : public views::MouseWatcherHost {
  public:
   explicit UserViewMouseWatcherHost(const gfx::Rect& screen_area)
@@ -104,6 +188,34 @@ class UserViewMouseWatcherHost : public views::MouseWatcherHost {
   gfx::Rect screen_area_;
 
   DISALLOW_COPY_AND_ASSIGN(UserViewMouseWatcherHost);
+};
+
+// A view that acts as the contents of the widget that appears when clicking
+// the active user. If the mouse exits this view or an otherwise unhandled
+// click is detected, it will invoke a closure passed at construction time.
+class AddUserWidgetContents : public views::View {
+ public:
+  explicit AddUserWidgetContents(const base::Closure& close_widget)
+      : close_widget_(close_widget) {
+    // Don't want to receive a mouse exit event when the cursor enters a child.
+    set_notify_enter_exit_on_child(true);
+  }
+
+  ~AddUserWidgetContents() override {}
+
+  bool OnMousePressed(const ui::MouseEvent& event) override { return true; }
+  void OnMouseReleased(const ui::MouseEvent& event) override {
+    close_widget_.Run();
+  }
+  void OnMouseExited(const ui::MouseEvent& event) override {
+    close_widget_.Run();
+  }
+  void OnGestureEvent(ui::GestureEvent* event) override { close_widget_.Run(); }
+
+ private:
+  base::Closure close_widget_;
+
+  DISALLOW_COPY_AND_ASSIGN(AddUserWidgetContents);
 };
 
 // The menu item view which gets shown when the user clicks in multi profile
@@ -137,7 +249,8 @@ class AddUserView : public views::View {
 };
 
 AddUserView::AddUserView(ButtonFromView* owner)
-    : add_user_(NULL), owner_(owner), anchor_(NULL) {
+    : add_user_(nullptr), owner_(owner), anchor_(nullptr) {
+  DCHECK(!UseMd());
   AddContent();
   owner_->ForceBorderVisible(true);
 }
@@ -155,14 +268,13 @@ void AddUserView::AddContent() {
   set_background(views::Background::CreateSolidBackground(kBackgroundColor));
 
   add_user_ = new views::View;
-  add_user_->SetBorder(
-      views::Border::CreateEmptyBorder(0, kTrayUserTileHoverBorderInset, 0, 0));
-
   add_user_->SetLayoutManager(new views::BoxLayout(
       views::BoxLayout::kHorizontal, 0, 0, kTrayPopupPaddingBetweenItems));
   AddChildViewAt(add_user_, 0);
 
-  // Add the [+] icon which is also the anchor for messages.
+  // Add the icon which is also the anchor for messages.
+  add_user_->SetBorder(
+      views::CreateEmptyBorder(0, kTrayUserTileHoverBorderInset, 0, 0));
   RoundedImageView* icon = new RoundedImageView(kTrayRoundedBorderRadius, true);
   anchor_ = icon;
   icon->SetImage(*ui::ResourceBundle::GetSharedInstance()
@@ -178,32 +290,67 @@ void AddUserView::AddContent() {
   add_user_->AddChildView(command_label);
 }
 
+// This border reserves 4dp above and 8dp below and paints a horizontal
+// separator 3dp below the host view.
+class ActiveUserBorder : public views::Border {
+ public:
+  ActiveUserBorder() {}
+  ~ActiveUserBorder() override {}
+
+  // views::Border:
+  void Paint(const views::View& view, gfx::Canvas* canvas) override {
+    canvas->FillRect(
+        gfx::Rect(
+            0, view.height() - kMenuSeparatorVerticalPadding - kSeparatorWidth,
+            view.width(), kSeparatorWidth),
+        kHorizontalSeparatorColor);
+  }
+
+  gfx::Insets GetInsets() const override {
+    return gfx::Insets(kMenuSeparatorVerticalPadding,
+                       kMenuExtraMarginFromLeftEdge,
+                       kMenuSeparatorVerticalPadding * 2, 0);
+  }
+
+  gfx::Size GetMinimumSize() const override { return gfx::Size(); }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(ActiveUserBorder);
+};
+
 }  // namespace
 
 UserView::UserView(SystemTrayItem* owner, LoginStatus login, UserIndex index)
     : user_index_(index),
-      user_card_view_(NULL),
+      user_card_view_(nullptr),
       owner_(owner),
       is_user_card_button_(false),
-      logout_button_(NULL),
+      logout_button_(nullptr),
       add_user_enabled_(true),
-      focus_manager_(NULL) {
+      focus_manager_(nullptr) {
   CHECK_NE(LoginStatus::NOT_LOGGED_IN, login);
-  if (!index) {
-    // Only the logged in user will have a background. All other users will have
-    // to allow the TrayPopupContainer highlighting the menu line.
+  if (!UseMd() && !index && login == LoginStatus::PUBLIC) {
+    // Public user gets a yellow bg.
     set_background(views::Background::CreateSolidBackground(
-        login == LoginStatus::PUBLIC ? kPublicAccountBackgroundColor
-                                     : kBackgroundColor));
+        kPublicAccountBackgroundColor));
   }
-  SetLayoutManager(new views::BoxLayout(views::BoxLayout::kHorizontal, 0, 0,
-                                        kTrayPopupPaddingBetweenItems));
   // The logout button must be added before the user card so that the user card
   // can correctly calculate the remaining available width.
   // Note that only the current multiprofile user gets a button.
-  if (!user_index_)
+  if (IsActiveUser())
     AddLogoutButton(login);
   AddUserCard(login);
+
+  if (UseMd()) {
+    auto layout = new views::BoxLayout(views::BoxLayout::kHorizontal, 0, 0, 0);
+    SetLayoutManager(layout);
+    layout->set_cross_axis_alignment(
+        views::BoxLayout::CROSS_AXIS_ALIGNMENT_CENTER);
+    layout->SetFlexForView(user_card_view_, 1);
+
+    if (IsActiveUser())
+      SetBorder(base::MakeUnique<ActiveUserBorder>());
+  }
 }
 
 UserView::~UserView() {
@@ -211,6 +358,7 @@ UserView::~UserView() {
 }
 
 void UserView::MouseMovedOutOfHost() {
+  DCHECK(!UseMd());
   RemoveAddUserMenuOption();
 }
 
@@ -232,13 +380,24 @@ gfx::Rect UserView::GetBoundsInScreenOfUserButtonForTest() {
   return user_card_view_->GetBoundsInScreen();
 }
 
+bool UserView::IsActiveUser() const {
+  return user_index_ == 0;
+}
+
 gfx::Size UserView::GetPreferredSize() const {
-  gfx::Size size = views::View::GetPreferredSize();
+  // MD uses a layout manager.
+  if (UseMd())
+    return View::GetPreferredSize();
+
+  // The width is more or less ignored (set by other rows in the system menu).
+  gfx::Size size = user_card_view_->GetPreferredSize();
+  if (logout_button_)
+    size.SetToMax(logout_button_->GetPreferredSize());
   // Only the active user panel will be forced to a certain height.
-  if (!user_index_) {
+  if (IsActiveUser()) {
     size.set_height(std::max(
         size.height(),
-        GetTrayConstant(TRAY_POPUP_ITEM_HEIGHT) + GetInsets().height()));
+        GetTrayConstant(TRAY_POPUP_ITEM_MIN_HEIGHT) + GetInsets().height()));
   }
   return size;
 }
@@ -248,8 +407,12 @@ int UserView::GetHeightForWidth(int width) const {
 }
 
 void UserView::Layout() {
+  // MD uses a layout manager.
+  if (UseMd())
+    return views::View::Layout();
+
   gfx::Rect contents_area(GetContentsBounds());
-  if (user_card_view_ && logout_button_) {
+  if (logout_button_) {
     // Give the logout button the space it requests.
     gfx::Rect logout_area = contents_area;
     logout_area.ClampToCenteredSize(logout_button_->GetPreferredSize());
@@ -285,10 +448,8 @@ void UserView::Layout() {
     user_card_area.set_width(remaining_width);
     user_card_view_->SetBoundsRect(user_card_area);
     logout_button_->SetBoundsRect(logout_area);
-  } else if (user_card_view_) {
+  } else {
     user_card_view_->SetBoundsRect(contents_area);
-  } else if (logout_button_) {
-    logout_button_->SetBoundsRect(contents_area);
   }
 }
 
@@ -296,10 +457,10 @@ void UserView::ButtonPressed(views::Button* sender, const ui::Event& event) {
   if (sender == logout_button_) {
     WmShell::Get()->RecordUserMetricsAction(UMA_STATUS_AREA_SIGN_OUT);
     RemoveAddUserMenuOption();
-    WmShell::Get()->system_tray_delegate()->SignOut();
+    WmShell::Get()->system_tray_controller()->SignOut();
   } else if (sender == user_card_view_ &&
              IsMultiProfileSupportedAndUserActive()) {
-    if (!user_index_) {
+    if (IsActiveUser()) {
       ToggleAddUserMenuOption();
     } else {
       RemoveAddUserMenuOption();
@@ -309,7 +470,7 @@ void UserView::ButtonPressed(views::Button* sender, const ui::Event& event) {
       owner_->system_tray()->CloseSystemBubble();
     }
   } else if (add_menu_option_.get() &&
-             sender == add_menu_option_->GetContentsView()) {
+             sender->GetWidget() == add_menu_option_.get()) {
     RemoveAddUserMenuOption();
     // Let the user add another account to the session.
     MultiProfileUMA::RecordSigninUser(MultiProfileUMA::SIGNIN_USER_BY_TRAY);
@@ -332,11 +493,14 @@ void UserView::OnDidChangeFocus(View* focused_before, View* focused_now) {
 void UserView::AddLogoutButton(LoginStatus login) {
   const base::string16 title =
       user::GetLocalizedSignOutStringForStatus(login, true);
-  auto* logout_button = new TrayPopupLabelButton(this, title);
+  auto* logout_button =
+      TrayPopupUtils::CreateTrayPopupBorderlessButton(this, title);
   logout_button->SetAccessibleName(title);
   logout_button_ = logout_button;
-  // In public account mode, the logout button border has a custom color.
-  if (login == LoginStatus::PUBLIC) {
+  if (UseMd()) {
+    AddChildView(TrayPopupUtils::CreateVerticalSeparator());
+  } else if (login == LoginStatus::PUBLIC) {
+    // In public account mode, the logout button border has a custom color.
     std::unique_ptr<TrayPopupLabelButtonBorder> border(
         new TrayPopupLabelButtonBorder());
     border->SetPainter(false, views::Button::STATE_NORMAL,
@@ -354,16 +518,19 @@ void UserView::AddLogoutButton(LoginStatus login) {
 }
 
 void UserView::AddUserCard(LoginStatus login) {
+  if (UseMd())
+    return AddUserCardMd(login);
+
   // Add padding around the panel.
-  SetBorder(views::Border::CreateEmptyBorder(
-      kTrayPopupUserCardVerticalPadding, kTrayPopupPaddingHorizontal,
-      kTrayPopupUserCardVerticalPadding, kTrayPopupPaddingHorizontal));
+  const int kSidePadding = kTrayPopupPaddingHorizontal;
+  SetBorder(views::CreateEmptyBorder(
+      kTrayPopupUserCardVerticalPadding, kSidePadding,
+      kTrayPopupUserCardVerticalPadding, kSidePadding));
 
   views::TrayBubbleView* bubble_view =
       owner_->system_tray()->GetSystemBubble()->bubble_view();
-  int max_card_width =
-      bubble_view->GetMaximumSize().width() -
-      (2 * kTrayPopupPaddingHorizontal + kTrayPopupPaddingBetweenItems);
+  int max_card_width = bubble_view->GetMaximumSize().width() -
+                       (2 * kSidePadding + kTrayPopupPaddingBetweenItems);
   if (logout_button_)
     max_card_width -= logout_button_->GetPreferredSize().width();
   user_card_view_ = new UserCardView(login, max_card_width, user_index_);
@@ -374,31 +541,33 @@ void UserView::AddUserCard(LoginStatus login) {
   if (clickable) {
     // To allow the border to start before the icon, reduce the size before and
     // add an inset to the icon to get the spacing.
-    if (!user_index_) {
-      SetBorder(views::Border::CreateEmptyBorder(
+    if (IsActiveUser()) {
+      SetBorder(views::CreateEmptyBorder(
           kTrayPopupUserCardVerticalPadding,
-          kTrayPopupPaddingHorizontal - kTrayUserTileHoverBorderInset,
-          kTrayPopupUserCardVerticalPadding, kTrayPopupPaddingHorizontal));
-      user_card_view_->SetBorder(views::Border::CreateEmptyBorder(
-          0, kTrayUserTileHoverBorderInset, 0, 0));
+          kSidePadding - kTrayUserTileHoverBorderInset,
+          kTrayPopupUserCardVerticalPadding, kSidePadding));
+      user_card_view_->SetBorder(
+          views::CreateEmptyBorder(0, kTrayUserTileHoverBorderInset, 0, 0));
     }
     gfx::Insets insets = gfx::Insets(1, 1, 1, 1);
     views::View* contents_view = user_card_view_;
-    if (user_index_) {
+    if (!IsActiveUser()) {
       // Since the activation border needs to be drawn around the tile, we
       // have to put the tile into another view which fills the menu panel,
       // but keeping the offsets of the content.
       contents_view = new views::View();
-      contents_view->SetBorder(views::Border::CreateEmptyBorder(
-          kTrayPopupUserCardVerticalPadding, kTrayPopupPaddingHorizontal,
-          kTrayPopupUserCardVerticalPadding, kTrayPopupPaddingHorizontal));
+      contents_view->SetBorder(views::CreateEmptyBorder(
+          kTrayPopupUserCardVerticalPadding, kSidePadding,
+          kTrayPopupUserCardVerticalPadding, kSidePadding));
       contents_view->SetLayoutManager(new views::FillLayout());
-      SetBorder(views::Border::CreateEmptyBorder(0, 0, 0, 0));
+      SetBorder(nullptr);
       contents_view->AddChildView(user_card_view_);
       insets = gfx::Insets(1, 1, 1, 3);
     }
-    auto* button =
-        new ButtonFromView(contents_view, this, !user_index_, insets);
+    auto* button = new ButtonFromView(contents_view, this,
+                                      // This parameter is ignored in non-md.
+                                      TrayPopupInkDropStyle::FILL_BOUNDS,
+                                      IsActiveUser(), insets);
     user_card_view_ = button;
     is_user_card_button_ = true;
   }
@@ -407,6 +576,25 @@ void UserView::AddUserCard(LoginStatus login) {
   // available. In that case we should increase system bubble's width.
   if (login == LoginStatus::PUBLIC)
     bubble_view->SetWidth(GetPreferredSize().width());
+}
+
+void UserView::AddUserCardMd(LoginStatus login) {
+  user_card_view_ = new UserCardView(login, -1, user_index_);
+  // The entry is clickable when no system modal dialog is open and the multi
+  // profile option is active.
+  bool clickable = !WmShell::Get()->IsSystemModalWindowOpen() &&
+                   IsMultiProfileSupportedAndUserActive();
+  if (clickable) {
+    views::View* contents_view = user_card_view_;
+    auto* button =
+        new ButtonFromView(contents_view, this,
+                           IsActiveUser() ? TrayPopupInkDropStyle::INSET_BOUNDS
+                                          : TrayPopupInkDropStyle::FILL_BOUNDS,
+                           false, gfx::Insets());
+    user_card_view_ = button;
+    is_user_card_button_ = true;
+  }
+  AddChildViewAt(user_card_view_, 0);
 }
 
 void UserView::ToggleAddUserMenuOption() {
@@ -424,7 +612,8 @@ void UserView::ToggleAddUserMenuOption() {
   params.keep_on_top = true;
   params.accept_events = true;
   params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
-  params.shadow_type = views::Widget::InitParams::SHADOW_TYPE_NONE;
+  if (!UseMd())
+    params.shadow_type = views::Widget::InitParams::SHADOW_TYPE_NONE;
   params.opacity = views::Widget::InitParams::TRANSLUCENT_WINDOW;
   params.name = "AddUserMenuOption";
   WmLookup::Get()
@@ -434,71 +623,113 @@ void UserView::ToggleAddUserMenuOption() {
           add_menu_option_.get(), kShellWindowId_DragImageAndTooltipContainer,
           &params);
   add_menu_option_->Init(params);
-  add_menu_option_->SetOpacity(1.f);
-
-  // Position it below our user card.
-  gfx::Rect bounds = user_card_view_->GetBoundsInScreen();
-  bounds.set_y(bounds.y() + bounds.height());
-  add_menu_option_->SetBounds(bounds);
-
-  // Show the content.
-  add_menu_option_->SetAlwaysOnTop(true);
-  add_menu_option_->Show();
-
-  AddUserView* add_user_view =
-      new AddUserView(static_cast<ButtonFromView*>(user_card_view_));
 
   const SessionStateDelegate* delegate =
       WmShell::Get()->GetSessionStateDelegate();
-
   SessionStateDelegate::AddUserError add_user_error;
   add_user_enabled_ = delegate->CanAddUserToMultiProfile(&add_user_error);
 
-  ButtonFromView* button =
-      new ButtonFromView(add_user_view, add_user_enabled_ ? this : NULL,
-                         add_user_enabled_, gfx::Insets(1, 1, 1, 1));
-  button->SetAccessibleName(
-      l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_SIGN_IN_ANOTHER_ACCOUNT));
-  button->ForceBorderVisible(true);
-  add_menu_option_->SetContentsView(button);
+  if (UseMd()) {
+    base::Optional<SessionStateDelegate::AddUserError> error;
+    if (!add_user_enabled_)
+      error = add_user_error;
 
-  if (add_user_enabled_) {
+    // Position the widget on top of the user card view (which is still in the
+    // system menu). The top half of the widget will be transparent to allow
+    // the active user to show through.
+    gfx::Rect bounds = user_card_view_->GetBoundsInScreen();
+    bounds.set_width(bounds.width() + kSeparatorWidth);
+    int row_height = bounds.height();
+
+    views::View* container = new AddUserWidgetContents(
+        base::Bind(&UserView::RemoveAddUserMenuOption, base::Unretained(this)));
+    container->SetBorder(views::CreatePaddedBorder(
+        views::CreateSolidSidedBorder(0, 0, 0, kSeparatorWidth,
+                                      kBackgroundColor),
+        gfx::Insets(row_height, 0, 0, 0)));
+    views::View* add_user_padding = new views::View();
+    add_user_padding->SetBorder(views::CreateSolidSidedBorder(
+        kMenuSeparatorVerticalPadding, 0, 0, 0, kBackgroundColor));
+    views::View* add_user_view = CreateAddUserView(error, this);
+    add_user_padding->AddChildView(add_user_view);
+    add_user_padding->SetLayoutManager(new views::FillLayout());
+    container->AddChildView(add_user_padding);
+    container->SetLayoutManager(new views::FillLayout());
+    add_menu_option_->SetContentsView(container);
+
+    bounds.set_height(container->GetPreferredSize().height());
+    add_menu_option_->SetBounds(bounds);
+
+    // Show the content.
+    add_menu_option_->SetAlwaysOnTop(true);
+    add_menu_option_->Show();
+
     // We activate the entry automatically if invoked with focus.
-    if (user_card_view_->HasFocus()) {
-      button->GetFocusManager()->SetFocusedView(button);
-      user_card_view_->GetFocusManager()->SetFocusedView(button);
+    if (add_user_enabled_ && user_card_view_->HasFocus()) {
+      add_user_view->GetFocusManager()->SetFocusedView(add_user_view);
+      user_card_view_->GetFocusManager()->SetFocusedView(add_user_view);
     }
   } else {
-    ui::ResourceBundle& bundle = ui::ResourceBundle::GetSharedInstance();
-    int message_id = 0;
-    switch (add_user_error) {
-      case SessionStateDelegate::ADD_USER_ERROR_NOT_ALLOWED_PRIMARY_USER:
-        message_id = IDS_ASH_STATUS_TRAY_MESSAGE_NOT_ALLOWED_PRIMARY_USER;
-        break;
-      case SessionStateDelegate::ADD_USER_ERROR_MAXIMUM_USERS_REACHED:
-        message_id = IDS_ASH_STATUS_TRAY_MESSAGE_CANNOT_ADD_USER;
-        break;
-      case SessionStateDelegate::ADD_USER_ERROR_OUT_OF_USERS:
-        message_id = IDS_ASH_STATUS_TRAY_MESSAGE_OUT_OF_USERS;
-        break;
-      default:
-        NOTREACHED() << "Unknown adding user error " << add_user_error;
-    }
+    AddUserView* add_user_view =
+        new AddUserView(static_cast<ButtonFromView*>(user_card_view_));
+    ButtonFromView* button = new ButtonFromView(
+        add_user_view, add_user_enabled_ ? this : nullptr,
+        // Ignored in non-md.
+        TrayPopupInkDropStyle::INSET_BOUNDS, add_user_enabled_, gfx::Insets(1));
+    button->SetAccessibleName(
+        l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_SIGN_IN_ANOTHER_ACCOUNT));
+    button->ForceBorderVisible(true);
 
-    popup_message_.reset(new PopupMessage(
-        bundle.GetLocalizedString(IDS_ASH_STATUS_TRAY_CAPTION_CANNOT_ADD_USER),
-        bundle.GetLocalizedString(message_id), PopupMessage::ICON_WARNING,
-        add_user_view->anchor(), views::BubbleBorder::TOP_LEFT,
-        gfx::Size(parent()->bounds().width() - kPopupMessageOffset, 0),
-        2 * kPopupMessageOffset));
+    add_menu_option_->SetOpacity(1.f);
+    add_menu_option_->SetContentsView(button);
+    // Position it below our user card.
+    gfx::Rect bounds = user_card_view_->GetBoundsInScreen();
+    bounds.set_y(bounds.y() + bounds.height());
+    add_menu_option_->SetBounds(bounds);
+
+    // Show the content.
+    add_menu_option_->SetAlwaysOnTop(true);
+    add_menu_option_->Show();
+
+    if (add_user_enabled_) {
+      // We activate the entry automatically if invoked with focus.
+      if (user_card_view_->HasFocus()) {
+        button->GetFocusManager()->SetFocusedView(button);
+        user_card_view_->GetFocusManager()->SetFocusedView(button);
+      }
+    } else {
+      ui::ResourceBundle& bundle = ui::ResourceBundle::GetSharedInstance();
+      int message_id = 0;
+      switch (add_user_error) {
+        case SessionStateDelegate::ADD_USER_ERROR_NOT_ALLOWED_PRIMARY_USER:
+          message_id = IDS_ASH_STATUS_TRAY_MESSAGE_NOT_ALLOWED_PRIMARY_USER;
+          break;
+        case SessionStateDelegate::ADD_USER_ERROR_MAXIMUM_USERS_REACHED:
+          message_id = IDS_ASH_STATUS_TRAY_MESSAGE_CANNOT_ADD_USER;
+          break;
+        case SessionStateDelegate::ADD_USER_ERROR_OUT_OF_USERS:
+          message_id = IDS_ASH_STATUS_TRAY_MESSAGE_OUT_OF_USERS;
+          break;
+        default:
+          NOTREACHED() << "Unknown adding user error " << add_user_error;
+      }
+
+      popup_message_.reset(new PopupMessage(
+          bundle.GetLocalizedString(
+              IDS_ASH_STATUS_TRAY_CAPTION_CANNOT_ADD_USER),
+          bundle.GetLocalizedString(message_id), PopupMessage::ICON_WARNING,
+          add_user_view->anchor(), views::BubbleBorder::TOP_LEFT,
+          gfx::Size(parent()->bounds().width() - kPopupMessageOffset, 0),
+          2 * kPopupMessageOffset));
+    }
+    // Find the screen area which encloses both elements and sets then a mouse
+    // watcher which will close the "menu".
+    gfx::Rect area = user_card_view_->GetBoundsInScreen();
+    area.set_height(2 * area.height());
+    mouse_watcher_.reset(
+        new views::MouseWatcher(new UserViewMouseWatcherHost(area), this));
+    mouse_watcher_->Start();
   }
-  // Find the screen area which encloses both elements and sets then a mouse
-  // watcher which will close the "menu".
-  gfx::Rect area = user_card_view_->GetBoundsInScreen();
-  area.set_height(2 * area.height());
-  mouse_watcher_.reset(
-      new views::MouseWatcher(new UserViewMouseWatcherHost(area), this));
-  mouse_watcher_->Start();
   // Install a listener to focus changes so that we can remove the card when
   // the focus gets changed. When called through the destruction of the bubble,
   // the FocusManager cannot be determined anymore and we remember it here.
@@ -510,7 +741,7 @@ void UserView::RemoveAddUserMenuOption() {
   if (!add_menu_option_.get())
     return;
   focus_manager_->RemoveFocusChangeListener(this);
-  focus_manager_ = NULL;
+  focus_manager_ = nullptr;
   if (user_card_view_->GetFocusManager())
     user_card_view_->GetFocusManager()->ClearFocus();
   popup_message_.reset();

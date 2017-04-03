@@ -73,12 +73,18 @@ class GC_PLUGIN_IGNORE("https://crbug.com/644725")
   void prepareTransfer(Transferables*);
   void finalizeTransfer(ExceptionState&);
 
+  // Shared between File and FileList logic; does not write a leading tag.
   bool writeFile(File*, ExceptionState&);
 
   // v8::ValueSerializer::Delegate
   void ThrowDataCloneError(v8::Local<v8::String> message) override;
   v8::Maybe<bool> WriteHostObject(v8::Isolate*,
                                   v8::Local<v8::Object> message) override;
+
+  void* ReallocateBufferMemory(void* oldBuffer,
+                               size_t,
+                               size_t* actualSize) override;
+  void FreeBufferMemory(void* buffer) override;
 
   RefPtr<ScriptState> m_scriptState;
   RefPtr<SerializedScriptValue> m_serializedScriptValue;

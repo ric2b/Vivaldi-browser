@@ -90,10 +90,10 @@ void PropertyRegistration::registerProperty(
   }
 
   if (descriptor.hasInitialValue()) {
-    CSSTokenizer::Scope scope(descriptor.initialValue());
+    CSSTokenizer tokenizer(descriptor.initialValue());
     bool isAnimationTainted = false;
     const CSSValue* initial =
-        syntaxDescriptor.parse(scope.tokenRange(), isAnimationTainted);
+        syntaxDescriptor.parse(tokenizer.tokenRange(), isAnimationTainted);
     if (!initial) {
       exceptionState.throwDOMException(
           SyntaxError,
@@ -106,8 +106,8 @@ void PropertyRegistration::registerProperty(
           "The initial value provided is not computationally independent.");
       return;
     }
-    RefPtr<CSSVariableData> initialVariableData =
-        CSSVariableData::create(scope.tokenRange(), isAnimationTainted, false);
+    RefPtr<CSSVariableData> initialVariableData = CSSVariableData::create(
+        tokenizer.tokenRange(), isAnimationTainted, false);
     registry.registerProperty(atomicName, syntaxDescriptor,
                               descriptor.inherits(), initial,
                               initialVariableData.release());
@@ -126,27 +126,6 @@ void PropertyRegistration::registerProperty(
   document->setNeedsStyleRecalc(SubtreeStyleChange,
                                 StyleChangeReasonForTracing::create(
                                     StyleChangeReason::PropertyRegistration));
-}
-
-void PropertyRegistration::unregisterProperty(
-    ExecutionContext* executionContext,
-    const String& property,
-    ExceptionState& exceptionState) {
-  Document* document = toDocument(executionContext);
-  PropertyRegistry& registry = *document->propertyRegistry();
-  AtomicString atomicProperty(property);
-  if (!registry.registration(atomicProperty)) {
-    exceptionState.throwDOMException(
-        NotFoundError,
-        "CSS.unregisterProperty() called with non-registered property " +
-            property);
-    return;
-  }
-  registry.unregisterProperty(atomicProperty);
-
-  document->setNeedsStyleRecalc(SubtreeStyleChange,
-                                StyleChangeReasonForTracing::create(
-                                    StyleChangeReason::PropertyUnregistration));
 }
 
 }  // namespace blink

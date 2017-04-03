@@ -24,16 +24,16 @@
 //      |     < NotifyStreamCreated     |
 //      |                               |
 //      |          PlayStream >         |
-//      |  < NotifyStreamStateChanged   | kAudioStreamPlaying
 //      |                               |
 //      |         PauseStream >         |
-//      |  < NotifyStreamStateChanged   | kAudioStreamPaused
 //      |                               |
 //      |          PlayStream >         |
-//      |  < NotifyStreamStateChanged   | kAudioStreamPlaying
 //      |             ...               |
 //      |         CloseStream >         |
 //      v                               v
+// If there is an error at any point, a NotifyStreamError will
+// be sent. Otherwise, the renderer can assume that the actual state
+// of the output stream is consistent with the control signals it sends.
 
 // A SyncSocket pair is used to signal buffer readiness between processes.
 
@@ -76,8 +76,6 @@ namespace content {
 class AudioMirroringManager;
 class MediaInternals;
 class MediaStreamManager;
-class MediaStreamUIProxy;
-class ResourceContext;
 
 class CONTENT_EXPORT AudioRendererHost : public BrowserMessageFilter {
  public:
@@ -177,8 +175,9 @@ class CONTENT_EXPORT AudioRendererHost : public BrowserMessageFilter {
   // validated. When |is_valid| is false, this calls ReportErrorAndClose().
   void DidValidateRenderFrame(int stream_id, bool is_valid);
 
-  // Send playing/paused status to the renderer.
-  void DoNotifyStreamStateChanged(int stream_id, bool is_playing);
+  // Updates status of stream for AudioStreamMonitor and updates
+  // the number of playing streams.
+  void StreamStateChanged(int stream_id, bool is_playing);
 
   RenderProcessHost::AudioOutputControllerList DoGetOutputControllers() const;
 
@@ -208,8 +207,7 @@ class CONTENT_EXPORT AudioRendererHost : public BrowserMessageFilter {
                                base::TimeTicks auth_start_time);
 
   // Proceed with device authorization after checking permissions.
-  void AccessChecked(std::unique_ptr<MediaStreamUIProxy> ui_proxy,
-                     const std::string& device_id,
+  void AccessChecked(const std::string& device_id,
                      const url::Origin& security_origin,
                      int stream_id,
                      base::TimeTicks auth_start_time,

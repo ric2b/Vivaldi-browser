@@ -18,6 +18,8 @@
 #include "chrome/browser/media/router/route_message.h"
 #include "chrome/browser/media/router/route_message_observer.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 
@@ -26,28 +28,6 @@ using media::mojom::RemotingStartFailReason;
 using media::mojom::RemotingStopReason;
 
 using Messaging = CastRemotingConnectorMessaging;
-
-class CastRemotingConnector::FrameRemoterFactory
-    : public media::mojom::RemoterFactory {
- public:
-  // |render_frame_host| represents the source render frame.
-  explicit FrameRemoterFactory(content::RenderFrameHost* render_frame_host)
-      : host_(render_frame_host) {
-    DCHECK(host_);
-  }
-  ~FrameRemoterFactory() final {}
-
-  void Create(media::mojom::RemotingSourcePtr source,
-              media::mojom::RemoterRequest request) final {
-    CastRemotingConnector::Get(content::WebContents::FromRenderFrameHost(host_))
-        ->CreateBridge(std::move(source), std::move(request));
-  }
-
- private:
-  content::RenderFrameHost* const host_;
-
-  DISALLOW_COPY_AND_ASSIGN(FrameRemoterFactory);
-};
 
 class CastRemotingConnector::RemotingBridge : public media::mojom::Remoter {
  public:
@@ -165,12 +145,16 @@ CastRemotingConnector* CastRemotingConnector::Get(
 }
 
 // static
-void CastRemotingConnector::CreateRemoterFactory(
-    content::RenderFrameHost* render_frame_host,
-    media::mojom::RemoterFactoryRequest request) {
-  mojo::MakeStrongBinding(
-      base::MakeUnique<FrameRemoterFactory>(render_frame_host),
-      std::move(request));
+void CastRemotingConnector::CreateMediaRemoter(
+    content::RenderFrameHost* host,
+    media::mojom::RemotingSourcePtr source,
+    media::mojom::RemoterRequest request) {
+  DCHECK(host);
+  auto* const contents = content::WebContents::FromRenderFrameHost(host);
+  if (!contents)
+    return;
+  CastRemotingConnector::Get(contents)->CreateBridge(std::move(source),
+                                                     std::move(request));
 }
 
 CastRemotingConnector::CastRemotingConnector(

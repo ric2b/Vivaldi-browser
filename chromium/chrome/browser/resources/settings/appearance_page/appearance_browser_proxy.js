@@ -7,16 +7,27 @@ cr.define('settings', function() {
   function AppearanceBrowserProxy() {}
 
   AppearanceBrowserProxy.prototype = {
+    /** @return {!Promise<number>} */
+    getDefaultZoom: assertNotReached,
+
     /**
-     * @return {!Promise<boolean>} Whether the theme may be reset.
+     * @param {string} themeId
+     * @return {!Promise<!chrome.management.ExtensionInfo>} Theme info.
      */
-    getResetThemeEnabled: assertNotReached,
+    getThemeInfo: assertNotReached,
+
+    /** @return {boolean} Whether the current profile is supervised. */
+    isSupervised: assertNotReached,
 
 <if expr="chromeos">
     openWallpaperManager: assertNotReached,
 </if>
 
-    resetTheme: assertNotReached,
+    useDefaultTheme: assertNotReached,
+
+<if expr="is_linux and not chromeos">
+    useSystemTheme: assertNotReached,
+</if>
   };
 
   /**
@@ -29,8 +40,22 @@ cr.define('settings', function() {
 
   AppearanceBrowserProxyImpl.prototype = {
     /** @override */
-    getResetThemeEnabled: function() {
-      return cr.sendWithPromise('getResetThemeEnabled');
+    getDefaultZoom: function() {
+      return new Promise(function(resolve) {
+        chrome.settingsPrivate.getDefaultZoom(resolve);
+      });
+    },
+
+    /** @override */
+    getThemeInfo: function(themeId) {
+      return new Promise(function(resolve) {
+        chrome.management.get(themeId, resolve);
+      });
+    },
+
+    /** @override */
+    isSupervised: function() {
+      return loadTimeData.getBoolean('isSupervised');
     },
 
 <if expr="chromeos">
@@ -41,9 +66,16 @@ cr.define('settings', function() {
 </if>
 
     /** @override */
-    resetTheme: function() {
-      chrome.send('resetTheme');
+    useDefaultTheme: function() {
+      chrome.send('useDefaultTheme');
     },
+
+<if expr="is_linux and not chromeos">
+    /** @override */
+    useSystemTheme: function() {
+      chrome.send('useSystemTheme');
+    },
+</if>
   };
 
   return {

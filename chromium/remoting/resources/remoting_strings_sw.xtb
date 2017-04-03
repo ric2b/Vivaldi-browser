@@ -27,13 +27,15 @@ Kwa maelezo kuhusu faragha, tafadhali angalia Sera ya Faragha ya Google (http://
 <translation id="1654128982815600832">Inawasha miunganisho ya mbali kwa kompyuta hii...</translation>
 <translation id="170207782578677537">Ilishindwa kusajili kompyuta hii.</translation>
 <translation id="1704090719919187045">Mapendeleo ya Seva Pangishi ya Chromoting</translation>
+<translation id="1730409684442507495">• Ubora wa picha, utendakazi na matumizi ya betri yaliyoimarishwa.
+• Utendakazi ulioimarishwa wa shughuli za kubofya na kuburuta.
+• Vipengele vya uhuishaji wa Kiolesura vilivyoimarishwa.</translation>
 <translation id="174018511426417793">Huna kompyuta zilizosajiliwa. Ili uwashe miunganisho ya mbali, sakinisha Eneo-kazi la Mbali la Chrome hapo na ubofye “<ph name="BUTTON_NAME" />”.</translation>
 <translation id="1742469581923031760">Inaunganisha...</translation>
 <translation id="1770394049404108959">Siwezi kuifungua programu.</translation>
 <translation id="177096447311351977">IP ya Kituo cha kiteja: <ph name="CLIENT_GAIA_IDENTIFIER" /> ip='<ph name="CLIENT_IP_ADDRESS_AND_PORT" />' ip ya mpangishi='<ph name="HOST_IP_ADDRESS_AND_PORT" />' kituo='<ph name="CHANNEL_TYPE" />' muunganisho='<ph name="CONNECTION_TYPE" />'.</translation>
 <translation id="1779766957982586368">Funga dirisha</translation>
 <translation id="1841799852846221389">Inafunga miunganisho ya mbali ya kompyuta hii...</translation>
-<translation id="189172778771606813">Funga droo ya kusogeza</translation>
 <translation id="1897488610212723051">Futa</translation>
 <translation id="195619862187186579">Mipangilio ya kibodi</translation>
 <translation id="1996161829609978754">Chrome inapakua kisakinishi cha Seva pangishi cha Eneo-kazi la Chromoting. Mara tu upakuaji unapokamilika, tafadhali endesha kisakinishi kabla ya kuendelea.</translation>
@@ -74,7 +76,6 @@ Kwa maelezo kuhusu faragha, tafadhali angalia Sera ya Faragha ya Google (http://
 <translation id="2699970397166997657">Chromoting</translation>
 <translation id="2747641796667576127">Usasishaji wa programu kwa kawaida hufanyika kiotomatiki, lakini wakati mwingine unaweza kushindwa japo kwa nadra. Kusasisha programu kunapaswa kuchukua si zaidi ya dakika chache na kunaweza kufanyika wakati imeunganishwa kwa kompyuta yako kwa mbali.</translation>
 <translation id="2841013758207633010">Muda</translation>
-<translation id="2851674870054673688">Mara tu anapoingiza msimbo kipindi chako cha kushiriki kitaanza.</translation>
 <translation id="2851754573186462851">Utiririshaji wa Programu ya Chromium</translation>
 <translation id="2855866366045322178">nje ya mtandao</translation>
 <translation id="2888969873284818612">Hitilafu ya mtandao imetokea. Tutazima na kuwasha programu kifaa chako kikiwa mtandaoni tena.</translation>
@@ -114,6 +115,7 @@ Kwa maelezo kuhusu faragha, tafadhali angalia Sera ya Faragha ya Google (http://
 Chromoting</translation>
 <translation id="3870154837782082782">Google Inc.</translation>
 <translation id="3884839335308961732">Tafadhali thibitisha akaunti yako na PIN hapa chini ili kuruhusu ufikiaji kwa Kompyuta ya Mbali ya Chrome</translation>
+<translation id="3897092660631435901">Menyu</translation>
 <translation id="3905196214175737742">Kikoa cha mmiliki wa seva pangishi si sahihi.</translation>
 <translation id="3908017899227008678">Punguza ili itoshe</translation>
 <translation id="3931191050278863510">Mpangishi amesimamishwa.</translation>
@@ -126,6 +128,7 @@ Chromoting</translation>
 <translation id="409800995205263688">DOKEZO: Mipangilio ya sera inakubali miunganisho kati ya kompyuta zilizo katika mtandao wako.</translation>
 <translation id="4155497795971509630">Baadhi ya vipengele vinavyohitajika havipo. Tafadhali hakikisha kuwa umesakinisha toleo jipya la programu na ujaribu tena.</translation>
 <translation id="4156740505453712750">Ili ulinde ufikiaji kwenye kompyuta hii, tafadhali chagua PIN ya <ph name="BOLD_START" />angalau tarakimu sita<ph name="BOLD_END" />. PIN hii itahitajika utakapounganisha kutoka eneo jingine.</translation>
+<translation id="4156741816461781891">Umeingia katika akaunti ukitumia <ph name="EMAIL_ADDRESS" />.</translation>
 <translation id="4176825807642096119">Msimbo wa ufikiaji</translation>
 <translation id="4207623512727273241">Tafadhali endesha kisakinishi kabla ya kuendelea.</translation>
 <translation id="4227991223508142681">Utoaji Data wa Seva Pangishi</translation>
@@ -166,7 +169,6 @@ ya Mbali ya Chrome</translation>
 <translation id="5070121137485264635">Seva pangishi ya mbali inakuhitaji uhalalishe hadi kwenye tovuti nyingine. Ili kuendelea, sharti uipe Chrome Remote Desktop idhini za ziada ili ifikie anwani hii:</translation>
 <translation id="507204348399810022">Una uhakika ungependa kuzima miunganisho ya mbali kwenye <ph name="HOSTNAME" />?</translation>
 <translation id="5156271271724754543">Tafadhali ingiza PIN ile ile katika vikasha vyote viwili.</translation>
-<translation id="5168917394043976756">Fungua droo ya kusogeza</translation>
 <translation id="5170982930780719864">Kitambulisho cha seva pangishi si sahihi.</translation>
 <translation id="518094545883702183">Maelezo haya yanatumika tu kwa kutambua tatizo unaloripoti, yanapatikana tu kwa mtu anayechunguza ripoti yako, na yanahifadhiwa kwa siku zisizozidi 30.</translation>
 <translation id="5222676887888702881">Ondoka</translation>
@@ -209,10 +211,6 @@ ya Mbali ya Chrome</translation>
 <translation id="6304318647555713317">Kiteja</translation>
 <translation id="6381670701864002291">Kitu kingine.</translation>
 <translation id="6398765197997659313">Ondoka kwenye Skrini nzima</translation>
-<translation id="6408143143164565232">• Sikiliza sauti kwenye kompyuta za Windows au Linux.
-• Ondoa miunganisho usiyotaka kwa kubonyesza na kushikilia jina la kompyuta.
-• Kubana na kukuza kwa urahisi na kusogeza kwa vidole viwili.
-• Mwonekano mpya wa Usaidizi na Maoni.</translation>
 <translation id="6441316101718669559">Ujumuishaji wa eneo-kazi hautumiki kwenye mfumo huu. Bado unaweza kutumia programu, lakini hali ya mtumiaji itaharibiwa.</translation>
 <translation id="652218476070540101">PIN ya kompyuta hii inasasishwa...</translation>
 <translation id="6527303717912515753">Shiriki</translation>
@@ -225,6 +223,7 @@ ya Mbali ya Chrome</translation>
 <translation id="6640610550128933069">mara ya mwisho mtandaoni <ph name="DATE" /></translation>
 <translation id="6668065415969892472">PIN yako imesasishwa.</translation>
 <translation id="6681800064886881394">Hakimiliki 2013 Google Inc. Haki Zote Zimehifadhiwa.</translation>
+<translation id="6705482892455291412">Mara tu wanapoweka nambari ya kuthibitisha, utadokezwa kukubali muunganisho na uanze kushiriki kipindi.</translation>
 <translation id="6746493157771801606">Futa historia</translation>
 <translation id="6748108480210050150">Kutoka</translation>
 <translation id="677755392401385740">Seva pangishi ya mtumiaji: <ph name="HOST_USERNAME" /> Imeanza.</translation>
@@ -302,6 +301,7 @@ ya Mbali ya Chrome</translation>
 <translation id="9188433529406846933">Idhinisha</translation>
 <translation id="9213184081240281106">Usanidi wa seva pangishi si sahihi.</translation>
 <translation id="951991426597076286">Kataa</translation>
+<translation id="962733587145768554">Tafadhali chagua '<ph name="SHARE" />' kwenye kisanduku cha kidirisha cha muunganisho ili ukamilishe mchakato.</translation>
 <translation id="979100198331752041">Kompyuta ya Mbali ya Chrome kwenye <ph name="HOSTNAME" /> imepitwa na wakati na inahitaji kusasishwa.</translation>
 <translation id="985602178874221306">Waandishi wa Chromium</translation>
 <translation id="992215271654996353"><ph name="HOSTNAME" /> (mara ya mwisho mtandaoni <ph name="DATE_OR_TIME" />)</translation>

@@ -128,12 +128,7 @@ class TestScheduler : public Scheduler {
       OrderedSimpleTaskRunner* task_runner,
       std::unique_ptr<CompositorTimingHistory> compositor_timing_history);
 
-  // Extra test helper functionality
-  bool IsBeginRetroFrameArgsEmpty() const {
-    return begin_retro_frame_args_.empty();
-  }
-
-  bool SwapThrottled() const { return state_machine_.SwapThrottled(); }
+  bool IsDrawThrottled() const { return state_machine_.IsDrawThrottled(); }
 
   bool NeedsBeginMainFrame() const {
     return state_machine_.needs_begin_main_frame();
@@ -147,6 +142,10 @@ class TestScheduler : public Scheduler {
 
   bool begin_frames_expected() const {
     return begin_frame_source_ && observing_begin_frame_source_;
+  }
+
+  int current_frame_number() const {
+    return state_machine_.current_frame_number();
   }
 
   ~TestScheduler() override;

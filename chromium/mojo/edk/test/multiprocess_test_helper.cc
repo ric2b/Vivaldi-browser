@@ -146,9 +146,11 @@ ScopedMessagePipeHandle MultiprocessTestHelper::StartChildWithExtraSwitch(
       launch_type == LaunchType::NAMED_CHILD) {
     pipe = CreateParentMessagePipe(pipe_token, child_token);
   } else if (launch_type == LaunchType::PEER) {
-    pipe = ConnectToPeerProcess(channel.PassServerHandle());
+    peer_token_ = mojo::edk::GenerateRandomToken();
+    pipe = ConnectToPeerProcess(channel.PassServerHandle(), peer_token_);
   } else if (launch_type == LaunchType::NAMED_PEER) {
-    pipe = ConnectToPeerProcess(CreateServerHandle(named_pipe, false));
+    peer_token_ = mojo::edk::GenerateRandomToken();
+    pipe = ConnectToPeerProcess(CreateServerHandle(named_pipe), peer_token_);
   }
 
   test_child_ =
@@ -160,9 +162,8 @@ ScopedMessagePipeHandle MultiprocessTestHelper::StartChildWithExtraSwitch(
     ChildProcessLaunched(test_child_.Handle(), channel.PassServerHandle(),
                          child_token, process_error_callback_);
   } else if (launch_type == LaunchType::NAMED_CHILD) {
-    ChildProcessLaunched(test_child_.Handle(),
-                         CreateServerHandle(named_pipe, false), child_token,
-                         process_error_callback_);
+    ChildProcessLaunched(test_child_.Handle(), CreateServerHandle(named_pipe),
+                         child_token, process_error_callback_);
   }
 
   CHECK(test_child_.IsValid());
@@ -183,6 +184,12 @@ int MultiprocessTestHelper::WaitForChildShutdown() {
 #endif
   test_child_.Close();
   return rv;
+}
+
+void MultiprocessTestHelper::ClosePeerConnection() {
+  DCHECK(!peer_token_.empty());
+  ::mojo::edk::ClosePeerConnection(peer_token_);
+  peer_token_.clear();
 }
 
 bool MultiprocessTestHelper::WaitForChildTestShutdown() {

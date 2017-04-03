@@ -12,12 +12,13 @@
 
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
-#include "services/ui/public/interfaces/display.mojom.h"
+#include "services/ui/public/interfaces/display_manager.mojom.h"
 #include "services/ui/public/interfaces/window_tree.mojom.h"
 #include "services/ui/ws/display.h"
 #include "services/ui/ws/display_binding.h"
 #include "services/ui/ws/drag_controller.h"
 #include "services/ui/ws/event_dispatcher.h"
+#include "services/ui/ws/frame_generator_delegate.h"
 #include "services/ui/ws/platform_display.h"
 #include "services/ui/ws/platform_display_factory.h"
 #include "services/ui/ws/test_change_tracker.h"
@@ -35,23 +36,6 @@ namespace ws {
 namespace test {
 
 // Collection of utilities useful in creating mus tests.
-
-class WindowManagerWindowTreeFactorySetTestApi {
- public:
-  explicit WindowManagerWindowTreeFactorySetTestApi(
-      WindowManagerWindowTreeFactorySet*
-          window_manager_window_tree_factory_set);
-  ~WindowManagerWindowTreeFactorySetTestApi();
-
-  void Add(const UserId& user_id);
-
- private:
-  WindowManagerWindowTreeFactorySet* window_manager_window_tree_factory_set_;
-
-  DISALLOW_COPY_AND_ASSIGN(WindowManagerWindowTreeFactorySetTestApi);
-};
-
-// -----------------------------------------------------------------------------
 
 class UserDisplayManagerTestApi {
  public:
@@ -265,7 +249,7 @@ class TestPlatformDisplayFactory : public PlatformDisplayFactory {
   ~TestPlatformDisplayFactory();
 
   // PlatformDisplayFactory:
-  PlatformDisplay* CreatePlatformDisplay() override;
+  std::unique_ptr<PlatformDisplay> CreatePlatformDisplay() override;
 
  private:
   mojom::Cursor* cursor_storage_;
@@ -279,19 +263,13 @@ class TestPlatformDisplayFactory : public PlatformDisplayFactory {
 // A stub implementation of FrameGeneratorDelegate.
 class TestFrameGeneratorDelegate : public FrameGeneratorDelegate {
  public:
-  explicit TestFrameGeneratorDelegate(std::unique_ptr<ServerWindow> root);
+  TestFrameGeneratorDelegate();
   ~TestFrameGeneratorDelegate() override;
 
   // FrameGeneratorDelegate:
-  ServerWindow* GetRootWindow() override;
-  void OnCompositorFrameDrawn() override {}
   bool IsInHighContrastMode() override;
-  const ViewportMetrics& GetViewportMetrics() override;
 
  private:
-  std::unique_ptr<ServerWindow> root_;
-  ViewportMetrics metrics_;
-
   DISALLOW_COPY_AND_ASSIGN(TestFrameGeneratorDelegate);
 };
 
@@ -333,6 +311,7 @@ class TestWindowManager : public mojom::WindowManager {
                          ui::mojom::WindowDataPtr root,
                          bool drawn) override {}
   void WmDisplayRemoved(int64_t display_id) override;
+  void WmDisplayModified(const display::Display& display) override {}
   void WmSetBounds(uint32_t change_id,
                    uint32_t window_id,
                    const gfx::Rect& bounds) override {}
@@ -438,6 +417,10 @@ class TestWindowTreeClient : public ui::mojom::WindowTreeClient {
   void OnWindowFocused(uint32_t focused_window_id) override;
   void OnWindowPredefinedCursorChanged(uint32_t window_id,
                                        mojom::Cursor cursor_id) override;
+  void OnWindowSurfaceChanged(Id window_id,
+                              const cc::SurfaceId& surface_id,
+                              const gfx::Size& frame_size,
+                              float device_scale_factor) override;
   void OnDragDropStart(
       mojo::Map<mojo::String, mojo::Array<uint8_t>> mime_data) override;
   void OnDragEnter(uint32_t window,
@@ -523,10 +506,6 @@ class TestWindowServerDelegate : public WindowServerDelegate {
     window_server_ = window_server;
   }
 
-  void set_num_displays_to_create(int count) {
-    num_displays_to_create_ = count;
-  }
-
   TestWindowTreeClient* last_client() {
     return last_binding() ? last_binding()->client() : nullptr;
   }
@@ -538,9 +517,13 @@ class TestWindowServerDelegate : public WindowServerDelegate {
 
   bool got_on_no_more_displays() const { return got_on_no_more_displays_; }
 
+  // Creates |num_displays| displays.
+  void CreateDisplays(int num_displays);
+
   Display* AddDisplay();
 
   // WindowServerDelegate:
+  void StartDisplayInit() override;
   void OnNoMoreDisplays() override;
   std::unique_ptr<WindowTreeBinding> CreateWindowTreeBinding(
       BindingType type,
@@ -548,14 +531,10 @@ class TestWindowServerDelegate : public WindowServerDelegate {
       ws::WindowTree* tree,
       mojom::WindowTreeRequest* tree_request,
       mojom::WindowTreeClientPtr* client) override;
-  void CreateDefaultDisplays() override;
   bool IsTestConfig() const override;
   void UpdateTouchTransforms() override {}
 
  private:
-  // If CreateDefaultDisplays() this is the number of Displays that are
-  // created. The default is 0, which results in a DCHECK.
-  int num_displays_to_create_ = 0;
   WindowServer* window_server_ = nullptr;
   bool got_on_no_more_displays_ = false;
   // All TestWindowTreeBinding objects created via CreateWindowTreeBinding.
@@ -632,17 +611,21 @@ class WindowEventTargetingHelper {
   WindowServerTestHelper ws_test_helper_;
   // TestWindowTreeClient that is used for the WM client. Owned by
   // |window_server_delegate_|
-  TestWindowTreeClient* wm_client_;
+  TestWindowTreeClient* wm_client_ = nullptr;
   // Owned by WindowServer
-  TestDisplayBinding* display_binding_;
+  TestDisplayBinding* display_binding_ = nullptr;
   // Owned by WindowServer's DisplayManager.
-  Display* display_;
+  Display* display_ = nullptr;
   scoped_refptr<DisplayCompositor> display_compositor_;
 
   DISALLOW_COPY_AND_ASSIGN(WindowEventTargetingHelper);
 };
 
 // -----------------------------------------------------------------------------
+
+// Adds a new WM to |window_server| for |user_id|. Creates
+// WindowManagerWindowTreeFactory and associated WindowTree for the WM.
+void AddWindowManager(WindowServer* window_server, const UserId& user_id);
 
 // Returns the first and only root of |tree|. If |tree| has zero or more than
 // one root returns null.

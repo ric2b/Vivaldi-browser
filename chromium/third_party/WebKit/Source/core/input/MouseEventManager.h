@@ -6,6 +6,7 @@
 #define MouseEventManager_h
 
 #include "core/CoreExport.h"
+#include "core/dom/SynchronousMutationObserver.h"
 #include "core/input/BoundaryEventDispatcher.h"
 #include "core/page/DragActions.h"
 #include "core/page/EventWithHitTestResults.h"
@@ -16,6 +17,7 @@
 
 namespace blink {
 
+class ContainerNode;
 class DragState;
 class DataTransfer;
 class Element;
@@ -29,12 +31,15 @@ enum class DragInitiator;
 
 // This class takes care of dispatching all mouse events and keeps track of
 // positions and states of mouse.
-class CORE_EXPORT MouseEventManager
-    : public GarbageCollectedFinalized<MouseEventManager> {
+class CORE_EXPORT MouseEventManager final
+    : public GarbageCollectedFinalized<MouseEventManager>,
+      public SynchronousMutationObserver {
   WTF_MAKE_NONCOPYABLE(MouseEventManager);
+  USING_GARBAGE_COLLECTED_MIXIN(MouseEventManager);
 
  public:
   MouseEventManager(LocalFrame*, ScrollManager*);
+  virtual ~MouseEventManager();
   DECLARE_TRACE();
 
   WebInputEventResult dispatchMouseEvent(EventTarget*,
@@ -87,8 +92,6 @@ class CORE_EXPORT MouseEventManager
       const MouseEventWithHitTestResults&);
   WebInputEventResult handleMouseReleaseEvent(
       const MouseEventWithHitTestResults&);
-
-  void nodeWillBeRemoved(Node& nodeToBeRemoved);
 
   static DragState& dragState();
 
@@ -171,11 +174,15 @@ class CORE_EXPORT MouseEventManager
   // is different from the given element.
   bool slideFocusOnShadowHostIfNecessary(const Element&);
 
-  bool dragHysteresisExceeded(const IntPoint&) const;
+  bool dragThresholdExceeded(const IntPoint&) const;
   bool handleDrag(const MouseEventWithHitTestResults&, DragInitiator);
   bool tryStartDrag(const MouseEventWithHitTestResults&);
   void clearDragDataTransfer();
   DataTransfer* createDraggingDataTransfer() const;
+
+  // Implementations of |SynchronousMutationObserver|
+  void nodeChildrenWillBeRemoved(ContainerNode&) final;
+  void nodeWillBeRemoved(Node& nodeToBeRemoved) final;
 
   // NOTE: If adding a new field to this class please ensure that it is
   // cleared in |MouseEventManager::clear()|.

@@ -132,6 +132,8 @@ TEST(MimeUtilTest, CommonMediaMimeType) {
   EXPECT_TRUE(IsSupportedMediaMimeType("audio/wav"));
   EXPECT_TRUE(IsSupportedMediaMimeType("audio/x-wav"));
 
+  EXPECT_TRUE(IsSupportedMediaMimeType("audio/flac"));
+
   EXPECT_TRUE(IsSupportedMediaMimeType("audio/ogg"));
   EXPECT_TRUE(IsSupportedMediaMimeType("application/ogg"));
 #if defined(OS_ANDROID)
@@ -306,6 +308,7 @@ TEST(IsCodecSupportedOnPlatformTest, EncryptedCodecBehavior) {
           case MimeUtil::MP3:
           case MimeUtil::MPEG4_AAC:
           case MimeUtil::VORBIS:
+          case MimeUtil::FLAC:
           case MimeUtil::H264:
             EXPECT_TRUE(result);
             break;
@@ -356,6 +359,7 @@ TEST(IsCodecSupportedOnPlatformTest, ClearCodecBehaviorWithAndroidPipeline) {
             break;
 
           // These codecs are always available via MediaPlayer.
+          case MimeUtil::FLAC:
           case MimeUtil::PCM:
           case MimeUtil::MP3:
           case MimeUtil::MPEG4_AAC:
@@ -416,6 +420,7 @@ TEST(IsCodecSupportedOnPlatformTest, ClearCodecBehaviorWithUnifiedPipeline) {
             break;
 
           // These codecs are always supported with the unified pipeline.
+          case MimeUtil::FLAC:
           case MimeUtil::PCM:
           case MimeUtil::MPEG2_AAC:
           case MimeUtil::MP3:

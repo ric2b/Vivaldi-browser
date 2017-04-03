@@ -25,25 +25,15 @@
 
 #include "core/style/FilterOperation.h"
 
+#include "core/svg/SVGElementProxy.h"
 #include "platform/LengthFunctions.h"
 #include "platform/animation/AnimationUtilities.h"
+#include "platform/graphics/filters/FEDropShadow.h"
 #include "platform/graphics/filters/FEGaussianBlur.h"
 #include "platform/graphics/filters/Filter.h"
 #include "platform/graphics/filters/FilterEffect.h"
-#include "platform/graphics/filters/SkiaImageFilterBuilder.h"
 
 namespace blink {
-
-static inline FloatSize outsetSizeForBlur(float stdDeviation) {
-  IntSize kernelSize = FEGaussianBlur::calculateUnscaledKernelSize(
-      FloatPoint(stdDeviation, stdDeviation));
-  FloatSize outset;
-  // We take the half kernel size and multiply it with three, because we run box
-  // blur three times.
-  outset.setWidth(3.0f * kernelSize.width() * 0.5f);
-  outset.setHeight(3.0f * kernelSize.height() * 0.5f);
-  return outset;
-}
 
 FilterOperation* FilterOperation::blend(const FilterOperation* from,
                                         const FilterOperation* to,
@@ -55,6 +45,7 @@ FilterOperation* FilterOperation::blend(const FilterOperation* from,
 }
 
 DEFINE_TRACE(ReferenceFilterOperation) {
+  visitor->trace(m_elementProxy);
   visitor->trace(m_filter);
   FilterOperation::trace(visitor);
 }
@@ -64,6 +55,26 @@ FloatRect ReferenceFilterOperation::mapRect(const FloatRect& rect) const {
   if (!lastEffect)
     return rect;
   return lastEffect->mapRect(rect);
+}
+
+ReferenceFilterOperation::ReferenceFilterOperation(
+    const String& url,
+    SVGElementProxy& elementProxy)
+    : FilterOperation(REFERENCE), m_url(url), m_elementProxy(&elementProxy) {}
+
+void ReferenceFilterOperation::addClient(SVGResourceClient* client) {
+  m_elementProxy->addClient(client);
+}
+
+void ReferenceFilterOperation::removeClient(SVGResourceClient* client) {
+  m_elementProxy->removeClient(client);
+}
+
+bool ReferenceFilterOperation::operator==(const FilterOperation& o) const {
+  if (!isSameType(o))
+    return false;
+  const ReferenceFilterOperation& other = toReferenceFilterOperation(o);
+  return m_url == other.m_url && m_elementProxy == other.m_elementProxy;
 }
 
 FilterOperation* BasicColorMatrixFilterOperation::blend(
@@ -146,13 +157,8 @@ FilterOperation* BasicComponentTransferFilterOperation::blend(
 }
 
 FloatRect BlurFilterOperation::mapRect(const FloatRect& rect) const {
-  // Matches FEGaussianBlur::mapRect.
   float stdDeviation = floatValueForLength(m_stdDeviation, 0);
-  FloatSize outsetSize = outsetSizeForBlur(stdDeviation);
-  FloatRect mappedRect = rect;
-  mappedRect.inflateX(outsetSize.width());
-  mappedRect.inflateY(outsetSize.height());
-  return mappedRect;
+  return FEGaussianBlur::mapEffect(FloatSize(stdDeviation, stdDeviation), rect);
 }
 
 FilterOperation* BlurFilterOperation::blend(const FilterOperation* from,
@@ -168,13 +174,9 @@ FilterOperation* BlurFilterOperation::blend(const FilterOperation* from,
 }
 
 FloatRect DropShadowFilterOperation::mapRect(const FloatRect& rect) const {
-  FloatSize outsetSize = outsetSizeForBlur(m_stdDeviation);
-  FloatRect mappedRect = rect;
-  mappedRect.inflateX(outsetSize.width());
-  mappedRect.inflateY(outsetSize.height());
-  mappedRect.moveBy(m_location);
-  mappedRect.unite(rect);
-  return mappedRect;
+  float stdDeviation = m_stdDeviation;
+  return FEDropShadow::mapEffect(FloatSize(stdDeviation, stdDeviation),
+                                 FloatPoint(m_location), rect);
 }
 
 FilterOperation* DropShadowFilterOperation::blend(const FilterOperation* from,

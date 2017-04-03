@@ -14,6 +14,7 @@ class CMAAEffect;
 
 namespace gpu {
 namespace gles2 {
+class CopyTextureCHROMIUMResourceManager;
 class GLES2Decoder;
 class Framebuffer;
 
@@ -34,17 +35,20 @@ class GPU_EXPORT ApplyFramebufferAttachmentCMAAINTELResourceManager {
 
   // Applies the algorithm to the color attachments of the currently bound draw
   // framebuffer.
-  void ApplyFramebufferAttachmentCMAAINTEL(gles2::GLES2Decoder* decoder,
-                                           gles2::Framebuffer* framebuffer);
+  void ApplyFramebufferAttachmentCMAAINTEL(
+      gles2::GLES2Decoder* decoder,
+      gles2::Framebuffer* framebuffer,
+      gles2::CopyTextureCHROMIUMResourceManager* copier);
 
  private:
   // Applies the CMAA algorithm to a texture.
-  void ApplyCMAAEffectTexture(GLuint source_texture, GLuint dest_texture);
+  void ApplyCMAAEffectTexture(GLuint source_texture,
+                              GLuint dest_texture,
+                              bool do_copy);
 
   void OnSize(GLint width, GLint height);
   void ReleaseTextures();
 
-  void CopyTexture(GLint dest);
   GLuint CreateProgram(const char* defines,
                        const char* vs_source,
                        const char* fs_source);
@@ -70,7 +74,6 @@ class GPU_EXPORT ApplyFramebufferAttachmentCMAAINTELResourceManager {
   GLuint debug_display_edges_shader_;
 
   GLuint cmaa_framebuffer_;
-  GLuint copy_framebuffer_;
 
   GLuint rgba8_texture_;
   GLuint working_color_texture_;
@@ -79,11 +82,11 @@ class GPU_EXPORT ApplyFramebufferAttachmentCMAAINTELResourceManager {
   GLuint mini4_edge_texture_;
   GLuint mini4_edge_depth_texture_;
 
-  GLuint edges1_shader_result_texture_float4_slot1_;
-  GLuint edges1_shader_result_texture_;
-  GLuint edges_combine_shader_result_texture_float4_slot1_;
-  GLuint process_and_apply_shader_result_texture_float4_slot1_;
-  GLuint edges_combine_shader_result_texture_slot2_;
+  GLuint edges0_shader_result_rgba_texture_slot1_;
+  GLuint edges0_shader_target_texture_slot2_;
+  GLuint edges1_shader_result_edge_texture_;
+  GLuint process_and_apply_shader_result_rgba_texture_slot1_;
+  GLuint edges_combine_shader_result_edge_texture_;
 
   static const char vert_str_[];
   static const char cmaa_frag_s1_[];

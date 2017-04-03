@@ -5,7 +5,7 @@
 #include "components/navigation_metrics/navigation_metrics.h"
 
 #include "base/macros.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "url/gurl.h"
 
 namespace {
@@ -23,21 +23,23 @@ enum Scheme {
   SCHEME_ABOUT,
   SCHEME_CHROME,
   SCHEME_BLOB,
+  SCHEME_FILESYSTEM,
   SCHEME_MAX,
 };
 
 const char* const kSchemeNames[] = {
-  "unknown",
-  url::kHttpScheme,
-  url::kHttpsScheme,
-  url::kFileScheme,
-  url::kFtpScheme,
-  url::kDataScheme,
-  url::kJavaScriptScheme,
-  url::kAboutScheme,
-  "chrome",
-  url::kBlobScheme,
-  "max",
+    "unknown",
+    url::kHttpScheme,
+    url::kHttpsScheme,
+    url::kFileScheme,
+    url::kFtpScheme,
+    url::kDataScheme,
+    url::kJavaScriptScheme,
+    url::kAboutScheme,
+    "chrome",
+    url::kBlobScheme,
+    url::kFileSystemScheme,
+    "max",
 };
 
 static_assert(arraysize(kSchemeNames) == SCHEME_MAX + 1,

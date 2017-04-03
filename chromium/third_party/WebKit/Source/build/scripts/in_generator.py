@@ -26,6 +26,7 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+import os
 import os.path
 import shlex
 import shutil
@@ -34,20 +35,8 @@ import optparse
 from in_file import InFile
 
 
-class Writer(object):
-    # Subclasses should override.
-    class_name = None
-    defaults = None
-    valid_values = None
-    default_parameters = None
-
+class GenericWriter(object):
     def __init__(self, in_files):
-        if isinstance(in_files, basestring):
-            in_files = [in_files]
-        if in_files:
-            self.in_file = InFile.load_from_files(in_files, self.defaults, self.valid_values, self.default_parameters)
-        else:
-            self.in_file = None
         self._outputs = {}  # file_name -> generator
 
     def _write_file_if_changed(self, output_dir, contents, file_name):
@@ -74,6 +63,24 @@ class Writer(object):
         self.gperf_path = gperf_path
 
 
+class Writer(GenericWriter):
+    # Subclasses should override.
+    class_name = None
+    defaults = None
+    valid_values = None
+    default_parameters = None
+
+    def __init__(self, in_files):
+        super(Writer, self).__init__(in_files)
+
+        if isinstance(in_files, basestring):
+            in_files = [in_files]
+        if in_files:
+            self.in_file = InFile.load_from_files(in_files, self.defaults, self.valid_values, self.default_parameters)
+        else:
+            self.in_file = None
+
+
 class Maker(object):
     def __init__(self, writer_class):
         self._writer_class = writer_class
@@ -86,9 +93,15 @@ class Maker(object):
             exit(1)
 
         parser = optparse.OptionParser()
+
         parser.add_option("--gperf", default="gperf")
+        parser.add_option("--developer_dir",
+                          help='Path to Xcode.')
         parser.add_option("--output_dir", default=os.getcwd())
         options, args = parser.parse_args()
+
+        if options.developer_dir:
+            os.environ['DEVELOPER_DIR'] = options.developer_dir
 
         writer = self._writer_class(args)
         writer.set_gperf_path(options.gperf)

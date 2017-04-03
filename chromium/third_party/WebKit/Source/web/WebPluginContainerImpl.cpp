@@ -37,6 +37,7 @@
 #include "core/HTMLNames.h"
 #include "core/clipboard/DataObject.h"
 #include "core/clipboard/DataTransfer.h"
+#include "core/dom/DocumentUserGestureToken.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/dom/Fullscreen.h"
 #include "core/events/DragEvent.h"
@@ -86,6 +87,7 @@
 #include "public/platform/WebCursorInfo.h"
 #include "public/platform/WebDragData.h"
 #include "public/platform/WebExternalTextureLayer.h"
+#include "public/platform/WebInputEvent.h"
 #include "public/platform/WebRect.h"
 #include "public/platform/WebString.h"
 #include "public/platform/WebURL.h"
@@ -95,7 +97,6 @@
 #include "public/web/WebDocument.h"
 #include "public/web/WebElement.h"
 #include "public/web/WebFrameClient.h"
-#include "public/web/WebInputEvent.h"
 #include "public/web/WebPlugin.h"
 #include "public/web/WebPrintParams.h"
 #include "public/web/WebPrintPresetOptions.h"
@@ -467,8 +468,9 @@ WebString WebPluginContainerImpl::executeScriptURL(const WebURL& url,
     return WebString();
 
   if (!m_element->document().contentSecurityPolicy()->allowJavaScriptURLs(
-          m_element->document().url(), OrdinalNumber()))
+          m_element, m_element->document().url(), OrdinalNumber())) {
     return WebString();
+  }
 
   const KURL& kurl = url;
   DCHECK(kurl.protocolIs("javascript"));
@@ -476,9 +478,10 @@ WebString WebPluginContainerImpl::executeScriptURL(const WebURL& url,
   String script = decodeURLEscapeSequences(
       kurl.getString().substring(strlen("javascript:")));
 
-  UserGestureIndicator gestureIndicator(popupsAllowed
-                                            ? DefinitelyProcessingNewUserGesture
-                                            : PossiblyProcessingUserGesture);
+  UserGestureIndicator gestureIndicator(
+      popupsAllowed ? DocumentUserGestureToken::create(
+                          frame->document(), UserGestureToken::NewGesture)
+                    : nullptr);
   v8::HandleScope handleScope(toIsolate(frame));
   v8::Local<v8::Value> result =
       frame->script().executeScriptInMainWorldAndReturnValue(
@@ -750,9 +753,8 @@ void WebPluginContainerImpl::handleDragEvent(MouseEvent* event) {
   WebDragOperationsMask dragOperationMask =
       static_cast<WebDragOperationsMask>(dataTransfer->sourceOperation());
   WebPoint dragScreenLocation(event->screenX(), event->screenY());
-  WebPoint dragLocation(
-      (event->absoluteLocation().x() - location().x()).toInt(),
-      (event->absoluteLocation().y() - location().y()).toInt());
+  WebPoint dragLocation(event->absoluteLocation().x() - location().x(),
+                        event->absoluteLocation().y() - location().y());
 
   m_webPlugin->handleDragStatusUpdate(dragStatus, dragData, dragOperationMask,
                                       dragLocation, dragScreenLocation);

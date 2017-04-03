@@ -16,7 +16,7 @@
 #include "content/browser/frame_host/render_widget_host_view_child_frame.h"
 #include "content/common/content_export.h"
 #include "content/common/cursors/webcursor.h"
-#include "third_party/WebKit/public/web/WebInputEvent.h"
+#include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "ui/events/event.h"
 #include "ui/events/gestures/gesture_recognizer.h"
 #include "ui/events/gestures/gesture_types.h"
@@ -28,7 +28,6 @@ namespace content {
 class BrowserPluginGuest;
 class RenderWidgetHost;
 class RenderWidgetHostImpl;
-struct NativeWebKeyboardEvent;
 struct TextInputState;
 
 // See comments in render_widget_host_view.h about this class and its members.
@@ -107,6 +106,11 @@ class CONTENT_EXPORT RenderWidgetHostViewGuest
   void ProcessTouchEvent(const blink::WebTouchEvent& event,
                          const ui::LatencyInfo& latency) override;
 
+  bool CanCopyToVideoFrame() const override;
+  void BeginFrameSubscription(
+      std::unique_ptr<RenderWidgetHostViewFrameSubscriber> subscriber) override;
+  void EndFrameSubscription() override;
+
   bool LockMouse() override;
   void UnlockMouse() override;
 
@@ -130,6 +134,7 @@ class CONTENT_EXPORT RenderWidgetHostViewGuest
                        InputEventAckState ack_result) override;
 
   bool IsRenderWidgetHostViewGuest() override;
+  RenderWidgetHostViewBase* GetOwnerRenderWidgetHostView() const;
 
  protected:
   friend class RenderWidgetHostView;
@@ -139,8 +144,6 @@ class CONTENT_EXPORT RenderWidgetHostViewGuest
       RenderWidgetHost* widget,
       BrowserPluginGuest* guest,
       base::WeakPtr<RenderWidgetHostViewBase> platform_view);
-
-  RenderWidgetHostViewBase* GetOwnerRenderWidgetHostView() const;
 
   // Since we now route GestureEvents directly to the guest renderer, we need
   // a way to make sure that the BrowserPlugin in the embedder gets focused so

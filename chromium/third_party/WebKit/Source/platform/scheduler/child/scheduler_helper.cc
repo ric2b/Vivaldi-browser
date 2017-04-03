@@ -24,10 +24,12 @@ SchedulerHelper::SchedulerHelper(
                                tracing_category,
                                disabled_by_default_tracing_category,
                                disabled_by_default_verbose_tracing_category)),
-      control_task_runner_(NewTaskQueue(
-          TaskQueue::Spec("control_tq").SetShouldNotifyObservers(false))),
-      default_task_runner_(NewTaskQueue(
-          TaskQueue::Spec("default_tq").SetShouldMonitorQuiescence(true))),
+      control_task_runner_(
+          NewTaskQueue(TaskQueue::Spec(TaskQueue::QueueType::CONTROL)
+                           .SetShouldNotifyObservers(false))),
+      default_task_runner_(
+          NewTaskQueue(TaskQueue::Spec(TaskQueue::QueueType::DEFAULT)
+                           .SetShouldMonitorQuiescence(true))),
       observer_(nullptr),
       tracing_category_(tracing_category),
       disabled_by_default_tracing_category_(
@@ -68,6 +70,9 @@ scoped_refptr<TaskQueue> SchedulerHelper::ControlTaskRunner() {
   return control_task_runner_;
 }
 
+size_t SchedulerHelper::GetNumberOfPendingTasks() const {
+  return task_queue_manager_->GetNumberOfPendingTasks();
+}
 
 void SchedulerHelper::SetWorkBatchSizeForTesting(size_t work_batch_size) {
   CheckOnValidThread();

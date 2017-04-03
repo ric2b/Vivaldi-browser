@@ -17,6 +17,8 @@
 #include "components/sessions/core/session_command.h"
 #include "components/sessions/core/session_types.h"
 
+#include "components/sessions/vivaldi_session_service_commands.h"
+
 namespace sessions {
 
 // Identifier for commands written to file.
@@ -53,6 +55,9 @@ static const SessionCommand::id_type kCommandLastActiveTime = 23;
 // OBSOLETE Superseded by kCommandSetWindowWorkspace2.
 // static const SessionCommand::id_type kCommandSetWindowWorkspace = 24;
 static const SessionCommand::id_type kCommandSetWindowWorkspace2 = 25;
+
+// Vivaldi functions. Have to in this file because of constant declarations
+#include "components/sessions/vivaldi_session_service_commands_funcs.inc"
 
 namespace {
 
@@ -321,6 +326,9 @@ void AddTabsToWindows(IdToSessionTab* tabs, IdToSessionWindow* windows) {
   // move, so clear it out.
   tabs->clear();
 }
+
+// Vivaldi code. Included here because of declarations above
+#include "components/sessions/vivaldi_session_service_commands.inc"
 
 // Creates tabs and windows from the commands specified in |data|. The created
 // tabs and windows are added to |tabs| and |windows| respectively, with the
@@ -597,29 +605,8 @@ bool CreateTabsAndWindows(const ScopedVector<SessionCommand>& data,
         break;
       }
 
-      case kCommandSetExtData: {
-        SessionID::id_type tab_id;
-        std::string ext_data;
-        if (!RestoreSetExtDataCommand(
-                *command,
-                &tab_id,
-                &ext_data)) {
-          return true;
-        }
-
-        GetTab(tab_id, tabs)->ext_data.swap(ext_data);
-        break;
-      }
-
-      case kCommandSetWindowExtData: {
-        SessionID::id_type window_id;
-        std::string ext_data;
-        if (!RestoreSetWindowExtDataCommand(*command, &window_id, &ext_data))
-          return true;
-
-        GetWindow(window_id, windows)->ext_data.swap(ext_data);
-        break;
-      }
+      // Macro defined in  vivaldi_session_service_commands.inc
+      VIVALDI_SESSION_SERVICE_CASES
 
       default:
         // TODO(skuhne): This might call back into a callback handler to extend
@@ -845,22 +832,6 @@ std::unique_ptr<SessionCommand> CreateSetWindowAppNameCommand(
   return CreateSetWindowAppNameCommand(kCommandSetWindowAppName,
                                          window_id.id(),
                                          app_name);
-}
-
-std::unique_ptr<SessionCommand> CreateSetWindowExtDataCommand(
-    const SessionID& window_id,
-    const std::string& ext_data) {
-  return CreateSetWindowExtDataCommand(kCommandSetWindowExtData,
-                                         window_id.id(),
-                                         ext_data);
-}
-
-std::unique_ptr<SessionCommand> CreateSetExtDataCommand(
-    const SessionID& tab_id,
-    const std::string& ext_data) {
-  return CreateSetTabExtDataCommand(kCommandSetExtData,
-                                         tab_id.id(),
-                                         ext_data);
 }
 
 bool ReplacePendingCommand(BaseSessionService* base_session_service,

@@ -18,8 +18,8 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
 
 /**
- * A payment integration test for a merchant that requests an email address and a phone number and
- * provides free shipping regardless of address.
+ * A payment integration test for a merchant that requests a payer name, an email address and
+ * a phone number and provides free shipping regardless of address.
  */
 public class PaymentRequestContactDetailsAndFreeShippingTest extends PaymentRequestTestBase {
     public PaymentRequestContactDetailsAndFreeShippingTest() {
@@ -43,8 +43,8 @@ public class PaymentRequestContactDetailsAndFreeShippingTest extends PaymentRequ
     }
 
     /**
-     * Submit the email address, phone number and shipping address to the merchant when the user
-     * clicks "Pay."
+     * Submit the payer name, email address, phone number and shipping address to the merchant when
+     * the user clicks "Pay."
      */
     @MediumTest
     @Feature({"Payments"})
@@ -53,14 +53,14 @@ public class PaymentRequestContactDetailsAndFreeShippingTest extends PaymentRequ
         clickAndWait(R.id.button_primary, mReadyForUnmaskInput);
         setTextInCardUnmaskDialogAndWait(R.id.card_unmask_input, "123", mReadyToUnmask);
         clickCardUnmaskButtonAndWait(DialogInterface.BUTTON_POSITIVE, mDismissed);
-        expectResultContains(new String[] {"jon.doe@google.com", "555-555-5555", "Jon Doe",
-                "4111111111111111", "12", "2050", "visa", "123", "Google", "340 Main St", "CA",
-                "Los Angeles", "90291", "US", "en", "freeShippingOption"});
+        expectResultContains(new String[] {"Jon Doe", "jon.doe@google.com", "555-555-5555",
+                "Jon Doe", "4111111111111111", "12", "2050", "visa", "123", "Google", "340 Main St",
+                "CA", "Los Angeles", "90291", "US", "en", "freeShippingOption"});
     }
 
     /**
-     * Test that starting a payment request that requires an email address, a phone number and a
-     * shipping address results in the appropriate metric being logged in the
+     * Test that starting a payment request that requires an email address, a phone number a name
+     * and a shipping address results in the appropriate metric being logged in the
      * PaymentRequest.RequestedInformation histogram.
      */
     @MediumTest
@@ -74,7 +74,8 @@ public class PaymentRequestContactDetailsAndFreeShippingTest extends PaymentRequ
         for (int i = 0; i < PaymentRequestMetrics.REQUESTED_INFORMATION_MAX; ++i) {
             assertEquals((i == (PaymentRequestMetrics.REQUESTED_INFORMATION_EMAIL
                     | PaymentRequestMetrics.REQUESTED_INFORMATION_PHONE
-                    | PaymentRequestMetrics.REQUESTED_INFORMATION_SHIPPING) ? 1 : 0),
+                    | PaymentRequestMetrics.REQUESTED_INFORMATION_SHIPPING
+                    | PaymentRequestMetrics.REQUESTED_INFORMATION_NAME) ? 1 : 0),
                     RecordHistogram.getHistogramValueCountForTesting(
                             "PaymentRequest.RequestedInformation", i));
         }

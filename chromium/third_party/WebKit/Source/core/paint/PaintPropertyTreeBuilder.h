@@ -16,7 +16,6 @@ namespace blink {
 
 class FrameView;
 class LayoutObject;
-class ObjectPaintProperties;
 
 // The context for PaintPropertyTreeBuilder.
 // It's responsible for bookkeeping tree state in other order, for example, the
@@ -83,17 +82,26 @@ struct PaintPropertyTreeBuilderContext {
 class PaintPropertyTreeBuilder {
  public:
   PaintPropertyTreeBuilderContext setupInitialContext();
-  void buildTreeNodes(FrameView&, PaintPropertyTreeBuilderContext&);
-  void buildTreeNodesForSelf(const LayoutObject&,
-                             PaintPropertyTreeBuilderContext&);
-  void buildTreeNodesForChildren(const LayoutObject&,
-                                 PaintPropertyTreeBuilderContext&);
+  // Update the paint properties for a frame and ensure the context is up to
+  // date.
+  void updateProperties(FrameView&, PaintPropertyTreeBuilderContext&);
+
+  // Update the paint properties that affect this object (e.g., properties like
+  // paint offset translation) and ensure the context is up to date.
+  void updatePropertiesForSelf(const LayoutObject&,
+                               PaintPropertyTreeBuilderContext&);
+  // Update the paint properties that affect children of this object (e.g.,
+  // scroll offset transform) and ensure the context is up to date.
+  void updatePropertiesForChildren(const LayoutObject&,
+                                   PaintPropertyTreeBuilderContext&);
 
  private:
   static void updatePaintOffsetTranslation(const LayoutObject&,
                                            PaintPropertyTreeBuilderContext&);
   static void updateTransform(const LayoutObject&,
                               PaintPropertyTreeBuilderContext&);
+  static void updateTransformForNonRootSVG(const LayoutObject&,
+                                           PaintPropertyTreeBuilderContext&);
   static void updateEffect(const LayoutObject&,
                            PaintPropertyTreeBuilderContext&);
   static void updateCssClip(const LayoutObject&,

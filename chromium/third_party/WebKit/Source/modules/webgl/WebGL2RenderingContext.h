@@ -13,6 +13,10 @@ namespace blink {
 
 class CanvasContextCreationAttributes;
 class EXTColorBufferFloat;
+class EXTTextureFilterAnisotropic;
+class OESTextureFloatLinear;
+class WebGLDebugRendererInfo;
+class WebGLLoseContext;
 
 class WebGL2RenderingContext : public WebGL2RenderingContextBase {
   DEFINE_WRAPPERTYPEINFO();
@@ -39,7 +43,7 @@ class WebGL2RenderingContext : public WebGL2RenderingContextBase {
   CanvasRenderingContext::ContextType getContextType() const override {
     return CanvasRenderingContext::ContextWebgl2;
   }
-  ImageBitmap* transferToImageBitmap(ExceptionState&) final;
+  ImageBitmap* transferToImageBitmap(ScriptState*) final;
   String contextName() const override { return "WebGL2RenderingContext"; }
   void registerContextExtensions() override;
   void setCanvasGetContextResult(RenderingContext&) final;
@@ -56,12 +60,12 @@ class WebGL2RenderingContext : public WebGL2RenderingContextBase {
       const CanvasContextCreationAttributes& requestedAttributes);
 
   Member<EXTColorBufferFloat> m_extColorBufferFloat;
-  Member<EXTDisjointTimerQuery> m_extDisjointTimerQuery;
+  Member<EXTDisjointTimerQueryWebGL2> m_extDisjointTimerQueryWebGL2;
   Member<EXTTextureFilterAnisotropic> m_extTextureFilterAnisotropic;
   Member<OESTextureFloatLinear> m_oesTextureFloatLinear;
   Member<WebGLCompressedTextureASTC> m_webglCompressedTextureASTC;
   Member<WebGLCompressedTextureATC> m_webglCompressedTextureATC;
-  Member<WebGLCompressedTextureES30> m_webglCompressedTextureES30;
+  Member<WebGLCompressedTextureETC> m_webglCompressedTextureETC;
   Member<WebGLCompressedTextureETC1> m_webglCompressedTextureETC1;
   Member<WebGLCompressedTexturePVRTC> m_webglCompressedTexturePVRTC;
   Member<WebGLCompressedTextureS3TC> m_webglCompressedTextureS3TC;

@@ -18,10 +18,30 @@ cr.define('settings_menu', function() {
 
       teardown(function() { settingsMenu.remove(); });
 
-      test('openAdvanced', function() {
-        settingsMenu.fire('toggle-advanced-page', true);
+      test('advancedOpenedBinding', function() {
+        assertFalse(settingsMenu.advancedOpened);
+        settingsMenu.advancedOpened = true;
         Polymer.dom.flush();
         assertTrue(settingsMenu.$.advancedPage.opened);
+
+        settingsMenu.advancedOpened = false;
+        Polymer.dom.flush();
+        assertFalse(settingsMenu.$.advancedPage.opened);
+      });
+
+      test('tapAdvanced', function() {
+        assertFalse(settingsMenu.advancedOpened);
+
+        var advancedTrigger = settingsMenu.$$('#advancedPage .menu-trigger');
+        assertTrue(!!advancedTrigger);
+
+        MockInteractions.tap(advancedTrigger);
+        Polymer.dom.flush();
+        assertTrue(settingsMenu.$.advancedPage.opened);
+
+        MockInteractions.tap(advancedTrigger);
+        Polymer.dom.flush();
+        assertFalse(settingsMenu.$.advancedPage.opened);
       });
 
       test('upAndDownIcons', function() {
@@ -31,12 +51,12 @@ cr.define('settings_menu', function() {
             '.menu-trigger iron-icon');
         assertTrue(!!ironIconElement);
 
-        settingsMenu.fire('toggle-advanced-page', true);
+        settingsMenu.advancedOpened = true;
         Polymer.dom.flush();
         var openIcon = ironIconElement.icon;
         assertTrue(!!openIcon);
 
-        settingsMenu.fire('toggle-advanced-page', false);
+        settingsMenu.advancedOpened = false;
         Polymer.dom.flush();
         assertNotEquals(openIcon, ironIconElement.icon);
       });
@@ -46,6 +66,18 @@ cr.define('settings_menu', function() {
         var advancedPage = settingsMenu.$.advancedPage;
         assertEquals('/reset',
             advancedPage.querySelector('paper-menu').selected);
+      });
+
+      // Test that navigating via the paper menu always clears the current
+      // search URL parameter.
+      test('clearsUrlSearchParam', function() {
+        var urlParams = new URLSearchParams('search=foo');
+        settings.navigateTo(settings.Route.BASIC, urlParams);
+        assertEquals(
+            urlParams.toString(),
+            settings.getQueryParameters().toString());
+        MockInteractions.tap(settingsMenu.$.people);
+        assertEquals('', settings.getQueryParameters().toString());
       });
     });
   }

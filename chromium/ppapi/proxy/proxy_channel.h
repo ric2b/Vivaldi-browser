@@ -102,9 +102,7 @@ class PPAPI_PROXY_EXPORT ProxyChannel
     return channel_.get();
   }
 
-#if defined(OS_POSIX) && !defined(OS_NACL)
-  base::ScopedFD TakeRendererFD();
-#endif
+  base::ProcessId peer_pid() { return peer_pid_; }
 
  protected:
   explicit ProxyChannel();

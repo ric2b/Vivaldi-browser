@@ -78,10 +78,7 @@ class TextFinder::DeferredScopeStringMatches
 
   DEFINE_INLINE_TRACE() { visitor->trace(m_textFinder); }
 
-  void dispose() {
-    if (m_timer.isActive())
-      m_timer.stop();
-  }
+  void dispose() { m_timer.stop(); }
 
  private:
   DeferredScopeStringMatches(TextFinder* textFinder,
@@ -610,7 +607,7 @@ int TextFinder::nearestFindMatch(const FloatPoint& point,
 }
 
 int TextFinder::selectFindMatch(unsigned index, WebRect* selectionRect) {
-  ASSERT_WITH_SECURITY_IMPLICATION(index < m_findMatchesCache.size());
+  SECURITY_DCHECK(index < m_findMatchesCache.size());
 
   Range* range = m_findMatchesCache[index].m_range;
   if (!range->boundaryPointsValid() || !range->startContainer()->isConnected())

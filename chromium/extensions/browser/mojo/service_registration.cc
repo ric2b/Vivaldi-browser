@@ -11,7 +11,6 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/site_instance.h"
-#include "extensions/browser/api/serial/serial_service_factory.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extensions_browser_client.h"
 #include "extensions/browser/mojo/keep_alive_impl.h"
@@ -19,7 +18,7 @@
 #include "extensions/common/constants.h"
 #include "extensions/common/extension_api.h"
 #include "extensions/common/switches.h"
-#include "services/shell/public/cpp/interface_registry.h"
+#include "services/service_manager/public/cpp/interface_registry.h"
 
 #if defined(ENABLE_WIFI_DISPLAY)
 #include "extensions/browser/api/display_source/wifi_display/wifi_display_media_service_impl.h"
@@ -29,6 +28,7 @@
 namespace extensions {
 namespace {
 
+#if defined(ENABLE_WIFI_DISPLAY)
 bool ExtensionHasPermission(const Extension* extension,
                             content::RenderProcessHost* render_process_host,
                             const std::string& permission_name) {
@@ -40,6 +40,7 @@ bool ExtensionHasPermission(const Extension* extension,
       ->IsAvailable(permission_name, extension, context, extension->url())
       .is_available();
 }
+#endif
 
 }  // namespace
 
@@ -47,15 +48,8 @@ void RegisterServicesForFrame(content::RenderFrameHost* render_frame_host,
                               const Extension* extension) {
   DCHECK(extension);
 
-  shell::InterfaceRegistry* registry =
+  service_manager::InterfaceRegistry* registry =
       render_frame_host->GetInterfaceRegistry();
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnableMojoSerialService)) {
-    if (ExtensionHasPermission(extension, render_frame_host->GetProcess(),
-                               "serial")) {
-      registry->AddInterface(base::Bind(&BindToSerialServiceRequest));
-    }
-  }
   registry->AddInterface(base::Bind(
       KeepAliveImpl::Create,
       render_frame_host->GetProcess()->GetBrowserContext(), extension));

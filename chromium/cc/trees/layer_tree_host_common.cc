@@ -15,8 +15,6 @@
 #include "cc/layers/layer.h"
 #include "cc/layers/layer_impl.h"
 #include "cc/layers/layer_iterator.h"
-#include "cc/proto/begin_main_frame_and_commit_state.pb.h"
-#include "cc/proto/gfx_conversions.h"
 #include "cc/trees/draw_property_utils.h"
 #include "cc/trees/effect_node.h"
 #include "cc/trees/layer_tree_host.h"
@@ -84,7 +82,6 @@ LayerTreeHostCommon::CalcDrawPropsImplInputs::CalcDrawPropsImplInputs(
     bool can_adjust_raster_scales,
     bool verify_clip_tree_calculations,
     bool verify_visible_rect_calculations,
-    bool verify_transform_tree_calculations,
     LayerImplList* render_surface_layer_list,
     PropertyTrees* property_trees)
     : root_layer(root_layer),
@@ -103,7 +100,6 @@ LayerTreeHostCommon::CalcDrawPropsImplInputs::CalcDrawPropsImplInputs(
       can_adjust_raster_scales(can_adjust_raster_scales),
       verify_clip_tree_calculations(verify_clip_tree_calculations),
       verify_visible_rect_calculations(verify_visible_rect_calculations),
-      verify_transform_tree_calculations(verify_transform_tree_calculations),
       render_surface_layer_list(render_surface_layer_list),
       property_trees(property_trees) {}
 
@@ -126,7 +122,6 @@ LayerTreeHostCommon::CalcDrawPropsImplInputsForTesting::
                               std::numeric_limits<int>::max() / 2,
                               true,
                               false,
-                              true,
                               true,
                               true,
                               render_surface_layer_list,
@@ -175,50 +170,27 @@ bool LayerTreeHostCommon::ScrollUpdateInfo::operator==(
   return layer_id == other.layer_id && scroll_delta == other.scroll_delta;
 }
 
-void LayerTreeHostCommon::ScrollUpdateInfo::ToProtobuf(
-    proto::ScrollUpdateInfo* proto) const {
-  proto->set_layer_id(layer_id);
-  Vector2dToProto(scroll_delta, proto->mutable_scroll_delta());
+LayerTreeHostCommon::ScrollbarsUpdateInfo::ScrollbarsUpdateInfo()
+    : layer_id(Layer::INVALID_ID), hidden(true) {}
+
+LayerTreeHostCommon::ScrollbarsUpdateInfo::ScrollbarsUpdateInfo(int layer_id,
+                                                                bool hidden)
+    : layer_id(layer_id), hidden(hidden) {}
+
+bool LayerTreeHostCommon::ScrollbarsUpdateInfo::operator==(
+    const LayerTreeHostCommon::ScrollbarsUpdateInfo& other) const {
+  return layer_id == other.layer_id && hidden == other.hidden;
 }
 
-void LayerTreeHostCommon::ScrollUpdateInfo::FromProtobuf(
-    const proto::ScrollUpdateInfo& proto) {
-  layer_id = proto.layer_id();
-  scroll_delta = ProtoToVector2d(proto.scroll_delta());
-}
+ReflectedMainFrameState::ReflectedMainFrameState() : page_scale_delta(1.0f) {}
+
+ReflectedMainFrameState::~ReflectedMainFrameState() = default;
 
 ScrollAndScaleSet::ScrollAndScaleSet()
     : page_scale_delta(1.f), top_controls_delta(0.f) {
 }
 
 ScrollAndScaleSet::~ScrollAndScaleSet() {}
-
-bool ScrollAndScaleSet::EqualsForTesting(const ScrollAndScaleSet& other) const {
-  return scrolls == other.scrolls &&
-         page_scale_delta == other.page_scale_delta &&
-         elastic_overscroll_delta == other.elastic_overscroll_delta &&
-         top_controls_delta == other.top_controls_delta;
-}
-
-void ScrollAndScaleSet::ToProtobuf(proto::ScrollAndScaleSet* proto) const {
-  for (const auto& scroll : scrolls)
-    scroll.ToProtobuf(proto->add_scrolls());
-  proto->set_page_scale_delta(page_scale_delta);
-  Vector2dFToProto(elastic_overscroll_delta,
-                   proto->mutable_elastic_overscroll_delta());
-  proto->set_top_controls_delta(top_controls_delta);
-}
-
-void ScrollAndScaleSet::FromProtobuf(const proto::ScrollAndScaleSet& proto) {
-  DCHECK_EQ(scrolls.size(), 0u);
-  for (int i = 0; i < proto.scrolls_size(); ++i) {
-    scrolls.push_back(LayerTreeHostCommon::ScrollUpdateInfo());
-    scrolls[i].FromProtobuf(proto.scrolls(i));
-  }
-  page_scale_delta = proto.page_scale_delta();
-  elastic_overscroll_delta = ProtoToVector2dF(proto.elastic_overscroll_delta());
-  top_controls_delta = proto.top_controls_delta();
-}
 
 static inline void SetMaskLayersAreDrawnRenderSurfaceLayerListMembers(
     RenderSurfaceImpl* surface,
@@ -240,15 +212,8 @@ static inline void ClearMaskLayersAreDrawnRenderSurfaceLayerListMembers(
 static inline void ClearIsDrawnRenderSurfaceLayerListMember(
     LayerImplList* layer_list,
     ScrollTree* scroll_tree) {
-  for (LayerImpl* layer : *layer_list) {
-    if (layer->is_drawn_render_surface_layer_list_member()) {
-      DCHECK_GT(
-          scroll_tree->Node(layer->scroll_tree_index())->num_drawn_descendants,
-          0);
-      scroll_tree->Node(layer->scroll_tree_index())->num_drawn_descendants--;
-    }
+  for (LayerImpl* layer : *layer_list)
     layer->set_is_drawn_render_surface_layer_list_member(false);
-  }
 }
 
 static bool CdpPerfTracingEnabled() {
@@ -321,33 +286,11 @@ enum PropertyTreeOption {
   DONT_BUILD_PROPERTY_TREES
 };
 
-static void ComputeLayerScrollsDrawnDescendants(LayerTreeImpl* layer_tree_impl,
-                                                ScrollTree* scroll_tree) {
-  for (int i = static_cast<int>(scroll_tree->size()) - 1; i > 0; --i) {
-    ScrollNode* node = scroll_tree->Node(i);
-    scroll_tree->parent(node)->num_drawn_descendants +=
-        node->num_drawn_descendants;
-  }
-  for (LayerImpl* layer : *layer_tree_impl) {
-    bool scrolls_drawn_descendant = false;
-    if (layer->scrollable()) {
-      ScrollNode* node = scroll_tree->Node(layer->scroll_tree_index());
-      if (node->num_drawn_descendants > 0)
-        scrolls_drawn_descendant = true;
-    }
-    layer->set_scrolls_drawn_descendant(scrolls_drawn_descendant);
-  }
-}
-
 static void ComputeInitialRenderSurfaceLayerList(
     LayerTreeImpl* layer_tree_impl,
     PropertyTrees* property_trees,
     LayerImplList* render_surface_layer_list,
     bool can_render_to_separate_surface) {
-  ScrollTree* scroll_tree = &property_trees->scroll_tree;
-  for (int i = 0; i < static_cast<int>(scroll_tree->size()); ++i)
-    scroll_tree->Node(i)->num_drawn_descendants = 0;
-
   // Add all non-skipped surfaces to the initial render surface layer list. Add
   // all non-skipped layers to the layer list of their target surface, and
   // add their content rect to their target surface's accumulated content rect.
@@ -359,13 +302,10 @@ static void ComputeInitialRenderSurfaceLayerList(
     }
     layer->set_is_drawn_render_surface_layer_list_member(false);
 
-    bool layer_is_drawn =
-        property_trees->effect_tree.Node(layer->effect_tree_index())->is_drawn;
     bool is_root = layer_tree_impl->IsRootLayer(layer);
-    bool skip_layer =
-        !is_root && draw_property_utils::LayerShouldBeSkipped(
-                        layer, layer_is_drawn, property_trees->transform_tree,
-                        property_trees->effect_tree);
+    bool skip_layer = !is_root && draw_property_utils::LayerShouldBeSkipped(
+                                      layer, property_trees->transform_tree,
+                                      property_trees->effect_tree);
     if (skip_layer)
       continue;
 
@@ -414,13 +354,14 @@ static void ComputeInitialRenderSurfaceLayerList(
             surface->render_target()->nearest_occlusion_immune_ancestor());
       }
     }
+    bool layer_is_drawn =
+        property_trees->effect_tree.Node(layer->effect_tree_index())->is_drawn;
     bool layer_should_be_drawn = draw_property_utils::LayerNeedsUpdate(
-        layer, layer_is_drawn, property_trees->transform_tree);
+        layer, layer_is_drawn, property_trees);
     if (!layer_should_be_drawn)
       continue;
 
     layer->set_is_drawn_render_surface_layer_list_member(true);
-    scroll_tree->Node(layer->scroll_tree_index())->num_drawn_descendants++;
     layer->render_target()->layer_list().push_back(layer);
 
     // The layer contributes its drawable content rect to its render target.
@@ -516,9 +457,6 @@ static void CalculateRenderSurfaceLayerList(
   ComputeListOfNonEmptySurfaces(layer_tree_impl, property_trees,
                                 &initial_render_surface_list,
                                 render_surface_layer_list);
-
-  ComputeLayerScrollsDrawnDescendants(layer_tree_impl,
-                                      &property_trees->scroll_tree);
 }
 
 void CalculateDrawPropertiesInternal(
@@ -623,9 +561,6 @@ void CalculateDrawPropertiesInternal(
   if (inputs->verify_visible_rect_calculations)
     draw_property_utils::VerifyVisibleRectsCalculations(visible_layer_list,
                                                         inputs->property_trees);
-  if (inputs->verify_transform_tree_calculations)
-    draw_property_utils::VerifyTransformTreeCalculations(
-        visible_layer_list, inputs->property_trees);
 
   if (should_measure_property_tree_performance) {
     TRACE_EVENT_END0(TRACE_DISABLED_BY_DEFAULT("cc.debug.cdp-perf"),
@@ -655,8 +590,7 @@ void LayerTreeHostCommon::CalculateDrawPropertiesForTesting(
   draw_property_utils::UpdatePropertyTrees(property_trees,
                                            can_render_to_separate_surface);
   draw_property_utils::FindLayersThatNeedUpdates(
-      inputs->root_layer->GetLayerTree(), property_trees->transform_tree,
-      property_trees->effect_tree, &update_layer_list);
+      inputs->root_layer->GetLayerTree(), property_trees, &update_layer_list);
 }
 
 void LayerTreeHostCommon::CalculateDrawProperties(

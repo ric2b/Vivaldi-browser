@@ -19,7 +19,6 @@ class BluetoothUUID;
 }
 
 namespace content {
-struct BluetoothScanFilter;
 
 // General Metrics
 
@@ -67,7 +66,7 @@ enum class UMARequestDeviceOutcome {
   CHOSEN_DEVICE_VANISHED = 8,
   BLUETOOTH_CHOOSER_CANCELLED = 9,
   BLUETOOTH_CHOOSER_DENIED_PERMISSION = 10,
-  BLACKLISTED_SERVICE_IN_FILTER = 11,
+  BLOCKLISTED_SERVICE_IN_FILTER = 11,
   BLUETOOTH_OVERVIEW_HELP_LINK_PRESSED = 12,
   ADAPTER_OFF_HELP_LINK_PRESSED = 13,
   NEED_LOCATION_HELP_LINK_PRESSED = 14,
@@ -75,6 +74,7 @@ enum class UMARequestDeviceOutcome {
   BLUETOOTH_GLOBALLY_DISABLED = 16,
   BLUETOOTH_CHOOSER_EVENT_HANDLER_INVALID = 17,
   BLUETOOTH_LOW_ENERGY_NOT_AVAILABLE = 18,
+  BLUETOOTH_CHOOSER_RESCAN = 19,
   // NOTE: Add new requestDevice() outcomes immediately above this line. Make
   // sure to update the enum list in
   // tools/metrics/histograms/histograms.xml accordingly.
@@ -178,7 +178,7 @@ enum class UMAGetCharacteristicOutcome {
   NO_DEVICE = 1,
   NO_SERVICE = 2,
   NOT_FOUND = 3,
-  BLACKLISTED = 4,
+  BLOCKLISTED = 4,
   NO_CHARACTERISTICS = 5,
   // Note: Add new outcomes immediately above this line.
   // Make sure to update the enum list in
@@ -225,7 +225,7 @@ enum UMAGATTOperationOutcome {
   NOT_AUTHORIZED = 10,
   NOT_PAIRED = 11,
   NOT_SUPPORTED = 12,
-  BLACKLISTED = 13,
+  BLOCKLISTED = 13,
   // Note: Add new GATT Outcomes immediately above this line.
   // Make sure to update the enum list in
   // tools/metrics/histograms/histograms.xml accordingly.
@@ -275,6 +275,24 @@ void RecordStartNotificationsOutcome(UMAGATTOperationOutcome outcome);
 // Records the outcome of a cache query for startNotifications. Should only be
 // called if QueryCacheForCharacteristic fails.
 void RecordStartNotificationsOutcome(CacheQueryOutcome outcome);
+
+enum class UMARSSISignalStrengthLevel {
+  LESS_THAN_OR_EQUAL_TO_MIN_RSSI,
+  LEVEL_0,
+  LEVEL_1,
+  LEVEL_2,
+  LEVEL_3,
+  LEVEL_4,
+  GREATER_THAN_OR_EQUAL_TO_MAX_RSSI,
+  // Note: Add new RSSI signal strength level immediately above this line.
+  COUNT
+};
+
+// Records the raw RSSI, and processed result displayed to users, when
+// content::BluetoothDeviceChooserController::CalculateSignalStrengthLevel() is
+// called.
+void RecordRSSISignalStrength(int rssi);
+void RecordRSSISignalStrengthLevel(UMARSSISignalStrengthLevel level);
 
 }  // namespace content
 

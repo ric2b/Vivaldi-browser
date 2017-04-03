@@ -41,11 +41,4 @@ VivaldiAPIPermissions::GetAllPermissions() const {
   return permissions;
 }
 
-std::vector<PermissionsProvider::AliasInfo>
-VivaldiAPIPermissions::GetAllAliases() const {
-  // Register aliases.
-  std::vector<PermissionsProvider::AliasInfo> aliases;
-  return aliases;
-}
-
 }   // namespace extensions

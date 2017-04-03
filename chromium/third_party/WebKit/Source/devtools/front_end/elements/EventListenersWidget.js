@@ -26,155 +26,156 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-
 /**
- * @constructor
- * @extends {WebInspector.ThrottledWidget}
- * @implements {WebInspector.ToolbarItem.ItemsProvider}
+ * @implements {UI.ToolbarItem.ItemsProvider}
+ * @unrestricted
  */
-WebInspector.EventListenersWidget = function()
-{
-    WebInspector.ThrottledWidget.call(this);
-    this.element.classList.add("events-pane");
+Elements.EventListenersWidget = class extends UI.ThrottledWidget {
+  constructor() {
+    super();
+    this.element.classList.add('events-pane');
     this._toolbarItems = [];
 
-    this._showForAncestorsSetting = WebInspector.settings.moduleSetting("showEventListenersForAncestors");
+    this._showForAncestorsSetting = Common.settings.moduleSetting('showEventListenersForAncestors');
     this._showForAncestorsSetting.addChangeListener(this.update.bind(this));
 
-    this._dispatchFilterBySetting = WebInspector.settings.createSetting("eventListenerDispatchFilterType", WebInspector.EventListenersWidget.DispatchFilterBy.All);
+    this._dispatchFilterBySetting = Common.settings.createSetting(
+        'eventListenerDispatchFilterType', Elements.EventListenersWidget.DispatchFilterBy.All);
     this._dispatchFilterBySetting.addChangeListener(this.update.bind(this));
 
-    this._showFrameworkListenersSetting = WebInspector.settings.createSetting("showFrameowkrListeners", true);
+    this._showFrameworkListenersSetting = Common.settings.createSetting('showFrameowkrListeners', true);
     this._showFrameworkListenersSetting.addChangeListener(this._showFrameworkListenersChanged.bind(this));
-    this._eventListenersView = new WebInspector.EventListenersView(this.element, this.update.bind(this));
+    this._eventListenersView = new Components.EventListenersView(this.element, this.update.bind(this));
 
-    var refreshButton = new WebInspector.ToolbarButton(WebInspector.UIString("Refresh"), "refresh-toolbar-item");
-    refreshButton.addEventListener("click", this.update.bind(this));
+    var refreshButton = new UI.ToolbarButton(Common.UIString('Refresh'), 'largeicon-refresh');
+    refreshButton.addEventListener('click', this.update.bind(this));
     this._toolbarItems.push(refreshButton);
-    this._toolbarItems.push(new WebInspector.ToolbarCheckbox(WebInspector.UIString("Ancestors"), WebInspector.UIString("Show listeners on the ancestors"), this._showForAncestorsSetting));
-    var dispatchFilter = new WebInspector.ToolbarComboBox(this._onDispatchFilterTypeChanged.bind(this));
+    this._toolbarItems.push(new UI.ToolbarCheckbox(
+        Common.UIString('Ancestors'), Common.UIString('Show listeners on the ancestors'),
+        this._showForAncestorsSetting));
+    var dispatchFilter = new UI.ToolbarComboBox(this._onDispatchFilterTypeChanged.bind(this));
 
     /**
      * @param {string} name
      * @param {string} value
-     * @this {WebInspector.EventListenersWidget}
+     * @this {Elements.EventListenersWidget}
      */
-    function addDispatchFilterOption(name, value)
-    {
-        var option = dispatchFilter.createOption(name, "", value);
-        if (value === this._dispatchFilterBySetting.get())
-            dispatchFilter.select(option);
+    function addDispatchFilterOption(name, value) {
+      var option = dispatchFilter.createOption(name, '', value);
+      if (value === this._dispatchFilterBySetting.get())
+        dispatchFilter.select(option);
     }
-    addDispatchFilterOption.call(this, WebInspector.UIString("All"), WebInspector.EventListenersWidget.DispatchFilterBy.All);
-    addDispatchFilterOption.call(this, WebInspector.UIString("Passive"), WebInspector.EventListenersWidget.DispatchFilterBy.Passive);
-    addDispatchFilterOption.call(this, WebInspector.UIString("Blocking"), WebInspector.EventListenersWidget.DispatchFilterBy.Blocking);
+    addDispatchFilterOption.call(this, Common.UIString('All'), Elements.EventListenersWidget.DispatchFilterBy.All);
+    addDispatchFilterOption.call(
+        this, Common.UIString('Passive'), Elements.EventListenersWidget.DispatchFilterBy.Passive);
+    addDispatchFilterOption.call(
+        this, Common.UIString('Blocking'), Elements.EventListenersWidget.DispatchFilterBy.Blocking);
     dispatchFilter.setMaxWidth(200);
     this._toolbarItems.push(dispatchFilter);
-    this._toolbarItems.push(new WebInspector.ToolbarCheckbox(WebInspector.UIString("Framework listeners"), WebInspector.UIString("Resolve event listeners bound with framework"), this._showFrameworkListenersSetting));
+    this._toolbarItems.push(new UI.ToolbarCheckbox(
+        Common.UIString('Framework listeners'), Common.UIString('Resolve event listeners bound with framework'),
+        this._showFrameworkListenersSetting));
 
-    WebInspector.context.addFlavorChangeListener(WebInspector.DOMNode, this.update, this);
+    UI.context.addFlavorChangeListener(SDK.DOMNode, this.update, this);
     this.update();
-}
+  }
 
-WebInspector.EventListenersWidget.DispatchFilterBy = {
-    All : "All",
-    Blocking : "Blocking",
-    Passive : "Passive"
-}
+  /**
+   * @override
+   * @protected
+   * @return {!Promise.<?>}
+   */
+  doUpdate() {
+    if (this._lastRequestedNode) {
+      this._lastRequestedNode.target().runtimeAgent().releaseObjectGroup(
+          Elements.EventListenersWidget._objectGroupName);
+      delete this._lastRequestedNode;
+    }
+    var node = UI.context.flavor(SDK.DOMNode);
+    if (!node) {
+      this._eventListenersView.reset();
+      this._eventListenersView.addEmptyHolderIfNeeded();
+      return Promise.resolve();
+    }
+    this._lastRequestedNode = node;
+    var selectedNodeOnly = !this._showForAncestorsSetting.get();
+    var promises = [];
+    var listenersView = this._eventListenersView;
+    promises.push(node.resolveToObjectPromise(Elements.EventListenersWidget._objectGroupName));
+    if (!selectedNodeOnly) {
+      var currentNode = node.parentNode;
+      while (currentNode) {
+        promises.push(currentNode.resolveToObjectPromise(Elements.EventListenersWidget._objectGroupName));
+        currentNode = currentNode.parentNode;
+      }
+      promises.push(this._windowObjectInNodeContext(node));
+    }
+    return Promise.all(promises)
+        .then(this._eventListenersView.addObjects.bind(this._eventListenersView))
+        .then(this._showFrameworkListenersChanged.bind(this));
+  }
 
-WebInspector.EventListenersWidget._objectGroupName = "event-listeners-panel";
+  /**
+   * @override
+   * @return {!Array<!UI.ToolbarItem>}
+   */
+  toolbarItems() {
+    return this._toolbarItems;
+  }
 
-WebInspector.EventListenersWidget.prototype = {
+  /**
+   * @param {!Event} event
+   */
+  _onDispatchFilterTypeChanged(event) {
+    this._dispatchFilterBySetting.set(event.target.value);
+  }
+
+  _showFrameworkListenersChanged() {
+    var dispatchFilter = this._dispatchFilterBySetting.get();
+    var showPassive = dispatchFilter === Elements.EventListenersWidget.DispatchFilterBy.All ||
+        dispatchFilter === Elements.EventListenersWidget.DispatchFilterBy.Passive;
+    var showBlocking = dispatchFilter === Elements.EventListenersWidget.DispatchFilterBy.All ||
+        dispatchFilter === Elements.EventListenersWidget.DispatchFilterBy.Blocking;
+    this._eventListenersView.showFrameworkListeners(
+        this._showFrameworkListenersSetting.get(), showPassive, showBlocking);
+  }
+
+  /**
+   * @param {!SDK.DOMNode} node
+   * @return {!Promise<!SDK.RemoteObject>}
+   */
+  _windowObjectInNodeContext(node) {
+    return new Promise(windowObjectInNodeContext);
+
     /**
-     * @override
-     * @protected
-     * @return {!Promise.<?>}
+     * @param {function(?)} fulfill
+     * @param {function(*)} reject
      */
-    doUpdate: function()
-    {
-        if (this._lastRequestedNode) {
-            this._lastRequestedNode.target().runtimeAgent().releaseObjectGroup(WebInspector.EventListenersWidget._objectGroupName);
-            delete this._lastRequestedNode;
+    function windowObjectInNodeContext(fulfill, reject) {
+      var executionContexts = node.target().runtimeModel.executionContexts();
+      var context = null;
+      if (node.frameId()) {
+        for (var i = 0; i < executionContexts.length; ++i) {
+          var executionContext = executionContexts[i];
+          if (executionContext.frameId === node.frameId() && executionContext.isDefault)
+            context = executionContext;
         }
-        var node = WebInspector.context.flavor(WebInspector.DOMNode);
-        if (!node) {
-            this._eventListenersView.reset();
-            this._eventListenersView.addEmptyHolderIfNeeded();
-            return Promise.resolve();
-        }
-        this._lastRequestedNode = node;
-        var selectedNodeOnly = !this._showForAncestorsSetting.get();
-        var promises = [];
-        var listenersView = this._eventListenersView;
-        promises.push(node.resolveToObjectPromise(WebInspector.EventListenersWidget._objectGroupName));
-        if (!selectedNodeOnly) {
-            var currentNode = node.parentNode;
-            while (currentNode) {
-                promises.push(currentNode.resolveToObjectPromise(WebInspector.EventListenersWidget._objectGroupName));
-                currentNode = currentNode.parentNode;
-            }
-            promises.push(this._windowObjectInNodeContext(node));
-        }
-        return Promise.all(promises).then(this._eventListenersView.addObjects.bind(this._eventListenersView)).then(this._showFrameworkListenersChanged.bind(this));
-    },
+      } else {
+        context = executionContexts[0];
+      }
+      context.evaluate(
+          'self', Elements.EventListenersWidget._objectGroupName, false, true, false, false, false, fulfill);
+    }
+  }
 
-    /**
-     * @override
-     * @return {!Array<!WebInspector.ToolbarItem>}
-     */
-    toolbarItems: function()
-    {
-        return this._toolbarItems;
-    },
+  _eventListenersArrivedForTest() {
+  }
+};
 
-    /**
-     * @param {!Event} event
-     */
-    _onDispatchFilterTypeChanged: function(event)
-    {
-        this._dispatchFilterBySetting.set(event.target.value);
-    },
+Elements.EventListenersWidget.DispatchFilterBy = {
+  All: 'All',
+  Blocking: 'Blocking',
+  Passive: 'Passive'
+};
 
-    _showFrameworkListenersChanged: function()
-    {
-        var dispatchFilter = this._dispatchFilterBySetting.get();
-        var showPassive = dispatchFilter === WebInspector.EventListenersWidget.DispatchFilterBy.All || dispatchFilter === WebInspector.EventListenersWidget.DispatchFilterBy.Passive;
-        var showBlocking = dispatchFilter === WebInspector.EventListenersWidget.DispatchFilterBy.All || dispatchFilter === WebInspector.EventListenersWidget.DispatchFilterBy.Blocking;
-        this._eventListenersView.showFrameworkListeners(this._showFrameworkListenersSetting.get(), showPassive, showBlocking);
-    },
-
-    /**
-     * @param {!WebInspector.DOMNode} node
-     * @return {!Promise<!WebInspector.RemoteObject>}
-     */
-    _windowObjectInNodeContext: function(node)
-    {
-        return new Promise(windowObjectInNodeContext);
-
-        /**
-         * @param {function(?)} fulfill
-         * @param {function(*)} reject
-         */
-        function windowObjectInNodeContext(fulfill, reject)
-        {
-            var executionContexts = node.target().runtimeModel.executionContexts();
-            var context = null;
-            if (node.frameId()) {
-                for (var i = 0; i < executionContexts.length; ++i) {
-                    var executionContext = executionContexts[i];
-                    if (executionContext.frameId === node.frameId() && executionContext.isDefault)
-                        context = executionContext;
-                }
-            } else {
-                context = executionContexts[0];
-            }
-            context.evaluate("self", WebInspector.EventListenersWidget._objectGroupName, false, true, false, false, false, fulfill);
-        }
-    },
-
-    _eventListenersArrivedForTest: function()
-    {
-    },
-
-    __proto__: WebInspector.ThrottledWidget.prototype
-}
+Elements.EventListenersWidget._objectGroupName = 'event-listeners-panel';

@@ -22,6 +22,7 @@
 #include "net/quic/test_tools/quic_session_peer.h"
 #include "net/quic/test_tools/quic_spdy_session_peer.h"
 #include "net/quic/test_tools/quic_spdy_stream_peer.h"
+#include "net/quic/test_tools/quic_stream_peer.h"
 #include "net/quic/test_tools/quic_sustained_bandwidth_recorder_peer.h"
 #include "net/quic/test_tools/quic_test_utils.h"
 #include "net/test/gtest_util.h"
@@ -208,8 +209,7 @@ class QuicSimpleServerSessionTest
     session_->OnConfigNegotiated();
   }
 
-  QuicFlagSaver flags_;  // Save/restore all QUIC flag values.
-  StrictMock<MockQuicServerSessionVisitor> owner_;
+  StrictMock<MockQuicSessionVisitor> owner_;
   StrictMock<MockQuicCryptoServerStreamHelper> stream_helper_;
   MockQuicConnectionHelper helper_;
   MockAlarmFactory alarm_factory_;

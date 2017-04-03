@@ -18,6 +18,9 @@ BackgroundKeyboardHandler = function() {
   /** @type {number} @private */
   this.passThroughKeyUpCount_ = 0;
 
+  /** @type {Set} @private */
+  this.eatenKeyDowns_ = new Set();
+
   document.addEventListener('keydown', this.onKeyDown.bind(this), false);
   document.addEventListener('keyup', this.onKeyUp.bind(this), false);
 };
@@ -34,9 +37,11 @@ BackgroundKeyboardHandler.prototype = {
       return false;
 
     if (ChromeVoxState.instance.mode != ChromeVoxMode.CLASSIC &&
+        ChromeVoxState.instance.mode != ChromeVoxMode.NEXT_COMPAT &&
         !cvox.ChromeVoxKbHandler.basicKeyDownActionsListener(evt)) {
       evt.preventDefault();
       evt.stopPropagation();
+      this.eatenKeyDowns_.add(evt.keyCode);
     }
     Output.forceModeForNextSpeechUtterance(cvox.QueueMode.FLUSH);
     return false;
@@ -58,6 +63,13 @@ BackgroundKeyboardHandler.prototype = {
         this.passThroughKeyUpCount_++;
       }
     }
+
+    if (this.eatenKeyDowns_.has(evt.keyCode)) {
+      evt.preventDefault();
+      evt.stopPropagation();
+      this.eatenKeyDowns_.delete(evt.keyCode);
+    }
+
     return false;
   },
 
@@ -67,7 +79,8 @@ BackgroundKeyboardHandler.prototype = {
    * @param {ChromeVoxMode?} oldMode
    */
   onModeChanged: function(newMode, oldMode) {
-    if (newMode == ChromeVoxMode.CLASSIC) {
+    if (newMode == ChromeVoxMode.CLASSIC ||
+        newMode == ChromeVoxMode.NEXT_COMPAT) {
       chrome.accessibilityPrivate.setKeyboardListener(false, false);
     } else {
       chrome.accessibilityPrivate.setKeyboardListener(
@@ -75,12 +88,14 @@ BackgroundKeyboardHandler.prototype = {
     }
 
     if (newMode === ChromeVoxMode.NEXT ||
-        newMode === ChromeVoxMode.FORCE_NEXT) {
-      // Switching out of classic, compat, or uninitialized (on startup).
+        newMode === ChromeVoxMode.FORCE_NEXT ||
+        newMode === ChromeVoxMode.NEXT_COMPAT) {
+      // Switching out of classic, classic compat, or uninitialized
+      // (on startup).
       window['prefs'].switchToKeyMap('keymap_next');
     } else if (oldMode &&
         oldMode != ChromeVoxMode.CLASSIC &&
-        oldMode != ChromeVoxMode.COMPAT) {
+        oldMode != ChromeVoxMode.CLASSIC_COMPAT) {
       // Switching out of next. Intentionally do nothing when switching out of
       // an uninitialized |oldMode|.
       window['prefs'].switchToKeyMap('keymap_classic');

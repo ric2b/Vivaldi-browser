@@ -27,7 +27,8 @@
 #include "chromeos/login/auth/key.h"
 #include "chromeos/login/auth/stub_authenticator.h"
 #include "chromeos/login/auth/user_context.h"
-#include "chromeos/login/user_names.h"
+#include "components/session_manager/core/session_manager.h"
+#include "components/user_manager/user_names.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/test/test_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -150,6 +151,8 @@ IN_PROC_BROWSER_TEST_F(ScreenLockerTest, TestBasic) {
       content::NotificationService::AllSources());
   if (!tester->IsLocked())
     lock_state_observer.Wait();
+  EXPECT_EQ(session_manager::SessionState::LOCKED,
+            session_manager::SessionManager::Get()->session_state());
 
   // Test to make sure that the widget is actually appearing and is of
   // reasonable size, preventing a regression of
@@ -158,7 +161,7 @@ IN_PROC_BROWSER_TEST_F(ScreenLockerTest, TestBasic) {
   EXPECT_GT(lock_bounds.width(), 10);
   EXPECT_GT(lock_bounds.height(), 10);
 
-  UserContext user_context(login::StubAccountId());
+  UserContext user_context(user_manager::StubAccountId());
   user_context.SetKey(Key("pass"));
   tester->InjectStubUserContext(user_context);
   EXPECT_TRUE(tester->IsLocked());
@@ -173,6 +176,8 @@ IN_PROC_BROWSER_TEST_F(ScreenLockerTest, TestBasic) {
   EXPECT_EQ(
       1,
       fake_session_manager_client_->notify_lock_screen_shown_call_count());
+  EXPECT_EQ(session_manager::SessionState::ACTIVE,
+            session_manager::SessionManager::Get()->session_state());
 
   EXPECT_TRUE(VerifyLockScreenDismissed());
 }
@@ -215,7 +220,7 @@ IN_PROC_BROWSER_TEST_F(ScreenLockerTest, TestFullscreenExit) {
     EXPECT_FALSE(window_state->hide_shelf_when_fullscreen());
     EXPECT_TRUE(tester->IsLocked());
   }
-  UserContext user_context(login::StubAccountId());
+  UserContext user_context(user_manager::StubAccountId());
   user_context.SetKey(Key("pass"));
   tester->InjectStubUserContext(user_context);
   tester->EnterPassword("pass");

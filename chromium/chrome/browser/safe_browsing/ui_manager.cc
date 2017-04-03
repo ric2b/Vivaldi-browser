@@ -24,6 +24,7 @@
 #include "chrome/common/pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing_db/metadata.pb.h"
+#include "components/safe_browsing_db/safe_browsing_prefs.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/notification_service.h"
@@ -38,40 +39,96 @@ using content::BrowserThread;
 using content::NavigationEntry;
 using content::WebContents;
 using safe_browsing::HitReport;
+using safe_browsing::SBThreatType;
 
 namespace {
 
 const void* const kWhitelistKey = &kWhitelistKey;
 
-// A WhitelistUrlSet holds the set of URLs that have been whitelisted for a
-// specific WebContents, along with pending entries that are still undecided.
+// A WhitelistUrlSet holds the set of URLs that have been whitelisted
+// for a specific WebContents, along with pending entries that are still
+// undecided. Each URL is associated with the first SBThreatType that
+// was seen for that URL. The URLs in this set should come from
+// GetWhitelistUrl() or GetMainFrameWhitelistUrlForResource().
 class WhitelistUrlSet : public base::SupportsUserData::Data {
  public:
   WhitelistUrlSet() {}
 
-  bool Contains(const GURL url) {
-    return set_.find(url.GetWithEmptyPath()) != set_.end();
+  bool Contains(const GURL url, SBThreatType* threat_type) {
+    auto found = map_.find(url);
+    if (found == map_.end())
+      return false;
+    if (threat_type)
+      *threat_type = found->second;
+    return true;
   }
 
-  void Insert(const GURL url) {
-    set_.insert(url.GetWithEmptyPath());
-    pending_.erase(url.GetWithEmptyPath());
+  void RemovePending(const GURL& url) { pending_.erase(url); }
+
+  void Insert(const GURL url, SBThreatType threat_type) {
+    if (Contains(url, nullptr))
+      return;
+    map_[url] = threat_type;
+    RemovePending(url);
   }
 
-  bool ContainsPending(const GURL url) {
-    return pending_.find(url.GetWithEmptyPath()) != pending_.end();
+  bool ContainsPending(const GURL& url, SBThreatType* threat_type) {
+    auto found = pending_.find(url);
+    if (found == pending_.end())
+      return false;
+    if (threat_type)
+      *threat_type = found->second;
+    return true;
   }
 
-  void InsertPending(const GURL url) {
-    pending_.insert(url.GetWithEmptyPath());
+  void InsertPending(const GURL url, SBThreatType threat_type) {
+    if (ContainsPending(url, nullptr))
+      return;
+    pending_[url] = threat_type;
   }
 
  private:
-  std::set<GURL> set_;
-  std::set<GURL> pending_;
+  std::map<GURL, SBThreatType> map_;
+  std::map<GURL, SBThreatType> pending_;
 
   DISALLOW_COPY_AND_ASSIGN(WhitelistUrlSet);
 };
+
+// Returns the URL that should be used in a WhitelistUrlSet for the given
+// |resource|.
+GURL GetMainFrameWhitelistUrlForResource(
+    const safe_browsing::SafeBrowsingUIManager::UnsafeResource& resource) {
+  if (resource.is_subresource) {
+    NavigationEntry* entry = resource.GetNavigationEntryForResource();
+    if (!entry)
+      return GURL();
+    return entry->GetURL().GetWithEmptyPath();
+  }
+  return resource.url.GetWithEmptyPath();
+}
+
+// Returns the URL that should be used in a WhitelistUrlSet for the
+// resource loaded from |url| on a navigation |entry|.
+GURL GetWhitelistUrl(const GURL& url,
+                     bool is_subresource,
+                     NavigationEntry* entry) {
+  if (is_subresource) {
+    if (!entry)
+      return GURL();
+    return entry->GetURL().GetWithEmptyPath();
+  }
+  return url.GetWithEmptyPath();
+}
+
+WhitelistUrlSet* GetOrCreateWhitelist(content::WebContents* web_contents) {
+  WhitelistUrlSet* site_list =
+      static_cast<WhitelistUrlSet*>(web_contents->GetUserData(kWhitelistKey));
+  if (!site_list) {
+    site_list = new WhitelistUrlSet;
+    web_contents->SetUserData(kWhitelistKey, site_list);
+  }
+  return site_list;
+}
 
 }  // namespace
 
@@ -81,6 +138,7 @@ namespace safe_browsing {
 
 SafeBrowsingUIManager::UnsafeResource::UnsafeResource()
     : is_subresource(false),
+      is_subframe(false),
       threat_type(SB_THREAT_TYPE_SAFE),
       threat_source(safe_browsing::ThreatSource::UNKNOWN) {}
 
@@ -151,7 +209,9 @@ void SafeBrowsingUIManager::LogPauseDelay(base::TimeDelta time) {
 
 void SafeBrowsingUIManager::OnBlockingPageDone(
     const std::vector<UnsafeResource>& resources,
-    bool proceed) {
+    bool proceed,
+    content::WebContents* web_contents,
+    const GURL& main_frame_url) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   for (const auto& resource : resources) {
     if (!resource.callback.is_null()) {
@@ -160,8 +220,17 @@ void SafeBrowsingUIManager::OnBlockingPageDone(
           FROM_HERE, base::Bind(resource.callback, proceed));
     }
 
-    if (proceed)
-      AddToWhitelistUrlSet(resource, false /* Pending -> permanent */);
+    GURL whitelist_url = GetWhitelistUrl(
+        main_frame_url, false /* is subresource */,
+        nullptr /* no navigation entry needed for main resource */);
+    if (proceed) {
+      AddToWhitelistUrlSet(whitelist_url, web_contents,
+                           false /* Pending -> permanent */,
+                           resource.threat_type);
+    } else if (web_contents) {
+      // |web_contents| doesn't exist if the tab has been closed.
+      RemoveFromPendingWhitelistUrlSet(whitelist_url, web_contents);
+    }
   }
 }
 
@@ -195,7 +264,8 @@ void SafeBrowsingUIManager::DisplayBlockingPage(
   if (!web_contents) {
     std::vector<UnsafeResource> resources;
     resources.push_back(resource);
-    OnBlockingPageDone(resources, false);
+    OnBlockingPageDone(resources, false, web_contents,
+                       GetMainFrameWhitelistUrlForResource(resource));
     return;
   }
 
@@ -239,10 +309,9 @@ void SafeBrowsingUIManager::DisplayBlockingPage(
 
     Profile* profile =
         Profile::FromBrowserContext(web_contents->GetBrowserContext());
-    hit_report.is_extended_reporting =
-        profile &&
-        profile->GetPrefs()->GetBoolean(
-            prefs::kSafeBrowsingExtendedReportingEnabled);
+    hit_report.extended_reporting_level =
+        profile ? GetExtendedReportingLevel(*profile->GetPrefs())
+                : SBER_LEVEL_OFF;
     hit_report.is_metrics_reporting_active =
         ChromeMetricsServiceAccessor::IsMetricsAndCrashReportingEnabled();
 
@@ -250,9 +319,13 @@ void SafeBrowsingUIManager::DisplayBlockingPage(
   }
 
   if (resource.threat_type != SB_THREAT_TYPE_SAFE) {
-    FOR_EACH_OBSERVER(Observer, observer_list_, OnSafeBrowsingHit(resource));
+    for (Observer& observer : observer_list_)
+      observer.OnSafeBrowsingHit(resource);
   }
-  AddToWhitelistUrlSet(resource, true /* A decision is now pending */);
+  AddToWhitelistUrlSet(GetMainFrameWhitelistUrlForResource(resource),
+                       resource.web_contents_getter.Run(),
+                       true /* A decision is now pending */,
+                       resource.threat_type);
   SafeBrowsingBlockingPage::ShowBlockingPage(this, resource);
 }
 
@@ -264,7 +337,7 @@ void SafeBrowsingUIManager::MaybeReportSafeBrowsingHit(
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   // Send report if user opted-in extended reporting.
-  if (hit_report.is_extended_reporting) {
+  if (hit_report.extended_reporting_level != SBER_LEVEL_OFF) {
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
         base::Bind(&SafeBrowsingUIManager::ReportSafeBrowsingHitOnIOThread,
@@ -318,6 +391,12 @@ void SafeBrowsingUIManager::RemoveObserver(Observer* observer) {
   observer_list_.RemoveObserver(observer);
 }
 
+// Static.
+void SafeBrowsingUIManager::CreateWhitelistForTesting(
+    content::WebContents* web_contents) {
+  GetOrCreateWhitelist(web_contents);
+}
+
 void SafeBrowsingUIManager::ReportInvalidCertificateChainOnIOThread(
     const std::string& serialized_report) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
@@ -359,36 +438,70 @@ void SafeBrowsingUIManager::SendSerializedThreatDetails(
   }
 }
 
-// Record this domain in the current WebContents as either whitelisted or
+// Record this domain in the given WebContents as either whitelisted or
 // pending whitelisting (if an interstitial is currently displayed). If an
 // existing WhitelistUrlSet does not yet exist, create a new WhitelistUrlSet.
-void SafeBrowsingUIManager::AddToWhitelistUrlSet(const UnsafeResource& resource,
-                                                 bool pending) {
+void SafeBrowsingUIManager::AddToWhitelistUrlSet(
+    const GURL& whitelist_url,
+    content::WebContents* web_contents,
+    bool pending,
+    SBThreatType threat_type) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  WebContents* web_contents = resource.web_contents_getter.Run();
-  WhitelistUrlSet* site_list =
-      static_cast<WhitelistUrlSet*>(web_contents->GetUserData(kWhitelistKey));
-  if (!site_list) {
-    site_list = new WhitelistUrlSet;
-    web_contents->SetUserData(kWhitelistKey, site_list);
-  }
+  // A WebContents might not exist if the tab has been closed.
+  if (!web_contents)
+    return;
 
-  GURL whitelisted_url;
-  if (resource.is_subresource) {
-    NavigationEntry* entry = resource.GetNavigationEntryForResource();
-    if (!entry)
-      return;
-    whitelisted_url = entry->GetURL();
-  } else {
-    whitelisted_url = resource.url;
-  }
+  WhitelistUrlSet* site_list = GetOrCreateWhitelist(web_contents);
+
+  if (whitelist_url.is_empty())
+    return;
 
   if (pending) {
-    site_list->InsertPending(whitelisted_url);
+    site_list->InsertPending(whitelist_url, threat_type);
   } else {
-    site_list->Insert(whitelisted_url);
+    site_list->Insert(whitelist_url, threat_type);
   }
+
+  // Notify security UI that security state has changed.
+  web_contents->DidChangeVisibleSecurityState();
+}
+
+void SafeBrowsingUIManager::RemoveFromPendingWhitelistUrlSet(
+    const GURL& whitelist_url,
+    content::WebContents* web_contents) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+  // A WebContents might not exist if the tab has been closed.
+  if (!web_contents)
+    return;
+
+  // Use |web_contents| rather than |resource.web_contents_getter|
+  // here. By this point, a "Back" navigation could have already been
+  // committed, so the page loading |resource| might be gone and
+  // |web_contents_getter| may no longer be valid.
+  WhitelistUrlSet* site_list =
+      static_cast<WhitelistUrlSet*>(web_contents->GetUserData(kWhitelistKey));
+
+  if (whitelist_url.is_empty())
+    return;
+
+  // Note that this function does not DCHECK that |whitelist_url|
+  // appears in the pending whitelist. In the common case, it's expected
+  // that a URL is in the pending whitelist when it is removed, but it's
+  // not always the case. For example, if there are several blocking
+  // pages queued up for different resources on the same page, and the
+  // user goes back to dimiss the first one, the subsequent blocking
+  // pages get dismissed as well (as if the user had clicked "Back to
+  // safety" on each of them). In this case, the first dismissal will
+  // remove the main-frame URL from the pending whitelist, so the
+  // main-frame URL will have already been removed when the subsequent
+  // blocking pages are dismissed.
+  if (site_list->ContainsPending(whitelist_url, nullptr))
+    site_list->RemovePending(whitelist_url);
+
+  // Notify security UI that security state has changed.
+  web_contents->DidChangeVisibleSecurityState();
 }
 
 bool SafeBrowsingUIManager::IsWhitelisted(const UnsafeResource& resource) {
@@ -396,9 +509,10 @@ bool SafeBrowsingUIManager::IsWhitelisted(const UnsafeResource& resource) {
   if (resource.is_subresource) {
     entry = resource.GetNavigationEntryForResource();
   }
+  SBThreatType unused_threat_type;
   return IsUrlWhitelistedOrPendingForWebContents(
       resource.url, resource.is_subresource, entry,
-      resource.web_contents_getter.Run(), true);
+      resource.web_contents_getter.Run(), true, &unused_threat_type);
 }
 
 // Check if the user has already seen and/or ignored a SB warning for this
@@ -408,29 +522,31 @@ bool SafeBrowsingUIManager::IsUrlWhitelistedOrPendingForWebContents(
     bool is_subresource,
     NavigationEntry* entry,
     content::WebContents* web_contents,
-    bool whitelist_only) {
+    bool whitelist_only,
+    SBThreatType* threat_type) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  GURL lookup_url;
-  if (is_subresource) {
-    if (!entry)
-      return false;
-    lookup_url = entry->GetURL();
-  } else {
-    lookup_url = url;
-  }
+  GURL lookup_url = GetWhitelistUrl(url, is_subresource, entry);
+  if (lookup_url.is_empty())
+    return false;
 
   WhitelistUrlSet* site_list =
       static_cast<WhitelistUrlSet*>(web_contents->GetUserData(kWhitelistKey));
   if (!site_list)
     return false;
 
-  bool whitelisted = site_list->Contains(lookup_url);
+  bool whitelisted = site_list->Contains(lookup_url, threat_type);
   if (whitelist_only) {
     return whitelisted;
   } else {
-    return whitelisted || site_list->ContainsPending(lookup_url);
+    return whitelisted || site_list->ContainsPending(lookup_url, threat_type);
   }
+}
+
+// Static.
+GURL SafeBrowsingUIManager::GetMainFrameWhitelistUrlForResourceForTesting(
+    const safe_browsing::SafeBrowsingUIManager::UnsafeResource& resource) {
+  return GetMainFrameWhitelistUrlForResource(resource);
 }
 
 }  // namespace safe_browsing

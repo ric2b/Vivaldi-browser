@@ -12,12 +12,13 @@
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 
-namespace media {
 namespace midi {
 
 namespace {
 
 using Sample = base::HistogramBase::Sample;
+using midi::mojom::PortState;
+using midi::mojom::Result;
 
 // If many users have more devices, this number will be increased.
 // But the number is expected to be big enough for now.
@@ -198,7 +199,7 @@ void MidiManager::AddOutputPort(const MidiPortInfo& info) {
     client->AddOutputPort(info);
 }
 
-void MidiManager::SetInputPortState(uint32_t port_index, MidiPortState state) {
+void MidiManager::SetInputPortState(uint32_t port_index, PortState state) {
   base::AutoLock auto_lock(lock_);
   DCHECK_LT(port_index, input_ports_.size());
   input_ports_[port_index].state = state;
@@ -206,7 +207,7 @@ void MidiManager::SetInputPortState(uint32_t port_index, MidiPortState state) {
     client->SetInputPortState(port_index, state);
 }
 
-void MidiManager::SetOutputPortState(uint32_t port_index, MidiPortState state) {
+void MidiManager::SetOutputPortState(uint32_t port_index, PortState state) {
   base::AutoLock auto_lock(lock_);
   DCHECK_LT(port_index, output_ports_.size());
   output_ports_[port_index].state = state;
@@ -270,4 +271,3 @@ void MidiManager::ShutdownOnSessionThread() {
 }
 
 }  // namespace midi
-}  // namespace media

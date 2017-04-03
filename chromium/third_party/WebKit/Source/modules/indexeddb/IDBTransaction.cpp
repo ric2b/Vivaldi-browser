@@ -27,6 +27,7 @@
 
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ScriptState.h"
 #include "bindings/core/v8/V8PerIsolateData.h"
 #include "core/dom/DOMException.h"
 #include "core/dom/ExceptionCode.h"
@@ -55,22 +56,20 @@ IDBTransaction* IDBTransaction::createNonVersionChange(
   DCHECK_NE(mode, WebIDBTransactionModeVersionChange);
   DCHECK(!scope.isEmpty()) << "Non-version transactions should operate on a "
                               "well-defined set of stores";
-  IDBOpenDBRequest* openDBRequest = nullptr;
-  IDBTransaction* transaction = new IDBTransaction(
-      scriptState, id, scope, mode, db, openDBRequest, IDBDatabaseMetadata());
+  IDBTransaction* transaction =
+      new IDBTransaction(scriptState, id, scope, mode, db);
   transaction->suspendIfNeeded();
   return transaction;
 }
 
 IDBTransaction* IDBTransaction::createVersionChange(
-    ScriptState* scriptState,
+    ExecutionContext* executionContext,
     int64_t id,
     IDBDatabase* db,
     IDBOpenDBRequest* openDBRequest,
     const IDBDatabaseMetadata& oldMetadata) {
-  IDBTransaction* transaction = new IDBTransaction(
-      scriptState, id, HashSet<String>(), WebIDBTransactionModeVersionChange,
-      db, openDBRequest, oldMetadata);
+  IDBTransaction* transaction =
+      new IDBTransaction(executionContext, id, db, openDBRequest, oldMetadata);
   transaction->suspendIfNeeded();
   return transaction;
 }
@@ -102,41 +101,50 @@ IDBTransaction::IDBTransaction(ScriptState* scriptState,
                                int64_t id,
                                const HashSet<String>& scope,
                                WebIDBTransactionMode mode,
-                               IDBDatabase* db,
-                               IDBOpenDBRequest* openDBRequest,
-                               const IDBDatabaseMetadata& oldMetadata)
+                               IDBDatabase* db)
     : ActiveScriptWrappable(this),
       ActiveDOMObject(scriptState->getExecutionContext()),
       m_id(id),
       m_database(db),
-      m_openDBRequest(openDBRequest),
       m_mode(mode),
-      m_scope(scope),
+      m_scope(scope) {
+  DCHECK(m_database);
+  DCHECK(!m_scope.isEmpty()) << "Non-versionchange transactions must operate "
+                                "on a well-defined set of stores";
+  DCHECK(m_mode == WebIDBTransactionModeReadOnly ||
+         m_mode == WebIDBTransactionModeReadWrite)
+      << "Invalid transaction mode";
+
+  DCHECK_EQ(m_state, Active);
+  V8PerIsolateData::from(scriptState->isolate())
+      ->addEndOfScopeTask(DeactivateTransactionTask::create(this));
+
+  m_database->transactionCreated(this);
+}
+
+IDBTransaction::IDBTransaction(ExecutionContext* executionContext,
+                               int64_t id,
+                               IDBDatabase* db,
+                               IDBOpenDBRequest* openDBRequest,
+                               const IDBDatabaseMetadata& oldMetadata)
+    : ActiveScriptWrappable(this),
+      ActiveDOMObject(executionContext),
+      m_id(id),
+      m_database(db),
+      m_openDBRequest(openDBRequest),
+      m_mode(WebIDBTransactionModeVersionChange),
+      m_state(Inactive),
       m_oldDatabaseMetadata(oldMetadata) {
   DCHECK(m_database);
+  DCHECK(m_openDBRequest);
+  DCHECK(m_scope.isEmpty());
 
-  if (isVersionChange()) {
-    DCHECK(scope.isEmpty());
-
-    // Not active until the callback.
-    m_state = Inactive;
-  } else {
-    DCHECK(!scope.isEmpty()) << "Non-versionchange transactions must operate "
-                                "on a well-defined set of stores";
-    DCHECK(m_mode == WebIDBTransactionModeReadOnly ||
-           m_mode == WebIDBTransactionModeReadWrite)
-        << "Invalid transaction mode";
-  }
-
-  if (m_state == Active)
-    V8PerIsolateData::from(scriptState->isolate())
-        ->addEndOfScopeTask(DeactivateTransactionTask::create(this));
   m_database->transactionCreated(this);
 }
 
 IDBTransaction::~IDBTransaction() {
-  DCHECK(m_state == Finished || m_contextStopped);
-  DCHECK(m_requestList.isEmpty() || m_contextStopped);
+  DCHECK(m_state == Finished || !getExecutionContext());
+  DCHECK(m_requestList.isEmpty() || !getExecutionContext());
 }
 
 DEFINE_TRACE(IDBTransaction) {
@@ -329,7 +337,7 @@ void IDBTransaction::abort(ExceptionState& exceptionState) {
 
   m_state = Finishing;
 
-  if (m_contextStopped)
+  if (!getExecutionContext())
     return;
 
   abortOutstandingRequests();
@@ -353,7 +361,7 @@ void IDBTransaction::unregisterRequest(IDBRequest* request) {
 
 void IDBTransaction::onAbort(DOMException* error) {
   IDB_TRACE("IDBTransaction::onAbort");
-  if (m_contextStopped) {
+  if (!getExecutionContext()) {
     finished();
     return;
   }
@@ -381,7 +389,7 @@ void IDBTransaction::onAbort(DOMException* error) {
 
 void IDBTransaction::onComplete() {
   IDB_TRACE("IDBTransaction::onComplete");
-  if (m_contextStopped) {
+  if (!getExecutionContext()) {
     finished();
     return;
   }
@@ -400,7 +408,7 @@ bool IDBTransaction::hasPendingActivity() const {
   // can get a handle to us or any child request object and any of those have
   // event listeners. This is  in order to handle user generated events
   // properly.
-  return m_hasPendingActivity && !m_contextStopped;
+  return m_hasPendingActivity && getExecutionContext();
 }
 
 WebIDBTransactionMode IDBTransaction::stringToMode(const String& modeString) {
@@ -456,7 +464,7 @@ ExecutionContext* IDBTransaction::getExecutionContext() const {
 
 DispatchEventResult IDBTransaction::dispatchEventInternal(Event* event) {
   IDB_TRACE("IDBTransaction::dispatchEvent");
-  if (m_contextStopped || !getExecutionContext()) {
+  if (!getExecutionContext()) {
     m_state = Finished;
     return DispatchEventResult::CanceledBeforeDispatch;
   }
@@ -486,20 +494,11 @@ DispatchEventResult IDBTransaction::dispatchEventInternal(Event* event) {
   return dispatchResult;
 }
 
-void IDBTransaction::contextDestroyed() {
-  if (m_contextStopped)
-    return;
-
-  m_contextStopped = true;
-
-  abort(IGNORE_EXCEPTION);
-}
-
 void IDBTransaction::enqueueEvent(Event* event) {
   DCHECK_NE(m_state, Finished)
       << "A finished transaction tried to enqueue an event of type "
       << event->type() << ".";
-  if (m_contextStopped || !getExecutionContext())
+  if (!getExecutionContext())
     return;
 
   EventQueue* eventQueue = getExecutionContext()->getEventQueue();

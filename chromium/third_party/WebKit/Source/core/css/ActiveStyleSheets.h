@@ -12,9 +12,11 @@ namespace blink {
 
 class CSSStyleSheet;
 class RuleSet;
+class StyleEngine;
+class TreeScope;
 
-using ActiveStyleSheetVector =
-    HeapVector<std::pair<Member<CSSStyleSheet>, Member<RuleSet>>>;
+using ActiveStyleSheet = std::pair<Member<CSSStyleSheet>, Member<RuleSet>>;
+using ActiveStyleSheetVector = HeapVector<ActiveStyleSheet>;
 
 enum ActiveSheetsChange {
   NoActiveSheetsChanged,  // Nothing changed.

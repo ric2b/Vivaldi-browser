@@ -53,13 +53,13 @@ class AudioBuffer;
 class AudioBufferCallback;
 class AudioBufferSourceNode;
 class AudioListener;
-class AudioSummingJunction;
+class BaseAudioContextTest;
 class BiquadFilterNode;
 class ChannelMergerNode;
 class ChannelSplitterNode;
+class ConstantSourceNode;
 class ConvolverNode;
 class DelayNode;
-class Dictionary;
 class Document;
 class DynamicsCompressorNode;
 class ExceptionState;
@@ -67,6 +67,7 @@ class GainNode;
 class HTMLMediaElement;
 class IIRFilterNode;
 class MediaElementAudioSourceNode;
+class MediaStream;
 class MediaStreamAudioDestinationNode;
 class MediaStreamAudioSourceNode;
 class OscillatorNode;
@@ -169,6 +170,7 @@ class MODULES_EXPORT BaseAudioContext : public EventTargetWithInlineData,
   // The AudioNode create methods are called on the main thread (from
   // JavaScript).
   AudioBufferSourceNode* createBufferSource(ExceptionState&);
+  ConstantSourceNode* createConstantSource(ExceptionState&);
   MediaElementAudioSourceNode* createMediaElementSource(HTMLMediaElement*,
                                                         ExceptionState&);
   MediaStreamAudioSourceNode* createMediaStreamSource(MediaStream*,
@@ -297,6 +299,11 @@ class MODULES_EXPORT BaseAudioContext : public EventTargetWithInlineData,
   // initialized internally if necessary.
   PeriodicWave* periodicWave(int type);
 
+  // For metrics purpose, records when start() is called on a
+  // AudioScheduledSourceHandler or a AudioBufferSourceHandler without a user
+  // gesture while the AudioContext requires a user gesture.
+  void maybeRecordStartAttempt();
+
  protected:
   explicit BaseAudioContext(Document*);
   BaseAudioContext(Document*,
@@ -340,6 +347,23 @@ class MODULES_EXPORT BaseAudioContext : public EventTargetWithInlineData,
   bool isAllowedToStart() const;
 
  private:
+  friend class BaseAudioContextTest;
+
+  // Do not change the order of this enum, it is used for metrics.
+  enum AutoplayStatus {
+    // The AudioContext failed to activate because of user gesture requirements.
+    AutoplayStatusFailed = 0,
+    // Same as AutoplayStatusFailed but start() on a node was called with a user
+    // gesture.
+    AutoplayStatusFailedWithStart = 1,
+    // The AudioContext had user gesture requirements and was able to activate
+    // with a user gesture.
+    AutoplayStatusSucceeded = 2,
+
+    // Keep at the end.
+    AutoplayStatusCount
+  };
+
   bool m_isCleared;
   void clear();
 
@@ -381,6 +405,9 @@ class MODULES_EXPORT BaseAudioContext : public EventTargetWithInlineData,
   // resolvers.
   virtual void rejectPendingResolvers();
 
+  // Record the current autoplay status and clear it.
+  void recordAutoplayStatus();
+
   // True if we're in the process of resolving promises for resume().  Resolving
   // can take some time and the audio context process loop is very fast, so we
   // don't want to call resolve an excessive number of times.
@@ -420,6 +447,8 @@ class MODULES_EXPORT BaseAudioContext : public EventTargetWithInlineData,
   // This is considering 32 is large enough for multiple channels audio.
   // It is somewhat arbitrary and could be increased if necessary.
   enum { MaxNumberOfChannels = 32 };
+
+  Optional<AutoplayStatus> m_autoplayStatus;
 };
 
 }  // namespace blink

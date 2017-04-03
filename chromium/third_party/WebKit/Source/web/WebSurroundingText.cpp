@@ -58,6 +58,8 @@ void WebSurroundingText::initialize(const WebNode& webNode,
   if (!node->layoutObject())
     return;
 
+  // TODO(xiaochengh): The followinng SurroundingText can hold a null Range,
+  // in which case we should prevent it from being stored in |m_private|.
   m_private.reset(new SurroundingText(
       createVisiblePosition(node->layoutObject()->positionForPoint(
                                 static_cast<IntPoint>(nodePoint)))
@@ -69,9 +71,17 @@ void WebSurroundingText::initialize(const WebNode& webNode,
 void WebSurroundingText::initializeFromCurrentSelection(WebLocalFrame* frame,
                                                         size_t maxLength) {
   LocalFrame* webFrame = toWebLocalFrameImpl(frame)->frame();
+
+  // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
+  // needs to be audited.  See http://crbug.com/590369 for more details.
+  webFrame->document()->updateStyleAndLayoutIgnorePendingStylesheets();
+
   if (Range* range = createRange(
-          webFrame->selection().selection().toNormalizedEphemeralRange()))
+          webFrame->selection().selection().toNormalizedEphemeralRange())) {
+    // TODO(xiaochengh): The followinng SurroundingText can hold a null Range,
+    // in which case we should prevent it from being stored in |m_private|.
     m_private.reset(new SurroundingText(*range, maxLength));
+  }
 }
 
 WebString WebSurroundingText::textContent() const {

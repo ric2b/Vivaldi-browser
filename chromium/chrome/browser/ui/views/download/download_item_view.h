@@ -25,6 +25,7 @@
 #include "base/task/cancelable_task_tracker.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
+#include "chrome/browser/download/download_commands.h"
 #include "chrome/browser/download/download_item_model.h"
 #include "chrome/browser/icon_manager.h"
 #include "content/public/browser/download_item.h"
@@ -84,6 +85,12 @@ class DownloadItemView : public views::InkDropHostView,
   // Returns the DownloadItem model object belonging to this item.
   content::DownloadItem* download() { return model_.download(); }
 
+  // Submits download to download feedback service if the user has approved and
+  // the download is suitable for submission, then apply |download_command|.
+  // If user hasn't seen SBER opt-in text before, show SBER opt-in dialog first.
+  void MaybeSubmitDownloadToFeedbackService(
+      DownloadCommands::Command download_command);
+
   // DownloadItem::Observer methods
   void OnDownloadUpdated(content::DownloadItem* download) override;
   void OnDownloadOpened(content::DownloadItem* download) override;
@@ -99,11 +106,12 @@ class DownloadItemView : public views::InkDropHostView,
   bool OnKeyPressed(const ui::KeyEvent& event) override;
   bool GetTooltipText(const gfx::Point& p,
                       base::string16* tooltip) const override;
-  void GetAccessibleState(ui::AXViewState* state) override;
+  void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
   void OnThemeChanged() override;
 
   // Overridden from view::InkDropHostView:
   void AddInkDropLayer(ui::Layer* ink_drop_layer) override;
+  std::unique_ptr<views::InkDrop> CreateInkDrop() override;
   std::unique_ptr<views::InkDropRipple> CreateInkDropRipple() const override;
   std::unique_ptr<views::InkDropHighlight> CreateInkDropHighlight()
       const override;
@@ -130,6 +138,9 @@ class DownloadItemView : public views::InkDropHostView,
   void OnBlur() override;
 
  private:
+  FRIEND_TEST_ALL_PREFIXES(DownloadItemViewDangerousDownloadLabelTest,
+                           AdjustTextAndGetSize);
+
   enum State { NORMAL = 0, HOT, PUSHED };
   class DropDownButton;
 
@@ -142,13 +153,16 @@ class DownloadItemView : public views::InkDropHostView,
   void OpenDownload();
 
   // Submits the downloaded file to the safebrowsing download feedback service.
-  // Returns whether submission was successful. On successful submission,
-  // |this| and the DownloadItem will have been deleted.
-  bool SubmitDownloadToFeedbackService();
+  // Returns whether submission was successful. Applies |download_command|, if
+  // submission fails.
+  bool SubmitDownloadToFeedbackService(
+      DownloadCommands::Command download_command);
 
   // If the user has |enabled| uploading, calls SubmitDownloadToFeedbackService.
-  // Otherwise, it simply removes the DownloadItem without uploading.
-  void PossiblySubmitDownloadToFeedbackService(bool enabled);
+  // Otherwise, apply |download_command|.
+  void SubmitDownloadWhenFeedbackServiceEnabled(
+      DownloadCommands::Command download_command,
+      bool feedback_enabled);
 
   // This function calculates the vertical coordinate to draw the file name text
   // relative to local bounds.
@@ -188,7 +202,7 @@ class DownloadItemView : public views::InkDropHostView,
   // Reverts from dangerous mode to normal download mode.
   void ClearWarningDialog();
 
-  // Start displaying the dangerous download warning or the malicious download
+  // Starts displaying the dangerous download warning or the malicious download
   // warning.
   void ShowWarningDialog();
 
@@ -204,6 +218,12 @@ class DownloadItemView : public views::InkDropHostView,
   // lines.  The size is computed only the first time this method is invoked
   // and simply returned on subsequent calls.
   void SizeLabelToMinWidth();
+
+  // Given a multiline |label|, decides whether it should be displayed on one
+  // line (if short), or broken across two lines.  In the latter case,
+  // linebreaks near the middle of the string and sets the label's text
+  // accordingly.  Returns the preferred size for the label.
+  static gfx::Size AdjustTextAndGetSize(views::Label* label);
 
   // Reenables the item after it has been disabled when a user clicked it to
   // open the downloaded file.

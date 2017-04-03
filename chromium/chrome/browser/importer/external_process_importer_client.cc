@@ -18,9 +18,9 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/utility_process_host.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "importer/vivaldi_profile_import_process_messages.h"
 
 #include "app/vivaldi_resources.h"
+#include "importer/vivaldi_profile_import_process_messages.h"
 
 using content::BrowserThread;
 using content::UtilityProcessHost;

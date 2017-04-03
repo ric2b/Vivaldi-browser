@@ -15,6 +15,7 @@
 #include "base/callback_forward.h"
 #include "base/memory/ref_counted.h"
 #include "base/version.h"
+#include "components/update_client/update_client_errors.h"
 
 // The UpdateClient class is a facade with a simple interface. The interface
 // exposes a few APIs to install a CRX or update a group of CRXs.
@@ -140,18 +141,25 @@ class FilePath;
 namespace update_client {
 
 class Configurator;
+enum class Error;
 struct CrxUpdateItem;
 
-enum Error {
-  ERROR_UPDATE_INVALID_ARGUMENT = -1,
-  ERROR_UPDATE_IN_PROGRESS = 1,
-  ERROR_UPDATE_CANCELED = 2,
-  ERROR_UPDATE_RETRY_LATER = 3,
-};
+// Called when a non-blocking call in this module completes.
+using Callback = base::Callback<void(Error error)>;
 
 // Defines an interface for a generic CRX installer.
 class CrxInstaller : public base::RefCountedThreadSafe<CrxInstaller> {
  public:
+  // Contains the result of the Install operation.
+  struct Result {
+    explicit Result(int error, int extended_error = 0)
+        : error(error), extended_error(extended_error) {}
+    explicit Result(InstallError error, int extended_error = 0)
+        : error(static_cast<int>(error)), extended_error(extended_error) {}
+    int error = 0;  // 0 indicates that install has been successful.
+    int extended_error = 0;
+  };
+
   // Called on the main thread when there was a problem unpacking or
   // verifying the CRX. |error| is a non-zero value which is only meaningful
   // to the caller.
@@ -162,8 +170,8 @@ class CrxInstaller : public base::RefCountedThreadSafe<CrxInstaller> {
   // as a json dictionary.|unpack_path| contains the temporary directory
   // with all the unpacked CRX files.
   // This method may be called from a thread other than the main thread.
-  virtual bool Install(const base::DictionaryValue& manifest,
-                       const base::FilePath& unpack_path) = 0;
+  virtual Result Install(const base::DictionaryValue& manifest,
+                         const base::FilePath& unpack_path) = 0;
 
   // Sets |installed_file| to the full path to the installed |file|. |file| is
   // the filename of the file in this CRX. Returns false if this is
@@ -237,7 +245,6 @@ class UpdateClient : public base::RefCounted<UpdateClient> {
   using CrxDataCallback =
       base::Callback<void(const std::vector<std::string>& ids,
                           std::vector<CrxComponent>* components)>;
-  using CompletionCallback = base::Callback<void(int error)>;
 
   // Defines an interface to observe the UpdateClient. It provides
   // notifications when state changes occur for the service itself or for the
@@ -290,8 +297,8 @@ class UpdateClient : public base::RefCounted<UpdateClient> {
   // the observers are being notified.
   virtual void RemoveObserver(Observer* observer) = 0;
 
-  // Installs the specified CRX. Calls back on |completion_callback| after the
-  // update has been handled. The |error| parameter of the |completion_callback|
+  // Installs the specified CRX. Calls back on |callback| after the
+  // update has been handled. The |error| parameter of the |callback|
   // contains an error code in the case of a run-time error, or 0 if the
   // install has been handled successfully. Overlapping calls of this function
   // are executed concurrently, as long as the id parameter is different,
@@ -302,7 +309,7 @@ class UpdateClient : public base::RefCounted<UpdateClient> {
   // queued up.
   virtual void Install(const std::string& id,
                        const CrxDataCallback& crx_data_callback,
-                       const CompletionCallback& completion_callback) = 0;
+                       const Callback& callback) = 0;
 
   // Updates the specified CRXs. Calls back on |crx_data_callback| before the
   // update is attempted to give the caller the opportunity to provide the
@@ -313,7 +320,7 @@ class UpdateClient : public base::RefCounted<UpdateClient> {
   // installs are running.
   virtual void Update(const std::vector<std::string>& ids,
                       const CrxDataCallback& crx_data_callback,
-                      const CompletionCallback& completion_callback) = 0;
+                      const Callback& callback) = 0;
 
   // Sends an uninstall ping for the CRX identified by |id| and |version|. The
   // |reason| parameter is defined by the caller. The current implementation of

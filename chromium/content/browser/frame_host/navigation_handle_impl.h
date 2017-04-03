@@ -8,7 +8,11 @@
 #include "content/public/browser/navigation_handle.h"
 
 #include <stddef.h>
+
+#include <memory>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "base/callback.h"
 #include "base/macros.h"
@@ -17,6 +21,7 @@
 #include "content/browser/frame_host/frame_tree_node.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/common/content_export.h"
+#include "content/public/browser/global_request_id.h"
 #include "content/public/browser/navigation_data.h"
 #include "content/public/browser/navigation_throttle.h"
 #include "content/public/browser/ssl_status.h"
@@ -76,7 +81,7 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
       const GURL& url,
       FrameTreeNode* frame_tree_node,
       bool is_renderer_initiated,
-      bool is_synchronous,
+      bool is_same_page,
       bool is_srcdoc,
       const base::TimeTicks& navigation_start,
       int pending_nav_entry_id,
@@ -85,10 +90,10 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
 
   // NavigationHandle implementation:
   const GURL& GetURL() override;
+  SiteInstance* GetStartingSiteInstance() override;
   bool IsInMainFrame() override;
   bool IsParentMainFrame() override;
   bool IsRendererInitiated() override;
-  bool IsSynchronousNavigation() override;
   bool IsSrcdoc() override;
   bool WasServerRedirect() override;
   int GetFrameTreeNodeId() override;
@@ -105,6 +110,7 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
   bool HasCommitted() override;
   bool IsErrorPage() override;
   const net::HttpResponseHeaders* GetResponseHeaders() override;
+  net::HttpResponseInfo::ConnectionInfo GetConnectionInfo() override;
   void Resume() override;
   void CancelDeferredNavigation(
       NavigationThrottle::ThrottleCheckResult result) override;
@@ -126,6 +132,9 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
       const std::string& raw_response_header) override;
   void CallDidCommitNavigationForTesting(const GURL& url) override;
   bool WasStartedFromContextMenu() const override;
+  const GURL& GetSearchableFormURL() override;
+  const std::string& GetSearchableFormEncoding() override;
+  const GlobalRequestID& GetGlobalRequestID() override;
 
   NavigationData* GetNavigationData() override;
 
@@ -215,6 +224,7 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
       const GURL& new_referrer_url,
       bool new_is_external_protocol,
       scoped_refptr<net::HttpResponseHeaders> response_headers,
+      net::HttpResponseInfo::ConnectionInfo connection_info,
       const ThrottleChecksFinishedCallback& callback);
 
   // Called when the URLRequest has delivered response headers and metadata.
@@ -223,11 +233,19 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
   // NavigationHandle will not call |callback| with a result of DEFER.
   // If the result is PROCEED, then 'ReadyToCommitNavigation' will be called
   // with |render_frame_host| and |response_headers| just before calling
-  // |callback|.
+  // |callback|. Should a transfer navigation happen, |transfer_callback| will
+  // be run on the IO thread.
+  // PlzNavigate: transfer navigations are not possible.
   void WillProcessResponse(
       RenderFrameHostImpl* render_frame_host,
       scoped_refptr<net::HttpResponseHeaders> response_headers,
+      net::HttpResponseInfo::ConnectionInfo connection_info,
       const SSLStatus& ssl_status,
+      const GlobalRequestID& request_id,
+      bool should_replace_current_entry,
+      bool is_download,
+      bool is_stream,
+      const base::Closure& transfer_callback,
       const ThrottleChecksFinishedCallback& callback);
 
   // Returns the FrameTreeNode this navigation is happening in.
@@ -254,8 +272,16 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
 
   SSLStatus ssl_status() { return ssl_status_; }
 
+  // Called when the navigation is transferred to a different renderer.
+  void Transfer();
+
   NavigationUIData* navigation_ui_data() const {
     return navigation_ui_data_.get();
+  }
+
+  void set_searchable_form_url(const GURL& url) { searchable_form_url_ = url; }
+  void set_searchable_form_encoding(const std::string& encoding) {
+    searchable_form_encoding_ = encoding;
   }
 
  private:
@@ -279,7 +305,7 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
   NavigationHandleImpl(const GURL& url,
                        FrameTreeNode* frame_tree_node,
                        bool is_renderer_initiated,
-                       bool is_synchronous,
+                       bool is_same_page,
                        bool is_srcdoc,
                        const base::TimeTicks& navigation_start,
                        int pending_nav_entry_id,
@@ -288,6 +314,19 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
   NavigationThrottle::ThrottleCheckResult CheckWillStartRequest();
   NavigationThrottle::ThrottleCheckResult CheckWillRedirectRequest();
   NavigationThrottle::ThrottleCheckResult CheckWillProcessResponse();
+
+  // Called when WillProcessResponse checks are done, to find the final
+  // RenderFrameHost for the navigation. Checks whether the navigation should be
+  // transferred. Returns false if the transfer attempt results in the
+  // destruction of this NavigationHandle and the navigation should no longer
+  // proceed. This can happen when the RenderFrameHostManager determines a
+  // transfer is needed, but WebContentsDelegate::ShouldTransferNavigation
+  // returns false.
+  bool MaybeTransferAndProceed();
+
+  // Helper method for MaybeTransferAndProceed. Returns false if the transfer
+  // attempt results in the destruction of this NavigationHandle.
+  bool MaybeTransferAndProceedInternal();
 
   // Helper function to run and reset the |complete_callback_|. This marks the
   // end of a round of NavigationThrottleChecks.
@@ -301,6 +340,7 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
 
   // See NavigationHandle for a description of those member variables.
   GURL url_;
+  scoped_refptr<SiteInstance> starting_site_instance_;
   Referrer sanitized_referrer_;
   bool has_user_gesture_;
   ui::PageTransition transition_;
@@ -308,11 +348,15 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
   net::Error net_error_code_;
   RenderFrameHostImpl* render_frame_host_;
   const bool is_renderer_initiated_;
-  bool is_same_page_;
-  const bool is_synchronous_;
+  const bool is_same_page_;
   const bool is_srcdoc_;
   bool was_redirected_;
   scoped_refptr<net::HttpResponseHeaders> response_headers_;
+  net::HttpResponseInfo::ConnectionInfo connection_info_;
+
+  // The original url of the navigation. This may differ from |url_| if the
+  // navigation encounters redirects.
+  const GURL original_url_;
 
   // The HTTP method used for the navigation.
   std::string method_;
@@ -364,8 +408,29 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
 
   SSLStatus ssl_status_;
 
+  // The id of the URLRequest tied to this navigation.
+  GlobalRequestID request_id_;
+
+  // Whether the current NavigationEntry should be replaced upon commit.
+  bool should_replace_current_entry_;
+
+  // The chain of redirects.
+  std::vector<GURL> redirect_chain_;
+
+  // A callback to run on the IO thread if the navigation transfers.
+  base::Closure transfer_callback_;
+
+  // Whether the navigation ended up being a download or a stream.
+  bool is_download_;
+  bool is_stream_;
+
   // False by default unless the navigation started within a context menu.
   bool started_from_context_menu_;
+
+  GURL searchable_form_url_;
+  std::string searchable_form_encoding_;
+
+  base::WeakPtrFactory<NavigationHandleImpl> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(NavigationHandleImpl);
 };

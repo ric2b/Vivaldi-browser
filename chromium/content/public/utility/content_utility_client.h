@@ -12,9 +12,7 @@
 #include "content/public/common/content_client.h"
 #include "content/public/common/service_info.h"
 
-class GURL;
-
-namespace shell {
+namespace service_manager {
 class InterfaceRegistry;
 class Service;
 }
@@ -36,7 +34,8 @@ class CONTENT_EXPORT ContentUtilityClient {
 
   // Allows the client to expose interfaces from this utility process to the
   // browser process via |registry|.
-  virtual void ExposeInterfacesToBrowser(shell::InterfaceRegistry* registry) {}
+  virtual void ExposeInterfacesToBrowser(
+      service_manager::InterfaceRegistry* registry) {}
 
   virtual void RegisterServices(StaticServiceMap* services) {}
 };

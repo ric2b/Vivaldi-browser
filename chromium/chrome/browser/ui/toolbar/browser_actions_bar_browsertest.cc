@@ -10,6 +10,7 @@
 #include "base/bind_helpers.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
+#include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/api/extension_action/extension_action_api.h"
 #include "chrome/browser/extensions/browser_action_test_util.h"
 #include "chrome/browser/extensions/extension_action.h"
@@ -70,10 +71,6 @@ void BrowserActionsBarBrowserTest::SetUpCommandLine(
     base::CommandLine* command_line) {
   ExtensionBrowserTest::SetUpCommandLine(command_line);
   ToolbarActionsBar::disable_animations_for_testing_ = true;
-  // We need to disable Media Router since having Media Router enabled will
-  // result in auto-enabling the redesign and breaking the test.
-  override_media_router_.reset(new extensions::FeatureSwitch::ScopedOverride(
-      extensions::FeatureSwitch::media_router(), false));
   // These tests are deliberately testing behavior without the redesign.
   // Forcefully disable it.
   override_redesign_.reset(new extensions::FeatureSwitch::ScopedOverride(
@@ -639,4 +636,45 @@ IN_PROC_BROWSER_TEST_F(BrowserActionsBarBrowserTest, RemovePoppedOutAction) {
   EXPECT_EQ(1, browser_actions_bar()->VisibleBrowserActions());
   EXPECT_EQ(1, browser_actions_bar()->NumberOfBrowserActions());
   EXPECT_FALSE(toolbar_actions_bar->popped_out_action());
+}
+
+// A test that runs in incognito mode.
+class BrowserActionsBarIncognitoTest : public BrowserActionsBarBrowserTest {
+ public:
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    BrowserActionsBarBrowserTest::SetUpCommandLine(command_line);
+    command_line->AppendSwitch("incognito");
+  }
+};
+
+// Tests that first loading an extension action in an incognito profile, then
+// removing the incognito profile and using the extension action in a normal
+// profile doesn't crash.
+// Regression test for crbug.com/663726.
+IN_PROC_BROWSER_TEST_F(BrowserActionsBarIncognitoTest, IncognitoMode) {
+  EXPECT_TRUE(browser()->profile()->IsOffTheRecord());
+  const extensions::Extension* extension = LoadExtensionIncognito(
+      test_data_dir_.AppendASCII("api_test/browser_action_with_icon"));
+  ASSERT_TRUE(extension);
+  Browser* second_browser =
+      new Browser(Browser::CreateParams(profile()->GetOriginalProfile()));
+  base::RunLoop().RunUntilIdle();
+  EXPECT_FALSE(second_browser->profile()->IsOffTheRecord());
+
+  content::WindowedNotificationObserver window_close_observer(
+      chrome::NOTIFICATION_BROWSER_CLOSED, content::Source<Browser>(browser()));
+  browser()->window()->Close();
+  window_close_observer.Wait();
+
+  std::vector<ToolbarActionViewController*> actions =
+      second_browser->window()->GetToolbarActionsBar()->GetActions();
+  ASSERT_EQ(1u, actions.size());
+  gfx::Image icon = actions[0]->GetIcon(
+      second_browser->tab_strip_model()->GetActiveWebContents(),
+      gfx::Size(ToolbarActionsBar::IconWidth(false),
+                ToolbarActionsBar::IconHeight()));
+  const gfx::ImageSkia* skia = icon.ToImageSkia();
+  ASSERT_TRUE(skia);
+  // Force the image to try and load a representation.
+  skia->GetRepresentation(2.0);
 }

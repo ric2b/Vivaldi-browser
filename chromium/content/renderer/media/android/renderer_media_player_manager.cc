@@ -10,9 +10,12 @@
 #include "content/renderer/media/android/webmediaplayer_android.h"
 #include "content/renderer/render_view_impl.h"
 #include "media/base/media_switches.h"
+#include "third_party/WebKit/public/platform/modules/remoteplayback/WebRemotePlaybackAvailability.h"
 #include "ui/gfx/geometry/rect_f.h"
 
 namespace content {
+
+using ::blink::WebRemotePlaybackAvailability;
 
 RendererMediaPlayerManager::RendererMediaPlayerManager(
     RenderFrame* render_frame)
@@ -49,6 +52,8 @@ bool RendererMediaPlayerManager::OnMessageReceived(const IPC::Message& msg) {
                         OnDisconnectedFromRemoteDevice)
     IPC_MESSAGE_HANDLER(MediaPlayerMsg_CancelledRemotePlaybackRequest,
                         OnCancelledRemotePlaybackRequest)
+    IPC_MESSAGE_HANDLER(MediaPlayerMsg_RemotePlaybackStarted,
+                        OnRemotePlaybackStarted)
     IPC_MESSAGE_HANDLER(MediaPlayerMsg_DidExitFullscreen, OnDidExitFullscreen)
     IPC_MESSAGE_HANDLER(MediaPlayerMsg_DidMediaPlayerPlay, OnPlayerPlay)
     IPC_MESSAGE_HANDLER(MediaPlayerMsg_DidMediaPlayerPause, OnPlayerPause)
@@ -119,6 +124,11 @@ void RendererMediaPlayerManager::RequestRemotePlayback(int player_id) {
 void RendererMediaPlayerManager::RequestRemotePlaybackControl(int player_id) {
   Send(new MediaPlayerHostMsg_RequestRemotePlaybackControl(routing_id(),
                                                            player_id));
+}
+
+void RendererMediaPlayerManager::RequestRemotePlaybackStop(int player_id) {
+  Send(new MediaPlayerHostMsg_RequestRemotePlaybackStop(routing_id(),
+                                                        player_id));
 }
 
 void RendererMediaPlayerManager::OnMediaMetadataChanged(
@@ -210,6 +220,13 @@ void RendererMediaPlayerManager::OnCancelledRemotePlaybackRequest(
     player->OnCancelledRemotePlaybackRequest();
 }
 
+void RendererMediaPlayerManager::OnRemotePlaybackStarted(
+    int player_id) {
+  media::RendererMediaPlayerInterface* player = GetMediaPlayer(player_id);
+  if (player)
+    player->OnRemotePlaybackStarted();
+}
+
 void RendererMediaPlayerManager::OnDidExitFullscreen(int player_id) {
   media::RendererMediaPlayerInterface* player = GetMediaPlayer(player_id);
   if (player)
@@ -230,10 +247,10 @@ void RendererMediaPlayerManager::OnPlayerPause(int player_id) {
 
 void RendererMediaPlayerManager::OnRemoteRouteAvailabilityChanged(
     int player_id,
-    bool routes_available) {
+    blink::WebRemotePlaybackAvailability availability) {
   media::RendererMediaPlayerInterface* player = GetMediaPlayer(player_id);
   if (player)
-    player->OnRemoteRouteAvailabilityChanged(routes_available);
+    player->OnRemoteRouteAvailabilityChanged(availability);
 }
 
 void RendererMediaPlayerManager::EnterFullscreen(int player_id) {

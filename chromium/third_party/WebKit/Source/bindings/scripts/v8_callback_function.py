@@ -11,12 +11,13 @@ from v8_globals import includes  # pylint: disable=W0403
 import v8_utilities  # pylint: disable=W0403
 
 CALLBACK_FUNCTION_H_INCLUDES = frozenset([
-    'bindings/core/v8/ExceptionState.h',
-    'bindings/core/v8/ScopedPersistent.h',
+    'bindings/core/v8/ScriptWrappable.h',
+    'bindings/core/v8/TraceWrapperV8Reference.h',
     'platform/heap/Handle.h',
     'wtf/text/WTFString.h',
 ])
 CALLBACK_FUNCTION_CPP_INCLUDES = frozenset([
+    'bindings/core/v8/ExceptionState.h',
     'bindings/core/v8/ScriptState.h',
     'bindings/core/v8/ToV8.h',
     'bindings/core/v8/V8Binding.h',
@@ -50,7 +51,8 @@ def callback_function_context(callback_function):
             'return_value': idl_type.v8_value_to_local_cpp_value(
                 callback_function.extended_attributes,
                 'v8ReturnValue', 'cppValue',
-                isolate='scriptState->isolate()', bailout_return_value='false'),
+                isolate='m_scriptState->isolate()',
+                bailout_return_value='false'),
         })
 
     context.update(arguments_context(callback_function.arguments, context.get('return_cpp_type')))
@@ -62,14 +64,12 @@ def arguments_context(arguments, return_cpp_type):
         return {
             'argument_name': '%sArgument' % argument.name,
             'cpp_value_to_v8_value': argument.idl_type.cpp_value_to_v8_value(
-                argument.name, isolate='scriptState->isolate()',
-                creation_context='scriptState->context()->Global()'),
+                argument.name, isolate='m_scriptState->isolate()',
+                creation_context='m_scriptState->context()->Global()'),
         }
 
     argument_declarations = [
-        'ScriptState* scriptState',
         'ScriptWrappable* scriptWrappable',
-        'ExceptionState& exceptionState',
     ]
     argument_declarations.extend(
         '%s %s' % (argument.idl_type.callback_cpp_type, argument.name)

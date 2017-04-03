@@ -33,6 +33,25 @@ class CSPDirectiveListTest : public ::testing::Test {
   Persistent<ContentSecurityPolicy> csp;
 };
 
+TEST_F(CSPDirectiveListTest, Header) {
+  struct TestCase {
+    const char* list;
+    const char* expected;
+  } cases[] = {{"script-src 'self'", "script-src 'self'"},
+               {"  script-src 'self'  ", "script-src 'self'"},
+               {"\t\tscript-src 'self'", "script-src 'self'"},
+               {"script-src 'self' \t", "script-src 'self'"}};
+
+  for (const auto& test : cases) {
+    Member<CSPDirectiveList> directiveList =
+        createList(test.list, ContentSecurityPolicyHeaderTypeReport);
+    EXPECT_EQ(test.expected, directiveList->header());
+    directiveList =
+        createList(test.list, ContentSecurityPolicyHeaderTypeEnforce);
+    EXPECT_EQ(test.expected, directiveList->header());
+  }
+}
+
 TEST_F(CSPDirectiveListTest, IsMatchingNoncePresent) {
   struct TestCase {
     const char* list;
@@ -369,6 +388,50 @@ TEST_F(CSPDirectiveListTest, allowRequestWithoutIntegrity) {
                                  test.context, resource,
                                  ResourceRequest::RedirectStatus::NoRedirect,
                                  ContentSecurityPolicy::SuppressReport));
+  }
+}
+
+TEST_F(CSPDirectiveListTest, workerSrc) {
+  struct TestCase {
+    const char* list;
+    bool allowed;
+  } cases[] = {
+      {"worker-src 'none'", false},
+      {"worker-src http://not.example.test", false},
+      {"worker-src https://example.test", true},
+      {"default-src *; worker-src 'none'", false},
+      {"default-src *; worker-src http://not.example.test", false},
+      {"default-src *; worker-src https://example.test", true},
+      {"child-src *; worker-src 'none'", false},
+      {"child-src *; worker-src http://not.example.test", false},
+      {"child-src *; worker-src https://example.test", true},
+      {"default-src *; child-src *; worker-src 'none'", false},
+      {"default-src *; child-src *; worker-src http://not.example.test", false},
+      {"default-src *; child-src *; worker-src https://example.test", true},
+
+      // Fallback to child-src.
+      {"child-src 'none'", false},
+      {"child-src http://not.example.test", false},
+      {"child-src https://example.test", true},
+      {"default-src *; child-src 'none'", false},
+      {"default-src *; child-src http://not.example.test", false},
+      {"default-src *; child-src https://example.test", true},
+
+      // Fallback to default-src.
+      {"default-src 'none'", false},
+      {"default-src http://not.example.test", false},
+      {"default-src https://example.test", true},
+  };
+
+  for (const auto& test : cases) {
+    SCOPED_TRACE(test.list);
+    KURL resource = KURL(KURL(), "https://example.test/worker.js");
+    Member<CSPDirectiveList> directiveList =
+        createList(test.list, ContentSecurityPolicyHeaderTypeEnforce);
+    EXPECT_EQ(test.allowed,
+              directiveList->allowWorkerFromSource(
+                  resource, ResourceRequest::RedirectStatus::NoRedirect,
+                  ContentSecurityPolicy::SuppressReport));
   }
 }
 

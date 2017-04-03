@@ -14,7 +14,6 @@
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/geometry/vector2d.h"
 
-class SkBitmap;
 class SkCanvas;
 
 namespace gfx {
@@ -58,7 +57,6 @@ class CC_EXPORT SoftwareOutputDevice {
 
  protected:
   gfx::Size viewport_pixel_size_;
-  float scale_factor_;
   gfx::Rect damage_rect_;
   sk_sp<SkSurface> surface_;
   std::unique_ptr<gfx::VSyncProvider> vsync_provider_;

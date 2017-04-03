@@ -38,6 +38,16 @@ void RecordImmediateTaskQueueingDuration(tracked_objects::Duration duration) {
 double MonotonicTimeInSeconds(base::TimeTicks timeTicks) {
   return (timeTicks - base::TimeTicks()).InSecondsF();
 }
+
+// Converts a OnceClosure to a RepeatingClosure. It hits CHECK failure to run
+// the resulting RepeatingClosure more than once.
+// TODO(tzik): This will be unneeded after the Closure-to-OnceClosure migration
+// on TaskRunner finished. Remove it once it gets unneeded.
+base::RepeatingClosure UnsafeConvertOnceClosureToRepeating(
+    base::OnceClosure cb) {
+  return base::BindRepeating([](base::OnceClosure cb) { std::move(cb).Run(); },
+                             base::Passed(&cb));
+}
 }
 
 TaskQueueManager::TaskQueueManager(
@@ -102,7 +112,7 @@ void TaskQueueManager::UnregisterTimeDomain(TimeDomain* time_domain) {
 scoped_refptr<internal::TaskQueueImpl> TaskQueueManager::NewTaskQueue(
     const TaskQueue::Spec& spec) {
   TRACE_EVENT1(tracing_category_, "TaskQueueManager::NewTaskQueue",
-               "queue_name", spec.name);
+               "queue_name", TaskQueue::NameForQueueType(spec.type));
   DCHECK(main_thread_checker_.CalledOnValidThread());
   TimeDomain* time_domain =
       spec.time_domain ? spec.time_domain : real_time_domain_.get();
@@ -251,10 +261,11 @@ void TaskQueueManager::DoWork(base::TimeTicks run_time, bool from_main_thread) {
     if (!delegate_->IsNested() && task_start_time != base::TimeTicks()) {
       // Only report top level task durations.
       base::TimeTicks task_end_time = lazy_now.Now();
-      FOR_EACH_OBSERVER(
-          TaskTimeObserver, task_time_observers_,
-          ReportTaskTime(task_queue, MonotonicTimeInSeconds(task_start_time),
-                         MonotonicTimeInSeconds(task_end_time)));
+      for (auto& observer : task_time_observers_) {
+        observer.ReportTaskTime(task_queue,
+                                MonotonicTimeInSeconds(task_start_time),
+                                MonotonicTimeInSeconds(task_end_time));
+      }
       task_start_time = task_end_time;
     }
 
@@ -319,8 +330,11 @@ TaskQueueManager::ProcessTaskResult TaskQueueManager::ProcessTaskFromWorkQueue(
     // arbitrarily delayed so the additional delay should not be a problem.
     // TODO(skyostil): Figure out a way to not forget which task queue the
     // task is associated with. See http://crbug.com/522843.
-    delegate_->PostNonNestableTask(pending_task.posted_from,
-                                   std::move(pending_task.task));
+    // TODO(tzik): Remove base::UnsafeConvertOnceClosureToRepeating once
+    // TaskRunners have migrated to OnceClosure.
+    delegate_->PostNonNestableTask(
+        pending_task.posted_from,
+        UnsafeConvertOnceClosureToRepeating(std::move(pending_task.task)));
     return ProcessTaskResult::DEFERRED;
   }
 
@@ -329,8 +343,8 @@ TaskQueueManager::ProcessTaskResult TaskQueueManager::ProcessTaskFromWorkQueue(
   TRACE_TASK_EXECUTION("TaskQueueManager::ProcessTaskFromWorkQueue",
                        pending_task);
   if (queue->GetShouldNotifyObservers()) {
-    FOR_EACH_OBSERVER(base::MessageLoop::TaskObserver, task_observers_,
-                      WillProcessTask(pending_task));
+    for (auto& observer : task_observers_)
+      observer.WillProcessTask(pending_task);
     queue->NotifyWillProcessTask(pending_task);
   }
   TRACE_EVENT1(tracing_category_, "TaskQueueManager::RunTask", "queue",
@@ -341,7 +355,7 @@ TaskQueueManager::ProcessTaskResult TaskQueueManager::ProcessTaskFromWorkQueue(
   internal::TaskQueueImpl* prev_executing_task_queue =
       currently_executing_task_queue_;
   currently_executing_task_queue_ = queue;
-  task_annotator_.RunTask("TaskQueueManager::PostTask", pending_task);
+  task_annotator_.RunTask("TaskQueueManager::PostTask", &pending_task);
   // Detect if the TaskQueueManager just got deleted.  If this happens we must
   // not access any member variables after this point.
   if (protect->HasOneRef())
@@ -350,8 +364,8 @@ TaskQueueManager::ProcessTaskResult TaskQueueManager::ProcessTaskFromWorkQueue(
   currently_executing_task_queue_ = prev_executing_task_queue;
 
   if (queue->GetShouldNotifyObservers()) {
-    FOR_EACH_OBSERVER(base::MessageLoop::TaskObserver, task_observers_,
-                      DidProcessTask(pending_task));
+    for (auto& observer : task_observers_)
+      observer.DidProcessTask(pending_task);
     queue->NotifyDidProcessTask(pending_task);
   }
 
@@ -426,6 +440,13 @@ LazyNow TaskQueueManager::CreateLazyNow() const {
   return LazyNow(delegate_.get());
 }
 
+size_t TaskQueueManager::GetNumberOfPendingTasks() const {
+  size_t task_count = 0;
+  for (auto& queue : queues_)
+    task_count += queue->GetNumberOfPendingTasks();
+  return task_count;
+}
+
 std::unique_ptr<base::trace_event::ConvertableToTraceFormat>
 TaskQueueManager::AsValueWithSelectorResult(
     bool should_run,
@@ -468,6 +489,10 @@ void TaskQueueManager::OnTriedToSelectBlockedWorkQueue(
     observer_->OnTriedToExecuteBlockedTask(*work_queue->task_queue(),
                                            *work_queue->GetFrontTask());
   }
+}
+
+bool TaskQueueManager::HasImmediateWorkForTesting() const {
+  return !selector_.EnabledWorkQueuesEmpty();
 }
 
 }  // namespace scheduler

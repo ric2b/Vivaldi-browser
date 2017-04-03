@@ -70,8 +70,19 @@ struct ContentRectangle : public WorldRectangle {
   // are applied relative to the parent, rather than absolutely.
   int parent_id = -1;
 
-  // If true, this object will be visible and accept input.
+  // If true, this object will be visible.
   bool visible = true;
+
+  // If false, the reticle will not hit the element, even if visible.
+  bool hit_testable = true;
+
+  // If true, transformations will be applied relative to the field of view,
+  // rather than the world.
+  bool lock_to_fov = false;
+
+  // If true, this element is the content quad. Only one content quad may be
+  // added to the scene.
+  bool content_quad = false;
 
   // Specifies the region (in pixels) of a texture to render.
   Recti copy_rect = {0, 0, 0, 0};

@@ -29,6 +29,7 @@
 #ifndef ScopedStyleResolver_h
 #define ScopedStyleResolver_h
 
+#include "core/css/ActiveStyleSheets.h"
 #include "core/css/ElementRuleCollector.h"
 #include "core/css/RuleSet.h"
 #include "core/dom/TreeScope.h"
@@ -39,7 +40,6 @@ namespace blink {
 
 class PageRuleCollector;
 class StyleSheetContents;
-class ViewportStyleResolver;
 
 // This class selects a ComputedStyle for a given element based on a collection
 // of stylesheets.
@@ -58,6 +58,7 @@ class ScopedStyleResolver final : public GarbageCollected<ScopedStyleResolver> {
       const StringImpl* animationName);
 
   void appendCSSStyleSheet(CSSStyleSheet&, const MediaQueryEvaluator&);
+  void appendActiveStyleSheets(unsigned index, const ActiveStyleSheetVector&);
   void collectMatchingAuthorRules(ElementRuleCollector&,
                                   CascadeOrder = ignoreCascadeOrder);
   void collectMatchingShadowHostRules(ElementRuleCollector&,
@@ -70,10 +71,10 @@ class ScopedStyleResolver final : public GarbageCollected<ScopedStyleResolver> {
                          HeapHashSet<Member<const StyleSheetContents>>&
                              visitedSharedStyleSheetContents) const;
   void resetAuthorStyle();
-  void collectViewportRulesTo(ViewportStyleResolver*) const;
   bool hasDeepOrShadowSelector() const { return m_hasDeepOrShadowSelector; }
   void setHasUnresolvedKeyframesRule() { m_hasUnresolvedKeyframesRule = true; }
   static void keyframesRulesAdded(const TreeScope&);
+  static ContainerNode& invalidationRootForTreeScope(const TreeScope&);
 
   DECLARE_TRACE();
 

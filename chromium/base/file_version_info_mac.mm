@@ -92,10 +92,6 @@ base::string16 FileVersionInfoMac::file_version() {
   return product_version();
 }
 
-base::string16 FileVersionInfoMac::source_version() {
-  return GetString16Value(CFSTR("CFSourceVersionString"));
-}
-
 base::string16 FileVersionInfoMac::original_filename() {
   return GetString16Value(kCFBundleNameKey);
 }

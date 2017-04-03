@@ -150,6 +150,10 @@ class ScopedCreateDCWithBitmap {
 
 namespace ui {
 
+NativeTheme* NativeTheme::GetInstanceForNativeUi() {
+  return NativeThemeWin::instance();
+}
+
 bool NativeThemeWin::IsThemingActive() const {
   return is_theme_active_ && is_theme_active_();
 }
@@ -293,7 +297,7 @@ void NativeThemeWin::Paint(SkCanvas* canvas,
   }
 
   skia::ScopedPlatformPaint paint(canvas);
-  HDC surface = paint.GetPlatformSurface();
+  HDC surface = paint.GetNativeDrawingContext();
 
   // When drawing the task manager or the bookmark editor, we draw into an
   // offscreen buffer, where we can use OS-specific drawing routines for
@@ -456,7 +460,7 @@ void NativeThemeWin::PaintDirect(SkCanvas* destination_canvas,
                           extra.scrollbar_track);
       return;
     case kScrollbarCorner:
-      destination_canvas->drawColor(SK_ColorWHITE, SkXfermode::kSrc_Mode);
+      destination_canvas->drawColor(SK_ColorWHITE, SkBlendMode::kSrc);
       return;
     case kTabPanelBackground:
       PaintTabPanelBackground(hdc, rect);
@@ -479,25 +483,6 @@ void NativeThemeWin::PaintDirect(SkCanvas* destination_canvas,
 }
 
 SkColor NativeThemeWin::GetSystemColor(ColorId color_id) const {
-  const bool md = ui::MaterialDesignController::IsModeMaterial();
-  if (!md) {
-    // Link:
-    const SkColor kLinkPressedColor = SkColorSetRGB(200, 0, 0);
-
-    switch (color_id) {
-      // Link
-      case kColorId_LinkDisabled:
-        return system_colors_[COLOR_WINDOWTEXT];
-      case kColorId_LinkEnabled:
-        return system_colors_[COLOR_HOTLIGHT];
-      case kColorId_LinkPressed:
-        return kLinkPressedColor;
-
-      default:
-        break;
-    }
-  }
-
   // TODO: Obtain the correct colors using GetSysColor.
   // Dialogs:
   const SkColor kDialogBackgroundColor = SkColorSetRGB(251, 251, 251);
@@ -514,9 +499,10 @@ SkColor NativeThemeWin::GetSystemColor(ColorId color_id) const {
   const SkColor kPositiveTextColor = SkColorSetRGB(0x0b, 0x80, 0x43);
   const SkColor kNegativeTextColor = SkColorSetRGB(0xc5, 0x39, 0x29);
   // Results Tables:
-  const SkColor kResultsTableUrlColor =
-      md ? gfx::kGoogleBlue700 : SkColorSetRGB(0x0b, 0x80, 0x43);
+  const SkColor kResultsTableUrlColor = gfx::kGoogleBlue700;
   const SkColor kResultsTableSelectedUrlColor = SK_ColorWHITE;
+  // Label:
+  const SkColor kLabelTextSelectionBackgroundFocusedColor = gfx::kGoogleBlue700;
 
   switch (color_id) {
     // Windows
@@ -549,6 +535,10 @@ SkColor NativeThemeWin::GetSystemColor(ColorId color_id) const {
       return system_colors_[COLOR_BTNTEXT];
     case kColorId_LabelDisabledColor:
       return system_colors_[COLOR_GRAYTEXT];
+    case kColorId_LabelTextSelectionColor:
+      return system_colors_[COLOR_HIGHLIGHTTEXT];
+    case kColorId_LabelTextSelectionBackgroundFocused:
+      return kLabelTextSelectionBackgroundFocusedColor;
 
     // Textfield
     case kColorId_TextfieldDefaultColor:

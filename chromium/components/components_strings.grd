@@ -206,12 +206,14 @@
       <part file="physical_web_ui_strings.grdp" />
       <part file="policy_strings.grdp" />
       <part file="security_interstitials_strings.grdp" />
+      <part file="security_state_strings.grdp" />
       <part file="ssl_errors_strings.grdp" />
       <part file="supervised_user_error_page_strings.grdp" />
       <part file="sync_ui_strings.grdp" />
       <part file="translate_strings.grdp" />
       <part file="undo_strings.grdp" />
       <part file="version_ui_strings.grdp" />
+      <part file="web_contents_delegate_android_strings.grdp" />
 
       <!-- Generic terms -->
       <message name="IDS_CANCEL" desc="Used for Cancel on buttons">

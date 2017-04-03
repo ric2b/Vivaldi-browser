@@ -28,26 +28,26 @@
 #include "components/signin/core/browser/signin_manager_base.h"
 #include "components/sync/base/experiments.h"
 #include "components/sync/base/model_type.h"
+#include "components/sync/base/sync_prefs.h"
 #include "components/sync/base/unrecoverable_error_handler.h"
-#include "components/sync/core/network_time_update_callback.h"
-#include "components/sync/core/shutdown_reason.h"
-#include "components/sync/core/sync_manager_factory.h"
-#include "components/sync/core/user_share.h"
 #include "components/sync/device_info/local_device_info_provider.h"
 #include "components/sync/driver/data_type_controller.h"
 #include "components/sync/driver/data_type_manager.h"
 #include "components/sync/driver/data_type_manager_observer.h"
 #include "components/sync/driver/data_type_status_table.h"
 #include "components/sync/driver/glue/sync_backend_host.h"
-#include "components/sync/driver/protocol_event_observer.h"
 #include "components/sync/driver/startup_controller.h"
 #include "components/sync/driver/sync_client.h"
 #include "components/sync/driver/sync_frontend.h"
-#include "components/sync/driver/sync_prefs.h"
 #include "components/sync/driver/sync_service.h"
 #include "components/sync/driver/sync_stopped_reporter.h"
+#include "components/sync/engine/events/protocol_event_observer.h"
 #include "components/sync/engine/model_safe_worker.h"
+#include "components/sync/engine/net/network_time_update_callback.h"
+#include "components/sync/engine/shutdown_reason.h"
+#include "components/sync/engine/sync_manager_factory.h"
 #include "components/sync/js/sync_js_controller.h"
+#include "components/sync/syncable/user_share.h"
 #include "components/version_info/version_info.h"
 #include "google_apis/gaia/google_service_auth_error.h"
 #include "google_apis/gaia/oauth2_token_service.h"
@@ -72,7 +72,7 @@ namespace syncer {
 class BackendMigrator;
 class BaseTransaction;
 class DataTypeManager;
-class DeviceInfoService;
+class DeviceInfoSyncBridge;
 class DeviceInfoSyncService;
 class DeviceInfoTracker;
 class LocalDeviceInfoProvider;
@@ -245,8 +245,6 @@ class ProfileSyncService : public syncer::SyncService,
     scoped_refptr<net::URLRequestContextGetter> url_request_context;
     std::string debug_identifier;
     version_info::Channel channel = version_info::Channel::UNKNOWN;
-    scoped_refptr<base::SingleThreadTaskRunner> db_thread;
-    scoped_refptr<base::SingleThreadTaskRunner> file_thread;
     base::SequencedWorkerPool* blocking_pool = nullptr;
 
    private:
@@ -310,7 +308,7 @@ class ProfileSyncService : public syncer::SyncService,
   base::string16 GetLastSyncedTimeString() const override;
   std::string GetBackendInitializationStateString() const override;
   syncer::SyncCycleSnapshot GetLastCycleSnapshot() const override;
-  base::Value* GetTypeStatusMap() const override;
+  base::Value* GetTypeStatusMap() override;
   const GURL& sync_service_url() const override;
   std::string unrecoverable_error_message() const override;
   tracked_objects::Location unrecoverable_error_location() const override;
@@ -345,8 +343,8 @@ class ProfileSyncService : public syncer::SyncService,
   // Returns the SyncableService for syncer::DEVICE_INFO.
   virtual syncer::SyncableService* GetDeviceInfoSyncableService();
 
-  // Returns the ModelTypeService for syncer::DEVICE_INFO.
-  virtual syncer::ModelTypeService* GetDeviceInfoService();
+  // Returns the ModelTypeSyncBridge for syncer::DEVICE_INFO.
+  virtual syncer::ModelTypeSyncBridge* GetDeviceInfoSyncBridge();
 
   // Returns synced devices tracker.
   virtual syncer::DeviceInfoTracker* GetDeviceInfoTracker() const;
@@ -374,7 +372,7 @@ class ProfileSyncService : public syncer::SyncService,
   void OnDirectoryTypeUpdateCounterUpdated(
       syncer::ModelType type,
       const syncer::UpdateCounters& counters) override;
-  void OnDirectoryTypeStatusCounterUpdated(
+  void OnDatatypeStatusCounterUpdated(
       syncer::ModelType type,
       const syncer::StatusCounters& counters) override;
   void OnConnectionStatusChange(syncer::ConnectionStatus status) override;
@@ -468,7 +466,7 @@ class ProfileSyncService : public syncer::SyncService,
   // server.
   bool HasUnsyncedItems() const;
 
-  // Used by ProfileSyncServiceHarness.  May return NULL.
+  // Used by ProfileSyncServiceHarness.  May return null.
   syncer::BackendMigrator* GetBackendMigratorForTest();
 
   // Used by tests to inspect interaction with OAuth2TokenService.
@@ -826,8 +824,6 @@ class ProfileSyncService : public syncer::SyncService,
   version_info::Channel channel_;
 
   // Threading context.
-  scoped_refptr<base::SingleThreadTaskRunner> db_thread_;
-  scoped_refptr<base::SingleThreadTaskRunner> file_thread_;
   base::SequencedWorkerPool* blocking_pool_;
 
   // Indicates if this is the first time sync is being configured.  This value
@@ -921,11 +917,10 @@ class ProfileSyncService : public syncer::SyncService,
   // and association information.
   syncer::WeakHandle<syncer::DataTypeDebugInfoListener> debug_info_listener_;
 
-  // A thread where all the sync operations happen.
-  // OWNERSHIP Notes:
-  //     * Created when backend starts for the first time.
-  //     * If sync is disabled, PSS claims ownership from backend.
-  //     * If sync is reenabled, PSS passes ownership to new backend.
+  // The thread where all the sync operations happen. This thread is kept alive
+  // until browser shutdown and reused if sync is turned off and on again. It is
+  // joined during the shutdown process, but there is an abort mechanism in
+  // place to prevent slow HTTP requests from blocking browser shutdown.
   std::unique_ptr<base::Thread> sync_thread_;
 
   // ProfileSyncService uses this service to get access tokens.
@@ -958,10 +953,10 @@ class ProfileSyncService : public syncer::SyncService,
 
   std::unique_ptr<syncer::LocalDeviceInfoProvider> local_device_;
 
-  // Locally owned SyncableService and ModelTypeService implementations.
+  // Locally owned SyncableService and ModelTypeSyncBridge implementations.
   std::unique_ptr<sync_sessions::SessionsSyncManager> sessions_sync_manager_;
   std::unique_ptr<syncer::DeviceInfoSyncService> device_info_sync_service_;
-  std::unique_ptr<syncer::DeviceInfoService> device_info_service_;
+  std::unique_ptr<syncer::DeviceInfoSyncBridge> device_info_service_;
 
   std::unique_ptr<syncer::NetworkResources> network_resources_;
 

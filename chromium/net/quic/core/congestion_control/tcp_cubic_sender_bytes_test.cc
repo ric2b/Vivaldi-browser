@@ -10,6 +10,7 @@
 
 #include "base/logging.h"
 #include "net/quic/core/congestion_control/rtt_stats.h"
+#include "net/quic/core/congestion_control/send_algorithm_interface.h"
 #include "net/quic/core/crypto/crypto_protocol.h"
 #include "net/quic/core/proto/cached_network_parameters.pb.h"
 #include "net/quic/core/quic_flags.h"
@@ -92,8 +93,8 @@ class TcpCubicSenderBytesTest : public ::testing::Test {
       acked_packets.push_back(
           std::make_pair(acked_packet_number_, kDefaultTCPMSS));
     }
-    sender_->OnCongestionEvent(true, bytes_in_flight_, acked_packets,
-                               lost_packets);
+    sender_->OnCongestionEvent(true, bytes_in_flight_, clock_.Now(),
+                               acked_packets, lost_packets);
     bytes_in_flight_ -= n * kDefaultTCPMSS;
     clock_.AdvanceTime(one_ms_);
   }
@@ -108,8 +109,8 @@ class TcpCubicSenderBytesTest : public ::testing::Test {
       lost_packets.push_back(
           std::make_pair(acked_packet_number_, packet_length));
     }
-    sender_->OnCongestionEvent(false, bytes_in_flight_, acked_packets,
-                               lost_packets);
+    sender_->OnCongestionEvent(false, bytes_in_flight_, clock_.Now(),
+                               acked_packets, lost_packets);
     bytes_in_flight_ -= n * packet_length;
   }
 
@@ -118,8 +119,8 @@ class TcpCubicSenderBytesTest : public ::testing::Test {
     SendAlgorithmInterface::CongestionVector acked_packets;
     SendAlgorithmInterface::CongestionVector lost_packets;
     lost_packets.push_back(std::make_pair(packet_number, kDefaultTCPMSS));
-    sender_->OnCongestionEvent(false, bytes_in_flight_, acked_packets,
-                               lost_packets);
+    sender_->OnCongestionEvent(false, bytes_in_flight_, clock_.Now(),
+                               acked_packets, lost_packets);
     bytes_in_flight_ -= kDefaultTCPMSS;
   }
 
@@ -701,18 +702,10 @@ TEST_F(TcpCubicSenderBytesTest, BandwidthResumption) {
   EXPECT_EQ(kMaxCongestionWindowPackets * kDefaultTCPMSS,
             sender_->GetCongestionWindow());
 
-  if (FLAGS_quic_no_lower_bw_resumption_limit) {
-    // Resume with an illegal value of 0 and verify the server uses 1 instead.
-    cached_network_params.set_bandwidth_estimate_bytes_per_second(0);
-    sender_->ResumeConnectionState(cached_network_params, false);
-    EXPECT_EQ(sender_->min_congestion_window(), sender_->GetCongestionWindow());
-  } else {
-    cached_network_params.set_bandwidth_estimate_bytes_per_second(
-        (kMinCongestionWindowForBandwidthResumption - 1) * kDefaultTCPMSS);
-    sender_->ResumeConnectionState(cached_network_params, false);
-    EXPECT_EQ(kMinCongestionWindowForBandwidthResumption * kDefaultTCPMSS,
-              sender_->GetCongestionWindow());
-  }
+  // Resume with an illegal value of 0 and verify the server uses 1 instead.
+  cached_network_params.set_bandwidth_estimate_bytes_per_second(0);
+  sender_->ResumeConnectionState(cached_network_params, false);
+  EXPECT_EQ(sender_->min_congestion_window(), sender_->GetCongestionWindow());
 
   // Resume to the max value.
   cached_network_params.set_max_bandwidth_estimate_bytes_per_second(
@@ -840,14 +833,15 @@ TEST_F(TcpCubicSenderBytesTest, DefaultMaxCwnd) {
   RttStats rtt_stats;
   QuicConnectionStats stats;
   std::unique_ptr<SendAlgorithmInterface> sender(SendAlgorithmInterface::Create(
-      &clock_, &rtt_stats, kCubicBytes, &stats, kInitialCongestionWindow));
+      &clock_, &rtt_stats, /*unacked_packets=*/nullptr, kCubicBytes,
+      QuicRandom::GetInstance(), &stats, kInitialCongestionWindow));
 
   SendAlgorithmInterface::CongestionVector acked_packets;
   SendAlgorithmInterface::CongestionVector missing_packets;
   for (uint64_t i = 1; i < kDefaultMaxCongestionWindowPackets; ++i) {
     acked_packets.clear();
     acked_packets.push_back(std::make_pair(i, 1350));
-    sender->OnCongestionEvent(true, sender->GetCongestionWindow(),
+    sender->OnCongestionEvent(true, sender->GetCongestionWindow(), clock_.Now(),
                               acked_packets, missing_packets);
   }
   EXPECT_EQ(kDefaultMaxCongestionWindowPackets,

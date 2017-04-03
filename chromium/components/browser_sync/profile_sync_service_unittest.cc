@@ -9,6 +9,7 @@
 #include "base/callback.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
+#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
@@ -24,21 +25,23 @@
 #include "components/signin/core/browser/account_tracker_service.h"
 #include "components/signin/core/browser/fake_signin_manager.h"
 #include "components/strings/grit/components_strings.h"
+#include "components/sync/base/pref_names.h"
 #include "components/sync/driver/fake_data_type_controller.h"
 #include "components/sync/driver/glue/sync_backend_host_mock.h"
-#include "components/sync/driver/pref_names.h"
 #include "components/sync/driver/sync_api_component_factory_mock.h"
 #include "components/sync/driver/sync_driver_switches.h"
 #include "components/sync/driver/sync_service_observer.h"
 #include "components/sync/driver/sync_util.h"
-#include "components/syncable_prefs/testing_pref_service_syncable.h"
+#include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "components/version_info/version_info_values.h"
 #include "google_apis/gaia/gaia_constants.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/l10n/l10n_util.h"
 
+using syncer::DataTypeController;
 using syncer::SyncBackendHostMock;
+using syncer::SyncMergeResult;
 using testing::Return;
 
 namespace browser_sync {
@@ -102,14 +105,14 @@ class TestSyncServiceObserver : public syncer::SyncServiceObserver {
 class SyncBackendHostNoReturn : public SyncBackendHostMock {
   void Initialize(
       syncer::SyncFrontend* frontend,
-      std::unique_ptr<base::Thread> sync_thread,
-      const scoped_refptr<base::SingleThreadTaskRunner>& db_thread,
-      const scoped_refptr<base::SingleThreadTaskRunner>& file_thread,
+      base::Thread* sync_thread,
       const syncer::WeakHandle<syncer::JsEventHandler>& event_handler,
       const GURL& service_url,
       const std::string& sync_user_agent,
       const syncer::SyncCredentials& credentials,
       bool delete_sync_data_folder,
+      bool enable_local_sync_backend,
+      const base::FilePath& local_sync_backend_folder,
       std::unique_ptr<syncer::SyncManagerFactory> sync_manager_factory,
       const syncer::WeakHandle<syncer::UnrecoverableErrorHandler>&
           unrecoverable_error_handler,
@@ -127,14 +130,14 @@ class SyncBackendHostMockCollectDeleteDirParam : public SyncBackendHostMock {
 
   void Initialize(
       syncer::SyncFrontend* frontend,
-      std::unique_ptr<base::Thread> sync_thread,
-      const scoped_refptr<base::SingleThreadTaskRunner>& db_thread,
-      const scoped_refptr<base::SingleThreadTaskRunner>& file_thread,
+      base::Thread* sync_thread,
       const syncer::WeakHandle<syncer::JsEventHandler>& event_handler,
       const GURL& service_url,
       const std::string& sync_user_agent,
       const syncer::SyncCredentials& credentials,
       bool delete_sync_data_folder,
+      bool enable_local_sync_backend,
+      const base::FilePath& local_sync_backend_folder,
       std::unique_ptr<syncer::SyncManagerFactory> sync_manager_factory,
       const syncer::WeakHandle<syncer::UnrecoverableErrorHandler>&
           unrecoverable_error_handler,
@@ -144,11 +147,11 @@ class SyncBackendHostMockCollectDeleteDirParam : public SyncBackendHostMock {
           saved_nigori_state) override {
     delete_dir_param_->push_back(delete_sync_data_folder);
     SyncBackendHostMock::Initialize(
-        frontend, std::move(sync_thread), db_thread, file_thread, event_handler,
-        service_url, sync_user_agent, credentials, delete_sync_data_folder,
-        std::move(sync_manager_factory), unrecoverable_error_handler,
-        report_unrecoverable_error_function, http_post_provider_factory_getter,
-        std::move(saved_nigori_state));
+        frontend, sync_thread, event_handler, service_url, sync_user_agent,
+        credentials, delete_sync_data_folder, enable_local_sync_backend,
+        local_sync_backend_folder, std::move(sync_manager_factory),
+        unrecoverable_error_handler, report_unrecoverable_error_function,
+        http_post_provider_factory_getter, std::move(saved_nigori_state));
   }
 
  private:
@@ -198,6 +201,10 @@ ACTION_P(ReturnNewMockHostCaptureClearServerData, captured_callback) {
       &OnClearServerDataCalled, base::Unretained(captured_callback)));
 }
 
+void DoNothing(DataTypeController::ConfigureResult ignored1,
+               const SyncMergeResult& ignored2,
+               const SyncMergeResult& ignored3) {}
+
 // A test harness that uses a real ProfileSyncService and in most cases a
 // MockSyncBackendHost.
 //
@@ -236,7 +243,7 @@ class ProfileSyncServiceTest : public ::testing::Test {
         profile_sync_service_bundle_.CreateBasicInitParams(behavior,
                                                            builder.Build());
 
-    service_.reset(new ProfileSyncService(std::move(init_params)));
+    service_ = base::MakeUnique<ProfileSyncService>(std::move(init_params));
     service_->RegisterDataTypeController(
         base::MakeUnique<syncer::FakeDataTypeController>(syncer::BOOKMARKS));
   }
@@ -354,7 +361,7 @@ class ProfileSyncServiceTest : public ::testing::Test {
 
   ProfileSyncService* service() { return service_.get(); }
 
-  syncable_prefs::TestingPrefServiceSyncable* prefs() {
+  sync_preferences::TestingPrefServiceSyncable* prefs() {
     return profile_sync_service_bundle_.pref_service();
   }
 
@@ -949,6 +956,22 @@ TEST_F(ProfileSyncServiceTest, ValidPointersInDTCMap) {
   CreateService(ProfileSyncService::AUTO_START);
   service()->OnSessionRestoreComplete();
   service()->OnSyncCycleCompleted();
+}
+
+// The OpenTabsUIDelegate should only be accessable when PROXY_TABS is enabled.
+TEST_F(ProfileSyncServiceTest, GetOpenTabsUIDelegate) {
+  CreateService(ProfileSyncService::AUTO_START);
+  InitializeForNthSync();
+  EXPECT_EQ(nullptr, service()->GetOpenTabsUIDelegate());
+
+  auto controller =
+      base::MakeUnique<syncer::FakeDataTypeController>(syncer::PROXY_TABS);
+  // Progress the controller to RUNNING first, which is how the service
+  // determines whether a type is enabled.
+  controller->StartAssociating(base::Bind(&DoNothing));
+  controller->FinishStart(DataTypeController::OK_FIRST_RUN);
+  service()->RegisterDataTypeController(std::move(controller));
+  EXPECT_NE(nullptr, service()->GetOpenTabsUIDelegate());
 }
 
 }  // namespace

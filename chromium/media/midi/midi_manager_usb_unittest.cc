@@ -18,10 +18,12 @@
 #include "media/midi/usb_midi_device.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-namespace media {
 namespace midi {
 
 namespace {
+
+using mojom::PortState;
+using mojom::Result;
 
 template<typename T, size_t N>
 std::vector<T> ToVector(const T (&array)[N]) {
@@ -108,9 +110,9 @@ class FakeMidiManagerClient : public MidiManagerClient {
     output_ports_.push_back(info);
   }
 
-  void SetInputPortState(uint32_t port_index, MidiPortState state) override {}
+  void SetInputPortState(uint32_t port_index, PortState state) override {}
 
-  void SetOutputPortState(uint32_t port_index, MidiPortState state) override {}
+  void SetOutputPortState(uint32_t port_index, PortState state) override {}
 
   void CompleteStartSession(Result result) override {
     complete_start_session_ = true;
@@ -574,4 +576,3 @@ TEST_F(MidiManagerUsbTest, AttachDevice) {
 }  // namespace
 
 }  // namespace midi
-}  // namespace media

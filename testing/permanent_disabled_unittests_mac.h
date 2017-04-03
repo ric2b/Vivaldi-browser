@@ -5,9 +5,3 @@
 // On the form
 //    DISABLE(foo,bar)
 //    DISABLE(foo,baz)
-
-/*
-  DISABLE(BluetoothTest, DiscoverLowEnergyDeviceWithUpdatedUUIDs)
-  DISABLE(BluetoothTest, DiscoverMultipleLowEnergyDevices)
-  DISABLE(BluetoothTest, LowEnergyDeviceProperties)
-  */

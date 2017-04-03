@@ -37,11 +37,13 @@ class PrefService;
 namespace policy {
 
 class DeviceCloudPolicyStoreChromeOS;
+class ForwardingSchemaRegistry;
 class HeartbeatScheduler;
+class SchemaRegistry;
 class StatusUploader;
 class SystemLogUploader;
 
-enum class ZeroTouchEnrollmentMode { DISABLED, ENABLED, FORCED };
+enum class ZeroTouchEnrollmentMode { DISABLED, ENABLED, FORCED, HANDS_OFF };
 
 // CloudPolicyManager specialization for device policy on Chrome OS.
 class DeviceCloudPolicyManagerChromeOS : public CloudPolicyManager {
@@ -114,6 +116,20 @@ class DeviceCloudPolicyManagerChromeOS : public CloudPolicyManager {
   // policy server.
   StatusUploader* GetStatusUploader() const { return status_uploader_.get(); }
 
+  // Passes the pointer to the schema registry that corresponds to the signin
+  // profile.
+  //
+  // After this method is called, the component cloud policy manager becomes
+  // associated with this schema registry.
+  void SetSigninProfileSchemaRegistry(SchemaRegistry* schema_registry);
+
+  // Sets whether the component cloud policy service should be created.
+  // Defaults to true.
+  void set_is_component_policy_enabled_for_testing(
+      bool is_component_policy_enabled) {
+    is_component_policy_enabled_ = is_component_policy_enabled;
+  }
+
  private:
   // Saves the state keys received from |session_manager_client_|.
   void OnStateKeysUpdated();
@@ -153,6 +169,18 @@ class DeviceCloudPolicyManagerChromeOS : public CloudPolicyManager {
 
   std::unique_ptr<chromeos::attestation::AttestationPolicyObserver>
       attestation_policy_observer_;
+
+  // Wrapper schema registry that will track the signin profile schema registry
+  // once it is passed to this class.
+  std::unique_ptr<ForwardingSchemaRegistry>
+      signin_profile_forwarding_schema_registry_;
+
+  // Whether the component cloud policy service should be created.
+  // TODO(emaxx): Change the default to true once both the client and the
+  // DMServer are ready for handling policy fetches with the
+  // google/chromeos/signinextension type. See crbug.com/666720,
+  // crbug.com/644304 for reference.
+  bool is_component_policy_enabled_ = false;
 
   base::ObserverList<Observer, true> observers_;
 

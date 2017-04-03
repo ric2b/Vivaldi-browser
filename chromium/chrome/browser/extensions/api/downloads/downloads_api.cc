@@ -1367,7 +1367,7 @@ ExtensionFunction::ResponseAction DownloadsOpenFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(params.get());
   DownloadItem* download_item =
       GetDownload(browser_context(), include_incognito(), params->download_id);
-  // VB-4457 - gisli@vivaldi.com:  Normally extensions can not call open unless 
+  // VB-4457 - gisli@vivaldi.com:  Normally extensions can not call open unless
   // this is a user gesture.  Make exception for Vivaldi.
   std::string error;
   if (InvalidId(download_item, &error) ||

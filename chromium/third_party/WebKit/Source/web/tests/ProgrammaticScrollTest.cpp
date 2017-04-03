@@ -3,12 +3,12 @@
 #include "core/loader/FrameLoader.h"
 #include "platform/testing/URLTestHelpers.h"
 #include "public/platform/Platform.h"
+#include "public/platform/WebInputEvent.h"
 #include "public/platform/WebURLLoaderMockFactory.h"
 #include "public/web/WebCache.h"
 #include "public/web/WebFrame.h"
 #include "public/web/WebFrameClient.h"
 #include "public/web/WebHistoryItem.h"
-#include "public/web/WebInputEvent.h"
 #include "public/web/WebScriptSource.h"
 #include "public/web/WebSettings.h"
 #include "public/web/WebView.h"
@@ -56,7 +56,7 @@ TEST_F(ProgrammaticScrollTest, RestoreScrollPositionAndViewStateWithScale) {
   webViewImpl->mainFrame()->setScrollOffset(WebSize(0, 500));
   loader.documentLoader()->initialScrollState().wasScrolledByUser = false;
   loader.currentItem()->setPageScaleFactor(2);
-  loader.currentItem()->setScrollPoint(WebPoint(0, 200));
+  loader.currentItem()->setScrollOffset(ScrollOffset(0, 200));
 
   // Flip back the wasScrolledByUser flag which was set to true by
   // setPageScaleFactor because otherwise
@@ -86,7 +86,7 @@ TEST_F(ProgrammaticScrollTest, RestoreScrollPositionAndViewStateWithoutScale) {
   webViewImpl->mainFrame()->setScrollOffset(WebSize(0, 500));
   loader.documentLoader()->initialScrollState().wasScrolledByUser = false;
   loader.currentItem()->setPageScaleFactor(0);
-  loader.currentItem()->setScrollPoint(WebPoint(0, 400));
+  loader.currentItem()->setScrollOffset(ScrollOffset(0, 400));
 
   // FrameLoader::restoreScrollPositionAndViewState flows differently if scale
   // is zero.

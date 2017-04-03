@@ -61,8 +61,6 @@ class TestObserver : public ProfileWriter,
     EXPECT_EQ(expected_bookmark_entries_.size(), bookmark_count_);
     EXPECT_EQ(expected_favicon_groups_.size(), favicon_count_);
   }
-  void ImportItemFailed(importer::ImportItem item,
-                        const std::string& error) override {}
 
   // ProfileWriter:
   bool BookmarkModelIsLoaded() const override {
@@ -246,6 +244,12 @@ IN_PROC_BROWSER_TEST_F(EdgeImporterBrowserTest, EdgeImporterLegacyFallback) {
   data_path = data_path.AppendASCII("edge_profile");
 
   ASSERT_TRUE(base::CopyDirectory(data_path, temp_dir_.GetPath(), true));
+
+  base::string16 key_path(importer::GetEdgeSettingsKey());
+  base::win::RegKey key;
+  ASSERT_EQ(ERROR_SUCCESS,
+            key.Create(HKEY_CURRENT_USER, key_path.c_str(), KEY_WRITE));
+  key.WriteValue(L"FavoritesESEEnabled", 0ul);
   ASSERT_TRUE(importer::IsEdgeFavoritesLegacyMode());
 
   // Starts to import the above settings.

@@ -4,6 +4,8 @@
 
 #include "content/browser/gpu/gpu_data_manager_impl_private.h"
 
+#include <algorithm>
+#include <iterator>
 #include <memory>
 #include <utility>
 
@@ -166,23 +168,28 @@ void UpdateStats(const gpu::GPUInfo& gpu_info,
       gpu::GPU_FEATURE_TYPE_ACCELERATED_2D_CANVAS,
       gpu::GPU_FEATURE_TYPE_GPU_COMPOSITING,
       gpu::GPU_FEATURE_TYPE_GPU_RASTERIZATION,
-      gpu::GPU_FEATURE_TYPE_WEBGL};
+      gpu::GPU_FEATURE_TYPE_WEBGL,
+      gpu::GPU_FEATURE_TYPE_WEBGL2};
   const std::string kGpuBlacklistFeatureHistogramNames[] = {
       "GPU.BlacklistFeatureTestResults.Accelerated2dCanvas",
       "GPU.BlacklistFeatureTestResults.GpuCompositing",
       "GPU.BlacklistFeatureTestResults.GpuRasterization",
-      "GPU.BlacklistFeatureTestResults.Webgl"};
+      "GPU.BlacklistFeatureTestResults.Webgl",
+      "GPU.BlacklistFeatureTestResults.Webgl2"};
   const bool kGpuFeatureUserFlags[] = {
       command_line.HasSwitch(switches::kDisableAccelerated2dCanvas),
       command_line.HasSwitch(switches::kDisableGpu),
       command_line.HasSwitch(switches::kDisableGpuRasterization),
-      command_line.HasSwitch(switches::kDisableExperimentalWebGL)};
+      command_line.HasSwitch(switches::kDisableExperimentalWebGL),
+      (!command_line.HasSwitch(switches::kEnableES3APIs) ||
+       command_line.HasSwitch(switches::kDisableES3APIs))};
 #if defined(OS_WIN)
   const std::string kGpuBlacklistFeatureHistogramNamesWin[] = {
       "GPU.BlacklistFeatureTestResultsWindows.Accelerated2dCanvas",
       "GPU.BlacklistFeatureTestResultsWindows.GpuCompositing",
       "GPU.BlacklistFeatureTestResultsWindows.GpuRasterization",
-      "GPU.BlacklistFeatureTestResultsWindows.Webgl"};
+      "GPU.BlacklistFeatureTestResultsWindows.Webgl",
+      "GPU.BlacklistFeatureTestResultsWindows.Webgl2"};
 #endif
   const size_t kNumFeatures =
       sizeof(kGpuFeatures) / sizeof(gpu::GpuFeatureType);
@@ -342,12 +349,23 @@ bool GpuDataManagerImplPrivate::GpuAccessAllowed(
 
   // We only need to block GPU process if more features are disallowed other
   // than those in the preliminary gpu feature flags because the latter work
-  // through renderer commandline switches.
-  std::set<int> features = preliminary_blacklisted_features_;
-  gpu::MergeFeatureSets(&features, blacklisted_features_);
-  if (features.size() > preliminary_blacklisted_features_.size()) {
+  // through renderer commandline switches. WebGL and WebGL2 should not matter
+  // because their context creation can always be rejected on the GPU process
+  // side.
+  std::set<int> feature_diffs;
+  std::set_difference(blacklisted_features_.begin(),
+                      blacklisted_features_.end(),
+                      preliminary_blacklisted_features_.begin(),
+                      preliminary_blacklisted_features_.end(),
+                      std::inserter(feature_diffs, feature_diffs.begin()));
+  if (feature_diffs.size()) {
+    // TODO(zmo): Other features might also be OK to ignore here.
+    feature_diffs.erase(gpu::GPU_FEATURE_TYPE_WEBGL);
+    feature_diffs.erase(gpu::GPU_FEATURE_TYPE_WEBGL2);
+  }
+  if (feature_diffs.size()) {
     if (reason) {
-      *reason = "Features are disabled upon full but not preliminary GPU info.";
+      *reason = "Features are disabled on full but not preliminary GPU info.";
     }
     return false;
   }
@@ -764,6 +782,15 @@ void GpuDataManagerImplPrivate::AppendGpuCommandLine(
     }
   }
 #endif
+
+  if (gpu_preferences) { // enable_es3_apis
+    bool blacklisted = IsFeatureBlacklisted(gpu::GPU_FEATURE_TYPE_WEBGL2);
+    bool enabled = base::CommandLine::ForCurrentProcess()->HasSwitch(
+        switches::kEnableES3APIs);
+    bool disabled = base::CommandLine::ForCurrentProcess()->HasSwitch(
+        switches::kDisableES3APIs);
+    gpu_preferences->enable_es3_apis = (enabled || !blacklisted) && !disabled;
+  }
 
   // Pass GPU and driver information to GPU process. We try to avoid full GPU
   // info collection at GPU process startup, but we need gpu vendor_id,

@@ -438,21 +438,11 @@ class SimulatorTestRunner(TestRunner):
 
   def extract_test_data(self):
     """Extracts data emitted by the test."""
-    # Find the directory named after the unique device ID of the simulator we
-    # started. We expect only one because we use a new homedir each time.
-    udid_dir = os.path.join(
-        self.homedir, 'Library', 'Developer', 'CoreSimulator', 'Devices')
-    if not os.path.exists(udid_dir):
-      return
-    udids = os.listdir(udid_dir)
-    if len(udids) != 1:
-      return
-
     # Find the Documents directory of the test app. The app directory names
     # don't correspond with any known information, so we have to examine them
     # all until we find one with a matching CFBundleIdentifier.
     apps_dir = os.path.join(
-        udid_dir, udids[0], 'data', 'Containers', 'Data', 'Application')
+        self.homedir, 'Containers', 'Data', 'Application')
     if os.path.exists(apps_dir):
       for appid_dir in os.listdir(apps_dir):
         docs_dir = os.path.join(apps_dir, appid_dir, 'Documents')
@@ -542,6 +532,17 @@ class SimulatorTestRunner(TestRunner):
     cmd.extend(args)
     return cmd
 
+  def get_launch_env(self):
+    """Returns a dict of environment variables to use to launch the test app.
+
+    Returns:
+      A dict of environment variables.
+    """
+    env = super(SimulatorTestRunner, self).get_launch_env()
+    if self.xctest_path:
+      env['NSUnbufferedIO'] = 'YES'
+    return env
+
 
 class DeviceTestRunner(TestRunner):
   """Class for running tests on devices."""
@@ -612,9 +613,21 @@ class DeviceTestRunner(TestRunner):
       os.path.join(self.out_dir, 'Documents'),
     ])
 
+  def retrieve_crash_reports(self):
+    """Retrieves crash reports produced by the test."""
+    logs_dir = os.path.join(self.out_dir, 'Logs')
+    os.mkdir(logs_dir)
+    subprocess.check_call([
+      'idevicecrashreport',
+      '--extract',
+      '--udid', self.udid,
+      logs_dir,
+    ])
+
   def tear_down(self):
     """Performs cleanup actions which must occur after every test launch."""
     self.extract_test_data()
+    self.retrieve_crash_reports()
     self.screenshot_desktop()
     self.uninstall_apps()
 
@@ -634,7 +647,6 @@ class DeviceTestRunner(TestRunner):
         'xcodebuild',
         'test-without-building',
         'BUILT_PRODUCTS_DIR=%s' % os.path.dirname(self.app_path),
-        'NSUnbufferedIO=YES',
         '-destination', 'id=%s' % self.udid,
         '-project', XCTEST_PROJECT,
         '-scheme', XCTEST_SCHEME,
@@ -671,9 +683,10 @@ class DeviceTestRunner(TestRunner):
     """
     env = super(DeviceTestRunner, self).get_launch_env()
     if self.xctest_path:
-      # e.g. ios_web_shell_test_host
-      env['APP_TARGET_NAME'] = (
-        os.path.splitext(os.path.basename(self.app_path))[0])
-      # e.g. ios_web_shell_test
-      env['TEST_TARGET_NAME'] = env['APP_TARGET_NAME'].rsplit('_', 1)[0]
+      env['NSUnbufferedIO'] = 'YES'
+      # e.g. ios_web_shell_egtests
+      env['APP_TARGET_NAME'] = os.path.splitext(
+          os.path.basename(self.app_path))[0]
+      # e.g. ios_web_shell_egtests_module
+      env['TEST_TARGET_NAME'] = env['APP_TARGET_NAME'] + '_module'
     return env

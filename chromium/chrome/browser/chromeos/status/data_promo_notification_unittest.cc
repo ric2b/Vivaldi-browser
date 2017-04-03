@@ -16,32 +16,36 @@
 #include "chromeos/dbus/shill_device_client.h"
 #include "chromeos/dbus/shill_service_client.h"
 #include "chromeos/login/login_state.h"
+#include "chromeos/network/network_connect.h"
 #include "chromeos/network/network_state_handler.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/platform_test.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
-#include "ui/chromeos/network/network_connect.h"
 #include "ui/message_center/message_center.h"
 
 namespace {
 
 const char kCellularDevicePath[] = "/device/stub_cellular_device1";
 const char kCellularServicePath[] = "/service/cellular1";
+const char kCellularGuid[] = "cellular1_guid";
 const char kNotificationId[] = "chrome://settings/internet/data_saver";
 const char kTestUserName[] = "test-user@example.com";
 
-class NetworkConnectTestDelegate : public ui::NetworkConnect::Delegate {
+class NetworkConnectTestDelegate : public chromeos::NetworkConnect::Delegate {
  public:
   NetworkConnectTestDelegate() {}
   ~NetworkConnectTestDelegate() override {}
 
   void ShowNetworkConfigure(const std::string& network_id) override {}
-  void ShowNetworkSettingsForGuid(const std::string& network_id) override {}
+  void ShowNetworkSettings(const std::string& network_id) override {}
   bool ShowEnrollNetwork(const std::string& network_id) override {
     return false;
   }
   void ShowMobileSimDialog() override {}
-  void ShowMobileSetupDialog(const std::string& service_path) override {}
+  void ShowMobileSetupDialog(const std::string& network_id) override {}
+  void ShowNetworkConnectError(const std::string& error_name,
+                               const std::string& network_id) override {}
+  void ShowMobileActivationError(const std::string& network_id) override {}
 
  private:
   DISALLOW_COPY_AND_ASSIGN(NetworkConnectTestDelegate);
@@ -69,11 +73,11 @@ class DataPromoNotificationTest : public testing::Test {
     message_center::MessageCenter::Initialize();
     base::RunLoop().RunUntilIdle();
     network_connect_delegate_.reset(new NetworkConnectTestDelegate);
-    ui::NetworkConnect::Initialize(network_connect_delegate_.get());
+    chromeos::NetworkConnect::Initialize(network_connect_delegate_.get());
   }
 
   void TearDown() override {
-    ui::NetworkConnect::Shutdown();
+    chromeos::NetworkConnect::Shutdown();
     network_connect_delegate_.reset();
     message_center::MessageCenter::Shutdown();
     LoginState::Shutdown();
@@ -125,7 +129,7 @@ class DataPromoNotificationTest : public testing::Test {
     ShillServiceClient::TestInterface* service_test =
         DBusThreadManager::Get()->GetShillServiceClient()->GetTestInterface();
     service_test->ClearServices();
-    service_test->AddService(kCellularServicePath, "cellular1_guid",
+    service_test->AddService(kCellularServicePath, kCellularGuid,
                              "cellular1" /* name */, shill::kTypeCellular,
                              "activated", true /* visible */);
     service_test->SetServiceProperty(
@@ -153,7 +157,7 @@ TEST_F(DataPromoNotificationTest, DataSaverNotification) {
   // Network setup shouldn't be enough to activate notification.
   EXPECT_FALSE(message_center->FindVisibleNotificationById(kNotificationId));
 
-  ui::NetworkConnect::Get()->ConnectToNetwork(kCellularServicePath);
+  chromeos::NetworkConnect::Get()->ConnectToNetworkId(kCellularGuid);
   base::RunLoop().RunUntilIdle();
   // Connecting to cellular network (which here makes it the default network)
   // should trigger the Data Saver notification.

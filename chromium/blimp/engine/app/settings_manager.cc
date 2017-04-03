@@ -31,6 +31,7 @@ void SettingsManager::UpdateWebkitPreferences(content::WebPreferences* prefs) {
       settings_.default_maximum_page_scale_factor;
   prefs->shrinks_viewport_contents_to_fit =
       settings_.shrinks_viewport_contents_to_fit;
+  prefs->use_solid_color_scrollbars = true;
 }
 
 const EngineSettings& SettingsManager::GetEngineSettings() const {
@@ -43,7 +44,8 @@ void SettingsManager::UpdateEngineSettings(const EngineSettings& settings) {
 
   if (settings_.record_whole_document != old_settings.record_whole_document) {
     // Notify the observers that the web preferences have changed.
-    FOR_EACH_OBSERVER(Observer, observer_list_, OnWebPreferencesChanged());
+    for (auto& observer : observer_list_)
+      observer.OnWebPreferencesChanged();
   }
 }
 

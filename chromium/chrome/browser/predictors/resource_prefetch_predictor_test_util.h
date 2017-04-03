@@ -5,7 +5,9 @@
 #define CHROME_BROWSER_PREDICTORS_RESOURCE_PREFETCH_PREDICTOR_TEST_UTIL_H_
 
 #include <string>
+#include <vector>
 
+#include "chrome/browser/predictors/resource_prefetch_predictor.h"
 #include "chrome/browser/predictors/resource_prefetch_predictor_tables.h"
 
 namespace predictors {
@@ -32,16 +34,50 @@ PrefetchData CreatePrefetchData(const std::string& primary_key,
 RedirectData CreateRedirectData(const std::string& primary_key,
                                 uint64_t last_visit_time = 0);
 
+NavigationID CreateNavigationID(int process_id,
+                                int render_frame_id,
+                                const std::string& main_frame_url);
+
+ResourcePrefetchPredictor::PageRequestSummary CreatePageRequestSummary(
+    const std::string& main_frame_url,
+    const std::string& initial_url,
+    const std::vector<ResourcePrefetchPredictor::URLRequestSummary>&
+        subresource_requests);
+
+ResourcePrefetchPredictor::URLRequestSummary CreateURLRequestSummary(
+    int process_id,
+    int render_frame_id,
+    const std::string& main_frame_url,
+    const std::string& resource_url = std::string(),
+    content::ResourceType resource_type = content::RESOURCE_TYPE_MAIN_FRAME,
+    net::RequestPriority priority = net::MEDIUM,
+    const std::string& mime_type = std::string(),
+    bool was_cached = false,
+    const std::string& redirect_url = std::string(),
+    bool has_validators = false,
+    bool always_revalidate = false);
+
 // For printing failures nicely.
-void PrintTo(const PrefetchData& data, ::std::ostream* os);
-void PrintTo(const ResourceData& resource, ::std::ostream* os);
-void PrintTo(const RedirectData& data, ::std::ostream* os);
-void PrintTo(const RedirectStat& redirect, ::std::ostream* os);
+std::ostream& operator<<(std::ostream& stream, const PrefetchData& data);
+std::ostream& operator<<(std::ostream& stream, const ResourceData& resource);
+std::ostream& operator<<(std::ostream& stream, const RedirectData& data);
+std::ostream& operator<<(std::ostream& stream, const RedirectStat& redirect);
+std::ostream& operator<<(
+    std::ostream& stream,
+    const ResourcePrefetchPredictor::PageRequestSummary& summary);
+std::ostream& operator<<(
+    std::ostream& stream,
+    const ResourcePrefetchPredictor::URLRequestSummary& summary);
+std::ostream& operator<<(std::ostream& stream, const NavigationID& id);
 
 bool operator==(const PrefetchData& lhs, const PrefetchData& rhs);
 bool operator==(const ResourceData& lhs, const ResourceData& rhs);
 bool operator==(const RedirectData& lhs, const RedirectData& rhs);
 bool operator==(const RedirectStat& lhs, const RedirectStat& rhs);
+bool operator==(const ResourcePrefetchPredictor::PageRequestSummary& lhs,
+                const ResourcePrefetchPredictor::PageRequestSummary& rhs);
+bool operator==(const ResourcePrefetchPredictor::URLRequestSummary& lhs,
+                const ResourcePrefetchPredictor::URLRequestSummary& rhs);
 
 }  // namespace predictors
 

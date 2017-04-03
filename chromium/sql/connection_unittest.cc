@@ -11,7 +11,7 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/metrics/statistics_recorder.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/test/histogram_tester.h"
 #include "base/trace_event/process_memory_dump.h"
 #include "sql/connection.h"
@@ -146,6 +146,9 @@ class ScopedCommitHook {
 
 namespace {
 
+using sql::test::ExecuteWithResults;
+using sql::test::ExecuteWithResult;
+
 // Helper to return the count of items in sqlite_master.  Return -1 in
 // case of error.
 int SqliteMasterCount(sql::Connection* db) {
@@ -201,6 +204,17 @@ void ErrorCallbackResetHelper(sql::Connection* db,
   EXPECT_GT(*counter, 0u);
 }
 
+// Handle errors by blowing away the database.
+void RazeErrorCallback(sql::Connection* db,
+                       int expected_error,
+                       int error,
+                       sql::Statement* stmt) {
+  // Nothing here needs extended errors at this time.
+  EXPECT_EQ(expected_error, expected_error&0xff);
+  EXPECT_EQ(expected_error, error&0xff);
+  db->RazeAndClose();
+}
+
 #if defined(OS_POSIX)
 // Set a umask and restore the old mask on destruction.  Cribbed from
 // shared_memory_unittest.cc.  Used by POSIX-only UserPermission test.
@@ -239,24 +253,7 @@ const char kQueryTime[] = "Sqlite.QueryTime.Test";
 
 }  // namespace
 
-class SQLConnectionTest : public sql::SQLTestBase {
- public:
-  void SetUp() override {
-    // Any macro histograms which fire before the recorder is initialized cannot
-    // be tested.  So this needs to be ahead of Open().
-    base::StatisticsRecorder::Initialize();
-
-    SQLTestBase::SetUp();
-  }
-
-  // Handle errors by blowing away the database.
-  void RazeErrorCallback(int expected_error, int error, sql::Statement* stmt) {
-    // Nothing here needs extended errors at this time.
-    EXPECT_EQ(expected_error, expected_error&0xff);
-    EXPECT_EQ(expected_error, error&0xff);
-    db().RazeAndClose();
-  }
-};
+using SQLConnectionTest = sql::SQLTestBase;
 
 TEST_F(SQLConnectionTest, Execute) {
   // Valid statement should return true.
@@ -318,12 +315,23 @@ TEST_F(SQLConnectionTest, IsSQLValidTest) {
 }
 
 TEST_F(SQLConnectionTest, DoesStuffExist) {
-  // Test DoesTableExist.
+  // Test DoesTableExist and DoesIndexExist.
   EXPECT_FALSE(db().DoesTableExist("foo"));
   ASSERT_TRUE(db().Execute("CREATE TABLE foo (a, b)"));
   ASSERT_TRUE(db().Execute("CREATE INDEX foo_a ON foo (a)"));
+  EXPECT_FALSE(db().DoesIndexExist("foo"));
   EXPECT_TRUE(db().DoesTableExist("foo"));
   EXPECT_TRUE(db().DoesIndexExist("foo_a"));
+  EXPECT_FALSE(db().DoesTableExist("foo_a"));
+
+  // Test DoesViewExist.  The CREATE VIEW is an older form because some iOS
+  // versions use an earlier version of SQLite, and the difference isn't
+  // relevant for this test.
+  EXPECT_FALSE(db().DoesViewExist("voo"));
+  ASSERT_TRUE(db().Execute("CREATE VIEW voo AS SELECT 1"));
+  EXPECT_FALSE(db().DoesIndexExist("voo"));
+  EXPECT_FALSE(db().DoesTableExist("voo"));
+  EXPECT_TRUE(db().DoesViewExist("voo"));
 
   // Test DoesColumnExist.
   EXPECT_FALSE(db().DoesColumnExist("foo", "bar"));
@@ -509,34 +517,76 @@ TEST_F(SQLConnectionTest, Raze) {
   }
 }
 
-// Test that Raze() maintains page_size.
+// Helper for SQLConnectionTest.RazePageSize.  Creates a fresh db based on
+// db_prefix, with the given initial page size, and verifies it against the
+// expected size.  Then changes to the final page size and razes, verifying that
+// the fresh database ends up with the expected final page size.
+void TestPageSize(const base::FilePath& db_prefix,
+                  int initial_page_size,
+                  const std::string& expected_initial_page_size,
+                  int final_page_size,
+                  const std::string& expected_final_page_size) {
+  const char kCreateSql[] = "CREATE TABLE x (t TEXT)";
+  const char kInsertSql1[] = "INSERT INTO x VALUES ('This is a test')";
+  const char kInsertSql2[] = "INSERT INTO x VALUES ('That was a test')";
+
+  const base::FilePath db_path = db_prefix.InsertBeforeExtensionASCII(
+      base::IntToString(initial_page_size));
+  sql::Connection::Delete(db_path);
+  sql::Connection db;
+  db.set_page_size(initial_page_size);
+  ASSERT_TRUE(db.Open(db_path));
+  ASSERT_TRUE(db.Execute(kCreateSql));
+  ASSERT_TRUE(db.Execute(kInsertSql1));
+  ASSERT_TRUE(db.Execute(kInsertSql2));
+  ASSERT_EQ(expected_initial_page_size,
+            ExecuteWithResult(&db, "PRAGMA page_size"));
+
+  // Raze will use the page size set in the connection object, which may not
+  // match the file's page size.
+  db.set_page_size(final_page_size);
+  ASSERT_TRUE(db.Raze());
+
+  // SQLite 3.10.2 (at least) has a quirk with the sqlite3_backup() API (used by
+  // Raze()) which causes the destination database to remember the previous
+  // page_size, even if the overwriting database changed the page_size.  Access
+  // the actual database to cause the cached value to be updated.
+  EXPECT_EQ("0", ExecuteWithResult(&db, "SELECT COUNT(*) FROM sqlite_master"));
+
+  EXPECT_EQ(expected_final_page_size,
+            ExecuteWithResult(&db, "PRAGMA page_size"));
+  EXPECT_EQ("1", ExecuteWithResult(&db, "PRAGMA page_count"));
+}
+
+// Verify that sql::Recovery maintains the page size, and the virtual table
+// works with page sizes other than SQLite's default.  Also verify the case
+// where the default page size has changed.
 TEST_F(SQLConnectionTest, RazePageSize) {
-  // Fetch the default page size and double it for use in this test.
-  // Scoped to release statement before Close().
-  int default_page_size = 0;
-  {
-    sql::Statement s(db().GetUniqueStatement("PRAGMA page_size"));
-    ASSERT_TRUE(s.Step());
-    default_page_size = s.ColumnInt(0);
-  }
-  ASSERT_GT(default_page_size, 0);
-  const int kPageSize = 2 * default_page_size;
+  const std::string default_page_size =
+      ExecuteWithResult(&db(), "PRAGMA page_size");
 
-  // Re-open the database to allow setting the page size.
-  db().Close();
-  db().set_page_size(kPageSize);
-  ASSERT_TRUE(db().Open(db_path()));
+  // The database should have the default page size after raze.
+  EXPECT_NO_FATAL_FAILURE(
+      TestPageSize(db_path(), 0, default_page_size, 0, default_page_size));
 
-  // page_size should match the indicated value.
-  sql::Statement s(db().GetUniqueStatement("PRAGMA page_size"));
-  ASSERT_TRUE(s.Step());
-  ASSERT_EQ(kPageSize, s.ColumnInt(0));
+  // Sync user 32k pages.
+  EXPECT_NO_FATAL_FAILURE(
+      TestPageSize(db_path(), 32768, "32768", 32768, "32768"));
 
-  // After raze, page_size should still match the indicated value.
-  ASSERT_TRUE(db().Raze());
-  s.Reset(true);
-  ASSERT_TRUE(s.Step());
-  ASSERT_EQ(kPageSize, s.ColumnInt(0));
+  // Many clients use 4k pages.  This is the SQLite default after 3.12.0.
+  EXPECT_NO_FATAL_FAILURE(TestPageSize(db_path(), 4096, "4096", 4096, "4096"));
+
+  // 1k is the default page size before 3.12.0.
+  EXPECT_NO_FATAL_FAILURE(TestPageSize(db_path(), 1024, "1024", 1024, "1024"));
+
+  EXPECT_NO_FATAL_FAILURE(
+      TestPageSize(db_path(), 2048, "2048", 4096, "4096"));
+
+  // Databases with no page size specified should result in the new default
+  // page size.  2k has never been the default page size.
+  ASSERT_NE("2048", default_page_size);
+  EXPECT_NO_FATAL_FAILURE(
+      TestPageSize(db_path(), 2048, "2048", 0, default_page_size));
 }
 
 // Test that Raze() results are seen in other connections.
@@ -692,8 +742,8 @@ TEST_F(SQLConnectionTest, RazeCallbackReopen) {
     ASSERT_TRUE(expecter.SawExpectedErrors());
   }
 
-  db().set_error_callback(base::Bind(&SQLConnectionTest::RazeErrorCallback,
-                                     base::Unretained(this),
+  db().set_error_callback(base::Bind(&RazeErrorCallback,
+                                     &db(),
                                      SQLITE_CORRUPT));
 
   // When the PRAGMA calls in Open() raise SQLITE_CORRUPT, the error
@@ -938,8 +988,8 @@ TEST_F(SQLConnectionTest, Poison) {
   // Test that poisoning the database during a transaction works (with errors).
   // RazeErrorCallback() poisons the database, the extra COMMIT causes
   // CommitTransaction() to throw an error while commiting.
-  db().set_error_callback(base::Bind(&SQLConnectionTest::RazeErrorCallback,
-                                     base::Unretained(this),
+  db().set_error_callback(base::Bind(&RazeErrorCallback,
+                                     &db(),
                                      SQLITE_ERROR));
   db().Close();
   ASSERT_TRUE(db().Open(db_path()));
@@ -1432,11 +1482,43 @@ TEST_F(SQLConnectionTest, MmapInitiallyEnabled) {
   sql::Connection::Delete(db_path());
   db().set_mmap_disabled();
   ASSERT_TRUE(db().Open(db_path()));
+  EXPECT_EQ("0", ExecuteWithResult(&db(), "PRAGMA mmap_size"));
+}
+
+// Test whether a fresh database gets mmap enabled when using alternate status
+// storage.
+TEST_F(SQLConnectionTest, MmapInitiallyEnabledAltStatus) {
+  // Re-open fresh database with alt-status flag set.
+  db().Close();
+  sql::Connection::Delete(db_path());
+  db().set_mmap_alt_status();
+  ASSERT_TRUE(db().Open(db_path()));
+
   {
     sql::Statement s(db().GetUniqueStatement("PRAGMA mmap_size"));
-    ASSERT_TRUE(s.Step());
-    EXPECT_LE(s.ColumnInt(0), 0);
+
+    // SQLite doesn't have mmap support (perhaps an early iOS release).
+    if (!s.Step())
+      return;
+
+    // If mmap I/O is not on, attempt to turn it on.  If that succeeds, then
+    // Open() should have turned it on.  If mmap support is disabled, 0 is
+    // returned.  If the VFS does not understand SQLITE_FCNTL_MMAP_SIZE (for
+    // instance MojoVFS), -1 is returned.
+    if (s.ColumnInt(0) <= 0) {
+      ASSERT_TRUE(db().Execute("PRAGMA mmap_size = 1048576"));
+      s.Reset(true);
+      ASSERT_TRUE(s.Step());
+      EXPECT_LE(s.ColumnInt(0), 0);
+    }
   }
+
+  // Test that explicit disable overrides set_mmap_alt_status().
+  db().Close();
+  sql::Connection::Delete(db_path());
+  db().set_mmap_disabled();
+  ASSERT_TRUE(db().Open(db_path()));
+  EXPECT_EQ("0", ExecuteWithResult(&db(), "PRAGMA mmap_size"));
 }
 
 TEST_F(SQLConnectionTest, GetAppropriateMmapSize) {
@@ -1482,6 +1564,44 @@ TEST_F(SQLConnectionTest, GetAppropriateMmapSize) {
   ASSERT_GT(db().GetAppropriateMmapSize(), kMmapAlot);
   ASSERT_TRUE(MetaTable::GetMmapStatus(&db(), &mmap_status));
   ASSERT_EQ(MetaTable::kMmapSuccess, mmap_status);
+}
+
+TEST_F(SQLConnectionTest, GetAppropriateMmapSizeAltStatus) {
+#if defined(OS_IOS) && defined(USE_SYSTEM_SQLITE)
+  // Mmap is not supported on iOS9.  Make sure that test takes precedence.
+  if (!base::ios::IsRunningOnIOS10OrLater()) {
+    db().set_mmap_alt_status();
+    ASSERT_EQ(0UL, db().GetAppropriateMmapSize());
+    return;
+  }
+#endif
+
+  const size_t kMmapAlot = 25 * 1024 * 1024;
+
+  // At this point, Connection still expects a future [meta] table.
+  ASSERT_FALSE(db().DoesTableExist("meta"));
+  ASSERT_FALSE(db().DoesViewExist("MmapStatus"));
+  ASSERT_GT(db().GetAppropriateMmapSize(), kMmapAlot);
+  ASSERT_FALSE(db().DoesTableExist("meta"));
+  ASSERT_FALSE(db().DoesViewExist("MmapStatus"));
+
+  // Using alt status, everything should be mapped, with state in the view.
+  db().set_mmap_alt_status();
+  ASSERT_GT(db().GetAppropriateMmapSize(), kMmapAlot);
+  ASSERT_FALSE(db().DoesTableExist("meta"));
+  ASSERT_TRUE(db().DoesViewExist("MmapStatus"));
+  EXPECT_EQ(base::IntToString(MetaTable::kMmapSuccess),
+            ExecuteWithResult(&db(), "SELECT * FROM MmapStatus"));
+
+  // Also maps everything when kMmapSuccess is in the view.
+  ASSERT_GT(db().GetAppropriateMmapSize(), kMmapAlot);
+
+  // Failure status leads to nothing being mapped.
+  ASSERT_TRUE(db().Execute("DROP VIEW MmapStatus"));
+  ASSERT_TRUE(db().Execute("CREATE VIEW MmapStatus AS SELECT -2"));
+  ASSERT_EQ(0UL, db().GetAppropriateMmapSize());
+  EXPECT_EQ(base::IntToString(MetaTable::kMmapFailure),
+            ExecuteWithResult(&db(), "SELECT * FROM MmapStatus"));
 }
 
 // To prevent invalid SQL from accidentally shipping to production, prepared

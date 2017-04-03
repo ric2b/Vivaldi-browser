@@ -16,9 +16,6 @@
 #include "third_party/WebKit/public/web/WebRemoteFrameClient.h"
 #include "url/origin.h"
 
-struct FrameMsg_BuffersSwapped_Params;
-struct FrameMsg_CompositorFrameSwapped_Params;
-
 namespace blink {
 class WebInputEvent;
 struct WebRect;
@@ -136,6 +133,7 @@ class CONTENT_EXPORT RenderFrameProxy
   void forwardInputEvent(const blink::WebInputEvent* event) override;
   void frameRectsChanged(const blink::WebRect& frame_rect) override;
   void visibilityChanged(bool visible) override;
+  void setHasReceivedUserGesture() override;
   void didChangeOpener(blink::WebFrame* opener) override;
   void advanceFocus(blink::WebFocusType type,
                     blink::WebLocalFrame* source) override;

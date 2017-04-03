@@ -9,8 +9,9 @@
 #include "base/i18n/rtl.h"
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
-#include "ui/accessibility/ax_view_state.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/base/ime/input_method.h"
+#include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/events/event.h"
 #include "ui/events/keycodes/keyboard_codes.h"
@@ -21,6 +22,7 @@
 #include "ui/gfx/skia_util.h"
 #include "ui/native_theme/native_theme.h"
 #include "ui/resources/grit/ui_resources.h"
+#include "ui/views/controls/focus_ring.h"
 #include "ui/views/controls/prefix_selector.h"
 #include "ui/views/controls/scroll_view.h"
 #include "ui/views/controls/textfield/textfield.h"
@@ -406,15 +408,15 @@ void TreeView::ShowContextMenu(const gfx::Point& p,
   View::ShowContextMenu(p, source_type);
 }
 
-void TreeView::GetAccessibleState(ui::AXViewState* state) {
-  state->role = ui::AX_ROLE_TREE;
-  state->AddStateFlag(ui::AX_STATE_READ_ONLY);
+void TreeView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
+  node_data->role = ui::AX_ROLE_TREE;
+  node_data->AddStateFlag(ui::AX_STATE_READ_ONLY);
   if (!selected_node_)
     return;
 
   // Get selected item info.
-  state->role = ui::AX_ROLE_TREE_ITEM;
-  state->name = selected_node_->model_node()->GetTitle();
+  node_data->role = ui::AX_ROLE_TREE_ITEM;
+  node_data->SetName(selected_node_->model_node()->GetTitle());
 }
 
 const char* TreeView::GetClassName() const {
@@ -631,6 +633,8 @@ void TreeView::OnFocus() {
   // Notify the InputMethod so that it knows to query the TextInputClient.
   if (GetInputMethod())
     GetInputMethod()->OnCaretBoundsChanged(GetPrefixSelector());
+
+  SetHasFocusRing(true);
 }
 
 void TreeView::OnBlur() {
@@ -639,6 +643,7 @@ void TreeView::OnBlur() {
   SchedulePaintForNode(selected_node_);
   if (selector_)
     selector_->OnViewBlur();
+  SetHasFocusRing(false);
 }
 
 bool TreeView::OnClickOrTap(const ui::LocatedEvent& event) {
@@ -1055,6 +1060,22 @@ bool TreeView::IsPointInExpandControl(InternalNode* node,
   if (base::i18n::IsRTL())
     arrow_bounds.set_x(bounds().width() - arrow_dx - kArrowRegionSize);
   return arrow_bounds.Contains(point);
+}
+
+void TreeView::SetHasFocusRing(bool shows) {
+  if (!ui::MaterialDesignController::IsSecondaryUiMaterial() ||
+      !PlatformStyle::kTreeViewHasFocusRing) {
+    return;
+  }
+  // If this View is the grandchild of a ScrollView, use the grandparent
+  // ScrollView for the focus ring instead of this View so that the focus ring
+  // won't be scrolled. Since ScrollViews have a single content view, which they
+  // wrap in a ScrollView::Viewport, being the grandchild of a ScrollView
+  // implies being the sole grandchild, which means it's fine to wrap the focus
+  // ring around the grandparent here.
+  View* grandparent = parent() ? parent()->parent() : nullptr;
+  if (grandparent && grandparent->GetClassName() == ScrollView::kViewClassName)
+    static_cast<ScrollView*>(grandparent)->SetHasFocusRing(shows);
 }
 
 // InternalNode ----------------------------------------------------------------

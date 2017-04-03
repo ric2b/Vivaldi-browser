@@ -12,6 +12,7 @@ from telemetry.page import legacy_page_test
 from telemetry.value import scalar
 from telemetry.value import improvement_direction
 from telemetry.timeline import chrome_trace_category_filter
+from telemetry.timeline import chrome_trace_config
 from telemetry.web_perf import timeline_based_measurement
 
 
@@ -48,6 +49,7 @@ class OortOnline(perf_benchmark.PerfBenchmark):
     return page_sets.OortOnlinePageSet()
 
 
+@benchmark.Disabled('win')
 class OortOnlineTBMv2(perf_benchmark.PerfBenchmark):
   """OortOnline benchmark that measures WebGL and V8 performance.
   URL: http://oortonline.gl/#run
@@ -61,13 +63,6 @@ class OortOnlineTBMv2(perf_benchmark.PerfBenchmark):
       r'(reported_by_chrome:v8|reported_by_os:system_memory:[^:]+$)')
 
   page_set = page_sets.OortOnlineTBMPageSet
-
-  def SetExtraBrowserOptions(self, options):
-    options.AppendExtraBrowserArgs([
-        # TODO(perezju): Temporary workaround to disable periodic memory dumps.
-        # See: http://crbug.com/513692
-        '--enable-memory-benchmarking',
-    ])
 
   def CreateTimelineBasedMeasurementOptions(self):
     categories = [
@@ -94,6 +89,9 @@ class OortOnlineTBMv2(perf_benchmark.PerfBenchmark):
     options = timeline_based_measurement.Options(category_filter)
     options.SetTimelineBasedMetrics([
         'gcMetric', 'memoryMetric', 'responsivenessMetric'])
+    # Setting an empty memory dump config disables periodic dumps.
+    options.config.chrome_trace_config.SetMemoryDumpConfig(
+        chrome_trace_config.MemoryDumpConfig())
     return options
 
   @classmethod

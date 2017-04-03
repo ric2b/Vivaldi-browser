@@ -38,11 +38,20 @@
 #include "base/test/test_discardable_memory_allocator.h"
 #include "cc/blink/web_compositor_support_impl.h"
 #include "cc/test/ordered_simple_task_runner.h"
+#include "mojo/public/cpp/bindings/strong_binding.h"
 #include "platform/HTTPNames.h"
 #include "platform/heap/Heap.h"
+#include "platform/network/mime/MockMimeRegistry.h"
+#include "platform/scheduler/base/real_time_domain.h"
+#include "platform/scheduler/base/task_queue_manager.h"
 #include "platform/scheduler/base/test_time_source.h"
 #include "platform/scheduler/child/scheduler_tqm_delegate_for_test.h"
 #include "platform/scheduler/renderer/renderer_scheduler_impl.h"
+#include "public/platform/InterfaceProvider.h"
+#include "public/platform/WebContentLayer.h"
+#include "public/platform/WebExternalTextureLayer.h"
+#include "public/platform/WebImageLayer.h"
+#include "public/platform/WebScrollbarLayer.h"
 #include "wtf/CryptographicallyRandomNumber.h"
 #include "wtf/CurrentTime.h"
 #include "wtf/PtrUtil.h"
@@ -51,6 +60,23 @@
 #include <memory>
 
 namespace blink {
+
+class TestingPlatformSupport::TestingInterfaceProvider
+    : public blink::InterfaceProvider {
+ public:
+  TestingInterfaceProvider() = default;
+  virtual ~TestingInterfaceProvider() = default;
+
+  void getInterface(const char* name,
+                    mojo::ScopedMessagePipeHandle handle) override {
+    if (std::string(name) == mojom::blink::MimeRegistry::Name_) {
+      mojo::MakeStrongBinding(
+          makeUnique<MockMimeRegistry>(),
+          mojo::MakeRequest<mojom::blink::MimeRegistry>(std::move(handle)));
+      return;
+    }
+  }
+};
 
 namespace {
 
@@ -66,11 +92,52 @@ class DummyThread final : public blink::WebThread {
 
 }  // namespace
 
+std::unique_ptr<WebLayer> TestingCompositorSupport::createLayer() {
+  return nullptr;
+}
+
+std::unique_ptr<WebLayer> TestingCompositorSupport::createLayerFromCCLayer(
+    cc::Layer*) {
+  return nullptr;
+}
+
+std::unique_ptr<WebContentLayer> TestingCompositorSupport::createContentLayer(
+    WebContentLayerClient*) {
+  return nullptr;
+}
+std::unique_ptr<WebExternalTextureLayer>
+TestingCompositorSupport::createExternalTextureLayer(cc::TextureLayerClient*) {
+  return nullptr;
+}
+
+std::unique_ptr<WebImageLayer> TestingCompositorSupport::createImageLayer() {
+  return nullptr;
+}
+
+std::unique_ptr<WebScrollbarLayer>
+TestingCompositorSupport::createScrollbarLayer(
+    std::unique_ptr<WebScrollbar>,
+    WebScrollbarThemePainter,
+    std::unique_ptr<WebScrollbarThemeGeometry>) {
+  return nullptr;
+}
+
+std::unique_ptr<WebScrollbarLayer>
+TestingCompositorSupport::createSolidColorScrollbarLayer(
+    WebScrollbar::Orientation,
+    int thumbThickness,
+    int trackStart,
+    bool isLeftSideVerticalScrollbar) {
+  return nullptr;
+}
+
 TestingPlatformSupport::TestingPlatformSupport()
     : TestingPlatformSupport(TestingPlatformSupport::Config()) {}
 
 TestingPlatformSupport::TestingPlatformSupport(const Config& config)
-    : m_config(config), m_oldPlatform(Platform::current()) {
+    : m_config(config),
+      m_oldPlatform(Platform::current()),
+      m_interfaceProvider(new TestingInterfaceProvider) {
   ASSERT(m_oldPlatform);
   Platform::setCurrentPlatformForTesting(this);
 }
@@ -110,10 +177,6 @@ WebIDBFactory* TestingPlatformSupport::idbFactory() {
   return m_oldPlatform ? m_oldPlatform->idbFactory() : nullptr;
 }
 
-WebMimeRegistry* TestingPlatformSupport::mimeRegistry() {
-  return m_oldPlatform ? m_oldPlatform->mimeRegistry() : nullptr;
-}
-
 WebURLLoaderMockFactory* TestingPlatformSupport::getURLLoaderMockFactory() {
   return m_oldPlatform ? m_oldPlatform->getURLLoaderMockFactory() : nullptr;
 }
@@ -128,6 +191,10 @@ WebData TestingPlatformSupport::loadResource(const char* name) {
 
 WebURLError TestingPlatformSupport::cancelledError(const WebURL& url) const {
   return m_oldPlatform ? m_oldPlatform->cancelledError(url) : WebURLError();
+}
+
+InterfaceProvider* TestingPlatformSupport::interfaceProvider() {
+  return m_interfaceProvider.get();
 }
 
 // TestingPlatformSupportWithMockScheduler definition:
@@ -177,7 +244,34 @@ void TestingPlatformSupportWithMockScheduler::runUntilIdle() {
 
 void TestingPlatformSupportWithMockScheduler::runForPeriodSeconds(
     double seconds) {
-  m_mockTaskRunner->RunForPeriod(base::TimeDelta::FromSecondsD(seconds));
+  const base::TimeTicks deadline =
+      m_clock->NowTicks() + base::TimeDelta::FromSecondsD(seconds);
+
+  scheduler::TaskQueueManager* taskQueueManager =
+      m_scheduler->GetSchedulerHelperForTesting()
+          ->GetTaskQueueManagerForTesting();
+
+  for (;;) {
+    // If we've run out of immediate work then fast forward to the next delayed
+    // task, but don't pass |deadline|.
+    if (!taskQueueManager->HasImmediateWorkForTesting()) {
+      base::TimeTicks nextDelayedTask;
+      if (!taskQueueManager->real_time_domain()->NextScheduledRunTime(
+              &nextDelayedTask) ||
+          nextDelayedTask > deadline) {
+        break;
+      }
+
+      m_clock->SetNowTicks(nextDelayedTask);
+    }
+
+    if (m_clock->NowTicks() > deadline)
+      break;
+
+    m_mockTaskRunner->RunPendingTasks();
+  }
+
+  m_clock->SetNowTicks(deadline);
 }
 
 void TestingPlatformSupportWithMockScheduler::advanceClockSeconds(
@@ -236,7 +330,7 @@ ScopedUnittestsEnvironmentSetup::ScopedUnittestsEnvironmentSetup(int argc,
   m_compositorSupport = wrapUnique(new cc_blink::WebCompositorSupportImpl);
   m_testingPlatformConfig.compositorSupport = m_compositorSupport.get();
   m_testingPlatformSupport =
-      wrapUnique(new TestingPlatformSupport(m_testingPlatformConfig));
+      makeUnique<TestingPlatformSupport>(m_testingPlatformConfig);
 
   ProcessHeap::init();
   ThreadState::attachMainThread();

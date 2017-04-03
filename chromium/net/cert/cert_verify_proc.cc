@@ -18,6 +18,7 @@
 #include "net/base/net_errors.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "net/base/url_util.h"
+#include "net/cert/asn1_util.h"
 #include "net/cert/cert_status_flags.h"
 #include "net/cert/cert_verifier.h"
 #include "net/cert/cert_verify_proc_whitelist.h"
@@ -40,6 +41,7 @@
 #elif defined(OS_MACOSX)
 #include "net/cert/cert_verify_proc_mac.h"
 #elif defined(OS_WIN)
+#include "base/win/windows_version.h"
 #include "net/cert/cert_verify_proc_win.h"
 #else
 #error Implement certificate verification.
@@ -309,6 +311,34 @@ void CheckOCSP(const std::string& raw_response,
   }
 }
 
+// Records histograms indicating whether the certificate |cert|, which
+// is assumed to have been validated chaining to a private root,
+// contains the TLS Feature Extension (https://tools.ietf.org/html/rfc7633) and
+// has valid OCSP information stapled.
+void RecordTLSFeatureExtensionWithPrivateRoot(
+    X509Certificate* cert,
+    const OCSPVerifyResult& ocsp_result) {
+  std::string cert_der;
+  if (!X509Certificate::GetDEREncoded(cert->os_cert_handle(), &cert_der))
+    return;
+
+  // This checks only for the presence of the TLS Feature Extension, but
+  // does not check the feature list, and in particular does not verify that
+  // its value is 'status_request' or 'status_request2'. In practice the
+  // only use of the TLS feature extension is for OCSP stapling, so
+  // don't bother to check the value.
+  bool has_extension = asn1::HasTLSFeatureExtension(cert_der);
+
+  UMA_HISTOGRAM_BOOLEAN("Net.Certificate.TLSFeatureExtensionWithPrivateRoot",
+                        has_extension);
+  if (!has_extension)
+    return;
+
+  UMA_HISTOGRAM_BOOLEAN(
+      "Net.Certificate.TLSFeatureExtensionWithPrivateRootHasOCSP",
+      (ocsp_result.response_status != OCSPVerifyResult::MISSING));
+}
+
 // Comparison functor used for binary searching whether a given HashValue,
 // which MUST be a SHA-256 hash, is contained with an array of SHA-256
 // hashes.
@@ -326,6 +356,17 @@ struct HashToArrayComparator {
                   "Only SHA-256 hashes are supported");
     return memcmp(lhs.data(), rhs, crypto::kSHA256Length) < 0;
   }
+};
+
+bool AreSHA1IntermediatesAllowed() {
+#if defined(OS_WIN)
+  // TODO(rsleevi): Remove this once https://crbug.com/588789 is resolved
+  // for Windows 7/2008 users.
+  // Note: This must be kept in sync with cert_verify_proc_unittest.cc
+  return base::win::GetVersion() < base::win::VERSION_WIN8;
+#else
+  return false;
+#endif
 };
 
 }  // namespace
@@ -349,7 +390,8 @@ CertVerifyProc* CertVerifyProc::CreateDefault() {
 #endif
 }
 
-CertVerifyProc::CertVerifyProc() {}
+CertVerifyProc::CertVerifyProc()
+    : sha1_legacy_mode_enabled(base::FeatureList::IsEnabled(kSHA1LegacyMode)) {}
 
 CertVerifyProc::~CertVerifyProc() {}
 
@@ -444,8 +486,20 @@ int CertVerifyProc::Verify(X509Certificate* cert,
   // TODO(mattm): apply the SHA-1 deprecation check to all certs unless
   // CertVerifier::VERIFY_ENABLE_SHA1_LOCAL_ANCHORS flag is present.
   if (verify_result->has_md5 ||
-      (verify_result->has_sha1_leaf && verify_result->is_issued_by_known_root &&
-       IsPastSHA1DeprecationDate(*cert))) {
+      // Current SHA-1 behaviour:
+      // - Reject all publicly trusted SHA-1
+      // - ... unless it's in the intermediate and SHA-1 intermediates are
+      //   allowed for that platform. See https://crbug.com/588789
+      (!sha1_legacy_mode_enabled &&
+       (verify_result->is_issued_by_known_root &&
+        (verify_result->has_sha1_leaf ||
+         (verify_result->has_sha1 && !AreSHA1IntermediatesAllowed())))) ||
+      // Legacy SHA-1 behaviour:
+      // - Reject all publicly trusted SHA-1 leaf certs issued after
+      //   2016-01-01.
+      (sha1_legacy_mode_enabled && (verify_result->has_sha1_leaf &&
+                                    verify_result->is_issued_by_known_root &&
+                                    IsPastSHA1DeprecationDate(*cert)))) {
     verify_result->cert_status |= CERT_STATUS_WEAK_SIGNATURE_ALGORITHM;
     // Avoid replacing a more serious error, such as an OS/library failure,
     // by ensuring that if verification failed, it failed with a certificate
@@ -471,6 +525,11 @@ int CertVerifyProc::Verify(X509Certificate* cert,
     if (rv == OK)
       rv = MapCertStatusToNetError(verify_result->cert_status);
   }
+
+  // Record a histogram for the presence of the TLS feature extension in
+  // a certificate chaining to a private root.
+  if (rv == OK && !verify_result->is_issued_by_known_root)
+    RecordTLSFeatureExtensionWithPrivateRoot(cert, verify_result->ocsp_result);
 
   return rv;
 }
@@ -531,13 +590,11 @@ static bool CheckNameConstraints(const std::vector<std::string>& dns_names,
     if (host_info.IsIPAddress())
       continue;
 
-    const size_t registry_len = registry_controlled_domains::GetRegistryLength(
-        dns_name,
-        registry_controlled_domains::EXCLUDE_UNKNOWN_REGISTRIES,
-        registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES);
     // If the name is not in a known TLD, ignore it. This permits internal
     // names.
-    if (registry_len == 0)
+    if (!registry_controlled_domains::HostHasRegistryControlledDomain(
+            dns_name, registry_controlled_domains::EXCLUDE_UNKNOWN_REGISTRIES,
+            registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES))
       continue;
 
     for (size_t j = 0; domains[j][0]; ++j) {
@@ -693,12 +750,12 @@ bool CertVerifyProc::HasTooLongValidity(const X509Certificate& cert) {
   if (exploded_expiry.day_of_month > exploded_start.day_of_month)
     ++month_diff;
 
-  static const base::Time time_2012_07_01 =
-      base::Time::FromUTCExploded({2012, 7, 0, 1, 0, 0, 0, 0});
-  static const base::Time time_2015_04_01 =
-      base::Time::FromUTCExploded({2015, 4, 0, 1, 0, 0, 0, 0});
-  static const base::Time time_2019_07_01 =
-      base::Time::FromUTCExploded({2019, 7, 0, 1, 0, 0, 0, 0});
+  const base::Time time_2012_07_01 =
+      base::Time::FromInternalValue(12985574400000000);
+  const base::Time time_2015_04_01 =
+      base::Time::FromInternalValue(13072320000000000);
+  const base::Time time_2019_07_01 =
+      base::Time::FromInternalValue(13206412800000000);
 
   // For certificates issued before the BRs took effect.
   if (start < time_2012_07_01 && (month_diff > 120 || expiry > time_2019_07_01))
@@ -714,5 +771,9 @@ bool CertVerifyProc::HasTooLongValidity(const X509Certificate& cert) {
 
   return false;
 }
+
+// static
+const base::Feature CertVerifyProc::kSHA1LegacyMode{
+    "SHA1LegacyMode", base::FEATURE_DISABLED_BY_DEFAULT};
 
 }  // namespace net

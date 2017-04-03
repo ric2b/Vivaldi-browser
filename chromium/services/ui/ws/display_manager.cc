@@ -4,6 +4,8 @@
 
 #include "services/ui/ws/display_manager.h"
 
+#include <vector>
+
 #include "base/memory/ptr_util.h"
 #include "base/trace_event/trace_event.h"
 #include "services/ui/display/platform_screen.h"
@@ -16,7 +18,9 @@
 #include "services/ui/ws/user_display_manager_delegate.h"
 #include "services/ui/ws/user_id_tracker.h"
 #include "services/ui/ws/window_manager_state.h"
+#include "services/ui/ws/window_manager_window_tree_factory.h"
 #include "services/ui/ws/window_server_delegate.h"
+#include "services/ui/ws/window_tree.h"
 
 namespace ui {
 namespace ws {
@@ -89,7 +93,7 @@ void DisplayManager::OnDisplayUpdate(Display* display) {
     pair.second->OnDisplayUpdate(display);
 }
 
-Display* DisplayManager::GetDisplayContaining(ServerWindow* window) {
+Display* DisplayManager::GetDisplayContaining(const ServerWindow* window) {
   return const_cast<Display*>(
       static_cast<const DisplayManager*>(this)->GetDisplayContaining(window));
 }
@@ -168,19 +172,14 @@ void DisplayManager::OnActiveUserIdChanged(const UserId& previously_active_id,
 }
 
 void DisplayManager::OnDisplayAdded(int64_t id,
-                                    const gfx::Rect& bounds,
-                                    const gfx::Size& pixel_size,
-                                    float scale_factor) {
+                                    const display::ViewportMetrics& metrics) {
   TRACE_EVENT1("mus-ws", "OnDisplayAdded", "id", id);
   PlatformDisplayInitParams params;
   params.display_id = id;
-  params.metrics.bounds = bounds;
-  params.metrics.pixel_size = pixel_size;
-  params.metrics.device_scale_factor = scale_factor;
-  params.display_compositor = window_server_->GetDisplayCompositor();
+  params.metrics = metrics;
 
-  ws::Display* display = new ws::Display(window_server_, params);
-  display->Init(nullptr);
+  ws::Display* display = new ws::Display(window_server_);
+  display->Init(params, nullptr);
 
   window_server_->delegate()->UpdateTouchTransforms();
 }
@@ -192,12 +191,37 @@ void DisplayManager::OnDisplayRemoved(int64_t id) {
     DestroyDisplay(display);
 }
 
-void DisplayManager::OnDisplayModified(int64_t id,
-                                       const gfx::Rect& bounds,
-                                       const gfx::Size& pixel_size,
-                                       float scale_factor) {
-  // TODO(kylechar): Implement.
-  NOTREACHED();
+void DisplayManager::OnDisplayModified(
+    int64_t id,
+    const display::ViewportMetrics& metrics) {
+  TRACE_EVENT1("mus-ws", "OnDisplayModified", "id", id);
+
+  Display* display = GetDisplayById(id);
+  DCHECK(display);
+
+  // Update the platform display and check if anything has actually changed.
+  if (!display->platform_display()->UpdateViewportMetrics(metrics))
+    return;
+
+  // Send IPCs to WM clients first with new display information.
+  std::vector<WindowManagerWindowTreeFactory*> factories =
+      window_server_->window_manager_window_tree_factory_set()->GetFactories();
+  for (WindowManagerWindowTreeFactory* factory : factories) {
+    if (factory->window_tree())
+      factory->window_tree()->OnWmDisplayModified(display->ToDisplay());
+  }
+
+  // Change the root ServerWindow size after sending IPC to WM.
+  display->OnViewportMetricsChanged(metrics);
+  OnDisplayUpdate(display);
+}
+
+void DisplayManager::OnPrimaryDisplayChanged(int64_t primary_display_id) {
+  // TODO(kylechar): Send IPCs to WM clients first.
+
+  // Send IPCs to any DisplayManagerObservers.
+  for (const auto& pair : user_display_managers_)
+    pair.second->OnPrimaryDisplayChanged(primary_display_id);
 }
 
 }  // namespace ws

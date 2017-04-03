@@ -46,6 +46,9 @@ const char kDisablePaymentRequest[] = "disable-payment-request";
 // Disables the QR Code scanner.
 const char kDisableQRScanner[] = "disable-qr-scanner";
 
+// Disables the reading list.
+const char kDisableReadingList[] = "disable-reading-list";
+
 // Disables the Spotlight actions.
 const char kDisableSpotlightActions[] = "disable-spotlight-actions";
 
@@ -98,6 +101,9 @@ const char kEnableReaderModeToolbarIcon[] = "enable-reader-mode-toolbar-icon";
 // Enables the Spotlight actions.
 const char kEnableSpotlightActions[] = "enable-spotlight-actions";
 
+// Enables the reading list.
+const char kEnableReadingList[] = "enable-reading-list";
+
 // Enables the tab switcher.
 const char kEnableTabSwitcher[] = "enable-tab-switcher";
 
@@ -131,10 +137,5 @@ const char kIOSTestingFixedHttpsPort[] = "testing-fixed-https-port";
 
 // Enables grouping websites by domain and filtering them by period.
 const char kHistoryEnableGroupByDomain[] = "enable-grouped-history";
-
-// Use to opt-in to marking HTTP as non-secure.
-const char kMarkNonSecureAs[] = "mark-non-secure-as";
-const char kMarkNonSecureAsNeutral[] = "neutral";
-const char kMarkNonSecureAsNonSecure[] = "non-secure";
 
 }  // namespace switches

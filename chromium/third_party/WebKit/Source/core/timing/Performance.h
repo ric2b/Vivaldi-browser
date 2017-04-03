@@ -34,6 +34,7 @@
 
 #include "core/CoreExport.h"
 #include "core/frame/DOMWindowProperty.h"
+#include "core/frame/PerformanceMonitor.h"
 #include "core/timing/MemoryInfo.h"
 #include "core/timing/PerformanceBase.h"
 #include "core/timing/PerformanceNavigation.h"
@@ -41,10 +42,12 @@
 
 namespace blink {
 
-class InspectorWebPerfAgent;
+class ScriptState;
+class ScriptValue;
 
 class CORE_EXPORT Performance final : public PerformanceBase,
-                                      public DOMWindowProperty {
+                                      public DOMWindowProperty,
+                                      public PerformanceMonitor::Client {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(Performance);
   friend class PerformanceTest;
@@ -63,14 +66,27 @@ class CORE_EXPORT Performance final : public PerformanceBase,
 
   void updateLongTaskInstrumentation() override;
 
+  ScriptValue toJSONForBinding(ScriptState*) const;
+
   DECLARE_VIRTUAL_TRACE();
 
  private:
   explicit Performance(LocalFrame*);
 
+  // DOMWindowProperty overrides.
+  void frameDestroyed() override;
+
+  static std::pair<String, DOMWindow*> sanitizedAttribution(
+      const HeapHashSet<Member<Frame>>& frames,
+      Frame* observerFrame);
+
+  // PerformanceMonitor::Client implementation.
+  void reportLongTask(double startTime,
+                      double endTime,
+                      const HeapHashSet<Member<Frame>>& contextFrames) override;
+
   mutable Member<PerformanceNavigation> m_navigation;
   mutable Member<PerformanceTiming> m_timing;
-  mutable Member<InspectorWebPerfAgent> m_longTaskInspectorAgent;
 };
 
 }  // namespace blink

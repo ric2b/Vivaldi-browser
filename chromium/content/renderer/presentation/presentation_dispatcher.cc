@@ -13,7 +13,7 @@
 #include "content/public/common/presentation_constants.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/renderer/presentation/presentation_connection_client.h"
-#include "services/shell/public/cpp/interface_provider.h"
+#include "services/service_manager/public/cpp/interface_provider.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/platform/WebURL.h"
 #include "third_party/WebKit/public/platform/WebVector.h"
@@ -45,7 +45,8 @@ blink::WebPresentationError::ErrorType GetWebPresentationErrorTypeFromMojo(
 blink::WebPresentationConnectionState GetWebPresentationConnectionStateFromMojo(
     blink::mojom::PresentationConnectionState mojoSessionState) {
   switch (mojoSessionState) {
-    // TODO(imcheng): Add Connecting state to Blink (crbug.com/575351).
+    case blink::mojom::PresentationConnectionState::CONNECTING:
+      return blink::WebPresentationConnectionState::Connecting;
     case blink::mojom::PresentationConnectionState::CONNECTED:
       return blink::WebPresentationConnectionState::Connected;
     case blink::mojom::PresentationConnectionState::CLOSED:
@@ -272,7 +273,7 @@ void PresentationDispatcher::startListening(
   auto status_it = availability_status_.find(observer->url());
   if (status_it == availability_status_.end()) {
     DLOG(WARNING) << "Start listening for availability for unknown URL "
-                  << observer->url();
+                  << GURL(observer->url());
     return;
   }
   status_it->second->availability_observers.insert(observer);
@@ -284,7 +285,7 @@ void PresentationDispatcher::stopListening(
   auto status_it = availability_status_.find(observer->url());
   if (status_it == availability_status_.end()) {
     DLOG(WARNING) << "Stop listening for availability for unknown URL "
-                  << observer->url();
+                  << GURL(observer->url());
     return;
   }
   status_it->second->availability_observers.erase(observer);

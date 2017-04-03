@@ -16,6 +16,7 @@
 #include "third_party/WebKit/public/platform/WebURLRequest.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebView.h"
+
 #include "content/public/common/page_zoom.h"
 
 using blink::WebView;
@@ -85,8 +86,8 @@ void ExtensionHelper::OnAppWindowClosed() {
       dispatcher_->script_context_set().GetByV8Context(v8_context);
   if (!script_context)
     return;
-  script_context->module_system()->CallModuleMethod("app.window",
-                                                    "onAppWindowClosed");
+  script_context->module_system()->CallModuleMethodSafe("app.window",
+                                                        "onAppWindowClosed");
 }
 
 void ExtensionHelper::OnWebContentsFromTabId(int result) {

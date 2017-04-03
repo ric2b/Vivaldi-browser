@@ -6,7 +6,6 @@
 #include "core/dom/Element.h"
 #include "core/dom/StyleEngine.h"
 #include "core/frame/FrameView.h"
-#include "core/layout/LayoutObject.h"
 #include "core/testing/DummyPageHolder.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include <memory>
@@ -28,8 +27,7 @@ TEST(DragUpdateTest, AffectedByDragUpdate) {
       "<span></span>"
       "<span></span>"
       "<span></span>"
-      "</div>",
-      ASSERT_NO_EXCEPTION);
+      "</div>");
 
   document.view()->updateAllLifecyclePhases();
   unsigned startCount = document.styleEngine().styleForElementCount();
@@ -58,8 +56,7 @@ TEST(DragUpdateTest, ChildAffectedByDragUpdate) {
       "<span></span>"
       "<span class='drag'></span>"
       "<span></span>"
-      "</div>",
-      ASSERT_NO_EXCEPTION);
+      "</div>");
 
   document.updateStyleAndLayout();
   unsigned startCount = document.styleEngine().styleForElementCount();
@@ -89,8 +86,7 @@ TEST(DragUpdateTest, SiblingAffectedByDragUpdate) {
       "<span></span>"
       "<span></span>"
       "</div>"
-      "<span class='drag'></span>",
-      ASSERT_NO_EXCEPTION);
+      "<span class='drag'></span>");
 
   document.updateStyleAndLayout();
   unsigned startCount = document.styleEngine().styleForElementCount();

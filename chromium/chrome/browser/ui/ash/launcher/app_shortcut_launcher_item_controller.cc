@@ -47,8 +47,8 @@ const int kClickSuppressionInMS = 1000;
 
 // Check if a browser can be used for activation. This addresses a special use
 // case in the M31 multi profile mode where a user activates a V1 app which only
-// exists yet on another users desktop, but he expects to get only his own app
-// items and not the ones from other users through activation.
+// exists yet on another users desktop, but they expect to get only their own
+// app items and not the ones from other users through activation.
 // TODO(skuhne): Remove this function and replace the call with
 // launcher_controller()->IsBrowserFromActiveUser(browser) once this experiment
 // goes away.
@@ -86,7 +86,7 @@ AppShortcutLauncherItemController::AppShortcutLauncherItemController(
   // To detect V1 applications we use their domain and match them against the
   // used URL. This will also work with applications like Google Drive.
   const Extension* extension =
-      GetExtensionForAppID(app_id, controller->GetProfile());
+      GetExtensionForAppID(app_id, controller->profile());
   // Some unit tests have no real extension.
   if (extension) {
     set_refocus_url(GURL(
@@ -95,11 +95,6 @@ AppShortcutLauncherItemController::AppShortcutLauncherItemController(
 }
 
 AppShortcutLauncherItemController::~AppShortcutLauncherItemController() {
-}
-
-bool AppShortcutLauncherItemController::IsOpen() const {
-  return !chrome_launcher_controller_->
-      GetV1ApplicationsFromAppId(app_id()).empty();
 }
 
 bool AppShortcutLauncherItemController::IsVisible() const {
@@ -116,7 +111,7 @@ bool AppShortcutLauncherItemController::IsVisible() const {
 
 void AppShortcutLauncherItemController::Launch(ash::LaunchSource source,
                                                int event_flags) {
-  launcher_controller()->LaunchApp(app_id(), source, event_flags);
+  launcher_controller()->LaunchApp(std::string(app_id()), source, event_flags);
 }
 
 ash::ShelfItemDelegate::PerformedAction
@@ -186,7 +181,7 @@ AppShortcutLauncherItemController::GetRunningApplications() {
   }
 
   const Extension* extension =
-      GetExtensionForAppID(app_id(), launcher_controller()->GetProfile());
+      GetExtensionForAppID(app_id(), launcher_controller()->profile());
 
   // It is possible to come here While an extension gets loaded.
   if (!extension)
@@ -218,8 +213,8 @@ AppShortcutLauncherItemController::ItemSelected(const ui::Event& event) {
 }
 
 base::string16 AppShortcutLauncherItemController::GetTitle() {
-  return LauncherControllerHelper::GetAppTitle(
-      launcher_controller()->GetProfile(), app_id());
+  return LauncherControllerHelper::GetAppTitle(launcher_controller()->profile(),
+                                               app_id());
 }
 
 ash::ShelfMenuModel* AppShortcutLauncherItemController::CreateApplicationMenu(
@@ -232,7 +227,7 @@ bool AppShortcutLauncherItemController::IsDraggable() {
 }
 
 bool AppShortcutLauncherItemController::CanPin() const {
-  return GetPinnableForAppID(app_id(), launcher_controller()->GetProfile()) ==
+  return GetPinnableForAppID(app_id(), launcher_controller()->profile()) ==
          AppListControllerDelegate::PIN_EDITABLE;
 }
 
@@ -250,7 +245,7 @@ content::WebContents* AppShortcutLauncherItemController::GetLRUApplication() {
   }
 
   const Extension* extension =
-      GetExtensionForAppID(app_id(), launcher_controller()->GetProfile());
+      GetExtensionForAppID(app_id(), launcher_controller()->profile());
 
   // We may get here while the extension is loading (and NULL).
   if (!extension)
@@ -373,7 +368,7 @@ bool AppShortcutLauncherItemController::AdvanceToNextApp() {
 
 bool AppShortcutLauncherItemController::IsV2App() {
   const Extension* extension =
-      GetExtensionForAppID(app_id(), launcher_controller()->GetProfile());
+      GetExtensionForAppID(app_id(), launcher_controller()->profile());
   return extension && extension->is_platform_app();
 }
 

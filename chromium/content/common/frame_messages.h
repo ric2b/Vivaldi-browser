@@ -51,6 +51,7 @@
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/ipc/gfx_param_traits.h"
 #include "ui/gfx/ipc/skia/gfx_skia_param_traits.h"
+#include "ui/gfx/range/range.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -138,7 +139,7 @@ IPC_STRUCT_TRAITS_BEGIN(content::ContextMenuParams)
   IPC_STRUCT_TRAITS_MEMBER(selection_text)
   IPC_STRUCT_TRAITS_MEMBER(title_text)
   IPC_STRUCT_TRAITS_MEMBER(suggested_filename)
-  IPC_STRUCT_TRAITS_MEMBER(isVivaldiAddressfield)
+  IPC_STRUCT_TRAITS_MEMBER(vivaldi_input_type)
   IPC_STRUCT_TRAITS_MEMBER(misspelled_word)
   IPC_STRUCT_TRAITS_MEMBER(misspelling_hash)
   IPC_STRUCT_TRAITS_MEMBER(dictionary_suggestions)
@@ -172,6 +173,7 @@ IPC_STRUCT_TRAITS_BEGIN(content::FrameOwnerProperties)
   IPC_STRUCT_TRAITS_MEMBER(margin_width)
   IPC_STRUCT_TRAITS_MEMBER(margin_height)
   IPC_STRUCT_TRAITS_MEMBER(allow_fullscreen)
+  IPC_STRUCT_TRAITS_MEMBER(allow_payment_request)
   IPC_STRUCT_TRAITS_MEMBER(required_csp)
   IPC_STRUCT_TRAITS_MEMBER(delegated_permissions)
 IPC_STRUCT_TRAITS_END()
@@ -202,7 +204,6 @@ IPC_STRUCT_BEGIN(FrameHostMsg_DidFailProvisionalLoadWithError_Params)
 IPC_STRUCT_END()
 
 IPC_STRUCT_TRAITS_BEGIN(content::FrameNavigateParams)
-  IPC_STRUCT_TRAITS_MEMBER(page_id)
   IPC_STRUCT_TRAITS_MEMBER(nav_entry_id)
   IPC_STRUCT_TRAITS_MEMBER(frame_unique_name)
   IPC_STRUCT_TRAITS_MEMBER(item_sequence_number)
@@ -213,8 +214,6 @@ IPC_STRUCT_TRAITS_BEGIN(content::FrameNavigateParams)
   IPC_STRUCT_TRAITS_MEMBER(transition)
   IPC_STRUCT_TRAITS_MEMBER(redirects)
   IPC_STRUCT_TRAITS_MEMBER(should_update_history)
-  IPC_STRUCT_TRAITS_MEMBER(searchable_form_url)
-  IPC_STRUCT_TRAITS_MEMBER(searchable_form_encoding)
   IPC_STRUCT_TRAITS_MEMBER(contents_mime_type)
   IPC_STRUCT_TRAITS_MEMBER(socket_address)
 IPC_STRUCT_TRAITS_END()
@@ -301,6 +300,12 @@ IPC_STRUCT_BEGIN_WITH_PARENT(FrameHostMsg_DidCommitProvisionalLoad_Params,
 
   // True if the navigation originated as an srcdoc attribute.
   IPC_STRUCT_MEMBER(bool, is_srcdoc)
+
+  // See WebSearchableFormData for a description of these.
+  // Not used by PlzNavigate: in that case these fields are sent to the browser
+  // in BeginNavigationParams.
+  IPC_STRUCT_MEMBER(GURL, searchable_form_url)
+  IPC_STRUCT_MEMBER(std::string, searchable_form_encoding)
 IPC_STRUCT_END()
 
 IPC_STRUCT_BEGIN(FrameMsg_PostMessage_Params)
@@ -351,6 +356,8 @@ IPC_STRUCT_TRAITS_BEGIN(content::BeginNavigationParams)
   IPC_STRUCT_TRAITS_MEMBER(has_user_gesture)
   IPC_STRUCT_TRAITS_MEMBER(skip_service_worker)
   IPC_STRUCT_TRAITS_MEMBER(request_context_type)
+  IPC_STRUCT_TRAITS_MEMBER(searchable_form_url)
+  IPC_STRUCT_TRAITS_MEMBER(searchable_form_encoding)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(content::StartNavigationParams)
@@ -370,9 +377,7 @@ IPC_STRUCT_TRAITS_BEGIN(content::RequestNavigationParams)
   IPC_STRUCT_TRAITS_MEMBER(redirects)
   IPC_STRUCT_TRAITS_MEMBER(redirect_response)
   IPC_STRUCT_TRAITS_MEMBER(can_load_local_resources)
-  IPC_STRUCT_TRAITS_MEMBER(request_time)
   IPC_STRUCT_TRAITS_MEMBER(page_state)
-  IPC_STRUCT_TRAITS_MEMBER(page_id)
   IPC_STRUCT_TRAITS_MEMBER(nav_entry_id)
   IPC_STRUCT_TRAITS_MEMBER(is_same_document_history_load)
   IPC_STRUCT_TRAITS_MEMBER(is_history_navigation_in_new_child)
@@ -412,6 +417,7 @@ IPC_STRUCT_BEGIN(FrameHostMsg_OpenURL_Params)
   IPC_STRUCT_MEMBER(bool, uses_post)
   IPC_STRUCT_MEMBER(scoped_refptr<content::ResourceRequestBodyImpl>,
                     resource_request_body)
+  IPC_STRUCT_MEMBER(std::string, extra_headers)
   IPC_STRUCT_MEMBER(content::Referrer, referrer)
   IPC_STRUCT_MEMBER(WindowOpenDisposition, disposition)
   IPC_STRUCT_MEMBER(bool, should_replace_current_entry)
@@ -776,10 +782,6 @@ IPC_MESSAGE_ROUTED2(FrameMsg_DidUpdateOrigin,
 // support cross-process focused frame changes.
 IPC_MESSAGE_ROUTED0(FrameMsg_SetFocusedFrame)
 
-// Notifies this frame or proxy that it is no longer focused. This is used when
-// a frame in the embedder that the guest cannot see (<webview>) gains focus.
-IPC_MESSAGE_ROUTED0(FrameMsg_ClearFocusedFrame)
-
 // Sent to a frame proxy when its real frame is preparing to enter fullscreen
 // in another process.  Actually entering fullscreen will be done separately as
 // part of ViewMsg_Resize, once the browser process has resized the tab for
@@ -793,6 +795,9 @@ IPC_MESSAGE_ROUTED1(FrameMsg_SetTextTrackSettings,
 
 // Posts a message from a frame in another process to the current renderer.
 IPC_MESSAGE_ROUTED1(FrameMsg_PostMessageEvent, FrameMsg_PostMessage_Params)
+
+// Tells the RenderFrame to clear the focused element (if any).
+IPC_MESSAGE_ROUTED0(FrameMsg_ClearFocusedElement)
 
 #if defined(OS_ANDROID)
 // Request the distance to the nearest find result in a frame from the point at
@@ -931,6 +936,10 @@ IPC_MESSAGE_ROUTED0(FrameMsg_EnableViewSourceMode)
 // ScopedPageLoadDeferrer is on the stack for SwapOut.
 IPC_MESSAGE_ROUTED0(FrameMsg_SuppressFurtherDialogs)
 
+// Tells the frame to consider itself to have received a user gesture (based
+// on a user gesture proceed by a descendant).
+IPC_MESSAGE_ROUTED0(FrameMsg_SetHasReceivedUserGesture)
+
 IPC_MESSAGE_ROUTED1(FrameMsg_RunFileChooserResponse,
                     std::vector<content::FileChooserFileInfo>)
 
@@ -939,7 +948,7 @@ IPC_MESSAGE_ROUTED1(FrameMsg_RunFileChooserResponse,
 
 // Blink and JavaScript error messages to log to the console
 // or debugger UI.
-IPC_MESSAGE_ROUTED4(FrameHostMsg_AddMessageToConsole,
+IPC_MESSAGE_ROUTED4(FrameHostMsg_DidAddMessageToConsole,
                     int32_t,        /* log level */
                     base::string16, /* msg */
                     int32_t,        /* line number */
@@ -1085,9 +1094,6 @@ IPC_MESSAGE_ROUTED0(FrameHostMsg_DidAccessInitialDocument)
 // window.
 IPC_MESSAGE_ROUTED1(FrameHostMsg_DidChangeOpener, int /* opener_routing_id */)
 
-// Notifies the browser that a page id was assigned.
-IPC_MESSAGE_ROUTED1(FrameHostMsg_DidAssignPageId, int32_t /* page_id */)
-
 // Notifies the browser that sandbox flags have changed for a subframe of this
 // frame.
 IPC_MESSAGE_ROUTED2(FrameHostMsg_DidChangeSandboxFlags,
@@ -1134,6 +1140,15 @@ IPC_SYNC_MESSAGE_CONTROL3_1(FrameHostMsg_Are3DAPIsBlocked,
                             GURL /* top_origin_url */,
                             content::ThreeDAPIType /* requester */,
                             bool /* blocked */)
+
+// Message sent from renderer to the browser when focus changes inside the
+// frame. The first parameter says whether the newly focused element needs
+// keyboard input (true for textfields, text areas and content editable divs).
+// The second parameter is the node bounds relative to local root's
+// RenderWidgetHostView.
+IPC_MESSAGE_ROUTED2(FrameHostMsg_FocusedNodeChanged,
+                    bool /* is_editable_node */,
+                    gfx::Rect /* node_bounds */)
 
 #if defined(ENABLE_PLUGINS)
 // Notification sent from a renderer to the browser that a Pepper plugin
@@ -1307,11 +1322,23 @@ IPC_MESSAGE_ROUTED1(FrameHostMsg_FrameRectChanged, gfx::Rect /* frame_rect */)
 // Informs the child that the frame has changed visibility.
 IPC_MESSAGE_ROUTED1(FrameHostMsg_VisibilityChanged, bool /* visible */)
 
+// Indicates that a child of this frame recieved a user gesture, and this
+// frame should in turn consider itself to have received a user gesture.
+IPC_MESSAGE_ROUTED0(FrameHostMsg_SetHasReceivedUserGesture)
+
 // Used to tell the parent that the user right clicked on an area of the
 // content area, and a context menu should be shown for it. The params
 // object contains information about the node(s) that were selected when the
 // user right clicked.
 IPC_MESSAGE_ROUTED1(FrameHostMsg_ContextMenu, content::ContextMenuParams)
+
+// Notification that the text selection has changed.
+// Note: The second parameter is the character based offset of the
+// base::string16 text in the document.
+IPC_MESSAGE_ROUTED3(FrameHostMsg_SelectionChanged,
+                    base::string16 /* text covers the selection range */,
+                    uint32_t /* the offset of the text in the document */,
+                    gfx::Range /* selection range in the document */)
 
 // Response for FrameMsg_JavaScriptExecuteRequest, sent when a reply was
 // requested. The ID is the parameter supplied to

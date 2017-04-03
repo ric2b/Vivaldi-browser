@@ -132,10 +132,6 @@ class URL_EXPORT GURL {
     return parsed_;
   }
 
-  // Defiant equality operator!
-  bool operator==(const GURL& other) const;
-  bool operator!=(const GURL& other) const;
-
   // Allows GURL to used as a key in STL (for example, a std::set or std::map).
   bool operator<(const GURL& other) const;
   bool operator>(const GURL& other) const;
@@ -240,12 +236,19 @@ class URL_EXPORT GURL {
   // higher-level and more complete semantics. See that function's documentation
   // for more detail.
   bool SchemeIsCryptographic() const {
-    return SchemeIs(url::kHttpsScheme) || SchemeIs(url::kWssScheme);
+    return SchemeIs(url::kHttpsScheme) || SchemeIs(url::kWssScheme) ||
+           SchemeIs(url::kHttpsSuboriginScheme);
   }
 
   // Returns true if the scheme is "blob".
   bool SchemeIsBlob() const {
     return SchemeIs(url::kBlobScheme);
+  }
+
+  // Returns true if the scheme indicates a serialized suborigin.
+  bool SchemeIsSuborigin() const {
+    return SchemeIs(url::kHttpSuboriginScheme) ||
+           SchemeIs(url::kHttpsSuboriginScheme);
   }
 
   // The "content" of the URL is everything after the scheme (skipping the
@@ -446,5 +449,14 @@ class URL_EXPORT GURL {
 
 // Stream operator so GURL can be used in assertion statements.
 URL_EXPORT std::ostream& operator<<(std::ostream& out, const GURL& url);
+
+URL_EXPORT bool operator==(const GURL& x, const GURL& y);
+URL_EXPORT bool operator!=(const GURL& x, const GURL& y);
+
+// Equality operator for comparing raw spec_. This should be used in place of
+// url == GURL(spec) where |spec| is known (i.e. constants). This is to prevent
+// needlessly re-parsing |spec| into a temporary GURL.
+URL_EXPORT bool operator==(const GURL& x, const base::StringPiece& spec);
+URL_EXPORT bool operator!=(const GURL& x, const base::StringPiece& spec);
 
 #endif  // URL_GURL_H_

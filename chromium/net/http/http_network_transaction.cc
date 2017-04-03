@@ -55,9 +55,8 @@
 #include "net/log/net_log_event_type.h"
 #include "net/proxy/proxy_server.h"
 #include "net/socket/client_socket_factory.h"
+#include "net/socket/next_proto.h"
 #include "net/socket/socks_client_socket_pool.h"
-#include "net/socket/ssl_client_socket.h"
-#include "net/socket/ssl_client_socket_pool.h"
 #include "net/socket/transport_client_socket_pool.h"
 #include "net/spdy/spdy_http_stream.h"
 #include "net/spdy/spdy_session.h"
@@ -122,7 +121,6 @@ HttpNetworkTransaction::~HttpNetworkTransaction() {
       stream->Drain(session_);
     }
   }
-
   if (request_ && request_->upload_data_stream)
     request_->upload_data_stream->Reset();  // Invalidate pending callbacks.
 }
@@ -132,6 +130,7 @@ int HttpNetworkTransaction::Start(const HttpRequestInfo* request_info,
                                   const NetLogWithSource& net_log) {
   net_log_ = net_log;
   request_ = request_info;
+  url_ = request_->url;
 
   // Now that we have an HttpRequestInfo object, update server_ssl_config_.
   session_->GetSSLConfig(*request_, &server_ssl_config_, &proxy_ssl_config_);
@@ -144,7 +143,7 @@ int HttpNetworkTransaction::Start(const HttpRequestInfo* request_info,
   if (request_->load_flags & LOAD_PREFETCH)
     response_.unused_since_prefetch = true;
 
-  next_state_ = STATE_NOTIFY_BEFORE_CREATE_STREAM;
+  next_state_ = STATE_THROTTLE;
   int rv = DoLoop(OK);
   if (rv == ERR_IO_PENDING)
     callback_ = callback;
@@ -295,8 +294,6 @@ int HttpNetworkTransaction::Read(IOBuffer* buf, int buf_len,
   DCHECK(buf);
   DCHECK_LT(0, buf_len);
 
-  State next_state = STATE_NONE;
-
   scoped_refptr<HttpResponseHeaders> headers(GetResponseHeaders());
   if (headers_valid_ && headers.get() && stream_request_.get()) {
     // We're trying to read the body of the response but we're still trying
@@ -312,17 +309,27 @@ int HttpNetworkTransaction::Read(IOBuffer* buf, int buf_len,
     DCHECK_EQ(headers->response_code(), HTTP_PROXY_AUTHENTICATION_REQUIRED);
     LOG(WARNING) << "Blocked proxy response with status "
                  << headers->response_code() << " to CONNECT request for "
-                 << GetHostAndPort(request_->url) << ".";
+                 << GetHostAndPort(url_) << ".";
     return ERR_TUNNEL_CONNECTION_FAILED;
   }
 
   // Are we using SPDY or HTTP?
-  next_state = STATE_READ_BODY;
+  next_state_ = STATE_READ_BODY;
+
+  // We have reached the end of Start state machine, reset the requestinfo to
+  // null.
+  // RequestInfo is a member of the HttpTransaction's consumer and is useful
+  // only till final response headers are received. A reset will ensure that
+  // HttpRequestInfo is only used up until final response headers are received.
+  // Resetting is allowed so that the transaction can be disassociated from its
+  // creating consumer in cases where it is shared for writing to the cache.
+  // It is also safe to reset it to null at this point since upload_data_stream
+  // is also not used in the Read state machine.
+  request_ = nullptr;
 
   read_buf_ = buf;
   read_buf_len_ = buf_len;
 
-  next_state_ = next_state;
   int rv = DoLoop(OK);
   if (rv == ERR_IO_PENDING)
     callback_ = callback;
@@ -362,6 +369,8 @@ LoadState HttpNetworkTransaction::GetLoadState() const {
   // TODO(wtc): Define a new LoadState value for the
   // STATE_INIT_CONNECTION_COMPLETE state, which delays the HTTP request.
   switch (next_state_) {
+    case STATE_THROTTLE_COMPLETE:
+      return LOAD_STATE_THROTTLED;
     case STATE_CREATE_STREAM:
       return LOAD_STATE_WAITING_FOR_DELEGATE;
     case STATE_CREATE_STREAM_COMPLETE:
@@ -412,10 +421,20 @@ void HttpNetworkTransaction::PopulateNetErrorDetails(
 
 void HttpNetworkTransaction::SetPriority(RequestPriority priority) {
   priority_ = priority;
+
+  // TODO: Note that if throttling is ever implemented below this
+  // level, either of the two below calls may result in request
+  // completion, callbacks, and the potential deletion of this object
+  // (like the call below to throttle_->SetPriority()).  In that case,
+  // this code will need to be modified.
   if (stream_request_)
     stream_request_->SetPriority(priority);
   if (stream_)
     stream_->SetPriority(priority);
+
+  if (throttle_)
+    throttle_->SetPriority(priority);
+  // The above call may have resulted in deleting |*this|.
 }
 
 void HttpNetworkTransaction::SetWebSocketHandshakeStreamCreateHelper(
@@ -452,8 +471,8 @@ void HttpNetworkTransaction::OnStreamReady(const SSLConfig& used_ssl_config,
   server_ssl_config_ = used_ssl_config;
   proxy_info_ = used_proxy_info;
   response_.was_alpn_negotiated = stream_request_->was_alpn_negotiated();
-  response_.alpn_negotiated_protocol = SSLClientSocket::NextProtoToString(
-      stream_request_->negotiated_protocol());
+  response_.alpn_negotiated_protocol =
+      NextProtoToString(stream_request_->negotiated_protocol());
   response_.was_fetched_via_spdy = stream_request_->using_spdy();
   response_.was_fetched_via_proxy = !proxy_info_.is_direct();
   if (response_.was_fetched_via_proxy && !proxy_info_.is_empty())
@@ -573,6 +592,17 @@ void HttpNetworkTransaction::GetConnectionAttempts(
   *out = connection_attempts_;
 }
 
+void HttpNetworkTransaction::OnThrottleStateChanged() {
+  // TODO(rdsmith): This DCHECK is dependent on the only transition
+  // being from throttled->unthrottled.  That is true right now, but may not
+  // be so in the future.
+  DCHECK_EQ(STATE_THROTTLE_COMPLETE, next_state_);
+
+  net_log_.EndEvent(NetLogEventType::HTTP_TRANSACTION_THROTTLED);
+
+  DoLoop(OK);
+}
+
 bool HttpNetworkTransaction::IsSecureRequest() const {
   return request_->url.SchemeIsCryptographic();
 }
@@ -643,6 +673,14 @@ int HttpNetworkTransaction::DoLoop(int result) {
     State state = next_state_;
     next_state_ = STATE_NONE;
     switch (state) {
+      case STATE_THROTTLE:
+        DCHECK_EQ(OK, rv);
+        rv = DoThrottle();
+        break;
+      case STATE_THROTTLE_COMPLETE:
+        DCHECK_EQ(OK, rv);
+        rv = DoThrottleComplete();
+        break;
       case STATE_NOTIFY_BEFORE_CREATE_STREAM:
         DCHECK_EQ(OK, rv);
         rv = DoNotifyBeforeCreateStream();
@@ -652,7 +690,11 @@ int HttpNetworkTransaction::DoLoop(int result) {
         rv = DoCreateStream();
         break;
       case STATE_CREATE_STREAM_COMPLETE:
+        // TODO(zhongyi): remove liveness checks when crbug.com/652868 is
+        // solved.
+        net_log_.CrashIfInvalid();
         rv = DoCreateStreamComplete(rv);
+        net_log_.CrashIfInvalid();
         break;
       case STATE_INIT_STREAM:
         DCHECK_EQ(OK, rv);
@@ -752,6 +794,28 @@ int HttpNetworkTransaction::DoLoop(int result) {
   } while (rv != ERR_IO_PENDING && next_state_ != STATE_NONE);
 
   return rv;
+}
+
+int HttpNetworkTransaction::DoThrottle() {
+  throttle_ = session_->throttler()->CreateThrottle(
+      this, priority_, (request_->load_flags & LOAD_IGNORE_LIMITS) != 0);
+  next_state_ = STATE_THROTTLE_COMPLETE;
+
+  if (throttle_->IsThrottled()) {
+    net_log_.BeginEvent(NetLogEventType::HTTP_TRANSACTION_THROTTLED);
+    return ERR_IO_PENDING;
+  }
+
+  return OK;
+}
+
+int HttpNetworkTransaction::DoThrottleComplete() {
+  DCHECK(throttle_);
+  DCHECK(!throttle_->IsThrottled());
+
+  next_state_ = STATE_NOTIFY_BEFORE_CREATE_STREAM;
+
+  return OK;
 }
 
 int HttpNetworkTransaction::DoNotifyBeforeCreateStream() {

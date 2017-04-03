@@ -199,7 +199,8 @@ void logTouchTargetHistogram(EventTarget* eventTarget,
 TouchEvent::TouchEvent()
     : m_causesScrollingIfUncanceled(false),
       m_firstTouchMoveOrStart(false),
-      m_defaultPreventedBeforeCurrentTarget(false) {}
+      m_defaultPreventedBeforeCurrentTarget(false),
+      m_currentTouchAction(TouchActionAuto) {}
 
 TouchEvent::TouchEvent(TouchList* touches,
                        TouchList* targetTouches,
@@ -210,7 +211,9 @@ TouchEvent::TouchEvent(TouchList* touches,
                        bool cancelable,
                        bool causesScrollingIfUncanceled,
                        bool firstTouchMoveOrStart,
-                       double platformTimeStamp)
+                       double platformTimeStamp,
+                       TouchAction currentTouchAction,
+                       WebPointerProperties::PointerType pointerType)
     // Pass a sourceCapabilities including the ability to fire touchevents when
     // creating this touchevent, which is always created from input device
     // capabilities from EventHandler.
@@ -228,7 +231,9 @@ TouchEvent::TouchEvent(TouchList* touches,
       m_changedTouches(changedTouches),
       m_causesScrollingIfUncanceled(causesScrollingIfUncanceled),
       m_firstTouchMoveOrStart(firstTouchMoveOrStart),
-      m_defaultPreventedBeforeCurrentTarget(false) {}
+      m_defaultPreventedBeforeCurrentTarget(false),
+      m_currentTouchAction(currentTouchAction),
+      m_pointerType(pointerType) {}
 
 TouchEvent::TouchEvent(const AtomicString& type,
                        const TouchEventInit& initializer)
@@ -238,7 +243,9 @@ TouchEvent::TouchEvent(const AtomicString& type,
       m_changedTouches(TouchList::create(initializer.changedTouches())),
       m_causesScrollingIfUncanceled(false),
       m_firstTouchMoveOrStart(false),
-      m_defaultPreventedBeforeCurrentTarget(false) {}
+      m_defaultPreventedBeforeCurrentTarget(false),
+      m_currentTouchAction(TouchActionAuto),
+      m_pointerType(WebPointerProperties::PointerType::Unknown) {}
 
 TouchEvent::~TouchEvent() {}
 
@@ -256,14 +263,55 @@ void TouchEvent::preventDefault() {
   // A common developer error is to wait too long before attempting to stop
   // scrolling by consuming a touchmove event. Generate a warning if this
   // event is uncancelable.
-  if (!cancelable() && handlingPassive() == PassiveMode::NotPassive && view() &&
-      view()->isLocalDOMWindow() && view()->frame()) {
+  String warningMessage;
+  switch (handlingPassive()) {
+    case PassiveMode::NotPassive:
+    case PassiveMode::NotPassiveDefault:
+      if (!cancelable()) {
+        warningMessage = "Ignored attempt to cancel a " + type() +
+                         " event with cancelable=false, for example "
+                         "because scrolling is in progress and "
+                         "cannot be interrupted.";
+      }
+      break;
+    case PassiveMode::PassiveForcedDocumentLevel:
+      // Only enable the warning when the current touch action is auto because
+      // an author may use touch action but call preventDefault for interop with
+      // browsers that don't support touch-action.
+      if (m_currentTouchAction == TouchActionAuto) {
+        warningMessage =
+            "Unable to preventDefault inside passive event listener due to "
+            "target being treated as passive. See "
+            "https://www.chromestatus.com/features/5093566007214080";
+      }
+      break;
+    default:
+      break;
+  }
+
+  if (!warningMessage.isEmpty() && view() && view()->isLocalDOMWindow() &&
+      view()->frame()) {
     toLocalDOMWindow(view())->frame()->console().addMessage(
         ConsoleMessage::create(JSMessageSource, WarningMessageLevel,
-                               "Ignored attempt to cancel a " + type() +
-                                   " event with cancelable=false, for example "
-                                   "because scrolling is in progress and "
-                                   "cannot be interrupted."));
+                               warningMessage));
+  }
+
+  if ((type() == EventTypeNames::touchstart ||
+       type() == EventTypeNames::touchmove) &&
+      view() && view()->frame() && m_currentTouchAction == TouchActionAuto) {
+    switch (handlingPassive()) {
+      case PassiveMode::NotPassiveDefault:
+        UseCounter::count(view()->frame(),
+                          UseCounter::TouchEventPreventedNoTouchAction);
+        break;
+      case PassiveMode::PassiveForcedDocumentLevel:
+        UseCounter::count(
+            view()->frame(),
+            UseCounter::TouchEventPreventedForcedDocumentPassiveNoTouchAction);
+        break;
+      default:
+        break;
+    }
   }
 }
 

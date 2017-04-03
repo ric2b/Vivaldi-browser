@@ -58,11 +58,7 @@ TrayUser::TestState TrayUser::GetStateForTest() const {
 }
 
 gfx::Size TrayUser::GetLayoutSizeForTest() const {
-  if (!layout_view_) {
-    return gfx::Size(0, 0);
-  } else {
-    return layout_view_->size();
-  }
+  return layout_view_ ? layout_view_->size() : gfx::Size();
 }
 
 gfx::Rect TrayUser::GetUserPanelBoundsInScreenForTest() const {
@@ -78,8 +74,6 @@ views::View* TrayUser::CreateTrayView(LoginStatus status) {
   CHECK(layout_view_ == nullptr);
 
   layout_view_ = new views::View;
-  layout_view_->SetLayoutManager(new views::BoxLayout(
-      views::BoxLayout::kHorizontal, 0, 0, kUserLabelToIconPadding));
   UpdateAfterLoginStatusChange(status);
   return layout_view_;
 }
@@ -144,13 +138,16 @@ void TrayUser::UpdateAfterLoginStatusChange(LoginStatus status) {
       need_label = true;
       break;
     case LoginStatus::KIOSK_APP:
+    case LoginStatus::ARC_KIOSK_APP:
     case LoginStatus::NOT_LOGGED_IN:
       break;
   }
 
   if ((need_avatar != (avatar_ != nullptr)) ||
       (need_label != (label_ != nullptr))) {
-    layout_view_->RemoveAllChildViews(true);
+    delete label_;
+    delete avatar_;
+
     if (need_label) {
       label_ = new views::Label;
       SetupLabelForTray(label_);
@@ -160,6 +157,10 @@ void TrayUser::UpdateAfterLoginStatusChange(LoginStatus status) {
     }
     if (need_avatar) {
       avatar_ = new tray::RoundedImageView(kTrayRoundedBorderRadius, true);
+      if (MaterialDesignController::IsShelfMaterial()) {
+        avatar_->SetPaintToLayer(true);
+        avatar_->layer()->SetFillsBoundsOpaquely(false);
+      }
       layout_view_->AddChildView(avatar_);
     } else {
       avatar_ = nullptr;
@@ -173,19 +174,6 @@ void TrayUser::UpdateAfterLoginStatusChange(LoginStatus status) {
     label_->SetText(l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_GUEST_LABEL));
   }
 
-  if (avatar_) {
-    avatar_->SetCornerRadii(0, kTrayRoundedBorderRadius,
-                            kTrayRoundedBorderRadius, 0);
-    const int distance_to_avatar =
-        MaterialDesignController::IsShelfMaterial()
-            ? GetTrayConstant(TRAY_IMAGE_ITEM_PADDING)
-            : 0;
-    const bool is_horizontal =
-        IsHorizontalAlignment(system_tray()->shelf_alignment());
-    avatar_->SetBorder(views::Border::CreateEmptyBorder(
-        is_horizontal ? 0 : distance_to_avatar,
-        is_horizontal ? distance_to_avatar : 0, 0, 0));
-  }
   UpdateAvatarImage(status);
 
   // Update layout after setting label_ and avatar_ with new login status.
@@ -196,13 +184,8 @@ void TrayUser::UpdateAfterShelfAlignmentChange(ShelfAlignment alignment) {
   // Inactive users won't have a layout.
   if (!layout_view_)
     return;
-  const int distance_to_avatar = MaterialDesignController::IsShelfMaterial()
-                                     ? GetTrayConstant(TRAY_IMAGE_ITEM_PADDING)
-                                     : 0;
   if (IsHorizontalAlignment(alignment)) {
     if (avatar_) {
-      avatar_->SetBorder(
-          views::Border::CreateEmptyBorder(0, distance_to_avatar, 0, 0));
       avatar_->SetCornerRadii(0, kTrayRoundedBorderRadius,
                               kTrayRoundedBorderRadius, 0);
     }
@@ -213,7 +196,7 @@ void TrayUser::UpdateAfterShelfAlignmentChange(ShelfAlignment alignment) {
       int height = label_->GetContentsBounds().height();
       int vertical_pad = (kTrayItemSize - height) / 2;
       int remainder = height % 2;
-      label_->SetBorder(views::Border::CreateEmptyBorder(
+      label_->SetBorder(views::CreateEmptyBorder(
           vertical_pad + remainder,
           kTrayLabelItemHorizontalPaddingBottomAlignment, vertical_pad,
           kTrayLabelItemHorizontalPaddingBottomAlignment));
@@ -222,13 +205,11 @@ void TrayUser::UpdateAfterShelfAlignmentChange(ShelfAlignment alignment) {
         views::BoxLayout::kHorizontal, 0, 0, kUserLabelToIconPadding));
   } else {
     if (avatar_) {
-      avatar_->SetBorder(
-          views::Border::CreateEmptyBorder(distance_to_avatar, 0, 0, 0));
       avatar_->SetCornerRadii(0, 0, kTrayRoundedBorderRadius,
                               kTrayRoundedBorderRadius);
     }
     if (label_) {
-      label_->SetBorder(views::Border::CreateEmptyBorder(
+      label_->SetBorder(views::CreateEmptyBorder(
           kTrayLabelItemVerticalPaddingVerticalAlignment,
           kTrayLabelItemHorizontalPaddingBottomAlignment,
           kTrayLabelItemVerticalPaddingVerticalAlignment,

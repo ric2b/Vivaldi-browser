@@ -272,14 +272,7 @@ void CanvasRenderingContext2DState::resetTransform() {
   m_isTransformInvertible = true;
 }
 
-static void updateFilterReferences(HTMLCanvasElement* canvasElement,
-                                   CanvasRenderingContext2D* context,
-                                   const FilterOperations& filters) {
-  context->clearFilterReferences();
-  context->addFilterReferences(filters, canvasElement->document());
-}
-
-SkImageFilter* CanvasRenderingContext2DState::getFilter(
+sk_sp<SkImageFilter> CanvasRenderingContext2DState::getFilter(
     Element* styleResolutionHost,
     IntSize canvasSize,
     CanvasRenderingContext2D* context) const {
@@ -322,15 +315,14 @@ SkImageFilter* CanvasRenderingContext2DState::getFilter(
       m_resolvedFilter =
           SkiaImageFilterBuilder::build(lastEffect, ColorSpaceDeviceRGB);
       if (m_resolvedFilter) {
-        updateFilterReferences(toHTMLCanvasElement(styleResolutionHost),
-                               context, filterStyle->filter());
+        context->updateFilterReferences(filterStyle->filter());
         if (lastEffect->originTainted())
           context->setOriginTainted();
       }
     }
   }
 
-  return m_resolvedFilter.get();
+  return m_resolvedFilter;
 }
 
 bool CanvasRenderingContext2DState::hasFilter(
@@ -347,22 +339,19 @@ void CanvasRenderingContext2DState::clearResolvedFilter() const {
 }
 
 SkDrawLooper* CanvasRenderingContext2DState::emptyDrawLooper() const {
-  if (!m_emptyDrawLooper) {
-    std::unique_ptr<DrawLooperBuilder> drawLooperBuilder =
-        DrawLooperBuilder::create();
-    m_emptyDrawLooper = drawLooperBuilder->detachDrawLooper();
-  }
+  if (!m_emptyDrawLooper)
+    m_emptyDrawLooper = DrawLooperBuilder().detachDrawLooper();
+
   return m_emptyDrawLooper.get();
 }
 
 SkDrawLooper* CanvasRenderingContext2DState::shadowOnlyDrawLooper() const {
   if (!m_shadowOnlyDrawLooper) {
-    std::unique_ptr<DrawLooperBuilder> drawLooperBuilder =
-        DrawLooperBuilder::create();
-    drawLooperBuilder->addShadow(m_shadowOffset, m_shadowBlur, m_shadowColor,
-                                 DrawLooperBuilder::ShadowIgnoresTransforms,
-                                 DrawLooperBuilder::ShadowRespectsAlpha);
-    m_shadowOnlyDrawLooper = drawLooperBuilder->detachDrawLooper();
+    DrawLooperBuilder drawLooperBuilder;
+    drawLooperBuilder.addShadow(m_shadowOffset, m_shadowBlur, m_shadowColor,
+                                DrawLooperBuilder::ShadowIgnoresTransforms,
+                                DrawLooperBuilder::ShadowRespectsAlpha);
+    m_shadowOnlyDrawLooper = drawLooperBuilder.detachDrawLooper();
   }
   return m_shadowOnlyDrawLooper.get();
 }
@@ -370,18 +359,18 @@ SkDrawLooper* CanvasRenderingContext2DState::shadowOnlyDrawLooper() const {
 SkDrawLooper* CanvasRenderingContext2DState::shadowAndForegroundDrawLooper()
     const {
   if (!m_shadowAndForegroundDrawLooper) {
-    std::unique_ptr<DrawLooperBuilder> drawLooperBuilder =
-        DrawLooperBuilder::create();
-    drawLooperBuilder->addShadow(m_shadowOffset, m_shadowBlur, m_shadowColor,
-                                 DrawLooperBuilder::ShadowIgnoresTransforms,
-                                 DrawLooperBuilder::ShadowRespectsAlpha);
-    drawLooperBuilder->addUnmodifiedContent();
-    m_shadowAndForegroundDrawLooper = drawLooperBuilder->detachDrawLooper();
+    DrawLooperBuilder drawLooperBuilder;
+    drawLooperBuilder.addShadow(m_shadowOffset, m_shadowBlur, m_shadowColor,
+                                DrawLooperBuilder::ShadowIgnoresTransforms,
+                                DrawLooperBuilder::ShadowRespectsAlpha);
+    drawLooperBuilder.addUnmodifiedContent();
+    m_shadowAndForegroundDrawLooper = drawLooperBuilder.detachDrawLooper();
   }
   return m_shadowAndForegroundDrawLooper.get();
 }
 
-SkImageFilter* CanvasRenderingContext2DState::shadowOnlyImageFilter() const {
+sk_sp<SkImageFilter> CanvasRenderingContext2DState::shadowOnlyImageFilter()
+    const {
   if (!m_shadowOnlyImageFilter) {
     double sigma = skBlurRadiusToSigma(m_shadowBlur);
     m_shadowOnlyImageFilter = SkDropShadowImageFilter::Make(
@@ -389,11 +378,11 @@ SkImageFilter* CanvasRenderingContext2DState::shadowOnlyImageFilter() const {
         m_shadowColor, SkDropShadowImageFilter::kDrawShadowOnly_ShadowMode,
         nullptr);
   }
-  return m_shadowOnlyImageFilter.get();
+  return m_shadowOnlyImageFilter;
 }
 
-SkImageFilter* CanvasRenderingContext2DState::shadowAndForegroundImageFilter()
-    const {
+sk_sp<SkImageFilter>
+CanvasRenderingContext2DState::shadowAndForegroundImageFilter() const {
   if (!m_shadowAndForegroundImageFilter) {
     double sigma = skBlurRadiusToSigma(m_shadowBlur);
     m_shadowAndForegroundImageFilter = SkDropShadowImageFilter::Make(
@@ -401,7 +390,7 @@ SkImageFilter* CanvasRenderingContext2DState::shadowAndForegroundImageFilter()
         m_shadowColor,
         SkDropShadowImageFilter::kDrawShadowAndForeground_ShadowMode, nullptr);
   }
-  return m_shadowAndForegroundImageFilter.get();
+  return m_shadowAndForegroundImageFilter;
 }
 
 void CanvasRenderingContext2DState::shadowParameterChanged() {
@@ -436,18 +425,14 @@ void CanvasRenderingContext2DState::setFilter(const CSSValue* filterValue) {
   m_resolvedFilter.reset();
 }
 
-void CanvasRenderingContext2DState::setGlobalComposite(SkXfermode::Mode mode) {
-  m_strokePaint.setXfermodeMode(mode);
-  m_fillPaint.setXfermodeMode(mode);
-  m_imagePaint.setXfermodeMode(mode);
+void CanvasRenderingContext2DState::setGlobalComposite(SkBlendMode mode) {
+  m_strokePaint.setBlendMode(mode);
+  m_fillPaint.setBlendMode(mode);
+  m_imagePaint.setBlendMode(mode);
 }
 
-SkXfermode::Mode CanvasRenderingContext2DState::globalComposite() const {
-  SkXfermode* xferMode = m_strokePaint.getXfermode();
-  SkXfermode::Mode mode;
-  if (!xferMode || !xferMode->asMode(&mode))
-    return SkXfermode::kSrcOver_Mode;
-  return mode;
+SkBlendMode CanvasRenderingContext2DState::globalComposite() const {
+  return m_strokePaint.getBlendMode();
 }
 
 void CanvasRenderingContext2DState::setImageSmoothingEnabled(bool enabled) {

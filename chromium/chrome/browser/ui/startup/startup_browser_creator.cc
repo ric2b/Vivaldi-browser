@@ -7,6 +7,7 @@
 #include <stddef.h>
 
 #include <algorithm>  // For max().
+#include <limits>
 #include <memory>
 #include <set>
 
@@ -16,6 +17,7 @@
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
+#include "base/debug/alias.h"
 #include "base/environment.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -56,11 +58,12 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/startup/startup_browser_creator_impl.h"
 #include "chrome/browser/ui/user_manager.h"
-#include "chrome/browser/ui/webui/options/reset_profile_settings_handler.h"
+#include "chrome/browser/ui/webui/settings/reset_settings_handler.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_result_codes.h"
 #include "chrome/common/chrome_switches.h"
+#include "chrome/common/features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/installer/util/browser_distribution.h"
@@ -76,6 +79,7 @@
 #include "content/public/common/content_switches.h"
 #include "extensions/common/switches.h"
 #include "net/base/port_util.h"
+#include "printing/features/features.h"
 
 #if defined(USE_ASH)
 #include "ash/shell.h"  // nogncheck
@@ -103,13 +107,13 @@
 #include "chrome/browser/metrics/jumplist_metrics_win.h"
 #endif
 
-#if defined(ENABLE_PRINT_PREVIEW)
+#if BUILDFLAG(ENABLE_PRINT_PREVIEW)
 #include "chrome/browser/printing/cloud_print/cloud_print_proxy_service.h"
 #include "chrome/browser/printing/cloud_print/cloud_print_proxy_service_factory.h"
 #include "chrome/browser/printing/print_dialog_cloud.h"
 #endif
 
-#if defined(ENABLE_APP_LIST)
+#if BUILDFLAG(ENABLE_APP_LIST)
 #include "chrome/browser/ui/app_list/app_list_service.h"
 #endif
 
@@ -474,9 +478,18 @@ void StartupBrowserCreator::RegisterLocalStatePrefs(
 #if defined(OS_WIN)
   registry->RegisterStringPref(prefs::kLastWelcomedOSVersion, std::string());
   registry->RegisterBooleanPref(prefs::kWelcomePageOnOSUpgradeEnabled, true);
+  registry->RegisterBooleanPref(prefs::kHasSeenWin10PromoPage, false);
 #endif
   registry->RegisterBooleanPref(prefs::kSuppressUnsupportedOSWarning, false);
   registry->RegisterBooleanPref(prefs::kWasRestarted, false);
+}
+
+// static
+void StartupBrowserCreator::RegisterProfilePrefs(PrefRegistrySimple* registry) {
+  // Default to true so that existing users are not shown the Welcome page.
+  // ProfileManager handles setting this to false for new profiles upon
+  // creation.
+  registry->RegisterBooleanPref(prefs::kHasSeenWelcomePage, true);
 }
 
 // static
@@ -514,7 +527,9 @@ std::vector<GURL> StartupBrowserCreator::GetURLsFromCommandLine(
     // http://crbug.com/371030: Only use URLFixerUpper if we don't have a valid
     // URL, otherwise we will look in the current directory for a file named
     // 'about' if the browser was started with a about:foo argument.
-    if (!url.is_valid()) {
+    // http://crbug.com/424991: Always use URLFixerUpper on file:// URLs,
+    // otherwise we wouldn't correctly handle '#' in a file name.
+    if (!url.is_valid() || url.SchemeIsFile()) {
       base::ThreadRestrictions::ScopedAllowIO allow_io;
       url = url_formatter::FixupRelativeFile(cur_dir, param);
     }
@@ -538,7 +553,7 @@ std::vector<GURL> StartupBrowserCreator::GetURLsFromCommandLine(
     // On Windows, also allow a hash for the Chrome Cleanup Tool.
     const GURL reset_settings_url_with_cct_hash = reset_settings_url.Resolve(
         std::string("#") +
-        options::ResetProfileSettingsHandler::kCctResetSettingsHash);
+        settings::ResetSettingsHandler::kCctResetSettingsHash);
     url_points_to_an_approved_settings_page =
         url_points_to_an_approved_settings_page ||
         url == reset_settings_url_with_cct_hash;
@@ -574,7 +589,7 @@ bool StartupBrowserCreator::ProcessCmdLineImpl(
 
   bool silent_launch = false;
 
-#if defined(ENABLE_PRINT_PREVIEW)
+#if BUILDFLAG(ENABLE_PRINT_PREVIEW)
   // If we are just displaying a print dialog we shouldn't open browser
   // windows.
   if (command_line.HasSwitch(switches::kCloudPrintFile) &&
@@ -582,7 +597,7 @@ bool StartupBrowserCreator::ProcessCmdLineImpl(
                                                            command_line)) {
     silent_launch = true;
   }
-#endif  // defined(ENABLE_PRINT_PREVIEW)
+#endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
 
   if (command_line.HasSwitch(switches::kExplicitlyAllowedPorts)) {
     std::string allowed_ports =
@@ -759,9 +774,36 @@ bool StartupBrowserCreator::ProcessCmdLineImpl(
       command_line_without_urls.AppendSwitchNative(switch_it->first,
                                                    switch_it->second);
     }
+
+    // TODO(scottmg): DEBUG_ variables added for https://crbug.com/614753.
+    size_t DEBUG_num_profiles_on_entry = last_opened_profiles.size();
+    base::debug::Alias(&DEBUG_num_profiles_on_entry);
+    int DEBUG_loop_counter = 0;
+    base::debug::Alias(&DEBUG_loop_counter);
+
+    base::debug::Alias(&last_opened_profiles);
+    const Profile* DEBUG_profile_0 = nullptr;
+    const Profile* DEBUG_profile_1 = nullptr;
+    if (last_opened_profiles.size() > 0)
+      DEBUG_profile_0 = last_opened_profiles[0];
+    if (last_opened_profiles.size() > 1)
+      DEBUG_profile_1 = last_opened_profiles[1];
+    base::debug::Alias(&DEBUG_profile_0);
+    base::debug::Alias(&DEBUG_profile_1);
+
+    size_t DEBUG_num_profiles_at_loop_start =
+        std::numeric_limits<size_t>::max();
+    base::debug::Alias(&DEBUG_num_profiles_at_loop_start);
+
+    Profiles::const_iterator DEBUG_it_begin = last_opened_profiles.begin();
+    base::debug::Alias(&DEBUG_it_begin);
+    Profiles::const_iterator DEBUG_it_end = last_opened_profiles.end();
+    base::debug::Alias(&DEBUG_it_end);
+
     // Launch the profiles in the order they became active.
     for (Profiles::const_iterator it = last_opened_profiles.begin();
-         it != last_opened_profiles.end(); ++it) {
+         it != last_opened_profiles.end(); ++it, ++DEBUG_loop_counter) {
+      DEBUG_num_profiles_at_loop_start = last_opened_profiles.size();
       DCHECK(!(*it)->IsGuestSession());
       // Don't launch additional profiles which would only open a new tab
       // page. When restarting after an update, all profiles will reopen last
@@ -871,7 +913,7 @@ base::FilePath GetStartupProfilePath(const base::FilePath& user_data_dir,
         command_line.GetSwitchValuePath(switches::kProfileDirectory));
   }
 
-#if defined(ENABLE_APP_LIST)
+#if BUILDFLAG(ENABLE_APP_LIST)
   // If we are showing the app list then chrome isn't shown so load the app
   // list's profile rather than chrome's.
   if (command_line.HasSwitch(switches::kShowAppList))

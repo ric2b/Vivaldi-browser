@@ -14,10 +14,6 @@
 #include "third_party/WebKit/public/platform/modules/indexeddb/WebIDBValue.h"
 #include "third_party/WebKit/public/web/WebHeap.h"
 
-namespace blink {
-class WebData;
-}  // namespace blink
-
 namespace content {
 
 class MockWebIDBCallbacks : public blink::WebIDBCallbacks {
@@ -49,6 +45,7 @@ class MockWebIDBCallbacks : public blink::WebIDBCallbacks {
                     const blink::WebIDBMetadata&,
                     unsigned short dataLoss,
                     blink::WebString dataLossMessage));
+  MOCK_METHOD0(detach, void());
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MockWebIDBCallbacks);

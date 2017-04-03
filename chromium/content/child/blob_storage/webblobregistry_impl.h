@@ -14,16 +14,13 @@
 
 #include "base/memory/ref_counted.h"
 #include "base/single_thread_task_runner.h"
+#include "storage/common/blob_storage/blob_storage_constants.h"
 #include "storage/common/data_element.h"
 #include "third_party/WebKit/public/platform/WebBlobRegistry.h"
 
 namespace blink {
 class WebThreadSafeData;
 }  // namespace blink
-
-namespace storage {
-class DataElement;
-}
 
 namespace content {
 class BlobConsolidation;
@@ -98,6 +95,7 @@ class WebBlobRegistryImpl : public blink::WebBlobRegistry {
     scoped_refptr<base::SingleThreadTaskRunner> main_runner_;
   };
 
+  storage::BlobStorageLimits limits_;
   scoped_refptr<base::SingleThreadTaskRunner> io_runner_;
   scoped_refptr<base::SingleThreadTaskRunner> main_runner_;
   scoped_refptr<ThreadSafeSender> sender_;

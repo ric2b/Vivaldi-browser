@@ -10,7 +10,6 @@
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/trace_event_argument.h"
 #include "base/trace_event/trace_event_synthetic_delay.h"
-#include "cc/animation/animation_events.h"
 #include "cc/debug/benchmark_instrumentation.h"
 #include "cc/debug/devtools_instrumentation.h"
 #include "cc/output/compositor_frame_sink.h"
@@ -18,7 +17,7 @@
 #include "cc/resources/ui_resource_manager.h"
 #include "cc/trees/blocking_task_runner.h"
 #include "cc/trees/layer_tree_host_in_process.h"
-#include "cc/trees/remote_channel_main.h"
+#include "cc/trees/mutator_host.h"
 #include "cc/trees/scoped_abort_remaining_swap_promises.h"
 #include "cc/trees/threaded_channel.h"
 
@@ -31,17 +30,6 @@ std::unique_ptr<ProxyMain> ProxyMain::CreateThreaded(
       new ProxyMain(layer_tree_host, task_runner_provider));
   proxy_main->SetChannel(
       ThreadedChannel::Create(proxy_main.get(), task_runner_provider));
-  return proxy_main;
-}
-
-std::unique_ptr<ProxyMain> ProxyMain::CreateRemote(
-    RemoteProtoChannel* remote_proto_channel,
-    LayerTreeHostInProcess* layer_tree_host,
-    TaskRunnerProvider* task_runner_provider) {
-  std::unique_ptr<ProxyMain> proxy_main(
-      new ProxyMain(layer_tree_host, task_runner_provider));
-  proxy_main->SetChannel(RemoteChannelMain::Create(
-      remote_proto_channel, proxy_main.get(), task_runner_provider));
   return proxy_main;
 }
 
@@ -72,9 +60,9 @@ void ProxyMain::SetChannel(std::unique_ptr<ChannelMain> channel_main) {
   channel_main_ = std::move(channel_main);
 }
 
-void ProxyMain::DidCompleteSwapBuffers() {
+void ProxyMain::DidReceiveCompositorFrameAck() {
   DCHECK(IsMainThread());
-  layer_tree_host_->DidCompleteSwapBuffers();
+  layer_tree_host_->DidReceiveCompositorFrameAck();
 }
 
 void ProxyMain::BeginMainFrameNotExpectedSoon() {
@@ -88,7 +76,7 @@ void ProxyMain::DidCommitAndDrawFrame() {
   layer_tree_host_->DidCommitAndDrawFrame();
 }
 
-void ProxyMain::SetAnimationEvents(std::unique_ptr<AnimationEvents> events) {
+void ProxyMain::SetAnimationEvents(std::unique_ptr<MutatorEvents> events) {
   TRACE_EVENT0("cc", "ProxyMain::SetAnimationEvents");
   DCHECK(IsMainThread());
   layer_tree_host_->SetAnimationEvents(std::move(events));
@@ -351,7 +339,7 @@ void ProxyMain::MainThreadHasStoppedFlinging() {
 
 void ProxyMain::Start() {
   DCHECK(IsMainThread());
-  DCHECK(layer_tree_host_->IsThreaded() || layer_tree_host_->IsRemoteServer());
+  DCHECK(layer_tree_host_->IsThreaded());
   DCHECK(channel_main_);
 
   // Create LayerTreeHostImpl.
@@ -401,11 +389,12 @@ void ProxyMain::ReleaseCompositorFrameSink() {
   completion.Wait();
 }
 
-void ProxyMain::UpdateTopControlsState(TopControlsState constraints,
-                                       TopControlsState current,
-                                       bool animate) {
+void ProxyMain::UpdateBrowserControlsState(BrowserControlsState constraints,
+                                           BrowserControlsState current,
+                                           bool animate) {
   DCHECK(IsMainThread());
-  channel_main_->UpdateTopControlsStateOnImpl(constraints, current, animate);
+  channel_main_->UpdateBrowserControlsStateOnImpl(constraints, current,
+                                                  animate);
 }
 
 bool ProxyMain::SendCommitRequestToImplThreadIfNeeded(

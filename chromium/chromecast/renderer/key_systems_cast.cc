@@ -86,13 +86,17 @@ class PlayReadyKeySystemProperties : public ::media::KeySystemProperties {
 void AddChromecastKeySystems(
     std::vector<std::unique_ptr<::media::KeySystemProperties>>*
         key_systems_properties,
-    bool enable_persistent_license_support) {
+    bool enable_persistent_license_support,
+    bool force_software_crypto) {
 #if defined(PLAYREADY_CDM_AVAILABLE)
+  bool enable_persistent_license_playready = enable_persistent_license_support;
 #if defined(OS_ANDROID)
-  CHECK(!enable_persistent_license_support);
+  LOG_IF(WARNING, enable_persistent_license_playready)
+      << "Android doesn't support Playready persistent license.";
+  enable_persistent_license_playready = false;
 #endif
   key_systems_properties->emplace_back(
-      new PlayReadyKeySystemProperties(enable_persistent_license_support));
+      new PlayReadyKeySystemProperties(enable_persistent_license_playready));
 #endif  // defined(PLAYREADY_CDM_AVAILABLE)
 
 #if defined(WIDEVINE_CDM_AVAILABLE)
@@ -106,9 +110,11 @@ void AddChromecastKeySystems(
 #if defined(OS_ANDROID)
       codecs,  // Hardware-secure codecs.
 #endif
-      Robustness::HW_SECURE_ALL,             // Max audio robustness.
-      Robustness::HW_SECURE_ALL,             // Max video robustness.
-      EmeSessionTypeSupport::NOT_SUPPORTED,  // persistent-license.
+      Robustness::HW_SECURE_ALL,  // Max audio robustness.
+      Robustness::HW_SECURE_ALL,  // Max video robustness.
+      enable_persistent_license_support
+          ? EmeSessionTypeSupport::SUPPORTED
+          : EmeSessionTypeSupport::NOT_SUPPORTED,  // persistent-license.
       EmeSessionTypeSupport::NOT_SUPPORTED,  // persistent-release-message.
       // Note: On Chromecast, all CDMs may have persistent state.
       EmeFeatureSupport::ALWAYS_ENABLED,    // Persistent state.

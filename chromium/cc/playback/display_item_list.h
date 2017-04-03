@@ -25,12 +25,10 @@
 #include "ui/gfx/geometry/rect_conversions.h"
 
 class SkCanvas;
-class SkPictureRecorder;
 
 namespace cc {
 class ClientPictureCache;
 class DisplayItem;
-class DrawingDisplayItem;
 
 namespace proto {
 class DisplayItemList;
@@ -155,7 +153,7 @@ class CC_EXPORT DisplayItemList
 
   void GenerateDiscardableImagesMetadata();
   void GetDiscardableImagesInRect(const gfx::Rect& rect,
-                                  float raster_scale,
+                                  const gfx::SizeF& raster_scales,
                                   std::vector<DrawImage>* images);
 
   void SetRetainVisualRectsForTesting(bool retain) {

@@ -2250,6 +2250,55 @@ TEST_F(RendererSchedulerImplTest, SuspendRenderer) {
               testing::ElementsAre(std::string("L1"), std::string("T1")));
 }
 
+TEST_F(RendererSchedulerImplTest, ResumeRenderer) {
+  // Assume that the renderer is backgrounded.
+  scheduler_->OnRendererBackgrounded();
+
+  // Tasks in some queues don't fire when the renderer is suspended.
+  std::vector<std::string> run_order;
+  PostTestTasks(&run_order, "D1 C1 L1 I1 T1");
+  scheduler_->SuspendRenderer();
+  EnableIdleTasks();
+  RunUntilIdle();
+  EXPECT_THAT(run_order,
+              testing::ElementsAre(std::string("D1"), std::string("C1"),
+                                   std::string("I1")));
+
+  // The rest queued tasks fire when the renderer is resumed.
+  run_order.clear();
+  scheduler_->ResumeRenderer();
+  RunUntilIdle();
+  EXPECT_THAT(run_order,
+              testing::ElementsAre(std::string("L1"), std::string("T1")));
+
+  run_order.clear();
+  // No crash occurs when the renderer is suspended again, and
+  // tasks in some queues don't fire because of suspended.
+  PostTestTasks(&run_order, "D2 C2 L2 I2 T2");
+  scheduler_->SuspendRenderer();
+  EnableIdleTasks();
+  RunUntilIdle();
+  EXPECT_THAT(run_order,
+              testing::ElementsAre(std::string("D2"), std::string("C2"),
+                                   std::string("I2")));
+
+  // The rest queued tasks fire when the renderer is resumed.
+  run_order.clear();
+  scheduler_->ResumeRenderer();
+  RunUntilIdle();
+  EXPECT_THAT(run_order,
+              testing::ElementsAre(std::string("L2"), std::string("T2")));
+
+  run_order.clear();
+  PostTestTasks(&run_order, "D3 T3");
+  // No crash occurs when the resumed renderer goes foregrounded.
+  // Posted tasks while the renderer is resumed fire.
+  scheduler_->OnRendererForegrounded();
+  RunUntilIdle();
+  EXPECT_THAT(run_order,
+              testing::ElementsAre(std::string("D3"), std::string("T3")));
+}
+
 TEST_F(RendererSchedulerImplTest, UseCaseToString) {
   CheckAllUseCaseToString();
 }
@@ -2846,7 +2895,7 @@ TEST_F(RendererSchedulerImplTest,
 class WebViewSchedulerImplForTest : public WebViewSchedulerImpl {
  public:
   WebViewSchedulerImplForTest(RendererSchedulerImpl* scheduler)
-      : WebViewSchedulerImpl(nullptr, scheduler, false) {}
+      : WebViewSchedulerImpl(nullptr, nullptr, scheduler, false) {}
   ~WebViewSchedulerImplForTest() override {}
 
   void ReportIntervention(const std::string& message) override {
@@ -3359,7 +3408,7 @@ TEST_F(RendererSchedulerImplTest, UnthrottledTaskRunner) {
   // task runner.
   SimulateCompositorGestureStart(TouchEventPolicy::SEND_TOUCH_START);
   scoped_refptr<TaskQueue> unthrottled_task_runner =
-      scheduler_->NewUnthrottledTaskRunner("unthrottled_tq");
+      scheduler_->NewUnthrottledTaskRunner(TaskQueue::QueueType::UNTHROTTLED);
 
   size_t timer_count = 0;
   size_t unthrottled_count = 0;
@@ -3402,10 +3451,11 @@ TEST_F(RendererSchedulerImplTest, EnableVirtualTime) {
   scheduler_->EnableVirtualTime();
 
   scoped_refptr<TaskQueue> loading_tq =
-      scheduler_->NewLoadingTaskRunner("test");
-  scoped_refptr<TaskQueue> timer_tq = scheduler_->NewTimerTaskRunner("test");
+      scheduler_->NewLoadingTaskRunner(TaskQueue::QueueType::TEST);
+  scoped_refptr<TaskQueue> timer_tq =
+      scheduler_->NewTimerTaskRunner(TaskQueue::QueueType::TEST);
   scoped_refptr<TaskQueue> unthrottled_tq =
-      scheduler_->NewUnthrottledTaskRunner("test");
+      scheduler_->NewUnthrottledTaskRunner(TaskQueue::QueueType::TEST);
 
   EXPECT_EQ(scheduler_->DefaultTaskRunner()->GetTimeDomain(),
             scheduler_->GetVirtualTimeDomain());
@@ -3421,11 +3471,14 @@ TEST_F(RendererSchedulerImplTest, EnableVirtualTime) {
   EXPECT_EQ(unthrottled_tq->GetTimeDomain(),
             scheduler_->GetVirtualTimeDomain());
 
-  EXPECT_EQ(scheduler_->NewLoadingTaskRunner("test")->GetTimeDomain(),
+  EXPECT_EQ(scheduler_->NewLoadingTaskRunner(TaskQueue::QueueType::TEST)
+                ->GetTimeDomain(),
             scheduler_->GetVirtualTimeDomain());
-  EXPECT_EQ(scheduler_->NewTimerTaskRunner("test")->GetTimeDomain(),
+  EXPECT_EQ(scheduler_->NewTimerTaskRunner(TaskQueue::QueueType::TEST)
+                ->GetTimeDomain(),
             scheduler_->GetVirtualTimeDomain());
-  EXPECT_EQ(scheduler_->NewUnthrottledTaskRunner("test")->GetTimeDomain(),
+  EXPECT_EQ(scheduler_->NewUnthrottledTaskRunner(TaskQueue::QueueType::TEST)
+                ->GetTimeDomain(),
             scheduler_->GetVirtualTimeDomain());
 }
 

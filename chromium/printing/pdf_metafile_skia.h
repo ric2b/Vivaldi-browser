@@ -38,7 +38,7 @@ class PRINTING_EXPORT PdfMetafileSkia : public Metafile {
 
   // Metafile methods.
   bool Init() override;
-  bool InitFromData(const void* src_buffer, uint32_t src_buffer_size) override;
+  bool InitFromData(const void* src_buffer, size_t src_buffer_size) override;
 
   void StartPage(const gfx::Size& page_size,
                  const gfx::Rect& content_area,
@@ -52,15 +52,15 @@ class PRINTING_EXPORT PdfMetafileSkia : public Metafile {
   gfx::Rect GetPageBounds(unsigned int page_number) const override;
   unsigned int GetPageCount() const override;
 
-  gfx::NativeDrawingContext context() const override;
+  skia::NativeDrawingContext context() const override;
 
 #if defined(OS_WIN)
-  bool Playback(gfx::NativeDrawingContext hdc,
+  bool Playback(skia::NativeDrawingContext hdc,
                 const RECT* rect) const override;
-  bool SafePlayback(gfx::NativeDrawingContext hdc) const override;
+  bool SafePlayback(skia::NativeDrawingContext hdc) const override;
 #elif defined(OS_MACOSX)
   bool RenderPage(unsigned int page_number,
-                  gfx::NativeDrawingContext context,
+                  skia::NativeDrawingContext context,
                   const CGRect rect,
                   const MacRenderPageParams& params) const override;
 #endif

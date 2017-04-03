@@ -53,6 +53,10 @@ class PLATFORM_EXPORT SecurityOrigin : public RefCounted<SecurityOrigin> {
   static PassRefPtr<SecurityOrigin> create(const String& protocol,
                                            const String& host,
                                            int port);
+  static PassRefPtr<SecurityOrigin> create(const String& protocol,
+                                           const String& host,
+                                           int port,
+                                           const String& suborigin);
 
   static void setMap(URLSecurityOriginMap*);
 
@@ -264,6 +268,10 @@ class PLATFORM_EXPORT SecurityOrigin : public RefCounted<SecurityOrigin> {
 
   void setUniqueOriginIsPotentiallyTrustworthy(
       bool isUniqueOriginPotentiallyTrustworthy);
+
+  // Only used for document.domain setting. The method should probably be moved
+  // if we need it for something more general.
+  static String canonicalizeHost(const String& host, bool* success);
 
  private:
   friend class SecurityOriginTest;

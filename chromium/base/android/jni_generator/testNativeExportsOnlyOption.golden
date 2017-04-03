@@ -77,7 +77,6 @@ static void Java_SampleForTests_testMethodWithParam(JNIEnv* env, const
       base::android::MethodID::TYPE_INSTANCE>(
       env, SampleForTests_clazz(env),
       "testMethodWithParam",
-
 "("
 "I"
 ")"
@@ -87,7 +86,6 @@ static void Java_SampleForTests_testMethodWithParam(JNIEnv* env, const
      env->CallVoidMethod(obj.obj(),
           method_id, as_jint(iParam));
   jni_generator::CheckException(env);
-
 }
 
 static base::subtle::AtomicWord g_SampleForTests_testMethodWithParamAndReturn =
@@ -102,7 +100,6 @@ static base::android::ScopedJavaLocalRef<jstring>
       base::android::MethodID::TYPE_INSTANCE>(
       env, SampleForTests_clazz(env),
       "testMethodWithParamAndReturn",
-
 "("
 "I"
 ")"
@@ -126,7 +123,6 @@ static jint Java_SampleForTests_testStaticMethodWithParam(JNIEnv* env,
       base::android::MethodID::TYPE_STATIC>(
       env, SampleForTests_clazz(env),
       "testStaticMethodWithParam",
-
 "("
 "I"
 ")"
@@ -149,7 +145,6 @@ static jdouble Java_SampleForTests_testMethodWithNoParam(JNIEnv* env) {
       base::android::MethodID::TYPE_STATIC>(
       env, SampleForTests_clazz(env),
       "testMethodWithNoParam",
-
 "("
 ")"
 "D",
@@ -173,7 +168,6 @@ static base::android::ScopedJavaLocalRef<jstring>
       base::android::MethodID::TYPE_STATIC>(
       env, SampleForTests_clazz(env),
       "testStaticMethodWithNoParam",
-
 "("
 ")"
 "Ljava/lang/String;",

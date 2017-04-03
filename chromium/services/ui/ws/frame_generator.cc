@@ -10,29 +10,34 @@
 #include "cc/quads/render_pass_draw_quad.h"
 #include "cc/quads/shared_quad_state.h"
 #include "cc/quads/surface_draw_quad.h"
+#include "cc/surfaces/surface_id.h"
 #include "gpu/ipc/client/gpu_channel_host.h"
-#include "services/ui/surfaces/compositor_frame_sink.h"
+#include "services/ui/surfaces/display_compositor.h"
+#include "services/ui/surfaces/surfaces_context_provider.h"
 #include "services/ui/ws/frame_generator_delegate.h"
 #include "services/ui/ws/server_window.h"
-#include "services/ui/ws/server_window_surface.h"
-#include "services/ui/ws/server_window_surface_manager.h"
+#include "services/ui/ws/server_window_compositor_frame_sink_manager.h"
+#include "services/ui/ws/server_window_delegate.h"
 
 namespace ui {
 
 namespace ws {
 
-FrameGenerator::FrameGenerator(
-    FrameGeneratorDelegate* delegate,
-    scoped_refptr<DisplayCompositor> display_compositor)
+FrameGenerator::FrameGenerator(FrameGeneratorDelegate* delegate,
+                               ServerWindow* root_window)
     : delegate_(delegate),
-      display_compositor_(display_compositor),
-      frame_sink_id_(0, display_compositor->GenerateNextClientId()),
-      draw_timer_(false, false),
+      frame_sink_id_(
+          WindowIdToTransportId(root_window->id()),
+          static_cast<uint32_t>(mojom::CompositorFrameSinkType::DEFAULT)),
+      root_window_(root_window),
+      binding_(this),
       weak_factory_(this) {
   DCHECK(delegate_);
+  surface_sequence_generator_.set_frame_sink_id(frame_sink_id_);
 }
 
 FrameGenerator::~FrameGenerator() {
+  ReleaseAllSurfaceReferences();
   // Invalidate WeakPtrs now to avoid callbacks back into the
   // FrameGenerator during destruction of |compositor_frame_sink_|.
   weak_factory_.InvalidateWeakPtrs();
@@ -42,95 +47,78 @@ FrameGenerator::~FrameGenerator() {
 void FrameGenerator::OnGpuChannelEstablished(
     scoped_refptr<gpu::GpuChannelHost> channel) {
   if (widget_ != gfx::kNullAcceleratedWidget) {
-    compositor_frame_sink_ = base::MakeUnique<surfaces::CompositorFrameSink>(
-        frame_sink_id_, base::ThreadTaskRunnerHandle::Get(), widget_,
-        std::move(channel), display_compositor_);
+    cc::mojom::MojoCompositorFrameSinkRequest request =
+        mojo::GetProxy(&compositor_frame_sink_);
+    // TODO(fsamuel): FrameGenerator should not know about
+    // SurfacesContextProvider. In fact, FrameGenerator should not know
+    // about GpuChannelHost.
+    root_window_->CreateCompositorFrameSink(
+        mojom::CompositorFrameSinkType::DEFAULT, widget_,
+        channel->gpu_memory_buffer_manager(),
+        new SurfacesContextProvider(widget_, channel), std::move(request),
+        binding_.CreateInterfacePtrAndBind());
+    // TODO(fsamuel): This means we're always requesting a new BeginFrame signal
+    // even when we don't need it. Once surface ID propagation work is done,
+    // this will not be necessary because FrameGenerator will only need a
+    // BeginFrame if the window manager changes.
+    compositor_frame_sink_->SetNeedsBeginFrame(true);
   } else {
     gpu_channel_ = std::move(channel);
   }
-}
-
-void FrameGenerator::RequestRedraw(const gfx::Rect& redraw_region) {
-  dirty_rect_.Union(redraw_region);
-  WantToDraw();
 }
 
 void FrameGenerator::OnAcceleratedWidgetAvailable(
     gfx::AcceleratedWidget widget) {
   widget_ = widget;
   if (gpu_channel_ && widget != gfx::kNullAcceleratedWidget) {
-    compositor_frame_sink_.reset(new surfaces::CompositorFrameSink(
-        frame_sink_id_, base::ThreadTaskRunnerHandle::Get(), widget_,
-        std::move(gpu_channel_), display_compositor_));
+    cc::mojom::MojoCompositorFrameSinkRequest request =
+        mojo::GetProxy(&compositor_frame_sink_);
+    root_window_->CreateCompositorFrameSink(
+        mojom::CompositorFrameSinkType::DEFAULT, widget_,
+        gpu_channel_->gpu_memory_buffer_manager(),
+        new SurfacesContextProvider(widget_, gpu_channel_),
+        std::move(request), binding_.CreateInterfacePtrAndBind());
+    // TODO(fsamuel): This means we're always requesting a new BeginFrame signal
+    // even when we don't need it. Once surface ID propagation work is done,
+    // this will not be necessary because FrameGenerator will only need a
+    // BeginFrame if the window manager changes.
+    compositor_frame_sink_->SetNeedsBeginFrame(true);
   }
 }
 
-void FrameGenerator::RequestCopyOfOutput(
-    std::unique_ptr<cc::CopyOutputRequest> output_request) {
-  if (compositor_frame_sink_)
-    compositor_frame_sink_->RequestCopyOfOutput(std::move(output_request));
-}
+void FrameGenerator::DidReceiveCompositorFrameAck() {}
 
-void FrameGenerator::WantToDraw() {
-  if (draw_timer_.IsRunning() || frame_pending_)
+void FrameGenerator::OnBeginFrame(const cc::BeginFrameArgs& begin_frame_arags) {
+  if (!root_window_->visible())
     return;
 
-  // TODO(rjkroege): Use vblank to kick off Draw.
-  draw_timer_.Start(
-      FROM_HERE, base::TimeDelta(),
-      base::Bind(&FrameGenerator::Draw, weak_factory_.GetWeakPtr()));
-}
-
-void FrameGenerator::Draw() {
-  if (!delegate_->GetRootWindow()->visible())
-    return;
-
-  const ViewportMetrics& metrics = delegate_->GetViewportMetrics();
-  const gfx::Rect output_rect(metrics.pixel_size);
-  dirty_rect_.Intersect(output_rect);
   // TODO(fsamuel): We should add a trace for generating a top level frame.
-  cc::CompositorFrame frame(GenerateCompositorFrame(output_rect));
-  if (frame.metadata.may_contain_video != may_contain_video_) {
-    may_contain_video_ = frame.metadata.may_contain_video;
-    // TODO(sad): Schedule notifying observers.
-    if (may_contain_video_) {
-      // TODO(sad): Start a timer to reset the bit if no new frame with video
-      // is submitted 'soon'.
-    }
-  }
-  if (compositor_frame_sink_) {
-    frame_pending_ = true;
-    compositor_frame_sink_->SubmitCompositorFrame(
-        std::move(frame),
-        base::Bind(&FrameGenerator::DidDraw, weak_factory_.GetWeakPtr()));
-  }
-  dirty_rect_ = gfx::Rect();
+  cc::CompositorFrame frame(GenerateCompositorFrame(root_window_->bounds()));
+  if (compositor_frame_sink_)
+    compositor_frame_sink_->SubmitCompositorFrame(std::move(frame));
 }
 
-void FrameGenerator::DidDraw() {
-  frame_pending_ = false;
-  delegate_->OnCompositorFrameDrawn();
-  if (!dirty_rect_.IsEmpty())
-    WantToDraw();
+void FrameGenerator::ReclaimResources(
+    const cc::ReturnedResourceArray& resources) {
+  // Nothing to do here because FrameGenerator CompositorFrames don't reference
+  // any resources.
 }
 
 cc::CompositorFrame FrameGenerator::GenerateCompositorFrame(
-    const gfx::Rect& output_rect) const {
+    const gfx::Rect& output_rect) {
   const cc::RenderPassId render_pass_id(1, 1);
   std::unique_ptr<cc::RenderPass> render_pass = cc::RenderPass::Create();
-  render_pass->SetNew(render_pass_id, output_rect, dirty_rect_,
+  render_pass->SetNew(render_pass_id, output_rect, output_rect,
                       gfx::Transform());
 
-  bool may_contain_video = false;
-  DrawWindowTree(render_pass.get(), delegate_->GetRootWindow(), gfx::Vector2d(),
-                 1.0f, &may_contain_video);
+  DrawWindowTree(render_pass.get(), root_window_, gfx::Vector2d(), 1.0f);
 
   std::unique_ptr<cc::DelegatedFrameData> frame_data(
       new cc::DelegatedFrameData);
   frame_data->render_pass_list.push_back(std::move(render_pass));
   if (delegate_->IsInHighContrastMode()) {
     std::unique_ptr<cc::RenderPass> invert_pass = cc::RenderPass::Create();
-    invert_pass->SetNew(cc::RenderPassId(2, 0), output_rect, dirty_rect_,
+    invert_pass->SetNew(cc::RenderPassId(2, 0), output_rect, output_rect,
                         gfx::Transform());
     cc::SharedQuadState* shared_state =
         invert_pass->CreateAndAppendSharedQuadState();
@@ -150,7 +138,6 @@ cc::CompositorFrame FrameGenerator::GenerateCompositorFrame(
 
   cc::CompositorFrame frame;
   frame.delegated_frame_data = std::move(frame_data);
-  frame.metadata.may_contain_video = may_contain_video;
   return frame;
 }
 
@@ -158,14 +145,9 @@ void FrameGenerator::DrawWindowTree(
     cc::RenderPass* pass,
     ServerWindow* window,
     const gfx::Vector2d& parent_to_root_origin_offset,
-    float opacity,
-    bool* may_contain_video) const {
+    float opacity) {
   if (!window->visible())
     return;
-
-  ServerWindowSurface* default_surface =
-      window->surface_manager() ? window->surface_manager()->GetDefaultSurface()
-                                : nullptr;
 
   const gfx::Rect absolute_bounds =
       window->bounds() + parent_to_root_origin_offset;
@@ -173,18 +155,24 @@ void FrameGenerator::DrawWindowTree(
   const float combined_opacity = opacity * window->opacity();
   for (ServerWindow* child : base::Reversed(children)) {
     DrawWindowTree(pass, child, absolute_bounds.OffsetFromOrigin(),
-                   combined_opacity, may_contain_video);
+                   combined_opacity);
   }
 
-  if (!window->surface_manager() || !window->surface_manager()->ShouldDraw())
+  if (!window->compositor_frame_sink_manager() ||
+      !window->compositor_frame_sink_manager()->ShouldDraw())
     return;
 
-  ServerWindowSurface* underlay_surface =
-      window->surface_manager()->GetUnderlaySurface();
-  if (!default_surface && !underlay_surface)
+  cc::SurfaceId underlay_surface_id =
+      window->compositor_frame_sink_manager()->GetLatestSurfaceId(
+          mojom::CompositorFrameSinkType::UNDERLAY);
+  cc::SurfaceId default_surface_id =
+      window->compositor_frame_sink_manager()->GetLatestSurfaceId(
+          mojom::CompositorFrameSinkType::DEFAULT);
+
+  if (!underlay_surface_id.is_valid() && !default_surface_id.is_valid())
     return;
 
-  if (default_surface) {
+  if (default_surface_id.is_valid()) {
     gfx::Transform quad_to_target_transform;
     quad_to_target_transform.Translate(absolute_bounds.x(),
                                        absolute_bounds.y());
@@ -201,14 +189,14 @@ void FrameGenerator::DrawWindowTree(
                 combined_opacity, SkXfermode::kSrcOver_Mode,
                 0 /* sorting-context_id */);
     auto* quad = pass->CreateAndAppendDrawQuad<cc::SurfaceDrawQuad>();
+    AddOrUpdateSurfaceReference(mojom::CompositorFrameSinkType::DEFAULT,
+                                window);
     quad->SetAll(sqs, bounds_at_origin /* rect */,
                  gfx::Rect() /* opaque_rect */,
                  bounds_at_origin /* visible_rect */, true /* needs_blending*/,
-                 default_surface->GetSurfaceId());
-    if (default_surface->may_contain_video())
-      *may_contain_video = true;
+                 default_surface_id);
   }
-  if (underlay_surface) {
+  if (underlay_surface_id.is_valid()) {
     const gfx::Rect underlay_absolute_bounds =
         absolute_bounds - window->underlay_offset();
     gfx::Transform quad_to_target_transform;
@@ -216,7 +204,8 @@ void FrameGenerator::DrawWindowTree(
                                        underlay_absolute_bounds.y());
     cc::SharedQuadState* sqs = pass->CreateAndAppendSharedQuadState();
     const gfx::Rect bounds_at_origin(
-        underlay_surface->last_submitted_frame_size());
+        window->compositor_frame_sink_manager()->GetLatestFrameSize(
+            mojom::CompositorFrameSinkType::UNDERLAY));
     sqs->SetAll(quad_to_target_transform,
                 bounds_at_origin.size() /* layer_bounds */,
                 bounds_at_origin /* visible_layer_bounds */,
@@ -225,12 +214,98 @@ void FrameGenerator::DrawWindowTree(
                 0 /* sorting-context_id */);
 
     auto* quad = pass->CreateAndAppendDrawQuad<cc::SurfaceDrawQuad>();
+    AddOrUpdateSurfaceReference(mojom::CompositorFrameSinkType::UNDERLAY,
+                                window);
     quad->SetAll(sqs, bounds_at_origin /* rect */,
                  gfx::Rect() /* opaque_rect */,
                  bounds_at_origin /* visible_rect */, true /* needs_blending*/,
-                 underlay_surface->GetSurfaceId());
-    DCHECK(!underlay_surface->may_contain_video());
+                 underlay_surface_id);
   }
+}
+
+void FrameGenerator::AddOrUpdateSurfaceReference(
+    mojom::CompositorFrameSinkType type,
+    ServerWindow* window) {
+  cc::SurfaceId surface_id =
+      window->compositor_frame_sink_manager()->GetLatestSurfaceId(type);
+  if (!surface_id.is_valid())
+    return;
+  auto it = dependencies_.find(surface_id.frame_sink_id());
+  if (it == dependencies_.end()) {
+    SurfaceDependency dependency = {
+        surface_id.local_frame_id(),
+        surface_sequence_generator_.CreateSurfaceSequence()};
+    dependencies_[surface_id.frame_sink_id()] = dependency;
+    GetDisplayCompositor()->AddSurfaceReference(surface_id,
+                                                dependency.sequence);
+    // Observe |window_surface|'s window so that we can release references when
+    // the window is destroyed.
+    Add(window);
+    return;
+  }
+
+  // We are already holding a reference to this surface so there's no work to do
+  // here.
+  if (surface_id.local_frame_id() == it->second.local_frame_id)
+    return;
+
+  // If we have have an existing reference to a surface from the given
+  // FrameSink, then we should release the reference, and then add this new
+  // reference. This results in a delete and lookup in the map but simplifies
+  // the code.
+  ReleaseFrameSinkReference(surface_id.frame_sink_id());
+
+  // This recursion will always terminate. This line is being called because
+  // there was a stale surface reference. The stale reference has been released
+  // in the previous line and cleared from the dependencies_ map. Thus, in the
+  // recursive call, we'll enter the second if blcok because the FrameSinkId
+  // is no longer referenced in the map.
+  AddOrUpdateSurfaceReference(type, window);
+}
+
+void FrameGenerator::ReleaseFrameSinkReference(
+    const cc::FrameSinkId& frame_sink_id) {
+  auto it = dependencies_.find(frame_sink_id);
+  if (it == dependencies_.end())
+    return;
+  std::vector<uint32_t> sequences;
+  sequences.push_back(it->second.sequence.sequence);
+  GetDisplayCompositor()->ReturnSurfaceReferences(frame_sink_id, sequences);
+  dependencies_.erase(it);
+}
+
+void FrameGenerator::ReleaseAllSurfaceReferences() {
+  std::vector<uint32_t> sequences;
+  for (auto& dependency : dependencies_)
+    sequences.push_back(dependency.second.sequence.sequence);
+  GetDisplayCompositor()->ReturnSurfaceReferences(frame_sink_id_, sequences);
+  dependencies_.clear();
+}
+
+ui::DisplayCompositor* FrameGenerator::GetDisplayCompositor() {
+  return root_window_->delegate()->GetDisplayCompositor();
+}
+
+void FrameGenerator::OnWindowDestroying(ServerWindow* window) {
+  Remove(window);
+  ServerWindowCompositorFrameSinkManager* compositor_frame_sink_manager =
+      window->compositor_frame_sink_manager();
+  // If FrameGenerator was observing |window|, then that means it had a
+  // CompositorFrame at some point in time and should have a
+  // ServerWindowCompositorFrameSinkManager.
+  DCHECK(compositor_frame_sink_manager);
+
+  cc::SurfaceId default_surface_id =
+      window->compositor_frame_sink_manager()->GetLatestSurfaceId(
+          mojom::CompositorFrameSinkType::DEFAULT);
+  if (default_surface_id.is_valid())
+    ReleaseFrameSinkReference(default_surface_id.frame_sink_id());
+
+  cc::SurfaceId underlay_surface_id =
+      window->compositor_frame_sink_manager()->GetLatestSurfaceId(
+          mojom::CompositorFrameSinkType::UNDERLAY);
+  if (underlay_surface_id.is_valid())
+    ReleaseFrameSinkReference(underlay_surface_id.frame_sink_id());
 }
 
 }  // namespace ws

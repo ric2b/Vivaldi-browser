@@ -63,13 +63,14 @@ bool StructTraits<
 mojo::ScopedHandle StructTraits<gfx::mojom::GpuMemoryBufferHandleDataView,
                                 gfx::GpuMemoryBufferHandle>::
     shared_memory_handle(const gfx::GpuMemoryBufferHandle& handle) {
+  if (handle.is_null())
+    return mojo::ScopedHandle();
   base::PlatformFile platform_file = base::kInvalidPlatformFile;
 #if defined(OS_WIN)
   platform_file = handle.handle.GetHandle();
 #elif defined(OS_MACOSX) || defined(OS_IOS)
   NOTIMPLEMENTED();
 #else
-  DCHECK(handle.handle.auto_close || handle.handle.fd == -1);
   platform_file = handle.handle.fd;
 #endif
   return mojo::WrapPlatformFile(platform_file);
@@ -94,20 +95,25 @@ bool StructTraits<gfx::mojom::GpuMemoryBufferHandleDataView,
   if (!data.ReadType(&out->type) || !data.ReadId(&out->id))
     return false;
 
-  base::PlatformFile platform_file;
-  MojoResult unwrap_result = mojo::UnwrapPlatformFile(
-      data.TakeSharedMemoryHandle(), &platform_file);
-  if (unwrap_result != MOJO_RESULT_OK)
-    return false;
+  mojo::ScopedHandle handle = data.TakeSharedMemoryHandle();
+  if (handle.is_valid()) {
+    base::PlatformFile platform_file;
+    MojoResult unwrap_result = mojo::UnwrapPlatformFile(
+        std::move(handle), &platform_file);
+    if (unwrap_result != MOJO_RESULT_OK)
+      return false;
 #if defined(OS_WIN)
-  out->handle =
-      base::SharedMemoryHandle(platform_file, base::GetCurrentProcId());
+    out->handle =
+        base::SharedMemoryHandle(platform_file, base::GetCurrentProcId());
 #elif defined(OS_MACOSX) || defined(OS_IOS)
-  // TODO: Add support for mach_port on mac.
-  out->handle = base::SharedMemoryHandle();
+    // TODO: Add support for mach_port on mac.
+    out->handle = base::SharedMemoryHandle();
 #else
-  out->handle = base::SharedMemoryHandle(platform_file, true);
+    out->handle = base::SharedMemoryHandle(platform_file, true);
 #endif
+  } else {
+    out->handle = base::SharedMemoryHandle();
+  }
 
   out->offset = data.offset();
   out->stride = data.stride();

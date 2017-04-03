@@ -10,12 +10,11 @@
 #include <string>
 
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/stl_util.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/browser_shutdown.h"
 #include "chrome/browser/defaults.h"
-#include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/extensions/tab_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/tab_contents/core_tab_helper.h"
@@ -24,7 +23,6 @@
 #include "chrome/browser/ui/tabs/tab_strip_model_order_controller.h"
 #include "chrome/browser/ui/tabs/tab_utils.h"
 #include "chrome/browser/ui/web_contents_sizer.h"
-#include "chrome/browser/sessions/session_tab_helper.h"
 #include "chrome/common/url_constants.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "content/public/browser/render_process_host.h"
@@ -33,6 +31,8 @@
 #include "content/public/browser/web_contents_observer.h"
 
 #include "app/vivaldi_apptools.h"
+#include "chrome/browser/extensions/extension_tab_util.h"
+#include "chrome/browser/sessions/session_tab_helper.h"
 
 using base::UserMetricsAction;
 using content::WebContents;
@@ -114,7 +114,7 @@ bool CloseTracker::HasNext() const {
 
 WebContents* CloseTracker::Next() {
   if (observers_.empty())
-    return NULL;
+    return nullptr;
 
   DeletionObserver* observer = observers_[0];
   WebContents* web_contents = observer->web_contents();
@@ -215,8 +215,8 @@ TabStripModel::WebContentsData::WebContentsData(TabStripModel* tab_strip_model,
     : content::WebContentsObserver(contents),
       contents_(contents),
       tab_strip_model_(tab_strip_model),
-      group_(NULL),
-      opener_(NULL),
+      group_(nullptr),
+      opener_(nullptr),
       reset_group_on_select_(false),
       pinned_(false),
       blocked_(false) {}
@@ -250,7 +250,7 @@ TabStripModel::TabStripModel(TabStripModelDelegate* delegate, Profile* profile)
 }
 
 TabStripModel::~TabStripModel() {
-  base::STLDeleteElements(&contents_data_);
+  contents_data_.clear();
   order_controller_.reset();
 }
 
@@ -292,7 +292,8 @@ void TabStripModel::InsertWebContentsAt(int index,
   // otherwise we run into problems when we try to change the active contents
   // since the old contents and the new contents will be the same...
   WebContents* active_contents = GetActiveWebContents();
-  WebContentsData* data = new WebContentsData(this, contents);
+  std::unique_ptr<WebContentsData> data =
+      base::MakeUnique<WebContentsData>(this, contents);
   data->set_pinned(pin);
   if ((add_types & ADD_INHERIT_GROUP) && active_contents) {
     if (active) {
@@ -320,12 +321,13 @@ void TabStripModel::InsertWebContentsAt(int index,
   if (manager)
     data->set_blocked(manager->IsDialogActive());
 
-  contents_data_.insert(contents_data_.begin() + index, data);
+  contents_data_.insert(contents_data_.begin() + index, std::move(data));
 
   selection_model_.IncrementFrom(index);
 
-  FOR_EACH_OBSERVER(TabStripModelObserver, observers_,
-                    TabInsertedAt(this, contents, index, active));
+  for (auto& observer : observers_)
+    observer.TabInsertedAt(this, contents, index, active);
+
   if (active) {
     ui::ListSelectionModel new_model;
     new_model.Copy(selection_model_);
@@ -354,20 +356,16 @@ WebContents* TabStripModel::ReplaceWebContentsAt(int index,
 
   contents_data_[index]->SetWebContents(new_contents);
 
-  FOR_EACH_OBSERVER(TabStripModelObserver, observers_,
-                    TabReplacedAt(this, old_contents, new_contents, index));
+  for (auto& observer : observers_)
+    observer.TabReplacedAt(this, old_contents, new_contents, index);
 
   // When the active WebContents is replaced send out a selection notification
   // too. We do this as nearly all observers need to treat a replacement of the
   // selected contents as the selection changing.
   if (active_index() == index) {
-    FOR_EACH_OBSERVER(
-        TabStripModelObserver,
-        observers_,
-        ActiveTabChanged(old_contents,
-                         new_contents,
-                         active_index(),
-                         TabStripModelObserver::CHANGE_REASON_REPLACED));
+    for (auto& observer : observers_)
+      observer.ActiveTabChanged(old_contents, new_contents, active_index(),
+                                TabStripModelObserver::CHANGE_REASON_REPLACED);
   }
   return old_contents;
 }
@@ -375,7 +373,7 @@ WebContents* TabStripModel::ReplaceWebContentsAt(int index,
 WebContents* TabStripModel::DetachWebContentsAt(int index) {
   CHECK(!in_notify_);
   if (contents_data_.empty())
-    return NULL;
+    return nullptr;
   DCHECK(ContainsIndex(index));
 
   FixOpenersAndGroupsReferencing(index);
@@ -383,17 +381,17 @@ WebContents* TabStripModel::DetachWebContentsAt(int index) {
   WebContents* removed_contents = GetWebContentsAtImpl(index);
   bool was_selected = IsTabSelected(index);
   int next_selected_index = order_controller_->DetermineNewSelectedIndex(index);
-  delete contents_data_[index];
   contents_data_.erase(contents_data_.begin() + index);
   if (empty())
     closing_all_ = true;
-  FOR_EACH_OBSERVER(TabStripModelObserver, observers_,
-                    TabDetachedAt(removed_contents, index));
+  for (auto& observer : observers_)
+    observer.TabDetachedAt(removed_contents, index);
   if (empty()) {
     selection_model_.Clear();
     // TabDetachedAt() might unregister observers, so send |TabStripEmpty()| in
     // a second pass.
-    FOR_EACH_OBSERVER(TabStripModelObserver, observers_, TabStripEmpty());
+    for (auto& observer : observers_)
+      observer.TabStripEmpty();
   } else {
     int old_active = active_index();
     selection_model_.DecrementFrom(index);
@@ -419,8 +417,8 @@ WebContents* TabStripModel::DetachWebContentsAt(int index) {
     // notification is sent even though the tab selection has changed because
     // |old_model| is stored after calling DecrementFrom().
     if (was_selected) {
-      FOR_EACH_OBSERVER(TabStripModelObserver, observers_,
-                        TabSelectionChanged(this, old_model));
+      for (auto& observer : observers_)
+        observer.TabSelectionChanged(this, old_model);
     }
   }
   return removed_contents;
@@ -500,7 +498,7 @@ WebContents* TabStripModel::GetActiveWebContents() const {
 WebContents* TabStripModel::GetWebContentsAt(int index) const {
   if (ContainsIndex(index))
     return GetWebContentsAtImpl(index);
-  return NULL;
+  return nullptr;
 }
 
 int TabStripModel::GetIndexOfWebContents(const WebContents* contents) const {
@@ -515,8 +513,8 @@ void TabStripModel::UpdateWebContentsStateAt(int index,
     TabStripModelObserver::TabChangeType change_type) {
   DCHECK(ContainsIndex(index));
 
-  FOR_EACH_OBSERVER(TabStripModelObserver, observers_,
-      TabChangedAt(GetWebContentsAtImpl(index), index, change_type));
+  for (auto& observer : observers_)
+    observer.TabChangedAt(GetWebContentsAtImpl(index), index, change_type);
 }
 
 void TabStripModel::CloseAllTabs() {
@@ -538,11 +536,11 @@ bool TabStripModel::CloseWebContentsAt(int index, uint32_t close_types) {
 }
 
 bool TabStripModel::TabsAreLoading() const {
-  for (WebContentsDataVector::const_iterator iter = contents_data_.begin();
-       iter != contents_data_.end(); ++iter) {
-    if ((*iter)->web_contents()->IsLoading())
+  for (const auto& data : contents_data_) {
+    if (data->web_contents()->IsLoading())
       return true;
   }
+
   return false;
 }
 
@@ -626,16 +624,15 @@ void TabStripModel::TabNavigating(WebContents* contents,
 void TabStripModel::ForgetAllOpeners() {
   // Forget all opener memories so we don't do anything weird with tab
   // re-selection ordering.
-  for (WebContentsDataVector::const_iterator iter = contents_data_.begin();
-       iter != contents_data_.end(); ++iter)
-    (*iter)->set_opener(NULL);
+  for (const auto& data : contents_data_)
+    data->set_opener(nullptr);
 }
 
 void TabStripModel::ForgetGroup(WebContents* contents) {
   int index = GetIndexOfWebContents(contents);
   DCHECK(ContainsIndex(index));
-  contents_data_[index]->set_group(NULL);
-  contents_data_[index]->set_opener(NULL);
+  contents_data_[index]->set_group(nullptr);
+  contents_data_[index]->set_opener(nullptr);
 }
 
 bool TabStripModel::ShouldResetGroupOnSelect(WebContents* contents) const {
@@ -649,10 +646,9 @@ void TabStripModel::SetTabBlocked(int index, bool blocked) {
   if (contents_data_[index]->blocked() == blocked)
     return;
   contents_data_[index]->set_blocked(blocked);
-  FOR_EACH_OBSERVER(
-      TabStripModelObserver, observers_,
-      TabBlockedStateChanged(contents_data_[index]->web_contents(),
-                             index));
+  for (auto& observer : observers_)
+    observer.TabBlockedStateChanged(contents_data_[index]->web_contents(),
+                                    index);
 }
 
 void TabStripModel::SetTabPinned(int index, bool pinned) {
@@ -671,9 +667,9 @@ void TabStripModel::SetTabPinned(int index, bool pinned) {
     index = non_pinned_tab_index - 1;
   }
 
-  FOR_EACH_OBSERVER(TabStripModelObserver, observers_,
-                    TabPinnedStateChanged(
-                        this, contents_data_[index]->web_contents(), index));
+  for (auto& observer : observers_)
+    observer.TabPinnedStateChanged(this, contents_data_[index]->web_contents(),
+                                   index);
 }
 
 bool TabStripModel::IsTabPinned(int index) const {
@@ -1122,7 +1118,7 @@ void TabStripModel::GetIndicesWithSameDomain(int index,
   for (int i = 0; i < count(); ++i) {
     if (i == index)
       continue;
-    if (GetWebContentsAt(i)->GetURL().host() == domain)
+    if (GetWebContentsAt(i)->GetURL().host_piece() == domain)
       indices->push_back(i);
   }
 }
@@ -1158,7 +1154,7 @@ std::vector<int> TabStripModel::GetIndicesForCommand(int index) const {
 bool TabStripModel::IsNewTabAtEndOfTabStrip(WebContents* contents) const {
   const GURL& url = contents->GetURL();
   return url.SchemeIs(content::kChromeUIScheme) &&
-         url.host() == chrome::kChromeUINewTabHost &&
+         url.host_piece() == chrome::kChromeUINewTabHost &&
          contents == GetWebContentsAtImpl(count() - 1) &&
          contents->GetController().GetEntryCount() == 1;
 }
@@ -1173,7 +1169,8 @@ bool TabStripModel::InternalCloseTabs(const std::vector<int>& indices,
   base::WeakPtr<TabStripModel> ref(weak_factory_.GetWeakPtr());
   const bool closing_all = indices.size() == contents_data_.size();
   if (closing_all)
-    FOR_EACH_OBSERVER(TabStripModelObserver, observers_, WillCloseAllTabs());
+    for (auto& observer : observers_)
+      observer.WillCloseAllTabs();
 
   // We only try the fast shutdown path if the whole browser process is *not*
   // shutting down. Fast shutdown during browser termination is handled in
@@ -1231,10 +1228,9 @@ bool TabStripModel::InternalCloseTabs(const std::vector<int>& indices,
                      (close_types & CLOSE_CREATE_HISTORICAL_TAB) != 0);
   }
 
-  if (ref && closing_all && !retval) {
-    FOR_EACH_OBSERVER(TabStripModelObserver, observers_,
-                      CloseAllTabsCanceled());
-  }
+  if (ref && closing_all && !retval)
+    for (auto& observer : observers_)
+      observer.CloseAllTabsCanceled();
 
   return retval;
 }
@@ -1242,8 +1238,8 @@ bool TabStripModel::InternalCloseTabs(const std::vector<int>& indices,
 void TabStripModel::InternalCloseTab(WebContents* contents,
                                      int index,
                                      bool create_historical_tabs) {
-  FOR_EACH_OBSERVER(TabStripModelObserver, observers_,
-                    TabClosingAt(this, contents, index));
+  for (auto& observer : observers_)
+    observer.TabClosingAt(this, contents, index);
 
   // Ask the delegate to save an entry for this tab in the historical tab
   // database if applicable.
@@ -1263,8 +1259,8 @@ WebContents* TabStripModel::GetWebContentsAtImpl(int index) const {
 
 void TabStripModel::NotifyIfTabDeactivated(WebContents* contents) {
   if (contents) {
-    FOR_EACH_OBSERVER(TabStripModelObserver, observers_,
-                      TabDeactivated(contents));
+    for (auto& observer : observers_)
+      observer.TabDeactivated(contents);
   }
 }
 
@@ -1277,11 +1273,9 @@ void TabStripModel::NotifyIfActiveTabChanged(WebContents* old_contents,
                  : TabStripModelObserver::CHANGE_REASON_NONE;
     CHECK(!in_notify_);
     in_notify_ = true;
-    FOR_EACH_OBSERVER(TabStripModelObserver, observers_,
-        ActiveTabChanged(old_contents,
-                         new_contents,
-                         active_index(),
-                         reason));
+    for (auto& observer : observers_)
+      observer.ActiveTabChanged(old_contents, new_contents, active_index(),
+                                reason);
     in_notify_ = false;
   }
 }
@@ -1293,8 +1287,8 @@ void TabStripModel::NotifyIfActiveOrSelectionChanged(
   NotifyIfActiveTabChanged(old_contents, notify_types);
 
   if (!selection_model().Equals(old_model)) {
-    FOR_EACH_OBSERVER(TabStripModelObserver, observers_,
-                      TabSelectionChanged(this, old_model));
+    for (auto& observer : observers_)
+      observer.TabSelectionChanged(this, old_model);
   }
 }
 
@@ -1327,9 +1321,12 @@ void TabStripModel::MoveWebContentsAtImpl(int index,
                                           bool select_after_move) {
   FixOpenersAndGroupsReferencing(index);
 
-  WebContentsData* moved_data = contents_data_[index];
+  std::unique_ptr<WebContentsData> moved_data =
+      std::move(contents_data_[index]);
+  WebContents* web_contents = moved_data->web_contents();
   contents_data_.erase(contents_data_.begin() + index);
-  contents_data_.insert(contents_data_.begin() + to_position, moved_data);
+  contents_data_.insert(contents_data_.begin() + to_position,
+                        std::move(moved_data));
 
   selection_model_.Move(index, to_position);
   if (!selection_model_.IsSelected(to_position) && select_after_move) {
@@ -1337,8 +1334,8 @@ void TabStripModel::MoveWebContentsAtImpl(int index,
     selection_model_.SetSelectedIndex(to_position);
   }
 
-  FOR_EACH_OBSERVER(TabStripModelObserver, observers_,
-                    TabMoved(moved_data->web_contents(), index, to_position));
+  for (auto& observer : observers_)
+    observer.TabMoved(web_contents, index, to_position);
 }
 
 void TabStripModel::MoveSelectedTabsToImpl(int index,
@@ -1378,7 +1375,7 @@ void TabStripModel::MoveSelectedTabsToImpl(int index,
 }
 
 // static
-bool TabStripModel::OpenerMatches(const WebContentsData* data,
+bool TabStripModel::OpenerMatches(const std::unique_ptr<WebContentsData>& data,
                                   const WebContents* opener,
                                   bool use_group) {
   return data->opener() == opener || (use_group && data->group() == opener);
@@ -1386,7 +1383,7 @@ bool TabStripModel::OpenerMatches(const WebContentsData* data,
 
 void TabStripModel::FixOpenersAndGroupsReferencing(int index) {
   WebContents* old_contents = GetWebContentsAtImpl(index);
-  for (WebContentsData* data : contents_data_) {
+  for (auto& data : contents_data_) {
     if (data->group() == old_contents)
       data->set_group(contents_data_[index]->group());
     if (data->opener() == old_contents)

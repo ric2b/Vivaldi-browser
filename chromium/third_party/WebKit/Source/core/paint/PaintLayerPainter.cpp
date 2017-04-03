@@ -5,7 +5,6 @@
 #include "core/paint/PaintLayerPainter.h"
 
 #include "core/frame/LocalFrame.h"
-#include "core/layout/LayoutInline.h"
 #include "core/layout/LayoutView.h"
 #include "core/paint/ClipPathClipper.h"
 #include "core/paint/FilterPainter.h"
@@ -64,7 +63,7 @@ static ShouldRespectOverflowClipType shouldRespectOverflowClip(
              : RespectOverflowClip;
 }
 
-PaintLayerPainter::PaintResult PaintLayerPainter::paintLayer(
+PaintResult PaintLayerPainter::paintLayer(
     GraphicsContext& context,
     const PaintLayerPaintingInfo& paintingInfo,
     PaintLayerFlags paintFlags) {
@@ -111,13 +110,12 @@ PaintLayerPainter::PaintResult PaintLayerPainter::paintLayer(
                                                 paintFlags);
 }
 
-PaintLayerPainter::PaintResult
-PaintLayerPainter::paintLayerContentsCompositingAllPhases(
+PaintResult PaintLayerPainter::paintLayerContentsCompositingAllPhases(
     GraphicsContext& context,
     const PaintLayerPaintingInfo& paintingInfo,
     PaintLayerFlags paintFlags,
     FragmentPolicy fragmentPolicy) {
-  ASSERT(m_paintLayer.isSelfPaintingLayer() ||
+  DCHECK(m_paintLayer.isSelfPaintingLayer() ||
          m_paintLayer.hasSelfPaintingLayerDescendant());
 
   PaintLayerFlags localPaintFlags = paintFlags & ~(PaintLayerAppliedTransform);
@@ -152,13 +150,17 @@ static bool shouldCreateSubsequence(const PaintLayer& paintLayer,
     return false;
 
   // Create subsequence for only stacking contexts whose painting are atomic.
-  if (!paintLayer.stackingNode()->isStackingContext())
+  // SVG is also painted atomically.
+  if (!paintLayer.stackingNode()->isStackingContext() &&
+      !paintLayer.layoutObject()->isSVGRoot())
     return false;
 
   // The layer doesn't have children. Subsequence caching is not worth because
   // normally the actual painting will be cheap.
+  // SVG is also painted atomically.
   if (!PaintLayerStackingNodeIterator(*paintLayer.stackingNode(), AllChildren)
-           .next())
+           .next() &&
+      !paintLayer.layoutObject()->isSVGRoot())
     return false;
 
   // When in FOUC-avoidance mode, don't cache any subsequences, to avoid having
@@ -208,8 +210,7 @@ static bool shouldRepaintSubsequence(
 
   // Repaint if previously the layer might be clipped by paintDirtyRect and
   // paintDirtyRect changes.
-  if (paintLayer.previousPaintResult() ==
-          PaintLayerPainter::MayBeClippedByPaintDirtyRect &&
+  if (paintLayer.previousPaintResult() == MayBeClippedByPaintDirtyRect &&
       paintLayer.previousPaintDirtyRect() != paintingInfo.paintDirtyRect) {
     needsRepaint = true;
     shouldClearEmptyPaintPhaseFlags = true;
@@ -228,14 +229,38 @@ static bool shouldRepaintSubsequence(
   return needsRepaint;
 }
 
-PaintLayerPainter::PaintResult PaintLayerPainter::paintLayerContents(
+PaintResult PaintLayerPainter::paintLayerContents(
     GraphicsContext& context,
     const PaintLayerPaintingInfo& paintingInfoArg,
     PaintLayerFlags paintFlags,
     FragmentPolicy fragmentPolicy) {
-  ASSERT(m_paintLayer.isSelfPaintingLayer() ||
+  Optional<ScopedPaintChunkProperties> scopedPaintChunkProperties;
+  if (RuntimeEnabledFeatures::slimmingPaintV2Enabled() &&
+      RuntimeEnabledFeatures::rootLayerScrollingEnabled() &&
+      m_paintLayer.layoutObject() &&
+      m_paintLayer.layoutObject()->isLayoutView()) {
+    const auto* objectPaintProperties =
+        m_paintLayer.layoutObject()->paintProperties();
+    DCHECK(objectPaintProperties &&
+           objectPaintProperties->localBorderBoxProperties());
+    PaintChunkProperties properties(
+        context.getPaintController().currentPaintChunkProperties());
+    auto& localBorderBoxProperties =
+        *objectPaintProperties->localBorderBoxProperties();
+    properties.transform =
+        localBorderBoxProperties.propertyTreeState.transform();
+    properties.scroll = localBorderBoxProperties.propertyTreeState.scroll();
+    properties.clip = localBorderBoxProperties.propertyTreeState.clip();
+    properties.effect = localBorderBoxProperties.propertyTreeState.effect();
+    properties.backfaceHidden =
+        m_paintLayer.layoutObject()->hasHiddenBackface();
+    scopedPaintChunkProperties.emplace(context.getPaintController(),
+                                       m_paintLayer, properties);
+  }
+
+  DCHECK(m_paintLayer.isSelfPaintingLayer() ||
          m_paintLayer.hasSelfPaintingLayerDescendant());
-  ASSERT(!(paintFlags & PaintLayerAppliedTransform));
+  DCHECK(!(paintFlags & PaintLayerAppliedTransform));
 
   bool isSelfPaintingLayer = m_paintLayer.isSelfPaintingLayer();
   bool isPaintingOverlayScrollbars =
@@ -418,11 +443,18 @@ PaintLayerPainter::PaintResult PaintLayerPainter::paintLayerContents(
                                     : layerFragments[0].backgroundRect,
                                 localPaintingInfo, paintFlags);
 
-    Optional<ScopedPaintChunkProperties> scopedPaintChunkProperties;
-    if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
-      const ObjectPaintProperties* objectPaintProperties =
-          m_paintLayer.layoutObject()->objectPaintProperties();
-      ASSERT(objectPaintProperties &&
+    Optional<ScopedPaintChunkProperties> contentScopedPaintChunkProperties;
+    if (RuntimeEnabledFeatures::slimmingPaintV2Enabled() &&
+        !scopedPaintChunkProperties.has_value()) {
+      // If layoutObject() is a LayoutView and root layer scrolling is enabled,
+      // the LayoutView's paint properties will already have been applied at
+      // the top of this method, in scopedPaintChunkProperties.
+      DCHECK(!(RuntimeEnabledFeatures::rootLayerScrollingEnabled() &&
+               m_paintLayer.layoutObject() &&
+               m_paintLayer.layoutObject()->isLayoutView()));
+      const auto* objectPaintProperties =
+          m_paintLayer.layoutObject()->paintProperties();
+      DCHECK(objectPaintProperties &&
              objectPaintProperties->localBorderBoxProperties());
       PaintChunkProperties properties(
           context.getPaintController().currentPaintChunkProperties());
@@ -435,8 +467,8 @@ PaintLayerPainter::PaintResult PaintLayerPainter::paintLayerContents(
       properties.effect = localBorderBoxProperties.propertyTreeState.effect();
       properties.backfaceHidden =
           m_paintLayer.layoutObject()->hasHiddenBackface();
-      scopedPaintChunkProperties.emplace(context.getPaintController(),
-                                         m_paintLayer, properties);
+      contentScopedPaintChunkProperties.emplace(context.getPaintController(),
+                                                m_paintLayer, properties);
     }
 
     bool isPaintingRootLayer = (&m_paintLayer) == paintingInfo.rootLayer;
@@ -550,7 +582,7 @@ bool PaintLayerPainter::atLeastOneFragmentIntersectsDamageRect(
   return false;
 }
 
-PaintLayerPainter::PaintResult PaintLayerPainter::paintLayerWithTransform(
+PaintResult PaintLayerPainter::paintLayerWithTransform(
     GraphicsContext& context,
     const PaintLayerPaintingInfo& paintingInfo,
     PaintLayerFlags paintFlags) {
@@ -580,6 +612,13 @@ PaintLayerPainter::PaintResult PaintLayerPainter::paintLayerWithTransform(
     unsigned pages =
         ceilf(view->documentRect().height() / view->pageLogicalHeight());
     LayoutPoint paginationOffset;
+
+    // The fixed position object is offset from the top of the page, so remove
+    // any scroll offset.
+    LayoutPoint offsetFromRoot;
+    m_paintLayer.convertToLayerCoords(paintingInfo.rootLayer, offsetFromRoot);
+    paginationOffset -= offsetFromRoot - m_paintLayer.location();
+
     for (unsigned i = 0; i < pages; i++) {
       PaintLayerFragment fragment;
       fragment.backgroundRect = paintingInfo.paintDirtyRect;
@@ -673,8 +712,7 @@ PaintLayerPainter::PaintResult PaintLayerPainter::paintLayerWithTransform(
   return result;
 }
 
-PaintLayerPainter::PaintResult
-PaintLayerPainter::paintFragmentByApplyingTransform(
+PaintResult PaintLayerPainter::paintFragmentByApplyingTransform(
     GraphicsContext& context,
     const PaintLayerPaintingInfo& paintingInfo,
     PaintLayerFlags paintFlags,
@@ -715,7 +753,7 @@ PaintLayerPainter::paintFragmentByApplyingTransform(
       context, transformedPaintingInfo, paintFlags, ForceSingleFragment);
 }
 
-PaintLayerPainter::PaintResult PaintLayerPainter::paintChildren(
+PaintResult PaintLayerPainter::paintChildren(
     unsigned childrenToVisit,
     GraphicsContext& context,
     const PaintLayerPaintingInfo& paintingInfo,
@@ -830,7 +868,7 @@ void PaintLayerPainter::paintFragmentWithPhase(
     const PaintLayerPaintingInfo& paintingInfo,
     PaintLayerFlags paintFlags,
     ClipState clipState) {
-  ASSERT(m_paintLayer.isSelfPaintingLayer());
+  DCHECK(m_paintLayer.isSelfPaintingLayer());
 
   Optional<LayerClipRecorder> clipRecorder;
   if (clipState != HasClipped && paintingInfo.clipToDirtyRect &&
@@ -859,9 +897,9 @@ void PaintLayerPainter::paintFragmentWithPhase(
   Optional<ScrollRecorder> scrollRecorder;
   LayoutPoint paintOffset = -m_paintLayer.layoutBoxLocation();
   if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
-    const ObjectPaintProperties* objectPaintProperties =
-        m_paintLayer.layoutObject()->objectPaintProperties();
-    ASSERT(objectPaintProperties &&
+    const auto* objectPaintProperties =
+        m_paintLayer.layoutObject()->paintProperties();
+    DCHECK(objectPaintProperties &&
            objectPaintProperties->localBorderBoxProperties());
     paintOffset +=
         toSize(objectPaintProperties->localBorderBoxProperties()->paintOffset);

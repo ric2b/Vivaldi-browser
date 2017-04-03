@@ -10,6 +10,7 @@
 
 #include "base/barrier_closure.h"
 #include "base/bind.h"
+#include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
@@ -35,10 +36,10 @@
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chromeos/chromeos_paths.h"
+#include "chromeos/chromeos_switches.h"
 #include "chromeos/cryptohome/async_method_caller.h"
 #include "chromeos/cryptohome/cryptohome_parameters.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
-#include "chromeos/login/user_names.h"
 #include "chromeos/settings/cros_settings_names.h"
 #include "components/ownership/owner_key_util.h"
 #include "components/prefs/pref_registry_simple.h"
@@ -184,6 +185,12 @@ void KioskAppManager::RemoveObsoleteCryptohomes() {
       base::Bind(&PerformDelayedCryptohomeRemovals));
 }
 
+// static
+bool KioskAppManager::IsConsumerKioskEnabled() {
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+      switches::kEnableConsumerKiosk);
+}
+
 KioskAppManager::App::App(const KioskAppData& data,
                           bool is_extension_pending,
                           bool auto_launched_with_zero_delay)
@@ -256,11 +263,18 @@ void KioskAppManager::AddAppForTest(
 
 void KioskAppManager::EnableConsumerKioskAutoLaunch(
     const KioskAppManager::EnableKioskAutoLaunchCallback& callback) {
+  if (!IsConsumerKioskEnabled()) {
+    if (!callback.is_null())
+      callback.Run(false);
+    return;
+  }
+
   policy::BrowserPolicyConnectorChromeOS* connector =
       g_browser_process->platform_part()->browser_policy_connector_chromeos();
   connector->GetInstallAttributes()->LockDevice(
-      std::string(),  // user
       policy::DEVICE_MODE_CONSUMER_KIOSK_AUTOLAUNCH,
+      std::string(),  // domain
+      std::string(),  // realm
       std::string(),  // device_id
       base::Bind(
           &KioskAppManager::OnLockDevice, base::Unretained(this), callback));
@@ -268,6 +282,12 @@ void KioskAppManager::EnableConsumerKioskAutoLaunch(
 
 void KioskAppManager::GetConsumerKioskAutoLaunchStatus(
     const KioskAppManager::GetConsumerKioskAutoLaunchStatusCallback& callback) {
+  if (!IsConsumerKioskEnabled()) {
+    if (!callback.is_null())
+      callback.Run(CONSUMER_KIOSK_AUTO_LAUNCH_DISABLED);
+    return;
+  }
+
   policy::BrowserPolicyConnectorChromeOS* connector =
       g_browser_process->platform_part()->browser_policy_connector_chromeos();
   connector->GetInstallAttributes()->ReadImmutableAttributes(
@@ -577,14 +597,13 @@ void KioskAppManager::UpdateExternalCache() {
 }
 
 void KioskAppManager::OnKioskAppCacheUpdated(const std::string& app_id) {
-  FOR_EACH_OBSERVER(
-      KioskAppManagerObserver, observers_, OnKioskAppCacheUpdated(app_id));
+  for (auto& observer : observers_)
+    observer.OnKioskAppCacheUpdated(app_id);
 }
 
 void KioskAppManager::OnKioskAppExternalUpdateComplete(bool success) {
-  FOR_EACH_OBSERVER(KioskAppManagerObserver,
-                    observers_,
-                    OnKioskAppExternalUpdateComplete(success));
+  for (auto& observer : observers_)
+    observer.OnKioskAppExternalUpdateComplete(success);
 }
 
 void KioskAppManager::PutValidatedExternalExtension(
@@ -743,8 +762,8 @@ void KioskAppManager::UpdateAppData() {
   UpdateExternalCachePrefs();
   RetryFailedAppDataFetch();
 
-  FOR_EACH_OBSERVER(KioskAppManagerObserver, observers_,
-                    OnKioskAppsSettingsChanged());
+  for (auto& observer : observers_)
+    observer.OnKioskAppsSettingsChanged();
 }
 
 void KioskAppManager::ClearRemovedApps(
@@ -804,15 +823,13 @@ void KioskAppManager::GetKioskAppIconCacheDir(base::FilePath* cache_dir) {
 }
 
 void KioskAppManager::OnKioskAppDataChanged(const std::string& app_id) {
-  FOR_EACH_OBSERVER(KioskAppManagerObserver,
-                    observers_,
-                    OnKioskAppDataChanged(app_id));
+  for (auto& observer : observers_)
+    observer.OnKioskAppDataChanged(app_id);
 }
 
 void KioskAppManager::OnKioskAppDataLoadFailure(const std::string& app_id) {
-  FOR_EACH_OBSERVER(KioskAppManagerObserver,
-                    observers_,
-                    OnKioskAppDataLoadFailure(app_id));
+  for (auto& observer : observers_)
+    observer.OnKioskAppDataLoadFailure(app_id);
 }
 
 void KioskAppManager::OnExtensionListsUpdated(
@@ -829,10 +846,8 @@ void KioskAppManager::OnExtensionLoadedInCache(const std::string& id) {
   if (GetCachedCrx(id, &crx_path, &version))
     app_data->SetCachedCrx(crx_path);
 
-  FOR_EACH_OBSERVER(KioskAppManagerObserver,
-                    observers_,
-                    OnKioskExtensionLoadedInCache(id));
-
+  for (auto& observer : observers_)
+    observer.OnKioskExtensionLoadedInCache(id);
 }
 
 void KioskAppManager::OnExtensionDownloadFailed(
@@ -841,9 +856,8 @@ void KioskAppManager::OnExtensionDownloadFailed(
   KioskAppData* app_data = GetAppDataMutable(id);
   if (!app_data)
     return;
-  FOR_EACH_OBSERVER(KioskAppManagerObserver,
-                    observers_,
-                    OnKioskExtensionDownloadFailed(id));
+  for (auto& observer : observers_)
+    observer.OnKioskExtensionDownloadFailed(id);
 }
 
 KioskAppManager::AutoLoginState KioskAppManager::GetAutoLoginState() const {

@@ -18,12 +18,6 @@
   // Seems to have broken on the Windows and Linux testers
   DISABLE(NavigatingExtensionPopupBrowserTest, DownloadViaPost)
 
-/*
-  // Toolbar tests that started failing in v52
-  DISABLE(ToolbarViewInteractiveUITest, TestAppMenuOpensOnDrag)
-  DISABLE_ALL(ToolbarActionViewInteractiveUITest)
-*/
-
   // Broke in 55
   DISABLE(PageLoadMetricsBrowserTest, IgnoreDownloads)
 

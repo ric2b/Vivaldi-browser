@@ -33,6 +33,10 @@ typedef ScopedRuntimeEnabledFeatureForTest<
     RuntimeEnabledFeatures::setCompositeOpaqueFixedPositionEnabled>
     ScopedCompositeFixedPositionForTest;
 typedef ScopedRuntimeEnabledFeatureForTest<
+    RuntimeEnabledFeatures::compositeOpaqueScrollersEnabled,
+    RuntimeEnabledFeatures::setCompositeOpaqueScrollersEnabled>
+    ScopedCompositeOpaqueScrollersForTest;
+typedef ScopedRuntimeEnabledFeatureForTest<
     RuntimeEnabledFeatures::compositorWorkerEnabled,
     RuntimeEnabledFeatures::setCompositorWorkerEnabled>
     ScopedCompositorWorkerForTest;
@@ -44,6 +48,10 @@ typedef ScopedRuntimeEnabledFeatureForTest<
     RuntimeEnabledFeatures::slimmingPaintV2Enabled,
     RuntimeEnabledFeatures::setSlimmingPaintV2Enabled>
     ScopedSlimmingPaintV2ForTest;
+typedef ScopedRuntimeEnabledFeatureForTest<
+    RuntimeEnabledFeatures::slimmingPaintInvalidationEnabled,
+    RuntimeEnabledFeatures::setSlimmingPaintInvalidationEnabled>
+    ScopedSlimmingPaintInvalidationForTest;
 
 }  // namespace blink
 

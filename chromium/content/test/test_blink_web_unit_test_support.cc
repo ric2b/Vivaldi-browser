@@ -19,6 +19,7 @@
 #include "cc/blink/web_layer_impl.h"
 #include "cc/test/test_shared_bitmap_manager.h"
 #include "cc/trees/layer_tree_settings.h"
+#include "content/app/mojo/mojo_init.h"
 #include "content/child/web_url_loader_impl.h"
 #include "content/test/mock_webclipboard_impl.h"
 #include "content/test/web_gesture_curve_mock.h"
@@ -44,7 +45,7 @@
 #endif
 
 #ifdef V8_USE_EXTERNAL_STARTUP_DATA
-#include "gin/v8_initializer.h"
+#include "gin/v8_initializer.h"  // nogncheck
 #endif
 
 #if defined(ENABLE_WEBRTC)
@@ -124,6 +125,9 @@ TestBlinkWebUnitTestSupport::TestBlinkWebUnitTestSupport() {
   // an error that it's not set. Cleared by ClearInstanceForTesting() below.
   base::FeatureList::SetInstance(base::WrapUnique(new base::FeatureList));
 
+  // Initialize mojo firstly to enable Blink initialization to use it.
+  InitializeMojo();
+
   blink::initialize(this);
   blink::setLayoutTestMode(true);
   blink::WebRuntimeFeatures::enableDatabase(true);
@@ -186,14 +190,11 @@ blink::WebIDBFactory* TestBlinkWebUnitTestSupport::idbFactory() {
   return NULL;
 }
 
-blink::WebMimeRegistry* TestBlinkWebUnitTestSupport::mimeRegistry() {
-  return &mime_registry_;
-}
-
 blink::WebURLLoader* TestBlinkWebUnitTestSupport::createURLLoader() {
   // This loader should be used only for process-local resources such as
   // data URLs.
-  blink::WebURLLoader* default_loader = new WebURLLoaderImpl(nullptr, nullptr);
+  blink::WebURLLoader* default_loader =
+      new WebURLLoaderImpl(nullptr, nullptr, nullptr);
   return url_loader_factory_->createURLLoader(default_loader);
 }
 
@@ -330,9 +331,12 @@ class TestWebRTCCertificateGenerator
   std::unique_ptr<blink::WebRTCCertificate> fromPEM(
       blink::WebString pem_private_key,
       blink::WebString pem_certificate) override {
-    return base::MakeUnique<RTCCertificate>(
+    rtc::scoped_refptr<rtc::RTCCertificate> certificate =
         rtc::RTCCertificate::FromPEM(rtc::RTCCertificatePEM(
-            pem_private_key.utf8(), pem_certificate.utf8())));
+            pem_private_key.utf8(), pem_certificate.utf8()));
+    if (!certificate)
+      return nullptr;
+    return base::MakeUnique<RTCCertificate>(certificate);
   }
 };
 

@@ -11,23 +11,31 @@ struct URLRequest;
 struct URLResponseHead;
 
 [Native]
+struct URLRequestRedirectInfo;
+
+[Native]
 struct URLLoaderStatus;
 
+// Destroying a URLLoader will cancel the associated request.
 interface URLLoader {
   // If the associated request has |auto_follow_redirects| set to false,
   // then upon receiving an URLResponse with a non-NULL |redirect_url| field,
   // |FollowRedirect| may be called to load the URL indicated by the redirect.
   FollowRedirect();
-
-  // Cancels the request. The service will cancel loading, but there may be some
-  // time lag and it is possible that the client gets some notification after
-  // calling this method for a while.
-  Cancel();
 };
 
 interface URLLoaderClient {
   // Called when the response head is received.
   OnReceiveResponse(URLResponseHead head);
+
+  // Called when the request has been redirected. The receiver is expected to
+  // call FollowRedirect or cancel the request.
+  OnReceiveRedirect(URLRequestRedirectInfo redirect_info, URLResponseHead head);
+
+  // Called when some data from a resource request has been downloaded to the
+  // file. This is only called in the 'download_to_file' case and replaces
+  // OnStartLoadingResponseBody in the call sequence in that case.
+  OnDataDownloaded(int64 data_length, int64 encoded_length);
 
   // Called when the loader starts loading response body.
   OnStartLoadingResponseBody(handle<data_pipe_consumer> body);

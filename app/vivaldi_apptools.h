@@ -10,6 +10,7 @@
 namespace base {
 class CommandLine;
 }
+class GURL;
 
 namespace vivaldi {
 
@@ -24,6 +25,13 @@ bool BASE_EXPORT IsVivaldiRunning(const base::CommandLine &cmd_line);
 bool BASE_EXPORT IsDebuggingVivaldi(const base::CommandLine &cmd_line);
 bool BASE_EXPORT IsTabDragInProgress();
 void BASE_EXPORT SetTabDragInProgress(bool tab_drag_in_progress);
+
+std::string VivaldiLastChange();
+
+GURL GetVivaldiNewTabURL();
+
+// Returns a version string to be displayed in "About Vivaldi" dialog.
+std::string GetVivaldiVersionString();
 
 }  // namespace vivaldi
 

@@ -13,9 +13,7 @@ declare_args() {
   chrome_public_apk_use_chromium_linker = chromium_linker_supported
 
   # Whether chrome_public_apk should use the relocation packer.
-  # TODO: Enable packed relocations for x64. See: b/20532404
-  chrome_public_apk_use_relocation_packer =
-      chromium_linker_supported && current_cpu != "x64"
+  chrome_public_apk_use_relocation_packer = chromium_linker_supported
 
   # Whether native libraries should be loaded from within the apk.
   # Only attempt loading the library from the APK for 64 bit devices
@@ -33,6 +31,7 @@ default_chrome_public_jinja_variables = [
   "channel=$android_channel",
   "enable_leakcanary=$enable_leakcanary",
   "enable_vr_shell=$enable_vr_shell",
+  "enable_webvr=$enable_webvr",
 ]
 
 template("chrome_public_apk_tmpl") {
@@ -92,8 +91,6 @@ template("monochrome_public_apk_tmpl") {
           [ "//chrome/android:monochrome_secondary_abi_lib" ]
     }
 
-    alternative_locale_resource_dep = "//chrome/android:monochrome_locale_paks"
-
     alternative_android_sdk_jar = webview_framework_jar
     app_as_shared_lib = true
     use_chromium_linker = false
@@ -110,7 +107,12 @@ template("monochrome_public_apk_tmpl") {
     if (!defined(deps)) {
       deps = []
     }
-    deps += [ "//android_webview/glue" ]
+    deps += [
+      "//android_webview:monochrome_webview_assets",
+      "//android_webview/glue",
+      "//chrome/android:chrome_public_non_pak_assets",
+      "//chrome/android:monochrome_pak_assets",
+    ]
 
     if (!is_java_debug) {
       if (!defined(proguard_configs)) {

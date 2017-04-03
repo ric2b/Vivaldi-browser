@@ -83,6 +83,8 @@ class WTF_EXPORT StringView {
         m_characters16(chars),
         m_length(length) {}
   StringView(const UChar* chars);
+  StringView(const char16_t* chars)
+      : StringView(reinterpret_cast<const UChar*>(chars)) {}
 
 #if DCHECK_IS_ON()
   ~StringView();
@@ -213,11 +215,14 @@ inline void StringView::set(const StringImpl& impl,
     m_characters16 = impl.characters16() + offset;
 }
 
+// Unicode aware case insensitive string matching. Non-ASCII characters might
+// match to ASCII characters. These functions are rarely used to implement web
+// platform features.
 WTF_EXPORT bool equalIgnoringCase(const StringView&, const StringView&);
-WTF_EXPORT bool equalIgnoringASCIICase(const StringView&, const StringView&);
-
 WTF_EXPORT bool equalIgnoringCaseAndNullity(const StringView&,
                                             const StringView&);
+
+WTF_EXPORT bool equalIgnoringASCIICase(const StringView&, const StringView&);
 
 // TODO(esprehn): Can't make this an overload of WTF::equal since that makes
 // calls to equal() that pass literal strings ambiguous. Figure out if we can

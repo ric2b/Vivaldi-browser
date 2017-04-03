@@ -34,14 +34,15 @@
 #include "media/capture/video/video_capture_device.h"
 #include "media/capture/video/video_capture_device_factory.h"
 
-#if defined(ENABLE_SCREEN_CAPTURE)
+#if defined(ENABLE_SCREEN_CAPTURE) && !defined(OS_ANDROID)
 #include "content/browser/media/capture/desktop_capture_device.h"
 #if defined(USE_AURA)
 #include "content/browser/media/capture/desktop_capture_device_aura.h"
 #endif
-#if defined(OS_ANDROID)
-#include "content/browser/media/capture/screen_capture_device_android.h"
 #endif
+
+#if defined(ENABLE_SCREEN_CAPTURE) && defined(OS_ANDROID)
+#include "content/browser/media/capture/screen_capture_device_android.h"
 #endif
 
 #if defined(OS_MACOSX)
@@ -88,9 +89,10 @@ void ConsolidateCaptureFormats(media::VideoCaptureFormats* formats) {
   formats->erase(last, formats->end());
   // Mark all formats as I420, since this is what the renderer side will get
   // anyhow: the actual pixel format is decided at the device level.
-  for (media::VideoCaptureFormats::iterator it = formats->begin();
-       it != formats->end(); ++it) {
-    it->pixel_format = media::PIXEL_FORMAT_I420;
+  // Don't do this for Y16 format as it is handled separatelly.
+  for (auto& format : *formats) {
+    if (format.pixel_format != media::PIXEL_FORMAT_Y16)
+      format.pixel_format = media::PIXEL_FORMAT_I420;
   }
 }
 
@@ -519,9 +521,9 @@ void VideoCaptureManager::HandleQueuedStartRequest() {
 void VideoCaptureManager::OnDeviceStarted(
     int serial_id,
     std::unique_ptr<VideoCaptureDevice> device) {
+  DVLOG(3) << __func__;
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   DCHECK_EQ(serial_id, device_start_queue_.begin()->serial_id());
-  DVLOG(3) << __func__;
   if (device_start_queue_.front().abort_start()) {
     // |device| can be null if creation failed in
     // DoStartDeviceCaptureOnDeviceThread.
@@ -548,13 +550,14 @@ void VideoCaptureManager::OnDeviceStarted(
       MaybePostDesktopCaptureWindowId(session_id);
     }
 
-    auto request = photo_request_queue_.begin();
-    while(request != photo_request_queue_.end()) {
-      if (GetDeviceEntryBySessionId(request->first)->video_capture_device()) {
-        request->second.Run(entry->video_capture_device());
+    auto it = photo_request_queue_.begin();
+    while (it != photo_request_queue_.end()) {
+      auto request = it++;
+      DeviceEntry* maybe_entry = GetDeviceEntryBySessionId(request->first);
+      if (maybe_entry && maybe_entry->video_capture_device()) {
+        request->second.Run(maybe_entry->video_capture_device());
         photo_request_queue_.erase(request);
       }
-      ++request;
     }
   }
 
@@ -592,7 +595,7 @@ VideoCaptureManager::DoStartTabCaptureOnDeviceThread(
   DCHECK(IsOnDeviceThread());
 
   std::unique_ptr<VideoCaptureDevice> video_capture_device;
-  video_capture_device.reset(WebContentsVideoCaptureDevice::Create(id));
+  video_capture_device = WebContentsVideoCaptureDevice::Create(id);
 
   if (!video_capture_device) {
     device_client->OnError(FROM_HERE, "Could not create capture device");
@@ -620,7 +623,7 @@ VideoCaptureManager::DoStartDesktopCaptureOnDeviceThread(
   }
 
   if (desktop_id.type == DesktopMediaID::TYPE_WEB_CONTENTS) {
-    video_capture_device.reset(WebContentsVideoCaptureDevice::Create(id));
+    video_capture_device = WebContentsVideoCaptureDevice::Create(id);
     IncrementDesktopCaptureCounter(TAB_VIDEO_CAPTURER_CREATED);
     if (desktop_id.audio_share) {
       IncrementDesktopCaptureCounter(TAB_VIDEO_CAPTURER_CREATED_WITH_AUDIO);
@@ -630,11 +633,13 @@ VideoCaptureManager::DoStartDesktopCaptureOnDeviceThread(
   } else {
 #if defined(OS_ANDROID)
     video_capture_device = base::MakeUnique<ScreenCaptureDeviceAndroid>();
-#elif defined(USE_AURA)
+#else
+#if defined(USE_AURA)
     video_capture_device = DesktopCaptureDeviceAura::Create(desktop_id);
-#endif
+#endif  // defined(USE_AURA)
     if (!video_capture_device)
       video_capture_device = DesktopCaptureDevice::Create(desktop_id);
+#endif  // defined (OS_ANDROID)
   }
 #endif  // defined(ENABLE_SCREEN_CAPTURE)
 
@@ -650,7 +655,6 @@ VideoCaptureManager::DoStartDesktopCaptureOnDeviceThread(
 void VideoCaptureManager::StartCaptureForClient(
     media::VideoCaptureSessionId session_id,
     const media::VideoCaptureParams& params,
-    base::ProcessHandle client_render_process,
     VideoCaptureControllerID client_id,
     VideoCaptureControllerEventHandler* client_handler,
     const DoneCB& done_cb) {
@@ -678,7 +682,7 @@ void VideoCaptureManager::StartCaptureForClient(
   // Run the callback first, as AddClient() may trigger OnFrameInfo().
   done_cb.Run(entry->video_capture_controller()->GetWeakPtrForIOThread());
   entry->video_capture_controller()->AddClient(
-      client_id, client_handler, client_render_process, session_id, params);
+      client_id, client_handler, session_id, params);
 }
 
 void VideoCaptureManager::StopCaptureForClient(

@@ -35,6 +35,29 @@ enum class OptInCancelReason {
   SIZE,                             // The size of this enum; keep last.
 };
 
+enum class OptInSilentAuthCode {
+  // Silent auth code feature is disabled.
+  DISABLED = 0,
+  // Silent auth code fetched normally.
+  SUCCESS = 1,
+  // HTTP Context cannot be prepared.
+  CONTEXT_NOT_READY = 2,
+  // No LST token is available.
+  NO_LST_TOKEN = 3,
+  // Silent auth code failed due sever HTTP error 5XX.
+  HTTP_SERVER_FAILURE = 4,
+  // Silent auth code failed due client HTTP error 4XX.
+  HTTP_CLIENT_FAILURE = 5,
+  // Silent auth code failed due unknown HTTP error.
+  HTTP_UNKNOWN_FAILURE = 6,
+  // Cannot parse HTTP response.
+  RESPONSE_PARSE_FAILURE = 7,
+  // No Auth code in response.
+  NO_AUTH_CODE_IN_RESPONSE = 8,
+  // The size of this enum, keep last.
+  SIZE,
+};
+
 // The values should be listed in ascending order for SIZE a last, for safety.
 // For detailed meaning, please see also to auth.mojom.
 enum class ProvisioningResult : int {
@@ -79,6 +102,11 @@ enum class ProvisioningResult : int {
   // time.
   OVERALL_SIGN_IN_TIMEOUT = 17,
 
+  // In Chrome, server communication error occurs.
+  // For backward compatibility, the UMA is handled differently. Please see
+  // ArcAuthService::OnProvisioningFinished for details.
+  CHROME_SERVER_COMMUNICATION_ERROR = 18,
+
   // The size of this enum; keep last.
   SIZE,
 };
@@ -90,6 +118,7 @@ void UpdateProvisioningResultUMA(ProvisioningResult result, bool managed);
 void UpdateProvisioningTiming(const base::TimeDelta& elapsed_time,
                               bool success,
                               bool managed);
+void UpdateSilentAuthCodeUMA(OptInSilentAuthCode state);
 
 }  // namespace arc
 

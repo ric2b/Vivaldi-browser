@@ -80,7 +80,7 @@ struct GenericEventParams {
 
 class MockTouchEventConverterEvdev : public TouchEventConverterEvdev {
  public:
-  MockTouchEventConverterEvdev(int fd,
+  MockTouchEventConverterEvdev(ScopedInputDevice fd,
                                base::FilePath path,
                                const EventDeviceInfo& devinfo,
                                DeviceEventDispatcherEvdev* dispatcher);
@@ -158,15 +158,11 @@ class MockDeviceEventDispatcherEvdev : public DeviceEventDispatcherEvdev {
 };
 
 MockTouchEventConverterEvdev::MockTouchEventConverterEvdev(
-    int fd,
+    ScopedInputDevice fd,
     base::FilePath path,
     const EventDeviceInfo& devinfo,
     DeviceEventDispatcherEvdev* dispatcher)
-    : TouchEventConverterEvdev(fd,
-                               path,
-                               1,
-                               devinfo,
-                               dispatcher) {
+    : TouchEventConverterEvdev(std::move(fd), path, 1, devinfo, dispatcher) {
   int fds[2];
 
   if (pipe(fds))
@@ -211,8 +207,8 @@ class TouchEventConverterEvdevTest : public testing::Test {
     int evdev_io[2];
     if (pipe(evdev_io))
       PLOG(FATAL) << "failed pipe";
-    events_in_ = evdev_io[0];
-    events_out_ = evdev_io[1];
+    ScopedInputDevice events_in(evdev_io[0]);
+    events_out_.reset(evdev_io[1]);
 
     // Device creation happens on a worker thread since it may involve blocking
     // operations. Simulate that by creating it before creating a UI message
@@ -222,7 +218,7 @@ class TouchEventConverterEvdevTest : public testing::Test {
         base::Bind(&TouchEventConverterEvdevTest::DispatchCallback,
                    base::Unretained(this))));
     device_.reset(new ui::MockTouchEventConverterEvdev(
-        events_in_, base::FilePath(kTestDevicePath), devinfo,
+        std::move(events_in), base::FilePath(kTestDevicePath), devinfo,
         dispatcher_.get()));
     loop_ = new base::MessageLoopForUI;
 
@@ -264,8 +260,7 @@ class TouchEventConverterEvdevTest : public testing::Test {
   std::unique_ptr<ui::MockTouchEventConverterEvdev> device_;
   std::unique_ptr<ui::MockDeviceEventDispatcherEvdev> dispatcher_;
 
-  int events_out_;
-  int events_in_;
+  ScopedInputDevice events_out_;
 
   void DispatchCallback(const GenericEventParams& params) {
     dispatched_events_.push_back(params);
@@ -886,13 +881,13 @@ class TouchEventConverterEvdevTouchNoiseTest
   void SetTouchNoiseFilter(std::unique_ptr<TouchNoiseFilter> filter) {
     TouchNoiseFinder* finder = device()->touch_noise_finder();
     finder->filters_.clear();
-    finder->filters_.push_back(filter.release());
+    finder->filters_.push_back(std::move(filter));
   }
 
   // Returns the first of TouchNoiseFinder's filters.
   ui::TouchNoiseFilter* first_filter() {
     TouchNoiseFinder* finder = device()->touch_noise_finder();
-    return finder->filters_.empty() ? nullptr : *finder->filters_.begin();
+    return finder->filters_.empty() ? nullptr : finder->filters_.begin()->get();
   }
 
   // TouchEventConverterEvdevTest:
@@ -1021,43 +1016,23 @@ TEST_F(TouchEventConverterEvdevTest, ActiveStylusTouchAndRelease) {
 
   dev->ConfigureReadMock(mock_kernel_queue, arraysize(mock_kernel_queue), 0);
   dev->ReadNow();
-  EXPECT_EQ(5u, size());
+  EXPECT_EQ(2u, size());
 
-  ui::MouseMoveEventParams move_event = dispatched_mouse_move_event(0);
-  EXPECT_EQ(9170, move_event.location.x());
-  EXPECT_EQ(3658, move_event.location.y());
+  auto down_event = dispatched_touch_event(0);
+  EXPECT_EQ(ET_TOUCH_PRESSED, down_event.type);
+  EXPECT_EQ(9170, down_event.location.x());
+  EXPECT_EQ(3658, down_event.location.y());
   EXPECT_EQ(EventPointerType::POINTER_TYPE_PEN,
-            move_event.pointer_details.pointer_type);
+            down_event.pointer_details.pointer_type);
+  EXPECT_EQ(60.f / 1024, down_event.pointer_details.force);
 
-  ui::MouseButtonEventParams button_event = dispatched_mouse_button_event(1);
-  EXPECT_EQ(9170, button_event.location.x());
-  EXPECT_EQ(3658, button_event.location.y());
+  auto up_event = dispatched_touch_event(1);
+  EXPECT_EQ(ET_TOUCH_RELEASED, up_event.type);
+  EXPECT_EQ(9173, up_event.location.x());
+  EXPECT_EQ(3906, up_event.location.y());
   EXPECT_EQ(EventPointerType::POINTER_TYPE_PEN,
-            button_event.pointer_details.pointer_type);
-  EXPECT_EQ(60.f / 1024, button_event.pointer_details.force);
-  EXPECT_EQ(button_event.button, static_cast<unsigned int>(BTN_LEFT));
-  EXPECT_EQ(button_event.down, true);
-
-  move_event = dispatched_mouse_move_event(2);
-  EXPECT_EQ(9170, move_event.location.x());
-  EXPECT_EQ(3658, move_event.location.y());
-  EXPECT_EQ(EventPointerType::POINTER_TYPE_PEN,
-            move_event.pointer_details.pointer_type);
-  EXPECT_EQ(60.f / 1024, move_event.pointer_details.force);
-
-  button_event = dispatched_mouse_button_event(3);
-  EXPECT_EQ(9173, button_event.location.x());
-  EXPECT_EQ(3906, button_event.location.y());
-  EXPECT_EQ(EventPointerType::POINTER_TYPE_PEN,
-            button_event.pointer_details.pointer_type);
-  EXPECT_EQ(button_event.button, static_cast<unsigned int>(BTN_LEFT));
-  EXPECT_EQ(button_event.down, false);
-
-  move_event = dispatched_mouse_move_event(4);
-  EXPECT_EQ(9173, move_event.location.x());
-  EXPECT_EQ(3906, move_event.location.y());
-  EXPECT_EQ(EventPointerType::POINTER_TYPE_PEN,
-            move_event.pointer_details.pointer_type);
+            up_event.pointer_details.pointer_type);
+  EXPECT_EQ(0.f, up_event.pointer_details.force);
 }
 
 TEST_F(TouchEventConverterEvdevTest, ActiveStylusMotion) {
@@ -1091,54 +1066,34 @@ TEST_F(TouchEventConverterEvdevTest, ActiveStylusMotion) {
 
   dev->ConfigureReadMock(mock_kernel_queue, arraysize(mock_kernel_queue), 0);
   dev->ReadNow();
-  EXPECT_EQ(7u, size());
+  EXPECT_EQ(4u, size());
 
-  ui::MouseMoveEventParams event = dispatched_mouse_move_event(0);
-  EXPECT_EQ(8921, event.location.x());
-  EXPECT_EQ(1072, event.location.y());
-  EXPECT_EQ(EventPointerType::POINTER_TYPE_PEN,
-            event.pointer_details.pointer_type);
-  EXPECT_EQ(0.f / 1024, event.pointer_details.force);
-
-  ui::MouseButtonEventParams button_event = dispatched_mouse_button_event(1);
-  EXPECT_EQ(8921, button_event.location.x());
-  EXPECT_EQ(1072, button_event.location.y());
-  EXPECT_EQ(EventPointerType::POINTER_TYPE_PEN,
-            button_event.pointer_details.pointer_type);
-  EXPECT_EQ(35.f / 1024, button_event.pointer_details.force);
-  EXPECT_EQ(button_event.button, static_cast<unsigned int>(BTN_LEFT));
-  EXPECT_EQ(button_event.down, true);
-
-  event = dispatched_mouse_move_event(2);
+  ui::TouchEventParams event = dispatched_touch_event(0);
+  EXPECT_EQ(ET_TOUCH_PRESSED, event.type);
   EXPECT_EQ(8921, event.location.x());
   EXPECT_EQ(1072, event.location.y());
   EXPECT_EQ(EventPointerType::POINTER_TYPE_PEN,
             event.pointer_details.pointer_type);
   EXPECT_EQ(35.f / 1024, event.pointer_details.force);
 
-  event = dispatched_mouse_move_event(3);
+  event = dispatched_touch_event(1);
+  EXPECT_EQ(ET_TOUCH_MOVED, event.type);
   EXPECT_EQ(8934, event.location.x());
   EXPECT_EQ(981, event.location.y());
   EXPECT_EQ(EventPointerType::POINTER_TYPE_PEN,
             event.pointer_details.pointer_type);
   EXPECT_EQ(184.f / 1024, event.pointer_details.force);
 
-  event = dispatched_mouse_move_event(4);
+  event = dispatched_touch_event(2);
+  EXPECT_EQ(ET_TOUCH_MOVED, event.type);
   EXPECT_EQ(8930, event.location.x());
   EXPECT_EQ(980, event.location.y());
   EXPECT_EQ(EventPointerType::POINTER_TYPE_PEN,
             event.pointer_details.pointer_type);
   EXPECT_EQ(348.f / 1024, event.pointer_details.force);
 
-  button_event = dispatched_mouse_button_event(5);
-  EXPECT_EQ(8930, button_event.location.x());
-  EXPECT_EQ(980, button_event.location.y());
-  EXPECT_EQ(EventPointerType::POINTER_TYPE_PEN,
-            button_event.pointer_details.pointer_type);
-  EXPECT_EQ(button_event.button, static_cast<unsigned int>(BTN_LEFT));
-  EXPECT_EQ(button_event.down, false);
-
-  event = dispatched_mouse_move_event(6);
+  event = dispatched_touch_event(3);
+  EXPECT_EQ(ET_TOUCH_RELEASED, event.type);
   EXPECT_EQ(8930, event.location.x());
   EXPECT_EQ(980, event.location.y());
   EXPECT_EQ(EventPointerType::POINTER_TYPE_PEN,

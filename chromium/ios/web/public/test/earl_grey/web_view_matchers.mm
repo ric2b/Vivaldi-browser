@@ -12,7 +12,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/ios/wait_util.h"
 #include "base/values.h"
-#include "ios/testing/earl_grey/wait_util.h"
+#include "ios/testing/wait_util.h"
 #import "ios/web/public/test/web_view_interaction_test_util.h"
 
 using web::test::ExecuteJavaScript;
@@ -31,22 +31,17 @@ id<GREYMatcher> webViewWithText(std::string text,
                                 web::WebState* web_state,
                                 bool should_contain_text) {
   MatchesBlock matches = ^BOOL(WKWebView*) {
-    __block BOOL did_succeed = NO;
-    NSDate* deadline =
-        [NSDate dateWithTimeIntervalSinceNow:testing::kWaitForUIElementTimeout];
-    while (([[NSDate date] compare:deadline] != NSOrderedDescending) &&
-           !did_succeed) {
-      std::unique_ptr<base::Value> value =
-          ExecuteJavaScript(web_state, kGetDocumentBodyJavaScript);
-      std::string body;
-      if (value && value->GetAsString(&body)) {
-        BOOL contains_text = body.find(text) != std::string::npos;
-        did_succeed = (contains_text == should_contain_text);
-      }
-      base::test::ios::SpinRunLoopWithMaxDelay(
-          base::TimeDelta::FromSecondsD(testing::kSpinDelaySeconds));
-    }
-    return did_succeed;
+    return testing::WaitUntilConditionOrTimeout(
+        testing::kWaitForUIElementTimeout, ^{
+          std::unique_ptr<base::Value> value =
+              ExecuteJavaScript(web_state, kGetDocumentBodyJavaScript);
+          std::string body;
+          if (value && value->GetAsString(&body)) {
+            BOOL contains_text = body.find(text) != std::string::npos;
+            return contains_text == should_contain_text;
+          }
+          return false;
+        });
   };
 
   DescribeToBlock describe = ^(id<GREYDescription> description) {
@@ -94,40 +89,35 @@ id<GREYMatcher> webViewContainingBlockedImage(std::string image_id,
                                               CGSize expected_size,
                                               WebState* web_state) {
   MatchesBlock matches = ^BOOL(WKWebView*) {
-    __block BOOL did_succeed = NO;
-    NSDate* deadline =
-        [NSDate dateWithTimeIntervalSinceNow:testing::kWaitForUIElementTimeout];
-    while (([[NSDate date] compare:deadline] != NSOrderedDescending) &&
-           !did_succeed) {
-      NSString* const kGetElementAttributesScript = [NSString
-          stringWithFormat:@"var image = document.getElementById('%@');"
-                           @"var imageHeight = image.height;"
-                           @"var imageWidth = image.width;"
-                           @"JSON.stringify({"
-                           @"  height:imageHeight,"
-                           @"  width:imageWidth"
-                           @"});",
-                           base::SysUTF8ToNSString(image_id)];
-      std::unique_ptr<base::Value> value = ExecuteJavaScript(
-          web_state, base::SysNSStringToUTF8(kGetElementAttributesScript));
-      std::string result;
-      if (value && value->GetAsString(&result)) {
-        NSString* evaluation_result = base::SysUTF8ToNSString(result);
-        NSData* image_attributes_as_data =
-            [evaluation_result dataUsingEncoding:NSUTF8StringEncoding];
-        NSDictionary* image_attributes =
-            [NSJSONSerialization JSONObjectWithData:image_attributes_as_data
-                                            options:0
-                                              error:nil];
-        CGFloat height = [image_attributes[@"height"] floatValue];
-        CGFloat width = [image_attributes[@"width"] floatValue];
-        did_succeed =
-            (height < expected_size.height && width < expected_size.width);
-      }
-      base::test::ios::SpinRunLoopWithMaxDelay(
-          base::TimeDelta::FromSecondsD(testing::kSpinDelaySeconds));
-    }
-    return did_succeed;
+    return testing::WaitUntilConditionOrTimeout(
+        testing::kWaitForUIElementTimeout, ^{
+          NSString* const kGetElementAttributesScript = [NSString
+              stringWithFormat:@"var image = document.getElementById('%@');"
+                               @"var imageHeight = image.height;"
+                               @"var imageWidth = image.width;"
+                               @"JSON.stringify({"
+                               @"  height:imageHeight,"
+                               @"  width:imageWidth"
+                               @"});",
+                               base::SysUTF8ToNSString(image_id)];
+          std::unique_ptr<base::Value> value = ExecuteJavaScript(
+              web_state, base::SysNSStringToUTF8(kGetElementAttributesScript));
+          std::string result;
+          if (value && value->GetAsString(&result)) {
+            NSString* evaluation_result = base::SysUTF8ToNSString(result);
+            NSData* image_attributes_as_data =
+                [evaluation_result dataUsingEncoding:NSUTF8StringEncoding];
+            NSDictionary* image_attributes =
+                [NSJSONSerialization JSONObjectWithData:image_attributes_as_data
+                                                options:0
+                                                  error:nil];
+            CGFloat height = [image_attributes[@"height"] floatValue];
+            CGFloat width = [image_attributes[@"width"] floatValue];
+            return (height < expected_size.height &&
+                    width < expected_size.width);
+          }
+          return false;
+        });
   };
 
   DescribeToBlock describe = ^(id<GREYDescription> description) {
@@ -146,18 +136,16 @@ id<GREYMatcher> webViewCssSelector(std::string selector, WebState* web_state) {
   MatchesBlock matches = ^BOOL(WKWebView*) {
     std::string script = base::StringPrintf(kTestCssSelectorJavaScriptTemplate,
                                             selector.c_str());
-    __block bool did_succeed = false;
-    NSDate* deadline =
-        [NSDate dateWithTimeIntervalSinceNow:testing::kWaitForUIElementTimeout];
-    while (([[NSDate date] compare:deadline] != NSOrderedDescending) &&
-           !did_succeed) {
-      std::unique_ptr<base::Value> value = ExecuteJavaScript(web_state, script);
-      if (value)
-        value->GetAsBoolean(&did_succeed);
-      base::test::ios::SpinRunLoopWithMaxDelay(
-          base::TimeDelta::FromSecondsD(testing::kSpinDelaySeconds));
-    }
-    return did_succeed;
+    return testing::WaitUntilConditionOrTimeout(
+        testing::kWaitForUIElementTimeout, ^{
+          bool did_succeed = false;
+          std::unique_ptr<base::Value> value =
+              ExecuteJavaScript(web_state, script);
+          if (value) {
+            value->GetAsBoolean(&did_succeed);
+          }
+          return did_succeed;
+        });
   };
 
   DescribeToBlock describe = ^(id<GREYDescription> description) {

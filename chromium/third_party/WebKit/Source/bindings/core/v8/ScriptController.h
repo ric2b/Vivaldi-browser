@@ -47,9 +47,8 @@
 namespace blink {
 
 class DOMWrapperWorld;
-class ExecutionContext;
+class Element;
 class HTMLDocument;
-class HTMLPlugInElement;
 class KURL;
 class ScriptState;
 class ScriptSourceCode;
@@ -113,7 +112,7 @@ class CORE_EXPORT ScriptController final
                                     Vector<v8::Local<v8::Value>>* results);
 
   // Returns true if argument is a JavaScript URL.
-  bool executeScriptIfJavaScriptURL(const KURL&);
+  bool executeScriptIfJavaScriptURL(const KURL&, Element*);
 
   // Returns true if the current world is isolated, and has its own Content
   // Security Policy. In this case, the policy of the main world should be
@@ -124,8 +123,6 @@ class CORE_EXPORT ScriptController final
 
   void enableEval();
   void disableEval(const String& errorMessage);
-
-  static bool canAccessFromCurrentOrigin(v8::Isolate*, Frame*);
 
   void collectIsolatedContexts(
       Vector<std::pair<ScriptState*, SecurityOrigin*>>&);

@@ -83,13 +83,6 @@ public class AwServiceWorkerController {
         }
 
         @Override
-        public void onDownloadStart(String url, String userAgent,
-                String contentDisposition, String mimeType, long contentLength) {}
-
-        @Override
-        public void newLoginRequest(String realm, String account, String args) {}
-
-        @Override
         public void onReceivedError(AwContentsClient.AwWebResourceRequest request,
                 AwContentsClient.AwWebResourceError error) {
             // TODO

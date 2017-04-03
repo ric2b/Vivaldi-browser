@@ -14,12 +14,16 @@
 class GURL;
 
 namespace extensions {
+class ExtensionNavigationUIData;
 class InfoMap;
 }
 
 namespace net {
 class URLRequest;
 }
+
+// Exposed for unit testing.
+bool IsSensitiveURL(const GURL& url);
 
 // This class is used to test whether extensions may modify web requests.
 class WebRequestPermissions {
@@ -32,8 +36,14 @@ class WebRequestPermissions {
   };
 
   // Returns true if the request shall not be reported to extensions.
-  static bool HideRequest(const extensions::InfoMap* extension_info_map,
-                          const net::URLRequest* request);
+  static bool HideRequest(
+      const extensions::InfoMap* extension_info_map,
+      const net::URLRequest* request,
+      extensions::ExtensionNavigationUIData* navigation_ui_data);
+
+  // Helper function used only in tests, sets a variable which enables or
+  // disables a CHECK.
+  static void AllowAllExtensionLocationsInPublicSessionForTesting(bool value);
 
   // |host_permission_check| controls how permissions are checked with regard to
   // |url|.

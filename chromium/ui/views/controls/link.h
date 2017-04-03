@@ -43,7 +43,7 @@ class VIEWS_EXPORT Link : public Label {
   bool OnKeyPressed(const ui::KeyEvent& event) override;
   void OnGestureEvent(ui::GestureEvent* event) override;
   bool SkipDefaultKeyEventProcessing(const ui::KeyEvent& event) override;
-  void GetAccessibleState(ui::AXViewState* state) override;
+  void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
   void OnEnabledChanged() override;
   void OnFocus() override;
   void OnBlur() override;
@@ -51,6 +51,7 @@ class VIEWS_EXPORT Link : public Label {
   void SetText(const base::string16& text) override;
   void OnNativeThemeChanged(const ui::NativeTheme* theme) override;
   void SetEnabledColor(SkColor color) override;
+  bool IsSelectionSupported() const override;
 
   // TODO(estade): almost all the places that call this pass false. With
   // Harmony, false is already the default so those callsites can be removed.

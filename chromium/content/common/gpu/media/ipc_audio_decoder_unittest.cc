@@ -17,6 +17,10 @@
 #include "media/filters/ipc_audio_decoder.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
+#if defined(OS_MACOSX)
+#include "base/mac/mac_util.h"
+#endif
+
 namespace content {
 
 namespace {
@@ -109,11 +113,18 @@ class IPCAudioDecoderTest : public testing::Test {
 // differences in duration, etc., occur when decoding via IPCDemuxer.
 
 TEST_F(IPCAudioDecoderTest, MP3) {
-  RunTest("sfx.mp3",
 #if defined(OS_MACOSX)
+  if (base::mac::IsAtLeastOS10_12()) {
+    RunTest("sfx.mp3",
+      "0.35,1.24,2.98,4.28,4.17,2.74,", 1, 44100,
+      base::TimeDelta::FromMicroseconds(313469), 13824, 13824);
+  } else {
+    RunTest("sfx.mp3",
           "0.83,1.07,2.28,3.57,3.98,3.20,", 1, 44100,
           base::TimeDelta::FromMicroseconds(287346), 12672, 12672);
+  }
 #elif defined(OS_WIN)
+  RunTest("sfx.mp3",
           "0.35,1.24,2.97,4.28,4.18,2.75,", 1, 44100,
           base::TimeDelta::FromMicroseconds(313469), 13824, 13824);
 #endif

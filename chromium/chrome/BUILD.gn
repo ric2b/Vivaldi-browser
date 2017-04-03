@@ -15,6 +15,9 @@ import("//build/toolchain/toolchain.gni")
 import("//chrome/chrome_paks.gni")
 import("//chrome/common/features.gni")
 import("//chrome/process_version_rc_template.gni")
+import("//extensions/features/features.gni")
+import("//ppapi/features/features.gni")
+import("//third_party/WebKit/public/public_features.gni")
 import("//third_party/widevine/cdm/widevine.gni")
 import("//tools/resources/generate_resource_whitelist.gni")
 import("//v8/gni/v8.gni")
@@ -107,7 +110,7 @@ if (!is_android && !is_mac) {
       public_deps += [ ":reorder_imports" ]
     }
     if (use_aura && (is_win || is_linux)) {
-      data_deps += [ "//chrome/app:mojo_manifests" ]
+      data_deps += [ "//chrome/app:service_manifests" ]
     }
   }
 
@@ -128,6 +131,7 @@ if (!is_android && !is_mac) {
     public_deps = []
     deps = [
       "//build/config/sanitizers:deps",
+      "//printing/features",
     ]
 
     data = [
@@ -174,6 +178,7 @@ if (!is_android && !is_mac) {
         "//chrome/common:constants",
         "//chrome/common:metrics_constants_util_win",
         "//chrome/install_static:install_static_util",
+        "//chrome/install_static:secondary_module",
         "//chrome/installer/util:with_no_strings",
         "//chrome_elf",
         "//components/browser_watcher:browser_watcher_client",
@@ -204,6 +209,9 @@ if (!is_android && !is_mac) {
         "/DELAYLOAD:ole32.dll",
         "/DELAYLOAD:oleaut32.dll",
       ]
+
+      # Turn on CFG for this project.
+      configs += [ "//build/config/win:win_msvc_cfg" ]
     } else if (use_aura) {
       # Non-Windows aura entrypoint.
       sources += [ "app/chrome_exe_main_aura.cc" ]
@@ -262,7 +270,7 @@ if (!is_android && !is_mac) {
 
       if (enable_package_mash_services) {
         deps += [ "//chrome/app/mash" ]
-        data_deps += [ "//chrome/app:mojo_manifests" ]
+        data_deps += [ "//chrome/app:service_manifests" ]
       }
     }
 
@@ -300,7 +308,6 @@ if (is_win) {
   shared_library("main_dll") {
     configs += [ "//build/config/compiler:wexit_time_destructors" ]
     defines = []
-    ldflags = []
 
     sources = [
       "//base/win/dllmain.cc",
@@ -311,58 +318,55 @@ if (is_win) {
       "app/chrome_main_mac.mm",
     ]
 
+    output_name = "chrome"
+
     deps = [
       ":browser_dependencies",
+      ":chrome_dll_manifest",
+      ":chrome_dll_version",
+      "//base/trace_event/etw_manifest:chrome_events_win",
       "//build/config/sanitizers:deps",
       "//chrome/app:chrome_dll_resources",
       "//chrome/app:command_ids",
+      "//chrome/app/theme:chrome_unscaled_resources",
       "//chrome/common:features",
+      "//chrome/install_static:install_static_util",
+      "//chrome/install_static:secondary_module",
+      "//chrome_elf",
+      "//components/crash/content/app",
+      "//components/policy:generated",
+      "//content/app/resources",
+      "//crypto",
+      "//net:net_resources",
       "//third_party/cld",
+      "//third_party/wtl",
+      "//ui/views",
     ]
-    if (is_win) {
-      output_name = "chrome"
 
-      deps += [
-        ":chrome_dll_manifest",
-        ":chrome_dll_version",
-        "//base/trace_event/etw_manifest:chrome_events_win",
-        "//chrome/app/theme:chrome_unscaled_resources",
-        "//chrome/install_static:install_static_util",
-        "//chrome_elf",
-        "//components/crash/content/app",
-        "//components/policy:generated",
-        "//content/app/resources",
-        "//crypto",
-        "//net:net_resources",
-        "//third_party/wtl",
-        "//ui/views",
-      ]
+    ldflags = [
+      "/DELAYLOAD:comdlg32.dll",
+      "/DELAYLOAD:crypt32.dll",
+      "/DELAYLOAD:cryptui.dll",
+      "/DELAYLOAD:dhcpcsvc.dll",
+      "/DELAYLOAD:dwmapi.dll",
+      "/DELAYLOAD:imagehlp.dll",
+      "/DELAYLOAD:imm32.dll",
+      "/DELAYLOAD:iphlpapi.dll",
+      "/DELAYLOAD:setupapi.dll",
+      "/DELAYLOAD:urlmon.dll",
+      "/DELAYLOAD:winhttp.dll",
+      "/DELAYLOAD:wininet.dll",
+      "/DELAYLOAD:winspool.drv",
+      "/DELAYLOAD:ws2_32.dll",
+      "/DELAYLOAD:wsock32.dll",
+    ]
 
-      ldflags += [
-        "/DELAYLOAD:comdlg32.dll",
-        "/DELAYLOAD:crypt32.dll",
-        "/DELAYLOAD:cryptui.dll",
-        "/DELAYLOAD:dhcpcsvc.dll",
-        "/DELAYLOAD:dwmapi.dll",
-        "/DELAYLOAD:imagehlp.dll",
-        "/DELAYLOAD:imm32.dll",
-        "/DELAYLOAD:iphlpapi.dll",
-        "/DELAYLOAD:setupapi.dll",
-        "/DELAYLOAD:urlmon.dll",
-        "/DELAYLOAD:winhttp.dll",
-        "/DELAYLOAD:wininet.dll",
-        "/DELAYLOAD:winspool.drv",
-        "/DELAYLOAD:ws2_32.dll",
-        "/DELAYLOAD:wsock32.dll",
-      ]
-
-      if (!is_component_build) {
-        # This is a large module that can't do incremental linking in some
-        # cases.
-        configs -= [ "//build/config/win:default_incremental_linking" ]
-        configs +=
-            [ "//build/config/win:default_large_module_incremental_linking" ]
-      }
+    if (!is_component_build) {
+      # This is a large module that can't do incremental linking in some
+      # cases.
+      configs -= [ "//build/config/win:default_incremental_linking" ]
+      configs +=
+          [ "//build/config/win:default_large_module_incremental_linking" ]
     }
 
     if (use_aura) {
@@ -412,56 +416,54 @@ if (is_win) {
         ":chrome_child_manifest",
         ":chrome_dll_version",
         "//build/config/sanitizers:deps",
+        "//chrome/browser/policy:path_parser",
         "//chrome/common:features",
+        "//chrome/install_static:install_static_util",
+        "//chrome/install_static:secondary_module",
+        "//chrome_elf",
         "//components/browser_watcher:browser_watcher_client",
         "//components/crash/content/app",
         "//content/public/app:child",
       ]
 
-      if (is_win) {
-        deps += [ "//chrome/install_static:install_static_util" ]
+      ldflags = [
+        "/DELAYLOAD:d3d11.dll",
+        "/DELAYLOAD:d3d9.dll",
+        "/DELAYLOAD:dwmapi.dll",
+        "/DELAYLOAD:dxva2.dll",
+        "/DELAYLOAD:esent.dll",
+        "/DELAYLOAD:wininet.dll",
+      ]
 
-        ldflags = [
-          "/DELAYLOAD:d3d11.dll",
-          "/DELAYLOAD:d3d9.dll",
-          "/DELAYLOAD:dwmapi.dll",
-          "/DELAYLOAD:dxva2.dll",
-          "/DELAYLOAD:esent.dll",
-          "/DELAYLOAD:wininet.dll",
-        ]
-
-        if (symbol_level == 2) {
-          # Incremental linking doesn't work on this target in debug mode with
-          # full symbols, but does work in other cases, including minimal
-          # symbols.
-          configs -= [ "//build/config/win:default_incremental_linking" ]
-          configs += [ "//build/config/win:no_incremental_linking" ]
-        }
-        if (chrome_pgo_phase == 1) {
-          ldflags += [
-            "/LTCG",
-
-            # Make sure that enough memory gets allocated for the PGO profiling
-            # buffers and also cap this memory. Usually a PGI instrumented build
-            # of chrome_child.dll requires ~55MB of memory for storing its counter
-            # etc, normally the linker should automatically choose an appropriate
-            # amount of memory but it doesn't always do a good estimate and
-            # sometime allocates too little or too much (and so the instrumented
-            # image fails to start). Making sure that the buffer has a size in the
-            # [128 MB, 512 MB] range should prevent this from happening.
-            "/GENPROFILE:MEMMIN=134217728",
-            "/GENPROFILE:MEMMAX=536870912",
-            "/PogoSafeMode",
-          ]
-        } else if (chrome_pgo_phase == 2) {
-          ldflags += [
-            "/LTCG",
-            "/USEPROFILE",
-          ]
-        }
+      if (symbol_level == 2) {
+        # Incremental linking doesn't work on this target in debug mode with
+        # full symbols, but does work in other cases, including minimal
+        # symbols.
+        configs -= [ "//build/config/win:default_incremental_linking" ]
+        configs += [ "//build/config/win:no_incremental_linking" ]
       }
+      if (chrome_pgo_phase == 1) {
+        ldflags += [
+          "/LTCG",
 
-      deps += [ "//chrome/browser/policy:path_parser" ]
+          # Make sure that enough memory gets allocated for the PGO profiling
+          # buffers and also cap this memory. Usually a PGI instrumented build
+          # of chrome_child.dll requires ~55MB of memory for storing its counter
+          # etc, normally the linker should automatically choose an appropriate
+          # amount of memory but it doesn't always do a good estimate and
+          # sometime allocates too little or too much (and so the instrumented
+          # image fails to start). Making sure that the buffer has a size in the
+          # [128 MB, 512 MB] range should prevent this from happening.
+          "/GENPROFILE:MEMMIN=134217728",
+          "/GENPROFILE:MEMMAX=536870912",
+          "/PogoSafeMode",
+        ]
+      } else if (chrome_pgo_phase == 2) {
+        ldflags += [
+          "/LTCG",
+          "/USEPROFILE",
+        ]
+      }
 
       if (enable_plugins && enable_pdf) {
         deps += [ "//pdf" ]
@@ -479,6 +481,10 @@ if (is_win) {
 } else if (is_mac) {
   chrome_helper_name = chrome_product_full_name + " Helper"
   chrome_framework_name = chrome_product_full_name + " Framework"
+
+  if (enable_xpc_notifications) {
+    chrome_framework_version = "A"
+  }
 
   group("chrome") {
     deps = [
@@ -954,6 +960,10 @@ if (is_win) {
         rebase_path(output_path, root_out_dir),
       ]
 
+      if (!use_system_xcode) {
+        args += [ hermetic_xcode_path ]
+      }
+
       outputs = [
         "$output_path/KeystoneRegistration.framework",
       ]
@@ -993,6 +1003,7 @@ if (is_win) {
   target(_dll_target_type, "chrome_dll") {
     visibility = [
       ":chrome_framework",
+      ":chrome_framework_create_bundle",
       ":chrome_framework_shared_library",
     ]
 
@@ -1042,6 +1053,27 @@ if (is_win) {
 
   mac_framework_bundle("chrome_framework") {
     output_name = chrome_framework_name
+
+    if (defined(chrome_framework_version)) {
+      framework_version = chrome_framework_version
+      framework_contents = [
+        "Helpers",
+        "Resources",
+      ]
+
+      if (is_chrome_branded) {
+        framework_contents += [ "Default Apps" ]
+      }
+      if (enable_nacl) {
+        framework_contents += [ "Internet Plug-Ins" ]
+      }
+      if (_should_bundle_widevine) {
+        framework_contents += [ "Libraries" ]
+      }
+      if (enable_xpc_notifications) {
+        framework_contents += [ "XPCServices" ]
+      }
+    }
 
     configs += [ "//build/config/compiler:wexit_time_destructors" ]
 
@@ -1095,6 +1127,16 @@ if (is_win) {
     }
   }
 
+  _framework_binary_path = "$root_out_dir/$chrome_framework_name.framework/"
+  if (defined(chrome_framework_version)) {
+    _framework_binary_path +=
+        "Versions/$chrome_framework_version/$chrome_framework_name"
+  } else {
+    _framework_binary_path += "$chrome_framework_name"
+  }
+  assert(_framework_binary_path != "",
+         "Ignore configuration-dependent unused variable warning")
+
   if (!is_asan && !is_component_build) {
     action("verify_chrome_framework_order") {
       script = "//chrome/tools/build/mac/run_verify_order.py"
@@ -1109,15 +1151,14 @@ if (is_win) {
       ]
       if (!use_system_xcode) {
         args += [
-          "--developer-dir",
+          "--developer_dir",
           hermetic_xcode_path,
         ]
       }
+
       args += [
         "_ChromeMain",
-        rebase_path(
-            "$root_out_dir/$chrome_framework_name.framework/$chrome_framework_name",
-            root_out_dir),
+        rebase_path(_framework_binary_path, root_out_dir),
       ]
       outputs = [
         stamp_file,
@@ -1138,7 +1179,7 @@ if (is_win) {
     # This list must be updated with the two targets' deps list below, and
     # the list of _dsyms in :chrome_dsym_archive.
     _chrome_symbols_sources = [
-      "$root_out_dir/$chrome_framework_name.framework/$chrome_framework_name",
+      _framework_binary_path,
       "$root_out_dir/$chrome_helper_name.app/Contents/MacOS/$chrome_helper_name",
       "$root_out_dir/$chrome_product_full_name.app/Contents/MacOS/$chrome_product_full_name",
       "$root_out_dir/crashpad_handler",
@@ -1482,13 +1523,19 @@ if (is_android) {
 
   java_cpp_enum("page_info_connection_type_javagen") {
     sources = [
-      "browser/ui/android/website_settings_popup_android.h",
+      "browser/ui/android/page_info/website_settings_popup_android.h",
     ]
   }
 
   java_cpp_enum("website_settings_action_javagen") {
     sources = [
       "browser/ui/website_settings/website_settings.h",
+    ]
+  }
+
+  java_cpp_enum("quick_action_category_enum_javagen") {
+    sources = [
+      "browser/android/contextualsearch/resolved_search_term.h",
     ]
   }
 

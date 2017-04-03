@@ -5,6 +5,8 @@
 #ifndef NodeIntersectionObserverData_h
 #define NodeIntersectionObserverData_h
 
+#include "bindings/core/v8/ScriptWrappable.h"
+#include "bindings/core/v8/TraceWrapperMember.h"
 #include "platform/heap/Handle.h"
 
 namespace blink {
@@ -14,7 +16,8 @@ class IntersectionObservation;
 class IntersectionObserver;
 
 class NodeIntersectionObserverData
-    : public GarbageCollected<NodeIntersectionObserverData> {
+    : public GarbageCollected<NodeIntersectionObserverData>,
+      public TraceWrapperBase {
  public:
   NodeIntersectionObserverData();
 
@@ -25,14 +28,14 @@ class NodeIntersectionObserverData
   void deactivateAllIntersectionObservers(Node&);
 
   DECLARE_TRACE();
-
   DECLARE_TRACE_WRAPPERS();
 
  private:
   // IntersectionObservers for which the Node owning this data is root.
   HeapHashSet<WeakMember<IntersectionObserver>> m_intersectionObservers;
   // IntersectionObservations for which the Node owning this data is target.
-  HeapHashMap<Member<IntersectionObserver>, Member<IntersectionObservation>>
+  HeapHashMap<TraceWrapperMember<IntersectionObserver>,
+              Member<IntersectionObservation>>
       m_intersectionObservations;
 };
 

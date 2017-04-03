@@ -20,7 +20,6 @@
 #include "ash/common/shelf/shelf_layout_manager.h"
 #include "ash/common/shelf/shelf_widget.h"
 #include "ash/common/shell_delegate.h"
-#include "ash/common/shell_window_ids.h"
 #include "ash/common/system/status_area_layout_manager.h"
 #include "ash/common/system/status_area_widget.h"
 #include "ash/common/system/tray/system_tray_delegate.h"
@@ -39,10 +38,10 @@
 #include "ash/common/wm/workspace_controller.h"
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
-#include "ash/display/display_manager.h"
 #include "ash/high_contrast/high_contrast_controller.h"
 #include "ash/host/ash_window_tree_host.h"
 #include "ash/public/cpp/shelf_types.h"
+#include "ash/public/cpp/shell_window_ids.h"
 #include "ash/root_window_settings.h"
 #include "ash/shelf/shelf_window_targeter.h"
 #include "ash/shell.h"
@@ -61,14 +60,14 @@
 #include "base/memory/ptr_util.h"
 #include "base/time/time.h"
 #include "ui/aura/client/aura_constants.h"
+#include "ui/aura/client/drag_drop_client.h"
 #include "ui/aura/client/screen_position_client.h"
 #include "ui/aura/window.h"
-#include "ui/aura/window_delegate.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/aura/window_observer.h"
 #include "ui/aura/window_tracker.h"
-#include "ui/base/hit_test.h"
 #include "ui/display/display.h"
+#include "ui/display/manager/display_manager.h"
 #include "ui/display/screen.h"
 #include "ui/keyboard/keyboard_controller.h"
 #include "ui/keyboard/keyboard_util.h"
@@ -77,13 +76,13 @@
 #include "ui/wm/core/capture_controller.h"
 #include "ui/wm/core/visibility_controller.h"
 #include "ui/wm/core/window_util.h"
-#include "ui/wm/public/drag_drop_client.h"
 #include "ui/wm/public/tooltip_client.h"
 #include "ui/wm/public/window_types.h"
 
 #if defined(OS_CHROMEOS)
 #include "ash/ash_touch_exploration_manager_chromeos.h"
 #include "ash/wm/boot_splash_screen_chromeos.h"
+#include "chromeos/chromeos_switches.h"
 #include "ui/chromeos/touch_exploration_controller.h"
 #endif
 
@@ -145,54 +144,16 @@ bool IsWindowAboveContainer(aura::Window* window,
   return true;
 }
 
-// A window delegate which does nothing. Used to create a window that
-// is a event target, but do nothing.
-class EmptyWindowDelegate : public aura::WindowDelegate {
- public:
-  EmptyWindowDelegate() {}
-  ~EmptyWindowDelegate() override {}
-
-  // aura::WindowDelegate overrides:
-  gfx::Size GetMinimumSize() const override { return gfx::Size(); }
-  gfx::Size GetMaximumSize() const override { return gfx::Size(); }
-  void OnBoundsChanged(const gfx::Rect& old_bounds,
-                       const gfx::Rect& new_bounds) override {}
-  gfx::NativeCursor GetCursor(const gfx::Point& point) override {
-    return gfx::kNullCursor;
-  }
-  int GetNonClientComponent(const gfx::Point& point) const override {
-    return HTNOWHERE;
-  }
-  bool ShouldDescendIntoChildForEventHandling(
-      aura::Window* child,
-      const gfx::Point& location) override {
-    return false;
-  }
-  bool CanFocus() override { return false; }
-  void OnCaptureLost() override {}
-  void OnPaint(const ui::PaintContext& context) override {}
-  void OnDeviceScaleFactorChanged(float device_scale_factor) override {}
-  void OnWindowDestroying(aura::Window* window) override {}
-  void OnWindowDestroyed(aura::Window* window) override { delete this; }
-  void OnWindowTargetVisibilityChanged(bool visible) override {}
-  bool HasHitTestMask() const override { return false; }
-  void GetHitTestMask(gfx::Path* mask) const override {}
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(EmptyWindowDelegate);
-};
-
 }  // namespace
 
 void RootWindowController::CreateForPrimaryDisplay(AshWindowTreeHost* host) {
   RootWindowController* controller = new RootWindowController(host);
-  controller->Init(RootWindowController::PRIMARY,
-                   WmShell::Get()->delegate()->IsFirstRunAfterBoot());
+  controller->Init(RootWindowController::PRIMARY);
 }
 
 void RootWindowController::CreateForSecondaryDisplay(AshWindowTreeHost* host) {
   RootWindowController* controller = new RootWindowController(host);
-  controller->Init(RootWindowController::SECONDARY, false /* first run */);
+  controller->Init(RootWindowController::SECONDARY);
 }
 
 // static
@@ -311,47 +272,6 @@ const aura::Window* RootWindowController::GetContainer(int container_id) const {
   return ash_host_->AsWindowTreeHost()->window()->GetChildById(container_id);
 }
 
-void RootWindowController::ShowShelf() {
-  if (!wm_shelf_aura_->IsShelfInitialized())
-    return;
-  // TODO(jamescook): Move this into WmShelf.
-  wm_shelf_aura_->shelf_widget()->SetShelfVisibility(true);
-  wm_shelf_aura_->shelf_widget()->status_area_widget()->Show();
-}
-
-void RootWindowController::CreateShelf() {
-  if (wm_shelf_aura_->IsShelfInitialized())
-    return;
-  wm_shelf_aura_->InitializeShelf();
-
-  if (panel_layout_manager())
-    panel_layout_manager()->SetShelf(wm_shelf_aura_.get());
-  if (docked_window_layout_manager()) {
-    docked_window_layout_manager()->SetShelf(wm_shelf_aura_.get());
-    if (wm_shelf_aura_->shelf_layout_manager()) {
-      docked_window_layout_manager()->AddObserver(
-          wm_shelf_aura_->shelf_layout_manager());
-    }
-  }
-
-  // Notify shell observers that the shelf has been created.
-  // TODO(jamescook): Move this into WmShelf::InitializeShelf(). This will
-  // require changing AttachedPanelWidgetTargeter's access to WmShelf.
-  WmShell::Get()->NotifyShelfCreatedForRootWindow(
-      WmWindowAura::Get(GetRootWindow()));
-
-  wm_shelf_aura_->shelf_widget()->PostCreateShelf();
-}
-
-void RootWindowController::UpdateAfterLoginStatusChange(LoginStatus status) {
-  if (status != LoginStatus::NOT_LOGGED_IN)
-    mouse_event_target_.reset();
-  StatusAreaWidget* status_area_widget =
-      wm_shelf_aura_->shelf_widget()->status_area_widget();
-  if (status_area_widget)
-    status_area_widget->UpdateAfterLoginStatusChange(status);
-}
-
 void RootWindowController::OnInitialWallpaperAnimationStarted() {
 #if defined(OS_CHROMEOS)
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
@@ -374,8 +294,6 @@ void RootWindowController::OnWallpaperAnimationFinished(views::Widget* widget) {
 }
 
 void RootWindowController::CloseChildWindows() {
-  mouse_event_target_.reset();
-
   // Remove observer as deactivating keyboard causes
   // docked_window_layout_manager() to fire notifications.
   if (docked_window_layout_manager() &&
@@ -500,19 +418,19 @@ RootWindowController::RootWindowController(AshWindowTreeHost* ash_host)
   wm_root_window_controller_ = WmRootWindowControllerAura::Get(root_window);
 
   stacking_controller_.reset(new StackingController);
-  aura::client::SetWindowTreeClient(root_window, stacking_controller_.get());
+  aura::client::SetWindowParentingClient(root_window,
+                                         stacking_controller_.get());
   capture_client_.reset(new ::wm::ScopedCaptureClient(root_window));
 }
 
-void RootWindowController::Init(RootWindowType root_window_type,
-                                bool first_run_after_boot) {
+void RootWindowController::Init(RootWindowType root_window_type) {
   aura::Window* root_window = GetRootWindow();
   Shell* shell = Shell::GetInstance();
   shell->InitRootWindow(root_window);
 
   wm_root_window_controller_->CreateContainers();
 
-  CreateSystemWallpaper(first_run_after_boot);
+  CreateSystemWallpaper(root_window_type);
 
   InitLayoutManagers();
   InitTouchHuds();
@@ -535,7 +453,7 @@ void RootWindowController::Init(RootWindowType root_window_type,
 
     // Create a shelf if a user is already logged in.
     if (WmShell::Get()->GetSessionStateDelegate()->NumberOfLoggedInUsers())
-      CreateShelf();
+      wm_root_window_controller_->CreateShelf();
 
     // Notify shell observers about new root window.
     shell->OnRootWindowAdded(WmWindowAura::Get(root_window));
@@ -556,7 +474,6 @@ void RootWindowController::InitLayoutManagers() {
   aura::Window* status_container = GetContainer(kShellWindowId_StatusContainer);
   WmWindow* wm_shelf_container = WmWindowAura::Get(shelf_container);
   WmWindow* wm_status_container = WmWindowAura::Get(status_container);
-  wm_shelf_aura_->CreateShelfWidget(WmWindowAura::Get(GetRootWindow()));
 
   wm_root_window_controller_->CreateLayoutManagers();
 
@@ -566,20 +483,6 @@ void RootWindowController::InitLayoutManagers() {
       wm_shelf_container, wm_shelf_aura_.get()));
   status_container->SetEventTargeter(base::MakeUnique<ShelfWindowTargeter>(
       wm_status_container, wm_shelf_aura_.get()));
-
-  if (!WmShell::Get()
-           ->GetSessionStateDelegate()
-           ->IsActiveUserSessionStarted()) {
-    // This window exists only to be a event target on login screen.
-    // It does not have to handle events, nor be visible.
-    mouse_event_target_.reset(new aura::Window(new EmptyWindowDelegate));
-    mouse_event_target_->Init(ui::LAYER_NOT_DRAWN);
-
-    aura::Window* lock_wallpaper_container =
-        GetContainer(kShellWindowId_LockScreenWallpaperContainer);
-    lock_wallpaper_container->AddChild(mouse_event_target_.get());
-    mouse_event_target_->Show();
-  }
 
   panel_container_handler_ = base::MakeUnique<PanelWindowEventHandler>();
   GetContainer(kShellWindowId_PanelContainer)
@@ -606,10 +509,18 @@ void RootWindowController::InitTouchHuds() {
     EnableTouchHudProjection();
 }
 
-void RootWindowController::CreateSystemWallpaper(bool is_first_run_after_boot) {
+void RootWindowController::CreateSystemWallpaper(
+    RootWindowType root_window_type) {
   SkColor color = SK_ColorBLACK;
 #if defined(OS_CHROMEOS)
-  if (is_first_run_after_boot)
+  // The splash screen appears on the primary display at boot. If this is a
+  // secondary monitor (either connected at boot or connected later) or if the
+  // browser restarted for a second login then don't use the boot color.
+  const bool is_boot_splash_screen =
+      root_window_type == PRIMARY &&
+      base::CommandLine::ForCurrentProcess()->HasSwitch(
+          chromeos::switches::kFirstExecAfterBoot);
+  if (is_boot_splash_screen)
     color = kChromeOsBootColor;
 #endif
   system_wallpaper_.reset(
@@ -618,7 +529,7 @@ void RootWindowController::CreateSystemWallpaper(bool is_first_run_after_boot) {
 #if defined(OS_CHROMEOS)
   // Make a copy of the system's boot splash screen so we can composite it
   // onscreen until the wallpaper is ready.
-  if (is_first_run_after_boot &&
+  if (is_boot_splash_screen &&
       (base::CommandLine::ForCurrentProcess()->HasSwitch(
            switches::kAshCopyHostBackgroundAtBoot) ||
        base::CommandLine::ForCurrentProcess()->HasSwitch(

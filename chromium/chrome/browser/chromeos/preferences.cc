@@ -9,7 +9,6 @@
 #include "ash/autoclick/autoclick_controller.h"
 #include "ash/common/accessibility_types.h"
 #include "ash/common/wm_shell.h"
-#include "ash/display/display_manager.h"
 #include "ash/shell.h"
 #include "base/command_line.h"
 #include "base/i18n/time_formatting.h"
@@ -41,7 +40,7 @@
 #include "components/prefs/pref_member.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/scoped_user_pref_update.h"
-#include "components/syncable_prefs/pref_service_syncable.h"
+#include "components/sync_preferences/pref_service_syncable.h"
 #include "components/user_manager/known_user.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
@@ -51,6 +50,7 @@
 #include "ui/base/ime/chromeos/extension_ime_util.h"
 #include "ui/base/ime/chromeos/ime_keyboard.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
+#include "ui/display/manager/display_manager.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/event_utils.h"
 #include "url/gurl.h"
@@ -332,6 +332,11 @@ void Preferences::RegisterProfilePrefs(
   registry->RegisterInt64Pref(prefs::kHatsLastInteractionTimestamp,
                               base::Time().ToInternalValue());
 
+  registry->RegisterInt64Pref(prefs::kHatsSurveyCycleEndTimestamp,
+                              base::Time().ToInternalValue());
+
+  registry->RegisterBooleanPref(prefs::kHatsDeviceIsSelected, false);
+
   registry->RegisterBooleanPref(prefs::kQuickUnlockFeatureNotificationShown,
                                 false);
 
@@ -341,7 +346,7 @@ void Preferences::RegisterProfilePrefs(
                                 update_engine::EndOfLifeStatus::kSupported);
 }
 
-void Preferences::InitUserPrefs(syncable_prefs::PrefServiceSyncable* prefs) {
+void Preferences::InitUserPrefs(sync_preferences::PrefServiceSyncable* prefs) {
   prefs_ = prefs;
 
   BooleanPrefMember::NamedChangeCallback callback =
@@ -395,7 +400,7 @@ void Preferences::InitUserPrefs(syncable_prefs::PrefServiceSyncable* prefs) {
 void Preferences::Init(Profile* profile, const user_manager::User* user) {
   DCHECK(profile);
   DCHECK(user);
-  syncable_prefs::PrefServiceSyncable* prefs =
+  sync_preferences::PrefServiceSyncable* prefs =
       PrefServiceSyncableFromProfile(profile);
   // This causes OnIsSyncingChanged to be called when the value of
   // PrefService::IsSyncing() changes.
@@ -439,7 +444,7 @@ void Preferences::Init(Profile* profile, const user_manager::User* user) {
 }
 
 void Preferences::InitUserPrefsForTesting(
-    syncable_prefs::PrefServiceSyncable* prefs,
+    sync_preferences::PrefServiceSyncable* prefs,
     const user_manager::User* user,
     scoped_refptr<input_method::InputMethodManager::State> ime_state) {
   user_ = user;
@@ -701,6 +706,9 @@ void Preferences::ApplyPreferences(ApplyReason reason,
     user_manager::known_user::SetBooleanPref(user_->GetAccountId(),
                                              prefs::kUse24HourClock, value);
   }
+
+  system::InputDeviceSettings::Get()
+      ->UpdateTouchDevicesStatusFromActiveProfilePrefs();
 }
 
 void Preferences::OnIsSyncingChanged() {

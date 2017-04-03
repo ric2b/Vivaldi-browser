@@ -92,7 +92,6 @@ const char kKeyIsProfileLoaded[] = "isProfileLoaded";
 
 // JS API callback names.
 const char kJsApiUserManagerInitialize[] = "userManagerInitialize";
-const char kJsApiUserManagerAddUser[] = "addUser";
 const char kJsApiUserManagerAuthLaunchUser[] = "authenticatedLaunchUser";
 const char kJsApiUserManagerLaunchGuest[] = "launchGuest";
 const char kJsApiUserManagerLaunchUser[] = "launchUser";
@@ -405,18 +404,6 @@ void UserManagerScreenHandler::HandleInitialize(const base::ListValue* args) {
   proximity_auth::ScreenlockBridge::Get()->SetLockHandler(this);
 }
 
-void UserManagerScreenHandler::HandleAddUser(const base::ListValue* args) {
-  if (!IsAddPersonEnabled()) {
-    // The 'Add User' UI should not be showing.
-    NOTREACHED();
-    return;
-  }
-  profiles::CreateAndSwitchToNewProfile(
-      base::Bind(&UserManagerScreenHandler::OnSwitchToProfileComplete,
-                 weak_ptr_factory_.GetWeakPtr()),
-      ProfileMetrics::ADD_NEW_USER_MANAGER);
-}
-
 void UserManagerScreenHandler::HandleAuthenticatedLaunchUser(
     const base::ListValue* args) {
   const base::Value* profile_path_value;
@@ -472,22 +459,15 @@ void UserManagerScreenHandler::HandleAuthenticatedLaunchUser(
   content::BrowserContext* browser_context =
       web_ui()->GetWebContents()->GetBrowserContext();
 
-// In order to support the upgrade case where we have a local hash but no
-// password token, the user perform a full online reauth.
-// TODO(zmin): Remove the condition for MACOSX once user_manager_mac.cc is
-// updated.
-#if !defined(OS_MACOSX)
   if (!email_address_.empty()) {
+    // In order to support the upgrade case where we have a local hash but no
+    // password token, the user must perform a full online reauth.
     UserManager::ShowReauthDialog(browser_context, email_address_,
                                   signin_metrics::Reason::REASON_UNLOCK);
   } else {
     // Fresh sign in via user manager without existing email address.
     UserManager::ShowSigninDialog(browser_context, profile_path);
   }
-#else
-  UserManager::ShowReauthDialog(browser_context, email_address_,
-                                signin_metrics::Reason::REASON_UNLOCK);
-#endif
 }
 
 void UserManagerScreenHandler::HandleRemoveUser(const base::ListValue* args) {
@@ -506,8 +486,7 @@ void UserManagerScreenHandler::HandleRemoveUser(const base::ListValue* args) {
 
   DCHECK(profiles::IsMultipleProfilesEnabled());
 
-  if (switches::IsMaterialDesignUserManager() &&
-      profiles::AreAllNonChildNonSupervisedProfilesLocked()) {
+  if (profiles::AreAllNonChildNonSupervisedProfilesLocked()) {
     web_ui()->CallJavascriptFunctionUnsafe(
         "cr.webUIListenerCallback",
         base::StringValue("show-error-dialog"),
@@ -727,9 +706,6 @@ void UserManagerScreenHandler::RegisterMessages() {
   web_ui()->RegisterMessageCallback(kJsApiUserManagerInitialize,
       base::Bind(&UserManagerScreenHandler::HandleInitialize,
                  base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(kJsApiUserManagerAddUser,
-      base::Bind(&UserManagerScreenHandler::HandleAddUser,
-                 base::Unretained(this)));
   web_ui()->RegisterMessageCallback(kJsApiUserManagerAuthLaunchUser,
       base::Bind(&UserManagerScreenHandler::HandleAuthenticatedLaunchUser,
                  base::Unretained(this)));
@@ -885,6 +861,18 @@ void UserManagerScreenHandler::GetLocalizedValues(
                                base::string16());
   localized_strings->SetString("publicAccountEnter", base::string16());
   localized_strings->SetString("publicAccountEnterAccessibleName",
+                               base::string16());
+  localized_strings->SetString("publicAccountMonitoringWarning",
+                               base::string16());
+  localized_strings->SetString("publicAccountLearnMore", base::string16());
+  localized_strings->SetString("publicAccountMonitoringInfo", base::string16());
+  localized_strings->SetString("publicAccountMonitoringInfoItem1",
+                               base::string16());
+  localized_strings->SetString("publicAccountMonitoringInfoItem2",
+                               base::string16());
+  localized_strings->SetString("publicAccountMonitoringInfoItem3",
+                               base::string16());
+  localized_strings->SetString("publicAccountMonitoringInfoItem4",
                                base::string16());
   localized_strings->SetString("publicSessionSelectLanguage", base::string16());
   localized_strings->SetString("publicSessionSelectKeyboard", base::string16());

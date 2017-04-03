@@ -29,8 +29,9 @@ namespace update_client {
 class Configurator;
 class PingManager;
 class Task;
-struct TaskContext;
 class UpdateEngine;
+enum class Error;
+struct TaskContext;
 
 class UpdateClientImpl : public UpdateClient {
  public:
@@ -44,10 +45,10 @@ class UpdateClientImpl : public UpdateClient {
   void RemoveObserver(Observer* observer) override;
   void Install(const std::string& id,
                const CrxDataCallback& crx_data_callback,
-               const CompletionCallback& completion_callback) override;
+               const Callback& callback) override;
   void Update(const std::vector<std::string>& ids,
               const CrxDataCallback& crx_data_callback,
-              const CompletionCallback& completion_callback) override;
+              const Callback& callback) override;
   bool GetCrxUpdateState(const std::string& id,
                          CrxUpdateItem* update_item) const override;
   bool IsUpdating(const std::string& id) const override;
@@ -60,9 +61,7 @@ class UpdateClientImpl : public UpdateClient {
   ~UpdateClientImpl() override;
 
   void RunTask(std::unique_ptr<Task> task);
-  void OnTaskComplete(const CompletionCallback& completion_callback,
-                      Task* task,
-                      int error);
+  void OnTaskComplete(const Callback& callback, Task* task, Error error);
 
   void NotifyObservers(Observer::Events event, const std::string& id);
 

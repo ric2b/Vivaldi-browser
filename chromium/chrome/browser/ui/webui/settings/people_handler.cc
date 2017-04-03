@@ -24,6 +24,7 @@
 #include "chrome/browser/signin/signin_error_controller_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/browser/signin/signin_promo.h"
+#include "chrome/browser/signin/signin_ui_util.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/sync/sync_ui_util.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -46,7 +47,7 @@
 #include "components/signin/core/common/signin_pref_names.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/sync/base/passphrase_type.h"
-#include "components/sync/driver/sync_prefs.h"
+#include "components/sync/base/sync_prefs.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_delegate.h"
@@ -151,6 +152,21 @@ void ParseConfigurationArguments(const base::ListValue* args,
     NOTREACHED();
 }
 
+std::string GetSyncErrorAction(sync_ui_util::ActionType action_type) {
+  switch (action_type) {
+    case sync_ui_util::REAUTHENTICATE:
+      return "reauthenticate";
+    case sync_ui_util::SIGNOUT_AND_SIGNIN:
+      return "signOutAndSignIn";
+    case sync_ui_util::UPGRADE_CLIENT:
+      return "upgradeClient";
+    case sync_ui_util::ENTER_PASSPHRASE:
+      return "enterPassphrase";
+    default:
+      return "noAction";
+  }
+}
+
 }  // namespace
 
 namespace settings {
@@ -199,8 +215,8 @@ void PeopleHandler::RegisterMessages() {
                  base::Unretained(this)));
 #if defined(OS_CHROMEOS)
   web_ui()->RegisterMessageCallback(
-      "SyncSetupDoSignOutOnAuthError",
-      base::Bind(&PeopleHandler::HandleDoSignOutOnAuthError,
+      "AttemptUserExit",
+      base::Bind(&PeopleHandler::HandleAttemptUserExit,
                  base::Unretained(this)));
 #else
   web_ui()->RegisterMessageCallback(
@@ -491,13 +507,13 @@ void PeopleHandler::HandleShowSetupUI(const base::ListValue* args) {
     return;
   }
 
-  OpenSyncSetup(false /* creating_supervised_user */);
+  OpenSyncSetup();
 }
 
 #if defined(OS_CHROMEOS)
 // On ChromeOS, we need to sign out the user session to fix an auth error, so
 // the user goes through the real signin flow to generate a new auth token.
-void PeopleHandler::HandleDoSignOutOnAuthError(const base::ListValue* args) {
+void PeopleHandler::HandleAttemptUserExit(const base::ListValue* args) {
   DVLOG(1) << "Signing out the user to fix a sync error.";
   chrome::AttemptUserExit();
 }
@@ -507,11 +523,12 @@ void PeopleHandler::HandleDoSignOutOnAuthError(const base::ListValue* args) {
 void PeopleHandler::HandleStartSignin(const base::ListValue* args) {
   AllowJavascript();
 
-  // Should only be called if the user is not already signed in.
-  DCHECK(!SigninManagerFactory::GetForProfile(profile_)->IsAuthenticated());
-  bool creating_supervised_user = false;
-  args->GetBoolean(0, &creating_supervised_user);
-  OpenSyncSetup(creating_supervised_user);
+  // Should only be called if the user is not already signed in or has an auth
+  // error.
+  DCHECK(!SigninManagerFactory::GetForProfile(profile_)->IsAuthenticated() ||
+         SigninErrorControllerFactory::GetForProfile(profile_)->HasError());
+
+  OpenSyncSetup();
 }
 
 void PeopleHandler::HandleStopSyncing(const base::ListValue* args) {
@@ -609,7 +626,7 @@ void PeopleHandler::CloseSyncSetup() {
   configuring_sync_ = false;
 }
 
-void PeopleHandler::OpenSyncSetup(bool creating_supervised_user) {
+void PeopleHandler::OpenSyncSetup() {
   // Notify services that login UI is now active.
   GetLoginUIService()->SetLoginUI(this);
 
@@ -629,18 +646,14 @@ void PeopleHandler::OpenSyncSetup(bool creating_supervised_user) {
   //    sync configure UI, not login UI).
   // 7) User re-enables sync after disabling it via advanced settings.
 #if !defined(OS_CHROMEOS)
-  SigninManagerBase* signin = SigninManagerFactory::GetForProfile(profile_);
-  if (!signin->IsAuthenticated() ||
+  if (!SigninManagerFactory::GetForProfile(profile_)->IsAuthenticated() ||
       SigninErrorControllerFactory::GetForProfile(profile_)->HasError()) {
     // User is not logged in (cases 1-2), or login has been specially requested
     // because previously working credentials have expired (case 3). Close sync
     // setup including any visible overlays, and display the gaia auth page.
     // Control will be returned to the sync settings page once auth is complete.
     CloseUI();
-    DisplayGaiaLogin(
-        creating_supervised_user ?
-            signin_metrics::AccessPoint::ACCESS_POINT_SUPERVISED_USER :
-            signin_metrics::AccessPoint::ACCESS_POINT_SETTINGS);
+    DisplayGaiaLogin(signin_metrics::AccessPoint::ACCESS_POINT_SETTINGS);
     return;
   }
 #endif
@@ -730,16 +743,20 @@ PeopleHandler::GetSyncStatusDictionary() {
 
   base::string16 status_label;
   base::string16 link_label;
+  sync_ui_util::ActionType action_type = sync_ui_util::NO_ACTION;
   bool status_has_error =
       sync_ui_util::GetStatusLabels(profile_, service, *signin,
                                     sync_ui_util::PLAIN_TEXT, &status_label,
-                                    &link_label) == sync_ui_util::SYNC_ERROR;
+                                    &link_label, &action_type) ==
+      sync_ui_util::SYNC_ERROR;
   sync_status->SetString("statusText", status_label);
-  sync_status->SetString("actionLinkText", link_label);
   sync_status->SetBoolean("hasError", status_has_error);
+  sync_status->SetString("statusAction", GetSyncErrorAction(action_type));
 
   sync_status->SetBoolean("managed", service && service->IsManaged());
   sync_status->SetBoolean("signedIn", signin->IsAuthenticated());
+  sync_status->SetString("signedInUsername",
+                         signin_ui_util::GetAuthenticatedUsername(signin));
   sync_status->SetBoolean("hasUnrecoverableError",
                           service && service->HasUnrecoverableError());
 
@@ -865,9 +882,6 @@ void PeopleHandler::PushSyncPrefs() {
   } else if (passphrase_type == syncer::PassphraseType::CUSTOM_PASSPHRASE) {
     args.SetString("fullEncryptionBody",
                    GetStringUTF16(IDS_SYNC_FULL_ENCRYPTION_BODY_CUSTOM));
-  } else {
-    args.SetString("fullEncryptionBody",
-                   GetStringUTF16(IDS_SYNC_FULL_ENCRYPTION_DATA));
   }
 
   CallJavascriptFunction("cr.webUIListenerCallback",

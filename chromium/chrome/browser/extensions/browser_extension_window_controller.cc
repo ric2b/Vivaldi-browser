@@ -15,6 +15,8 @@
 #include "components/sessions/core/session_id.h"
 #include "extensions/common/extension.h"
 
+#include "app/vivaldi_constants.h"
+
 BrowserExtensionWindowController::BrowserExtensionWindowController(
     Browser* browser)
     : extensions::WindowController(browser->window(), browser->profile()),
@@ -46,7 +48,7 @@ std::unique_ptr<base::DictionaryValue>
 BrowserExtensionWindowController::CreateWindowValue() const {
   std::unique_ptr<base::DictionaryValue> result =
       extensions::WindowController::CreateWindowValue();
-  result->SetString(keys::kWindowExtDataKey, browser_->ext_data());
+  result->SetString(vivaldi::kWindowExtDataKey, browser_->ext_data());
   return result;
 }
 

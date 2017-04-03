@@ -96,7 +96,7 @@ X11EventSource::X11EventSource(X11EventSourceDelegate* delegate,
                                XDisplay* display)
     : delegate_(delegate),
       display_(display),
-      event_timestamp_(CurrentTime),
+      dispatching_event_(nullptr),
       dummy_initialized_(false),
       continue_stream_(true) {
   DCHECK(!instance_);
@@ -184,11 +184,49 @@ Time X11EventSource::GetCurrentServerTime() {
 }
 
 Time X11EventSource::GetTimestamp() {
-  if (event_timestamp_ != CurrentTime) {
-    return event_timestamp_;
+  if (dispatching_event_) {
+    Time timestamp = ExtractTimeFromXEvent(*dispatching_event_);
+    if (timestamp != CurrentTime)
+      return timestamp;
   }
   DVLOG(1) << "Making a round trip to get a recent server timestamp.";
   return GetCurrentServerTime();
+}
+
+base::Optional<gfx::Point>
+X11EventSource::GetRootCursorLocationFromCurrentEvent() const {
+  if (!dispatching_event_)
+    return base::nullopt;
+
+  XEvent* event = dispatching_event_;
+  DCHECK(event);
+
+  bool is_xi2_event = event->type == GenericEvent;
+  int event_type = is_xi2_event
+                       ? reinterpret_cast<XIDeviceEvent*>(event)->evtype
+                       : event->type;
+
+  bool is_valid_event = false;
+  static_assert(XI_ButtonPress == ButtonPress, "");
+  static_assert(XI_ButtonRelease == ButtonRelease, "");
+  static_assert(XI_Motion == MotionNotify, "");
+  static_assert(XI_Enter == EnterNotify, "");
+  static_assert(XI_Leave == LeaveNotify, "");
+  switch (event_type) {
+    case ButtonPress:
+    case ButtonRelease:
+    case MotionNotify:
+    case EnterNotify:
+    case LeaveNotify:
+      is_valid_event =
+          is_xi2_event
+              ? ui::TouchFactory::GetInstance()->ShouldProcessXI2Event(event)
+              : true;
+  }
+
+  if (is_valid_event)
+    return ui::EventSystemLocationFromNative(event);
+  return base::nullopt;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -201,12 +239,12 @@ void X11EventSource::ExtractCookieDataDispatchEvent(XEvent* xevent) {
     have_cookie = true;
   }
 
-  event_timestamp_ = ExtractTimeFromXEvent(*xevent);
+  dispatching_event_ = xevent;
 
   delegate_->ProcessXEvent(xevent);
   PostDispatchEvent(xevent);
 
-  event_timestamp_ = CurrentTime;
+  dispatching_event_ = nullptr;
 
   if (have_cookie)
     XFreeEventData(xevent->xgeneric.display, &xevent->xcookie);

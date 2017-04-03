@@ -22,10 +22,9 @@ bool ShouldMakeNetworkRequestForURL(const GURL& url) {
   // to the network stack.
   // TODO(clamy): same document navigations should not send requests to the
   // network stack. Neither should pushState/popState.
-  return url != GURL(url::kAboutBlankURL) &&
-         !url.SchemeIs(url::kJavaScriptScheme) && !url.is_empty() &&
-         !url.SchemeIs(url::kContentIDScheme) &&
-         url != GURL(content::kAboutSrcDocURL);
+  return url != url::kAboutBlankURL && !url.SchemeIs(url::kJavaScriptScheme) &&
+         !url.is_empty() && !url.SchemeIs(url::kContentIDScheme) &&
+         url != content::kAboutSrcDocURL;
 }
 
 CommonNavigationParams::CommonNavigationParams()
@@ -124,8 +123,6 @@ StartNavigationParams::~StartNavigationParams() {
 RequestNavigationParams::RequestNavigationParams()
     : is_overriding_user_agent(false),
       can_load_local_resources(false),
-      request_time(base::Time::Now()),
-      page_id(-1),
       nav_entry_id(0),
       is_same_document_history_load(false),
       is_history_navigation_in_new_child(false),
@@ -144,9 +141,7 @@ RequestNavigationParams::RequestNavigationParams(
     bool is_overriding_user_agent,
     const std::vector<GURL>& redirects,
     bool can_load_local_resources,
-    base::Time request_time,
     const PageState& page_state,
-    int32_t page_id,
     int nav_entry_id,
     bool is_same_document_history_load,
     bool is_history_navigation_in_new_child,
@@ -162,9 +157,7 @@ RequestNavigationParams::RequestNavigationParams(
     : is_overriding_user_agent(is_overriding_user_agent),
       redirects(redirects),
       can_load_local_resources(can_load_local_resources),
-      request_time(request_time),
       page_state(page_state),
-      page_id(page_id),
       nav_entry_id(nav_entry_id),
       is_same_document_history_load(is_same_document_history_load),
       is_history_navigation_in_new_child(is_history_navigation_in_new_child),

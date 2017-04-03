@@ -7,8 +7,6 @@
 #include "base/profiler/scoped_tracker.h"
 #include "components/version_info/version_info.h"
 
-#include "components/version_info/version_info_values.h"
-
 namespace chrome {
 
 std::string GetVersionString() {
@@ -19,10 +17,6 @@ std::string GetVersionString() {
           "422460 VersionInfo::CreateVersionString"));
 
   return version_info::GetVersionStringWithModifier(GetChannelString());
-}
-
-std::string GetVivaldiVersionString() {
-  return VIVALDI_VERSION;
 }
 
 }  // namespace chrome

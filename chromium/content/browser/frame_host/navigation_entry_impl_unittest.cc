@@ -26,7 +26,7 @@ class NavigationEntryTest : public testing::Test {
 
     instance_ = SiteInstanceImpl::Create(NULL);
     entry2_.reset(new NavigationEntryImpl(
-          instance_, 3,
+          instance_,
           GURL("test:url"),
           Referrer(GURL("from"), blink::WebReferrerPolicyDefault),
           ASCIIToUTF16("title"),
@@ -137,8 +137,8 @@ TEST_F(NavigationEntryTest, NavigationEntryFavicons) {
 // Test SSLStatus inner class
 TEST_F(NavigationEntryTest, NavigationEntrySSLStatus) {
   // Default (unknown)
-  EXPECT_EQ(SECURITY_STYLE_UNKNOWN, entry1_->GetSSL().security_style);
-  EXPECT_EQ(SECURITY_STYLE_UNKNOWN, entry2_->GetSSL().security_style);
+  EXPECT_FALSE(entry1_->GetSSL().initialized);
+  EXPECT_FALSE(entry2_->GetSSL().initialized);
   EXPECT_FALSE(!!entry1_->GetSSL().certificate);
   EXPECT_EQ(0U, entry1_->GetSSL().cert_status);
   EXPECT_EQ(-1, entry1_->GetSSL().security_bits);
@@ -179,12 +179,6 @@ TEST_F(NavigationEntryTest, NavigationEntryAccessors) {
   EXPECT_FALSE(entry2_->GetPageState().IsValid());
   entry2_->SetPageState(PageState::CreateFromEncodedData("state"));
   EXPECT_EQ("state", entry2_->GetPageState().ToEncodedData());
-
-  // Page ID
-  EXPECT_EQ(-1, entry1_->GetPageID());
-  EXPECT_EQ(3, entry2_->GetPageID());
-  entry2_->SetPageID(2);
-  EXPECT_EQ(2, entry2_->GetPageID());
 
   // Transition type
   EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(

@@ -68,7 +68,6 @@ class WEB_EXPORT WebSettingsImpl final
   void setAutoplayExperimentMode(const WebString&) override;
   void setAutoZoomFocusedNodeToLegibleScale(bool) override;
   void setBrowserSideNavigationEnabled(bool) override;
-  void setCaretBrowsingEnabled(bool) override;
   void setClobberUserAgentInitialScaleQuirk(bool) override;
   void setCookieEnabled(bool) override;
   void setNavigateOnDragDrop(bool) override;
@@ -103,6 +102,7 @@ class WEB_EXPORT WebSettingsImpl final
   void setForcePreloadNoneForMediaElements(bool) override;
   void setForceZeroLayoutHeight(bool) override;
   void setFullscreenSupported(bool) override;
+  void setHideDownloadUI(bool) override;
   void setHistoryEntryRequiresUserGesture(bool) override;
   void setHyperlinkAuditingEnabled(bool) override;
   void setIgnoreMainFrameOverflowHiddenQuirk(bool) override;
@@ -136,7 +136,6 @@ class WEB_EXPORT WebSettingsImpl final
   void setPerTilePaintingEnabled(bool) override;
   void setPictographFontFamily(const WebString&,
                                UScriptCode = USCRIPT_COMMON) override;
-  void setPinchOverlayScrollbarThickness(int) override;
   void setPluginsEnabled(bool) override;
   void setAvailablePointerTypes(int) override;
   void setPrimaryPointerType(PointerType) override;
@@ -205,6 +204,10 @@ class WEB_EXPORT WebSettingsImpl final
   void setWebSecurityEnabled(bool) override;
   void setWideViewportQuirkEnabled(bool) override;
   void setXSSAuditorEnabled(bool) override;
+  void setExpensiveBackgroundThrottlingCPUBudget(float) override;
+  void setExpensiveBackgroundThrottlingInitialBudget(float) override;
+  void setExpensiveBackgroundThrottlingMaxBudget(float) override;
+  void setExpensiveBackgroundThrottlingMaxDelay(float) override;
 
   bool showFPSCounter() const { return m_showFPSCounter; }
   bool showPaintRects() const { return m_showPaintRects; }
@@ -228,6 +231,18 @@ class WEB_EXPORT WebSettingsImpl final
   }
   bool clobberUserAgentInitialScaleQuirk() const {
     return m_clobberUserAgentInitialScaleQuirk;
+  }
+  float expensiveBackgroundThrottlingCPUBudget() const {
+    return m_expensiveBackgroundThrottlingCPUBudget;
+  }
+  float expensiveBackgroundThrottlingInitialBudget() const {
+    return m_expensiveBackgroundThrottlingInitialBudget;
+  }
+  float expensiveBackgroundThrottlingMaxDelay() const {
+    return m_expensiveBackgroundThrottlingMaxDelay;
+  }
+  float expensiveBackgroundThrottlingMaxBudget() const {
+    return m_expensiveBackgroundThrottlingMaxBudget;
   }
 
   void setMockGestureTapHighlightsEnabled(bool);
@@ -255,6 +270,10 @@ class WEB_EXPORT WebSettingsImpl final
   // the Android SDK prior to and including version 18. Presumably, this
   // can be removed any time after 2015. See http://crbug.com/313754.
   bool m_clobberUserAgentInitialScaleQuirk;
+  float m_expensiveBackgroundThrottlingCPUBudget;
+  float m_expensiveBackgroundThrottlingInitialBudget;
+  float m_expensiveBackgroundThrottlingMaxBudget;
+  float m_expensiveBackgroundThrottlingMaxDelay;
 };
 
 }  // namespace blink

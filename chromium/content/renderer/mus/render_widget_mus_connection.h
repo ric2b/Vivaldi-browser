@@ -11,15 +11,13 @@
 #include "content/common/content_export.h"
 #include "content/renderer/input/render_widget_input_handler_delegate.h"
 #include "content/renderer/mus/compositor_mus_connection.h"
-#include "services/ui/public/cpp/window_surface.h"
 
 namespace gpu {
 class GpuChannelHost;
+class GpuMemoryBufferManager;
 }
 
 namespace content {
-
-class InputHandlerManager;
 
 // Use on main thread.
 class CONTENT_EXPORT RenderWidgetMusConnection
@@ -30,7 +28,8 @@ class CONTENT_EXPORT RenderWidgetMusConnection
 
   // Create a cc output surface.
   std::unique_ptr<cc::CompositorFrameSink> CreateCompositorFrameSink(
-      scoped_refptr<gpu::GpuChannelHost> gpu_channel_host);
+      scoped_refptr<gpu::GpuChannelHost> gpu_channel_host,
+      gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager);
 
   static RenderWidgetMusConnection* Get(int routing_id);
 
@@ -69,7 +68,8 @@ class CONTENT_EXPORT RenderWidgetMusConnection
 
   const int routing_id_;
   RenderWidgetInputHandler* input_handler_;
-  std::unique_ptr<ui::WindowSurfaceBinding> window_surface_binding_;
+  std::unique_ptr<ui::WindowCompositorFrameSinkBinding>
+      window_compositor_frame_sink_binding_;
   scoped_refptr<CompositorMusConnection> compositor_mus_connection_;
 
   base::Callback<void(ui::mojom::EventResult)> pending_ack_;

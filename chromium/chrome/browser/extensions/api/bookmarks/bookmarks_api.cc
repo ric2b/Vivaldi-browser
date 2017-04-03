@@ -9,8 +9,6 @@
 #include <memory>
 #include <utility>
 
-#include "app/vivaldi_apptools.h"
-#include "app/vivaldi_constants.h"
 #include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/i18n/file_util_icu.h"
@@ -45,6 +43,7 @@
 #include "components/bookmarks/browser/bookmark_utils.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
 #include "components/bookmarks/managed/managed_bookmark_service.h"
+#include "components/prefs/pref_service.h"
 #include "components/user_prefs/user_prefs.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/notification_service.h"
@@ -54,17 +53,8 @@
 #include "extensions/browser/notification_types.h"
 #include "ui/base/l10n/l10n_util.h"
 
-#include "chrome/browser/thumbnails/thumbnail_service.h"
-#include "chrome/browser/thumbnails/thumbnail_service_factory.h"
-#include "chrome/browser/thumbnails/thumbnailing_context.h"
-#include "components/prefs/pref_service.h"
-#include "third_party/skia/include/core/SkBitmap.h"
-#include "ui/gfx/codec/jpeg_codec.h"
-
-#if defined(OS_WIN)
-#include "chrome/browser/ui/browser_finder.h"
-#include "chrome/browser/ui/views/frame/browser_view.h"
-#endif
+#include "app/vivaldi_apptools.h"
+#include "app/vivaldi_constants.h"
 
 using bookmarks::BookmarkModel;
 using bookmarks::BookmarkNode;
@@ -82,7 +72,6 @@ using bookmarks::CreateDetails;
 using content::BrowserContext;
 using content::BrowserThread;
 using content::WebContents;
-
 
 namespace {
 
@@ -191,7 +180,7 @@ const BookmarkNode* BookmarksFunction::CreateBookmarkNode(
 
   std::string url_string;  // Optional.
   if (details.url.get())
-    url_string = *details.url.get();
+    url_string = *details.url;
 
   GURL url(url_string);
   if (!url_string.empty() && !url.is_valid()) {
@@ -668,7 +657,7 @@ bool BookmarksCreateFunction::RunOnReady() {
           BookmarkModelFactory::GetForBrowserContext(GetProfile()), nick, -1);
 
       if (doesNickExists) {
-        error_ = keys::kNicknameExists;
+        error_ = vivaldi::kNicknameExists;
         return false;
       }
     }
@@ -775,10 +764,11 @@ bool BookmarksUpdateFunction::RunOnReady() {
       }
 
       bool doesNickExists = ::bookmarks::DoesNickExists(
-          BookmarkModelFactory::GetForBrowserContext(GetProfile()), nick, idToCheck);
+          BookmarkModelFactory::GetForBrowserContext(GetProfile()),
+                                                     nick, idToCheck);
 
       if (doesNickExists) {
-        error_ = keys::kNicknameExists;
+        error_ = vivaldi::kNicknameExists;
         return false;
       }
     }
@@ -853,7 +843,6 @@ bool BookmarksUpdateFunction::RunOnReady() {
   }
   if (has_title)
     model->SetTitle(node, title);
-
   if (!url.is_empty())
     model->SetURL(node, url);
 

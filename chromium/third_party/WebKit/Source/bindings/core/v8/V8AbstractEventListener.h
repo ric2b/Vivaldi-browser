@@ -32,7 +32,8 @@
 #define V8AbstractEventListener_h
 
 #include "bindings/core/v8/DOMWrapperWorld.h"
-#include "bindings/core/v8/ScopedPersistent.h"
+#include "bindings/core/v8/ScriptWrappable.h"
+#include "bindings/core/v8/TraceWrapperV8Reference.h"
 #include "core/CoreExport.h"
 #include "core/events/EventListener.h"
 #include "platform/heap/SelfKeepAlive.h"
@@ -51,7 +52,8 @@ class WorkerGlobalScope;
 // Why does this matter?
 // WebKit does not allow duplicated HTML event handlers of the same type,
 // but ALLOWs duplicated non-HTML event handlers.
-class CORE_EXPORT V8AbstractEventListener : public EventListener {
+class CORE_EXPORT V8AbstractEventListener : public EventListener,
+                                            public TraceWrapperBase {
  public:
   ~V8AbstractEventListener() override;
 
@@ -103,12 +105,11 @@ class CORE_EXPORT V8AbstractEventListener : public EventListener {
 
   void clearListenerObject();
 
-  bool belongsToTheCurrentWorld() const final;
+  bool belongsToTheCurrentWorld(ExecutionContext*) const final;
   v8::Isolate* isolate() const { return m_isolate; }
   DOMWrapperWorld& world() const { return *m_world; }
 
   DECLARE_VIRTUAL_TRACE();
-
   DECLARE_VIRTUAL_TRACE_WRAPPERS();
 
  protected:
@@ -140,7 +141,7 @@ class CORE_EXPORT V8AbstractEventListener : public EventListener {
   static void wrapperCleared(
       const v8::WeakCallbackInfo<V8AbstractEventListener>&);
 
-  ScopedPersistent<v8::Object> m_listener;
+  TraceWrapperV8Reference<v8::Object> m_listener;
 
   // Indicates if this is an HTML type listener.
   bool m_isAttribute;

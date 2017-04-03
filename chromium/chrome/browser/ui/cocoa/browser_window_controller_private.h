@@ -7,7 +7,7 @@
 
 #import "chrome/browser/ui/cocoa/browser_window_controller.h"
 #import "chrome/browser/ui/cocoa/browser_window_layout.h"
-#import "chrome/browser/ui/cocoa/fullscreen_toolbar_controller.h"
+#import "chrome/browser/ui/cocoa/fullscreen/fullscreen_toolbar_controller.h"
 
 @class BrowserWindowLayout;
 class PermissionRequestManager;
@@ -87,16 +87,6 @@ class WebContents;
 - (void)registerForContentViewResizeNotifications;
 - (void)deregisterForContentViewResizeNotifications;
 
-// Allows/prevents bar visibility locks and releases from updating the visual
-// state. Enabling makes changes instantaneously; disabling cancels any
-// timers/animation.
-- (void)enableBarVisibilityUpdates;
-- (void)disableBarVisibilityUpdates;
-
-// If there are no visibility locks and bar visibity updates are enabled, hides
-// the bar with |animation|.  Otherwise, does nothing.
-- (void)hideOverlayIfPossibleWithAnimation:(BOOL)animation;
-
 // The opacity for the toolbar divider; 0 means that it shouldn't be shown.
 - (CGFloat)toolbarDividerOpacity;
 
@@ -105,24 +95,6 @@ class WebContents;
 
 // The min Y of the bubble point in the coordinate space of the toolbar.
 - (NSInteger)pageInfoBubblePointY;
-
-// Configures the fullscreenToolbarController_ right after it is constructed.
-- (void)configureFullscreenToolbarController;
-
-// Allows the omnibox to slide. Also prepares UI for several fullscreen modes.
-// This method gets called when entering AppKit fullscren, or when entering
-// Immersive fullscreen. Expects fullscreenStyle_ to be set.
-- (void)adjustUIForSlidingFullscreenStyle:(FullscreenSlidingStyle)style;
-
-// This method gets called when exiting AppKit fullscreen, or when exiting
-// Immersive fullscreen. It performs some common UI changes, and stops the
-// omnibox from sliding.
-- (void)adjustUIForExitingFullscreenAndStopOmniboxSliding;
-
-// Exposed for testing.
-// Creates a FullscreenToolbarController with the given style.
-- (FullscreenToolbarController*)newFullscreenToolbarControllerWithStyle:
-    (FullscreenSlidingStyle)style;
 
 // Toggles the AppKit Fullscreen API. By default, doing so enters Canonical
 // Fullscreen.
@@ -187,8 +159,10 @@ class WebContents;
 // it when we are entering fullscreen.
 - (void)adjustUIForEnteringFullscreen;
 
-// Returns YES if the fullscreen is for tab content or an extension.
-- (BOOL)isFullscreenForTabContentOrExtension;
+// Accessor for the controller managing the fullscreen toolbar visibility
+// locks.
+- (FullscreenToolbarVisibilityLockController*)
+    fullscreenToolbarVisibilityLockController;
 
 @end  // @interface BrowserWindowController(Private)
 

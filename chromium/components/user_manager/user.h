@@ -36,11 +36,13 @@ class UserManagerBase;
 class FakeUserManager;
 
 // A class representing information about a previously logged in user.
-// Each user has a canonical email (username), returned by |email()| and
-// may have a different displayed email (in the raw form as entered by user),
-// returned by |displayed_email()|.
-// Displayed emails are for use in UI only, anywhere else users must be referred
-// to by |email()|.
+//   Each user has an |AccountId| containing canonical email (username),
+// returned by |GetAccountId().GetUserEmail()| and may have a different
+// displayed email (in the raw form as entered by user), returned by
+// |displayed_email()|.
+//   Displayed emails are for use in UI only, anywhere else users must be
+// referred to by |GetAccountId()|. Internal details of AccountId should not
+// be relied on unless you have special knowledge of the account type.
 class USER_MANAGER_EXPORT User : public UserInfo {
  public:
   // User OAuth token status according to the last check.
@@ -86,7 +88,7 @@ class USER_MANAGER_EXPORT User : public UserInfo {
   ~User() override;
 
   // UserInfo
-  std::string GetEmail() const override;
+  std::string GetDisplayEmail() const override;
   base::string16 GetDisplayName() const override;
   base::string16 GetGivenName() const override;
   const gfx::ImageSkia& GetImage() const override;
@@ -116,10 +118,6 @@ class USER_MANAGER_EXPORT User : public UserInfo {
 
   // True if the user is a device local account user.
   virtual bool IsDeviceLocalAccount() const;
-
-  // The email the user used to log in.
-  // TODO(alemate): rename this to GetUserEmail() (see crbug.com/548923)
-  const std::string& email() const;
 
   // The displayed user name.
   base::string16 display_name() const { return display_name_; }
@@ -196,6 +194,7 @@ class USER_MANAGER_EXPORT User : public UserInfo {
   static User* CreateRegularUser(const AccountId& account_id);
   static User* CreateGuestUser(const AccountId& guest_account_id);
   static User* CreateKioskAppUser(const AccountId& kiosk_app_account_id);
+  static User* CreateArcKioskAppUser(const AccountId& arc_kiosk_account_id);
   static User* CreateSupervisedUser(const AccountId& account_id);
   static User* CreatePublicAccountUser(const AccountId& account_id);
 

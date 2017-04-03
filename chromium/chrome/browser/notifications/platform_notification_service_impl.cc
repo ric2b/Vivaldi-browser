@@ -36,6 +36,7 @@
 #include "content/public/browser/user_metrics.h"
 #include "content/public/common/notification_resources.h"
 #include "content/public/common/platform_notification_data.h"
+#include "extensions/features/features.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/message_center/notification.h"
@@ -48,7 +49,7 @@
 #include "chrome/browser/lifetime/scoped_keep_alive.h"
 #endif
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "chrome/browser/notifications/notifier_state_tracker.h"
 #include "chrome/browser/notifications/notifier_state_tracker_factory.h"
 #include "extensions/browser/extension_registry.h"
@@ -108,7 +109,8 @@ void PlatformNotificationServiceImpl::OnPersistentNotificationClick(
     BrowserContext* browser_context,
     const std::string& notification_id,
     const GURL& origin,
-    int action_index) {
+    int action_index,
+    const base::NullableString16& reply) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   blink::mojom::PermissionStatus permission_status =
       CheckPermissionOnUIThread(browser_context, origin,
@@ -141,7 +143,7 @@ void PlatformNotificationServiceImpl::OnPersistentNotificationClick(
 
   content::NotificationEventDispatcher::GetInstance()
       ->DispatchNotificationClickEvent(
-          browser_context, notification_id, origin, action_index,
+          browser_context, notification_id, origin, action_index, reply,
           base::Bind(
               &PlatformNotificationServiceImpl::OnClickEventDispatchComplete,
               base::Unretained(this)));
@@ -183,7 +185,7 @@ PlatformNotificationServiceImpl::CheckPermissionOnUIThread(
   Profile* profile = Profile::FromBrowserContext(browser_context);
   DCHECK(profile);
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   // Extensions support an API permission named "notification". This will grant
   // not only grant permission for using the Chrome App extension API, but also
   // for the Web Notification API.
@@ -224,7 +226,7 @@ PlatformNotificationServiceImpl::CheckPermissionOnIOThread(
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
   ProfileIOData* io_data = ProfileIOData::FromResourceContext(resource_context);
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   // Extensions support an API permission named "notification". This will grant
   // not only grant permission for using the Chrome App extension API, but also
   // for the Web Notification API.
@@ -489,7 +491,7 @@ PlatformNotificationServiceImpl::GetNotificationDisplayService(
 base::string16 PlatformNotificationServiceImpl::DisplayNameForContextMessage(
     Profile* profile,
     const GURL& origin) const {
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   // If the source is an extension, lookup the display name.
   if (origin.SchemeIs(extensions::kExtensionScheme)) {
     const extensions::Extension* extension =

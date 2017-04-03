@@ -18,28 +18,35 @@
 #include "base/android/build_info.h"
 #endif
 
+namespace content {
+
+#if defined(OS_WIN)
+// These tests are flaky on WebRTC Windows bots: https://crbug.com/633242.
+#define MAYBE_GetCapabilities DISABLED_GetCapabilities
+#define MAYBE_TakePhoto DISABLED_TakePhoto
+#define MAYBE_GrabFrame DISABLED_GrabFrame
+#else
+#define MAYBE_GetCapabilities GetCapabilities
+#define MAYBE_TakePhoto TakePhoto
+#define MAYBE_GrabFrame GrabFrame
+#endif
+
 namespace {
 
 static const char kImageCaptureHtmlFile[] = "/media/image_capture_test.html";
 
 // TODO(mcasas): enable real-camera tests by disabling the Fake Device for
-// platforms where the ImageCaptureCode is landed, https://crbug.com/518807.
-// TODO(mcasas): enable in Android when takePhoto() can be specified a (small)
-// capture resolution preventing the test from timeout https://crbug.com/634811.
+// platforms where the ImageCaptureCode is landed, https://crbug.com/656810
 static struct TargetCamera {
   bool use_fake;
 } const kTestParameters[] = {
-#if defined(OS_ANDROID)
     {true},
+#if defined(OS_LINUX)
     {false}
-#else
-    {true}
 #endif
 };
 
 }  // namespace
-
-namespace content {
 
 // This class is the content_browsertests for Image Capture API, which allows
 // for capturing still images out of a MediaStreamTrack. Is a
@@ -63,85 +70,62 @@ class WebRtcImageCaptureBrowserTest
           switches::kUseFakeDeviceForMediaStream));
     }
 
-    // Enables promised-based navigator.mediaDevices.getUserMedia();
-    // TODO(mcasas): remove after https://crbug.com/503227 is closed.
+    // "GetUserMedia": enables navigator.mediaDevices.getUserMedia();
+    // TODO(mcasas): remove GetUserMedia after https://crbug.com/503227.
+    // "ImageCapture": enables the ImageCapture API.
+    // TODO(mcasas): remove ImageCapture after https://crbug.com/603328.
     base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
-        switches::kEnableBlinkFeatures, "GetUserMedia");
+        switches::kEnableBlinkFeatures, "GetUserMedia,ImageCapture");
+  }
 
-    // Specific flag to enable ImageCapture API.
-    // TODO(mcasas): remove after https://crbug.com/603328 is closed.
-    base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
-        switches::kEnableBlinkFeatures, "ImageCapture");
+  void SetUp() override {
+    ASSERT_TRUE(embedded_test_server()->InitializeAndListen());
+    WebRtcWebcamBrowserTest::SetUp();
+  }
+
+  // Tries to run a |command| JS test, returning true if the test can be safely
+  // skipped or it works as intended, or false otherwise.
+  bool RunImageCaptureTestCase(const std::string& command) {
+#if defined(OS_ANDROID)
+    // TODO(mcasas): fails on Lollipop devices: https://crbug.com/634811
+    if (base::android::BuildInfo::GetInstance()->sdk_int() <
+        base::android::SDK_VERSION_MARSHMALLOW) {
+      return true;
+    }
+#endif
+
+    GURL url(embedded_test_server()->GetURL(kImageCaptureHtmlFile));
+    NavigateToURL(shell(), url);
+
+    if (!IsWebcamAvailableOnSystem(shell()->web_contents())) {
+      DVLOG(1) << "No video device; skipping test...";
+      return true;
+    }
+
+    std::string result;
+    if (!ExecuteScriptAndExtractString(shell(), command, &result))
+      return false;
+    DLOG_IF(ERROR, result != "OK") << result;
+    return result == "OK";
   }
 
  private:
   DISALLOW_COPY_AND_ASSIGN(WebRtcImageCaptureBrowserTest);
 };
 
-#if defined(OS_WIN)
-// This test is flaky on WebRTC Windows bots: https://crbug.com/633242.
-#define MAYBE_CreateAndGetCapabilities DISABLED_CreateAndGetCapabilities
-#else
-#define MAYBE_CreateAndGetCapabilities CreateAndGetCapabilities
-#endif
-IN_PROC_BROWSER_TEST_P(WebRtcImageCaptureBrowserTest,
-                       MAYBE_CreateAndGetCapabilities) {
-#if defined(OS_ANDROID)
-  // TODO(mcasas): fails on Lollipop devices: https://crbug.com/634811
-  if (base::android::BuildInfo::GetInstance()->sdk_int() <
-      base::android::SDK_VERSION_MARSHMALLOW) {
-    return;
-  }
-#endif
-
-  ASSERT_TRUE(embedded_test_server()->Start());
-  GURL url(embedded_test_server()->GetURL(kImageCaptureHtmlFile));
-  NavigateToURL(shell(), url);
-
-  if (!IsWebcamAvailableOnSystem(shell()->web_contents())) {
-    DVLOG(1) << "No video device; skipping test...";
-    return;
-  }
-
-  std::string result;
-  ASSERT_TRUE(ExecuteScriptAndExtractString(
-      shell(), "testCreateAndGetCapabilities()", &result));
-  if (result == "OK")
-    return;
-  FAIL();
+IN_PROC_BROWSER_TEST_P(WebRtcImageCaptureBrowserTest, MAYBE_GetCapabilities) {
+  embedded_test_server()->StartAcceptingConnections();
+  ASSERT_TRUE(RunImageCaptureTestCase("testCreateAndGetCapabilities()"));
 }
 
-#if defined(OS_WIN)
-// This test is flaky on WebRTC Windows bots: https://crbug.com/633242.
-#define MAYBE_CreateAndTakePhoto DISABLED_CreateAndTakePhoto
-#else
-#define MAYBE_CreateAndTakePhoto CreateAndTakePhoto
-#endif
-IN_PROC_BROWSER_TEST_P(WebRtcImageCaptureBrowserTest,
-                       MAYBE_CreateAndTakePhoto) {
-#if defined(OS_ANDROID)
-  // TODO(mcasas): fails on Lollipop devices: https://crbug.com/634811
-  if (base::android::BuildInfo::GetInstance()->sdk_int() <
-      base::android::SDK_VERSION_MARSHMALLOW) {
-    return;
-  }
-#endif
+IN_PROC_BROWSER_TEST_P(WebRtcImageCaptureBrowserTest, MAYBE_TakePhoto) {
+  embedded_test_server()->StartAcceptingConnections();
+  ASSERT_TRUE(RunImageCaptureTestCase("testCreateAndTakePhoto()"));
+}
 
-  ASSERT_TRUE(embedded_test_server()->Start());
-  GURL url(embedded_test_server()->GetURL(kImageCaptureHtmlFile));
-  NavigateToURL(shell(), url);
-
-  if (!IsWebcamAvailableOnSystem(shell()->web_contents())) {
-    DVLOG(1) << "No video device; skipping test...";
-    return;
-  }
-
-  std::string result;
-  ASSERT_TRUE(ExecuteScriptAndExtractString(shell(), "testCreateAndTakePhoto()",
-                                            &result));
-  if (result == "OK")
-    return;
-  FAIL();
+IN_PROC_BROWSER_TEST_P(WebRtcImageCaptureBrowserTest, MAYBE_GrabFrame) {
+  embedded_test_server()->StartAcceptingConnections();
+  ASSERT_TRUE(RunImageCaptureTestCase("testCreateAndGrabFrame()"));
 }
 
 INSTANTIATE_TEST_CASE_P(,

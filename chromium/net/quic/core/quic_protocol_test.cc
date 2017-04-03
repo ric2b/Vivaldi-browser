@@ -16,18 +16,6 @@ namespace net {
 namespace test {
 namespace {
 
-TEST(QuicProtocolTest, AdjustErrorForVersion) {
-  ASSERT_EQ(14, QUIC_STREAM_LAST_ERROR)
-      << "Any additions to QuicRstStreamErrorCode require an addition to "
-      << "AdjustErrorForVersion and this associated test.";
-
-  // If we ever add different RST codes, we should have a test akin to the
-  // following.
-  //  EXPECT_EQ(QUIC_RST_ACKNOWLEDGEMENT, AdjustErrorForVersion(
-  //      QUIC_RST_ACKNOWLEDGEMENT,
-  //      QUIC_VERSION_28));
-}
-
 TEST(QuicProtocolTest, MakeQuicTag) {
   QuicTag tag = MakeQuicTag('A', 'B', 'C', 'D');
   char bytes[4];
@@ -82,8 +70,8 @@ TEST(QuicProtocolTest, QuicVersionToQuicTag) {
 #endif
 
   // Explicitly test a specific version.
-  EXPECT_EQ(MakeQuicTag('Q', '0', '3', '0'),
-            QuicVersionToQuicTag(QUIC_VERSION_30));
+  EXPECT_EQ(MakeQuicTag('Q', '0', '3', '2'),
+            QuicVersionToQuicTag(QUIC_VERSION_32));
 
   // Loop over all supported versions and make sure that we never hit the
   // default case (i.e. all supported versions should be successfully converted
@@ -122,8 +110,8 @@ TEST(QuicProtocolTest, QuicTagToQuicVersion) {
 #endif
 
   // Explicitly test specific versions.
-  EXPECT_EQ(QUIC_VERSION_30,
-            QuicTagToQuicVersion(MakeQuicTag('Q', '0', '3', '0')));
+  EXPECT_EQ(QUIC_VERSION_32,
+            QuicTagToQuicVersion(MakeQuicTag('Q', '0', '3', '2')));
 
   for (size_t i = 0; i < arraysize(kSupportedQuicVersions); ++i) {
     QuicVersion version = kSupportedQuicVersions[i];
@@ -156,23 +144,23 @@ TEST(QuicProtocolTest, QuicTagToQuicVersionUnsupported) {
 }
 
 TEST(QuicProtocolTest, QuicVersionToString) {
-  EXPECT_EQ("QUIC_VERSION_30", QuicVersionToString(QUIC_VERSION_30));
+  EXPECT_EQ("QUIC_VERSION_32", QuicVersionToString(QUIC_VERSION_32));
   EXPECT_EQ("QUIC_VERSION_UNSUPPORTED",
             QuicVersionToString(QUIC_VERSION_UNSUPPORTED));
 
-  QuicVersion single_version[] = {QUIC_VERSION_30};
+  QuicVersion single_version[] = {QUIC_VERSION_32};
   QuicVersionVector versions_vector;
   for (size_t i = 0; i < arraysize(single_version); ++i) {
     versions_vector.push_back(single_version[i]);
   }
-  EXPECT_EQ("QUIC_VERSION_30", QuicVersionVectorToString(versions_vector));
+  EXPECT_EQ("QUIC_VERSION_32", QuicVersionVectorToString(versions_vector));
 
-  QuicVersion multiple_versions[] = {QUIC_VERSION_UNSUPPORTED, QUIC_VERSION_30};
+  QuicVersion multiple_versions[] = {QUIC_VERSION_UNSUPPORTED, QUIC_VERSION_32};
   versions_vector.clear();
   for (size_t i = 0; i < arraysize(multiple_versions); ++i) {
     versions_vector.push_back(multiple_versions[i]);
   }
-  EXPECT_EQ("QUIC_VERSION_UNSUPPORTED,QUIC_VERSION_30",
+  EXPECT_EQ("QUIC_VERSION_UNSUPPORTED,QUIC_VERSION_32",
             QuicVersionVectorToString(versions_vector));
 
   // Make sure that all supported versions are present in QuicVersionToString.
@@ -286,11 +274,10 @@ TEST(QuicProtocolTest, PathCloseFrameToString) {
 
 TEST(QuicProtocolTest, FilterSupportedVersions) {
   QuicFlagSaver flags;
-  QuicVersionVector all_versions = {
-      QUIC_VERSION_30, QUIC_VERSION_31, QUIC_VERSION_32, QUIC_VERSION_33,
-      QUIC_VERSION_34, QUIC_VERSION_35, QUIC_VERSION_36};
+  QuicVersionVector all_versions = {QUIC_VERSION_32, QUIC_VERSION_33,
+                                    QUIC_VERSION_34, QUIC_VERSION_35,
+                                    QUIC_VERSION_36};
 
-  FLAGS_quic_disable_pre_32 = true;
   FLAGS_quic_disable_pre_34 = true;
   FLAGS_quic_enable_version_35 = false;
   FLAGS_quic_enable_version_36_v2 = false;
@@ -302,11 +289,10 @@ TEST(QuicProtocolTest, FilterSupportedVersions) {
 
 TEST(QuicProtocolTest, FilterSupportedVersionsAllVersions) {
   QuicFlagSaver flags;
-  QuicVersionVector all_versions = {
-      QUIC_VERSION_30, QUIC_VERSION_31, QUIC_VERSION_32, QUIC_VERSION_33,
-      QUIC_VERSION_34, QUIC_VERSION_35, QUIC_VERSION_36};
+  QuicVersionVector all_versions = {QUIC_VERSION_32, QUIC_VERSION_33,
+                                    QUIC_VERSION_34, QUIC_VERSION_35,
+                                    QUIC_VERSION_36};
 
-  FLAGS_quic_disable_pre_32 = false;
   FLAGS_quic_disable_pre_34 = false;
   FLAGS_quic_enable_version_35 = true;
   FLAGS_quic_enable_version_36_v2 = true;
@@ -317,11 +303,10 @@ TEST(QuicProtocolTest, FilterSupportedVersionsAllVersions) {
 
 TEST(QuicProtocolTest, FilterSupportedVersionsNo36) {
   QuicFlagSaver flags;
-  QuicVersionVector all_versions = {
-      QUIC_VERSION_30, QUIC_VERSION_31, QUIC_VERSION_32, QUIC_VERSION_33,
-      QUIC_VERSION_34, QUIC_VERSION_35, QUIC_VERSION_36};
+  QuicVersionVector all_versions = {QUIC_VERSION_32, QUIC_VERSION_33,
+                                    QUIC_VERSION_34, QUIC_VERSION_35,
+                                    QUIC_VERSION_36};
 
-  FLAGS_quic_disable_pre_32 = false;
   FLAGS_quic_disable_pre_34 = false;
   FLAGS_quic_enable_version_35 = true;
   FLAGS_quic_enable_version_36_v2 = false;
@@ -333,11 +318,10 @@ TEST(QuicProtocolTest, FilterSupportedVersionsNo36) {
 
 TEST(QuicProtocolTest, FilterSupportedVersionsNo35) {
   QuicFlagSaver flags;
-  QuicVersionVector all_versions = {
-      QUIC_VERSION_30, QUIC_VERSION_31, QUIC_VERSION_32, QUIC_VERSION_33,
-      QUIC_VERSION_34, QUIC_VERSION_35, QUIC_VERSION_36};
+  QuicVersionVector all_versions = {QUIC_VERSION_32, QUIC_VERSION_33,
+                                    QUIC_VERSION_34, QUIC_VERSION_35,
+                                    QUIC_VERSION_36};
 
-  FLAGS_quic_disable_pre_32 = false;
   FLAGS_quic_disable_pre_34 = false;
   FLAGS_quic_enable_version_35 = true;
   FLAGS_quic_enable_version_36_v2 = true;
@@ -348,36 +332,16 @@ TEST(QuicProtocolTest, FilterSupportedVersionsNo35) {
   ASSERT_EQ(all_versions, FilterSupportedVersions(all_versions));
 }
 
-TEST(QuicProtocolTest, FilterSupportedVersionsNoPre32) {
-  QuicFlagSaver flags;
-  QuicVersionVector all_versions = {
-      QUIC_VERSION_30, QUIC_VERSION_31, QUIC_VERSION_32, QUIC_VERSION_33,
-      QUIC_VERSION_34, QUIC_VERSION_35, QUIC_VERSION_36};
-
-  FLAGS_quic_disable_pre_32 = true;
-  FLAGS_quic_disable_pre_34 = false;
-  FLAGS_quic_enable_version_35 = true;
-  FLAGS_quic_enable_version_36_v2 = true;
-
-  all_versions.erase(all_versions.begin());  // Remove 30
-  all_versions.erase(all_versions.begin());  // Remove 31
-
-  ASSERT_EQ(all_versions, FilterSupportedVersions(all_versions));
-}
-
 TEST(QuicProtocolTest, FilterSupportedVersionsNoPre34) {
   QuicFlagSaver flags;
-  QuicVersionVector all_versions = {
-      QUIC_VERSION_30, QUIC_VERSION_31, QUIC_VERSION_32, QUIC_VERSION_33,
-      QUIC_VERSION_34, QUIC_VERSION_35, QUIC_VERSION_36};
+  QuicVersionVector all_versions = {QUIC_VERSION_32, QUIC_VERSION_33,
+                                    QUIC_VERSION_34, QUIC_VERSION_35,
+                                    QUIC_VERSION_36};
 
-  FLAGS_quic_disable_pre_32 = false;
   FLAGS_quic_disable_pre_34 = true;
   FLAGS_quic_enable_version_35 = true;
   FLAGS_quic_enable_version_36_v2 = true;
 
-  all_versions.erase(all_versions.begin());  // Remove 30
-  all_versions.erase(all_versions.begin());  // Remove 31
   all_versions.erase(all_versions.begin());  // Remove 32
   all_versions.erase(all_versions.begin());  // Remove 33
 
@@ -400,9 +364,9 @@ TEST(QuicProtocolTest, QuicVersionManager) {
 }
 
 TEST(QuicProtocolTest, LookUpVersionByIndex) {
-  QuicVersionVector all_versions = {
-      QUIC_VERSION_30, QUIC_VERSION_31, QUIC_VERSION_32, QUIC_VERSION_33,
-      QUIC_VERSION_34, QUIC_VERSION_35, QUIC_VERSION_36};
+  QuicVersionVector all_versions = {QUIC_VERSION_32, QUIC_VERSION_33,
+                                    QUIC_VERSION_34, QUIC_VERSION_35,
+                                    QUIC_VERSION_36};
   int version_count = all_versions.size();
   for (int i = -5; i <= version_count + 1; ++i) {
     if (i >= 0 && i < version_count) {

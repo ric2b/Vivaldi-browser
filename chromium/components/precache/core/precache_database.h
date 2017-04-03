@@ -67,11 +67,13 @@ class PrecacheDatabase {
   base::Time GetLastPrecacheTimestamp();
 
   // Report precache-related metrics in response to a URL being fetched, where
-  // the fetch was motivated by precaching.
+  // the fetch was motivated by precaching. This is called from the network
+  // delegate, via precache_util.
   void RecordURLPrefetchMetrics(const net::HttpResponseInfo& info,
                                 const base::TimeDelta& latency);
 
-  // Records the precache of an url |url| for top host |referrer_host|.
+  // Records the precache of an url |url| for top host |referrer_host|. This is
+  // called from PrecacheFetcher.
   void RecordURLPrefetch(const GURL& url,
                          const std::string& referrer_host,
                          const base::Time& fetch_time,
@@ -81,6 +83,7 @@ class PrecacheDatabase {
   // Report precache-related metrics in response to a URL being fetched, where
   // the fetch was not motivated by precaching. |is_connection_cellular|
   // indicates whether the current network connection is a cellular network.
+  // This is called from the network delegate, via precache_util.
   void RecordURLNonPrefetch(const GURL& url,
                             const base::TimeDelta& latency,
                             const base::Time& fetch_time,
@@ -92,11 +95,11 @@ class PrecacheDatabase {
   // Returns the referrer host entry for the |referrer_host|.
   PrecacheReferrerHostEntry GetReferrerHost(const std::string& referrer_host);
 
-  // Populates the list of used and unused resources for referrer host with id
-  // |referrer_host_id|.
+  // Populates the list of used and downloaded resources for referrer host with
+  // id |referrer_host_id|. It will also clear the reported downloaded_urls.
   void GetURLListForReferrerHost(int64_t referrer_host_id,
                                  std::vector<GURL>* used_urls,
-                                 std::vector<GURL>* unused_urls);
+                                 std::vector<GURL>* downloaded_urls);
 
   // Updates the |manifest_id| and |fetch_time| for the referrer host
   // |hostname|, and deletes the precached subresource URLs for this top host.
@@ -123,6 +126,8 @@ class PrecacheDatabase {
 
  private:
   friend class PrecacheDatabaseTest;
+  friend class PrecacheFetcherTest;
+  friend class PrecacheManagerTest;
 
   bool IsDatabaseAccessible() const;
 
@@ -146,7 +151,8 @@ class PrecacheDatabase {
   void RecordURLPrefetchInternal(const GURL& url,
                                  const std::string& referrer_host,
                                  bool is_precached,
-                                 const base::Time& fetch_time);
+                                 const base::Time& fetch_time,
+                                 bool is_download_reported);
 
   void UpdatePrecacheReferrerHostInternal(const std::string& hostname,
                                           int64_t manifest_id,

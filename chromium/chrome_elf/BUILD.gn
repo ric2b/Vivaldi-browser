@@ -48,9 +48,13 @@ shared_library("chrome_elf") {
     ":security",
     "//build/config/sanitizers:deps",
     "//chrome/install_static:install_static_util",
+    "//chrome/install_static:primary_module",
   ]
   configs += [ "//build/config/win:windowed" ]
   configs -= [ "//build/config/win:console" ]
+
+  # Turn on CFG for this project.
+  configs += [ "//build/config/win:win_msvc_cfg" ]
 
   # Delay loads in this list will prevent user32.dll
   # from loading too early.

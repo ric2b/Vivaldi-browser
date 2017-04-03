@@ -14,12 +14,12 @@
 #include "base/threading/thread.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/base/weak_handle.h"
-#include "components/sync/core/configure_reason.h"
-#include "components/sync/core/shutdown_reason.h"
-#include "components/sync/core/sync_manager.h"
-#include "components/sync/core/sync_manager_factory.h"
 #include "components/sync/driver/backend_data_type_configurer.h"
+#include "components/sync/engine/configure_reason.h"
 #include "components/sync/engine/cycle/sync_cycle_snapshot.h"
+#include "components/sync/engine/shutdown_reason.h"
+#include "components/sync/engine/sync_manager.h"
+#include "components/sync/engine/sync_manager_factory.h"
 
 class GURL;
 
@@ -59,14 +59,14 @@ class SyncBackendHost : public BackendDataTypeConfigurer {
   // backend instance. May be null.
   virtual void Initialize(
       SyncFrontend* frontend,
-      std::unique_ptr<base::Thread> sync_thread,
-      const scoped_refptr<base::SingleThreadTaskRunner>& db_thread,
-      const scoped_refptr<base::SingleThreadTaskRunner>& file_thread,
+      base::Thread* sync_thread,
       const WeakHandle<JsEventHandler>& event_handler,
       const GURL& service_url,
       const std::string& sync_user_agent,
       const SyncCredentials& credentials,
       bool delete_sync_data_folder,
+      bool enable_local_sync_backend,
+      const base::FilePath& local_sync_backend_folder,
       std::unique_ptr<SyncManagerFactory> sync_manager_factory,
       const WeakHandle<UnrecoverableErrorHandler>& unrecoverable_error_handler,
       const base::Closure& report_unrecoverable_error_function,
@@ -117,15 +117,7 @@ class SyncBackendHost : public BackendDataTypeConfigurer {
   // Called on |frontend_loop_| to kick off shutdown.
   // See the implementation and Core::DoShutdown for details.
   // Must be called *after* StopSyncingForShutdown.
-  // For any reason other than BROWSER_SHUTDOWN, caller should claim sync
-  // thread because:
-  // * during browser shutdown sync thread is not claimed to avoid blocking
-  //   browser shutdown on sync shutdown.
-  // * otherwise sync thread is claimed so that if sync backend is recreated
-  //   later, initialization of new backend is serialized on previous sync
-  //   thread after cleanup of previous backend to avoid old/new backends
-  //   interfere with each other.
-  virtual std::unique_ptr<base::Thread> Shutdown(ShutdownReason reason) = 0;
+  virtual void Shutdown(ShutdownReason reason) = 0;
 
   // Removes all current registrations from the backend on the
   // InvalidationService.
@@ -199,8 +191,6 @@ class SyncBackendHost : public BackendDataTypeConfigurer {
 
   // Disables the sending of directory type debug counters.
   virtual void DisableDirectoryTypeDebugInfoForwarding() = 0;
-
-  virtual base::MessageLoop* GetSyncLoopForTesting() = 0;
 
   // Triggers sync cycle to update |types|.
   virtual void RefreshTypesForTest(ModelTypeSet types) = 0;

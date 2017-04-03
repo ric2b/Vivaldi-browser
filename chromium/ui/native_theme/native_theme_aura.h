@@ -14,9 +14,10 @@ namespace ui {
 class NATIVE_THEME_EXPORT NativeThemeAura : public NativeThemeBase {
  public:
   static NativeThemeAura* instance();
+  static NativeThemeAura* web_instance();
 
  protected:
-  NativeThemeAura();
+  explicit NativeThemeAura(bool use_overlay_scrollbars);
   ~NativeThemeAura() override;
 
   // Overridden from NativeThemeBase:
@@ -42,19 +43,18 @@ class NATIVE_THEME_EXPORT NativeThemeAura : public NativeThemeBase {
   void PaintScrollbarThumb(SkCanvas* canvas,
                            Part part,
                            State state,
-                           const gfx::Rect& rect) const override;
+                           const gfx::Rect& rect,
+                           ScrollbarOverlayColorTheme theme) const override;
   void PaintScrollbarCorner(SkCanvas* canvas,
                             State state,
                             const gfx::Rect& rect) const override;
-
-  void PaintScrollbarThumbStateTransition(SkCanvas* canvas,
-                                          Part part,
-                                          State startState,
-                                          State endState,
-                                          double progress,
-                                          const gfx::Rect& rect) const override;
+  gfx::Size GetPartSize(Part part,
+                        State state,
+                        const ExtraParams& extra) const override;
 
  private:
+  bool use_overlay_scrollbars_;
+
   DISALLOW_COPY_AND_ASSIGN(NativeThemeAura);
 };
 

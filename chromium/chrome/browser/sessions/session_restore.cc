@@ -15,6 +15,7 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/command_line.h"
 #include "base/debug/alias.h"
 #include "base/location.h"
 #include "base/macros.h"
@@ -62,8 +63,6 @@
 #include "content/public/common/page_state.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/extension_set.h"
-#include "ui/base/l10n/l10n_util.h"
-#include "chrome/grit/locale_settings.h"
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/boot_times_recorder.h"
@@ -75,10 +74,6 @@ using content::NavigationController;
 using content::RenderWidgetHost;
 using content::WebContents;
 using RestoredTab = SessionRestoreDelegate::RestoredTab;
-
-namespace vivaldi {
-GURL GetVivaldiNewTabURL();
-}  // namespace vivaldi
 
 namespace {
 
@@ -602,10 +597,7 @@ class SessionRestoreImpl : public content::NotificationObserver {
     // See crbug.com/154129.
     if (tab.navigations.empty())
       return nullptr;
-    int selected_index = tab.current_navigation_index;
-    selected_index = std::max(
-        0,
-        std::min(selected_index, static_cast<int>(tab.navigations.size() - 1)));
+    int selected_index = GetNavigationIndexToSelect(tab);
 
     RecordAppLaunchForTab(browser, tab, selected_index);
 
@@ -788,7 +780,7 @@ void SessionRestore::RestoreSessionAfterCrash(Browser* browser) {
   if (browser->tab_strip_model()->count() == 1) {
     const content::WebContents* active_tab =
         browser->tab_strip_model()->GetWebContentsAt(0);
-    if (active_tab->GetURL() == GURL(chrome::kChromeUINewTabURL) ||
+    if (active_tab->GetURL() == chrome::kChromeUINewTabURL ||
         search::IsInstantNTP(active_tab)) {
       // There is only one tab and its the new tab page, make session restore
       // clobber it.

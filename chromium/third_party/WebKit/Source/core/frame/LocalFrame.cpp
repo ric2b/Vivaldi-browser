@@ -48,11 +48,13 @@
 #include "core/frame/FrameHost.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalDOMWindow.h"
+#include "core/frame/PerformanceMonitor.h"
 #include "core/frame/Settings.h"
 #include "core/frame/VisualViewport.h"
 #include "core/html/HTMLFrameElementBase.h"
 #include "core/html/HTMLPlugInElement.h"
 #include "core/input/EventHandler.h"
+#include "core/inspector/ConsoleMessage.h"
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/layout/HitTestResult.h"
 #include "core/layout/LayoutView.h"
@@ -69,8 +71,10 @@
 #include "core/paint/ObjectPainter.h"
 #include "core/paint/PaintInfo.h"
 #include "core/paint/PaintLayer.h"
+#include "core/paint/PaintLayerPainter.h"
 #include "core/paint/TransformRecorder.h"
 #include "core/svg/SVGDocumentExtensions.h"
+#include "core/timing/Performance.h"
 #include "platform/DragImage.h"
 #include "platform/PluginScriptForbiddenScope.h"
 #include "platform/RuntimeEnabledFeatures.h"
@@ -85,6 +89,7 @@
 #include "platform/plugins/PluginData.h"
 #include "platform/text/TextStream.h"
 #include "public/platform/InterfaceProvider.h"
+#include "public/platform/InterfaceRegistry.h"
 #include "public/platform/WebFrameScheduler.h"
 #include "public/platform/WebScreenInfo.h"
 #include "public/platform/WebViewScheduler.h"
@@ -246,11 +251,14 @@ template class CORE_TEMPLATE_EXPORT Supplement<LocalFrame>;
 LocalFrame* LocalFrame::create(FrameLoaderClient* client,
                                FrameHost* host,
                                FrameOwner* owner,
-                               InterfaceProvider* interfaceProvider) {
+                               InterfaceProvider* interfaceProvider,
+                               InterfaceRegistry* interfaceRegistry) {
   LocalFrame* frame = new LocalFrame(
       client, host, owner,
       interfaceProvider ? interfaceProvider
-                        : InterfaceProvider::getEmptyInterfaceProvider());
+                        : InterfaceProvider::getEmptyInterfaceProvider(),
+      interfaceRegistry ? interfaceRegistry
+                        : InterfaceRegistry::getEmptyInterfaceRegistry());
   InspectorInstrumentation::frameAttachedToParent(frame);
   return frame;
 }
@@ -283,12 +291,12 @@ void LocalFrame::createView(const IntSize& viewportSize,
 
   FrameView* frameView = nullptr;
   if (isLocalRoot) {
-    frameView = FrameView::create(this, viewportSize);
+    frameView = FrameView::create(*this, viewportSize);
 
     // The layout size is set by WebViewImpl to support @viewport
     frameView->setLayoutSizeFixedToFrameSize(false);
   } else {
-    frameView = FrameView::create(this);
+    frameView = FrameView::create(*this);
   }
 
   frameView->setScrollbarModes(horizontalScrollbarMode, verticalScrollbarMode,
@@ -325,6 +333,7 @@ LocalFrame::~LocalFrame() {
 
 DEFINE_TRACE(LocalFrame) {
   visitor->trace(m_instrumentingAgents);
+  visitor->trace(m_performanceMonitor);
   visitor->trace(m_loader);
   visitor->trace(m_navigationScheduler);
   visitor->trace(m_view);
@@ -466,6 +475,11 @@ void LocalFrame::printNavigationErrorMessage(const Frame& targetFrame,
   localDOMWindow()->printErrorMessage(message);
 }
 
+void LocalFrame::printNavigationWarning(const String& message) {
+  m_console->addMessage(
+      ConsoleMessage::create(JSMessageSource, WarningMessageLevel, message));
+}
+
 WindowProxyManager* LocalFrame::getWindowProxyManager() const {
   return m_script->getWindowProxyManager();
 }
@@ -481,6 +495,11 @@ void LocalFrame::detachChildren() {
 
   if (Document* document = this->document())
     ChildFrameDisconnector(*document).disconnect();
+}
+
+void LocalFrame::documentAttached() {
+  DCHECK(document());
+  selection().documentAttached(document());
 }
 
 void LocalFrame::setDOMWindow(LocalDOMWindow* domWindow) {
@@ -530,6 +549,11 @@ void LocalFrame::didChangeVisibilityState() {
   Frame::didChangeVisibilityState();
 }
 
+void LocalFrame::setDocumentHasReceivedUserGesture() {
+  if (document())
+    document()->setHasReceivedUserGesture();
+}
+
 LocalFrame* LocalFrame::localFrameRoot() {
   LocalFrame* curFrame = this;
   while (curFrame && curFrame->tree().parent() &&
@@ -555,7 +579,8 @@ void LocalFrame::setPrinting(bool printing,
   // the document.  See https://bugs.webkit.org/show_bug.cgi?id=43704
   ResourceCacheValidationSuppressor validationSuppressor(document()->fetcher());
 
-  document()->setPrinting(printing);
+  document()->setPrinting(printing ? Document::Printing
+                                   : Document::FinishingPrinting);
   view()->adjustMediaTypeForPrinting(printing);
 
   if (shouldUsePrintingLayout()) {
@@ -577,6 +602,9 @@ void LocalFrame::setPrinting(bool printing,
     if (child->isLocalFrame())
       toLocalFrame(child)->setPrinting(printing, FloatSize(), FloatSize(), 0);
   }
+
+  if (!printing)
+    document()->setPrinting(Document::NotPrinting);
 }
 
 bool LocalFrame::shouldUsePrintingLayout() const {
@@ -641,11 +669,11 @@ void LocalFrame::setPageAndTextZoomFactors(float pageZoomFactor,
     if (FrameView* view = this->view()) {
       // Update the scroll position when doing a full page zoom, so the content
       // stays in relatively the same position.
-      LayoutPoint scrollPosition = view->scrollPosition();
+      ScrollOffset scrollOffset = view->scrollOffset();
       float percentDifference = (pageZoomFactor / m_pageZoomFactor);
-      view->setScrollPosition(
-          DoublePoint(scrollPosition.x() * percentDifference,
-                      scrollPosition.y() * percentDifference),
+      view->setScrollOffset(
+          ScrollOffset(scrollOffset.width() * percentDifference,
+                       scrollOffset.height() * percentDifference),
           ProgrammaticScroll);
     }
   }
@@ -713,11 +741,7 @@ String LocalFrame::selectedText() const {
 String LocalFrame::selectedTextForClipboard() const {
   if (!document())
     return emptyString();
-
-  // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
-  // needs to be audited.  See http://crbug.com/590369 for more details.
-  document()->updateStyleAndLayoutIgnorePendingStylesheets();
-
+  DCHECK(!document()->needsLayoutTreeUpdate());
   return selection().selectedTextForClipboard();
 }
 
@@ -842,7 +866,8 @@ bool LocalFrame::shouldThrottleRendering() const {
 inline LocalFrame::LocalFrame(FrameLoaderClient* client,
                               FrameHost* host,
                               FrameOwner* owner,
-                              InterfaceProvider* interfaceProvider)
+                              InterfaceProvider* interfaceProvider,
+                              InterfaceRegistry* interfaceRegistry)
     : Frame(client, host, owner),
       m_frameScheduler(page()->chromeClient().createFrameScheduler(
           client->frameBlameContext())),
@@ -859,11 +884,15 @@ inline LocalFrame::LocalFrame(FrameLoaderClient* client,
       m_pageZoomFactor(parentPageZoomFactor(this)),
       m_textZoomFactor(parentTextZoomFactor(this)),
       m_inViewSourceMode(false),
-      m_interfaceProvider(interfaceProvider) {
-  if (isLocalRoot())
+      m_interfaceProvider(interfaceProvider),
+      m_interfaceRegistry(interfaceRegistry) {
+  if (isLocalRoot()) {
     m_instrumentingAgents = new InstrumentingAgents();
-  else
+    m_performanceMonitor = new PerformanceMonitor(this);
+  } else {
     m_instrumentingAgents = localFrameRoot()->m_instrumentingAgents;
+    m_performanceMonitor = localFrameRoot()->m_performanceMonitor;
+  }
 }
 
 WebFrameScheduler* LocalFrame::frameScheduler() {

@@ -19,7 +19,7 @@
 #include "chrome/test/base/testing_profile.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_registry_simple.h"
-#include "components/syncable_prefs/testing_pref_service_syncable.h"
+#include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/constants.h"
@@ -113,7 +113,7 @@ class ComponentLoaderTest : public testing::Test {
   content::TestBrowserThreadBundle thread_bundle_;
   TestingProfile profile_;
   MockExtensionService extension_service_;
-  syncable_prefs::TestingPrefServiceSyncable prefs_;
+  sync_preferences::TestingPrefServiceSyncable prefs_;
   TestingPrefServiceSimple local_state_;
   ComponentLoader component_loader_;
 
@@ -134,47 +134,46 @@ TEST_F(ComponentLoaderTest, ParseManifest) {
   std::unique_ptr<base::DictionaryValue> manifest;
 
   // Test invalid JSON.
-  manifest.reset(
-      component_loader_.ParseManifest("{ 'test': 3 } invalid"));
-  EXPECT_FALSE(manifest.get());
+  manifest = component_loader_.ParseManifest("{ 'test': 3 } invalid");
+  EXPECT_FALSE(manifest);
 
   // Test manifests that are valid JSON, but don't have an object literal
   // at the root. ParseManifest() should always return NULL.
 
-  manifest.reset(component_loader_.ParseManifest(std::string()));
-  EXPECT_FALSE(manifest.get());
+  manifest = component_loader_.ParseManifest(std::string());
+  EXPECT_FALSE(manifest);
 
-  manifest.reset(component_loader_.ParseManifest("[{ \"foo\": 3 }]"));
-  EXPECT_FALSE(manifest.get());
+  manifest = component_loader_.ParseManifest("[{ \"foo\": 3 }]");
+  EXPECT_FALSE(manifest);
 
-  manifest.reset(component_loader_.ParseManifest("\"Test\""));
-  EXPECT_FALSE(manifest.get());
+  manifest = component_loader_.ParseManifest("\"Test\"");
+  EXPECT_FALSE(manifest);
 
-  manifest.reset(component_loader_.ParseManifest("42"));
-  EXPECT_FALSE(manifest.get());
+  manifest = component_loader_.ParseManifest("42");
+  EXPECT_FALSE(manifest);
 
-  manifest.reset(component_loader_.ParseManifest("true"));
-  EXPECT_FALSE(manifest.get());
+  manifest = component_loader_.ParseManifest("true");
+  EXPECT_FALSE(manifest);
 
-  manifest.reset(component_loader_.ParseManifest("false"));
-  EXPECT_FALSE(manifest.get());
+  manifest = component_loader_.ParseManifest("false");
+  EXPECT_FALSE(manifest);
 
-  manifest.reset(component_loader_.ParseManifest("null"));
-  EXPECT_FALSE(manifest.get());
+  manifest = component_loader_.ParseManifest("null");
+  EXPECT_FALSE(manifest);
 
   // Test parsing valid JSON.
 
   int value = 0;
-  manifest.reset(component_loader_.ParseManifest(
-      "{ \"test\": { \"one\": 1 }, \"two\": 2 }"));
-  ASSERT_TRUE(manifest.get());
+  manifest = component_loader_.ParseManifest(
+      "{ \"test\": { \"one\": 1 }, \"two\": 2 }");
+  ASSERT_TRUE(manifest);
   EXPECT_TRUE(manifest->GetInteger("test.one", &value));
   EXPECT_EQ(1, value);
   ASSERT_TRUE(manifest->GetInteger("two", &value));
   EXPECT_EQ(2, value);
 
   std::string string_value;
-  manifest.reset(component_loader_.ParseManifest(manifest_contents_));
+  manifest = component_loader_.ParseManifest(manifest_contents_);
   ASSERT_TRUE(manifest->GetString("background.page", &string_value));
   EXPECT_EQ("backgroundpage.html", string_value);
 }

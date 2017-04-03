@@ -34,6 +34,7 @@
 <translation id="2148716181193084225">Hari ini</translation>
 <translation id="2226276347425096477">Pendekkan teks ini menjadi <ph name="MAX_CHARACTERS" /> karakter atau kurang (saat ini Anda menggunakan <ph name="CURRENT_LENGTH" /> karakter).</translation>
 <translation id="2247351761944213033">Minggu <ph name="WEEKNUMBER" />, <ph name="YEAR" /></translation>
+<translation id="2277199496770840904">Lagu <ph name="NUMBER" /></translation>
 <translation id="2291999235780842123">kotak centang</translation>
 <translation id="2335594187091864976">pemilih tanggal dan waktu</translation>
 <translation id="248395913932153421">Hari</translation>
@@ -116,7 +117,6 @@
 <translation id="5643186887447432888">tombol</translation>
 <translation id="5677946354068040947">opsi lainnya</translation>
 <translation id="57838592816432529">Bisukan</translation>
-<translation id="583281660410589416">Tidak dikenal</translation>
 <translation id="5843503607508392247">Lainnya...</translation>
 <translation id="5860033963881614850">Nonaktif</translation>
 <translation id="588258955323874662">Layar Penuh</translation>
@@ -158,7 +158,7 @@
 <translation id="7364796246159120393">Pilih File</translation>
 <translation id="739024184232394898">Lainnya...</translation>
 <translation id="7491962110804786152">tab</translation>
-<translation id="7514365320538308">Unduh</translation>
+<translation id="7514365320538308">Download</translation>
 <translation id="7673697353781729403">Jam</translation>
 <translation id="7720026100085573005">sisa waktu</translation>
 <translation id="7740016676195725605">berhenti menampilkan teks</translation>

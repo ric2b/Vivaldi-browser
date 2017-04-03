@@ -163,6 +163,10 @@ struct CONTENT_EXPORT BeginNavigationParams {
 
   // Indicates the request context type.
   RequestContextType request_context_type;
+
+  // See WebSearchableFormData for a description of these.
+  GURL searchable_form_url;
+  std::string searchable_form_encoding;
 };
 
 // Provided by the browser -----------------------------------------------------
@@ -217,9 +221,7 @@ struct CONTENT_EXPORT RequestNavigationParams {
   RequestNavigationParams(bool is_overriding_user_agent,
                           const std::vector<GURL>& redirects,
                           bool can_load_local_resources,
-                          base::Time request_time,
                           const PageState& page_state,
-                          int32_t page_id,
                           int nav_entry_id,
                           bool is_same_document_history_load,
                           bool is_history_navigation_in_new_child,
@@ -249,19 +251,8 @@ struct CONTENT_EXPORT RequestNavigationParams {
   // resources.
   bool can_load_local_resources;
 
-  // The time the request was created. This is used by the old performance
-  // infrastructure to set up DocumentState associated with the RenderView.
-  // TODO(ppi): make it go away.
-  base::Time request_time;
-
   // Opaque history state (received by ViewHostMsg_UpdateState).
   PageState page_state;
-
-  // The page_id for this navigation, or -1 if it is a new navigation.  Back,
-  // Forward, and Reload navigations should have a valid page_id.  If the load
-  // succeeds, then this page_id will be reflected in the resultant
-  // FrameHostMsg_DidCommitProvisionalLoad message.
-  int32_t page_id;
 
   // For browser-initiated navigations, this is the unique id of the
   // NavigationEntry being navigated to. (For renderer-initiated navigations it

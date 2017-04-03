@@ -12,7 +12,7 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/prefs/browser_prefs.h"
-#include "chrome/browser/prefs/command_line_pref_store.h"
+#include "chrome/browser/prefs/chrome_command_line_pref_store.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
@@ -23,8 +23,8 @@
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/scoped_user_pref_update.h"
-#include "components/syncable_prefs/pref_service_mock_factory.h"
-#include "components/syncable_prefs/testing_pref_service_syncable.h"
+#include "components/sync_preferences/pref_service_mock_factory.h"
+#include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "content/public/common/web_preferences.h"
 #include "content/public/test/test_renderer_host.h"
 #include "ui/base/test/data/resource.h"
@@ -52,7 +52,7 @@ TEST(ChromePrefServiceTest, UpdateCommandLinePrefStore) {
   cmd_line.AppendSwitch(switches::kEnableCloudPrintProxy);
 
   // Call UpdateCommandLinePrefStore and check to see if the value has changed.
-  prefs.UpdateCommandLinePrefStore(new CommandLinePrefStore(&cmd_line));
+  prefs.UpdateCommandLinePrefStore(new ChromeCommandLinePrefStore(&cmd_line));
   pref = prefs.FindPreference(prefs::kCloudPrintProxyEnabled);
   ASSERT_TRUE(pref);
   value = pref->GetValue();
@@ -100,7 +100,7 @@ class ChromePrefServiceWebKitPrefs : public ChromeRenderViewHostTestHarness {
     // harness is not supposed to overwrite a profile if it's already created.
 
     // Set some (WebKit) user preferences.
-    syncable_prefs::TestingPrefServiceSyncable* pref_services =
+    sync_preferences::TestingPrefServiceSyncable* pref_services =
         profile()->GetTestingPrefService();
     pref_services->SetUserPref(prefs::kDefaultCharset,
                                new base::StringValue("utf8"));

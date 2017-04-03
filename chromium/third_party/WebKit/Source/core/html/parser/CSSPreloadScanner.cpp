@@ -231,13 +231,12 @@ static String parseCSSStringOrURL(const String& string) {
 void CSSPreloadScanner::emitRule(const SegmentedString& source) {
   if (equalIgnoringCase(m_rule, "import")) {
     String url = parseCSSStringOrURL(m_ruleValue.toString());
-    if (!url.isEmpty()) {
-      TextPosition position =
-          TextPosition(source.currentLine(), source.currentColumn());
-      std::unique_ptr<PreloadRequest> request =
-          PreloadRequest::create(FetchInitiatorTypeNames::css, position, url,
-                                 *m_predictedBaseElementURL,
-                                 Resource::CSSStyleSheet, m_referrerPolicy);
+    TextPosition position =
+        TextPosition(source.currentLine(), source.currentColumn());
+    auto request = PreloadRequest::createIfNeeded(
+        FetchInitiatorTypeNames::css, position, url, *m_predictedBaseElementURL,
+        Resource::CSSStyleSheet, m_referrerPolicy);
+    if (request) {
       // FIXME: Should this be including the charset in the preload request?
       m_requests->append(std::move(request));
     }
@@ -256,10 +255,9 @@ CSSPreloaderResourceClient::CSSPreloaderResourceClient(
     : m_policy(preloader->document()->settings()->cssExternalScannerPreload()
                    ? ScanAndPreload
                    : ScanOnly),
-      m_preloader(preloader) {
-  DCHECK(resource->getType() == Resource::Type::CSSStyleSheet);
-  setResource(toCSSStyleSheetResource(resource),
-              Resource::DontMarkAsReferenced);
+      m_preloader(preloader),
+      m_resource(toCSSStyleSheetResource(resource)) {
+  m_resource->addClient(this);
 }
 
 CSSPreloaderResourceClient::~CSSPreloaderResourceClient() {}
@@ -284,6 +282,12 @@ void CSSPreloaderResourceClient::didAppendFirstData(
 void CSSPreloaderResourceClient::scanCSS(
     const CSSStyleSheetResource* resource) {
   DCHECK(m_preloader);
+
+  // Early abort if there is no document loader. Do this early to ensure that
+  // scan histograms and preload histograms do not count different quantities.
+  if (!m_preloader->document()->loader())
+    return;
+
   // Passing an empty SegmentedString here results in PreloadRequest with no
   // file/line information.
   // TODO(csharrison): If this becomes an issue the CSSPreloadScanner may be
@@ -321,9 +325,16 @@ void CSSPreloaderResourceClient::fetchPreloads(PreloadRequestStream& preloads) {
   }
 }
 
+void CSSPreloaderResourceClient::clearResource() {
+  if (m_resource)
+    m_resource->removeClient(this);
+  m_resource.clear();
+}
+
 DEFINE_TRACE(CSSPreloaderResourceClient) {
   visitor->trace(m_preloader);
-  ResourceOwner<CSSStyleSheetResource>::trace(visitor);
+  visitor->trace(m_resource);
+  StyleSheetResourceClient::trace(visitor);
 }
 
 }  // namespace blink

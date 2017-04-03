@@ -1,7 +1,8 @@
 /*
  * Copyright (C) 1999 Lars Knoll (knoll@kde.org)
  *           (C) 1999 Antti Koivisto (koivisto@kde.org)
- * Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008 Apple Inc. All rights reserved.
+ * Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008 Apple Inc.
+ *               All rights reserved.
  * Copyright (C) 2006 Andrew Wellington (proton@wiretapped.net)
  * Copyright (C) 2010 Daniel Bates (dbates@intudata.com)
  *
@@ -64,11 +65,16 @@ LayoutListMarker* LayoutListMarker::createAnonymous(LayoutListItem* item) {
 
 LayoutSize LayoutListMarker::imageBulletSize() const {
   ASSERT(isImage());
+  const SimpleFontData* fontData = style()->font().primaryFont();
+  DCHECK(fontData);
+  if (!fontData)
+    return LayoutSize();
 
-  // FIXME: This is a somewhat arbitrary default width. Generated images for markers really won't
-  // become particularly useful until we support the CSS3 marker pseudoclass to allow control over
-  // the width and height of the marker box.
-  LayoutUnit bulletWidth = style()->getFontMetrics().ascent() / LayoutUnit(2);
+  // FIXME: This is a somewhat arbitrary default width. Generated images for
+  // markers really won't become particularly useful until we support the CSS3
+  // marker pseudoclass to allow control over the width and height of the
+  // marker box.
+  LayoutUnit bulletWidth = fontData->getFontMetrics().ascent() / LayoutUnit(2);
   return m_image->imageSize(*this, style()->effectiveZoom(),
                             LayoutSize(bulletWidth, bulletWidth));
 }
@@ -139,8 +145,11 @@ void LayoutListMarker::layout() {
     setWidth(imageSize.width());
     setHeight(imageSize.height());
   } else {
+    const SimpleFontData* fontData = style()->font().primaryFont();
+    DCHECK(fontData);
     setLogicalWidth(minPreferredLogicalWidth());
-    setLogicalHeight(LayoutUnit(style()->getFontMetrics().height()));
+    setLogicalHeight(
+        LayoutUnit(fontData ? fontData->getFontMetrics().height() : 0));
   }
 
   setMarginStart(LayoutUnit());
@@ -157,7 +166,8 @@ void LayoutListMarker::layout() {
 }
 
 void LayoutListMarker::imageChanged(WrappedImagePtr o, const IntRect*) {
-  // A list marker can't have a background or border image, so no need to call the base class method.
+  // A list marker can't have a background or border image, so no need to call
+  // the base class method.
   if (!m_image || o != m_image->data())
     return;
 
@@ -175,7 +185,8 @@ void LayoutListMarker::updateMarginsAndContent() {
 }
 
 void LayoutListMarker::updateContent() {
-  // FIXME: This if-statement is just a performance optimization, but it's messy to use the preferredLogicalWidths dirty bit for this.
+  // FIXME: This if-statement is just a performance optimization, but it's messy
+  // to use the preferredLogicalWidths dirty bit for this.
   // It's unclear if this is a premature optimization.
   if (!preferredLogicalWidthsDirty())
     return;
@@ -230,6 +241,10 @@ void LayoutListMarker::computePreferredLogicalWidths() {
   }
 
   const Font& font = style()->font();
+  const SimpleFontData* fontData = font.primaryFont();
+  DCHECK(fontData);
+  if (!fontData)
+    return;
 
   LayoutUnit logicalWidth;
   switch (getListStyleCategory()) {
@@ -237,7 +252,7 @@ void LayoutListMarker::computePreferredLogicalWidths() {
       break;
     case ListStyleCategory::Symbol:
       logicalWidth =
-          LayoutUnit((font.getFontMetrics().ascent() * 2 / 3 + 1) / 2 + 2);
+          LayoutUnit((fontData->getFontMetrics().ascent() * 2 / 3 + 1) / 2 + 2);
       break;
     case ListStyleCategory::Language:
       logicalWidth = getWidthOfTextWithSuffix();
@@ -253,7 +268,11 @@ void LayoutListMarker::computePreferredLogicalWidths() {
 }
 
 void LayoutListMarker::updateMargins() {
-  const FontMetrics& fontMetrics = style()->getFontMetrics();
+  const SimpleFontData* fontData = style()->font().primaryFont();
+  DCHECK(fontData);
+  if (!fontData)
+    return;
+  const FontMetrics& fontMetrics = fontData->getFontMetrics();
 
   LayoutUnit marginStart;
   LayoutUnit marginEnd;
@@ -341,64 +360,64 @@ int LayoutListMarker::baselinePosition(
 LayoutListMarker::ListStyleCategory LayoutListMarker::getListStyleCategory()
     const {
   switch (style()->listStyleType()) {
-    case NoneListStyle:
+    case EListStyleType::NoneListStyle:
       return ListStyleCategory::None;
-    case Disc:
-    case Circle:
-    case Square:
+    case EListStyleType::Disc:
+    case EListStyleType::Circle:
+    case EListStyleType::Square:
       return ListStyleCategory::Symbol;
-    case ArabicIndic:
-    case Armenian:
-    case Bengali:
-    case Cambodian:
-    case CJKIdeographic:
-    case CjkEarthlyBranch:
-    case CjkHeavenlyStem:
-    case DecimalLeadingZero:
-    case DecimalListStyle:
-    case Devanagari:
-    case EthiopicHalehame:
-    case EthiopicHalehameAm:
-    case EthiopicHalehameTiEr:
-    case EthiopicHalehameTiEt:
-    case Georgian:
-    case Gujarati:
-    case Gurmukhi:
-    case Hangul:
-    case HangulConsonant:
-    case Hebrew:
-    case Hiragana:
-    case HiraganaIroha:
-    case Kannada:
-    case Katakana:
-    case KatakanaIroha:
-    case Khmer:
-    case KoreanHangulFormal:
-    case KoreanHanjaFormal:
-    case KoreanHanjaInformal:
-    case Lao:
-    case LowerAlpha:
-    case LowerArmenian:
-    case LowerGreek:
-    case LowerLatin:
-    case LowerRoman:
-    case Malayalam:
-    case Mongolian:
-    case Myanmar:
-    case Oriya:
-    case Persian:
-    case SimpChineseFormal:
-    case SimpChineseInformal:
-    case Telugu:
-    case Thai:
-    case Tibetan:
-    case TradChineseFormal:
-    case TradChineseInformal:
-    case UpperAlpha:
-    case UpperArmenian:
-    case UpperLatin:
-    case UpperRoman:
-    case Urdu:
+    case EListStyleType::ArabicIndic:
+    case EListStyleType::Armenian:
+    case EListStyleType::Bengali:
+    case EListStyleType::Cambodian:
+    case EListStyleType::CJKIdeographic:
+    case EListStyleType::CjkEarthlyBranch:
+    case EListStyleType::CjkHeavenlyStem:
+    case EListStyleType::DecimalLeadingZero:
+    case EListStyleType::DecimalListStyle:
+    case EListStyleType::Devanagari:
+    case EListStyleType::EthiopicHalehame:
+    case EListStyleType::EthiopicHalehameAm:
+    case EListStyleType::EthiopicHalehameTiEr:
+    case EListStyleType::EthiopicHalehameTiEt:
+    case EListStyleType::Georgian:
+    case EListStyleType::Gujarati:
+    case EListStyleType::Gurmukhi:
+    case EListStyleType::Hangul:
+    case EListStyleType::HangulConsonant:
+    case EListStyleType::Hebrew:
+    case EListStyleType::Hiragana:
+    case EListStyleType::HiraganaIroha:
+    case EListStyleType::Kannada:
+    case EListStyleType::Katakana:
+    case EListStyleType::KatakanaIroha:
+    case EListStyleType::Khmer:
+    case EListStyleType::KoreanHangulFormal:
+    case EListStyleType::KoreanHanjaFormal:
+    case EListStyleType::KoreanHanjaInformal:
+    case EListStyleType::Lao:
+    case EListStyleType::LowerAlpha:
+    case EListStyleType::LowerArmenian:
+    case EListStyleType::LowerGreek:
+    case EListStyleType::LowerLatin:
+    case EListStyleType::LowerRoman:
+    case EListStyleType::Malayalam:
+    case EListStyleType::Mongolian:
+    case EListStyleType::Myanmar:
+    case EListStyleType::Oriya:
+    case EListStyleType::Persian:
+    case EListStyleType::SimpChineseFormal:
+    case EListStyleType::SimpChineseInformal:
+    case EListStyleType::Telugu:
+    case EListStyleType::Thai:
+    case EListStyleType::Tibetan:
+    case EListStyleType::TradChineseFormal:
+    case EListStyleType::TradChineseInformal:
+    case EListStyleType::UpperAlpha:
+    case EListStyleType::UpperArmenian:
+    case EListStyleType::UpperLatin:
+    case EListStyleType::UpperRoman:
+    case EListStyleType::Urdu:
       return ListStyleCategory::Language;
     default:
       ASSERT_NOT_REACHED();
@@ -418,13 +437,18 @@ IntRect LayoutListMarker::getRelativeMarkerRect() const {
   }
 
   IntRect relativeRect;
+  const SimpleFontData* fontData = style()->font().primaryFont();
+  DCHECK(fontData);
+  if (!fontData)
+    return relativeRect;
+
   switch (getListStyleCategory()) {
     case ListStyleCategory::None:
       return IntRect();
     case ListStyleCategory::Symbol: {
       // TODO(wkorman): Review and clean up/document the calculations below.
       // http://crbug.com/543193
-      const FontMetrics& fontMetrics = style()->getFontMetrics();
+      const FontMetrics& fontMetrics = fontData->getFontMetrics();
       int ascent = fontMetrics.ascent();
       int bulletWidth = (ascent * 2 / 3 + 1) / 2;
       relativeRect = IntRect(1, 3 * (ascent - ascent * 2 / 3) / 2, bulletWidth,
@@ -432,7 +456,7 @@ IntRect LayoutListMarker::getRelativeMarkerRect() const {
     } break;
     case ListStyleCategory::Language:
       relativeRect = IntRect(0, 0, getWidthOfTextWithSuffix().toInt(),
-                             style()->font().getFontMetrics().height());
+                             fontData->getFontMetrics().height());
       break;
   }
 
@@ -446,7 +470,8 @@ IntRect LayoutListMarker::getRelativeMarkerRect() const {
 }
 
 void LayoutListMarker::setSelectionState(SelectionState state) {
-  // The selection state for our containing block hierarchy is updated by the base class call.
+  // The selection state for our containing block hierarchy is updated by the
+  // base class call.
   LayoutBox::setSelectionState(state);
 
   if (inlineBoxWrapper() && canUpdateSelectionOnRootLineBoxes())
@@ -455,12 +480,12 @@ void LayoutListMarker::setSelectionState(SelectionState state) {
 
 void LayoutListMarker::listItemStyleDidChange() {
   RefPtr<ComputedStyle> newStyle = ComputedStyle::create();
-  // The marker always inherits from the list item, regardless of where it might end
-  // up (e.g., in some deeply nested line box). See CSS3 spec.
+  // The marker always inherits from the list item, regardless of where it might
+  // end up (e.g., in some deeply nested line box). See CSS3 spec.
   newStyle->inheritFrom(m_listItem->styleRef());
   if (style()) {
-    // Reuse the current margins. Otherwise resetting the margins to initial values
-    // would trigger unnecessary layout.
+    // Reuse the current margins. Otherwise resetting the margins to initial
+    // values would trigger unnecessary layout.
     newStyle->setMarginStart(style()->marginStart());
     newStyle->setMarginEnd(style()->marginRight());
   }

@@ -39,7 +39,9 @@
 #include "content/public/common/content_features.h"
 #include "content/public/common/resource_response.h"
 #include "content/public/common/resource_type.h"
-#include "mojo/public/cpp/bindings/binding.h"
+#include "mojo/public/cpp/bindings/associated_binding.h"
+#include "mojo/public/cpp/bindings/associated_group.h"
+#include "mojo/public/cpp/bindings/associated_interface_ptr_info.h"
 #include "net/base/net_errors.h"
 #include "net/base/request_priority.h"
 #include "net/http/http_response_headers.h"
@@ -89,8 +91,24 @@ class URLLoaderClientImpl final : public mojom::URLLoaderClient {
   }
 
   void OnReceiveResponse(const ResourceResponseHead& response_head) override {
+    has_received_response_ = true;
+    if (body_consumer_)
+      body_consumer_->Start(task_runner_.get());
     resource_dispatcher_->OnMessageReceived(
         ResourceMsg_ReceivedResponse(request_id_, response_head));
+  }
+
+  void OnReceiveRedirect(const net::RedirectInfo& redirect_info,
+                         const ResourceResponseHead& response_head) override {
+    DCHECK(!has_received_response_);
+    DCHECK(!body_consumer_);
+    resource_dispatcher_->OnMessageReceived(ResourceMsg_ReceivedRedirect(
+        request_id_, redirect_info, response_head));
+  }
+
+  void OnDataDownloaded(int64_t data_len, int64_t encoded_data_len) override {
+    resource_dispatcher_->OnMessageReceived(
+        ResourceMsg_DataDownloaded(request_id_, data_len, encoded_data_len));
   }
 
   void OnStartLoadingResponseBody(
@@ -98,6 +116,8 @@ class URLLoaderClientImpl final : public mojom::URLLoaderClient {
     DCHECK(!body_consumer_);
     body_consumer_ = new URLResponseBodyConsumer(
         request_id_, resource_dispatcher_, std::move(body), task_runner_);
+    if (has_received_response_)
+      body_consumer_->Start(task_runner_.get());
   }
 
   void OnComplete(const ResourceRequestCompletionStatus& status) override {
@@ -109,14 +129,16 @@ class URLLoaderClientImpl final : public mojom::URLLoaderClient {
     body_consumer_->OnComplete(status);
   }
 
-  mojom::URLLoaderClientPtr CreateInterfacePtrAndBind() {
-    return binding_.CreateInterfacePtrAndBind();
+  void Bind(mojom::URLLoaderClientAssociatedPtrInfo* client_ptr_info,
+            mojo::AssociatedGroup* associated_group) {
+    binding_.Bind(client_ptr_info, associated_group);
   }
 
  private:
-  mojo::Binding<mojom::URLLoaderClient> binding_;
+  mojo::AssociatedBinding<mojom::URLLoaderClient> binding_;
   scoped_refptr<URLResponseBodyConsumer> body_consumer_;
   const int request_id_;
+  bool has_received_response_ = false;
   ResourceDispatcher* const resource_dispatcher_;
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
 };
@@ -173,15 +195,12 @@ bool ResourceDispatcher::OnMessageReceived(const IPC::Message& message) {
     request_info->deferred_message_queue.push_back(new IPC::Message(message));
     return true;
   }
+
   // Make sure any deferred messages are dispatched before we dispatch more.
   if (!request_info->deferred_message_queue.empty()) {
+    request_info->deferred_message_queue.push_back(new IPC::Message(message));
     FlushDeferredMessages(request_id);
-    request_info = GetPendingRequestInfo(request_id);
-    DCHECK(request_info);
-    if (request_info->is_deferred) {
-      request_info->deferred_message_queue.push_back(new IPC::Message(message));
-      return true;
-    }
+    return true;
   }
 
   DispatchMessage(message);
@@ -356,9 +375,6 @@ void ResourceDispatcher::OnReceivedData(int request_id,
 void ResourceDispatcher::OnDownloadedData(int request_id,
                                           int data_len,
                                           int encoded_data_length) {
-  // Acknowledge the reception of this message.
-  message_sender_->Send(new ResourceHostMsg_DataDownloaded_ACK(request_id));
-
   PendingRequestInfo* request_info = GetPendingRequestInfo(request_id);
   if (!request_info)
     return;
@@ -402,8 +418,14 @@ void ResourceDispatcher::FollowPendingRedirect(
     int request_id,
     PendingRequestInfo* request_info) {
   IPC::Message* msg = request_info->pending_redirect_message.release();
-  if (msg)
-    message_sender_->Send(msg);
+  if (msg) {
+    if (request_info->url_loader) {
+      request_info->url_loader->FollowRedirect();
+      delete msg;
+    } else {
+      message_sender_->Send(msg);
+    }
+  }
 }
 
 void ResourceDispatcher::OnRequestComplete(
@@ -457,6 +479,10 @@ bool ResourceDispatcher::RemovePendingRequest(int request_id) {
   bool release_downloaded_file = request_info->download_to_file;
 
   ReleaseResourcesInMessageQueue(&request_info->deferred_message_queue);
+
+  // Clear URLLoaderClient to stop receiving further Mojo IPC from the browser
+  // process.
+  it->second->url_loader_client = nullptr;
 
   // Always delete the pending_request asyncly so that cancelling the request
   // doesn't delete the request context info while its response is still being
@@ -576,11 +602,8 @@ void ResourceDispatcher::DispatchMessage(const IPC::Message& message) {
 }
 
 void ResourceDispatcher::FlushDeferredMessages(int request_id) {
-  PendingRequestMap::iterator it = pending_requests_.find(request_id);
-  if (it == pending_requests_.end())  // The request could have become invalid.
-    return;
-  PendingRequestInfo* request_info = it->second.get();
-  if (request_info->is_deferred)
+  PendingRequestInfo* request_info = GetPendingRequestInfo(request_id);
+  if (!request_info || request_info->is_deferred)
     return;
   // Because message handlers could result in request_info being destroyed,
   // we need to work with a stack reference to the deferred queue.
@@ -591,17 +614,21 @@ void ResourceDispatcher::FlushDeferredMessages(int request_id) {
     q.pop_front();
     DispatchMessage(*m);
     delete m;
-    // If this request is deferred in the context of the above message, then
-    // we should honor the same and stop dispatching further messages.
     // We need to find the request again in the list as it may have completed
     // by now and the request_info instance above may be invalid.
-    PendingRequestMap::iterator index = pending_requests_.find(request_id);
-    if (index != pending_requests_.end()) {
-      PendingRequestInfo* pending_request = index->second.get();
-      if (pending_request->is_deferred) {
-        pending_request->deferred_message_queue.swap(q);
-        return;
-      }
+    request_info = GetPendingRequestInfo(request_id);
+    if (!request_info) {
+      // The recipient is gone, the messages won't be handled and
+      // resources they might hold won't be released. Explicitly release
+      // them from here so that they won't leak.
+      ReleaseResourcesInMessageQueue(&q);
+      return;
+    }
+    // If this request is deferred in the context of the above message, then
+    // we should honor the same and stop dispatching further messages.
+    if (request_info->is_deferred) {
+      request_info->deferred_message_queue.swap(q);
+      return;
     }
   }
 }
@@ -614,17 +641,23 @@ void ResourceDispatcher::StartSync(
     mojom::URLLoaderFactory* url_loader_factory) {
   CheckSchemeForReferrerPolicy(*request);
 
-  // TODO(yhirano): Use url_loader_factory otherwise.
-  DCHECK_EQ(blink::WebURLRequest::LoadingIPCType::ChromeIPC, ipc_type);
-
   SyncLoadResult result;
-  IPC::SyncMessage* msg = new ResourceHostMsg_SyncLoad(
-      routing_id, MakeRequestID(), *request, &result);
 
-  // NOTE: This may pump events (see RenderThread::Send).
-  if (!message_sender_->Send(msg)) {
-    response->error_code = net::ERR_FAILED;
-    return;
+  if (ipc_type == blink::WebURLRequest::LoadingIPCType::Mojo) {
+    if (!url_loader_factory->SyncLoad(
+            routing_id, MakeRequestID(), *request, &result)) {
+      response->error_code = net::ERR_FAILED;
+      return;
+    }
+  } else {
+    IPC::SyncMessage* msg = new ResourceHostMsg_SyncLoad(
+        routing_id, MakeRequestID(), *request, &result);
+
+    // NOTE: This may pump events (see RenderThread::Send).
+    if (!message_sender_->Send(msg)) {
+      response->error_code = net::ERR_FAILED;
+      return;
+    }
   }
 
   response->error_code = result.error_code;
@@ -650,7 +683,8 @@ int ResourceDispatcher::StartAsync(
     const GURL& frame_origin,
     std::unique_ptr<RequestPeer> peer,
     blink::WebURLRequest::LoadingIPCType ipc_type,
-    mojom::URLLoaderFactory* url_loader_factory) {
+    mojom::URLLoaderFactory* url_loader_factory,
+    mojo::AssociatedGroup* associated_group) {
   CheckSchemeForReferrerPolicy(*request);
 
   // Compute a unique request_id for this renderer process.
@@ -667,10 +701,12 @@ int ResourceDispatcher::StartAsync(
   if (ipc_type == blink::WebURLRequest::LoadingIPCType::Mojo) {
     std::unique_ptr<URLLoaderClientImpl> client(
         new URLLoaderClientImpl(request_id, this, main_thread_task_runner_));
-    mojom::URLLoaderPtr url_loader;
+    mojom::URLLoaderAssociatedPtr url_loader;
+    mojom::URLLoaderClientAssociatedPtrInfo client_ptr_info;
+    client->Bind(&client_ptr_info, associated_group);
     url_loader_factory->CreateLoaderAndStart(
-        GetProxy(&url_loader), routing_id, request_id, *request,
-        client->CreateInterfacePtrAndBind());
+        GetProxy(&url_loader, associated_group), routing_id, request_id,
+        *request, std::move(client_ptr_info));
     pending_requests_[request_id]->url_loader = std::move(url_loader);
     pending_requests_[request_id]->url_loader_client = std::move(client);
   } else {

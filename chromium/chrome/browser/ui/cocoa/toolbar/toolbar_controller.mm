@@ -36,7 +36,9 @@
 #import "chrome/browser/ui/cocoa/gradient_button_cell.h"
 #import "chrome/browser/ui/cocoa/image_button_cell.h"
 #import "chrome/browser/ui/cocoa/location_bar/autocomplete_text_field_editor.h"
+#import "chrome/browser/ui/cocoa/location_bar/location_bar_decoration.h"
 #import "chrome/browser/ui/cocoa/location_bar/location_bar_view_mac.h"
+#import "chrome/browser/ui/cocoa/location_bar/star_decoration.h"
 #import "chrome/browser/ui/cocoa/menu_button.h"
 #import "chrome/browser/ui/cocoa/toolbar/app_toolbar_button.h"
 #import "chrome/browser/ui/cocoa/toolbar/app_toolbar_button_cell.h"
@@ -840,7 +842,7 @@ class NotificationBridge : public AppMenuIconController::Delegate {
   if ([browserActionsContainerView_ isHidden]) {
     CGFloat edgeXPos = [appMenuButton_ frame].origin.x;
     leftDistance = edgeXPos - locationBarXPos -
-        [ToolbarController appMenuLeftPadding];
+        [ToolbarController appMenuLeftPadding] - kButtonInset;
   } else {
     leftDistance = NSMinX([browserActionsContainerView_ animationEndFrame]) -
         locationBarXPos;
@@ -958,7 +960,8 @@ class NotificationBridge : public AppMenuIconController::Delegate {
 
 - (NSPoint)bookmarkBubblePoint {
   if (locationBarView_->IsStarEnabled())
-    return locationBarView_->GetBookmarkBubblePoint();
+    return locationBarView_->GetBubblePointForDecoration(
+        locationBarView_->star_decoration());
 
   // Grab bottom middle of hotdogs.
   NSRect frame = appMenuButton_.frame;
@@ -968,16 +971,8 @@ class NotificationBridge : public AppMenuIconController::Delegate {
   return [self.view convertPoint:point toView:nil];
 }
 
-- (NSPoint)managePasswordsBubblePoint {
-  return locationBarView_->GetManagePasswordsBubblePoint();
-}
-
 - (NSPoint)saveCreditCardBubblePoint {
   return locationBarView_->GetSaveCreditCardBubblePoint();
-}
-
-- (NSPoint)translateBubblePoint {
-  return locationBarView_->GetTranslateBubblePoint();
 }
 
 - (CGFloat)baseToolbarHeight {

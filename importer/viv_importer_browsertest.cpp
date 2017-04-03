@@ -5,6 +5,7 @@
 #include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
+#include "base/vivaldi_paths.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -12,7 +13,6 @@
 #include "chrome/browser/importer/importer_progress_observer.h"
 #include "chrome/browser/importer/importer_unittest_utils.h"
 #include "chrome/browser/ui/browser.h"
-#include "chrome/common/chrome_paths.h"
 #include "chrome/common/importer/imported_bookmark_entry.h"
 #include "chrome/common/importer/importer_data_types.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -67,9 +67,9 @@ const OperaPasswordInfo OperaPasswords[] = {
     "http://localhost:8081/login",
     "http://localhost:8081/",
     L"username",
-    L"user1", 
+    L"user1",
     L"password",
-    L"password1", 
+    L"password1",
     false,
   },
   {false,
@@ -163,27 +163,32 @@ const OperaNotesInfo OperaNotes[] = {
   },
 };
 
-void TestImportedBookmarks(const ImportedBookmarkEntry &imported, const OperaBookmarkInfo &expected)
+void TestImportedBookmarks(const ImportedBookmarkEntry &imported,
+                           const OperaBookmarkInfo &expected)
 {
   EXPECT_EQ(base::WideToUTF16(expected.title), imported.title);
   EXPECT_EQ(expected.is_folder, imported.is_folder) << imported.title;
   EXPECT_EQ(expected.in_toolbar, imported.in_toolbar) << imported.title;
   EXPECT_EQ(expected.is_speeddial, imported.speeddial) << imported.title;
   EXPECT_EQ(expected.path_len, imported.path.size()) << imported.title;
-  EXPECT_EQ((expected.url ? expected.url : ""), imported.url.spec()) << imported.title;
+  EXPECT_EQ((expected.url ? expected.url : ""),
+            imported.url.spec()) << imported.title;
   for (size_t i=0; i< expected.path_len; i++ ){
     EXPECT_EQ(base::ASCIIToUTF16(expected.path[i]),
            imported.path[i]) << imported.title;
   }
 }
 
-void TestImportedNotes(const ImportedNotesEntry &imported, const OperaNotesInfo &expected)
+void TestImportedNotes(const ImportedNotesEntry &imported,
+                       const OperaNotesInfo &expected)
 {
   EXPECT_EQ(base::WideToUTF16(expected.title), imported.title);
-  EXPECT_EQ(base::WideToUTF16(expected.content ? expected.content : L""), imported.content) << imported.title;
+  EXPECT_EQ(base::WideToUTF16(expected.content ? expected.content : L""),
+            imported.content) << imported.title;
   EXPECT_EQ(expected.is_folder, imported.is_folder) << imported.title;
   EXPECT_EQ(expected.path_len, imported.path.size()) << imported.title;
-  EXPECT_EQ((expected.url ? expected.url : ""), imported.url.spec()) << imported.title;
+  EXPECT_EQ((expected.url ? expected.url : ""),
+            imported.url.spec()) << imported.title;
   for (size_t i=0; i< expected.path_len; i++ ){
     EXPECT_EQ(base::ASCIIToUTF16(expected.path[i]),
            imported.path[i]) << imported.title;
@@ -192,7 +197,7 @@ void TestImportedNotes(const ImportedNotesEntry &imported, const OperaNotesInfo 
 
 class OperaImportObserver: public ProfileWriter,
                         public importer::ImporterProgressObserver {
-public:
+ public:
   OperaImportObserver() : ProfileWriter(NULL), bookmark_count(0),
         notes_count(0), password_count(0) {}
 
@@ -205,8 +210,6 @@ public:
     EXPECT_EQ(arraysize(OperaNotes), notes_count);
     EXPECT_EQ(arraysize(OperaPasswords), password_count);
   }
-  void ImportItemFailed(importer::ImportItem item,
-                        const std::string& error) override {}
 
   bool BookmarkModelIsLoaded() const override {return true;}
 
@@ -232,9 +235,9 @@ public:
       const base::string16& top_level_folder_name) override {
     ASSERT_LE(bookmark_count + bookmarks.size(), arraysize(OperaBookmarks));
 
-    for(size_t i=0; i<bookmarks.size();i++)
+    for (size_t i=0; i<bookmarks.size();i++)
     {
-      EXPECT_NO_FATAL_FAILURE(TestImportedBookmarks(bookmarks[i], 
+      EXPECT_NO_FATAL_FAILURE(TestImportedBookmarks(bookmarks[i],
                 OperaBookmarks[bookmark_count])) << i;
       ++bookmark_count;
     }
@@ -244,15 +247,15 @@ public:
       const base::string16& top_level_folder_name) override {
     ASSERT_LE(notes_count + notes.size(), arraysize(OperaNotes));
 
-    for(size_t i=0; i<notes.size();i++)
+    for (size_t i=0; i<notes.size();i++)
     {
-      EXPECT_NO_FATAL_FAILURE(TestImportedNotes(notes[i], 
+      EXPECT_NO_FATAL_FAILURE(TestImportedNotes(notes[i],
                 OperaNotes[notes_count])) << i;
       ++notes_count;
     }
   }
 
-private:
+ private:
   ~OperaImportObserver() override {}
 
   size_t bookmark_count;
@@ -264,8 +267,9 @@ private:
 
 
 class OperaProfileImporterBrowserTest : public InProcessBrowserTest {
-protected:
+ protected:
   void SetUp() override {
+    vivaldi::RegisterVivaldiPaths();
     ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
     base::FilePath temp = temp_dir.GetPath().AppendASCII("OperaImportTest");
     base::DeleteFile(temp, true);
@@ -282,7 +286,7 @@ protected:
     bool use_master_password = false
     ){
     base::FilePath data_dir;
-    ASSERT_TRUE(PathService::Get(chrome::DIR_VIVALDI_TEST_DATA, &data_dir));
+    ASSERT_TRUE(PathService::Get(vivaldi::DIR_VIVALDI_TEST_DATA, &data_dir));
     data_dir = data_dir.AppendASCII("importer");
     data_dir = data_dir.AppendASCII(profile_subdir);
     ASSERT_TRUE(base::CopyDirectory(data_dir, profile_dir, true));
@@ -293,7 +297,8 @@ protected:
     import_profile.locale = "en-US";
 
     importer::ImportConfig import_config;
-    import_config.imported_items = importer::PASSWORDS | importer::NOTES | importer::FAVORITES;
+    import_config.imported_items = importer::PASSWORDS | importer::NOTES |
+                                   importer::FAVORITES;
     if (use_master_password) {
       import_config.arguments.push_back(base::WideToUTF16(kTestMasterPassword));
     }
@@ -315,14 +320,16 @@ protected:
   base::FilePath profile_dir;
 };
 
-IN_PROC_BROWSER_TEST_F(OperaProfileImporterBrowserTest, ImportNoMasterPassword) {
+IN_PROC_BROWSER_TEST_F(OperaProfileImporterBrowserTest,
+                       ImportNoMasterPassword) {
   scoped_refptr<OperaImportObserver> observer(new OperaImportObserver());
 
   TestVivaldiImportOfOpera("opera-nopass", observer.get(),observer.get());
 }
 
 
-IN_PROC_BROWSER_TEST_F(OperaProfileImporterBrowserTest, ImportWithMasterPassword) {
+IN_PROC_BROWSER_TEST_F(OperaProfileImporterBrowserTest,
+                       ImportWithMasterPassword) {
   scoped_refptr<OperaImportObserver> observer(new OperaImportObserver());
 
   TestVivaldiImportOfOpera("opera-pass", observer.get(),observer.get(), true);

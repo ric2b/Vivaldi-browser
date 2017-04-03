@@ -19,7 +19,7 @@ LOAD_FLAG(BYPASS_CACHE, 1 << 1)
 
 // This is a back/forward style navigation where the cached content should
 // be preferred over any protocol specific cache validation.
-LOAD_FLAG(PREFERRING_CACHE, 1 << 2)
+LOAD_FLAG(SKIP_CACHE_VALIDATION, 1 << 2)
 
 // This is a navigation that will fail if it cannot serve the requested
 // resource from the cache (or some equivalent local store).
@@ -88,3 +88,7 @@ LOAD_FLAG(SUPPORT_ASYNC_REVALIDATION, 1 << 17)
 // Indicates that this request is not to be migrated to a new network when QUIC
 // connection migration is enabled.
 LOAD_FLAG(DISABLE_CONNECTION_MIGRATION, 1 << 18)
+
+// Indicates that the cache should not check that the request matches the
+// response's vary header.
+LOAD_FLAG(SKIP_VARY_CHECK, 1 << 19)

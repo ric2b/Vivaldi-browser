@@ -27,14 +27,17 @@
 #include "core/fetch/CachedMetadata.h"
 #include "core/fetch/CrossOriginAccessControl.h"
 #include "core/fetch/FetchInitiatorTypeNames.h"
+#include "core/fetch/FetchRequest.h"
+#include "core/fetch/IntegrityMetadata.h"
 #include "core/fetch/MemoryCache.h"
 #include "core/fetch/ResourceClient.h"
 #include "core/fetch/ResourceClientWalker.h"
 #include "core/fetch/ResourceLoader.h"
-#include "core/inspector/InstanceCounters.h"
 #include "platform/Histogram.h"
+#include "platform/InstanceCounters.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/SharedBuffer.h"
+#include "platform/WebTaskRunner.h"
 #include "platform/network/HTTPParsers.h"
 #include "platform/tracing/TraceEvent.h"
 #include "platform/weborigin/KURL.h"
@@ -251,7 +254,7 @@ class Resource::ResourceCallback final {
   ResourceCallback();
 
   void runTask();
-  std::unique_ptr<CancellableTaskFactory> m_callbackTaskFactory;
+  TaskHandle m_taskHandle;
   HashSet<Persistent<Resource>> m_resourcesWithPendingClients;
 };
 
@@ -260,25 +263,28 @@ Resource::ResourceCallback& Resource::ResourceCallback::callbackHandler() {
   return callbackHandler;
 }
 
-Resource::ResourceCallback::ResourceCallback()
-    : m_callbackTaskFactory(
-          CancellableTaskFactory::create(this, &ResourceCallback::runTask)) {}
+Resource::ResourceCallback::ResourceCallback() {}
 
 void Resource::ResourceCallback::schedule(Resource* resource) {
-  if (!m_callbackTaskFactory->isPending())
-    Platform::current()
-        ->currentThread()
-        ->scheduler()
-        ->loadingTaskRunner()
-        ->postTask(BLINK_FROM_HERE, m_callbackTaskFactory->cancelAndCreate());
+  if (!m_taskHandle.isActive()) {
+    // unretained(this) is safe because a posted task is canceled when
+    // |m_taskHandle| is destroyed on the dtor of this ResourceCallback.
+    m_taskHandle =
+        Platform::current()
+            ->currentThread()
+            ->scheduler()
+            ->loadingTaskRunner()
+            ->postCancellableTask(
+                BLINK_FROM_HERE,
+                WTF::bind(&ResourceCallback::runTask, WTF::unretained(this)));
+  }
   m_resourcesWithPendingClients.add(resource);
 }
 
 void Resource::ResourceCallback::cancel(Resource* resource) {
   m_resourcesWithPendingClients.remove(resource);
-  if (m_callbackTaskFactory->isPending() &&
-      m_resourcesWithPendingClients.isEmpty())
-    m_callbackTaskFactory->cancel();
+  if (m_taskHandle.isActive() && m_resourcesWithPendingClients.isEmpty())
+    m_taskHandle.cancel();
 }
 
 bool Resource::ResourceCallback::isScheduled(Resource* resource) const {
@@ -301,6 +307,7 @@ Resource::Resource(const ResourceRequest& request,
     : m_loadFinishTime(0),
       m_identifier(0),
       m_encodedSize(0),
+      m_encodedSizeMemoryUsage(0),
       m_decodedSize(0),
       m_overheadSize(calculateOverheadSize()),
       m_preloadCount(0),
@@ -313,12 +320,12 @@ Resource::Resource(const ResourceRequest& request,
       m_linkPreload(false),
       m_isRevalidating(false),
       m_isAlive(false),
+      m_isAddRemoveClientProhibited(false),
+      m_integrityDisposition(ResourceIntegrityDisposition::NotChecked),
       m_options(options),
       m_responseTimestamp(currentTime()),
       m_cancelTimer(this, &Resource::cancelTimerFired),
       m_resourceRequest(request) {
-  // m_type is a bitfield, so this tests careless updates of the enum.
-  DCHECK_EQ(m_type, unsigned(type));
   InstanceCounters::incrementCounter(InstanceCounters::ResourceCounter);
 
   // Currently we support the metadata caching only for HTTP family.
@@ -391,9 +398,14 @@ void Resource::setResourceBuffer(PassRefPtr<SharedBuffer> resourceBuffer) {
   setEncodedSize(m_data->size());
 }
 
+void Resource::clearData() {
+  m_data.clear();
+  m_encodedSizeMemoryUsage = 0;
+}
+
 void Resource::setDataBufferingPolicy(DataBufferingPolicy dataBufferingPolicy) {
   m_options.dataBufferingPolicy = dataBufferingPolicy;
-  m_data.clear();
+  clearData();
   setEncodedSize(0);
 }
 
@@ -408,7 +420,7 @@ void Resource::error(const ResourceError& error) {
   if (!errorOccurred())
     setStatus(LoadError);
   DCHECK(errorOccurred());
-  m_data.clear();
+  clearData();
   m_loader = nullptr;
   checkNotify();
 }
@@ -446,6 +458,22 @@ bool Resource::isEligibleForIntegrityCheck(
   String ignoredErrorDescription;
   return securityOrigin->canRequest(resourceRequest().url()) ||
          passesAccessControlCheck(securityOrigin, ignoredErrorDescription);
+}
+
+void Resource::setIntegrityDisposition(
+    ResourceIntegrityDisposition disposition) {
+  DCHECK_NE(disposition, ResourceIntegrityDisposition::NotChecked);
+  DCHECK(m_type == Resource::Script || m_type == Resource::CSSStyleSheet);
+  m_integrityDisposition = disposition;
+}
+
+bool Resource::mustRefetchDueToIntegrityMetadata(
+    const FetchRequest& request) const {
+  if (request.integrityMetadata().isEmpty())
+    return false;
+
+  return !IntegrityMetadata::setsEqual(m_integrityMetadata,
+                                       request.integrityMetadata());
 }
 
 static double currentAge(const ResourceResponse& response,
@@ -559,9 +587,10 @@ bool Resource::willFollowRedirect(const ResourceRequest& newRequest,
 
 void Resource::setResponse(const ResourceResponse& response) {
   m_response = response;
-  if (m_response.wasFetchedViaServiceWorker())
+  if (m_response.wasFetchedViaServiceWorker()) {
     m_cacheHandler = ServiceWorkerResponseCachedMetadataHandler::create(
         this, m_fetcherSecurityOrigin.get());
+  }
 }
 
 void Resource::responseReceived(const ResourceResponse& response,
@@ -645,7 +674,7 @@ void Resource::didAddClient(ResourceClient* c) {
   }
 }
 
-static bool shouldSendCachedDataSynchronouslyForType(Resource::Type type) {
+static bool typeNeedsSynchronousCacheHit(Resource::Type type) {
   // Some resources types default to return data synchronously. For most of
   // these, it's because there are layout tests that expect data to return
   // synchronously in case of cache hit. In the case of fonts, there was a
@@ -682,12 +711,13 @@ void Resource::willAddClientOrObserver(PreloadReferencePolicy policy) {
   }
   if (!hasClientsOrObservers()) {
     m_isAlive = true;
-    memoryCache()->makeLive(this);
   }
 }
 
 void Resource::addClient(ResourceClient* client,
                          PreloadReferencePolicy policy) {
+  CHECK(!m_isAddRemoveClientProhibited);
+
   willAddClientOrObserver(policy);
 
   if (m_isRevalidating) {
@@ -695,11 +725,10 @@ void Resource::addClient(ResourceClient* client,
     return;
   }
 
-  // If we have existing data to send to the new client and the resource type
-  // supprts it, send it asynchronously.
-  if (!m_response.isNull() &&
-      !shouldSendCachedDataSynchronouslyForType(getType()) &&
-      !m_needsSynchronousCacheHit) {
+  // If an error has occurred or we have existing data to send to the new client
+  // and the resource type supprts it, send it asynchronously.
+  if ((errorOccurred() || !m_response.isNull()) &&
+      !typeNeedsSynchronousCacheHit(getType()) && !m_needsSynchronousCacheHit) {
     m_clientsAwaitingCallback.add(client);
     ResourceCallback::callbackHandler().schedule(this);
     return;
@@ -711,6 +740,8 @@ void Resource::addClient(ResourceClient* client,
 }
 
 void Resource::removeClient(ResourceClient* client) {
+  CHECK(!m_isAddRemoveClientProhibited);
+
   // This code may be called in a pre-finalizer, where weak members in the
   // HashCountedSet are already swept out.
 
@@ -730,7 +761,6 @@ void Resource::removeClient(ResourceClient* client) {
 void Resource::didRemoveClientOrObserver() {
   if (!hasClientsOrObservers() && m_isAlive) {
     m_isAlive = false;
-    memoryCache()->makeDead(this);
     allClientsAndObserversRemoved();
 
     // RFC2616 14.9.2:
@@ -764,20 +794,15 @@ void Resource::setDecodedSize(size_t decodedSize) {
   size_t oldSize = size();
   m_decodedSize = decodedSize;
   memoryCache()->update(this, oldSize, size());
-  memoryCache()->updateDecodedResource(this, UpdateForPropertyChange);
 }
 
 void Resource::setEncodedSize(size_t encodedSize) {
-  if (encodedSize == m_encodedSize)
+  if (encodedSize == m_encodedSize && encodedSize == m_encodedSizeMemoryUsage)
     return;
   size_t oldSize = size();
   m_encodedSize = encodedSize;
+  m_encodedSizeMemoryUsage = encodedSize;
   memoryCache()->update(this, oldSize, size());
-}
-
-void Resource::didAccessDecodedData() {
-  memoryCache()->updateDecodedResource(this, UpdateForAccess);
-  memoryCache()->prune();
 }
 
 void Resource::finishPendingClients() {
@@ -821,7 +846,9 @@ void Resource::prune() {
   destroyDecodedDataIfPossible();
 }
 
-void Resource::prepareToSuspend() {
+void Resource::onMemoryStateChange(MemoryState state) {
+  if (state != MemoryState::SUSPENDED)
+    return;
   prune();
   if (!m_cacheHandler)
     return;
@@ -836,11 +863,11 @@ void Resource::onMemoryDump(WebMemoryDumpLevelOfDetail levelOfDetail,
   const String dumpName = getMemoryDumpName();
   WebMemoryAllocatorDump* dump =
       memoryDump->createMemoryAllocatorDump(dumpName);
-  dump->addScalar("encoded_size", "bytes", m_encodedSize);
+  dump->addScalar("encoded_size", "bytes", m_encodedSizeMemoryUsage);
   if (hasClientsOrObservers())
-    dump->addScalar("live_size", "bytes", m_encodedSize);
+    dump->addScalar("live_size", "bytes", m_encodedSizeMemoryUsage);
   else
-    dump->addScalar("dead_size", "bytes", m_encodedSize);
+    dump->addScalar("dead_size", "bytes", m_encodedSizeMemoryUsage);
 
   if (m_data)
     m_data->onMemoryDump(dumpName, memoryDump);
@@ -907,6 +934,10 @@ void Resource::setLoFiStateOff() {
   m_resourceRequest.setLoFiState(WebURLRequest::LoFiOff);
 }
 
+void Resource::clearRangeRequestHeader() {
+  m_resourceRequest.clearHTTPHeaderField("range");
+}
+
 void Resource::revalidationSucceeded(
     const ResourceResponse& validatingResponse) {
   SECURITY_CHECK(m_redirectChain.isEmpty());
@@ -933,7 +964,7 @@ void Resource::revalidationSucceeded(
 
 void Resource::revalidationFailed() {
   SECURITY_CHECK(m_redirectChain.isEmpty());
-  m_data.clear();
+  clearData();
   m_cacheHandler.clear();
   destroyDecodedDataForFailedRevalidation();
   m_isRevalidating = false;

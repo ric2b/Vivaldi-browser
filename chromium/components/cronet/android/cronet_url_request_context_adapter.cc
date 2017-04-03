@@ -427,6 +427,7 @@ CronetURLRequestContextAdapter::~CronetURLRequestContextAdapter() {
     network_quality_estimator_->RemoveRTTObserver(this);
     network_quality_estimator_->RemoveThroughputObserver(this);
     network_quality_estimator_->RemoveEffectiveConnectionTypeObserver(this);
+    network_quality_estimator_->RemoveRTTAndThroughputEstimatesObserver(this);
   }
 
   // Stop NetLog observer if there is one.
@@ -626,6 +627,7 @@ void CronetURLRequestContextAdapter::InitializeOnNetworkThread(
     context_builder.set_socket_performance_watcher_factory(
         network_quality_estimator_->GetSocketPerformanceWatcherFactory());
     network_quality_estimator_->AddEffectiveConnectionTypeObserver(this);
+    network_quality_estimator_->AddRTTAndThroughputEstimatesObserver(this);
   }
 
   context_ = context_builder.Build();
@@ -678,8 +680,7 @@ void CronetURLRequestContextAdapter::InitializeOnNetworkThread(
 
       url::SchemeHostPort quic_server("https", canon_host, quic_hint.port);
       net::AlternativeService alternative_service(
-          net::AlternateProtocol::QUIC, "",
-          static_cast<uint16_t>(quic_hint.alternate_port));
+          net::kProtoQUIC, "", static_cast<uint16_t>(quic_hint.alternate_port));
       context_->http_server_properties()->SetAlternativeService(
           quic_server, alternative_service, base::Time::Max());
     }
@@ -869,6 +870,25 @@ void CronetURLRequestContextAdapter::OnEffectiveConnectionTypeChanged(
   Java_CronetUrlRequestContext_onEffectiveConnectionTypeChanged(
       base::android::AttachCurrentThread(), jcronet_url_request_context_.obj(),
       effective_connection_type);
+}
+
+void CronetURLRequestContextAdapter::OnRTTOrThroughputEstimatesComputed(
+    base::TimeDelta http_rtt,
+    base::TimeDelta transport_rtt,
+    int32_t downstream_throughput_kbps) {
+  DCHECK(GetNetworkTaskRunner()->BelongsToCurrentThread());
+
+  int32_t http_rtt_ms = http_rtt.InMilliseconds() <= INT32_MAX
+                            ? static_cast<int32_t>(http_rtt.InMilliseconds())
+                            : INT32_MAX;
+  int32_t transport_rtt_ms =
+      transport_rtt.InMilliseconds() <= INT32_MAX
+          ? static_cast<int32_t>(transport_rtt.InMilliseconds())
+          : INT32_MAX;
+
+  Java_CronetUrlRequestContext_onRTTOrThroughputEstimatesComputed(
+      base::android::AttachCurrentThread(), jcronet_url_request_context_.obj(),
+      http_rtt_ms, transport_rtt_ms, downstream_throughput_kbps);
 }
 
 void CronetURLRequestContextAdapter::OnRTTObservation(

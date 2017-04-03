@@ -31,6 +31,10 @@ struct NaClDesc;
 struct NaClImcTypedMsgHdr;
 struct PP_Size;
 
+namespace base {
+class SingleThreadTaskRunner;
+}
+
 namespace IPC {
 class Channel;
 struct ChannelHandle;
@@ -105,11 +109,10 @@ class NaClIPCAdapter : public base::RefCountedThreadSafe<NaClIPCAdapter>,
   // |open_resource_cb| may immediately call a OpenResourceReplyCallback
   // function to send a pre-opened resource descriptor to the untrusted side.
   // OpenResourceCallback returns true when OpenResourceReplyCallback is called.
-  NaClIPCAdapter(
-      const IPC::ChannelHandle& handle,
-      base::TaskRunner* runner,
-      ResolveFileTokenCallback resolve_file_token_cb,
-      OpenResourceCallback open_resource_cb);
+  NaClIPCAdapter(const IPC::ChannelHandle& handle,
+                 const scoped_refptr<base::SingleThreadTaskRunner>& runner,
+                 ResolveFileTokenCallback resolve_file_token_cb,
+                 OpenResourceCallback open_resource_cb);
 
   // Initializes with a given channel that's already created for testing
   // purposes. This function will take ownership of the given channel.
@@ -136,10 +139,6 @@ class NaClIPCAdapter : public base::RefCountedThreadSafe<NaClIPCAdapter>,
   // Make a NaClDesc that refers to this NaClIPCAdapter. Note that the returned
   // NaClDesc is reference-counted, and a reference is returned.
   NaClDesc* MakeNaClDesc();
-
-#if defined(OS_POSIX)
-  base::ScopedFD TakeClientFileDescriptor();
-#endif
 
   // Listener implementation.
   bool OnMessageReceived(const IPC::Message& message) override;

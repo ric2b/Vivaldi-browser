@@ -149,22 +149,25 @@ class OverlayOutputSurface : public OutputSurface {
   explicit OverlayOutputSurface(
       scoped_refptr<TestContextProvider> context_provider)
       : OutputSurface(std::move(context_provider)) {
-    surface_size_ = kDisplaySize;
-    device_scale_factor_ = 1;
     is_displayed_as_overlay_plane_ = true;
   }
 
   // OutputSurface implementation.
+  void BindToClient(OutputSurfaceClient* client) override {}
   void EnsureBackbuffer() override {}
   void DiscardBackbuffer() override {}
   void BindFramebuffer() override {
     bind_framebuffer_count_ += 1;
   }
+  void Reshape(const gfx::Size& size,
+               float device_scale_factor,
+               const gfx::ColorSpace& color_space,
+               bool has_alpha) override {}
+  void SwapBuffers(OutputSurfaceFrame frame) override {}
   uint32_t GetFramebufferCopyTextureFormat() override {
     // TestContextProvider has no real framebuffer, just use RGB.
     return GL_RGB;
   }
-  void SwapBuffers(OutputSurfaceFrame frame) override {}
   bool HasExternalStencilTest() const override { return false; }
   void ApplyExternalStencil() override {}
   OverlayCandidateValidator* GetOverlayCandidateValidator() const override {
@@ -174,15 +177,10 @@ class OverlayOutputSurface : public OutputSurface {
     return is_displayed_as_overlay_plane_;
   }
   unsigned GetOverlayTextureId() const override { return 10000; }
-  void set_is_displayed_as_overlay_plane(bool value) {
-    is_displayed_as_overlay_plane_ = value;
-  }
   bool SurfaceIsSuspendForRecycle() const override { return false; }
 
-  void OnSwapBuffersComplete() { client_->DidSwapBuffersComplete(); }
-
-  void SetScaleFactor(float scale_factor) {
-    device_scale_factor_ = scale_factor;
+  void set_is_displayed_as_overlay_plane(bool value) {
+    is_displayed_as_overlay_plane_ = value;
   }
 
   void SetOverlayCandidateValidator(OverlayCandidateValidator* validator) {
@@ -350,8 +348,9 @@ class OverlayTest : public testing::Test {
  protected:
   void SetUp() override {
     provider_ = TestContextProvider::Create();
+    provider_->BindToCurrentThread();
     output_surface_.reset(new OverlayOutputSurface(provider_));
-    EXPECT_TRUE(output_surface_->BindToClient(&client_));
+    output_surface_->BindToClient(&client_);
     output_surface_->SetOverlayCandidateValidator(
         new OverlayCandidateValidatorType);
 
@@ -388,9 +387,10 @@ TEST(OverlayTest, NoOverlaysByDefault) {
 
 TEST(OverlayTest, OverlaysProcessorHasStrategy) {
   scoped_refptr<TestContextProvider> provider = TestContextProvider::Create();
+  provider->BindToCurrentThread();
   OverlayOutputSurface output_surface(provider);
   FakeOutputSurfaceClient client;
-  EXPECT_TRUE(output_surface.BindToClient(&client));
+  output_surface.BindToClient(&client);
   output_surface.SetOverlayCandidateValidator(new SingleOverlayValidator);
 
   std::unique_ptr<SharedBitmapManager> shared_bitmap_manager(
@@ -1309,8 +1309,9 @@ class GLRendererWithOverlaysTest : public testing::Test {
  protected:
   GLRendererWithOverlaysTest() {
     provider_ = TestContextProvider::Create();
+    provider_->BindToCurrentThread();
     output_surface_.reset(new OverlayOutputSurface(provider_));
-    CHECK(output_surface_->BindToClient(&output_surface_client_));
+    output_surface_->BindToClient(&output_surface_client_);
     resource_provider_ = FakeResourceProvider::Create(provider_.get(), nullptr);
 
     provider_->support()->SetScheduleOverlayPlaneCallback(base::Bind(
@@ -1332,14 +1333,12 @@ class GLRendererWithOverlaysTest : public testing::Test {
   }
   void SwapBuffers() {
     renderer_->SwapBuffers(std::vector<ui::LatencyInfo>());
-    output_surface_->OnSwapBuffersComplete();
     renderer_->SwapBuffersComplete();
   }
   void SwapBuffersWithoutComplete() {
     renderer_->SwapBuffers(std::vector<ui::LatencyInfo>());
   }
   void SwapBuffersComplete() {
-    output_surface_->OnSwapBuffersComplete();
     renderer_->SwapBuffersComplete();
   }
   void ReturnResourceInUseQuery(ResourceId id) {

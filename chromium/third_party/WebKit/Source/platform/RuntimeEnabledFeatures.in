@@ -28,7 +28,6 @@
 // being false.
 
 Accelerated2dCanvas status=stable, settable_from_internals=True
-AlwaysUseComplexText status=stable
 AudioOutputDevices status=stable
 AudioVideoTracks status=experimental
 AudioWorklet status=experimental
@@ -39,10 +38,11 @@ BroadcastChannel status=stable
 Budget status=experimental
 Canvas2dFixedRenderingMode status=test
 EnableCanvas2dDynamicRenderingModeSwitching status=experimental
+CanMakePayment status=stable
 Canvas2dImageChromium status=experimental
 ClientHints status=stable
-CompositeOpaqueFixedPosition settable_from_internals=True
-CompositeOpaqueScrollers status=experimental, settable_from_internals=True
+CompositeOpaqueFixedPosition status=test, settable_from_internals=True
+CompositeOpaqueScrollers status=stable, settable_from_internals=True
 ColorCorrectRendering settable_from_internals=True
 CompositedSelectionUpdate
 CompositorWorker status=experimental
@@ -59,17 +59,20 @@ CSSContainment status=stable
 CSSFontDisplay status=experimental
 CSSFontSizeAdjust status=experimental
 CSSGridLayout status=experimental, settable_from_internals=True
+CSSDisplayContents status=experimental
 CSSHyphens status=stable
 CSSInBodyDoesNotBlockPaint status=experimental
 CSSIndependentTransformProperties status=experimental
 CSSMaskSourceType status=experimental
 CSSOMSmoothScroll status=experimental
 CSSOffsetPositionAnchor status=experimental
+CSSOffsetRotate status=stable
+CSSOffsetRotation status=stable
 CSSPaintAPI status=experimental, depends_on=CSSTypedOM, depends_on=Worklet
 CSSSnapSize status=experimental
-CSSStickyPosition status=experimental
+CSSStickyPosition status=stable
 CSSTouchActionPanDirections status=stable
-CSSTouchActionPinchZoom status=experimental
+CSSTouchActionPinchZoom status=stable
 CSSTypedOM status=experimental
 CSSVariables2 status=experimental
 CSSViewport status=experimental
@@ -79,11 +82,16 @@ CustomElementsV1 status=stable
 CustomSchemeHandler depends_on=NavigatorContentUtils, status=experimental
 Database status=stable
 DecodeToYUV status=experimental
+DesktopCaptureDisableLocalEchoControl status=experimental
 DeviceLight status=experimental
 DisplayList2dCanvas status=stable
+DocumentCookie
+DocumentDomain
+DocumentWrite
 DocumentWriteEvaluator
 DOMConvenienceAPI status=stable
 DurableStorage status=stable
+ExpensiveBackgroundTimerThrottling status=experimental
 FontCacheScaling status=test
 ForceDisplayList2dCanvas
 // See crbug.com/585250.
@@ -99,18 +107,18 @@ FeaturePolicy status=experimental
 FileAPIBlobClose status=experimental
 FileSystem status=stable
 ForeignFetch status=experimental, origin_trial_feature_name=ForeignFetch
-FramebustingNeedsSameOriginOrUserGesture status=test, settable_from_internals=True
-FullscreenUnprefixed status=test
+FramebustingNeedsSameOriginOrUserGesture status=experimental, settable_from_internals=True
+FullscreenUnprefixed status=test, settable_from_internals=True
 FrameTimingSupport status=experimental
-GamepadExtensions
+GamepadExtensions origin_trial_feature_name=WebVR
 GeometryInterfaces status=experimental, implied_by=CompositorWorker
 GetUserMedia status=stable
 GlobalCacheStorage status=stable
 IDBObserver status=experimental
-ImageCapture status=experimental
+ImageCapture status=experimental, origin_trial_feature_name=ImageCapture
 ImageOrientation status=test
 IndexedDBExperimental status=experimental
-InertTopControls status=experimental
+InertTopControls status=stable
 InputEvent status=experimental
 InputModeAttribute status=experimental
 InputMultipleFieldsUI status=stable
@@ -118,6 +126,7 @@ InstalledApp status=experimental
 IntersectionObserver status=stable
 LangAttributeAwareFormControlUI
 LayoutNG
+LayoutNGInline
 LinkServiceWorker status=experimental, origin_trial_feature_name=ForeignFetch
 LongTaskObserver status=experimental, origin_trial_feature_name=LongTaskObserver
 FractionalScrollOffsets
@@ -128,7 +137,7 @@ MediaCaptureFromVideo status=experimental
 MediaConstraints status=stable
 MediaDocumentDownloadButton
 MediaGetSettings status=test
-MediaSession
+MediaSession status=experimental
 MediaSourceExperimental status=experimental
 MediaSourceNewAbortAndDuration status=experimental
 MediaStreamSpeech status=experimental
@@ -142,10 +151,9 @@ NavigatorContentUtils
 WebNFC status=experimental
 NetworkInformation status=stable
 NetInfoDownlinkMax status=stable
-NewMediaPlaybackUi
 NotificationConstructor status=stable
 NotificationBadge status=stable
-NotificationImage status=experimental
+NotificationContentImage status=stable
 NotificationInlineReplies status=experimental
 Notifications status=stable
 OnDeviceChange status=experimental
@@ -161,11 +169,15 @@ ForceOverlayFullscreenVideo
 OverlayScrollbars
 PagePopup status=stable
 PaintUnderInvalidationChecking settable_from_internals=True
-PassiveDocumentEventListeners status=experimental
+PassiveDocumentEventListeners status=stable
 PassiveEventListenersDueToFling status=experimental
 PassPaintVisualRectToCompositor
+PaymentApp status=experimental
+PaymentDetailsError status=experimental
+// PaymentRequest is enabled by default on Android
 PaymentRequest status=experimental
-PaymentRequestPayerName status=experimental
+PaymentRequestIFrame status=experimental
+PaymentRequestPayerName status=stable
 PerformanceObserver status=stable
 PermissionDelegation status=test
 Permissions status=stable
@@ -174,6 +186,7 @@ PointerEvent status=stable
 // For temporary compat testing of Edge-like model - crbug.com/640700
 PointerEventV1SpecCapturing
 PreciseMemoryInfo
+PreferredImageRasterBounds settable_from_internals=True
 // This feature is deprecated and we are evangelizing affected sites.
 // See https://crbug.com/346236 for current status.
 PrefixedVideoFullscreen status=stable
@@ -182,11 +195,11 @@ PresentationReceiver status=test
 PushMessaging status=stable
 QuotaPromise status=experimental
 ReducedReferrerGranularity
-ReferrerPolicyHeader status=experimental
 ReloadwithoutSubResourceCacheRevalidation
-RemotePlayback status=experimental
+RemotePlayback status=stable
 RenderingPipelineThrottling status=stable
-RenderUnicodeControlCharacters status=experimental
+RenderingPipelineThrottlingLoadingIframes status=stable
+RenderUnicodeControlCharacters status=stable
 ResizeObserver status=experimental
 // Handles frame scrolling via the root PaintLayer instead of the FrameView.
 // crbug.com/417782 tracks enabling this by default.
@@ -199,11 +212,10 @@ ScrollAnchoring status=experimental, settable_from_internals=True
 // as per the spec, matching other Web engines.
 ScrollTopLeftInterop status=experimental
 Sensor status=experimental
-ServiceWorkerClientAttributes status=stable
-ServiceWorkerClientsGetID status=stable
-ServiceWorkerWindowClientNavigate status=stable
+ServiceWorkerNavigationPreload
 SetRootScroller status=experimental
 ShadowDOMV1 status=stable
+ShadowPiercingDescendantCombinator status=experimental
 ShapeDetection status=experimental
 SharedArrayBuffer
 SharedWorker status=stable
@@ -216,11 +228,9 @@ SlimmingPaintStrictCullRectClipping
 StableBlinkFeatures status=stable
 StackedCSSPropertyAnimations status=experimental
 StyleSharing status=stable
-StyleMatchedPropertiesCache status=stable
 // Do not turn this flag into stable, because many interfaces that should not
 // be shipped would be enabled. Instead, remove the flag from the shipping
 // interface.
-ExperimentalStream status=experimental
 SpeculativeLaunchServiceWorker
 StorageEstimate status=experimental
 Suborigins status=experimental
@@ -233,20 +243,20 @@ TimerThrottlingForHiddenFrames status=stable
 Touch status=stable
 TraceWrappables
 TrustedEventsDefaultAction status=stable
-UnsafeES3APIs
 UserSelectAll status=stable
 WebAnimationsAPI status=experimental
 WebAnimationsSVG status=experimental
 WebAssemblySerialization status=test
-WebBluetooth origin_trial_feature_name=WebBluetooth
+// WebBluetooth is enabled by default on Android, ChromeOS and Mac.
+WebBluetooth status=experimental
 WebGLDraftExtensions status=experimental
 WebGLImageChromium
 WebUSB status=experimental, origin_trial_feature_name=WebUSB
-WebVR
+WebVR origin_trial_feature_name=WebVR
 WebVTTRegions status=experimental
 V8BasedStructuredClone
 V8IdleTasks
-VisibilityChangeOnUnload status=experimental
+VisibilityChangeOnUnload status=stable
 XSLT status=stable
 smil status=stable
 ScrollCustomization
@@ -259,5 +269,6 @@ WebFontsInterventionV2WithSlow2G
 WebFontsInterventionTrigger
 WebShare status=experimental, origin_trial_feature_name=WebShare, origin_trial_os=android
 Worklet status=experimental
+LazyParseCSS status=experimental
 ParseHTMLOnMainThread status=test
 SendBeaconThrowForBlobWithNonSimpleType status=experimental

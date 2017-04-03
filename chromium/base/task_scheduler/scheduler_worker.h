@@ -10,6 +10,7 @@
 #include "base/base_export.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/synchronization/atomic_flag.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/task_scheduler/scheduler_lock.h"
 #include "base/task_scheduler/sequence.h"
@@ -37,7 +38,7 @@ class TaskTracker;
 class BASE_EXPORT SchedulerWorker {
  public:
   // Delegate interface for SchedulerWorker. The methods are always called from
-  // a thread managed by the SchedulerWorker instance.
+  // the thread managed by the SchedulerWorker instance.
   class Delegate {
    public:
     virtual ~Delegate() = default;
@@ -46,17 +47,17 @@ class BASE_EXPORT SchedulerWorker {
     // If a thread is recreated after detachment, |detach_duration| is the time
     // elapsed since detachment. Otherwise, if this is the first thread created
     // for |worker|, |detach_duration| is TimeDelta::Max().
-    virtual void OnMainEntry(SchedulerWorker* worker,
-                             const TimeDelta& detach_duration) = 0;
+    virtual void OnMainEntry(SchedulerWorker* worker) = 0;
 
     // Called by a thread managed by |worker| to get a Sequence from which to
     // run a Task.
     virtual scoped_refptr<Sequence> GetWork(SchedulerWorker* worker) = 0;
 
-    // Called by the SchedulerWorker after it ran |task|. |task_latency| is the
-    // time elapsed between when the task was posted and when it started to run.
-    virtual void DidRunTask(const Task* task,
-                            const TimeDelta& task_latency) = 0;
+    // Called by the SchedulerWorker after it ran a task with |task_priority|.
+    // |task_latency| is the time elapsed between when the task was posted and
+    // when it started to run.
+    virtual void DidRunTaskWithPriority(TaskPriority task_priority,
+                                        const TimeDelta& task_latency) = 0;
 
     // Called when |sequence| isn't empty after the SchedulerWorker pops a Task
     // from it. |sequence| is the last Sequence returned by GetWork().
@@ -81,6 +82,11 @@ class BASE_EXPORT SchedulerWorker {
     // This MUST return false if SchedulerWorker::JoinForTesting() is in
     // progress.
     virtual bool CanDetach(SchedulerWorker* worker) = 0;
+
+    // Called by a thread before it detaches. This method is not allowed to
+    // acquire a SchedulerLock because it is called within the scope of another
+    // SchedulerLock.
+    virtual void OnDetach() = 0;
   };
 
   enum class InitialState { ALIVE, DETACHED };
@@ -135,27 +141,18 @@ class BASE_EXPORT SchedulerWorker {
 
   void CreateThreadAssertSynchronized();
 
-  bool ShouldExitForTesting() const;
-
   // Synchronizes access to |thread_|.
   mutable SchedulerLock thread_lock_;
 
   // The underlying thread for this SchedulerWorker.
   std::unique_ptr<Thread> thread_;
 
-  // Time of the last successful Detach(). Is only accessed from the thread
-  // managed by this SchedulerWorker.
-  TimeTicks last_detach_time_;
-
   const ThreadPriority priority_hint_;
   const std::unique_ptr<Delegate> delegate_;
   TaskTracker* const task_tracker_;
 
-  // Synchronizes access to |should_exit_for_testing_|.
-  mutable SchedulerLock should_exit_for_testing_lock_;
-
-  // True once JoinForTesting() has been called.
-  bool should_exit_for_testing_ = false;
+  // Set once JoinForTesting() has been called.
+  AtomicFlag should_exit_for_testing_;
 
   DISALLOW_COPY_AND_ASSIGN(SchedulerWorker);
 };

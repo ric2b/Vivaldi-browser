@@ -666,6 +666,11 @@ def merge_resource(origin_file, overlay_file, target_location, params = {},
                    action=PRINT_NONE, json_file=None, root_dir=None,
                    translation_dir="resources", output_file_name=None,
                    translation_stamp=None):
+  util.PathSearcher.Configure([
+    os.path.dirname(target_location),
+    os.path.dirname(overlay_file),
+    os.path.dirname(origin_file),
+    ])
   mergeresource = GritFile(translation_dir=translation_dir)
   mergeresource.Load(overlay_file, params, output_file_name=output_file_name,
                      load_translations = (action != SETUP_RESOURCES))

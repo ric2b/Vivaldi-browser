@@ -433,7 +433,7 @@ def GnNinjaBuild(arch, out_dir, extra_gn_args=None):
     if arch == 'arm':
       # Without this the target_cpu='arm' build complains about missing code
       # signing identity
-      gn_args.append('use_ios_simulator=true')
+      gn_args.append('ios_enable_code_signing=false')
 
   gn_exe = GetGNExecutable(platform)
 
@@ -849,11 +849,8 @@ def main(args):
   if options.tar:
     BuildStepTarBundle(pepper_ver, tarfile)
 
-  # TODO(sbc): Re-enable this once we switch the pnacl component build
-  # from gyp to gn:
-  # https://bugs.chromium.org/p/chromium/issues/detail?id=646241
-  #if platform == 'linux':
-    #BuildStepBuildPNaClComponent(pepper_ver, chrome_revision)
+  if platform == 'linux':
+    BuildStepBuildPNaClComponent(pepper_ver, chrome_revision)
 
   if options.build_app_engine and platform == 'linux':
     BuildStepBuildAppEngine(pepperdir, chrome_revision)
@@ -869,7 +866,7 @@ def main(args):
     # Only archive sdk_tools/naclport/pnacl_component on linux.
     if platform == 'linux':
       BuildStepArchiveSDKTools()
-      #BuildStepArchivePNaClComponent(chrome_revision)
+      BuildStepArchivePNaClComponent(chrome_revision)
 
   return 0
 

@@ -26,7 +26,7 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/page_type.h"
 #include "ipc/message_filter.h"
-#include "third_party/WebKit/public/web/WebInputEvent.h"
+#include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/accessibility/ax_tree_update.h"
 #include "ui/events/keycodes/dom/dom_code.h"
@@ -270,6 +270,9 @@ void FetchHistogramsFromChildProcesses();
 // prescribed by https://tools.ietf.org/html/rfc7231#section-6.4.7) a test might
 // want to use HTTP 307 response instead.  This can be accomplished by replacing
 // "/cross-site/" URL substring above with "/cross-site-307/".
+//
+// |embedded_test_server| should not be running when passing it to this function
+// because adding the request handler won't be thread safe.
 void SetupCrossSiteRedirector(net::EmbeddedTestServer* embedded_test_server);
 
 // Waits for an interstitial page to attach to given web contents.
@@ -417,12 +420,18 @@ class RenderProcessHostWatcher : public RenderProcessHostObserver {
 
 // Watches for responses from the DOMAutomationController and keeps them in a
 // queue. Useful for waiting for a message to be received.
-class DOMMessageQueue : public NotificationObserver {
+class DOMMessageQueue : public NotificationObserver,
+                        public WebContentsObserver {
  public:
   // Constructs a DOMMessageQueue and begins listening for messages from the
   // DOMAutomationController. Do not construct this until the browser has
   // started.
   DOMMessageQueue();
+
+  // Same as the default constructor, but only listens for messages
+  // sent from a particular |web_contents|.
+  explicit DOMMessageQueue(WebContents* web_contents);
+
   ~DOMMessageQueue() override;
 
   // Removes all messages in the message queue.
@@ -436,6 +445,9 @@ class DOMMessageQueue : public NotificationObserver {
   void Observe(int type,
                const NotificationSource& source,
                const NotificationDetails& details) override;
+
+  // Overridden WebContentsObserver methods.
+  void RenderProcessGone(base::TerminationStatus status) override;
 
  private:
   NotificationRegistrar registrar_;
@@ -543,16 +555,21 @@ class InputMsgWatcher : public BrowserMessageFilter {
   // the message.
   uint32_t WaitForAck();
 
+  uint32_t last_event_ack_source() const { return ack_source_; }
+
  private:
   ~InputMsgWatcher() override;
 
   // Overridden BrowserMessageFilter methods.
   bool OnMessageReceived(const IPC::Message& message) override;
 
-  void ReceivedAck(blink::WebInputEvent::Type ack_type, uint32_t ack_state);
+  void ReceivedAck(blink::WebInputEvent::Type ack_type,
+                   uint32_t ack_state,
+                   uint32_t ack_source);
 
   blink::WebInputEvent::Type wait_for_type_;
   uint32_t ack_result_;
+  uint32_t ack_source_;
   base::Closure quit_;
 
   DISALLOW_COPY_AND_ASSIGN(InputMsgWatcher);
@@ -613,7 +630,11 @@ class TestNavigationManager : public WebContentsObserver {
 
   // Waits until the navigation request is ready to be sent to the network
   // stack. Returns false if the request was aborted before starting.
-  WARN_UNUSED_RESULT bool WaitForWillStartRequest();
+  WARN_UNUSED_RESULT bool WaitForRequestStart();
+
+  // Waits until the navigation response has been sent received. Returns false
+  // if the request was aborted before getting a response.
+  WARN_UNUSED_RESULT bool WaitForResponse();
 
   // Waits until the navigation has been finished. Will automatically resume
   // navigations paused before this point.
@@ -625,6 +646,13 @@ class TestNavigationManager : public WebContentsObserver {
   virtual bool ShouldMonitorNavigation(NavigationHandle* handle);
 
  private:
+  enum class NavigationState {
+    INITIAL = 0,
+    STARTED = 1,
+    RESPONSE = 2,
+    FINISHED = 3,
+  };
+
   // WebContentsObserver:
   void DidStartNavigation(NavigationHandle* handle) override;
   void DidFinishNavigation(NavigationHandle* handle) override;
@@ -633,15 +661,25 @@ class TestNavigationManager : public WebContentsObserver {
   // WillStartRequest.
   void OnWillStartRequest();
 
-  // Resumes the navigation.
-  void ResumeNavigation();
+  // Called when the NavigationThrottle pauses the navigation in
+  // WillProcessResponse.
+  void OnWillProcessResponse();
+
+  // Waits for the desired state. Returns false if the desired state cannot be
+  // reached (eg the navigation finishes before reaching this state).
+  bool WaitForDesiredState();
+
+  // Called when the state of the navigation has changed. This will either stop
+  // the message loop if the state specified by the user has been reached, or
+  // resume the navigation if it hasn't been reached yet.
+  void OnNavigationStateChanged();
 
   const GURL url_;
-  bool navigation_paused_;
   NavigationHandle* handle_;
-  bool handled_navigation_;
-  scoped_refptr<MessageLoopRunner> will_start_loop_runner_;
-  scoped_refptr<MessageLoopRunner> did_finish_loop_runner_;
+  bool navigation_paused_;
+  NavigationState current_state_;
+  NavigationState desired_state_;
+  scoped_refptr<MessageLoopRunner> loop_runner_;
 
   base::WeakPtrFactory<TestNavigationManager> weak_factory_;
 
@@ -655,11 +693,11 @@ class ConsoleObserverDelegate : public WebContentsDelegate {
   ~ConsoleObserverDelegate() override;
 
   // WebContentsDelegate method:
-  bool AddMessageToConsole(WebContents* source,
-                           int32_t level,
-                           const base::string16& message,
-                           int32_t line_no,
-                           const base::string16& source_id) override;
+  bool DidAddMessageToConsole(WebContents* source,
+                              int32_t level,
+                              const base::string16& message,
+                              int32_t line_no,
+                              const base::string16& source_id) override;
 
   // Returns the most recent message sent to the console.
   std::string message() { return message_; }

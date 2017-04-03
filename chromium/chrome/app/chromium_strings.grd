@@ -321,7 +321,7 @@ If you update this file, be sure also to update google_chrome_strings.grd. -->
       </if>
       <if expr="chromeos">
         <message name="IDS_EXTERNAL_PROTOCOL_TITLE" desc="External Protocol Dialog Title">
-          Chromium OS cannot open this page.
+          Chromium OS can't open this page.
         </message>
       </if>
       <!-- Strings used to warn that an OS is not supported -->
@@ -543,16 +543,16 @@ Chromium is unable to recover your settings.
 
       <message name="IDS_PROMPT_DOWNLOAD_CHANGES_SETTINGS"
                desc="Message shown on the download shelf when the download is known to change settings in the browser in a malicious way.">
-        <ph name="FILE_NAME">$1<ex>bla.exe</ex></ph> may harm your browsing experience, so Chromium has blocked it.
+        <ph name="FILE_NAME">$1<ex>bla.exe</ex></ph> may be dangerous, so Chromium has blocked it.
       </message>
 
       <message name="IDS_PROMPT_MALICIOUS_DOWNLOAD_URL"
          desc="Message shown to the user to validate the download when the download url is classified to lead to malware by the safebrowsing database.">
-        This file is malicious, and Chromium has blocked it.
+        This file is dangerous, so Chromium has blocked it.
       </message>
       <message name="IDS_PROMPT_MALICIOUS_DOWNLOAD_CONTENT"
          desc="Message shown to the user to validate the download when the download content is classified to lead to malware by safebrowsing.">
-        <ph name="FILE_NAME">$1<ex>malware.exe</ex></ph> is malicious, and Chromium has blocked it.
+        <ph name="FILE_NAME">$1<ex>malware.exe</ex></ph> is dangerous, so Chromium has blocked it.
       </message>
       <message name="IDS_BLOCK_REASON_DANGEROUS_DOWNLOAD"
          desc="Message shown to the user on chrome://downloads page to explain that this download is blocked because it is malware.">
@@ -780,6 +780,9 @@ Chromium is unable to recover your settings.
 
 Signing in anyway will merge Chromium information like bookmarks, history, and other settings to <ph name="ACCOUNT_EMAIL_NEW">$2<ex>user@example.com</ex></ph>.
         </message>
+        <message name="IDS_SYNC_USED_PROFILE_ERROR" desc="An error message shown when user tries to sign in to a profile that is used by other user name before.">
+          Someone previously signed in to Chromium on this computer as <ph name="ACCOUNT_EMAIL_LAST">$1<ex>user@example.com</ex></ph>. Please create a new Chromium user to keep your information separate.
+        </message>
       </if>
 
       <!-- Enterprise sign-in profile linking -->
@@ -799,7 +802,7 @@ Signing in anyway will merge Chromium information like bookmarks, history, and o
       </if>
 
       <!-- Enterprise sign-in dialog (new-style) -->
-      <!-- TODO(dconnelly): remove "new-style" once the old dialog is gone. -->
+      <!-- TODO(crbug.com/660349): remove "new-style" once the old dialog is gone. -->
       <if expr="toolkit_views or is_macosx">
         <message name="IDS_ENTERPRISE_SIGNIN_TITLE_NEW_STYLE" desc="The title of the dialog to confirm linking the browser profile with the signed-in enterprise account">
           Link your Chromium data to this account?
@@ -1142,11 +1145,21 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@example.com</
         Your manager must remove and add you back to Chromium.
       </message>
       <message name="IDS_SYNC_ERROR_USER_MENU_UPGRADE_MESSAGE" desc="Message of the out-of-date Chrome client error in the header of desktop user menu.">
-        Chromium is out of date.
+        Chromium is out of date
       </message>
       <message name="IDS_SYNC_ERROR_USER_MENU_UPGRADE_BUTTON" desc="Button in the header of desktop user menu that prompts the user to update Chrome to fix the out-of-date Chrome client error.">
         Update Chromium
       </message>
+
+      <!-- Sync errors. Android uses native UI to handle Sync settings -->
+      <if expr="not is_android">
+        <message name="IDS_SYNC_UPGRADE_CLIENT" desc="Message indicating client needs to be upgraded to the latest version.">
+          Update Chromium to start sync
+        </message>
+        <message name="IDS_SYNC_UPGRADE_CLIENT_LINK_LABEL" desc="Hyperlink text indicating client needs to be upgraded to the latest version.">
+          Update Chromium
+        </message>
+      </if>
 
       <!-- Upgrade recovery bubble -->
       <message name="IDS_RUN_RECOVERY" desc="Text for the button the user clicks to recover chromium and its updater.">
@@ -1188,24 +1201,23 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@example.com</
       <message name="IDS_FEEDBACK_SERVICE_DIALOG_EXPLANATION" desc="Explanation of the dialog asking whether the user wants to upload suspected malicious files for analysis">
         You can help make Chromium safer and easier to use by automatically reporting details of possible security incidents to Google.
       </message>
+      <message name="IDS_FEEDBACK_SERVICE_DIALOG_EXPLANATION_SCOUT" desc="Explanation of the dialog asking whether the user wants to upload some system information and page content for Safe Browsing analysis">
+        You can help make Chromium safer and easier to use by automatically sending some system information and page content to Google to help detect dangerous apps and sites.
+      </message>
 
       <!-- Page Information Window -->
-      <message name="IDS_PAGE_INFO_SECURITY_TAB_SECURE_IDENTITY_NO_CT" desc="The text of the identity section when the page is secure and no Certificate Transparency information is present.">
-        Chromium verified that <ph name="ISSUER">$1<ex>VeriSign</ex></ph> issued this website's certificate. The server did not supply any Certificate Transparency information.
-      </message>
-      <message name="IDS_PAGE_INFO_SECURITY_TAB_SECURE_IDENTITY_CT_VERIFIED" desc="The text of the identity section when the page is secure and a Signed Certificate Timestamp from a known Certificate Transparency log is present and valid.">
-        Chromium verified that <ph name="ISSUER">$1<ex>VeriSign</ex></ph> issued this website's certificate. The server supplied valid Certificate Transparency information.
-      </message>
-      <message name="IDS_PAGE_INFO_SECURITY_TAB_SECURE_IDENTITY_CT_UNVERIFIED" desc="The text of the identity section when the page is secure and contains a Signed Certificate Timestamp from an unknown Certificate Transparency log.">
-        Chromium verified that <ph name="ISSUER">$1<ex>VeriSign</ex></ph> issued this website's certificate. The server supplied Certificate Transparency information, but Chromium did not recognize any of the Certificate Transparency logs.
-      </message>
-      <message name="IDS_PAGE_INFO_SECURITY_TAB_SECURE_IDENTITY_CT_INVALID" desc="The text of the identity section when the page is secure, but it contains a Signed Certificate Timestamp from a known Certificate Transparency log that failed to verify.">
-        Chromium verified that <ph name="ISSUER">$1<ex>VeriSign</ex></ph> issued this website's certificate. The server supplied Certificate Transparency information, but it was invalid.
+      <message name="IDS_PAGE_INFO_SECURITY_TAB_SECURE_IDENTITY_VERIFIED" desc="The text of the identity section when the page is secure and uses a valid certificate">
+        Chromium verified that <ph name="ISSUER">$1<ex>VeriSign</ex></ph> issued this website's certificate.
       </message>
 
       <!-- Desktop Capture -->
       <message name="IDS_DESKTOP_MEDIA_PICKER_SOURCE_TYPE_TAB" desc="Text for the button on the window picker dialog, clicking which takes one to tab sharing">
         Chromium Tab
+      </message>
+
+      <!-- Plugin Placeholders -->
+      <message name="IDS_PLUGIN_RESTART_REQUIRED" desc="The placeholder text for a plugin that can't be loaded until the browser is restarted.">
+        Restart Chromium to enable <ph name="PLUGIN_NAME">$1<ex>Flash</ex></ph>
       </message>
 
       <!-- Runtime permission strings -->
@@ -1287,7 +1299,6 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@example.com</
           Select <ph name="SMALL_PRODUCT_LOGO">&lt;div class="logo-small"&gt;&lt;/div&gt;</ph> <ph name="BEGIN_BOLD">&lt;strong&gt;</ph>Chromium<ph name="END_BOLD">&lt;/strong&gt;</ph>
         </message>
       </if>
-
     </messages>
   </release>
 </grit>

@@ -18,13 +18,13 @@
 #include "components/bookmarks/test/test_bookmark_client.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/prefs/testing_pref_service.h"
-#include "components/sync/api/sync_error.h"
-#include "components/sync/driver/change_processor_mock.h"
 #include "components/sync/driver/data_type_controller_mock.h"
 #include "components/sync/driver/fake_sync_client.h"
 #include "components/sync/driver/fake_sync_service.h"
 #include "components/sync/driver/model_associator_mock.h"
 #include "components/sync/driver/sync_api_component_factory_mock.h"
+#include "components/sync/model/change_processor_mock.h"
+#include "components/sync/model/sync_error.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -71,11 +71,12 @@ class SyncBookmarkDataTypeControllerTest : public testing::Test,
   void SetUp() override {
     model_associator_ = new ModelAssociatorMock();
     change_processor_ = new ChangeProcessorMock();
-    history_service_.reset(new HistoryMock());
-    profile_sync_factory_.reset(new syncer::SyncApiComponentFactoryMock(
-        model_associator_, change_processor_));
-    bookmark_dtc_.reset(
-        new BookmarkDataTypeController(base::Bind(&base::DoNothing), this));
+    history_service_ = base::MakeUnique<HistoryMock>();
+    profile_sync_factory_ =
+        base::MakeUnique<syncer::SyncApiComponentFactoryMock>(
+            model_associator_, change_processor_);
+    bookmark_dtc_ = base::MakeUnique<BookmarkDataTypeController>(
+        base::Bind(&base::DoNothing), this);
   }
 
  protected:
@@ -85,8 +86,8 @@ class SyncBookmarkDataTypeControllerTest : public testing::Test,
   };
 
   void CreateBookmarkModel(BookmarkLoadPolicy bookmark_load_policy) {
-    bookmark_model_.reset(
-        new BookmarkModel(base::MakeUnique<bookmarks::TestBookmarkClient>()));
+    bookmark_model_ = base::MakeUnique<BookmarkModel>(
+        base::MakeUnique<bookmarks::TestBookmarkClient>());
     if (bookmark_load_policy == LOAD_MODEL) {
       TestingPrefServiceSimple prefs;
       bookmark_model_->Load(&prefs, base::FilePath(),

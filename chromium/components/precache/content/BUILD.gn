@@ -12,6 +12,7 @@ static_library("content") {
 
   deps = [
     "//base",
+    "//components/data_reduction_proxy/core/browser",
     "//components/history/core/browser",
     "//components/keyed_service/core",
     "//components/precache/core",
@@ -38,6 +39,7 @@ source_set("unit_tests") {
     "//components/history/core/browser",
     "//components/precache/core",
     "//components/precache/core:proto",
+    "//components/variations",
     "//content/public/browser",
     "//content/test:test_support",
     "//net:test_support",

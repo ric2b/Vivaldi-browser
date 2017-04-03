@@ -20,9 +20,9 @@
 #include "base/time/time.h"
 #include "components/sessions/core/session_id.h"
 #include "components/sessions/core/session_types.h"
-#include "components/sync/api/syncable_service.h"
+#include "components/sync/base/sync_prefs.h"
 #include "components/sync/device_info/device_info.h"
-#include "components/sync/driver/sync_prefs.h"
+#include "components/sync/model/syncable_service.h"
 #include "components/sync_sessions/favicon_cache.h"
 #include "components/sync_sessions/local_session_event_router.h"
 #include "components/sync_sessions/lost_navigations_recorder.h"
@@ -91,7 +91,7 @@ class SessionsSyncManager : public syncer::SyncableService,
       const std::string& tag,
       std::vector<const sessions::SessionWindow*>* windows) override;
   bool GetForeignTab(const std::string& tag,
-                     const SessionID::id_type tab_id,
+                     SessionID::id_type tab_id,
                      const sessions::SessionTab** tab) override;
   bool GetForeignSessionTabs(
       const std::string& tag,

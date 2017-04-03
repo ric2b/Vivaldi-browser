@@ -27,6 +27,9 @@ namespace cc {
 namespace {
 
 static constexpr FrameSinkId kArbitraryFrameSinkId(1, 1);
+static constexpr FrameSinkId kAnotherArbitraryFrameSinkId(2, 2);
+static const base::UnguessableToken kArbitraryToken =
+    base::UnguessableToken::Create();
 
 class TestSurfaceFactoryClient : public SurfaceFactoryClient {
  public:
@@ -64,25 +67,36 @@ gpu::SyncToken GenTestSyncToken(int id) {
   return token;
 }
 
-class SurfaceFactoryTest : public testing::Test, public SurfaceDamageObserver {
+class SurfaceFactoryTest : public testing::Test, public SurfaceObserver {
  public:
   SurfaceFactoryTest()
       : factory_(
             new SurfaceFactory(kArbitraryFrameSinkId, &manager_, &client_)),
-        local_frame_id_(3, 0),
+        local_frame_id_(3, kArbitraryToken),
         frame_sync_token_(GenTestSyncToken(4)),
         consumer_sync_token_(GenTestSyncToken(5)) {
     manager_.AddObserver(this);
     factory_->Create(local_frame_id_);
   }
 
-  // SurfaceDamageObserver implementation.
+  const SurfaceId& last_created_surface_id() const {
+    return last_created_surface_id_;
+  }
+
+  // SurfaceObserver implementation.
+  void OnSurfaceCreated(const SurfaceId& surface_id,
+                        const gfx::Size& frame,
+                        float device_scale_factor) override {
+    EXPECT_EQ(kArbitraryFrameSinkId, surface_id.frame_sink_id());
+    last_created_surface_id_ = surface_id;
+  }
+
   void OnSurfaceDamaged(const SurfaceId& id, bool* changed) override {
     *changed = true;
   }
 
   ~SurfaceFactoryTest() override {
-    if (!local_frame_id_.is_null())
+    if (local_frame_id_.is_valid())
       factory_->Destroy(local_frame_id_);
     manager_.RemoveObserver(this);
   }
@@ -101,6 +115,7 @@ class SurfaceFactoryTest : public testing::Test, public SurfaceDamageObserver {
     frame.delegated_frame_data = std::move(frame_data);
     factory_->SubmitCompositorFrame(local_frame_id_, std::move(frame),
                                     SurfaceFactory::DrawCallback());
+    EXPECT_EQ(last_created_surface_id_.local_frame_id(), local_frame_id_);
   }
 
   void UnrefResources(ResourceId* ids_to_unref,
@@ -145,6 +160,7 @@ class SurfaceFactoryTest : public testing::Test, public SurfaceDamageObserver {
   TestSurfaceFactoryClient client_;
   std::unique_ptr<SurfaceFactory> factory_;
   LocalFrameId local_frame_id_;
+  SurfaceId last_created_surface_id_;
 
   // This is the sync token submitted with the frame. It should never be
   // returned to the client.
@@ -423,7 +439,7 @@ TEST_F(SurfaceFactoryTest, ResourceLifetime) {
 }
 
 TEST_F(SurfaceFactoryTest, BlankNoIndexIncrement) {
-  LocalFrameId local_frame_id(6, 0);
+  LocalFrameId local_frame_id(6, kArbitraryToken);
   SurfaceId surface_id(kArbitraryFrameSinkId, local_frame_id);
   factory_->Create(local_frame_id);
   Surface* surface = manager_.GetSurfaceForId(surface_id);
@@ -435,19 +451,20 @@ TEST_F(SurfaceFactoryTest, BlankNoIndexIncrement) {
   factory_->SubmitCompositorFrame(local_frame_id, std::move(frame),
                                   SurfaceFactory::DrawCallback());
   EXPECT_EQ(2, surface->frame_index());
+  EXPECT_EQ(last_created_surface_id().local_frame_id(), local_frame_id);
   factory_->Destroy(local_frame_id);
 }
 
 void CreateSurfaceDrawCallback(SurfaceFactory* factory,
                                uint32_t* execute_count) {
-  LocalFrameId new_id(7, 0);
+  LocalFrameId new_id(7, base::UnguessableToken::Create());
   factory->Create(new_id);
   factory->Destroy(new_id);
   *execute_count += 1;
 }
 
 TEST_F(SurfaceFactoryTest, AddDuringDestroy) {
-  LocalFrameId local_frame_id(6, 0);
+  LocalFrameId local_frame_id(6, kArbitraryToken);
   factory_->Create(local_frame_id);
   CompositorFrame frame;
   frame.delegated_frame_data.reset(new DelegatedFrameData);
@@ -468,7 +485,7 @@ void DrawCallback(uint32_t* execute_count) {
 
 // Tests doing a DestroyAll before shutting down the factory;
 TEST_F(SurfaceFactoryTest, DestroyAll) {
-  LocalFrameId id(7, 0);
+  LocalFrameId id(7, kArbitraryToken);
   factory_->Create(id);
 
   std::unique_ptr<DelegatedFrameData> frame_data(new DelegatedFrameData);
@@ -481,14 +498,40 @@ TEST_F(SurfaceFactoryTest, DestroyAll) {
   uint32_t execute_count = 0;
   factory_->SubmitCompositorFrame(id, std::move(frame),
                                   base::Bind(&DrawCallback, &execute_count));
-
+  EXPECT_EQ(last_created_surface_id().local_frame_id(), id);
   local_frame_id_ = LocalFrameId();
   factory_->DestroyAll();
   EXPECT_EQ(1u, execute_count);
 }
 
+// Tests that SurfaceFactory doesn't return resources after Reset().
+TEST_F(SurfaceFactoryTest, Reset) {
+  LocalFrameId id(7, kArbitraryToken);
+  factory_->Create(id);
+
+  std::unique_ptr<DelegatedFrameData> frame_data(new DelegatedFrameData);
+  TransferableResource resource;
+  resource.id = 1;
+  resource.mailbox_holder.texture_target = GL_TEXTURE_2D;
+  frame_data->resource_list.push_back(resource);
+  CompositorFrame frame;
+  frame.delegated_frame_data = std::move(frame_data);
+  uint32_t execute_count = 0;
+  factory_->SubmitCompositorFrame(id, std::move(frame),
+                                  base::Bind(&DrawCallback, &execute_count));
+  EXPECT_EQ(last_created_surface_id().local_frame_id(), id);
+
+  SurfaceId surface_id(kArbitraryFrameSinkId, id);
+  manager_.AddSurfaceReference(manager_.GetRootSurfaceId(), surface_id);
+  factory_->Reset();
+  EXPECT_TRUE(client_.returned_resources().empty());
+  manager_.RemoveSurfaceReference(manager_.GetRootSurfaceId(), surface_id);
+  EXPECT_TRUE(client_.returned_resources().empty());
+  local_frame_id_ = LocalFrameId();
+}
+
 TEST_F(SurfaceFactoryTest, DestroySequence) {
-  LocalFrameId local_frame_id2(5, 0);
+  LocalFrameId local_frame_id2(5, kArbitraryToken);
   SurfaceId id2(kArbitraryFrameSinkId, local_frame_id2);
   factory_->Create(local_frame_id2);
 
@@ -507,13 +550,14 @@ TEST_F(SurfaceFactoryTest, DestroySequence) {
   DCHECK(manager_.GetSurfaceForId(id2));
   factory_->SubmitCompositorFrame(local_frame_id_, std::move(frame),
                                   SurfaceFactory::DrawCallback());
+  EXPECT_EQ(last_created_surface_id().local_frame_id(), local_frame_id_);
   DCHECK(!manager_.GetSurfaceForId(id2));
 
   // Check that waiting after the sequence is satisfied works.
   factory_->Create(local_frame_id2);
   DCHECK(manager_.GetSurfaceForId(id2));
   manager_.GetSurfaceForId(id2)->AddDestructionDependency(
-      SurfaceSequence(FrameSinkId(0, 0), 6));
+      SurfaceSequence(kAnotherArbitraryFrameSinkId, 6));
   factory_->Destroy(local_frame_id2);
   DCHECK(!manager_.GetSurfaceForId(id2));
 }
@@ -523,7 +567,7 @@ TEST_F(SurfaceFactoryTest, DestroySequence) {
 TEST_F(SurfaceFactoryTest, InvalidFrameSinkId) {
   FrameSinkId frame_sink_id(1234, 5678);
 
-  LocalFrameId local_frame_id(5, 0);
+  LocalFrameId local_frame_id(5, kArbitraryToken);
   SurfaceId id(factory_->frame_sink_id(), local_frame_id);
   factory_->Create(local_frame_id);
 
@@ -543,14 +587,14 @@ TEST_F(SurfaceFactoryTest, InvalidFrameSinkId) {
 }
 
 TEST_F(SurfaceFactoryTest, DestroyCycle) {
-  LocalFrameId local_frame_id2(5, 0);
+  LocalFrameId local_frame_id2(5, kArbitraryToken);
   SurfaceId id2(kArbitraryFrameSinkId, local_frame_id2);
   factory_->Create(local_frame_id2);
 
-  manager_.RegisterFrameSinkId(FrameSinkId(0, 0));
+  manager_.RegisterFrameSinkId(kAnotherArbitraryFrameSinkId);
 
   manager_.GetSurfaceForId(id2)->AddDestructionDependency(
-      SurfaceSequence(FrameSinkId(0, 0), 4));
+      SurfaceSequence(kAnotherArbitraryFrameSinkId, 4));
 
   // Give id2 a frame that references local_frame_id_.
   {
@@ -563,6 +607,7 @@ TEST_F(SurfaceFactoryTest, DestroyCycle) {
     frame.delegated_frame_data = std::move(frame_data);
     factory_->SubmitCompositorFrame(local_frame_id2, std::move(frame),
                                     SurfaceFactory::DrawCallback());
+    EXPECT_EQ(last_created_surface_id().local_frame_id(), local_frame_id2);
   }
   factory_->Destroy(local_frame_id2);
 
@@ -576,6 +621,7 @@ TEST_F(SurfaceFactoryTest, DestroyCycle) {
     frame.delegated_frame_data = std::move(frame_data);
     factory_->SubmitCompositorFrame(local_frame_id_, std::move(frame),
                                     SurfaceFactory::DrawCallback());
+    EXPECT_EQ(last_created_surface_id().local_frame_id(), local_frame_id_);
   }
   factory_->Destroy(local_frame_id_);
   EXPECT_TRUE(manager_.GetSurfaceForId(id2));
@@ -586,7 +632,7 @@ TEST_F(SurfaceFactoryTest, DestroyCycle) {
   // Satisfy last destruction dependency for id2.
   std::vector<uint32_t> to_satisfy;
   to_satisfy.push_back(4);
-  manager_.DidSatisfySequences(FrameSinkId(0, 0), &to_satisfy);
+  manager_.DidSatisfySequences(kAnotherArbitraryFrameSinkId, &to_satisfy);
 
   // id2 and local_frame_id_ are in a reference cycle that has no surface
   // sequences holding on to it, so they should be destroyed.
@@ -613,6 +659,7 @@ TEST_F(SurfaceFactoryTest, DuplicateCopyRequest) {
     frame.delegated_frame_data = std::move(frame_data);
     factory_->SubmitCompositorFrame(local_frame_id_, std::move(frame),
                                     SurfaceFactory::DrawCallback());
+    EXPECT_EQ(last_created_surface_id().local_frame_id(), local_frame_id_);
   }
   void* source1 = &source1;
   void* source2 = &source2;

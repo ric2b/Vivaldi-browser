@@ -5,10 +5,11 @@
 module ui.mojom;
 
 import "cc/ipc/surface_id.mojom";
+import "cc/ipc/surface_sequence.mojom";
+import "cc/ipc/mojo_compositor_frame_sink.mojom";
 import "services/ui/public/interfaces/cursor.mojom";
 import "services/ui/public/interfaces/event_matcher.mojom";
 import "services/ui/public/interfaces/mus_constants.mojom";
-import "services/ui/public/interfaces/surface.mojom";
 import "services/ui/public/interfaces/window_manager.mojom";
 import "services/ui/public/interfaces/window_manager_constants.mojom";
 import "services/ui/public/interfaces/window_tree_constants.mojom";
@@ -136,11 +137,12 @@ interface WindowTree {
   // Sets the opacity of the specified window to |opacity|.
   SetWindowOpacity(uint32 change_id, uint32 window_id, float opacity);
 
-  // Attaches a Surface to a particular window.
-  AttachSurface(uint32 window_id,
-                SurfaceType type,
-                Surface& surface,
-                SurfaceClient client);
+  // Attaches a CompositorFrameSink to a particular window.
+  AttachCompositorFrameSink(
+      uint32 window_id,
+      CompositorFrameSinkType type,
+      cc.mojom.MojoCompositorFrameSink& compositor_frame_sink,
+      cc.mojom.MojoCompositorFrameSinkClient client);
 
   // Reparents a window.
   // This fails for any of the following reasons:
@@ -352,9 +354,13 @@ interface WindowTreeClient {
   // Invoked when a change is done to the hierarchy. A value of 0 is used to
   // identify a null window. For example, if the old_parent is NULL, 0 is
   // supplied.
-  // |windows| contains any windows that are that the client has not been told
-  // about. This is not sent for hierarchy changes of windows not known to this
-  // client or not attached to the tree.
+  // If |window| was not visible to this client, but is visible now because
+  // |new_parent| is visible to this client, then |windows| contains details
+  // about |window|, and all its descendants. |windows| includes any windows
+  // that client may already know about, but did not know the parent because
+  // the parent was previously not visible to this client.
+  // This is not sent for hierarchy changes of windows not known to this client
+  // or not attached to the tree.
   OnWindowHierarchyChanged(uint32 window,
                            uint32 old_parent,
                            uint32 new_parent,
@@ -421,6 +427,17 @@ interface WindowTreeClient {
 
   OnWindowPredefinedCursorChanged(uint32 window_id, Cursor cursor_id);
 
+  // Invoked when a client window submits a new surface ID. The surface ID and
+  // associated information is propagated to the parent connection. The parent
+  // compositor can take ownership of this surface ID and embed it along with
+  // frame_size and device_scale_factor in a layer.
+  // TODO(fsamuel): Surface IDs should be passed to parents directly instead of
+  // going through the window server. http://crbug.com/655231
+  OnWindowSurfaceChanged(uint32 window_id,
+                         cc.mojom.SurfaceId surface_id,
+                         gfx.mojom.Size frame_size,
+                         float device_scale_factor);
+                         
   // Called when the mouse cursor enters a window on this connection for the
   // first time, providing a list of available mime types. We want to send this
   // set of data only one time, so this isn't part of OnDragEnter(), which
@@ -430,18 +447,18 @@ interface WindowTreeClient {
   // Called when the mouse cursor enters a window that has opted into
   // accepting drags through SetAcceptsDrags(), providing a list
   // of available mime types.  Returns a bitmask of the supported
-  // operations.
+  // operations. |screen_position| is in screen coordinates.
   OnDragEnter(uint32 window,
               uint32 key_state,
-              gfx.mojom.Point position,
+              gfx.mojom.Point screen_position,
               uint32 effect_bitmask) => (uint32 supported_op_bitmask);
 
   // Called when the pointer moves over the window after the initial
   // DragEnter. Returns a bitmask of the supported operations at this
-  // location.
+  // location. |screen_position| is in screen coordinates.
   OnDragOver(uint32 window,
              uint32 key_state,
-             gfx.mojom.Point position,
+             gfx.mojom.Point screen_position,
              uint32 effect_bitmask) => (uint32 supported_op_bitmask);
 
   // Called when the pointer leaves a window or if the drop is
@@ -449,10 +466,10 @@ interface WindowTreeClient {
   OnDragLeave(uint32 window);
 
   // Called when the drop occurs on a window. Returns the action
-  // taken.
+  // taken. |screen_position| is in screen coordinates.
   OnCompleteDrop(uint32 window,
                  uint32 key_state,
-                 gfx.mojom.Point position,
+                 gfx.mojom.Point screen_position,
                  uint32 effect_bitmask) => (uint32 action_taken);
 
   // Called on the client that requested PerformDragDrop() to return which drag

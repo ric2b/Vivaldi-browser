@@ -67,6 +67,7 @@ void VivaldiRenderViewObserver::FocusedNodeChanged(const blink::WebNode& node) {
   std::string tagname = "";
   std::string type = "";
   bool editable = false;
+  std::string role = "";
 
   if (!node.isNull() && node.isElementNode()) {
     blink::WebElement element =
@@ -76,9 +77,13 @@ void VivaldiRenderViewObserver::FocusedNodeChanged(const blink::WebNode& node) {
       type = element.getAttribute("type").utf8();
     }
     editable = element.isEditable();
+
+    if (element.hasAttribute("role")) {
+      role = element.getAttribute("role").utf8();
+    }
   }
   Send(new VivaldiMsg_DidUpdateFocusedElementInfo(routing_id(), tagname,
-    type, editable));
+    type, editable, role));
 }
 
 namespace {

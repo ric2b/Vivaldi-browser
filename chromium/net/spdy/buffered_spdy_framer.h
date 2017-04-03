@@ -50,7 +50,7 @@ class NET_EXPORT_PRIVATE BufferedSpdyFramerVisitorInterface {
   // |stream_id| The stream receiving data.
   // |data| A buffer containing the data received.
   // |len| The length of the data buffer (at most 2^24 - 1 for SPDY/3,
-  // but 2^16 - 1 - 8 for SPDY/4).
+  // but 2^16 - 1 - 8 for HTTP2).
   virtual void OnStreamFrameData(SpdyStreamId stream_id,
                                  const char* data,
                                  size_t len) = 0;
@@ -65,8 +65,7 @@ class NET_EXPORT_PRIVATE BufferedSpdyFramerVisitorInterface {
   virtual void OnStreamPadding(SpdyStreamId stream_id, size_t len) = 0;
 
   // Called when a SETTINGS frame is received.
-  // |clear_persisted| True if the respective flag is set on the SETTINGS frame.
-  virtual void OnSettings(bool clear_persisted) = 0;
+  virtual void OnSettings() = 0;
 
   // Called when an individual setting within a SETTINGS frame has been parsed
   // and validated.
@@ -150,9 +149,6 @@ class NET_EXPORT_PRIVATE BufferedSpdyFramer
                  bool exclusive,
                  bool fin,
                  bool end) override;
-  bool OnControlFrameHeaderData(SpdyStreamId stream_id,
-                                const char* header_data,
-                                size_t len) override;
   void OnStreamFrameData(SpdyStreamId stream_id,
                          const char* data,
                          size_t len) override;

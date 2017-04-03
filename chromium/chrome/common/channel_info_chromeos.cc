@@ -6,8 +6,6 @@
 
 #include "components/version_info/version_info.h"
 
-#include "app/vivaldi_apptools.h"
-
 namespace chrome {
 
 static version_info::Channel chromeos_channel = version_info::Channel::UNKNOWN;
@@ -31,11 +29,6 @@ std::string GetChannelString() {
 }
 
 version_info::Channel GetChannel() {
-#if defined(VIVALDI_BUILD)
-  if (vivaldi::IsVivaldiRunning()) {
-    return version_info::Channel::CHANNEL_STABLE;
-  }
-#endif
   return chromeos_channel;
 }
 

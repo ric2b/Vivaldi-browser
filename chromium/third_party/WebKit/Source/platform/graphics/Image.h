@@ -43,7 +43,6 @@
 #include "wtf/ThreadSafeRefCounted.h"
 #include "wtf/text/WTFString.h"
 
-class SkBitmap;
 class SkCanvas;
 class SkImage;
 class SkMatrix;
@@ -55,7 +54,6 @@ class FloatPoint;
 class FloatRect;
 class FloatSize;
 class GraphicsContext;
-class Length;
 class Image;
 
 class PLATFORM_EXPORT Image : public ThreadSafeRefCounted<Image> {
@@ -86,6 +84,7 @@ class PLATFORM_EXPORT Image : public ThreadSafeRefCounted<Image> {
   virtual bool currentFrameIsComplete() { return false; }
   virtual bool currentFrameIsLazyDecoded() { return false; }
   virtual bool isTextureBacked();
+  virtual void transfer() {}
 
   // Derived classes should override this if they can assure that the current
   // image frame contains only resources from its own security origin.
@@ -160,7 +159,7 @@ class PLATFORM_EXPORT Image : public ThreadSafeRefCounted<Image> {
                            const FloatRect&,
                            const FloatSize&,
                            const FloatPoint& phase,
-                           SkXfermode::Mode,
+                           SkBlendMode,
                            const FloatRect&,
                            const FloatSize& repeatSpacing = FloatSize());
 
@@ -200,7 +199,7 @@ class PLATFORM_EXPORT Image : public ThreadSafeRefCounted<Image> {
                  const FloatRect& dstRect,
                  const FloatPoint& srcPoint,
                  const FloatSize& tileSize,
-                 SkXfermode::Mode,
+                 SkBlendMode,
                  const FloatSize& repeatSpacing);
   void drawTiled(GraphicsContext&,
                  const FloatRect& dstRect,
@@ -208,7 +207,7 @@ class PLATFORM_EXPORT Image : public ThreadSafeRefCounted<Image> {
                  const FloatSize& tileScaleFactor,
                  TileRule hRule,
                  TileRule vRule,
-                 SkXfermode::Mode);
+                 SkBlendMode);
 
  private:
   RefPtr<SharedBuffer> m_encodedImageData;

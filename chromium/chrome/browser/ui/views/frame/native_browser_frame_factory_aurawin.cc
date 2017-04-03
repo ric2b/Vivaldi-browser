@@ -6,12 +6,12 @@
 
 #include "chrome/browser/ui/views/frame/browser_frame_mus.h"
 #include "chrome/browser/ui/views/frame/desktop_browser_frame_aura.h"
-#include "services/shell/runner/common/client_util.h"
+#include "services/service_manager/runner/common/client_util.h"
 
 NativeBrowserFrame* NativeBrowserFrameFactory::Create(
     BrowserFrame* browser_frame,
     BrowserView* browser_view) {
-  if (shell::ShellIsRemote())
+  if (service_manager::ServiceManagerIsRemote())
     return new BrowserFrameMus(browser_frame, browser_view);
   return new DesktopBrowserFrameAura(browser_frame, browser_view);
 }

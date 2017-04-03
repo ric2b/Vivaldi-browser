@@ -4,10 +4,14 @@
 
 #include "extensions/api/vivaldi_utilities/vivaldi_utilities_api.h"
 
+#include <memory>
 #include <string>
+#include <utility>
 #include <vector>
+
 #include "base/lazy_instance.h"
 #include "base/memory/ptr_util.h"
+#include "base/rand_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
@@ -26,8 +30,19 @@
 #include "components/sessions/core/tab_restore_service.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/render_view_host.h"
+#include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
+#include "prefs/vivaldi_pref_names.h"
+#include "ui/vivaldi_ui_utils.h"
 #include "url/url_constants.h"
+
+namespace {
+bool IsValidUserId(const std::string& user_id) {
+  uint64_t value;
+  return !user_id.empty() && base::HexStringToUInt64(user_id, &value) &&
+         value > 0;
+}
+}  // anonymous namespace
 
 namespace extensions {
 
@@ -81,7 +96,7 @@ Browser *VivaldiUtilitiesAPI::FindBrowserFromAppWindowId(
     return nullptr;  // not a window
 
   int window_id = iter->second;
-  for (auto* browser: *BrowserList::GetInstance()) {
+  for (auto* browser : *BrowserList::GetInstance()) {
     if (ExtensionTabUtil::GetWindowId(browser) == window_id &&
         browser->window()) {
       return browser;
@@ -105,7 +120,8 @@ void VivaldiUtilitiesAPI::OnAppWindowActivated(
   }
 }
 
-void VivaldiUtilitiesAPI::OnAppWindowRemoved(extensions::AppWindow* app_window) {
+void VivaldiUtilitiesAPI::OnAppWindowRemoved(
+    extensions::AppWindow* app_window) {
   appwindow_id_to_window_id_.erase(app_window->window_key());
 }
 
@@ -125,6 +141,95 @@ void VivaldiUtilitiesAPI::OnListenerAdded(const EventListenerInfo& details) {
 
 namespace ClearAllRecentlyClosedSessions =
     vivaldi::utilities::ClearAllRecentlyClosedSessions;
+
+UtilitiesBasicPrintFunction::UtilitiesBasicPrintFunction() {}
+UtilitiesBasicPrintFunction::~UtilitiesBasicPrintFunction() {}
+
+bool UtilitiesBasicPrintFunction::RunAsync() {
+  Profile* profile = Profile::FromBrowserContext(browser_context());
+  Browser *browser = chrome::FindAnyBrowser(profile, true);
+  chrome::BasicPrint(browser);
+
+  SendResponse(true);
+  return true;
+}
+
+UtilitiesClearAllRecentlyClosedSessionsFunction::
+    ~UtilitiesClearAllRecentlyClosedSessionsFunction() {
+}
+
+bool UtilitiesClearAllRecentlyClosedSessionsFunction::RunAsync() {
+  sessions::TabRestoreService *tab_restore_service =
+      TabRestoreServiceFactory::GetForProfile(GetProfile());
+  bool result = false;
+  if (tab_restore_service) {
+    result = true;
+    tab_restore_service->ClearEntries();
+  }
+  results_ = ClearAllRecentlyClosedSessions::Results::Create(result);
+  SendResponse(result);
+  return result;
+}
+
+UtilitiesGetUniqueUserIdFunction::~UtilitiesGetUniqueUserIdFunction() {
+}
+
+bool UtilitiesGetUniqueUserIdFunction::RunAsync() {
+  std::unique_ptr<vivaldi::utilities::GetUniqueUserId::Params> params(
+      vivaldi::utilities::GetUniqueUserId::Params::Create(*args_));
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  std::string user_id = g_browser_process->local_state()->GetString(
+      vivaldiprefs::kVivaldiUniqueUserId);
+
+  if (!IsValidUserId(user_id)) {
+    content::BrowserThread::PostTask(
+        content::BrowserThread::FILE, FROM_HERE,
+        base::Bind(
+            &UtilitiesGetUniqueUserIdFunction::GetUniqueUserIdOnFileThread,
+            this, params->legacy_user_id));
+  } else {
+    RespondOnUIThread(user_id, false);
+  }
+
+  return true;
+}
+
+void UtilitiesGetUniqueUserIdFunction::GetUniqueUserIdOnFileThread(
+    const std::string& legacy_user_id) {
+  // Note: We do not refresh the copy of the user id stored in the OS profile
+  // if it is missing because we do not want standalone copies of vivaldi on USB
+  // to spread their user id to all the computers they are run on.
+
+  std::string user_id;
+  bool is_new_user = false;
+  if (!ReadUserIdFromOSProfile(&user_id) || !IsValidUserId(user_id)) {
+    if (IsValidUserId(legacy_user_id)) {
+      user_id = legacy_user_id;
+    } else {
+      uint64_t random = base::RandUint64();
+      user_id = base::StringPrintf("%016" PRIX64, random);
+      is_new_user = true;
+    }
+    WriteUserIdToOSProfile(user_id);
+  }
+
+  content::BrowserThread::PostTask(
+      content::BrowserThread::UI, FROM_HERE,
+      base::Bind(&UtilitiesGetUniqueUserIdFunction::RespondOnUIThread, this,
+                 user_id, is_new_user));
+}
+
+void UtilitiesGetUniqueUserIdFunction::RespondOnUIThread(
+    const std::string& user_id,
+    bool is_new_user) {
+  g_browser_process->local_state()->SetString(
+      vivaldiprefs::kVivaldiUniqueUserId, user_id);
+
+  results_ = vivaldi::utilities::GetUniqueUserId::Results::Create(user_id,
+                                                                  is_new_user);
+  SendResponse(true);
+}
 
 bool UtilitiesIsTabInLastSessionFunction::RunAsync() {
   std::unique_ptr<vivaldi::utilities::IsTabInLastSession::Params> params(
@@ -161,7 +266,7 @@ UtilitiesIsTabInLastSessionFunction::UtilitiesIsTabInLastSessionFunction() {}
 
 UtilitiesIsTabInLastSessionFunction::~UtilitiesIsTabInLastSessionFunction() {}
 
-bool UtilitiesIsUrlValidFunction::RunSync() {
+bool UtilitiesIsUrlValidFunction::RunAsync() {
   std::unique_ptr<vivaldi::utilities::IsUrlValid::Params> params(
       vivaldi::utilities::IsUrlValid::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
@@ -178,6 +283,37 @@ bool UtilitiesIsUrlValidFunction::RunSync() {
 
   results_ = vivaldi::utilities::IsUrlValid::Results::Create(result);
 
+  SendResponse(true);
+  return true;
+}
+
+UtilitiesGetSelectedTextFunction::UtilitiesGetSelectedTextFunction() {}
+
+UtilitiesGetSelectedTextFunction::~UtilitiesGetSelectedTextFunction() {}
+
+bool UtilitiesGetSelectedTextFunction::RunAsync() {
+  std::unique_ptr<vivaldi::utilities::GetSelectedText::Params> params(
+      vivaldi::utilities::GetSelectedText::Params::Create(*args_));
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  int tabId;
+  if (!base::StringToInt(params->tab_id, &tabId))
+    return false;
+
+  std::string text;
+  content::WebContents* web_contents =
+    ::vivaldi::ui_tools::GetWebContentsFromTabStrip(tabId, GetProfile());
+  if (web_contents) {
+    content::RenderWidgetHostView* rwhv =
+      web_contents->GetRenderWidgetHostView();
+    if (rwhv) {
+      text = base::UTF16ToUTF8(rwhv->GetSelectedText());
+    }
+  }
+
+  results_ = vivaldi::utilities::GetSelectedText::Results::Create(text);
+
+  SendResponse(true);
   return true;
 }
 
@@ -185,50 +321,22 @@ UtilitiesIsUrlValidFunction::UtilitiesIsUrlValidFunction() {}
 
 UtilitiesIsUrlValidFunction::~UtilitiesIsUrlValidFunction() {}
 
-UtilitiesClearAllRecentlyClosedSessionsFunction::
-    ~UtilitiesClearAllRecentlyClosedSessionsFunction() {
-}
+UtilitiesMapFocusAppWindowToWindowIdFunction::
+    UtilitiesMapFocusAppWindowToWindowIdFunction() {}
 
-bool UtilitiesClearAllRecentlyClosedSessionsFunction::RunAsync() {
-  sessions::TabRestoreService *tab_restore_service =
-      TabRestoreServiceFactory::GetForProfile(GetProfile());
-  bool result = false;
-  if (tab_restore_service) {
-    result = true;
-    tab_restore_service->ClearEntries();
-  }
-  results_ = ClearAllRecentlyClosedSessions::Results::Create(result);
-  SendResponse(result);
-  return result;
-}
+UtilitiesMapFocusAppWindowToWindowIdFunction::
+    ~UtilitiesMapFocusAppWindowToWindowIdFunction() {}
 
-UtilitiesMapFocusAppWindowToWindowIdFunction::UtilitiesMapFocusAppWindowToWindowIdFunction() {
-
-}
-
-UtilitiesMapFocusAppWindowToWindowIdFunction::~UtilitiesMapFocusAppWindowToWindowIdFunction() {
-}
-
-bool UtilitiesMapFocusAppWindowToWindowIdFunction::RunSync() {
-  std::unique_ptr<vivaldi::utilities::MapFocusAppWindowToWindowId::Params> params(
-      vivaldi::utilities::MapFocusAppWindowToWindowId::Params::Create(*args_));
+bool UtilitiesMapFocusAppWindowToWindowIdFunction::RunAsync() {
+  std::unique_ptr<vivaldi::utilities::MapFocusAppWindowToWindowId::Params>
+      params(vivaldi::utilities::MapFocusAppWindowToWindowId::Params::Create(
+          *args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   VivaldiUtilitiesAPI *api =
       VivaldiUtilitiesAPI::GetFactoryInstance()->Get(GetProfile());
 
   api->MapAppWindowIdToWindowId(params->app_window_id, params->window_id);
-
-  return true;
-}
-
-UtilitiesBasicPrintFunction::UtilitiesBasicPrintFunction() {}
-UtilitiesBasicPrintFunction::~UtilitiesBasicPrintFunction() {}
-
-bool UtilitiesBasicPrintFunction::RunAsync() {
-  Profile* profile = Profile::FromBrowserContext(browser_context());
-  Browser *browser = chrome::FindAnyBrowser(profile, true);
-  chrome::BasicPrint(browser);
 
   SendResponse(true);
   return true;

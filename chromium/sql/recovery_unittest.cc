@@ -29,34 +29,8 @@
 
 namespace {
 
-// Execute |sql|, and stringify the results with |column_sep| between
-// columns and |row_sep| between rows.
-// TODO(shess): Promote this to a central testing helper.
-std::string ExecuteWithResults(sql::Connection* db,
-                               const char* sql,
-                               const char* column_sep,
-                               const char* row_sep) {
-  sql::Statement s(db->GetUniqueStatement(sql));
-  std::string ret;
-  while (s.Step()) {
-    if (!ret.empty())
-      ret += row_sep;
-    for (int i = 0; i < s.ColumnCount(); ++i) {
-      if (i > 0)
-        ret += column_sep;
-      if (s.ColumnType(i) == sql::COLUMN_TYPE_NULL) {
-        ret += "<null>";
-      } else if (s.ColumnType(i) == sql::COLUMN_TYPE_BLOB) {
-        ret += "<x'";
-        ret += base::HexEncode(s.ColumnBlob(i), s.ColumnByteLength(i));
-        ret += "'>";
-      } else {
-        ret += s.ColumnString(i);
-      }
-    }
-  }
-  return ret;
-}
+using sql::test::ExecuteWithResults;
+using sql::test::ExecuteWithResult;
 
 // Dump consistent human-readable representation of the database
 // schema.  For tables or indices, this will contain the sql command
@@ -153,8 +127,7 @@ TEST_F(SQLRecoveryTest, RecoverBasic) {
   ASSERT_EQ("CREATE TABLE x (t TEXT)", GetSchema(&db()));
 
   const char* kXSql = "SELECT * FROM x ORDER BY 1";
-  ASSERT_EQ("That was a test",
-            ExecuteWithResults(&db(), kXSql, "|", "\n"));
+  ASSERT_EQ("That was a test", ExecuteWithResult(&db(), kXSql));
 
   // Reset the database contents.
   ASSERT_TRUE(db().Execute("DELETE FROM x"));
@@ -176,8 +149,7 @@ TEST_F(SQLRecoveryTest, RecoverBasic) {
   EXPECT_TRUE(db().is_open());
   ASSERT_EQ("CREATE TABLE x (t TEXT)", GetSchema(&db()));
 
-  ASSERT_EQ("This is a test",
-            ExecuteWithResults(&db(), kXSql, "|", "\n"));
+  ASSERT_EQ("This is a test", ExecuteWithResult(&db(), kXSql));
 }
 
 // Test operation of the virtual table used by sql::Recovery.
@@ -340,12 +312,12 @@ TEST_F(SQLRecoveryTest, RecoverCorruptTable) {
 
   // Index shows one less than originally inserted.
   const char kCountSql[] = "SELECT COUNT (*) FROM x";
-  EXPECT_EQ("9", ExecuteWithResults(&db(), kCountSql, "|", ","));
+  EXPECT_EQ("9", ExecuteWithResult(&db(), kCountSql));
 
   // A full table scan shows all of the original data.  Using column [v] to
   // force use of the table rather than the index.
   const char kDistinctSql[] = "SELECT DISTINCT COUNT (v) FROM x";
-  EXPECT_EQ("10", ExecuteWithResults(&db(), kDistinctSql, "|", ","));
+  EXPECT_EQ("10", ExecuteWithResult(&db(), kDistinctSql));
 
   // Insert id 0 again.  Since it is not in the index, the insert
   // succeeds, but results in a duplicate value in the table.
@@ -353,8 +325,8 @@ TEST_F(SQLRecoveryTest, RecoverCorruptTable) {
   ASSERT_TRUE(db().Execute(kInsertSql));
 
   // Duplication is visible.
-  EXPECT_EQ("10", ExecuteWithResults(&db(), kCountSql, "|", ","));
-  EXPECT_EQ("11", ExecuteWithResults(&db(), kDistinctSql, "|", ","));
+  EXPECT_EQ("10", ExecuteWithResult(&db(), kCountSql));
+  EXPECT_EQ("11", ExecuteWithResult(&db(), kDistinctSql));
 
   // This works before the callback is called.
   const char kTrivialSql[] = "SELECT COUNT(*) FROM sqlite_master";
@@ -374,12 +346,12 @@ TEST_F(SQLRecoveryTest, RecoverCorruptTable) {
   ASSERT_TRUE(Reopen());
 
   // The recovered table has consistency between the index and the table.
-  EXPECT_EQ("10", ExecuteWithResults(&db(), kCountSql, "|", ","));
-  EXPECT_EQ("10", ExecuteWithResults(&db(), kDistinctSql, "|", ","));
+  EXPECT_EQ("10", ExecuteWithResult(&db(), kCountSql));
+  EXPECT_EQ("10", ExecuteWithResult(&db(), kDistinctSql));
 
   // Only one of the values is retained.
   const char kSelectSql[] = "SELECT v FROM x WHERE id = 0";
-  const std::string results = ExecuteWithResults(&db(), kSelectSql, "|", ",");
+  const std::string results = ExecuteWithResult(&db(), kSelectSql);
   EXPECT_TRUE(results=="100" || results=="0") << "Actual results: " << results;
 }
 
@@ -865,6 +837,77 @@ TEST_F(SQLRecoveryTest, AttachFailure) {
   // Verify that the failure was in the right place with the expected code.
   tester.ExpectBucketCount(kEventHistogramName, kEventEnum, 1);
   tester.ExpectBucketCount(kErrorHistogramName, SQLITE_NOTADB, 1);
+}
+
+// Helper for SQLRecoveryTest.PageSize.  Creates a fresh db based on db_prefix,
+// with the given initial page size, and verifies it against the expected size.
+// Then changes to the final page size and recovers, verifying that the
+// recovered database ends up with the expected final page size.
+void TestPageSize(const base::FilePath& db_prefix,
+                  int initial_page_size,
+                  const std::string& expected_initial_page_size,
+                  int final_page_size,
+                  const std::string& expected_final_page_size) {
+  const char kCreateSql[] = "CREATE TABLE x (t TEXT)";
+  const char kInsertSql1[] = "INSERT INTO x VALUES ('This is a test')";
+  const char kInsertSql2[] = "INSERT INTO x VALUES ('That was a test')";
+  const char kSelectSql[] = "SELECT * FROM x ORDER BY t";
+
+  const base::FilePath db_path = db_prefix.InsertBeforeExtensionASCII(
+      base::IntToString(initial_page_size));
+  sql::Connection::Delete(db_path);
+  sql::Connection db;
+  db.set_page_size(initial_page_size);
+  ASSERT_TRUE(db.Open(db_path));
+  ASSERT_TRUE(db.Execute(kCreateSql));
+  ASSERT_TRUE(db.Execute(kInsertSql1));
+  ASSERT_TRUE(db.Execute(kInsertSql2));
+  ASSERT_EQ(expected_initial_page_size,
+            ExecuteWithResult(&db, "PRAGMA page_size"));
+
+  // Recovery will use the page size set in the connection object, which may not
+  // match the file's page size.
+  db.set_page_size(final_page_size);
+  sql::Recovery::RecoverDatabase(&db, db_path);
+
+  // Recovery poisoned the handle, must re-open.
+  db.Close();
+
+  // Make sure the page size is read from the file.
+  db.set_page_size(0);
+  ASSERT_TRUE(db.Open(db_path));
+  ASSERT_EQ(expected_final_page_size,
+            ExecuteWithResult(&db, "PRAGMA page_size"));
+  EXPECT_EQ("That was a test\nThis is a test",
+            ExecuteWithResults(&db, kSelectSql, "|", "\n"));
+}
+
+// Verify that sql::Recovery maintains the page size, and the virtual table
+// works with page sizes other than SQLite's default.  Also verify the case
+// where the default page size has changed.
+TEST_F(SQLRecoveryTest, PageSize) {
+  const std::string default_page_size =
+      ExecuteWithResult(&db(), "PRAGMA page_size");
+
+  // The database should have the default page size after recovery.
+  EXPECT_NO_FATAL_FAILURE(
+      TestPageSize(db_path(), 0, default_page_size, 0, default_page_size));
+
+  // Sync user 32k pages.
+  EXPECT_NO_FATAL_FAILURE(
+      TestPageSize(db_path(), 32768, "32768", 32768, "32768"));
+
+  // Many clients use 4k pages.  This is the SQLite default after 3.12.0.
+  EXPECT_NO_FATAL_FAILURE(TestPageSize(db_path(), 4096, "4096", 4096, "4096"));
+
+  // 1k is the default page size before 3.12.0.
+  EXPECT_NO_FATAL_FAILURE(TestPageSize(db_path(), 1024, "1024", 1024, "1024"));
+
+  // Databases with no page size specified should recover with the new default
+  // page size.  2k has never been the default page size.
+  ASSERT_NE("2048", default_page_size);
+  EXPECT_NO_FATAL_FAILURE(
+      TestPageSize(db_path(), 2048, "2048", 0, default_page_size));
 }
 
 }  // namespace

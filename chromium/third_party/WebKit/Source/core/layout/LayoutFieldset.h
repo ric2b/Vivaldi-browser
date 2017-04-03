@@ -37,8 +37,6 @@ class LayoutFieldset final : public LayoutBlockFlow {
   const char* name() const override { return "LayoutFieldset"; }
 
  private:
-  // We override the two baseline functions because we want our baseline to be
-  // the bottom of our margin box.
   bool isOfType(LayoutObjectType type) const override {
     return type == LayoutObjectFieldset || LayoutBlockFlow::isOfType(type);
   }

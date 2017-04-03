@@ -30,7 +30,6 @@
 
 #include "platform/heap/Heap.h"
 
-#include "base/sys_info.h"
 #include "platform/Histogram.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/ScriptForbiddenScope.h"
@@ -67,9 +66,6 @@ class ParkThreadsScope final {
 
   bool parkThreads() {
     TRACE_EVENT0("blink_gc", "ThreadHeap::ParkThreadsScope");
-    const char* samplingState = TRACE_EVENT_GET_SAMPLING_STATE();
-    if (m_state->isMainThread())
-      TRACE_EVENT_SET_SAMPLING_STATE("blink_gc", "BlinkGCWaiting");
 
     // TODO(haraken): In an unlikely coincidence that two threads decide
     // to collect garbage at the same time, avoid doing two GCs in
@@ -85,8 +81,6 @@ class ParkThreadsScope final {
                                  50));
     timeToStopThreadsHistogram.count(timeForStoppingThreads);
 
-    if (m_state->isMainThread())
-      TRACE_EVENT_SET_NONCONST_SAMPLING_STATE(samplingState);
     return m_shouldResumeThreads;
   }
 
@@ -111,7 +105,6 @@ void ProcessHeap::init() {
   s_totalAllocatedSpace = 0;
   s_totalAllocatedObjectSize = 0;
   s_totalMarkedObjectSize = 0;
-  s_isLowEndDevice = base::SysInfo::IsLowEndDevice();
 
   GCInfoTable::init();
   CallbackStackMemoryPool::instance().initialize();
@@ -144,7 +137,6 @@ CrossThreadPersistentRegion& ProcessHeap::crossThreadPersistentRegion() {
 }
 
 bool ProcessHeap::s_shutdownComplete = false;
-bool ProcessHeap::s_isLowEndDevice = false;
 size_t ProcessHeap::s_totalAllocatedSpace = 0;
 size_t ProcessHeap::s_totalAllocatedObjectSize = 0;
 size_t ProcessHeap::s_totalMarkedObjectSize = 0;
@@ -210,9 +202,9 @@ void ThreadHeapStats::decreaseAllocatedSpace(size_t delta) {
 }
 
 ThreadHeap::ThreadHeap()
-    : m_regionTree(wrapUnique(new RegionTree())),
+    : m_regionTree(makeUnique<RegionTree>()),
       m_heapDoesNotContainCache(wrapUnique(new HeapDoesNotContainCache)),
-      m_safePointBarrier(wrapUnique(new SafePointBarrier())),
+      m_safePointBarrier(makeUnique<SafePointBarrier>()),
       m_freePagePool(wrapUnique(new FreePagePool)),
       m_orphanedPagePool(wrapUnique(new OrphanedPagePool)),
       m_markingStack(CallbackStack::create()),

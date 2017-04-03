@@ -16,6 +16,7 @@
 #include "services/ui/common/types.h"
 #include "services/ui/public/cpp/window_manager_delegate.h"
 #include "services/ui/public/cpp/window_tree_client_delegate.h"
+#include "services/ui/public/interfaces/display/display_controller.mojom.h"
 #include "services/ui/public/interfaces/window_manager.mojom.h"
 
 namespace base {
@@ -27,7 +28,7 @@ class Display;
 class ScreenBase;
 }
 
-namespace shell {
+namespace service_manager {
 class Connector;
 }
 
@@ -53,7 +54,7 @@ class WmTestHelper;
 class WindowManager : public ui::WindowManagerDelegate,
                       public ui::WindowTreeClientDelegate {
  public:
-  explicit WindowManager(shell::Connector* connector);
+  explicit WindowManager(service_manager::Connector* connector);
   ~WindowManager() override;
 
   void Init(std::unique_ptr<ui::WindowTreeClient> window_tree_client,
@@ -71,7 +72,7 @@ class WindowManager : public ui::WindowManagerDelegate,
     return window_manager_client_;
   }
 
-  shell::Connector* connector() { return connector_; }
+  service_manager::Connector* connector() { return connector_; }
 
   void SetScreenLocked(bool is_locked);
 
@@ -90,6 +91,10 @@ class WindowManager : public ui::WindowManagerDelegate,
 
   void AddObserver(WindowManagerObserver* observer);
   void RemoveObserver(WindowManagerObserver* observer);
+
+  // Returns the DisplayController interface if available. Will be null if no
+  // service_manager::Connector was available, for example in some tests.
+  display::mojom::DisplayController* GetDisplayController();
 
  private:
   friend class WmTestHelper;
@@ -141,6 +146,7 @@ class WindowManager : public ui::WindowManagerDelegate,
   void OnWmNewDisplay(ui::Window* window,
                       const display::Display& display) override;
   void OnWmDisplayRemoved(ui::Window* window) override;
+  void OnWmDisplayModified(const display::Display& display) override;
   void OnWmPerformMoveLoop(ui::Window* window,
                            ui::mojom::MoveLoopSource source,
                            const gfx::Point& cursor_location,
@@ -149,7 +155,8 @@ class WindowManager : public ui::WindowManagerDelegate,
   ui::mojom::EventResult OnAccelerator(uint32_t id,
                                        const ui::Event& event) override;
 
-  shell::Connector* connector_;
+  service_manager::Connector* connector_;
+  display::mojom::DisplayControllerPtr display_controller_;
 
   std::unique_ptr<ui::WindowTreeClient> window_tree_client_;
 

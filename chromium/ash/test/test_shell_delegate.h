@@ -10,7 +10,7 @@
 
 #include "ash/common/media_delegate.h"
 #include "ash/common/shell_delegate.h"
-#include "ash/test/test_session_state_delegate.h"
+#include "ash/common/test/test_session_state_delegate.h"
 #include "base/macros.h"
 
 namespace app_list {
@@ -35,8 +35,7 @@ class TestShellDelegate : public ShellDelegate {
   }
 
   // Overridden from ShellDelegate:
-  ::shell::Connector* GetShellConnector() const override;
-  bool IsFirstRunAfterBoot() const override;
+  ::service_manager::Connector* GetShellConnector() const override;
   bool IsIncognitoAllowed() const override;
   bool IsMultiProfilesEnabled() const override;
   bool IsRunningInForcedAppMode() const override;
@@ -53,7 +52,6 @@ class TestShellDelegate : public ShellDelegate {
   std::unique_ptr<WallpaperDelegate> CreateWallpaperDelegate() override;
   TestSessionStateDelegate* CreateSessionStateDelegate() override;
   AccessibilityDelegate* CreateAccessibilityDelegate() override;
-  NewWindowDelegate* CreateNewWindowDelegate() override;
   MediaDelegate* CreateMediaDelegate() override;
   std::unique_ptr<PaletteDelegate> CreatePaletteDelegate() override;
   ui::MenuModel* CreateContextMenu(WmShelf* wm_shelf,

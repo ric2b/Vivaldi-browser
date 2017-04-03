@@ -118,12 +118,12 @@
 <translation id="8400147561352026160">Shift+<ph name="KEY_COMBO_NAME" /></translation>
 <translation id="8428213095426709021">Instellingen</translation>
 <translation id="8602707065186045623"><ph name="SAVEAS_EXTENSION_TYPE" />-bestand (.<ph name="SAVEAS_EXTENSION_NAME" />)</translation>
-<translation id="8677655579646609597"><ph name="QUANTITY" /> kB/s</translation>
+<translation id="8677655579646609597"><ph name="QUANTITY" />  KB/s</translation>
 <translation id="8806053966018712535">Map <ph name="FOLDER_NAME" /></translation>
-<translation id="8901569739625249689"><ph name="QUANTITY" /> kB</translation>
+<translation id="8901569739625249689"><ph name="QUANTITY" />  KB</translation>
 <translation id="9038489124413477075">Naamloze map</translation>
 <translation id="9044832324875206639">{SECONDS,plural, =1{1 sec.}other{# sec.}}</translation>
 <translation id="9170848237812810038">&amp;Ongedaan maken</translation>
-<translation id="932327136139879170">Startpagina</translation>
+<translation id="932327136139879170">Homepage</translation>
 <translation id="945522503751344254">Feedback verzenden</translation>
 </translationbundle>

@@ -216,9 +216,8 @@ void NativeAppWindowViews::RemoveObserver(
 }
 
 void NativeAppWindowViews::OnViewWasResized() {
-  FOR_EACH_OBSERVER(web_modal::ModalDialogHostObserver,
-                    observer_list_,
-                    OnPositionRequiresUpdate());
+  for (auto& observer : observer_list_)
+    observer.OnPositionRequiresUpdate();
 }
 
 // WidgetDelegate implementation.
@@ -323,9 +322,8 @@ void NativeAppWindowViews::HandleKeyboardCode(ui::KeyboardCode code) {
 // WidgetObserver implementation.
 
 void NativeAppWindowViews::OnWidgetDestroying(views::Widget* widget) {
-  FOR_EACH_OBSERVER(web_modal::ModalDialogHostObserver,
-                    observer_list_,
-                    OnHostDestroying());
+  for (auto& observer : observer_list_)
+    observer.OnHostDestroying();
 }
 
 void NativeAppWindowViews::OnWidgetVisibilityChanged(views::Widget* widget,

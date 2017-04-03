@@ -33,7 +33,6 @@
 
 #include "WebIconURL.h"
 #include "WebNode.h"
-#include "WebURLLoaderOptions.h"
 #include "public/platform/WebCanvas.h"
 #include "public/platform/WebInsecureRequestPolicy.h"
 #include "public/web/WebFrameLoadType.h"
@@ -58,6 +57,8 @@ namespace blink {
 class Frame;
 class OpenedFrameTracker;
 class Visitor;
+class WebAssociatedURLLoader;
+struct WebAssociatedURLLoaderOptions;
 class WebDOMEvent;
 class WebData;
 class WebDataSource;
@@ -72,7 +73,6 @@ class WebSecurityOrigin;
 class WebSharedWorkerRepositoryClient;
 class WebString;
 class WebURL;
-class WebURLLoader;
 class WebURLRequest;
 class WebView;
 enum class WebSandboxFlags;
@@ -227,21 +227,14 @@ class WebFrame {
   // Returns the top-most frame in the hierarchy containing this frame.
   BLINK_EXPORT WebFrame* top() const;
 
-  // Returns the first/last child frame.
+  // Returns the first child frame.
   BLINK_EXPORT WebFrame* firstChild() const;
-  BLINK_EXPORT WebFrame* lastChild() const;
 
-  // Returns the previous/next sibling frame.
-  BLINK_EXPORT WebFrame* previousSibling() const;
+  // Returns the next sibling frame.
   BLINK_EXPORT WebFrame* nextSibling() const;
 
-  // Returns the previous/next frame in "frame traversal order",
-  // optionally wrapping around.
-  BLINK_EXPORT WebFrame* traversePrevious(bool wrap) const;
-  BLINK_EXPORT WebFrame* traverseNext(bool wrap) const;
-
-  // Returns the child frame identified by the given name.
-  BLINK_EXPORT WebFrame* findChildByName(const WebString& name) const;
+  // Returns the next frame in "frame traversal order".
+  BLINK_EXPORT WebFrame* traverseNext() const;
 
   // Content ------------------------------------------------------------
 
@@ -383,11 +376,13 @@ class WebFrame {
   // DEPRECATED: Please use createAssociatedURLLoader instead.
   virtual void dispatchWillSendRequest(WebURLRequest&) = 0;
 
-  // Returns a WebURLLoader that is associated with this frame.  The loader
-  // will, for example, be cancelled when WebFrame::stopLoading is called.
+  // Returns an AssociatedURLLoader that is associated with this frame.  The
+  // loader will, for example, be cancelled when WebFrame::stopLoading is
+  // called.
+  //
   // FIXME: stopLoading does not yet cancel an associated loader!!
-  virtual WebURLLoader* createAssociatedURLLoader(
-      const WebURLLoaderOptions& = WebURLLoaderOptions()) = 0;
+  virtual WebAssociatedURLLoader* createAssociatedURLLoader(
+      const WebAssociatedURLLoaderOptions&) = 0;
 
   // Returns the number of registered unload listeners.
   virtual unsigned unloadListenerCount() const = 0;
@@ -445,12 +440,6 @@ class WebFrame {
   // empty ((0,0), (0,0)).
   virtual WebRect selectionBoundsRect() const = 0;
 
-  // Only for testing purpose:
-  // Returns true if selection.anchorNode has a marker on range from |from| with
-  // |length|.
-  virtual bool selectionStartHasSpellingMarkerFor(int from,
-                                                  int length) const = 0;
-
   // Dumps the layer tree, used by the accelerated compositor, in
   // text form. This is used only by layout tests.
   virtual WebString layerTreeAsText(bool showDebugInfo = false) const = 0;
@@ -492,6 +481,7 @@ class WebFrame {
  private:
 #if BLINK_IMPLEMENTATION
   friend class OpenedFrameTracker;
+  friend class WebFrameTest;
 
   static void traceFrame(Visitor*, WebFrame*);
   static void traceFrame(InlinedGlobalMarkingVisitor, WebFrame*);

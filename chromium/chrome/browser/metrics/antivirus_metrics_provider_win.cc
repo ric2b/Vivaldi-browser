@@ -10,6 +10,7 @@
 #include <windows.h>
 #include <wscapi.h>
 
+#include <algorithm>
 #include <string>
 
 #include "base/bind.h"
@@ -21,6 +22,7 @@
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/path_service.h"
+#include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/task_runner_util.h"
@@ -56,6 +58,20 @@ struct PRODUCT_STATE {
 #pragma pack(pop)
 
 static_assert(sizeof(PRODUCT_STATE) == 4, "Wrong packing!");
+
+// Filter any part of a product string that looks like it might be a version
+// number. Returns true if the part should be removed from the product name.
+bool ShouldFilterPart(const std::string& str) {
+  // Special case for "360" (used by Norton), "365" (used by Kaspersky) and
+  // "NOD32" (used by ESET).
+  if (str == "365" || str == "360" || str == "NOD32")
+    return false;
+  for (const auto ch : str) {
+    if (isdigit(ch))
+      return true;
+  }
+  return false;
+}
 
 bool ShouldReportFullNames() {
   // The expectation is that this will be disabled for the majority of users,
@@ -176,11 +192,29 @@ AntiVirusMetricsProvider::GetAntiVirusProductsOnFileThread() {
       result = FillAntiVirusProductsFromWMI(&av_products);
   }
 
+  MaybeAddUnregisteredAntiVirusProducts(&av_products);
+
   UMA_HISTOGRAM_ENUMERATION("UMA.AntiVirusMetricsProvider.Result",
                             result,
                             RESULT_COUNT);
 
   return av_products;
+}
+
+std::string AntiVirusMetricsProvider::TrimVersionOfAvProductName(
+    const std::string& av_product) {
+  auto av_product_parts = base::SplitString(
+      av_product, " ", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
+
+  if (av_product_parts.size() >= 2) {
+    // Skipping first element, remove any that look like version numbers.
+    av_product_parts.erase(
+        std::remove_if(av_product_parts.begin() + 1, av_product_parts.end(),
+                       ShouldFilterPart),
+        av_product_parts.end());
+  }
+
+  return base::JoinString(av_product_parts, " ");
 }
 
 void AntiVirusMetricsProvider::GotAntiVirusProducts(
@@ -262,8 +296,8 @@ AntiVirusMetricsProvider::FillAntiVirusProductsFromWSC(
     result = product->get_ProductName(product_name.Receive());
     if (FAILED(result))
       return RESULT_FAILED_TO_GET_PRODUCT_NAME;
-    std::string name =
-        base::SysWideToUTF8(std::wstring(product_name, product_name.Length()));
+    std::string name = TrimVersionOfAvProductName(
+        base::SysWideToUTF8(std::wstring(product_name, product_name.Length())));
     product_name.Release();
     if (ShouldReportFullNames())
       av_product.set_product_name(name);
@@ -393,7 +427,7 @@ AntiVirusMetricsProvider::FillAntiVirusProductsFromWMI(
 
     // Owned by ScopedVariant.
     BSTR temp_bstr = V_BSTR(display_name.ptr());
-    std::string name(base::SysWideToUTF8(
+    std::string name = TrimVersionOfAvProductName(base::SysWideToUTF8(
         std::wstring(temp_bstr, ::SysStringLen(temp_bstr))));
 
     if (ShouldReportFullNames())
@@ -425,4 +459,49 @@ AntiVirusMetricsProvider::FillAntiVirusProductsFromWMI(
   *products = std::move(result_list);
 
   return RESULT_SUCCESS;
+}
+
+void AntiVirusMetricsProvider::MaybeAddUnregisteredAntiVirusProducts(
+    std::vector<AvProduct>* products) {
+  base::ThreadRestrictions::AssertIOAllowed();
+
+  // Trusteer Rapport does not register with WMI or Security Center so do some
+  // "best efforts" detection here.
+
+  // Rapport always installs into 32-bit Program Files in directory
+  // %DIR_PROGRAM_FILESX86%\Trusteer\Rapport
+  base::FilePath binary_path;
+  if (!PathService::Get(base::DIR_PROGRAM_FILESX86, &binary_path))
+    return;
+
+  binary_path = binary_path.AppendASCII("Trusteer")
+                    .AppendASCII("Rapport")
+                    .AppendASCII("bin")
+                    .AppendASCII("RapportService.exe");
+
+  if (!base::PathExists(binary_path))
+    return;
+
+  std::wstring mutable_path_str(binary_path.value());
+  std::string product_version;
+
+  if (!GetProductVersion(&mutable_path_str, &product_version))
+    return;
+
+  AvProduct av_product;
+
+  // Assume enabled, no easy way of knowing for sure.
+  av_product.set_product_state(metrics::SystemProfileProto::AntiVirusState::
+                                   SystemProfileProto_AntiVirusState_STATE_ON);
+
+  // Taken from Add/Remove programs as the product name.
+  std::string product_name("Trusteer Endpoint Protection");
+  if (ShouldReportFullNames()) {
+    av_product.set_product_name(product_name);
+    av_product.set_product_version(product_version);
+  }
+  av_product.set_product_name_hash(metrics::HashName(product_name));
+  av_product.set_product_version_hash(metrics::HashName(product_version));
+
+  products->push_back(av_product);
 }

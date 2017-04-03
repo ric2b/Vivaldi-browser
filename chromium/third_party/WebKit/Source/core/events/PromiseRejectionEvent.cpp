@@ -12,16 +12,17 @@ PromiseRejectionEvent::PromiseRejectionEvent(
     ScriptState* state,
     const AtomicString& type,
     const PromiseRejectionEventInit& initializer)
-    : Event(type, initializer), m_scriptState(state) {
+    : Event(type, initializer),
+      m_scriptState(state),
+      m_promise(this),
+      m_reason(this) {
   ThreadState::current()->registerPreFinalizer(this);
   DCHECK(initializer.hasPromise());
   m_promise.set(initializer.promise().isolate(),
                 initializer.promise().v8Value());
-  m_promise.setPhantom();
   if (initializer.hasReason()) {
     m_reason.set(initializer.reason().isolate(),
                  initializer.reason().v8Value());
-    m_reason.setPhantom();
   }
 }
 
@@ -84,8 +85,8 @@ DEFINE_TRACE(PromiseRejectionEvent) {
 }
 
 DEFINE_TRACE_WRAPPERS(PromiseRejectionEvent) {
-  visitor->traceWrappers(&m_promise);
-  visitor->traceWrappers(&m_reason);
+  visitor->traceWrappers(m_promise);
+  visitor->traceWrappers(m_reason);
 }
 
 }  // namespace blink

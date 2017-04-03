@@ -52,7 +52,11 @@ WebSettingsImpl::WebSettingsImpl(Settings* settings,
       m_shrinksViewportContentToFit(false),
       m_viewportMetaLayoutSizeQuirk(false),
       m_viewportMetaNonUserScalableQuirk(false),
-      m_clobberUserAgentInitialScaleQuirk(false) {
+      m_clobberUserAgentInitialScaleQuirk(false),
+      m_expensiveBackgroundThrottlingCPUBudget(-1),
+      m_expensiveBackgroundThrottlingInitialBudget(-1),
+      m_expensiveBackgroundThrottlingMaxBudget(-1),
+      m_expensiveBackgroundThrottlingMaxDelay(-1) {
   DCHECK(settings);
 }
 
@@ -506,6 +510,10 @@ void WebSettingsImpl::setMinimumAccelerated2dCanvasSize(int numPixels) {
   m_settings->setMinimumAccelerated2dCanvasSize(numPixels);
 }
 
+void WebSettingsImpl::setHideDownloadUI(bool hide) {
+  m_settings->setHideDownloadUI(hide);
+}
+
 void WebSettingsImpl::setHistoryEntryRequiresUserGesture(bool enabled) {
   m_settings->setHistoryEntryRequiresUserGesture(enabled);
 }
@@ -516,10 +524,6 @@ void WebSettingsImpl::setHyperlinkAuditingEnabled(bool enabled) {
 
 void WebSettingsImpl::setAutoplayExperimentMode(const WebString& mode) {
   m_settings->setAutoplayExperimentMode(mode);
-}
-
-void WebSettingsImpl::setCaretBrowsingEnabled(bool enabled) {
-  m_settings->setCaretBrowsingEnabled(enabled);
 }
 
 void WebSettingsImpl::setValidationMessageTimerMagnification(int newValue) {
@@ -669,10 +673,6 @@ void WebSettingsImpl::setSmartInsertDeleteEnabled(bool enabled) {
   m_settings->setSmartInsertDeleteEnabled(enabled);
 }
 
-void WebSettingsImpl::setPinchOverlayScrollbarThickness(int thickness) {
-  m_settings->setPinchOverlayScrollbarThickness(thickness);
-}
-
 void WebSettingsImpl::setUseSolidColorScrollbars(bool enabled) {
   m_settings->setUseSolidColorScrollbars(enabled);
 }
@@ -693,6 +693,25 @@ void WebSettingsImpl::setV8CacheStrategiesForCacheStorage(
 
 void WebSettingsImpl::setViewportStyle(WebViewportStyle style) {
   m_devToolsEmulator->setViewportStyle(style);
+}
+
+void WebSettingsImpl::setExpensiveBackgroundThrottlingCPUBudget(
+    float cpuBudget) {
+  m_expensiveBackgroundThrottlingCPUBudget = cpuBudget;
+}
+
+void WebSettingsImpl::setExpensiveBackgroundThrottlingInitialBudget(
+    float initialBudget) {
+  m_expensiveBackgroundThrottlingInitialBudget = initialBudget;
+}
+
+void WebSettingsImpl::setExpensiveBackgroundThrottlingMaxBudget(
+    float maxBudget) {
+  m_expensiveBackgroundThrottlingMaxBudget = maxBudget;
+}
+
+void WebSettingsImpl::setExpensiveBackgroundThrottlingMaxDelay(float maxDelay) {
+  m_expensiveBackgroundThrottlingMaxDelay = maxDelay;
 }
 
 void WebSettingsImpl::setServeResourceFromCacheOnly(bool onlyLoadFromCache)

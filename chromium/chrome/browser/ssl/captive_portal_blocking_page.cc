@@ -27,6 +27,8 @@
 #include "components/security_interstitials/core/metrics_helper.h"
 #include "components/url_formatter/url_formatter.h"
 #include "components/wifi/wifi_service.h"
+#include "content/public/browser/navigation_entry.h"
+#include "content/public/browser/ssl_status.h"
 #include "content/public/browser/web_contents.h"
 #include "net/base/network_change_notifier.h"
 #include "net/base/network_interfaces.h"
@@ -78,6 +80,7 @@ CaptivePortalBlockingPage::CaptivePortalBlockingPage(
                                request_url,
                                CreateMetricsHelper(web_contents, request_url)),
       login_url_(login_url),
+      ssl_info_(ssl_info),
       callback_(callback) {
   DCHECK(login_url_.is_valid());
 
@@ -85,7 +88,7 @@ CaptivePortalBlockingPage::CaptivePortalBlockingPage(
     cert_report_helper_.reset(new CertReportHelper(
         std::move(ssl_cert_reporter), web_contents, request_url, ssl_info,
         certificate_reporting::ErrorReport::INTERSTITIAL_CAPTIVE_PORTAL, false,
-        nullptr));
+        base::Time::Now(), nullptr));
   }
 
   RecordUMA(SHOW_ALL);
@@ -230,6 +233,9 @@ void CaptivePortalBlockingPage::CommandReceived(const std::string& command) {
     case security_interstitials::CMD_OPEN_REPORTING_PRIVACY:
       controller()->OpenExtendedReportingPrivacyPolicy();
       break;
+    case security_interstitials::CMD_OPEN_WHITEPAPER:
+      controller()->OpenExtendedReportingWhitepaper();
+      break;
     case security_interstitials::CMD_ERROR:
     case security_interstitials::CMD_TEXT_FOUND:
     case security_interstitials::CMD_TEXT_NOT_FOUND:
@@ -239,6 +245,10 @@ void CaptivePortalBlockingPage::CommandReceived(const std::string& command) {
       NOTREACHED() << "Command " << cmd
                    << " isn't handled by the captive portal interstitial.";
   }
+}
+
+void CaptivePortalBlockingPage::OverrideEntry(content::NavigationEntry* entry) {
+  entry->GetSSL() = content::SSLStatus(ssl_info_);
 }
 
 void CaptivePortalBlockingPage::OnProceed() {

@@ -9,6 +9,7 @@
 
 #include "base/metrics/histogram.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/metrics/user_metrics.h"
 #include "base/strings/stringprintf.h"
 #include "base/template_util.h"
 
@@ -40,18 +41,36 @@ const char kHistogramDismissedUnvisited[] =
     "NewTabPage.ContentSuggestions.DismissedUnvisited";
 const char kHistogramDismissedVisited[] =
     "NewTabPage.ContentSuggestions.DismissedVisited";
+const char kHistogramArticlesUsageTimeLocal[] =
+    "NewTabPage.ContentSuggestions.UsageTimeLocal";
 const char kHistogramVisitDuration[] =
     "NewTabPage.ContentSuggestions.VisitDuration";
 const char kHistogramMoreButtonShown[] =
     "NewTabPage.ContentSuggestions.MoreButtonShown";
 const char kHistogramMoreButtonClicked[] =
     "NewTabPage.ContentSuggestions.MoreButtonClicked";
+const char kHistogramCategoryDismissed[] =
+    "NewTabPage.ContentSuggestions.CategoryDismissed";
 
 const char kPerCategoryHistogramFormat[] = "%s.%s";
 
-// Each suffix here should correspond to an entry under histogram suffix
-// ContentSuggestionCategory in histograms.xml.
-std::string GetCategorySuffix(Category category) {
+// This mostly corresponds to the KnownCategories enum, but it is contiguous
+// and contains exactly the values to be recorded in UMA. Don't remove or
+// reorder elements, only add new ones at the end (before COUNT), and keep in
+// sync with ContentSuggestionsCategory in histograms.xml.
+enum class HistogramCategories {
+  EXPERIMENTAL,
+  RECENT_TABS,
+  DOWNLOADS,
+  BOOKMARKS,
+  PHYSICAL_WEB_PAGES,
+  FOREIGN_TABS,
+  ARTICLES,
+  // Insert new values here!
+  COUNT
+};
+
+HistogramCategories GetHistogramCategory(Category category) {
   static_assert(
       std::is_same<decltype(category.id()), typename base::underlying_type<
                                                 KnownCategories>::type>::value,
@@ -63,24 +82,50 @@ std::string GetCategorySuffix(Category category) {
   KnownCategories known_category = static_cast<KnownCategories>(category.id());
   switch (known_category) {
     case KnownCategories::RECENT_TABS:
-      return "RecentTabs";
+      return HistogramCategories::RECENT_TABS;
     case KnownCategories::DOWNLOADS:
-      return "Downloads";
+      return HistogramCategories::DOWNLOADS;
     case KnownCategories::BOOKMARKS:
-      return "Bookmarks";
+      return HistogramCategories::BOOKMARKS;
     case KnownCategories::PHYSICAL_WEB_PAGES:
-      return "PhysicalWeb";
+      return HistogramCategories::PHYSICAL_WEB_PAGES;
     case KnownCategories::FOREIGN_TABS:
-      return "ForeignTabs";
+      return HistogramCategories::FOREIGN_TABS;
     case KnownCategories::ARTICLES:
-      return "Articles";
+      return HistogramCategories::ARTICLES;
     case KnownCategories::LOCAL_CATEGORIES_COUNT:
     case KnownCategories::REMOTE_CATEGORIES_OFFSET:
       NOTREACHED();
-      break;
+      return HistogramCategories::COUNT;
   }
   // All other (unknown) categories go into a single "Experimental" bucket.
-  return "Experimental";
+  return HistogramCategories::EXPERIMENTAL;
+}
+
+// Each suffix here should correspond to an entry under histogram suffix
+// ContentSuggestionCategory in histograms.xml.
+std::string GetCategorySuffix(Category category) {
+  HistogramCategories histogram_category = GetHistogramCategory(category);
+  switch (histogram_category) {
+    case HistogramCategories::RECENT_TABS:
+      return "RecentTabs";
+    case HistogramCategories::DOWNLOADS:
+      return "Downloads";
+    case HistogramCategories::BOOKMARKS:
+      return "Bookmarks";
+    case HistogramCategories::PHYSICAL_WEB_PAGES:
+      return "PhysicalWeb";
+    case HistogramCategories::FOREIGN_TABS:
+      return "ForeignTabs";
+    case HistogramCategories::ARTICLES:
+      return "Articles";
+    case HistogramCategories::EXPERIMENTAL:
+      return "Experimental";
+    case HistogramCategories::COUNT:
+      NOTREACHED();
+      break;
+  }
+  return std::string();
 }
 
 std::string GetCategoryHistogramName(const char* base_name, Category category) {
@@ -159,6 +204,25 @@ void LogCategoryHistogramScore(const char* base_name,
   UmaHistogramScore(name, score);
 }
 
+// Records ContentSuggestions usage. Therefore the day is sliced into 20min
+// buckets. Depending on the current local time the count of the corresponding
+// bucket is increased.
+void RecordContentSuggestionsUsage() {
+  const int kBucketSizeMins = 20;
+  const int kNumBuckets = 24 * 60 / kBucketSizeMins;
+
+  base::Time::Exploded now_exploded;
+  base::Time::Now().LocalExplode(&now_exploded);
+  size_t bucket =
+      (now_exploded.hour * 60 + now_exploded.minute) / kBucketSizeMins;
+
+  UMA_HISTOGRAM_ENUMERATION(kHistogramArticlesUsageTimeLocal, bucket,
+                            kNumBuckets);
+
+  base::RecordAction(
+      base::UserMetricsAction("NewTabPage_ContentSuggestions_ArticlesUsage"));
+}
+
 }  // namespace
 
 void OnPageShown(
@@ -188,6 +252,13 @@ void OnSuggestionShown(int global_position,
   LogCategoryHistogramAge(kHistogramShownAge, category, age);
 
   LogCategoryHistogramScore(kHistogramShownScore, category, score);
+
+  // When the first of the articles suggestions is shown, then we count this as
+  // a single usage of content suggestions.
+  if (category.IsKnownCategory(KnownCategories::ARTICLES) &&
+      category_position == 0) {
+    RecordContentSuggestionsUsage();
+  }
 }
 
 void OnSuggestionOpened(int global_position,
@@ -212,6 +283,10 @@ void OnSuggestionOpened(int global_position,
   LogCategoryHistogramEnumeration(
       kHistogramOpenDisposition, category, static_cast<int>(disposition),
       static_cast<int>(WindowOpenDisposition::MAX_VALUE) + 1);
+
+  if (category.IsKnownCategory(KnownCategories::ARTICLES)) {
+    RecordContentSuggestionsUsage();
+  }
 }
 
 void OnSuggestionMenuOpened(int global_position,
@@ -266,6 +341,12 @@ void OnMoreButtonClicked(Category category, int position) {
   // one extra bucket to this histogram.
   LogCategoryHistogramEnumeration(kHistogramMoreButtonClicked, category,
                                   position, kMaxSuggestionsPerCategory + 1);
+}
+
+void OnCategoryDismissed(Category category) {
+  UMA_HISTOGRAM_ENUMERATION(kHistogramCategoryDismissed,
+                            static_cast<int>(GetHistogramCategory(category)),
+                            static_cast<int>(HistogramCategories::COUNT));
 }
 
 }  // namespace metrics

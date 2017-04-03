@@ -25,10 +25,12 @@
 #include "components/update_client/test_configurator.h"
 #include "components/update_client/test_installer.h"
 #include "components/update_client/update_client.h"
+#include "components/update_client/update_client_errors.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 using Configurator = update_client::Configurator;
+using Result = update_client::CrxInstaller::Result;
 using TestConfigurator = update_client::TestConfigurator;
 using UpdateClient = update_client::UpdateClient;
 
@@ -46,8 +48,8 @@ class MockInstaller : public CrxInstaller {
 
   MOCK_METHOD1(OnUpdateError, void(int error));
   MOCK_METHOD2(Install,
-               bool(const base::DictionaryValue& manifest,
-                    const base::FilePath& unpack_path));
+               Result(const base::DictionaryValue& manifest,
+                      const base::FilePath& unpack_path));
   MOCK_METHOD2(GetInstalledFile,
                bool(const std::string& file, base::FilePath* installed_file));
   MOCK_METHOD0(Uninstall, bool());
@@ -64,11 +66,11 @@ class MockUpdateClient : public UpdateClient {
   MOCK_METHOD3(Install,
                void(const std::string& id,
                     const CrxDataCallback& crx_data_callback,
-                    const CompletionCallback& completion_callback));
+                    const Callback& callback));
   MOCK_METHOD3(Update,
                void(const std::vector<std::string>& ids,
                     const CrxDataCallback& crx_data_callback,
-                    const CompletionCallback& completion_callback));
+                    const Callback& callback));
   MOCK_CONST_METHOD2(GetCrxUpdateState,
                      bool(const std::string& id, CrxUpdateItem* update_item));
   MOCK_CONST_METHOD1(IsUpdating, bool(const std::string& id));
@@ -129,12 +131,12 @@ class ComponentUpdaterTest : public testing::Test {
 class OnDemandTester {
  public:
   void OnDemand(ComponentUpdateService* cus, const std::string& id);
-  int error() const { return error_; }
+  update_client::Error error() const { return error_; }
 
  private:
-  void OnDemandComplete(int error);
+  void OnDemandComplete(update_client::Error error);
 
-  int error_ = 0;
+  update_client::Error error_ = update_client::Error::NONE;
 };
 
 MockInstaller::MockInstaller() {
@@ -162,7 +164,7 @@ void OnDemandTester::OnDemand(ComponentUpdateService* cus,
       base::Bind(&OnDemandTester::OnDemandComplete, base::Unretained(this)));
 }
 
-void OnDemandTester::OnDemandComplete(int error) {
+void OnDemandTester::OnDemandComplete(update_client::Error error) {
   error_ = error;
 }
 
@@ -227,8 +229,8 @@ TEST_F(ComponentUpdaterTest, RegisterComponent) {
 
     void OnUpdate(const std::vector<std::string>& ids,
                   const UpdateClient::CrxDataCallback& crx_data_callback,
-                  const UpdateClient::CompletionCallback& completion_callback) {
-      completion_callback.Run(0);
+                  const Callback& callback) {
+      callback.Run(update_client::Error::NONE);
       static int cnt = 0;
       ++cnt;
       if (cnt >= max_cnt_)
@@ -287,13 +289,12 @@ TEST_F(ComponentUpdaterTest, RegisterComponent) {
 TEST_F(ComponentUpdaterTest, OnDemandUpdate) {
   class LoopHandler {
    public:
-    LoopHandler(int max_cnt) : max_cnt_(max_cnt) {}
+    explicit LoopHandler(int max_cnt) : max_cnt_(max_cnt) {}
 
-    void OnInstall(
-        const std::string& ids,
-        const UpdateClient::CrxDataCallback& crx_data_callback,
-        const UpdateClient::CompletionCallback& completion_callback) {
-      completion_callback.Run(0);
+    void OnInstall(const std::string& ids,
+                   const UpdateClient::CrxDataCallback& crx_data_callback,
+                   const Callback& callback) {
+      callback.Run(update_client::Error::NONE);
       static int cnt = 0;
       ++cnt;
       if (cnt >= max_cnt_) {
@@ -342,10 +343,9 @@ TEST_F(ComponentUpdaterTest, OnDemandUpdate) {
 
   base::RunLoop().Run();
 
-  EXPECT_EQ(
-      static_cast<int>(update_client::Error::ERROR_UPDATE_INVALID_ARGUMENT),
-      ondemand_tester_component_not_registered.error());
-  EXPECT_EQ(0, ondemand_tester.error());
+  EXPECT_EQ(update_client::Error::INVALID_ARGUMENT,
+            ondemand_tester_component_not_registered.error());
+  EXPECT_EQ(update_client::Error::NONE, ondemand_tester.error());
 
   ht.ExpectUniqueSample("ComponentUpdater.Calls", 0, 1);
   ht.ExpectUniqueSample("ComponentUpdater.UpdateCompleteResult", 0, 1);
@@ -359,11 +359,10 @@ TEST_F(ComponentUpdaterTest, MaybeThrottle) {
     LoopHandler(int max_cnt, const base::Closure& quit_closure)
         : max_cnt_(max_cnt), quit_closure_(quit_closure) {}
 
-    void OnInstall(
-        const std::string& ids,
-        const UpdateClient::CrxDataCallback& crx_data_callback,
-        const UpdateClient::CompletionCallback& completion_callback) {
-      completion_callback.Run(0);
+    void OnInstall(const std::string& ids,
+                   const UpdateClient::CrxDataCallback& crx_data_callback,
+                   const Callback& callback) {
+      callback.Run(update_client::Error::NONE);
       static int cnt = 0;
       ++cnt;
       if (cnt >= max_cnt_)

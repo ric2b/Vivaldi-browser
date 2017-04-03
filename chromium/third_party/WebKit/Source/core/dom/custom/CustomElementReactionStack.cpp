@@ -14,8 +14,9 @@ namespace blink {
 
 namespace {
 
-CustomElementReactionStack& customElementReactionStack() {
-  DEFINE_STATIC_LOCAL(CustomElementReactionStack, customElementReactionStack,
+Persistent<CustomElementReactionStack>& customElementReactionStack() {
+  DEFINE_STATIC_LOCAL(Persistent<CustomElementReactionStack>,
+                      customElementReactionStack,
                       (new CustomElementReactionStack));
   return customElementReactionStack;
 }
@@ -41,7 +42,7 @@ void CustomElementReactionStack::popInvokingReactions() {
   ElementQueue* queue = m_stack.last();
   if (queue)
     invokeReactions(*queue);
-  m_stack.removeLast();
+  m_stack.pop_back();
 }
 
 void CustomElementReactionStack::invokeReactions(ElementQueue& queue) {
@@ -96,6 +97,11 @@ void CustomElementReactionStack::enqueueToBackupQueue(
   enqueue(m_backupQueue, element, reaction);
 }
 
+void CustomElementReactionStack::clearQueue(Element* element) {
+  if (CustomElementReactionQueue* reactions = m_map.get(element))
+    reactions->clear();
+}
+
 void CustomElementReactionStack::invokeBackupQueue() {
   DCHECK(isMainThread());
   invokeReactions(*m_backupQueue);
@@ -103,7 +109,16 @@ void CustomElementReactionStack::invokeBackupQueue() {
 }
 
 CustomElementReactionStack& CustomElementReactionStack::current() {
-  return customElementReactionStack();
+  return *customElementReactionStack();
+}
+
+CustomElementReactionStack*
+CustomElementReactionStackTestSupport::setCurrentForTest(
+    CustomElementReactionStack* newStack) {
+  Persistent<CustomElementReactionStack>& stack = customElementReactionStack();
+  CustomElementReactionStack* oldStack = stack.get();
+  stack = newStack;
+  return oldStack;
 }
 
 }  // namespace blink

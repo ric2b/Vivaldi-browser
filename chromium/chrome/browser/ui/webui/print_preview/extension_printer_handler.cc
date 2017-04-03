@@ -20,7 +20,7 @@
 #include "chrome/browser/printing/pwg_raster_converter.h"
 #include "components/cloud_devices/common/cloud_device_description.h"
 #include "components/cloud_devices/common/printer_description.h"
-#include "device/core/device_client.h"
+#include "device/base/device_client.h"
 #include "device/usb/usb_device.h"
 #include "device/usb/usb_service.h"
 #include "extensions/browser/api/device_permissions_manager.h"
@@ -343,12 +343,12 @@ void ExtensionPrinterHandler::OnUsbDevicesEnumerated(
         permissions_manager->GetForExtension(extension->id());
     for (const auto& device : devices) {
       if (manifest_data->SupportsDevice(device)) {
-        extensions::UsbDevicePermission::CheckParam param(
-            device->vendor_id(), device->product_id(),
-            extensions::UsbDevicePermissionData::UNSPECIFIED_INTERFACE);
+        std::unique_ptr<extensions::UsbDevicePermission::CheckParam> param =
+            extensions::UsbDevicePermission::CheckParam::ForUsbDevice(
+                extension.get(), device.get());
         if (device_permissions->FindUsbDeviceEntry(device) ||
             extension->permissions_data()->CheckAPIPermissionWithParam(
-                extensions::APIPermission::kUsbDevice, &param)) {
+                extensions::APIPermission::kUsbDevice, param.get())) {
           // Skip devices the extension already has permission to access.
           continue;
         }

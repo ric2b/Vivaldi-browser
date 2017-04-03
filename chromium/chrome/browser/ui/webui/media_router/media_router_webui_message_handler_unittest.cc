@@ -6,8 +6,8 @@
 #include "base/strings/stringprintf.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/browser/ui/webui/media_router/media_router_test.h"
 #include "chrome/browser/ui/webui/media_router/media_router_ui.h"
+#include "chrome/browser/ui/webui/media_router/media_router_web_ui_test.h"
 #include "chrome/browser/ui/webui/media_router/media_router_webui_message_handler.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/test/test_web_ui.h"
@@ -63,7 +63,7 @@ class TestMediaRouterWebUIMessageHandler
   std::string domain_;
 };
 
-class MediaRouterWebUIMessageHandlerTest : public MediaRouterTest {
+class MediaRouterWebUIMessageHandlerTest : public MediaRouterWebUITest {
  public:
   MediaRouterWebUIMessageHandlerTest()
     : web_ui_(new content::TestWebUI()),
@@ -150,7 +150,6 @@ TEST_F(MediaRouterWebUIMessageHandlerTest, UpdateSinks) {
   EXPECT_EQ(static_cast<int>(MediaCastMode::TAB_MIRROR), cast_mode_bits);
 }
 
-#if defined(GOOGLE_CHROME_BUILD)
 TEST_F(MediaRouterWebUIMessageHandlerTest, UpdateSinksWithIdentity) {
   MediaSink::Id sink_id("sinkId123");
   std::string sink_name("The sink");
@@ -327,7 +326,6 @@ TEST_F(MediaRouterWebUIMessageHandlerTest, UpdateSinksWithDefaultDomain) {
   EXPECT_TRUE(sink_value->GetString("domain", &value));
   EXPECT_EQ(kUserDomainForTesting, value);
 }
-#endif  // defined(GOOGLE_CHROME_BUILD)
 
 TEST_F(MediaRouterWebUIMessageHandlerTest, UpdateRoutes) {
   MediaRoute::Id route_id("routeId123");

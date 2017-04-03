@@ -17,8 +17,8 @@
 #include "base/observer_list.h"
 #include "base/threading/thread_checker.h"
 #include "cc/surfaces/frame_sink_id.h"
-#include "cc/surfaces/surface_damage_observer.h"
 #include "cc/surfaces/surface_id.h"
+#include "cc/surfaces/surface_observer.h"
 #include "cc/surfaces/surface_sequence.h"
 #include "cc/surfaces/surfaces_export.h"
 
@@ -41,15 +41,19 @@ class CC_SURFACES_EXPORT SurfaceManager {
 
   Surface* GetSurfaceForId(const SurfaceId& surface_id);
 
-  void AddObserver(SurfaceDamageObserver* obs) {
-    observer_list_.AddObserver(obs);
-  }
+  void AddObserver(SurfaceObserver* obs) { observer_list_.AddObserver(obs); }
 
-  void RemoveObserver(SurfaceDamageObserver* obs) {
+  void RemoveObserver(SurfaceObserver* obs) {
     observer_list_.RemoveObserver(obs);
   }
 
   bool SurfaceModified(const SurfaceId& surface_id);
+
+  // Called when a CompositorFrame is submitted to a SurfaceFactory for a given
+  // |surface_id| for the first time.
+  void SurfaceCreated(const SurfaceId& surface_id,
+                      const gfx::Size& frame_size,
+                      float device_scale_factor);
 
   // A frame for a surface satisfies a set of sequence numbers in a particular
   // id namespace.
@@ -61,6 +65,24 @@ class CC_SURFACES_EXPORT SurfaceManager {
   // Invalidate a frame_sink_id that might still have associated sequences,
   // possibly because a renderer process has crashed.
   void InvalidateFrameSinkId(const FrameSinkId& frame_sink_id);
+
+  // Adds a reference from a parent surface to a child surface. Any surface
+  // embedding a child surface should have a reference added so that the child
+  // surface is not garbage collected until after the parent surface.
+  void AddSurfaceReference(const SurfaceId& parent_id,
+                           const SurfaceId& child_id);
+
+  // Removes a reference from a parent surface to a child surface.
+  void RemoveSurfaceReference(const SurfaceId& parent_id,
+                              const SurfaceId& child_id);
+
+  // Returns the number of surfaces that have references to |surface_id|. When
+  // the count is zero nothing is referencing the surface and it may be garbage
+  // collected.
+  size_t GetSurfaceReferenceCount(const SurfaceId& surface_id) const;
+
+  // Returns the number of surfaces that |surface_id| has references to.
+  size_t GetReferencedSurfaceCount(const SurfaceId& surface_id) const;
 
   // SurfaceFactoryClient, hierarchy, and BeginFrameSource can be registered
   // and unregistered in any order with respect to each other.
@@ -96,6 +118,8 @@ class CC_SURFACES_EXPORT SurfaceManager {
   void UnregisterFrameSinkHierarchy(const FrameSinkId& parent_frame_sink_id,
                                     const FrameSinkId& child_frame_sink_id);
 
+  const SurfaceId& GetRootSurfaceId() { return kRootSurfaceId; }
+
  private:
   void RecursivelyAttachBeginFrameSource(const FrameSinkId& frame_sink_id,
                                          BeginFrameSource* source);
@@ -108,9 +132,14 @@ class CC_SURFACES_EXPORT SurfaceManager {
 
   void GarbageCollectSurfaces();
 
+  // Removes reference from a parent surface to a child surface. Used to remove
+  // references without triggered GC.
+  void RemoveSurfaceReferenceImpl(const SurfaceId& parent_id,
+                                  const SurfaceId& child_id);
+
   using SurfaceMap = std::unordered_map<SurfaceId, Surface*, SurfaceIdHash>;
   SurfaceMap surface_map_;
-  base::ObserverList<SurfaceDamageObserver> observer_list_;
+  base::ObserverList<SurfaceObserver> observer_list_;
   base::ThreadChecker thread_checker_;
 
   // List of surfaces to be destroyed, along with what sequences they're still
@@ -143,10 +172,26 @@ class CC_SURFACES_EXPORT SurfaceManager {
   };
   std::unordered_map<FrameSinkId, FrameSinkSourceMapping, FrameSinkIdHash>
       frame_sink_source_map_;
+
+  using SurfaceIdSet = std::unordered_set<SurfaceId, SurfaceIdHash>;
+  // Tracks references from the child surface to parent surface. If there are
+  // zero entries in the set for a SurfaceId then nothing is referencing the
+  // surface and it can be garbage collected.
+  std::unordered_map<SurfaceId, SurfaceIdSet, SurfaceIdHash>
+      child_to_parent_refs_;
+  // Tracks references from the parent surface to child surface. Is the inverse
+  // of |child_to_parent_refs_|.
+  std::unordered_map<SurfaceId, SurfaceIdSet, SurfaceIdHash>
+      parent_to_child_refs_;
+
   // Set of which sources are registered to which namespace.  Any child
   // that is implicitly using this namespace must be reachable by the
   // parent in the dag.
   std::unordered_map<BeginFrameSource*, FrameSinkId> registered_sources_;
+
+  // Root SurfaceId that references display root surfaces. There is no Surface
+  // with this id, it's for bookkeeping purposes only.
+  const SurfaceId kRootSurfaceId;
 
   DISALLOW_COPY_AND_ASSIGN(SurfaceManager);
 };

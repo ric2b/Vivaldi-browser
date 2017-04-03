@@ -10,6 +10,9 @@
 #include <set>
 
 #include "base/memory/ref_counted.h"
+#include "content/common/content_export.h"
+#include "content/common/indexed_db/indexed_db.mojom.h"
+#include "content/common/indexed_db/indexed_db_constants.h"
 #include "third_party/WebKit/public/platform/modules/indexeddb/WebIDBCursor.h"
 #include "third_party/WebKit/public/platform/modules/indexeddb/WebIDBDatabase.h"
 #include "third_party/WebKit/public/platform/modules/indexeddb/WebIDBTypes.h"
@@ -17,7 +20,6 @@
 namespace blink {
 class WebBlobInfo;
 class WebIDBCallbacks;
-class WebIDBDatabaseCallbacks;
 class WebIDBObserver;
 class WebString;
 }
@@ -25,11 +27,12 @@ class WebString;
 namespace content {
 class ThreadSafeSender;
 
-class WebIDBDatabaseImpl : public blink::WebIDBDatabase {
+class CONTENT_EXPORT WebIDBDatabaseImpl
+    : public NON_EXPORTED_BASE(blink::WebIDBDatabase) {
  public:
-  WebIDBDatabaseImpl(int32_t ipc_database_id,
-                     int32_t ipc_database_callbacks_id,
-                     ThreadSafeSender* thread_safe_sender);
+  WebIDBDatabaseImpl(indexed_db::mojom::DatabaseAssociatedPtrInfo database,
+                     scoped_refptr<base::SingleThreadTaskRunner> io_runner,
+                     scoped_refptr<ThreadSafeSender> thread_safe_sender);
   ~WebIDBDatabaseImpl() override;
 
   // blink::WebIDBDatabase
@@ -125,9 +128,20 @@ class WebIDBDatabaseImpl : public blink::WebIDBDatabase {
       const blink::WebVector<blink::WebString>& uuids) override;
 
  private:
-  int32_t ipc_database_id_;
-  int32_t ipc_database_callbacks_id_;
+  FRIEND_TEST_ALL_PREFIXES(WebIDBDatabaseImplTest, ValueSizeTest);
+  FRIEND_TEST_ALL_PREFIXES(WebIDBDatabaseImplTest, KeyAndValueSizeTest);
+
+  class IOThreadHelper;
+
+  // Maximum size (in bytes) of value/key pair allowed for put requests. Any
+  // requests larger than this size will be rejected.
+  // Used by unit tests to exercise behavior without allocating huge chunks
+  // of memory.
+  size_t max_put_value_size_ = kMaxIDBMessageSizeInBytes;
+
+  IOThreadHelper* helper_;
   std::set<int32_t> observer_ids_;
+  scoped_refptr<base::SingleThreadTaskRunner> io_runner_;
   scoped_refptr<ThreadSafeSender> thread_safe_sender_;
 };
 

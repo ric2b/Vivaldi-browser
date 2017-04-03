@@ -32,6 +32,10 @@ class ViewsTestBase : public PlatformTest {
   // Whether the test is running under mus.
   static bool IsMus();
 
+  // Returns true if running aura-mus in a client configuration (not the window
+  // manager).
+  static bool IsAuraMusClient();
+
   // testing::Test:
   void SetUp() override;
   void TearDown() override;
@@ -43,6 +47,9 @@ class ViewsTestBase : public PlatformTest {
   Widget::InitParams CreateParams(Widget::InitParams::Type type);
 
   bool HasCompositingManager() const;
+
+  // Simulate an OS-level destruction of the native window held by |widget|.
+  void SimulateNativeDestroy(Widget* widget);
 
  protected:
   TestViewsDelegate* views_delegate() const {

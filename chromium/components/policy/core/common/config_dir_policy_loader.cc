@@ -22,7 +22,6 @@
 #include "components/policy/core/common/policy_bundle.h"
 #include "components/policy/core/common/policy_load_status.h"
 #include "components/policy/core/common/policy_types.h"
-#include "components/policy/policy_constants.h"
 
 namespace policy {
 
@@ -57,20 +56,6 @@ PolicyLoadStatus JsonErrorToPolicyLoadStatus(int status) {
   }
   NOTREACHED() << "Invalid status " << status;
   return POLICY_LOAD_STATUS_PARSE_ERROR;
-}
-
-bool IsUserPolicy(const PolicyMap::const_iterator iter) {
-  const PolicyDetails* policy_details = GetChromePolicyDetails(iter->first);
-  if (!policy_details) {
-    LOG(ERROR) << "Ignoring unknown platform policy: " << iter->first;
-    return false;
-  }
-  if (policy_details->is_device_policy) {
-    // Device Policy is only implemented as Cloud Policy (not Platform Policy).
-    LOG(ERROR) << "Ignoring device platform policy: " << iter->first;
-    return false;
-  }
-  return true;
 }
 
 }  // namespace
@@ -157,8 +142,8 @@ void ConfigDirPolicyLoader::LoadFromPath(const base::FilePath& path,
   for (std::set<base::FilePath>::reverse_iterator config_file_iter =
            files.rbegin(); config_file_iter != files.rend();
        ++config_file_iter) {
-    JSONFileValueDeserializer deserializer(*config_file_iter);
-    deserializer.set_allow_trailing_comma(true);
+    JSONFileValueDeserializer deserializer(*config_file_iter,
+                                           base::JSON_ALLOW_TRAILING_COMMAS);
     int error_code = 0;
     std::string error_msg;
     std::unique_ptr<base::Value> value =
@@ -186,7 +171,6 @@ void ConfigDirPolicyLoader::LoadFromPath(const base::FilePath& path,
     PolicyMap policy_map;
     policy_map.LoadFrom(dictionary_value, level, scope_,
                         POLICY_SOURCE_PLATFORM);
-    policy_map.EraseNonmatching(base::Bind(&IsUserPolicy));
     bundle->Get(PolicyNamespace(POLICY_DOMAIN_CHROME, std::string()))
         .MergeFrom(policy_map);
   }

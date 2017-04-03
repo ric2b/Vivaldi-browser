@@ -8,7 +8,9 @@ import("//build/config/features.gni")
 import("//build/config/ui.gni")
 import("//build/split_static_library.gni")
 import("//chrome/common/features.gni")
+import("//extensions/features/features.gni")
 import("//media/media_options.gni")
+import("//printing/features/features.gni")
 
 config("ui_warnings") {
   if (is_clang) {
@@ -104,8 +106,6 @@ split_static_library("ui") {
     "find_bar/find_tab_helper.cc",
     "find_bar/find_tab_helper.h",
     "javascript_dialogs/chrome_javascript_native_dialog_factory.h",
-    "javascript_dialogs/javascript_dialog_tab_helper.cc",
-    "javascript_dialogs/javascript_dialog_tab_helper.h",
     "login/login_handler.cc",
     "login/login_handler.h",
     "login/login_interstitial_delegate.cc",
@@ -195,6 +195,7 @@ split_static_library("ui") {
     "views/platform_keys_certificate_selector_chromeos.cc",
     "views/platform_keys_certificate_selector_chromeos.h",
     "web_contents_sizer.h",
+    "website_settings/permission_prompt.h",
     "website_settings/website_settings.cc",
     "website_settings/website_settings.h",
     "website_settings/website_settings_ui.cc",
@@ -231,6 +232,8 @@ split_static_library("ui") {
     "webui/chromeos/keyboard_overlay_ui.h",
     "webui/chromeos/login/app_launch_splash_screen_handler.cc",
     "webui/chromeos/login/app_launch_splash_screen_handler.h",
+    "webui/chromeos/login/arc_terms_of_service_screen_handler.cc",
+    "webui/chromeos/login/arc_terms_of_service_screen_handler.h",
     "webui/chromeos/login/authenticated_user_email_retriever.cc",
     "webui/chromeos/login/authenticated_user_email_retriever.h",
     "webui/chromeos/login/auto_enrollment_check_screen_handler.cc",
@@ -436,7 +439,6 @@ split_static_library("ui") {
     ":ui_warnings",
     "//build/config:precompiled_headers",
     "//build/config/compiler:wexit_time_destructors",
-    "//third_party/WebKit/public:debug_devtools",
   ]
 
   # Since browser and browser_ui actually depend on each other,
@@ -462,6 +464,7 @@ split_static_library("ui") {
     "//chrome/app/resources:platform_locale_settings",
     "//chrome/app/theme:chrome_unscaled_resources",
     "//chrome/app/theme:theme_resources",
+    "//chrome/browser:resource_prefetch_predictor_proto",
     "//chrome/browser/devtools",
     "//chrome/browser/ui/webui/engagement:mojo_bindings",
     "//chrome/browser/ui/webui/omnibox:mojo_bindings",
@@ -524,11 +527,13 @@ split_static_library("ui") {
     "//components/rappor",
     "//components/renderer_context_menu",
     "//components/resources",
+    "//components/safe_browsing_db:safe_browsing_prefs",
     "//components/safe_json",
     "//components/search",
     "//components/search_engines",
     "//components/security_interstitials/core",
-    "//components/security_state",
+    "//components/security_state/content",
+    "//components/security_state/core",
     "//components/sessions",
     "//components/signin/core/account_id",
     "//components/signin/core/browser",
@@ -540,8 +545,8 @@ split_static_library("ui") {
     "//components/suggestions/proto",
     "//components/supervised_user_error_page",
     "//components/sync",
+    "//components/sync_preferences",
     "//components/sync_sessions",
-    "//components/syncable_prefs",
     "//components/toolbar",
     "//components/tracing:startup_tracing",
     "//components/undo",
@@ -559,18 +564,21 @@ split_static_library("ui") {
     "//content/app/resources",
     "//content/public/common",
     "//crypto",
+    "//device/base",
     "//device/bluetooth/public/interfaces:experimental_interfaces",
-    "//device/core",
     "//device/usb",
+    "//extensions/features",
     "//media",
     "//net:net_with_v8",
-    "//services/shell/runner/common",
+    "//printing/features",
+    "//services/service_manager/runner/common",
     "//skia",
     "//storage/browser",
     "//storage/common",
+    "//third_party/WebKit/public:features",
     "//third_party/WebKit/public:resources",
     "//third_party/adobe/flash:flapper_version_h",
-    "//third_party/brotli",
+    "//third_party/brotli:dec",
     "//third_party/cacheinvalidation",
     "//third_party/cld:cld_version",
     "//third_party/icu",
@@ -579,7 +587,6 @@ split_static_library("ui") {
     "//third_party/re2",
     "//third_party/zlib",
     "//ui/accessibility",
-    "//ui/base",
     "//ui/base",
     "//ui/base/ime",
     "//ui/compositor",
@@ -726,6 +733,11 @@ split_static_library("ui") {
       "global_error/global_error_service_factory.h",
       "infobar_container_delegate.cc",
       "infobar_container_delegate.h",
+      "javascript_dialogs/javascript_dialog.h",
+      "javascript_dialogs/javascript_dialog_tab_helper.cc",
+      "javascript_dialogs/javascript_dialog_tab_helper.h",
+      "javascript_dialogs/javascript_dialog_views.cc",
+      "javascript_dialogs/javascript_dialog_views.h",
       "layout_constants.cc",
       "layout_constants.h",
       "location_bar/location_bar.cc",
@@ -871,7 +883,6 @@ split_static_library("ui") {
       "website_settings/chooser_bubble_delegate.h",
       "website_settings/permission_menu_model.cc",
       "website_settings/permission_menu_model.h",
-      "website_settings/permission_prompt.h",
       "website_settings/website_settings_infobar_delegate.cc",
       "website_settings/website_settings_infobar_delegate.h",
       "webui/app_launcher_login_handler.cc",
@@ -912,6 +923,8 @@ split_static_library("ui") {
       "webui/identity_internals_ui.h",
       "webui/inspect_ui.cc",
       "webui/inspect_ui.h",
+      "webui/md_bookmarks/md_bookmarks_ui.cc",
+      "webui/md_bookmarks/md_bookmarks_ui.h",
       "webui/md_downloads/downloads_list_tracker.cc",
       "webui/md_downloads/downloads_list_tracker.h",
       "webui/md_downloads/md_downloads_dom_handler.cc",
@@ -996,6 +1009,7 @@ split_static_library("ui") {
       "webui/options/easy_unlock_handler.h",
       "webui/options/font_settings_handler.cc",
       "webui/options/font_settings_handler.h",
+      "webui/options/font_settings_utils.cc",
       "webui/options/font_settings_utils.h",
       "webui/options/font_settings_utils_linux.cc",
       "webui/options/font_settings_utils_mac.mm",
@@ -1080,6 +1094,8 @@ split_static_library("ui") {
       "webui/settings/chromeos/internet_handler.h",
       "webui/settings/downloads_handler.cc",
       "webui/settings/downloads_handler.h",
+      "webui/settings/extension_control_handler.cc",
+      "webui/settings/extension_control_handler.h",
       "webui/settings/font_handler.cc",
       "webui/settings/font_handler.h",
       "webui/settings/languages_handler.cc",
@@ -1090,6 +1106,8 @@ split_static_library("ui") {
       "webui/settings/md_settings_ui.h",
       "webui/settings/metrics_reporting_handler.cc",
       "webui/settings/metrics_reporting_handler.h",
+      "webui/settings/on_startup_handler.cc",
+      "webui/settings/on_startup_handler.h",
       "webui/settings/people_handler.cc",
       "webui/settings/people_handler.h",
       "webui/settings/profile_info_handler.cc",
@@ -1098,12 +1116,16 @@ split_static_library("ui") {
       "webui/settings/protocol_handlers_handler.h",
       "webui/settings/reset_settings_handler.cc",
       "webui/settings/reset_settings_handler.h",
+      "webui/settings/safe_browsing_handler.cc",
+      "webui/settings/safe_browsing_handler.h",
       "webui/settings/search_engines_handler.cc",
       "webui/settings/search_engines_handler.h",
       "webui/settings/settings_clear_browsing_data_handler.cc",
       "webui/settings/settings_clear_browsing_data_handler.h",
       "webui/settings/settings_cookies_view_handler.cc",
       "webui/settings/settings_cookies_view_handler.h",
+      "webui/settings/settings_import_data_handler.cc",
+      "webui/settings/settings_import_data_handler.h",
       "webui/settings/settings_manage_profile_handler.cc",
       "webui/settings/settings_manage_profile_handler.h",
       "webui/settings/settings_media_devices_selection_handler.cc",
@@ -1265,16 +1287,14 @@ split_static_library("ui") {
       "ash/ash_init.h",
       "ash/ash_util.cc",
       "ash/ash_util.h",
-      "ash/cast_config_delegate_chromeos.cc",
-      "ash/cast_config_delegate_chromeos.h",
       "ash/cast_config_delegate_media_router.cc",
       "ash/cast_config_delegate_media_router.h",
       "ash/chrome_keyboard_ui.cc",
       "ash/chrome_keyboard_ui.h",
       "ash/chrome_launcher_prefs.cc",
       "ash/chrome_launcher_prefs.h",
-      "ash/chrome_new_window_delegate.cc",
-      "ash/chrome_new_window_delegate.h",
+      "ash/chrome_new_window_client.cc",
+      "ash/chrome_new_window_client.h",
       "ash/chrome_screenshot_grabber.cc",
       "ash/chrome_screenshot_grabber.h",
       "ash/chrome_shell_content_state.cc",
@@ -1282,10 +1302,10 @@ split_static_library("ui") {
       "ash/chrome_shell_content_state_chromeos.cc",
       "ash/chrome_shell_delegate.cc",
       "ash/chrome_shell_delegate.h",
-      "ash/chrome_wallpaper_manager.cc",
-      "ash/chrome_wallpaper_manager.h",
       "ash/ime_controller_chromeos.cc",
       "ash/ime_controller_chromeos.h",
+      "ash/ime_driver_ash.cc",
+      "ash/ime_driver_ash.h",
       "ash/keyboard_ui_service.cc",
       "ash/keyboard_ui_service.h",
       "ash/launcher/app_shortcut_launcher_item_controller.cc",
@@ -1316,8 +1336,6 @@ split_static_library("ui") {
       "ash/launcher/chrome_launcher_controller_mus.h",
       "ash/launcher/chrome_launcher_controller_util.cc",
       "ash/launcher/chrome_launcher_controller_util.h",
-      "ash/launcher/chrome_mash_shelf_controller.cc",
-      "ash/launcher/chrome_mash_shelf_controller.h",
       "ash/launcher/desktop_shell_launcher_context_menu.cc",
       "ash/launcher/desktop_shell_launcher_context_menu.h",
       "ash/launcher/extension_app_window_launcher_controller.cc",
@@ -1366,8 +1384,6 @@ split_static_library("ui") {
       "ash/multi_user/user_switch_animator_chromeos.h",
       "ash/multi_user/user_switch_util.cc",
       "ash/multi_user/user_switch_util.h",
-      "ash/network_connect_delegate_chromeos.cc",
-      "ash/network_connect_delegate_chromeos.h",
       "ash/networking_config_delegate_chromeos.cc",
       "ash/networking_config_delegate_chromeos.h",
       "ash/palette_delegate_chromeos.cc",
@@ -1399,8 +1415,10 @@ split_static_library("ui") {
       "//ash/common/strings",
       "//ash/public/cpp",
       "//ash/public/interfaces",
+      "//components/session_manager/core",
       "//components/user_manager",
       "//services/ui/public/cpp",
+      "//services/ui/public/interfaces",
       "//ui/app_list/presenter",
       "//ui/app_list/presenter:mojom",
       "//ui/keyboard:mojom",
@@ -1439,8 +1457,6 @@ split_static_library("ui") {
       "views/apps/native_app_window_frame_view_mac.mm",
       "views/autofill/card_unmask_prompt_views.cc",
       "views/autofill/card_unmask_prompt_views.h",
-      "views/autofill/decorated_textfield.cc",
-      "views/autofill/decorated_textfield.h",
       "views/autofill/info_bubble.cc",
       "views/autofill/info_bubble.h",
       "views/autofill/tooltip_icon.cc",
@@ -1476,6 +1492,12 @@ split_static_library("ui") {
       "views/extensions/extension_keybinding_registry_views.h",
       "views/frame/native_widget_mac_frameless_nswindow.h",
       "views/frame/native_widget_mac_frameless_nswindow.mm",
+      "views/harmony/harmony_layout_delegate.cc",
+      "views/harmony/harmony_layout_delegate.h",
+      "views/harmony/layout_delegate.cc",
+      "views/harmony/layout_delegate.h",
+      "views/layout_utils.cc",
+      "views/layout_utils.h",
       "views/location_bar/location_bar_bubble_delegate_view.cc",
       "views/location_bar/location_bar_bubble_delegate_view.h",
       "views/login_handler_views.cc",
@@ -1492,6 +1514,8 @@ split_static_library("ui") {
       "views/website_settings/chosen_object_row.cc",
       "views/website_settings/chosen_object_row.h",
       "views/website_settings/chosen_object_row_observer.h",
+      "views/website_settings/non_accessible_image_view.cc",
+      "views/website_settings/non_accessible_image_view.h",
       "views/website_settings/permission_prompt_impl.cc",
       "views/website_settings/permission_prompt_impl.h",
       "views/website_settings/permission_selector_row.cc",
@@ -1520,8 +1544,6 @@ split_static_library("ui") {
       sources += [
         "external_protocol_dialog_delegate.cc",
         "external_protocol_dialog_delegate.h",
-        "views/chrome_browser_main_extra_parts_views_linux.cc",
-        "views/chrome_browser_main_extra_parts_views_linux.h",
         "views/external_protocol_dialog.cc",
         "views/external_protocol_dialog.h",
         "views/frame/opaque_browser_frame_view.cc",
@@ -1540,6 +1562,18 @@ split_static_library("ui") {
         "views/sync/one_click_signin_dialog_view.h",
         "views/sync/profile_signin_confirmation_dialog_views.cc",
         "views/sync/profile_signin_confirmation_dialog_views.h",
+      ]
+    }
+
+    # These files do Gtk+-based theming, but Gtk+ is not available on
+    # Ozone builds, or on common environments where Ozone will be used.
+    #
+    # TODO(tonikitoo): It seems sensible to make it possible to opt-in
+    # the use of these files in case Gtk is available with its Wayland.
+    if (use_aura && !use_ozone && is_desktop_linux) {
+      sources += [
+        "views/chrome_browser_main_extra_parts_views_linux.cc",
+        "views/chrome_browser_main_extra_parts_views_linux.h",
       ]
     }
     if (enable_extensions && (!is_mac || mac_views_browser)) {
@@ -1574,6 +1608,8 @@ split_static_library("ui") {
     }
     if (!is_mac || mac_views_browser) {
       sources += [
+        "javascript_dialogs/javascript_dialog.cc",
+
         # This test header is included because it contains forward declarations
         # needed for "friend" statements for use in tests.
         "translate/translate_bubble_test_utils.h",
@@ -1633,8 +1669,6 @@ split_static_library("ui") {
         "views/dropdown_bar_host.cc",
         "views/dropdown_bar_host.h",
         "views/dropdown_bar_host_delegate.h",
-        "views/dropdown_bar_view.cc",
-        "views/dropdown_bar_view.h",
         "views/elevation_icon_setter.cc",
         "views/elevation_icon_setter.h",
         "views/find_bar_host.cc",
@@ -1857,18 +1891,16 @@ split_static_library("ui") {
           "//services/ui/public/cpp",
           "//services/ui/public/interfaces",
         ]
+      }
 
-        # TODO(erg): These files hard depend on mus, and thus can't be in a gyp
-        # build. When gyp goes away, merge this back into the sources list.
+      # TODO(ellyjones): Mus is not supported on Mac (there is no ui::Window
+      # apart from aura::Window, which is also not supported).
+      if (!is_mac) {
         sources += [
           "views/tabs/window_finder_mus.cc",
           "views/tabs/window_finder_mus.h",
         ]
-      }
 
-      # TODO(ellyjones): This target fails to build on Mac because of
-      # incompatible uses of gpu::AcceleratedWidget vs gpu::SurfaceHandle.
-      if (!is_mac) {
         deps += [ "//ui/views/mus" ]
       }
     }
@@ -1896,11 +1928,12 @@ split_static_library("ui") {
     deps += [ "//build/linux/libgio" ]
   }
   if (use_aura && !use_ozone && is_desktop_linux) {
-    deps += [
-      # gtk2 is the only component that can interact with gtk2 in our new
-      # world.
-      "//chrome/browser/ui/libgtk2ui",
-    ]
+    # These are the only components that can interact with gtk.
+    if (use_gtk3) {
+      deps += [ "//chrome/browser/ui/libgtkui:libgtk3ui" ]
+    } else {
+      deps += [ "//chrome/browser/ui/libgtkui:libgtk2ui" ]
+    }
   }
   if (is_win || is_mac || is_desktop_linux) {
     sources += [
@@ -1956,8 +1989,6 @@ split_static_library("ui") {
       "webui/signin/sync_confirmation_ui.h",
       "webui/signin/user_manager_screen_handler.cc",
       "webui/signin/user_manager_screen_handler.h",
-      "webui/signin/user_manager_ui.cc",
-      "webui/signin/user_manager_ui.h",
       "webui/welcome_handler.cc",
       "webui/welcome_handler.h",
       "webui/welcome_ui.cc",
@@ -2078,6 +2109,7 @@ split_static_library("ui") {
       "webui/theme_source.cc",
       "webui/theme_source.h",
     ]
+    deps += [ "//chrome/browser:theme_properties" ]
   }
   if (enable_print_preview) {
     sources += [
@@ -2087,11 +2119,20 @@ split_static_library("ui") {
       "webui/print_preview/print_preview_handler.h",
       "webui/print_preview/print_preview_ui.cc",
       "webui/print_preview/print_preview_ui.h",
+      "webui/print_preview/printer_backend_proxy.h",
+      "webui/print_preview/printer_capabilities.cc",
+      "webui/print_preview/printer_capabilities.h",
       "webui/print_preview/printer_handler.cc",
       "webui/print_preview/printer_handler.h",
       "webui/print_preview/sticky_settings.cc",
       "webui/print_preview/sticky_settings.h",
     ]
+
+    if (is_chromeos) {
+      sources += [ "webui/print_preview/printer_backend_proxy_chromeos.cc" ]
+    } else {
+      sources += [ "webui/print_preview/printer_backend_proxy.cc" ]
+    }
   }
 
   if (is_android) {
@@ -2119,13 +2160,9 @@ split_static_library("ui") {
         "android/autofill/password_generation_popup_view_android.h",
         "android/bluetooth_chooser_android.cc",
         "android/bluetooth_chooser_android.h",
-        "android/certificate_viewer_android.cc",
-        "android/certificate_viewer_android.h",
         "android/chrome_http_auth_handler.cc",
         "android/chrome_http_auth_handler.h",
         "android/color_chooser_dialog_android.cc",
-        "android/connection_info_popup_android.cc",
-        "android/connection_info_popup_android.h",
         "android/content_settings/popup_blocked_infobar_delegate.cc",
         "android/content_settings/popup_blocked_infobar_delegate.h",
         "android/content_settings/subresource_filter_infobar_delegate.cc",
@@ -2142,8 +2179,8 @@ split_static_library("ui") {
         "android/infobars/confirm_infobar.h",
         "android/infobars/data_reduction_promo_infobar.cc",
         "android/infobars/data_reduction_promo_infobar.h",
-        "android/infobars/download_overwrite_infobar.cc",
-        "android/infobars/download_overwrite_infobar.h",
+        "android/infobars/duplicate_download_infobar.cc",
+        "android/infobars/duplicate_download_infobar.h",
         "android/infobars/generated_password_saved_infobar.cc",
         "android/infobars/generated_password_saved_infobar.h",
         "android/infobars/grouped_permission_infobar.cc",
@@ -2156,8 +2193,8 @@ split_static_library("ui") {
         "android/infobars/instant_apps_infobar.h",
         "android/infobars/permission_infobar.cc",
         "android/infobars/permission_infobar.h",
-        "android/infobars/save_password_infobar.cc",
-        "android/infobars/save_password_infobar.h",
+        "android/infobars/search_geolocation_disclosure_infobar.cc",
+        "android/infobars/search_geolocation_disclosure_infobar.h",
         "android/infobars/simple_confirm_infobar_builder.cc",
         "android/infobars/simple_confirm_infobar_builder.h",
         "android/infobars/subresource_filter_infobar.cc",
@@ -2172,6 +2209,12 @@ split_static_library("ui") {
         "android/omnibox/omnibox_url_emphasizer.h",
         "android/omnibox/omnibox_view_util.cc",
         "android/omnibox/omnibox_view_util.h",
+        "android/page_info/certificate_viewer_android.cc",
+        "android/page_info/certificate_viewer_android.h",
+        "android/page_info/connection_info_popup_android.cc",
+        "android/page_info/connection_info_popup_android.h",
+        "android/page_info/website_settings_popup_android.cc",
+        "android/page_info/website_settings_popup_android.h",
         "android/simple_message_box_android.cc",
         "android/snackbars/auto_signin_prompt_controller.cc",
         "android/snackbars/auto_signin_prompt_controller.h",
@@ -2195,16 +2238,12 @@ split_static_library("ui") {
         "android/usb_chooser_dialog_android.h",
         "android/view_android_helper.cc",
         "android/view_android_helper.h",
-        "android/website_settings_popup_android.cc",
-        "android/website_settings_popup_android.h",
         "browser_otr_state_android.cc",
         "screen_capture_notification_ui_stub.cc",
         "webui/offline/offline_internals_ui.cc",
         "webui/offline/offline_internals_ui.h",
         "webui/offline/offline_internals_ui_message_handler.cc",
         "webui/offline/offline_internals_ui_message_handler.h",
-        "webui/popular_sites_internals_message_handler.cc",
-        "webui/popular_sites_internals_message_handler.h",
         "webui/popular_sites_internals_ui.cc",
         "webui/popular_sites_internals_ui.h",
         "webui/snippets_internals_message_handler.cc",
@@ -2212,8 +2251,10 @@ split_static_library("ui") {
         "webui/snippets_internals_ui.cc",
         "webui/snippets_internals_ui.h",
       ]
-      if (enable_vr_shell) {
-        defines += [ "ENABLE_VR_SHELL" ]
+      if (enable_vr_shell || enable_webvr) {
+        if (enable_vr_shell) {
+          defines += [ "ENABLE_VR_SHELL" ]
+        }
         sources += [
           "webui/vr_shell/vr_shell_ui_message_handler.cc",
           "webui/vr_shell/vr_shell_ui_message_handler.h",
@@ -2221,7 +2262,7 @@ split_static_library("ui") {
           "webui/vr_shell/vr_shell_ui_ui.h",
         ]
         configs += [ "//third_party/gvr-android-sdk:libgvr_config" ]
-        deps += [ "//chrome/browser/android/vr_shell:vr_shell" ]
+        deps += [ "//chrome/browser/android/vr_shell:vr_common" ]
       }
       if (enable_vr_shell_ui_dev) {
         assert(enable_vr_shell)
@@ -2241,8 +2282,6 @@ split_static_library("ui") {
     sources += [
       "certificate_viewer_mac.h",
       "certificate_viewer_mac.mm",
-      "chrome_style.cc",
-      "chrome_style.h",
       "cocoa/accelerator_utils_cocoa.mm",
       "cocoa/accelerators_cocoa.h",
       "cocoa/accelerators_cocoa.mm",
@@ -2260,6 +2299,8 @@ split_static_library("ui") {
       "cocoa/browser_window_command_handler.mm",
       "cocoa/chrome_command_dispatcher_delegate.h",
       "cocoa/chrome_command_dispatcher_delegate.mm",
+      "cocoa/chrome_style.cc",
+      "cocoa/chrome_style.h",
       "cocoa/color_chooser_mac.mm",
       "cocoa/confirm_quit.h",
       "cocoa/confirm_quit_panel_controller.h",
@@ -2644,10 +2685,20 @@ split_static_library("ui") {
         "cocoa/framed_browser_window.mm",
         "cocoa/full_size_content_window.h",
         "cocoa/full_size_content_window.mm",
+        "cocoa/fullscreen/fullscreen_menubar_tracker.h",
+        "cocoa/fullscreen/fullscreen_menubar_tracker.mm",
+        "cocoa/fullscreen/fullscreen_toolbar_animation_controller.h",
+        "cocoa/fullscreen/fullscreen_toolbar_animation_controller.mm",
+        "cocoa/fullscreen/fullscreen_toolbar_controller.h",
+        "cocoa/fullscreen/fullscreen_toolbar_controller.mm",
+        "cocoa/fullscreen/fullscreen_toolbar_mouse_tracker.h",
+        "cocoa/fullscreen/fullscreen_toolbar_mouse_tracker.mm",
+        "cocoa/fullscreen/fullscreen_toolbar_visibility_lock_controller.h",
+        "cocoa/fullscreen/fullscreen_toolbar_visibility_lock_controller.mm",
+        "cocoa/fullscreen/immersive_fullscreen_controller.h",
+        "cocoa/fullscreen/immersive_fullscreen_controller.mm",
         "cocoa/fullscreen_low_power_coordinator.h",
         "cocoa/fullscreen_low_power_coordinator.mm",
-        "cocoa/fullscreen_toolbar_controller.h",
-        "cocoa/fullscreen_toolbar_controller.mm",
         "cocoa/fullscreen_window.h",
         "cocoa/fullscreen_window.mm",
         "cocoa/global_error_bubble_controller.h",
@@ -2747,6 +2798,8 @@ split_static_library("ui") {
         "cocoa/omnibox/omnibox_popup_view_mac.mm",
         "cocoa/omnibox/omnibox_view_mac.h",
         "cocoa/omnibox/omnibox_view_mac.mm",
+        "cocoa/omnibox_decoration_bubble_controller.h",
+        "cocoa/omnibox_decoration_bubble_controller.mm",
         "cocoa/one_click_signin_dialog_controller.h",
         "cocoa/one_click_signin_dialog_controller.mm",
         "cocoa/one_click_signin_view_controller.h",
@@ -2914,6 +2967,9 @@ split_static_library("ui") {
         # See crbug.com/590850
         "content_settings/content_setting_media_menu_model.cc",
         "content_settings/content_setting_media_menu_model.h",
+        "javascript_dialogs/javascript_dialog_cocoa.h",
+        "javascript_dialogs/javascript_dialog_cocoa.mm",
+        "javascript_dialogs/javascript_dialog_mac.cc",
         "proximity_auth/proximity_auth_error_bubble_stub.cc",
       ]
     }
@@ -2953,6 +3009,10 @@ split_static_library("ui") {
       "webui/cast/cast_ui.h",
       "webui/conflicts_ui.cc",
       "webui/conflicts_ui.h",
+      "webui/welcome_win10_handler.cc",
+      "webui/welcome_win10_handler.h",
+      "webui/welcome_win10_ui.cc",
+      "webui/welcome_win10_ui.h",
     ]
     public_deps += [
       "//ui/views",
@@ -2998,9 +3058,6 @@ split_static_library("ui") {
       "views/first_run_dialog.cc",
       "views/first_run_dialog.h",
       "views/frame/browser_desktop_window_tree_host.h",
-      "views/frame/desktop_browser_frame_auralinux.cc",
-      "views/frame/desktop_browser_frame_auralinux.h",
-      "views/frame/native_browser_frame_factory_auralinux.cc",
       "views/status_icons/status_icon_linux_wrapper.cc",
       "views/status_icons/status_icon_linux_wrapper.h",
       "webui/help/version_updater_basic.cc",
@@ -3015,12 +3072,21 @@ split_static_library("ui") {
       sources += [
         "views/frame/browser_desktop_window_tree_host_x11.cc",
         "views/frame/browser_desktop_window_tree_host_x11.h",
+        "views/frame/desktop_browser_frame_aurax11.cc",
+        "views/frame/desktop_browser_frame_aurax11.h",
         "views/frame/global_menu_bar_registrar_x11.cc",
         "views/frame/global_menu_bar_registrar_x11.h",
         "views/frame/global_menu_bar_x11.cc",
         "views/frame/global_menu_bar_x11.h",
+        "views/frame/native_browser_frame_factory_aurax11.cc",
         "views/javascript_app_modal_dialog_views_x11.cc",
         "views/javascript_app_modal_dialog_views_x11.h",
+      ]
+    }
+    if (use_ozone) {
+      sources += [
+        "views/frame/browser_desktop_window_tree_host_ozone.cc",
+        "views/frame/native_browser_frame_factory_ozone.cc",
       ]
     }
   }
@@ -3043,16 +3109,18 @@ split_static_library("ui") {
       sources += [
         "views/javascript_app_modal_event_blocker_x11.cc",
         "views/javascript_app_modal_event_blocker_x11.h",
-        "views/tabs/window_finder_x11.cc",
       ]
       configs += [ "//build/config/linux:x11" ]
       deps += [
         "//ui/events/devices",
         "//ui/events/devices/x11",
       ]
-      if (is_chromeos) {
-        sources -= [ "views/tabs/window_finder_x11.cc" ]
+      if (is_desktop_linux) {
+        sources += [ "views/tabs/window_finder_x11.cc" ]
       }
+    }
+    if (use_ozone) {
+      sources += [ "views/tabs/window_finder_ozone.cc" ]
     }
   }
 
@@ -3073,10 +3141,6 @@ split_static_library("ui") {
       "app_list/app_list_model_builder.h",
       "app_list/app_list_positioner.cc",
       "app_list/app_list_positioner.h",
-      "app_list/app_list_prefs.cc",
-      "app_list/app_list_prefs.h",
-      "app_list/app_list_prefs_factory.cc",
-      "app_list/app_list_prefs_factory.h",
       "app_list/app_list_service.cc",
       "app_list/app_list_service.h",
       "app_list/app_list_service_impl.cc",
@@ -3103,8 +3167,6 @@ split_static_library("ui") {
       "app_list/google_now_extension.h",
       "app_list/launcher_page_event_dispatcher.cc",
       "app_list/launcher_page_event_dispatcher.h",
-      "app_list/model_pref_updater.cc",
-      "app_list/model_pref_updater.h",
       "app_list/profile_loader.cc",
       "app_list/profile_loader.h",
       "app_list/profile_store.h",
@@ -3167,6 +3229,7 @@ split_static_library("ui") {
       sources += [
         "app_list/arc/arc_app_context_menu.cc",
         "app_list/arc/arc_app_context_menu.h",
+        "app_list/arc/arc_app_dialog.h",
         "app_list/arc/arc_app_icon.cc",
         "app_list/arc/arc_app_icon.h",
         "app_list/arc/arc_app_icon_loader.cc",
@@ -3197,6 +3260,8 @@ split_static_library("ui") {
         "ash/launcher/arc_app_deferred_launcher_controller.h",
         "ash/launcher/arc_app_deferred_launcher_item_controller.cc",
         "ash/launcher/arc_app_deferred_launcher_item_controller.h",
+        "ash/launcher/arc_app_shelf_id.cc",
+        "ash/launcher/arc_app_shelf_id.h",
         "ash/launcher/arc_app_window_launcher_controller.cc",
         "ash/launcher/arc_app_window_launcher_controller.h",
         "ash/launcher/arc_app_window_launcher_item_controller.cc",
@@ -3205,6 +3270,7 @@ split_static_library("ui") {
         "ash/launcher/arc_launcher_context_menu.h",
         "ash/launcher/launcher_arc_app_updater.cc",
         "ash/launcher/launcher_arc_app_updater.h",
+        "views/arc_app_dialog_view.cc",
       ]
     }
     if (is_desktop_linux) {

@@ -14,7 +14,7 @@ import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.MainDex;
 import org.chromium.ui.base.WindowAndroid;
-import org.chromium.ui.gfx.DeviceDisplayInfo;
+import org.chromium.ui.display.DisplayAndroid;
 import org.chromium.ui.resources.ResourceLoader.ResourceLoaderCallback;
 import org.chromium.ui.resources.dynamics.DynamicResource;
 import org.chromium.ui.resources.dynamics.DynamicResourceLoader;
@@ -73,13 +73,13 @@ public class ResourceManager implements ResourceLoaderCallback {
             throw new IllegalStateException("Context should not be null during initialization.");
         }
 
-        DeviceDisplayInfo displayInfo = DeviceDisplayInfo.create(context);
-        int screenWidth = displayInfo.getPhysicalDisplayWidth() != 0
-                ? displayInfo.getPhysicalDisplayWidth()
-                : displayInfo.getDisplayWidth();
-        int screenHeight = displayInfo.getPhysicalDisplayHeight() != 0
-                ? displayInfo.getPhysicalDisplayHeight()
-                : displayInfo.getDisplayHeight();
+        DisplayAndroid displayAndroid = windowAndroid.getDisplay();
+        int screenWidth = displayAndroid.getPhysicalDisplayWidth() != 0
+                ? displayAndroid.getPhysicalDisplayWidth()
+                : displayAndroid.getDisplayWidth();
+        int screenHeight = displayAndroid.getPhysicalDisplayHeight() != 0
+                ? displayAndroid.getPhysicalDisplayHeight()
+                : displayAndroid.getDisplayHeight();
         int minScreenSideLength = Math.min(screenWidth, screenHeight);
 
         Resources resources = context.getResources();
@@ -167,6 +167,14 @@ public class ResourceManager implements ResourceLoaderCallback {
                 aperture.left, aperture.top, aperture.right, aperture.bottom);
     }
 
+    @Override
+    public void onResourceUnregistered(int resType, int resId) {
+        // Only remove dynamic bitmaps that were unregistered.
+        if (resType != AndroidResourceType.DYNAMIC_BITMAP) return;
+
+        nativeRemoveResource(mNativeResourceManagerPtr, resType, resId);
+    }
+
     /**
      * Clear the cache of tinted assets that the native manager holds.
      */
@@ -234,6 +242,8 @@ public class ResourceManager implements ResourceLoaderCallback {
             int unscaledSpriteHeight, float scaledSpriteWidth, float scaledSpriteHeight);
     private native void nativeOnCrushedSpriteResourceReloaded(long nativeResourceManagerImpl,
             int bitmapResId, Bitmap bitmap);
+    private native void nativeRemoveResource(long nativeResourceManagerImpl, int resType,
+            int resId);
     private native void nativeClearTintedResourceCache(long nativeResourceManagerImpl);
 
 }

@@ -28,8 +28,7 @@ static_library("renderer") {
   deps = [
     "//base",
     "//base:i18n",
-    "//components/autofill/content/common",
-    "//components/autofill/content/public/interfaces",
+    "//components/autofill/content/common:mojo_interfaces",
     "//components/autofill/core/common",
     "//components/strings",
     "//content/public/common",
@@ -38,7 +37,7 @@ static_library("renderer") {
     "//ipc",
     "//mojo/common:common_base",
     "//net",
-    "//services/shell/public/cpp",
+    "//services/service_manager/public/cpp",
     "//skia",
     "//third_party/WebKit/public:blink",
     "//third_party/re2",
@@ -77,7 +76,7 @@ source_set("unit_tests") {
 
   deps = [
     ":test_support",
-    "//components/autofill/content/public/interfaces",
+    "//components/autofill/content/common:mojo_interfaces",
     "//testing/gtest",
   ]
 }

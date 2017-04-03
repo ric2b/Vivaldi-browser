@@ -18,10 +18,8 @@
 
 namespace gfx {
 class Point;
-class PointF;
 class ScrollOffset;
 class SizeF;
-class Vector2d;
 class Vector2dF;
 }
 
@@ -155,6 +153,7 @@ class CC_EXPORT InputHandler {
   virtual void MouseMoveAt(const gfx::Point& mouse_position) = 0;
   virtual void MouseDown() = 0;
   virtual void MouseUp() = 0;
+  virtual void MouseLeave() = 0;
 
   // Stop scrolling the selected layer. Should only be called if ScrollBegin()
   // returned SCROLL_STARTED.

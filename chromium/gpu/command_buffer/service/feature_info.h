@@ -92,6 +92,12 @@ class GPU_EXPORT FeatureInfo : public base::RefCounted<FeatureInfo> {
     bool ext_read_format_bgra;
     bool desktop_srgb_support;
     bool arb_es3_compatibility;
+    bool chromium_color_buffer_float_rgb = false;
+    bool chromium_color_buffer_float_rgba = false;
+    bool angle_robust_client_memory = false;
+    bool khr_debug = false;
+    bool chromium_bind_generates_resource = false;
+    bool angle_webgl_compatibility = false;
   };
 
   FeatureInfo();
@@ -143,10 +149,6 @@ class GPU_EXPORT FeatureInfo : public base::RefCounted<FeatureInfo> {
   bool IsES3Capable() const;
   void EnableES3Validators();
 
-  bool IsES3Enabled() const {
-    return unsafe_es3_apis_enabled_;
-  }
-
   bool disable_shader_translator() const { return disable_shader_translator_; }
 
   bool IsWebGLContext() const;
@@ -158,6 +160,14 @@ class GPU_EXPORT FeatureInfo : public base::RefCounted<FeatureInfo> {
   void EnableEXTColorBufferFloat();
   void EnableOESTextureFloatLinear();
   void EnableOESTextureHalfFloatLinear();
+
+  bool ext_color_buffer_float_available() const {
+    return ext_color_buffer_float_available_;
+  }
+
+  bool oes_texture_float_linear_available() const {
+    return oes_texture_float_linear_available_;
+  }
 
  private:
   friend class base::RefCounted<FeatureInfo>;
@@ -184,13 +194,6 @@ class GPU_EXPORT FeatureInfo : public base::RefCounted<FeatureInfo> {
   // Flags for Workarounds.
   const GpuDriverBugWorkarounds workarounds_;
 
-  // Whether the command line switch kEnableUnsafeES3APIs is passed in.
-  bool enable_unsafe_es3_apis_switch_;
-
-  bool unsafe_es3_apis_enabled_;
-
-  bool chromium_color_buffer_float_rgba_available_;
-  bool chromium_color_buffer_float_rgb_available_;
   bool ext_color_buffer_float_available_;
   bool oes_texture_float_linear_available_;
   bool oes_texture_half_float_linear_available_;

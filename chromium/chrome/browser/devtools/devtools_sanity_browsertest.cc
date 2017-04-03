@@ -74,7 +74,7 @@
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_filter.h"
 #include "net/url_request/url_request_http_job.h"
-#include "third_party/WebKit/public/web/WebInputEvent.h"
+#include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "ui/compositor/compositor_switches.h"
 #include "ui/gl/gl_switches.h"
 #include "url/gurl.h"
@@ -1000,12 +1000,13 @@ IN_PROC_BROWSER_TEST_F(DevToolsExtensionTest,
   dir->WriteFile(FILE_PATH_LITERAL("panel.html"),
                  "<html><body>A panel."
                  "<script src='blob_xhr.js'></script>"
+                 "<script src='blob_iframe.js'></script>"
                  "</body></html>");
   // Creating blobs from chrome-extension:// origins is only permitted if the
   // process has been granted permission to commit 'chrome-extension' schemes.
   dir->WriteFile(
       FILE_PATH_LITERAL("blob_xhr.js"),
-      "var blob_url = URL.createObjectURL(new Blob(['blob contents']));\n"
+      "var blob_url = URL.createObjectURL(new Blob(['xhr blob contents']));\n"
       "var xhr = new XMLHttpRequest();\n"
       "xhr.open('GET', blob_url, true);\n"
       "xhr.onload = function (e) {\n"
@@ -1013,6 +1014,17 @@ IN_PROC_BROWSER_TEST_F(DevToolsExtensionTest,
       "    domAutomationController.send(xhr.response);\n"
       "};\n"
       "xhr.send(null);\n");
+  dir->WriteFile(
+      FILE_PATH_LITERAL("blob_iframe.js"),
+      "var payload = `"
+      "<html><body>iframe blob contents"
+      "<script>"
+      "    domAutomationController.setAutomationId(0);"
+      "    domAutomationController.send(document.body.innerText);\n"
+      "</script></body></html>"
+      "`;"
+      "document.body.appendChild(document.createElement('iframe')).src ="
+      "    URL.createObjectURL(new Blob([payload], {type: 'text/html'}));");
   // Install the extension.
   const Extension* extension = LoadExtensionFromPath(dir->UnpackedPath());
   ASSERT_TRUE(extension);
@@ -1032,7 +1044,12 @@ IN_PROC_BROWSER_TEST_F(DevToolsExtensionTest,
   std::string message;
   while (true) {
     ASSERT_TRUE(message_queue.WaitForMessage(&message));
-    if (message == "\"blob contents\"")
+    if (message == "\"xhr blob contents\"")
+      break;
+  }
+  while (true) {
+    ASSERT_TRUE(message_queue.WaitForMessage(&message));
+    if (message == "\"iframe blob contents\"")
       break;
   }
 }
@@ -1300,8 +1317,16 @@ IN_PROC_BROWSER_TEST_F(WorkerDevToolsSanityTest, InspectSharedWorker) {
   RunTest("testSharedWorker", kSharedWorkerTestPage, kSharedWorkerTestWorker);
 }
 
+// Flakey on Win.  http://crbug.com/663351
+#if defined(OS_WIN)
+#define MAYBE_PauseInSharedWorkerInitialization \
+  DISABLED_PauseInSharedWorkerInitialization
+#else
+#define MAYBE_PauseInSharedWorkerInitialization \
+  PauseInSharedWorkerInitialization
+#endif
 IN_PROC_BROWSER_TEST_F(WorkerDevToolsSanityTest,
-                       PauseInSharedWorkerInitialization) {
+                       MAYBE_PauseInSharedWorkerInitialization) {
   ASSERT_TRUE(spawned_test_server()->Start());
   GURL url = spawned_test_server()->GetURL(kReloadSharedWorkerTestPage);
   ui_test_utils::NavigateToURL(browser(), url);
@@ -1494,16 +1519,9 @@ class MockWebUIProvider
 // This tests checks that window is correctly initialized when DevTools is
 // opened while navigation through history with forward and back actions.
 // (crbug.com/627407)
-// Flaky on Windows. http://crbug.com/628174#c4
-#if defined(OS_WIN)
-#define MAYBE_TestWindowInitializedOnNavigateBack \
-  DISABLED_TestWindowInitializedOnNavigateBack
-#else
-#define MAYBE_TestWindowInitializedOnNavigateBack \
-  TestWindowInitializedOnNavigateBack
-#endif
+// Flaky on Windows and ChromeOS. http://crbug.com/628174#c4
 IN_PROC_BROWSER_TEST_F(DevToolsSanityTest,
-                       MAYBE_TestWindowInitializedOnNavigateBack) {
+                       DISABLED_TestWindowInitializedOnNavigateBack) {
   TestChromeWebUIControllerFactory test_factory;
   MockWebUIProvider mock_provider("dummyurl",
                                   "<script>\n"

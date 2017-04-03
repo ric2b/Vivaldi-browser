@@ -12,16 +12,15 @@ mojom_generator_sources = [
   "$mojom_generator_root/pylib/mojom/error.py",
   "$mojom_generator_root/pylib/mojom/generate/__init__.py",
   "$mojom_generator_root/pylib/mojom/generate/constant_resolver.py",
-  "$mojom_generator_root/pylib/mojom/generate/data.py",
   "$mojom_generator_root/pylib/mojom/generate/generator.py",
   "$mojom_generator_root/pylib/mojom/generate/module.py",
   "$mojom_generator_root/pylib/mojom/generate/pack.py",
   "$mojom_generator_root/pylib/mojom/generate/template_expander.py",
+  "$mojom_generator_root/pylib/mojom/generate/translate.py",
   "$mojom_generator_root/pylib/mojom/parse/__init__.py",
   "$mojom_generator_root/pylib/mojom/parse/ast.py",
   "$mojom_generator_root/pylib/mojom/parse/lexer.py",
   "$mojom_generator_root/pylib/mojom/parse/parser.py",
-  "$mojom_generator_root/pylib/mojom/parse/translate.py",
   "$mojom_generator_script",
 ]
 
@@ -39,9 +38,14 @@ foreach(config_file, _bindings_configuration_files) {
   _bindings_configurations += [ read_file(config_file, "scope") ]
 }
 foreach(configuration, _bindings_configurations) {
+  # Check that the mojom field of each typemap refers to a mojom that exists.
   foreach(typemap, configuration.typemaps) {
-    # Check that the mojom field of each typemap refers to a mojom that exists.
     read_file(typemap.mojom, "")
+  }
+  if (is_mac && defined(configuration.typemaps_mac)) {
+    foreach(typemap, configuration.typemaps_mac) {
+      read_file(typemap.mojom, "")
+    }
   }
 }
 
@@ -78,6 +82,9 @@ foreach(configuration, _bindings_configurations) {
 #       TODO(yzshen):
 #         - convert all users to use the new mode;
 #         - remove support for the old mode.
+#
+#   cpp_only (optional)
+#       If set to true, only the C++ bindings targets will be generated.
 #
 # The following parameters are used to support the component build. They are
 # needed so that bindings which are linked with a component can use the same
@@ -209,6 +216,9 @@ template("mojom") {
   # Generate code for variants.
   foreach(bindings_configuration, _bindings_configurations) {
     cpp_only = false
+    if (defined(invoker.cpp_only)) {
+      cpp_only = invoker.cpp_only
+    }
     variant_suffix = ""
     if (defined(bindings_configuration.variant)) {
       variant = bindings_configuration.variant
@@ -256,6 +266,13 @@ template("mojom") {
         foreach(typemap, bindings_configuration.typemaps) {
           if (get_path_info(source, "abspath") == typemap.mojom) {
             active_typemaps += [ typemap ]
+          }
+        }
+        if (is_mac && defined(bindings_configuration.typemaps_mac)) {
+          foreach(typemap, bindings_configuration.typemaps_mac) {
+            if (get_path_info(source, "abspath") == typemap.mojom) {
+              active_typemaps += [ typemap ]
+            }
           }
         }
       }
@@ -515,8 +532,8 @@ template("mojom") {
       android_library(java_target_name) {
         deps = [
           "//base:base_java",
-          "//mojo/public/java:bindings",
-          "//mojo/public/java:system",
+          "//mojo/public/java:bindings_java",
+          "//mojo/public/java:system_java",
         ]
 
         foreach(d, all_deps) {

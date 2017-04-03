@@ -11,6 +11,7 @@
 #include "ui/aura/env.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
+#include "ui/aura/window_port.h"
 #include "ui/aura/window_targeter.h"
 #include "ui/aura/window_tree_host_observer.h"
 #include "ui/base/ime/input_method.h"
@@ -218,12 +219,13 @@ void WindowTreeHost::Hide() {
 ////////////////////////////////////////////////////////////////////////////////
 // WindowTreeHost, protected:
 
-WindowTreeHost::WindowTreeHost()
-    : window_(new Window(nullptr)),
+WindowTreeHost::WindowTreeHost() : WindowTreeHost(nullptr) {}
+
+WindowTreeHost::WindowTreeHost(std::unique_ptr<WindowPort> window_port)
+    : window_(new Window(nullptr, std::move(window_port))),
       last_cursor_(ui::kCursorNull),
       input_method_(nullptr),
-      owned_input_method_(false) {
-}
+      owned_input_method_(false) {}
 
 void WindowTreeHost::DestroyCompositor() {
   compositor_.reset();
@@ -270,8 +272,8 @@ void WindowTreeHost::OnHostMoved(const gfx::Point& new_location) {
   TRACE_EVENT1("ui", "WindowTreeHost::OnHostMoved",
                "origin", new_location.ToString());
 
-  FOR_EACH_OBSERVER(WindowTreeHostObserver, observers_,
-                    OnHostMoved(this, new_location));
+  for (WindowTreeHostObserver& observer : observers_)
+    observer.OnHostMoved(this, new_location);
 }
 
 void WindowTreeHost::OnHostResized(const gfx::Size& new_size) {
@@ -287,17 +289,18 @@ void WindowTreeHost::OnHostResized(const gfx::Size& new_size) {
   // The layer, and the observers should be notified of the
   // transformed size of the root window.
   UpdateRootWindowSize(layer_size);
-  FOR_EACH_OBSERVER(WindowTreeHostObserver, observers_, OnHostResized(this));
+  for (WindowTreeHostObserver& observer : observers_)
+    observer.OnHostResized(this);
 }
 
 void WindowTreeHost::OnHostWorkspaceChanged() {
-  FOR_EACH_OBSERVER(WindowTreeHostObserver, observers_,
-                    OnHostWorkspaceChanged(this));
+  for (WindowTreeHostObserver& observer : observers_)
+    observer.OnHostWorkspaceChanged(this);
 }
 
 void WindowTreeHost::OnHostCloseRequested() {
-  FOR_EACH_OBSERVER(WindowTreeHostObserver, observers_,
-                    OnHostCloseRequested(this));
+  for (WindowTreeHostObserver& observer : observers_)
+    observer.OnHostCloseRequested(this);
 }
 
 void WindowTreeHost::OnHostActivated() {

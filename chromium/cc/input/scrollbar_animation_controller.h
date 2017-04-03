@@ -23,6 +23,7 @@ class CC_EXPORT ScrollbarAnimationControllerClient {
                                                  base::TimeDelta delay) = 0;
   virtual void SetNeedsRedrawForScrollbarAnimation() = 0;
   virtual void SetNeedsAnimateForScrollbarAnimation() = 0;
+  virtual void DidChangeScrollbarVisibility() = 0;
   virtual ScrollbarSet ScrollbarsFor(int scroll_layer_id) const = 0;
 
  protected:
@@ -41,19 +42,20 @@ class CC_EXPORT ScrollbarAnimationController {
   virtual void DidScrollBegin();
   virtual void DidScrollUpdate(bool on_resize);
   virtual void DidScrollEnd();
-  virtual void DidCaptureScrollbarBegin() {}
-  virtual void DidCaptureScrollbarEnd() {}
-  virtual void DidMouseMoveOffScrollbar() {}
+  virtual void DidMouseDown() {}
+  virtual void DidMouseUp() {}
+  virtual void DidMouseLeave() {}
   virtual void DidMouseMoveNear(float distance) {}
+  virtual bool ScrollbarsHidden() const;
 
  protected:
   ScrollbarAnimationController(int scroll_layer_id,
                                ScrollbarAnimationControllerClient* client,
                                base::TimeDelta delay_before_starting,
-                               base::TimeDelta resize_delay_before_starting,
-                               base::TimeDelta duration);
+                               base::TimeDelta resize_delay_before_starting);
 
   virtual void RunAnimationFrame(float progress) = 0;
+  virtual const base::TimeDelta& Duration() = 0;
 
   void StartAnimation();
   void StopAnimation();
@@ -61,17 +63,18 @@ class CC_EXPORT ScrollbarAnimationController {
 
   ScrollbarAnimationControllerClient* client_;
 
+  void PostDelayedAnimationTask(bool on_resize);
+
+  int scroll_layer_id() const { return scroll_layer_id_; }
+
  private:
   // Returns how far through the animation we are as a progress value from
   // 0 to 1.
   float AnimationProgressAtTime(base::TimeTicks now);
 
-  void PostDelayedAnimationTask(bool on_resize);
-
   base::TimeTicks last_awaken_time_;
   base::TimeDelta delay_before_starting_;
   base::TimeDelta resize_delay_before_starting_;
-  base::TimeDelta duration_;
 
   bool is_animating_;
 

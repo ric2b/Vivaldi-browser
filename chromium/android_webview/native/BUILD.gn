@@ -4,6 +4,7 @@
 
 import("//build/config/android/config.gni")
 import("//build/config/android/rules.gni")
+import("//components/spellcheck/spellcheck_build_features.gni")
 
 source_set("native") {
   deps = [
@@ -13,6 +14,7 @@ source_set("native") {
     "//base/third_party/dynamic_annotations:dynamic_annotations",
     "//cc:cc",
     "//components/autofill/content/browser:browser",
+    "//components/spellcheck:build_features",
     "//components/strings",
     "//components/web_contents_delegate_android:web_contents_delegate_android",
     "//content/public/common",
@@ -40,8 +42,6 @@ source_set("native") {
     "android_webview_jni_registrar.h",
     "aw_autofill_client.cc",
     "aw_autofill_client.h",
-    "aw_browser_dependency_factory.cc",
-    "aw_browser_dependency_factory.h",
     "aw_contents.cc",
     "aw_contents.h",
     "aw_contents_background_thread_client.cc",
@@ -68,8 +68,6 @@ source_set("native") {
     "aw_locale_manager_impl.h",
     "aw_media_url_interceptor.cc",
     "aw_media_url_interceptor.h",
-    "aw_message_port_service_impl.cc",
-    "aw_message_port_service_impl.h",
     "aw_metrics_switch.cc",
     "aw_metrics_switch.h",
     "aw_pdf_exporter.cc",
@@ -139,7 +137,6 @@ generate_jni("native_jni") {
     "../java/src/org/chromium/android_webview/AwFormDatabase.java",
     "../java/src/org/chromium/android_webview/AwGLFunctor.java",
     "../java/src/org/chromium/android_webview/AwHttpAuthHandler.java",
-    "../java/src/org/chromium/android_webview/AwMessagePortService.java",
     "../java/src/org/chromium/android_webview/AwMetricsServiceClient.java",
     "../java/src/org/chromium/android_webview/AwPdfExporter.java",
     "../java/src/org/chromium/android_webview/AwPicture.java",

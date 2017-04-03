@@ -13,8 +13,8 @@
 #include "ash/common/system/tray/system_tray_controller.h"
 #include "ash/common/system/tray/system_tray_delegate.h"
 #include "ash/common/system/tray/tray_constants.h"
+#include "ash/common/system/tray/tray_popup_utils.h"
 #include "ash/common/wm_shell.h"
-#include "ash/resources/vector_icons/vector_icons.h"
 #include "base/logging.h"
 #include "base/strings/utf_string_conversions.h"
 #include "grit/ash_resources.h"
@@ -22,7 +22,6 @@
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/image/image.h"
-#include "ui/gfx/paint_vector_icon.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/layout/box_layout.h"
@@ -38,7 +37,7 @@ class SettingsDefaultView : public ActionableView,
                             public PowerStatus::Observer {
  public:
   SettingsDefaultView(SystemTrayItem* owner, LoginStatus status)
-      : ActionableView(owner),
+      : ActionableView(owner, TrayPopupInkDropStyle::FILL_BOUNDS),
         login_status_(status),
         label_(nullptr),
         power_status_view_(nullptr) {
@@ -54,20 +53,16 @@ class SettingsDefaultView : public ActionableView,
              ->GetSessionStateDelegate()
              ->IsInSecondaryLoginScreen()) {
       ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
-      views::ImageView* icon = new ash::FixedSizedImageView(
-          0, GetTrayConstant(TRAY_POPUP_ITEM_HEIGHT));
-      if (MaterialDesignController::IsSystemTrayMenuMaterial()) {
-        icon->SetImage(
-            gfx::CreateVectorIcon(kSystemMenuSettingsIcon, kMenuIconColor));
-      } else {
-        icon->SetImage(
-            rb.GetImageNamed(IDR_AURA_UBER_TRAY_SETTINGS).ToImageSkia());
-      }
+      views::ImageView* icon = TrayPopupUtils::CreateMainImageView();
+
+      icon->SetImage(
+          rb.GetImageNamed(IDR_AURA_UBER_TRAY_SETTINGS).ToImageSkia());
       icon->set_id(test::kSettingsTrayItemViewId);
       AddChildView(icon);
 
       base::string16 text = rb.GetLocalizedString(IDS_ASH_STATUS_TRAY_SETTINGS);
-      label_ = new views::Label(text);
+      label_ = TrayPopupUtils::CreateDefaultLabel();
+      label_->SetText(text);
       AddChildView(label_);
       SetAccessibleName(text);
 
@@ -79,6 +74,9 @@ class SettingsDefaultView : public ActionableView,
       AddChildView(power_status_view_);
       OnPowerStatusChanged();
     }
+
+    if (MaterialDesignController::IsSystemTrayMenuMaterial())
+      SetInkDropMode(InkDropHostView::InkDropMode::ON);
   }
 
   ~SettingsDefaultView() override { PowerStatus::Get()->RemoveObserver(this); }

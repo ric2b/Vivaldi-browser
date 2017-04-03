@@ -64,10 +64,6 @@ const char kIosBookmarkFolderDefault[] = "ios.bookmark.default_folder";
 // the bookmark promo dialog.
 const char kIosBookmarkPromoAlreadySeen[] = "ios.bookmark.promo_already_seen";
 
-// Whether Chrome should attempt to hand off the current URL to other Apple
-// devices that share an iCloud account.
-const char kIosHandoffToOtherDevices[] = "ios.handoff_to_other_devices";
-
 // Whether the user has enabled the Physical Web feature to surface URLs
 // broadcast by nearby devices.
 const char kIosPhysicalWebEnabled[] = "ios.physical_web_enabled";
@@ -109,12 +105,6 @@ const char kNtpShownBookmarksFolder[] = "ntp.shown_bookmarks_folder";
 
 // True if the memory debugging tools should be visible.
 const char kShowMemoryDebuggingTools[] = "ios.memory.show_debugging_tools";
-
-// User preferred speech input language for voice search.
-const char kVoiceSearchLocale[] = "ios.speechinput.voicesearch_locale";
-
-// Boolean which indicates if TTS after voice search is enabled.
-const char kVoiceSearchTTS[] = "ios.speechinput.voicesearch_tts";
 
 // List which contains the last known list of accounts.
 const char kSigninLastAccounts[] = "ios.signin.last_accounts";

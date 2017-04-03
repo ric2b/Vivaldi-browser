@@ -15,13 +15,13 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/non_thread_safe.h"
-#include "components/sync/api/attachments/attachment_store.h"
-#include "components/sync/api/data_type_error_handler.h"
-#include "components/sync/api/sync_change_processor.h"
-#include "components/sync/api/sync_merge_result.h"
-#include "components/sync/core/attachments/attachment_service.h"
-#include "components/sync/core/attachments/attachment_service_proxy.h"
-#include "components/sync/driver/change_processor.h"
+#include "components/sync/model/attachments/attachment_service.h"
+#include "components/sync/model/attachments/attachment_service_proxy.h"
+#include "components/sync/model/attachments/attachment_store.h"
+#include "components/sync/model/change_processor.h"
+#include "components/sync/model/data_type_error_handler.h"
+#include "components/sync/model/sync_change_processor.h"
+#include "components/sync/model/sync_merge_result.h"
 
 namespace syncer {
 
@@ -52,7 +52,7 @@ class GenericChangeProcessor : public ChangeProcessor,
                                public base::NonThreadSafe {
  public:
   // Create a change processor for |type| and connect it to the syncer.
-  // |attachment_store| can be NULL which means that datatype will not use sync
+  // |attachment_store| can be null which means that datatype will not use sync
   // attachments.
   GenericChangeProcessor(
       ModelType type,
@@ -172,7 +172,7 @@ class GenericChangeProcessor : public ChangeProcessor,
   // and have to keep a local pointer to the user_share.
   UserShare* const share_handle_;
 
-  // AttachmentService for datatype. Can be NULL if datatype doesn't use
+  // AttachmentService for datatype. Can be null if datatype doesn't use
   // attachments.
   std::unique_ptr<AttachmentService> attachment_service_;
 
@@ -181,7 +181,7 @@ class GenericChangeProcessor : public ChangeProcessor,
 
   // Must be destroyed before attachment_service_ to ensure WeakPtrs are
   // invalidated before attachment_service_ is destroyed.
-  // Can be NULL if attachment_service_ is NULL;
+  // Can be null if attachment_service_ is null;
   std::unique_ptr<base::WeakPtrFactory<AttachmentService>>
       attachment_service_weak_ptr_factory_;
   AttachmentServiceProxy attachment_service_proxy_;

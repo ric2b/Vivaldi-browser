@@ -27,97 +27,87 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-
-WebInspector.SettingsUI = {}
+UI.SettingsUI = {};
 
 /**
  * @param {string} name
- * @param {!WebInspector.Setting} setting
+ * @param {!Common.Setting} setting
  * @param {boolean=} omitParagraphElement
  * @param {string=} tooltip
  * @return {!Element}
  */
-WebInspector.SettingsUI.createSettingCheckbox = function(name, setting, omitParagraphElement, tooltip)
-{
-    var label = createCheckboxLabel(name);
-    if (tooltip)
-        label.title = tooltip;
+UI.SettingsUI.createSettingCheckbox = function(name, setting, omitParagraphElement, tooltip) {
+  var label = createCheckboxLabel(name);
+  if (tooltip)
+    label.title = tooltip;
 
-    var input = label.checkboxElement;
-    input.name = name;
-    WebInspector.SettingsUI.bindCheckbox(input, setting);
+  var input = label.checkboxElement;
+  input.name = name;
+  UI.SettingsUI.bindCheckbox(input, setting);
 
-    if (omitParagraphElement)
-        return label;
+  if (omitParagraphElement)
+    return label;
 
-    var p = createElement("p");
-    p.appendChild(label);
-    return p;
-}
+  var p = createElement('p');
+  p.appendChild(label);
+  return p;
+};
 
 /**
  * @param {!Element} input
- * @param {!WebInspector.Setting} setting
+ * @param {!Common.Setting} setting
  */
-WebInspector.SettingsUI.bindCheckbox = function(input, setting)
-{
-    function settingChanged()
-    {
-        if (input.checked !== setting.get())
-            input.checked = setting.get();
-    }
-    setting.addChangeListener(settingChanged);
-    settingChanged();
+UI.SettingsUI.bindCheckbox = function(input, setting) {
+  function settingChanged() {
+    if (input.checked !== setting.get())
+      input.checked = setting.get();
+  }
+  setting.addChangeListener(settingChanged);
+  settingChanged();
 
-    function inputChanged()
-    {
-        if (setting.get() !== input.checked)
-            setting.set(input.checked);
-    }
-    input.addEventListener("change", inputChanged, false);
-}
+  function inputChanged() {
+    if (setting.get() !== input.checked)
+      setting.set(input.checked);
+  }
+  input.addEventListener('change', inputChanged, false);
+};
 
 /**
  * @param {string} name
  * @param {!Element} element
  * @return {!Element}
  */
-WebInspector.SettingsUI.createCustomSetting = function(name, element)
-{
-    var p = createElement("p");
-    var fieldsetElement = p.createChild("fieldset");
-    fieldsetElement.createChild("label").textContent = name;
-    fieldsetElement.appendChild(element);
-    return p;
-}
+UI.SettingsUI.createCustomSetting = function(name, element) {
+  var p = createElement('p');
+  var fieldsetElement = p.createChild('fieldset');
+  fieldsetElement.createChild('label').textContent = name;
+  fieldsetElement.appendChild(element);
+  return p;
+};
 
 /**
- * @param {!WebInspector.Setting} setting
+ * @param {!Common.Setting} setting
  * @return {!Element}
  */
-WebInspector.SettingsUI.createSettingFieldset = function(setting)
-{
-    var fieldset = createElement("fieldset");
-    fieldset.disabled = !setting.get();
-    setting.addChangeListener(settingChanged);
-    return fieldset;
+UI.SettingsUI.createSettingFieldset = function(setting) {
+  var fieldset = createElement('fieldset');
+  fieldset.disabled = !setting.get();
+  setting.addChangeListener(settingChanged);
+  return fieldset;
 
-    function settingChanged()
-    {
-        fieldset.disabled = !setting.get();
-    }
-}
+  function settingChanged() {
+    fieldset.disabled = !setting.get();
+  }
+};
 
 /**
  * @interface
  */
-WebInspector.SettingUI = function()
-{
-}
+UI.SettingUI = function() {};
 
-WebInspector.SettingUI.prototype = {
-    /**
-     * @return {?Element}
-     */
-    settingElement: function() { }
-}
+UI.SettingUI.prototype = {
+  /**
+   * @return {?Element}
+   */
+  settingElement: function() {}
+};

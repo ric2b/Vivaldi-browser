@@ -21,11 +21,6 @@
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 
-namespace testing {
-class TestCase;
-class TestInfo;
-}
-
 namespace base {
 
 class CommandLine;
@@ -150,7 +145,7 @@ class TestLauncher {
   void RunTestIteration();
 
   // Saves test results summary as JSON if requested from command line.
-  void MaybeSaveSummaryAsJSON();
+  void MaybeSaveSummaryAsJSON(const std::vector<std::string>& additional_tags);
 
   // Called on a worker thread after a child process finishes.
   void OnLaunchTestProcessFinished(

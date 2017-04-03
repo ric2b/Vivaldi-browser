@@ -7,51 +7,62 @@
 
 #include "core/CoreExport.h"
 #include "core/layout/ng/ng_constraint_space.h"
+#include "core/layout/ng/ng_layout_opportunity_tree_node.h"
+#include "core/layout/ng/ng_units.h"
 #include "platform/heap/Handle.h"
 #include "wtf/text/WTFString.h"
+#include "wtf/Optional.h"
 #include "wtf/Vector.h"
 
 namespace blink {
 
+typedef NGLogicalRect NGLayoutOpportunity;
+typedef Vector<NGLayoutOpportunity> NGLayoutOpportunities;
+
 class CORE_EXPORT NGLayoutOpportunityIterator final
     : public GarbageCollectedFinalized<NGLayoutOpportunityIterator> {
  public:
-  NGLayoutOpportunityIterator(NGConstraintSpace* space,
-                              unsigned clear,
-                              bool for_inline_or_bfc);
-  ~NGLayoutOpportunityIterator() {}
+  // Default constructor.
+  //
+  // @param space Constraint space with exclusions for which this iterator needs
+  //              to generate layout opportunities.
+  // @param opt_origin_point Optional origin_point parameter that is used as a
+  //                     default start point for layout opportunities.
+  // @param opt_leader_point Optional 'leader' parameter that is used to specify
+  // the
+  //                     ending point of temporary excluded rectangle which
+  //                     starts from 'origin'. This rectangle may represent a
+  //                     text fragment for example.
+  NGLayoutOpportunityIterator(
+      NGConstraintSpace* space,
+      const WTF::Optional<NGLogicalOffset>& opt_origin_point = WTF::nullopt,
+      const WTF::Optional<NGLogicalOffset>& opt_leader_point = WTF::nullopt);
 
-  NGConstraintSpace* Next();
+  // Gets the next Layout Opportunity or nullptr if the search is exhausted.
+  // TODO(chrome-layout-team): Refactor with using C++ <iterator> library.
+  const NGLayoutOpportunity Next();
 
   DEFINE_INLINE_VIRTUAL_TRACE() {
     visitor->trace(constraint_space_);
-    visitor->trace(current_opportunities_);
+    visitor->trace(opportunity_tree_root_);
   }
 
  private:
-  void FilterExclusions();
-  bool NextPosition();
-  bool IsValidPosition();
-  void FilterForPosition(Vector<NGExclusion>&);
-  void ComputeOpportunitiesForPosition();
-  LayoutUnit heightForOpportunity(const Vector<NGExclusion>&,
-                                  LayoutUnit left,
-                                  LayoutUnit top,
-                                  LayoutUnit right,
-                                  LayoutUnit bottom);
-  void addLayoutOpportunity(LayoutUnit left,
-                            LayoutUnit top,
-                            LayoutUnit right,
-                            LayoutUnit bottom);
+  // Mutable Getters.
+  NGLayoutOpportunityTreeNode* MutableOpportunityTreeRoot() {
+    return opportunity_tree_root_.get();
+  }
+
+  // Read-only Getters.
+  const NGLayoutOpportunityTreeNode* OpportunityTreeRoot() const {
+    return opportunity_tree_root_.get();
+  }
 
   Member<NGConstraintSpace> constraint_space_;
-  unsigned clear_;
-  bool for_inline_or_bfc_;
-  Vector<NGExclusion> filtered_exclusions_;
-  HeapVector<Member<NGConstraintSpace>> current_opportunities_;
 
-  LayoutUnit current_x_;
-  LayoutUnit current_y_;
+  NGLayoutOpportunities opportunities_;
+  NGLayoutOpportunities::const_iterator opportunity_iter_;
+  Member<NGLayoutOpportunityTreeNode> opportunity_tree_root_;
 };
 
 }  // namespace blink

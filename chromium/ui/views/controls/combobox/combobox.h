@@ -28,7 +28,6 @@ class ComboboxTestApi;
 
 class ComboboxListener;
 class CustomButton;
-class MenuModelAdapter;
 class MenuRunner;
 class Painter;
 class PrefixSelector;
@@ -95,7 +94,7 @@ class VIEWS_EXPORT Combobox : public View,
   void OnPaint(gfx::Canvas* canvas) override;
   void OnFocus() override;
   void OnBlur() override;
-  void GetAccessibleState(ui::AXViewState* state) override;
+  void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
   void Layout() override;
   void OnEnabledChanged() override;
   void OnNativeThemeChanged(const ui::NativeTheme* theme) override;
@@ -119,7 +118,7 @@ class VIEWS_EXPORT Combobox : public View,
 
   class ComboboxMenuModel;
 
-  // Updates the border according to the current state.
+  // Updates the border according to the current node_data.
   void UpdateBorder();
 
   // Given bounds within our View, this helper mirrors the bounds if necessary.
@@ -211,7 +210,6 @@ class VIEWS_EXPORT Combobox : public View,
 
   // Set while the dropdown is showing. Ensures the menu is closed if |this| is
   // destroyed.
-  std::unique_ptr<MenuModelAdapter> menu_model_adapter_;
   std::unique_ptr<MenuRunner> menu_runner_;
 
   // The image to be drawn for this combobox's arrow.

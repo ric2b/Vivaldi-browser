@@ -27,13 +27,15 @@ Para sa higit pang impormasyon tungkol sa privacy, pakitingnan ang Patakaran sa 
 <translation id="1654128982815600832">Pinapagana ang mga malayuang koneksyon para sa computer na ito…</translation>
 <translation id="170207782578677537">Nabigong irehistro ang computer na ito.</translation>
 <translation id="1704090719919187045">Mga Kagustuhan sa Chromoting Host</translation>
+<translation id="1730409684442507495">• Pinahusay na kalidad ng larawan ng desktop, pagtugon at paggamit ng baterya.
+• Pinahusay na pagtugon ng mga pag-click at pag-drag na pagpapatakbo.
+• Pinahusay na ilang effect ng animation sa UI.</translation>
 <translation id="174018511426417793">Wala kang mga nakarehistrong computer. Upang paganahin ang mga malayuang koneksyon sa isang computer, i-install ang Remote na Desktop ng Chrome doon at i-click ang “<ph name="BUTTON_NAME" />”.</translation>
 <translation id="1742469581923031760">Kumokonekta…</translation>
 <translation id="1770394049404108959">Hindi ko mabuksan ang application.</translation>
 <translation id="177096447311351977">Channel IP para sa client: <ph name="CLIENT_GAIA_IDENTIFIER" /> ip='<ph name="CLIENT_IP_ADDRESS_AND_PORT" />' host_ip='<ph name="HOST_IP_ADDRESS_AND_PORT" />' channel='<ph name="CHANNEL_TYPE" />' koneksyon='<ph name="CONNECTION_TYPE" />'.</translation>
 <translation id="1779766957982586368">Isara ang window</translation>
 <translation id="1841799852846221389">Hindi pinapagana ang mga malayuang koneksyon para sa computer na ito…</translation>
-<translation id="189172778771606813">Isara ang navigation drawer</translation>
 <translation id="1897488610212723051">I-delete</translation>
 <translation id="195619862187186579">Mga layout ng keyboard</translation>
 <translation id="1996161829609978754">Dina-download ng Chrome ang installer ng Host ng Chromoting.  Sa sandaling makumpleto ang pag-download, mangyaring patakbuhin ang installer bago magpatuloy.</translation>
@@ -74,7 +76,6 @@ Para sa higit pang impormasyon tungkol sa privacy, pakitingnan ang Patakaran sa 
 <translation id="2699970397166997657">Chromoting</translation>
 <translation id="2747641796667576127">Karaniwang awtomatikong isinasagawa ang mga pag-update sa software, ngunit maaaring mabigo sa ilang hindi pangkaraniwang sitwasyon. Hindi dapat tumagal nang mahigit sa ilang minuto ang pag-update sa software at magagawa ito habang nakakonekta sa iyong computer nang malayuan.</translation>
 <translation id="2841013758207633010">Oras</translation>
-<translation id="2851674870054673688">Sa sandaling ilagay nila ang code, magsisimula ang iyong session ng pagbabahagi.</translation>
 <translation id="2851754573186462851">Chromium App Streaming</translation>
 <translation id="2855866366045322178">naka-offline</translation>
 <translation id="2888969873284818612">Nagkaroon ng error sa network. Ire-restart namin ang app kapag on-line nang muli ang iyong device.</translation>
@@ -114,6 +115,7 @@ Para sa higit pang impormasyon tungkol sa privacy, pakitingnan ang Patakaran sa 
 Host</translation>
 <translation id="3870154837782082782">Google Inc.</translation>
 <translation id="3884839335308961732">Pakikumpirma ang iyong account at PIN sa ibaba upang payagan ang pag-access ng Remote na Desktop ng Chrome.</translation>
+<translation id="3897092660631435901">Menu</translation>
 <translation id="3905196214175737742">Di-wastong domain ng may-ari ng host.</translation>
 <translation id="3908017899227008678">Paliitin upang magkasya</translation>
 <translation id="3931191050278863510">Huminto ang host.</translation>
@@ -126,6 +128,7 @@ Host</translation>
 <translation id="409800995205263688">TANDAAN: Ang pinapayagan ng mga setting ng patakaran ay mga koneksyon lang sa pagitan ng mga computer sa loob ng iyong network.</translation>
 <translation id="4155497795971509630">Nawawala ang ilang bahagi na kinakailangan. Pakitiyak na na-install mo ang pinakabagong bersyon ng software at subukang muli.</translation>
 <translation id="4156740505453712750">Upang protektahan ang access sa computer na ito, mangyaring pumili ng PIN na may <ph name="BOLD_START" />hindi bababa sa anim na digit<ph name="BOLD_END" />. Kakailanganin ang PIN na ito kapag kumokonekta mula sa isa pang lokasyon.</translation>
+<translation id="4156741816461781891">Naka-sign in bilang <ph name="EMAIL_ADDRESS" />.</translation>
 <translation id="4176825807642096119">Access code</translation>
 <translation id="4207623512727273241">Mangyaring patakbuhin ang installer bago magpatuloy.</translation>
 <translation id="4227991223508142681">Host na Provisioning Utility</translation>
@@ -166,7 +169,6 @@ Desktop ng Chrome</translation>
 <translation id="5070121137485264635">Hinihiling sa iyo ng remote host na magpatunay sa isang website ng third-party. Upang makapagpatuloy, dapat mong bigyan ng mga karagdagang pahintulot ang Remote na Desktop ng Chrome upang ma-access ang address na ito:</translation>
 <translation id="507204348399810022">Sigurado ka bang gusto mong i-disable ang mga malayuang koneksyon sa <ph name="HOSTNAME" />?</translation>
 <translation id="5156271271724754543">Pakilagay ang parehong PIN sa parehong kahon.</translation>
-<translation id="5168917394043976756">Buksan ang navigation drawer</translation>
 <translation id="5170982930780719864">Di-wastong host id.</translation>
 <translation id="518094545883702183">Ang impormasyong ito ay ginagamit lang para sa pagda-diagnose sa problemang inuulat mo, available lang sa isang taong nagsisiyasat ng iyong ulat, at pinapanatili sa loob ng hindi hihigit sa 30 araw.</translation>
 <translation id="5222676887888702881">Mag-sign out</translation>
@@ -209,10 +211,6 @@ Desktop ng Chrome</translation>
 <translation id="6304318647555713317">Client</translation>
 <translation id="6381670701864002291">Iba pang bagay.</translation>
 <translation id="6398765197997659313">Lumabas sa buong screen</translation>
-<translation id="6408143143164565232">• Makinig sa audio mula sa mga Windows o Linux computer.
-• Mag-alis ng mga hindi gustong koneksyon sa pamamagitan ng pagpindot nang matagal sa pangalan ng computer.
-• Pinahusay na pag-pinch upang mag-zoom at pag-ii-scroll gamit ang dalawang daliri.
-• Bagong screen ng Tulong at Feedback.</translation>
 <translation id="6441316101718669559">Hindi sinusuportahan sa platform na ito ang pagsasama sa desktop. Maaari mo pa ring gamitin ang application, ngunit hindi magiging maganda ang karanasan ng user.</translation>
 <translation id="652218476070540101">Ina-update ang PIN para sa computer na ito…</translation>
 <translation id="6527303717912515753">Ibahagi</translation>
@@ -225,6 +223,7 @@ Desktop ng Chrome</translation>
 <translation id="6640610550128933069">huling naka-online noong <ph name="DATE" /></translation>
 <translation id="6668065415969892472">Na-update na ang iyong PIN.</translation>
 <translation id="6681800064886881394">Copyright 2013 Google Inc. Nakalaan ang Lahat ng Karapatan.</translation>
+<translation id="6705482892455291412">Kapag inilagay na nila ang code, ipo-prompt kang tanggapin ang koneksyon at simulan ang session ng pagbabahagi.</translation>
 <translation id="6746493157771801606">I-clear ang kasaysayan</translation>
 <translation id="6748108480210050150">Mula</translation>
 <translation id="677755392401385740">Sinimulan ang host para sa user: <ph name="HOST_USERNAME" />.</translation>
@@ -301,6 +300,7 @@ Desktop ng Chrome</translation>
 <translation id="9188433529406846933">Pahintulutan</translation>
 <translation id="9213184081240281106">Di-wastong configuration ng host.</translation>
 <translation id="951991426597076286">Tanggihan</translation>
+<translation id="962733587145768554">Pakipili ang '<ph name="SHARE" />' sa dialog box ng koneksyon upang makumpleto ang proseso.</translation>
 <translation id="979100198331752041">Ang Remote na Desktop ng Chrome sa <ph name="HOSTNAME" /> ay luma na at kinakailangang ma-update.</translation>
 <translation id="985602178874221306">Ang Mga May-akda ng Chromium</translation>
 <translation id="992215271654996353"><ph name="HOSTNAME" /> (huling online <ph name="DATE_OR_TIME" />)</translation>

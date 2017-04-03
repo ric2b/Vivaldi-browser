@@ -28,7 +28,6 @@
   ],
   "mb_type": "gn",
   "compiler": "ninja",
-  "additional_compile_targets": [ "gn_all" ],
   "configuration": "Release",
   "sdk": "iphoneos10.0",
   "tests": [

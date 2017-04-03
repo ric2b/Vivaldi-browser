@@ -1,10 +1,9 @@
 {
-  "manifest_version":  1,
-  "name": "exe:mus_clipboard_unittests",
+  "name": "mus_clipboard_unittests",
   "display_name": "Clipboard Service Unittests",
-  "capabilities": {
-    "required": {
-      "service:ui": { "interfaces":  [ "ui::mojom::Clipboard" ] }
+  "interface_provider_specs": {
+    "service_manager:connector": {
+      "requires": { "ui": [ "app" ] }
     }
   }
 }

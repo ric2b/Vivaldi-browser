@@ -242,7 +242,7 @@ void ImmersiveModeControllerAsh::CreateMashRevealWidget() {
       mash_reveal_widget_.get(),
       views::WindowManagerConnection::Get()->client()->NewWindow(
           &window_properties),
-      ui::mojom::SurfaceType::DEFAULT);
+      ui::mojom::CompositorFrameSinkType::DEFAULT);
   init_params.accept_events = false;
   init_params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
   init_params.activatable = views::Widget::InitParams::ACTIVATABLE_NO;
@@ -272,7 +272,8 @@ void ImmersiveModeControllerAsh::OnImmersiveRevealStarted() {
   UpdateTabIndicators();
   LayoutBrowserRootView();
   CreateMashRevealWidget();
-  FOR_EACH_OBSERVER(Observer, observers_, OnImmersiveRevealStarted());
+  for (Observer& observer : observers_)
+    observer.OnImmersiveRevealStarted();
 }
 
 void ImmersiveModeControllerAsh::OnImmersiveRevealEnded() {

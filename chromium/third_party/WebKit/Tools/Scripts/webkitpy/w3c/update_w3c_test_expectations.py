@@ -23,6 +23,8 @@ from webkitpy.w3c.test_parser import TestParser
 
 _log = logging.getLogger(__name__)
 
+MARKER_COMMENT = '# ====== New tests from w3c-test-autoroller added here ======'
+
 
 class W3CExpectationsLineAdder(object):
 
@@ -43,18 +45,17 @@ class W3CExpectationsLineAdder(object):
             _log.error('No issue on current branch.')
             return 1
 
-        try_bots = self.get_try_bots()
         rietveld = Rietveld(self.host.web)
-        try_jobs = rietveld.latest_try_jobs(issue_number, try_bots)
-        _log.debug('Latest try jobs: %r', try_jobs)
+        builds = rietveld.latest_try_jobs(issue_number, self.get_try_bots())
+        _log.debug('Latest try jobs: %r', builds)
 
-        if not try_jobs:
+        if not builds:
             _log.error('No try job information was collected.')
             return 1
 
         test_expectations = {}
-        for job in try_jobs:
-            platform_results = self.get_failing_results_dict(job)
+        for build in builds:
+            platform_results = self.get_failing_results_dict(build)
             test_expectations = self.merge_dicts(test_expectations, platform_results)
 
         for test_name, platform_result in test_expectations.iteritems():
@@ -268,14 +269,13 @@ class W3CExpectationsLineAdder(object):
         _log.debug('Lines to write to TestExpectations: %r', line_list)
         port = self.host.port_factory.get()
         expectations_file_path = port.path_to_generic_test_expectations_file()
-        marker_comment = '# Tests added from W3C auto import bot'
         file_contents = self.host.filesystem.read_text_file(expectations_file_path)
-        marker_comment_index = file_contents.find(marker_comment)
+        marker_comment_index = file_contents.find(MARKER_COMMENT)
         line_list = [line for line in line_list if self._test_name_from_expectation_string(line) not in file_contents]
         if not line_list:
             return
         if marker_comment_index == -1:
-            file_contents += '\n%s\n' % marker_comment
+            file_contents += '\n%s\n' % MARKER_COMMENT
             file_contents += '\n'.join(line_list)
         else:
             end_of_marker_line = (file_contents[marker_comment_index:].find('\n')) + marker_comment_index
@@ -314,17 +314,13 @@ class W3CExpectationsLineAdder(object):
                 'rebaseline-cl',
                 '--verbose',
                 '--no-trigger-jobs',
-                '--only-changed-tests',
             ] + tests_to_rebaseline)
-            # NOTE(qyearsley): If rebaseline-cl is changed to stage all new files
-            # with git, then this would be unnecessary and should be removed.
-            self.host.executive.run_command(['git', 'add', '--all'])
         return tests_results
 
     def get_modified_existing_tests(self):
         """Returns a list of layout test names for layout tests that have been modified."""
         diff_output = self.host.executive.run_command(
-            ['git', 'diff', 'origin/master', '--name-only', '-diff-filter=AMR'])  # Added, modified, and renamed files.
+            ['git', 'diff', 'origin/master', '--name-only', '--diff-filter=AMR'])  # Added, modified, and renamed files.
         paths_from_chromium_root = diff_output.splitlines()
         modified_tests = []
         for path in paths_from_chromium_root:

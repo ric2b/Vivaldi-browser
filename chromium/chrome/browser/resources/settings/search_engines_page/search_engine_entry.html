@@ -1,17 +1,16 @@
+<link rel="import" href="chrome://resources/cr_elements/cr_action_menu/cr_action_menu.html">
 <link rel="import" href="chrome://resources/cr_elements/icons.html">
 <link rel="import" href="chrome://resources/html/polymer.html">
 <link rel="import" href="chrome://resources/html/icon.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/iron-dropdown/iron-dropdown.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button.html">
 <link rel="import" href="/search_engines_page/search_engine_dialog.html">
+<link rel="import" href="/search_engines_page/search_engine_entry_css.html">
 <link rel="import" href="/search_engines_page/search_engines_browser_proxy.html">
 <link rel="import" href="/settings_shared_css.html">
 
 <dom-module id="settings-search-engine-entry">
-  <link rel="import" type="css" href="/search_engines_page/search_engine_entry.css">
   <template>
-    <style include="settings-shared"></style>
-    <style>
+    <style include="settings-shared search-engine-entry">
       :host([is-default]) {
         font-weight: 500;
       }
@@ -41,24 +40,21 @@
       </div>
       <div class="keyword-column">[[engine.keyword]]</div>
       <div class="url-column">[[engine.url]]</div>
-      <paper-icon-button icon="cr:more-vert" toggles tabindex$="[[tabindex]]"
-          active="{{editMenuOpened}}">
+      <paper-icon-button icon="cr:more-vert" tabindex$="[[tabindex]]"
+          on-tap="onDotsTap_">
       </paper-icon-button>
-      <iron-dropdown opened="{{editMenuOpened}}" horizontal-align="right"
-          vertical-align="auto">
-        <div class="dropdown-content">
-          <button class="dropdown-item" role="option" on-tap="onMakeDefaultTap_"
-              hidden$="[[!engine.canBeDefault]]" id="makeDefault">
-            $i18n{searchEnginesMakeDefault}
-          </button>
-          <button class="dropdown-item" role="option" on-tap="onEditTap_"
-              hidden$="[[!engine.canBeEdited]]"
-              id="edit">$i18n{searchEnginesEdit}</button>
-          <button class="dropdown-item" role="option" on-tap="onDeleteTap_"
-              hidden$="[[!engine.canBeRemoved]]"
-              id="delete">$i18n{searchEnginesRemoveFromList}</button>
-        <div>
-      </iron-dropdown>
+      <dialog is="cr-action-menu">
+        <button class="dropdown-item" role="option" on-tap="onMakeDefaultTap_"
+            hidden$="[[!engine.canBeDefault]]" id="makeDefault">
+          $i18n{searchEnginesMakeDefault}
+        </button>
+        <button class="dropdown-item" role="option" on-tap="onEditTap_"
+            hidden$="[[!engine.canBeEdited]]"
+            id="edit">$i18n{searchEnginesEdit}</button>
+        <button class="dropdown-item" role="option" on-tap="onDeleteTap_"
+            hidden$="[[!engine.canBeRemoved]]"
+            id="delete">$i18n{searchEnginesRemoveFromList}</button>
+      </dialog>
     </div>
   </template>
   <script src="search_engine_entry.js"></script>

@@ -146,6 +146,10 @@ void PreviewModeClient::DocumentHasUnsupportedFeature(
   NOTREACHED();
 }
 
+void PreviewModeClient::FontSubstituted() {
+  NOTREACHED();
+}
+
 void PreviewModeClient::DocumentLoadProgress(uint32_t available,
                                              uint32_t doc_size) {}
 
@@ -157,6 +161,8 @@ bool PreviewModeClient::IsPrintPreview() {
   NOTREACHED();
   return false;
 }
+
+void PreviewModeClient::CancelBrowserDownload() {}
 
 uint32_t PreviewModeClient::GetBackgroundColor() {
   NOTREACHED();

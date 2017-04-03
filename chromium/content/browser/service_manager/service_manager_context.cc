@@ -24,33 +24,35 @@
 #include "content/public/browser/utility_process_host_client.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/service_manager_connection.h"
-#include "content/public/common/service_names.h"
+#include "content/public/common/service_names.mojom.h"
 #include "mojo/edk/embedder/embedder.h"
 #include "services/catalog/catalog.h"
 #include "services/catalog/manifest_provider.h"
+#include "services/catalog/public/interfaces/constants.mojom.h"
 #include "services/catalog/store.h"
-#include "services/file/public/cpp/constants.h"
-#include "services/shell/connect_params.h"
-#include "services/shell/native_runner.h"
-#include "services/shell/public/cpp/connector.h"
-#include "services/shell/public/cpp/service.h"
-#include "services/shell/public/interfaces/service.mojom.h"
-#include "services/shell/runner/common/client_util.h"
-#include "services/shell/runner/host/in_process_native_runner.h"
-#include "services/shell/service_manager.h"
+#include "services/file/public/interfaces/constants.mojom.h"
+#include "services/service_manager/connect_params.h"
+#include "services/service_manager/native_runner.h"
+#include "services/service_manager/public/cpp/connector.h"
+#include "services/service_manager/public/cpp/service.h"
+#include "services/service_manager/public/interfaces/service.mojom.h"
+#include "services/service_manager/runner/common/client_util.h"
+#include "services/service_manager/runner/host/in_process_native_runner.h"
+#include "services/service_manager/service_manager.h"
 
 namespace content {
 
 namespace {
 
-base::LazyInstance<std::unique_ptr<shell::Connector>>::Leaky
+base::LazyInstance<std::unique_ptr<service_manager::Connector>>::Leaky
     g_io_thread_connector = LAZY_INSTANCE_INITIALIZER;
 
 void DestroyConnectorOnIOThread() { g_io_thread_connector.Get().reset(); }
 
-void StartUtilityProcessOnIOThread(shell::mojom::ServiceFactoryRequest request,
-                                   const base::string16& process_name,
-                                   bool use_sandbox) {
+void StartUtilityProcessOnIOThread(
+    service_manager::mojom::ServiceFactoryRequest request,
+    const base::string16& process_name,
+    bool use_sandbox) {
   UtilityProcessHost* process_host =
       UtilityProcessHost::Create(nullptr, nullptr);
   process_host->SetName(process_name);
@@ -60,11 +62,12 @@ void StartUtilityProcessOnIOThread(shell::mojom::ServiceFactoryRequest request,
   process_host->GetRemoteInterfaces()->GetInterface(std::move(request));
 }
 
-void StartServiceInUtilityProcess(const std::string& service_name,
-                                  const base::string16& process_name,
-                                  bool use_sandbox,
-                                  shell::mojom::ServiceRequest request) {
-  shell::mojom::ServiceFactoryPtr service_factory;
+void StartServiceInUtilityProcess(
+    const std::string& service_name,
+    const base::string16& process_name,
+    bool use_sandbox,
+    service_manager::mojom::ServiceRequest request) {
+  service_manager::mojom::ServiceFactoryPtr service_factory;
   BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
                           base::Bind(&StartUtilityProcessOnIOThread,
                                      base::Passed(GetProxy(&service_factory)),
@@ -74,9 +77,11 @@ void StartServiceInUtilityProcess(const std::string& service_name,
 
 #if (ENABLE_MOJO_MEDIA_IN_GPU_PROCESS)
 
-// Request shell::mojom::ServiceFactory from GPU process host. Must be called on
+// Request service_manager::mojom::ServiceFactory from GPU process host. Must be
+// called on
 // IO thread.
-void RequestGpuServiceFactory(shell::mojom::ServiceFactoryRequest request) {
+void RequestGpuServiceFactory(
+    service_manager::mojom::ServiceFactoryRequest request) {
   GpuProcessHost* process_host =
       GpuProcessHost::Get(GpuProcessHost::GPU_PROCESS_KIND_SANDBOXED);
   if (!process_host) {
@@ -92,8 +97,8 @@ void RequestGpuServiceFactory(shell::mojom::ServiceFactoryRequest request) {
 }
 
 void StartServiceInGpuProcess(const std::string& service_name,
-                              shell::mojom::ServiceRequest request) {
-  shell::mojom::ServiceFactoryPtr service_factory;
+                              service_manager::mojom::ServiceRequest request) {
+  service_manager::mojom::ServiceFactoryPtr service_factory;
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
       base::Bind(&RequestGpuServiceFactory,
@@ -137,12 +142,12 @@ class ServiceManagerContext::InProcessServiceManagerContext
  public:
   InProcessServiceManagerContext() {}
 
-  shell::mojom::ServiceRequest Start(
+  service_manager::mojom::ServiceRequest Start(
       std::unique_ptr<BuiltinManifestProvider> manifest_provider) {
-    shell::mojom::ServicePtr embedder_service_proxy;
-    shell::mojom::ServiceRequest embedder_service_request =
+    service_manager::mojom::ServicePtr embedder_service_proxy;
+    service_manager::mojom::ServiceRequest embedder_service_request =
         mojo::GetProxy(&embedder_service_proxy);
-    shell::mojom::ServicePtrInfo embedder_service_proxy_info =
+    service_manager::mojom::ServicePtrInfo embedder_service_proxy_info =
         embedder_service_proxy.PassInterface();
     BrowserThread::GetTaskRunnerForThread(BrowserThread::IO)->PostTask(
         FROM_HERE,
@@ -165,19 +170,19 @@ class ServiceManagerContext::InProcessServiceManagerContext
 
   void StartOnIOThread(
       std::unique_ptr<BuiltinManifestProvider> manifest_provider,
-      shell::mojom::ServicePtrInfo embedder_service_proxy_info) {
+      service_manager::mojom::ServicePtrInfo embedder_service_proxy_info) {
     manifest_provider_ = std::move(manifest_provider);
 
     base::SequencedWorkerPool* blocking_pool = BrowserThread::GetBlockingPool();
-    std::unique_ptr<shell::NativeRunnerFactory> native_runner_factory(
-        new shell::InProcessNativeRunnerFactory(blocking_pool));
+    std::unique_ptr<service_manager::NativeRunnerFactory> native_runner_factory(
+        new service_manager::InProcessNativeRunnerFactory(blocking_pool));
     catalog_.reset(
         new catalog::Catalog(blocking_pool, nullptr, manifest_provider_.get()));
-    service_manager_.reset(new shell::ServiceManager(
+    service_manager_.reset(new service_manager::ServiceManager(
         std::move(native_runner_factory), catalog_->TakeService()));
 
-    shell::mojom::ServiceRequest request =
-        service_manager_->StartEmbedderService(kBrowserServiceName);
+    service_manager::mojom::ServiceRequest request =
+        service_manager_->StartEmbedderService(mojom::kBrowserServiceName);
     mojo::FuseInterface(
         std::move(request), std::move(embedder_service_proxy_info));
   }
@@ -190,16 +195,16 @@ class ServiceManagerContext::InProcessServiceManagerContext
 
   std::unique_ptr<BuiltinManifestProvider> manifest_provider_;
   std::unique_ptr<catalog::Catalog> catalog_;
-  std::unique_ptr<shell::ServiceManager> service_manager_;
+  std::unique_ptr<service_manager::ServiceManager> service_manager_;
 
   DISALLOW_COPY_AND_ASSIGN(InProcessServiceManagerContext);
 };
 
 ServiceManagerContext::ServiceManagerContext() {
-  shell::mojom::ServiceRequest request;
-  if (shell::ShellIsRemote()) {
+  service_manager::mojom::ServiceRequest request;
+  if (service_manager::ServiceManagerIsRemote()) {
     mojo::edk::SetParentPipeHandleFromCommandLine();
-    request = shell::GetServiceRequestFromCommandLine();
+    request = service_manager::GetServiceRequestFromCommandLine();
   } else {
     std::unique_ptr<BuiltinManifestProvider> manifest_provider =
         base::MakeUnique<BuiltinManifestProvider>();
@@ -208,22 +213,27 @@ ServiceManagerContext::ServiceManagerContext() {
       const char* name;
       int resource_id;
     } kManifests[] = {
-      { kBrowserServiceName, IDR_MOJO_CONTENT_BROWSER_MANIFEST },
-      { kGpuServiceName, IDR_MOJO_CONTENT_GPU_MANIFEST },
-      { kPluginServiceName, IDR_MOJO_CONTENT_PLUGIN_MANIFEST },
-      { kRendererServiceName, IDR_MOJO_CONTENT_RENDERER_MANIFEST },
-      { kUtilityServiceName, IDR_MOJO_CONTENT_UTILITY_MANIFEST },
-      { "service:catalog", IDR_MOJO_CATALOG_MANIFEST },
-      { file::kFileServiceName, IDR_MOJO_FILE_MANIFEST }
+      { mojom::kBrowserServiceName, IDR_MOJO_CONTENT_BROWSER_MANIFEST },
+      { mojom::kGpuServiceName, IDR_MOJO_CONTENT_GPU_MANIFEST },
+      { mojom::kPluginServiceName, IDR_MOJO_CONTENT_PLUGIN_MANIFEST },
+      { mojom::kRendererServiceName, IDR_MOJO_CONTENT_RENDERER_MANIFEST },
+      { mojom::kUtilityServiceName, IDR_MOJO_CONTENT_UTILITY_MANIFEST },
+      { catalog::mojom::kServiceName, IDR_MOJO_CATALOG_MANIFEST },
+      { file::mojom::kServiceName, IDR_MOJO_FILE_MANIFEST }
     };
 
     for (size_t i = 0; i < arraysize(kManifests); ++i) {
       std::string contents = GetContentClient()->GetDataResource(
           kManifests[i].resource_id,
           ui::ScaleFactor::SCALE_FACTOR_NONE).as_string();
-      DCHECK(!contents.empty());
+      base::debug::Alias(&i);
+      CHECK(!contents.empty());
+
       std::unique_ptr<base::Value> manifest_value =
           base::JSONReader::Read(contents);
+      base::debug::Alias(&contents);
+      CHECK(manifest_value);
+
       std::unique_ptr<base::Value> overlay_value =
           GetContentClient()->browser()->GetServiceManifestOverlay(
               kManifests[i].name);
@@ -234,6 +244,7 @@ ServiceManagerContext::ServiceManagerContext() {
         CHECK(overlay_value->GetAsDictionary(&overlay_dictionary));
         MergeDictionary(manifest_dictionary, overlay_dictionary);
       }
+
       manifest_provider->AddManifestValue(kManifests[i].name,
                                           std::move(manifest_value));
     }
@@ -283,7 +294,7 @@ ServiceManagerContext::ServiceManagerContext() {
 
 #if (ENABLE_MOJO_MEDIA_IN_GPU_PROCESS)
   ServiceManagerConnection::GetForProcess()->AddServiceRequestHandler(
-      "service:media", base::Bind(&StartServiceInGpuProcess, "service:media"));
+      "media", base::Bind(&StartServiceInGpuProcess, "media"));
 #endif
 }
 
@@ -301,7 +312,7 @@ ServiceManagerContext::~ServiceManagerContext() {
 }
 
 // static
-shell::Connector* ServiceManagerContext::GetConnectorForIOThread() {
+service_manager::Connector* ServiceManagerContext::GetConnectorForIOThread() {
   DCHECK(BrowserThread::CurrentlyOn(BrowserThread::IO));
   return g_io_thread_connector.Get().get();
 }

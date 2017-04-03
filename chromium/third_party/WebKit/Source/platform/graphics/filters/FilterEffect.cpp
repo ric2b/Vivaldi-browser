@@ -84,7 +84,7 @@ FloatRect FilterEffect::mapRect(const FloatRect& rect) const {
 }
 
 FilterEffect* FilterEffect::inputEffect(unsigned number) const {
-  ASSERT_WITH_SECURITY_IMPLICATION(number < m_inputEffects.size());
+  SECURITY_DCHECK(number < m_inputEffects.size());
   return m_inputEffects.at(number).get();
 }
 
@@ -124,7 +124,7 @@ bool FilterEffect::inputsTaintOrigin() const {
 sk_sp<SkImageFilter> FilterEffect::createTransparentBlack() const {
   SkImageFilter::CropRect rect = getCropRect();
   sk_sp<SkColorFilter> colorFilter =
-      SkColorFilter::MakeModeFilter(0, SkXfermode::kClear_Mode);
+      SkColorFilter::MakeModeFilter(0, SkBlendMode::kClear);
   return SkColorFilterImageFilter::Make(std::move(colorFilter), nullptr, &rect);
 }
 

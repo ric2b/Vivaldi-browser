@@ -6,7 +6,6 @@
 
 [
     Constructor,
-    Constructor(DOMMatrixReadOnly other),
     Constructor(sequence<unrestricted double> numberSequence),
     RaisesException=Constructor,
     // FIXME: Should implement more constructors (See: crbug.com/388780)
@@ -42,31 +41,34 @@
     inherit attribute unrestricted double m43;
     inherit attribute unrestricted double m44;
 
-    // TODO(zino): Should implement rotateSelf() method (See: crbug.com/645878)
-    // TODO(zino): Should implement rotateFromVectorSelf() method (See: crbug.com/645882)
-    // TODO(zino): Should implement rotateAxisAngleSelf() method (See: crbug.com/645883)
-    // TODO(zino): Should implement setMatrixValue() method (See: crbug.com/645884)
-    // TODO(zino): Should remove scaleNonUniformSelf() method (See: crbug.com/645887)
     // Mutable transform methods
     [RaisesException] DOMMatrix multiplySelf(optional DOMMatrixInit other);
     [RaisesException] DOMMatrix preMultiplySelf(optional DOMMatrixInit other);
-    DOMMatrix translateSelf(unrestricted double tx,
-                            unrestricted double ty,
+    DOMMatrix translateSelf(optional unrestricted double tx = 0,
+                            optional unrestricted double ty = 0,
                             optional unrestricted double tz = 0);
-    DOMMatrix scaleSelf(unrestricted double scale,
+    DOMMatrix scaleSelf(optional unrestricted double scaleX = 1,
+                        optional unrestricted double scaleY,
+                        optional unrestricted double scaleZ = 1,
                         optional unrestricted double originX = 0,
-                        optional unrestricted double originY = 0);
-    DOMMatrix scale3dSelf(unrestricted double scale,
+                        optional unrestricted double originY = 0,
+                        optional unrestricted double originZ = 0);
+    DOMMatrix scale3dSelf(optional unrestricted double scale = 1,
                           optional unrestricted double originX = 0,
                           optional unrestricted double originY = 0,
                           optional unrestricted double originZ = 0);
-    DOMMatrix scaleNonUniformSelf(unrestricted double scaleX,
-                                  optional unrestricted double scaleY = 1,
-                                  optional unrestricted double scaleZ = 1,
-                                  optional unrestricted double originX = 0,
-                                  optional unrestricted double originY = 0,
-                                  optional unrestricted double originZ = 0);
+    DOMMatrix rotateSelf(optional unrestricted double rotX = 0,
+                          optional unrestricted double rotY,
+                          optional unrestricted double rotZ);
+    DOMMatrix rotateFromVectorSelf(optional unrestricted double x = 0,
+                                  optional unrestricted double y = 0);
+    DOMMatrix rotateAxisAngleSelf(optional unrestricted double x = 0,
+                                  optional unrestricted double y = 0,
+                                  optional unrestricted double z = 0,
+                                  optional unrestricted double angle = 0);
     DOMMatrix skewXSelf(optional unrestricted double sx = 0);
     DOMMatrix skewYSelf(optional unrestricted double sy = 0);
     DOMMatrix invertSelf();
+
+    [RaisesException] DOMMatrix setMatrixValue(DOMString transformList);
 };

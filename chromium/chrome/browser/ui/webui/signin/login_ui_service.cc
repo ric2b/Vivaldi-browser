@@ -11,6 +11,7 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/scoped_tabbed_browser_displayer.h"
+#include "chrome/browser/ui/user_manager.h"
 #include "chrome/browser/ui/webui/signin/login_ui_service_factory.h"
 #include "chrome/common/url_constants.h"
 #include "components/signin/core/browser/signin_header_helper.h"
@@ -48,10 +49,8 @@ void LoginUIService::LoginUIClosed(LoginUI* ui) {
 
 void LoginUIService::SyncConfirmationUIClosed(
     SyncConfirmationUIClosedResult result) {
-  FOR_EACH_OBSERVER(
-      Observer,
-      observer_list_,
-      OnSyncConfirmationUIClosed(result));
+  for (Observer& observer : observer_list_)
+    observer.OnSyncConfirmationUIClosed(result);
 }
 
 void LoginUIService::ShowLoginPopup() {
@@ -75,8 +74,11 @@ void LoginUIService::DisplayLoginResult(Browser* browser,
   last_login_result_ = error_message;
   last_login_error_email_ = email;
   if (switches::IsMaterialDesignUserMenu() && !error_message.empty()) {
-    browser->ShowModalSigninErrorWindow();
-  } else {
+    if (browser)
+      browser->ShowModalSigninErrorWindow();
+    else
+      UserManager::DisplayErrorMessage();
+  } else if (browser) {
     browser->window()->ShowAvatarBubbleFromAvatarButton(
         error_message.empty() ? BrowserWindow::AVATAR_BUBBLE_MODE_CONFIRM_SIGNIN
                               : BrowserWindow::AVATAR_BUBBLE_MODE_SHOW_ERROR,

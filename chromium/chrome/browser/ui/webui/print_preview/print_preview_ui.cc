@@ -7,6 +7,7 @@
 #include <map>
 #include <vector>
 
+#include "base/feature_list.h"
 #include "base/id_map.h"
 #include "base/lazy_instance.h"
 #include "base/macros.h"
@@ -26,6 +27,7 @@
 #include "chrome/browser/ui/webui/metrics_handler.h"
 #include "chrome/browser/ui/webui/print_preview/print_preview_handler.h"
 #include "chrome/browser/ui/webui/theme_source.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/browser_resources.h"
 #include "chrome/grit/chromium_strings.h"
@@ -35,6 +37,7 @@
 #include "content/public/browser/url_data_source.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui_data_source.h"
+#include "printing/features/features.h"
 #include "printing/page_size_margins.h"
 #include "printing/print_job_constants.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -189,6 +192,7 @@ content::WebUIDataSource* CreatePrintPreviewUISource() {
   source->AddLocalizedString("destinationLabel",
                              IDS_PRINT_PREVIEW_DESTINATION_LABEL);
   source->AddLocalizedString("copiesLabel", IDS_PRINT_PREVIEW_COPIES_LABEL);
+  source->AddLocalizedString("scalingLabel", IDS_PRINT_PREVIEW_SCALING_LABEL);
   source->AddLocalizedString("examplePageRangeText",
                              IDS_PRINT_PREVIEW_EXAMPLE_PAGE_RANGE_TEXT);
   source->AddLocalizedString("layoutLabel", IDS_PRINT_PREVIEW_LAYOUT_LABEL);
@@ -260,10 +264,8 @@ content::WebUIDataSource* CreatePrintPreviewUISource() {
                              IDS_PRINT_PREVIEW_PAGE_RANGE_SYNTAX_INSTRUCTION);
   source->AddLocalizedString("copiesInstruction",
                              IDS_PRINT_PREVIEW_COPIES_INSTRUCTION);
-  source->AddLocalizedString("incrementTitle",
-                             IDS_PRINT_PREVIEW_INCREMENT_TITLE);
-  source->AddLocalizedString("decrementTitle",
-                             IDS_PRINT_PREVIEW_DECREMENT_TITLE);
+  source->AddLocalizedString("scalingInstruction",
+                             IDS_PRINT_PREVIEW_SCALING_INSTRUCTION);
   source->AddLocalizedString("printPagesLabel",
                              IDS_PRINT_PREVIEW_PRINT_PAGES_LABEL);
   source->AddLocalizedString("optionsLabel", IDS_PRINT_PREVIEW_OPTIONS_LABEL);
@@ -400,11 +402,14 @@ content::WebUIDataSource* CreatePrintPreviewUISource() {
   source->OverrideContentSecurityPolicyObjectSrc("object-src 'self';");
   source->AddLocalizedString("moreOptionsLabel", IDS_MORE_OPTIONS_LABEL);
   source->AddLocalizedString("lessOptionsLabel", IDS_LESS_OPTIONS_LABEL);
+
+  bool scaling_enabled = base::FeatureList::IsEnabled(features::kPrintScaling);
+  source->AddBoolean("scalingEnabled", scaling_enabled);
+
 #if defined(OS_CHROMEOS)
   bool cups_and_md_settings_enabled =
       base::CommandLine::ForCurrentProcess()->HasSwitch(
-          ::switches::kEnableNativeCups) &&
-      base::FeatureList::IsEnabled(features::kMaterialDesignSettings);
+          ::switches::kEnableNativeCups);
   source->AddBoolean("showLocalManageButton", cups_and_md_settings_enabled);
 #else
   source->AddBoolean("showLocalManageButton", true);
@@ -527,7 +532,7 @@ void PrintPreviewUI::OnPrintPreviewRequest(int request_id) {
   g_print_preview_request_id_map.Get().Set(id_, request_id);
 }
 
-#if defined(ENABLE_BASIC_PRINTING)
+#if BUILDFLAG(ENABLE_BASIC_PRINTING)
 void PrintPreviewUI::OnShowSystemDialog() {
   web_ui()->CallJavascriptFunctionUnsafe("onSystemDialogLinkClicked");
 }
@@ -540,8 +545,9 @@ void PrintPreviewUI::OnDidGetPreviewPageCount(
     g_testing_delegate->DidGetPreviewPageCount(params.page_count);
   base::FundamentalValue count(params.page_count);
   base::FundamentalValue request_id(params.preview_request_id);
+  base::FundamentalValue fit_to_page_scaling(params.fit_to_page_scaling);
   web_ui()->CallJavascriptFunctionUnsafe("onDidGetPreviewPageCount", count,
-                                         request_id);
+                                         request_id, fit_to_page_scaling);
 }
 
 void PrintPreviewUI::OnDidGetDefaultPageLayout(

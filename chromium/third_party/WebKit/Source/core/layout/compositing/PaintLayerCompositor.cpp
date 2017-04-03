@@ -357,21 +357,19 @@ void PaintLayerCompositor::updateWithoutAcceleratedCompositing(
 #endif
 }
 
-static void
-forceRecomputePaintInvalidationRectsIncludingNonCompositingDescendants(
+static void forceRecomputeVisualRectsIncludingNonCompositingDescendants(
     LayoutObject* layoutObject) {
-  // We clear the previous paint invalidation rect as it's wrong (paint
-  // invalidation container changed, ...). Forcing a full invalidation will make
-  // us recompute it. Also we are not changing the previous position from our
-  // paint invalidation container, which is fine as we want a full paint
-  // invalidation anyway.
-  layoutObject->clearPreviousPaintInvalidationRects();
+  // We clear the previous visual rect as it's wrong (paint invalidation
+  // container changed, ...). Forcing a full invalidation will make us recompute
+  // it. Also we are not changing the previous position from our paint
+  // invalidation container, which is fine as we want a full paint invalidation
+  // anyway.
+  layoutObject->clearPreviousVisualRects();
 
   for (LayoutObject* child = layoutObject->slowFirstChild(); child;
        child = child->nextSibling()) {
     if (!child->isPaintInvalidationContainer())
-      forceRecomputePaintInvalidationRectsIncludingNonCompositingDescendants(
-          child);
+      forceRecomputeVisualRectsIncludingNonCompositingDescendants(child);
   }
 }
 
@@ -481,7 +479,7 @@ void PaintLayerCompositor::updateIfNeeded() {
   }
 
   for (unsigned i = 0; i < layersNeedingPaintInvalidation.size(); i++)
-    forceRecomputePaintInvalidationRectsIncludingNonCompositingDescendants(
+    forceRecomputeVisualRectsIncludingNonCompositingDescendants(
         layersNeedingPaintInvalidation[i]->layoutObject());
 
   // Inform the inspector that the layer tree has changed.
@@ -656,7 +654,7 @@ enum AcceleratedFixedRootBackgroundHistogramBuckets {
 
 void PaintLayerCompositor::frameViewDidScroll() {
   FrameView* frameView = m_layoutView.frameView();
-  IntPoint scrollPosition = frameView->scrollPosition();
+  IntSize scrollOffset = frameView->scrollOffsetInt();
 
   if (!m_scrollLayer)
     return;
@@ -674,7 +672,7 @@ void PaintLayerCompositor::frameViewDidScroll() {
   if (scrollingCoordinatorHandlesOffset)
     m_scrollLayer->setPosition(frameView->scrollOrigin());
   else
-    m_scrollLayer->setPosition(-scrollPosition);
+    m_scrollLayer->setPosition(IntPoint(-scrollOffset));
 
   DEFINE_STATIC_LOCAL(EnumerationHistogram, acceleratedBackgroundHistogram,
                       ("Renderer.AcceleratedFixedRootBackground",
@@ -833,7 +831,14 @@ void PaintLayerCompositor::setIsInWindow(bool isInWindow) {
 
 void PaintLayerCompositor::updateRootLayerPosition() {
   if (m_rootContentLayer) {
-    const IntRect& documentRect = m_layoutView.documentRect();
+    IntRect documentRect = m_layoutView.documentRect();
+
+    // Ensure the root content layer is at least the size of the outer viewport
+    // so that we don't end up clipping position: fixed elements if the
+    // document is smaller.
+    documentRect.unite(IntRect(documentRect.location(),
+                               m_layoutView.frameView()->visibleContentSize()));
+
     m_rootContentLayer->setSize(FloatSize(documentRect.size()));
     m_rootContentLayer->setPosition(documentRect.location());
   }

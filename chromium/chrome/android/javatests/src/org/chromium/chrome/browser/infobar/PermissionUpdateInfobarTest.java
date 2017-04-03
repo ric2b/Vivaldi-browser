@@ -5,7 +5,6 @@
 package org.chromium.chrome.browser.infobar;
 
 import android.Manifest;
-import android.os.Environment;
 import android.test.suitebuilder.annotation.MediumTest;
 
 import org.chromium.base.ThreadUtils;
@@ -51,8 +50,7 @@ public class PermissionUpdateInfobarTest extends ChromeTabbedActivityTestBase {
     @Override
     protected void setUp() throws Exception {
         super.setUp();
-        mTestServer = EmbeddedTestServer.createAndStartFileServer(
-                getInstrumentation().getContext(), Environment.getExternalStorageDirectory());
+        mTestServer = EmbeddedTestServer.createAndStartServer(getInstrumentation().getContext());
     }
 
     @Override
@@ -65,7 +63,7 @@ public class PermissionUpdateInfobarTest extends ChromeTabbedActivityTestBase {
     // permissions.
     @MediumTest
     public void testInfobarShutsDownCleanlyForGeolocation()
-            throws IllegalArgumentException, InterruptedException {
+            throws IllegalArgumentException, InterruptedException, TimeoutException {
         ChromeTabUtils.newTabFromMenu(getInstrumentation(), getActivity());
 
         // Register for animation notifications
@@ -106,7 +104,7 @@ public class PermissionUpdateInfobarTest extends ChromeTabbedActivityTestBase {
             });
 
             loadUrl(mTestServer.getURL(GEOLOCATION_PAGE));
-            assertTrue("InfoBar not added", mListener.addInfoBarAnimationFinished());
+            mListener.addInfoBarAnimationFinished("InfoBar not added");
             assertEquals(1, getInfoBars().size());
 
             final WebContents webContents = ThreadUtils.runOnUiThreadBlockingNoException(
@@ -185,7 +183,7 @@ public class PermissionUpdateInfobarTest extends ChromeTabbedActivityTestBase {
             });
 
             loadUrl(mTestServer.getURL(GEOLOCATION_IFRAME_PAGE));
-            assertTrue("InfoBar not added", mListener.addInfoBarAnimationFinished());
+            mListener.addInfoBarAnimationFinished("InfoBar not added");
             assertEquals(1, getInfoBars().size());
 
             final WebContents webContents = ThreadUtils.runOnUiThreadBlockingNoException(

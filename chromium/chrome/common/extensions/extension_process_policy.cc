@@ -15,6 +15,8 @@
 #include "extensions/common/manifest_handlers/app_isolation_info.h"
 #include "extensions/common/switches.h"
 
+#include "app/vivaldi_apptools.h"
+
 namespace extensions {
 
 const extensions::Extension* GetNonBookmarkAppExtension(

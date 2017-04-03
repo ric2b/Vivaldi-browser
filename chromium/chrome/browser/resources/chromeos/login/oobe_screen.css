@@ -4,6 +4,11 @@
  *
  * This contains common styling for all the OOBE screens. */
 
+:root {
+  --oobe-roboto-medium: 500 12px Roboto;
+  --oobe-roboto-bold: 700 12px Roboto;
+}
+
 .step {
   box-sizing: border-box;
   position: absolute;

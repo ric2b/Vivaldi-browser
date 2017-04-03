@@ -56,6 +56,13 @@ const char kJSViewportType[] = "viewport";
 const char kJSXOffset[] = "xOffset";
 const char kJSYOffset[] = "yOffset";
 const char kJSZoom[] = "zoom";
+const char kJSPinchPhase[] = "pinchPhase";
+// kJSPinchX and kJSPinchY represent the center of the pinch gesture.
+const char kJSPinchX[] = "pinchX";
+const char kJSPinchY[] = "pinchY";
+// kJSPinchVector represents the amount of panning caused by the pinch gesture.
+const char kJSPinchVectorX[] = "pinchVectorX";
+const char kJSPinchVectorY[] = "pinchVectorY";
 // Stop scrolling message (Page -> Plugin)
 const char kJSStopScrollingType[] = "stopScrolling";
 // Document dimension arguments (Plugin -> Page).
@@ -274,6 +281,9 @@ OutOfProcessInstance::OutOfProcessInstance(PP_Instance instance)
       pp::Printing_Dev(this),
       cursor_(PP_CURSORTYPE_POINTER),
       zoom_(1.0),
+      needs_reraster_(true),
+      last_bitmap_smaller_(false),
+      last_zoom_when_smaller_(1.0),
       device_scale_(1.0),
       full_(false),
       paint_manager_(this, this, true),
@@ -282,6 +292,7 @@ OutOfProcessInstance::OutOfProcessInstance(PP_Instance instance)
       preview_document_load_state_(LOAD_STATE_COMPLETE),
       uma_(this),
       told_browser_about_unsupported_feature_(false),
+      font_substitution_reported_(false),
       print_preview_page_count_(0),
       last_progress_sent_(0),
       recently_sent_find_update_(false),
@@ -290,7 +301,8 @@ OutOfProcessInstance::OutOfProcessInstance(PP_Instance instance)
       stop_scrolling_(false),
       background_color_(0),
       top_toolbar_height_(0),
-      accessibility_state_(ACCESSIBILITY_STATE_OFF) {
+      accessibility_state_(ACCESSIBILITY_STATE_OFF),
+      is_print_preview_(false) {
   loader_factory_.Initialize(this);
   timer_factory_.Initialize(this);
   form_factory_.Initialize(this);
@@ -322,8 +334,9 @@ bool OutOfProcessInstance::Init(uint32_t argc,
     return false;
   std::string document_url = document_url_var.AsString();
   base::StringPiece document_url_piece(document_url);
+  is_print_preview_ = document_url_piece.starts_with(kChromePrint);
   if (!document_url_piece.starts_with(kChromeExtension) &&
-      !document_url_piece.starts_with(kChromePrint)) {
+      !is_print_preview_) {
     return false;
   }
 
@@ -374,7 +387,7 @@ bool OutOfProcessInstance::Init(uint32_t argc,
   // A |kJSResetPrintPreviewModeType| message will be sent to the plugin letting
   // it know the url to load. By not loading here we avoid loading the same
   // document twice.
-  if (IsPrintPreviewUrl(original_url))
+  if (IsPrintPreview())
     return true;
 
   LoadUrl(stream_url);
@@ -395,12 +408,90 @@ void OutOfProcessInstance::HandleMessage(const pp::Var& message) {
   if (type == kJSViewportType &&
       dict.Get(pp::Var(kJSXOffset)).is_number() &&
       dict.Get(pp::Var(kJSYOffset)).is_number() &&
-      dict.Get(pp::Var(kJSZoom)).is_number()) {
+      dict.Get(pp::Var(kJSZoom)).is_number() &&
+      dict.Get(pp::Var(kJSPinchPhase)).is_number()) {
     received_viewport_message_ = true;
     stop_scrolling_ = false;
+    PinchPhase pinch_phase =
+        static_cast<PinchPhase>(dict.Get(pp::Var(kJSPinchPhase)).AsInt());
     double zoom = dict.Get(pp::Var(kJSZoom)).AsDouble();
+    double zoom_ratio = zoom / zoom_;
+
     pp::FloatPoint scroll_offset(dict.Get(pp::Var(kJSXOffset)).AsDouble(),
                                  dict.Get(pp::Var(kJSYOffset)).AsDouble());
+
+    if (pinch_phase == PINCH_START) {
+      starting_scroll_offset_ = scroll_offset;
+      initial_zoom_ratio_ = zoom_ratio;
+      last_bitmap_smaller_ = false;
+      needs_reraster_ = false;
+      return;
+    }
+
+    if (pinch_phase == PINCH_UPDATE_ZOOM_IN) {
+      if (!(dict.Get(pp::Var(kJSPinchX)).is_number() &&
+            dict.Get(pp::Var(kJSPinchY)).is_number() &&
+            dict.Get(pp::Var(kJSPinchVectorX)).is_number() &&
+            dict.Get(pp::Var(kJSPinchVectorY)).is_number())) {
+        NOTREACHED();
+        return;
+      }
+
+      pp::Point pinch_center(dict.Get(pp::Var(kJSPinchX)).AsDouble(),
+                             dict.Get(pp::Var(kJSPinchY)).AsDouble());
+      // Pinch vector is the panning caused due to change in pinch
+      // center between start and end of the gesture.
+      pp::Point pinch_vector =
+          pp::Point(dict.Get(kJSPinchVectorX).AsDouble() * zoom_ratio,
+                    dict.Get(kJSPinchVectorY).AsDouble() * zoom_ratio);
+      pp::Point scroll_delta;
+      // If the rendered document doesn't fill the display area we will
+      // use |paint_offset| to anchor the paint vertically into the same place.
+      // We use the scroll bars instead of the pinch vector to get the actual
+      // position on screen of the paint.
+      pp::Point paint_offset;
+
+      if (plugin_size_.width() > GetDocumentPixelWidth() * zoom_ratio) {
+        // We want to keep the paint in the middle but it must stay in the same
+        // position relative to the scroll bars.
+        paint_offset = pp::Point(0, (1 - zoom_ratio) * pinch_center.y());
+        scroll_delta = pp::Point(0,
+            (scroll_offset.y() -
+             starting_scroll_offset_.y() * zoom_ratio / initial_zoom_ratio_));
+
+        pinch_vector = pp::Point();
+        last_zoom_when_smaller_ = zoom;
+        last_bitmap_smaller_ = true;
+      } else if (last_bitmap_smaller_) {
+          pinch_center = pp::Point((plugin_size_.width() / device_scale_) / 2,
+              (plugin_size_.height() / device_scale_) / 2);
+          paint_offset = pp::Point(
+              (1 - zoom / last_zoom_when_smaller_) * pinch_center.x(),
+              (1 - zoom_ratio) * pinch_center.y());
+          pinch_vector = pp::Point();
+          scroll_delta = pp::Point(
+              (scroll_offset.x() -
+               starting_scroll_offset_.x() * zoom_ratio / initial_zoom_ratio_),
+              (scroll_offset.y() -
+               starting_scroll_offset_.y() * zoom_ratio / initial_zoom_ratio_));
+      }
+
+      paint_manager_.SetTransform(zoom_ratio, pinch_center,
+          pinch_vector + paint_offset + scroll_delta,
+          true);
+      needs_reraster_ = false;
+      return;
+    }
+
+    if (pinch_phase == PINCH_UPDATE_ZOOM_OUT || pinch_phase == PINCH_END) {
+      // We reraster on pinch zoom out in order to solve the invalid regions
+      // that appear after zooming out.
+      // On pinch end the scale is again 1.f and we request a reraster
+      // in the new position.
+      paint_manager_.ClearTransform();
+      last_bitmap_smaller_ = false;
+      needs_reraster_ = true;
+    }
 
     // Bound the input parameters.
     zoom = std::max(kMinZoom, zoom);
@@ -433,6 +524,10 @@ void OutOfProcessInstance::HandleMessage(const pp::Var& message) {
              dict.Get(pp::Var(kJSPrintPreviewGrayscale)).is_bool() &&
              dict.Get(pp::Var(kJSPrintPreviewPageCount)).is_int()) {
     url_ = dict.Get(pp::Var(kJSPrintPreviewUrl)).AsString();
+    // For security reasons we crash if the URL that is trying to be loaded here
+    // isn't a print preview one.
+    CHECK(IsPrintPreview());
+    CHECK(IsPrintPreviewUrl(url_));
     preview_pages_info_ = std::queue<PreviewPageInfo>();
     preview_document_load_state_ = LOAD_STATE_COMPLETE;
     document_load_state_ = LOAD_STATE_LOADING;
@@ -449,7 +544,13 @@ void OutOfProcessInstance::HandleMessage(const pp::Var& message) {
   } else if (type == kJSLoadPreviewPageType &&
              dict.Get(pp::Var(kJSPreviewPageUrl)).is_string() &&
              dict.Get(pp::Var(kJSPreviewPageIndex)).is_int()) {
-    ProcessPreviewPageInfo(dict.Get(pp::Var(kJSPreviewPageUrl)).AsString(),
+
+    std::string url = dict.Get(pp::Var(kJSPreviewPageUrl)).AsString();
+    // For security reasons we crash if the URL that is trying to be loaded here
+    // isn't a print preview one.
+    CHECK(IsPrintPreview());
+    CHECK(IsPrintPreviewUrl(url));
+    ProcessPreviewPageInfo(url,
                            dict.Get(pp::Var(kJSPreviewPageIndex)).AsInt());
   } else if (type == kJSStopScrollingType) {
     stop_scrolling_ = true;
@@ -788,7 +889,7 @@ void OutOfProcessInstance::OnPaint(
     ready->push_back(PaintManager::ReadyRect(rect, image_data_, true));
   }
 
-  if (!received_viewport_message_)
+  if (!received_viewport_message_ || !needs_reraster_)
     return;
 
   engine_->PrePaint();
@@ -843,24 +944,8 @@ void OutOfProcessInstance::OnPaint(
 }
 
 void OutOfProcessInstance::DidOpen(int32_t result) {
-  if (result == PP_OK) {
-    if (!engine_->HandleDocumentLoad(embed_loader_)) {
-      document_load_state_ = LOAD_STATE_LOADING;
-      DocumentLoadFailed();
-    }
-  } else if (result != PP_ERROR_ABORTED) {  // Can happen in tests.
-    NOTREACHED();
+  if (result != PP_OK || !engine_->HandleDocumentLoad(embed_loader_))
     DocumentLoadFailed();
-  }
-
-  // If it's a progressive load, cancel the stream URL request so that requests
-  // can be made on the original URL.
-  // TODO(raymes): Make this clearer once the in-process plugin is deleted.
-  if (engine_->IsProgressiveLoad()) {
-    pp::VarDictionary message;
-    message.Set(kType, kJSCancelStreamUrlType);
-    PostMessage(message);
-  }
 }
 
 void OutOfProcessInstance::DidOpenPreview(int32_t result) {
@@ -1206,6 +1291,8 @@ void OutOfProcessInstance::DocumentLoadComplete(int page_count) {
   UserMetricsRecordAction("PDF.LoadSuccess");
   uma_.HistogramEnumeration("PDF.DocumentFeature", LOADED_DOCUMENT,
                             FEATURES_COUNT);
+  if (!font_substitution_reported_)
+    uma_.HistogramEnumeration("PDF.IsFontSubstituted", 0, 2);
 
   // Note: If we are in print preview mode the scroll location is retained
   // across document loads so we don't want to scroll again and override it.
@@ -1310,6 +1397,13 @@ void OutOfProcessInstance::DocumentLoadFailed() {
   message.Set(pp::Var(kType), pp::Var(kJSLoadProgressType));
   message.Set(pp::Var(kJSProgressPercentage), pp::Var(-1));
   PostMessage(message);
+}
+
+void OutOfProcessInstance::FontSubstituted() {
+  if (font_substitution_reported_)
+    return;
+  font_substitution_reported_ = true;
+  uma_.HistogramEnumeration("PDF.IsFontSubstituted", 1, 2);
 }
 
 void OutOfProcessInstance::PreviewDocumentLoadFailed() {
@@ -1443,6 +1537,7 @@ void OutOfProcessInstance::LoadUrlInternal(
   pp::URLRequestInfo request(this);
   request.SetURL(url);
   request.SetMethod("GET");
+  request.SetFollowRedirects(false);
 
   *loader = CreateURLLoaderInternal();
   pp::CompletionCallback callback = loader_factory_.NewCallback(method);
@@ -1478,11 +1573,17 @@ void OutOfProcessInstance::AppendBlankPrintPreviewPages() {
 }
 
 bool OutOfProcessInstance::IsPrintPreview() {
-  return IsPrintPreviewUrl(url_);
+  return is_print_preview_;
 }
 
 uint32_t OutOfProcessInstance::GetBackgroundColor() {
   return background_color_;
+}
+
+void OutOfProcessInstance::CancelBrowserDownload() {
+  pp::VarDictionary message;
+  message.Set(kType, kJSCancelStreamUrlType);
+  PostMessage(message);
 }
 
 void OutOfProcessInstance::IsSelectingChanged(bool is_selecting) {
@@ -1494,8 +1595,7 @@ void OutOfProcessInstance::IsSelectingChanged(bool is_selecting) {
 
 void OutOfProcessInstance::ProcessPreviewPageInfo(const std::string& url,
                                                   int dst_page_index) {
-  if (!IsPrintPreview())
-    return;
+  DCHECK(IsPrintPreview());
 
   int src_page_index = ExtractPrintPreviewPageIndex(url);
   if (src_page_index < 1)

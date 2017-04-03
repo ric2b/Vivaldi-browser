@@ -15,10 +15,10 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "cc/resources/shared_bitmap_manager.h"
+#include "components/discardable_memory/common/discardable_shared_memory_id.h"
 #include "content/common/content_export.h"
 #include "content/common/content_param_traits_macros.h"
 #include "content/common/gpu_process_launch_causes.h"
-#include "content/common/host_discardable_shared_memory_manager.h"
 #include "gpu/command_buffer/common/sync_token.h"
 #include "gpu/ipc/common/gpu_param_traits_macros.h"
 #include "ipc/ipc_channel_handle.h"
@@ -130,6 +130,9 @@ IPC_MESSAGE_CONTROL1(ChildProcessMsg_SetProcessBackgrounded,
 // Sent to child processes to tell them to purge and suspend.
 IPC_MESSAGE_CONTROL0(ChildProcessMsg_PurgeAndSuspend)
 
+// Sent to child processes to tell them to resume from suspended mode.
+IPC_MESSAGE_CONTROL0(ChildProcessMsg_Resume)
+
 ////////////////////////////////////////////////////////////////////////////////
 // Messages sent from the child process to the browser.
 
@@ -178,12 +181,6 @@ IPC_MESSAGE_CONTROL0(ChildProcessHostMsg_ReleaseCachedFonts)
 
 // Asks the browser to create a block of shared memory for the child process to
 // fill in and pass back to the browser.
-IPC_SYNC_MESSAGE_CONTROL1_1(ChildProcessHostMsg_SyncAllocateSharedMemory,
-                            uint32_t /* buffer size */,
-                            base::SharedMemoryHandle)
-
-// Asks the browser to create a block of shared memory for the child process to
-// fill in and pass back to the browser.
 IPC_SYNC_MESSAGE_CONTROL2_1(ChildProcessHostMsg_SyncAllocateSharedBitmap,
                             uint32_t /* buffer size */,
                             cc::SharedBitmapId,
@@ -218,13 +215,13 @@ IPC_MESSAGE_CONTROL2(ChildProcessHostMsg_DeletedGpuMemoryBuffer,
 IPC_SYNC_MESSAGE_CONTROL2_1(
     ChildProcessHostMsg_SyncAllocateLockedDiscardableSharedMemory,
     uint32_t /* size */,
-    content::DiscardableSharedMemoryId,
+    discardable_memory::DiscardableSharedMemoryId,
     base::SharedMemoryHandle)
 
 // Informs the browser that the child deleted a block of discardable shared
 // memory.
 IPC_MESSAGE_CONTROL1(ChildProcessHostMsg_DeletedDiscardableSharedMemory,
-                     content::DiscardableSharedMemoryId)
+                     discardable_memory::DiscardableSharedMemoryId)
 
 #if defined(OS_LINUX)
 // Asks the browser to change the priority of thread.

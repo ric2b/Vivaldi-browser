@@ -11,15 +11,15 @@
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "base/values.h"
-#include "cc/input/top_controls_state.h"
+#include "cc/input/browser_controls_state.h"
 #include "cc/output/managed_memory_policy.h"
 #include "cc/output/swap_promise.h"
 #include "cc/trees/layer_tree_host_client.h"
 #include "cc/trees/layer_tree_host_single_thread_client.h"
 #include "cc/trees/layer_tree_settings.h"
-#include "cc/trees/remote_proto_channel.h"
 #include "cc/trees/swap_promise_monitor.h"
 #include "content/common/content_export.h"
+#include "content/public/renderer/remote_proto_channel.h"
 #include "content/renderer/gpu/compositor_dependencies.h"
 #include "third_party/WebKit/public/platform/WebLayerTreeView.h"
 #include "ui/gfx/geometry/rect.h"
@@ -29,7 +29,8 @@ class CommandLine;
 }
 
 namespace cc {
-class CopyOutputRequest;
+
+class AnimationHost;
 class InputHandler;
 class Layer;
 class LayerTreeHost;
@@ -54,7 +55,7 @@ class CONTENT_EXPORT RenderWidgetCompositor
     : NON_EXPORTED_BASE(public blink::WebLayerTreeView),
       NON_EXPORTED_BASE(public cc::LayerTreeHostClient),
       NON_EXPORTED_BASE(public cc::LayerTreeHostSingleThreadClient),
-      NON_EXPORTED_BASE(public cc::RemoteProtoChannel) {
+      public RemoteProtoChannel {
  public:
   // Attempt to construct and initialize a compositor instance for the widget
   // with the given settings. Returns NULL if initialization fails.
@@ -162,11 +163,11 @@ class CONTENT_EXPORT RenderWidgetCompositor
   void setShowDebugBorders(bool show) override;
   void setShowScrollBottleneckRects(bool show) override;
 
-  void updateTopControlsState(blink::WebTopControlsState constraints,
-                              blink::WebTopControlsState current,
-                              bool animate) override;
-  void setTopControlsHeight(float height, bool shrink) override;
-  void setTopControlsShownRatio(float) override;
+  void updateBrowserControlsState(blink::WebBrowserControlsState constraints,
+                                  blink::WebBrowserControlsState current,
+                                  bool animate) override;
+  void setBrowserControlsHeight(float height, bool shrink) override;
+  void setBrowserControlsShownRatio(float) override;
   // TODO(ianwen): Move this method to WebLayerTreeView and implement main
   // thread scrolling.
   virtual void setBottomControlsHeight(float height);
@@ -188,15 +189,15 @@ class CONTENT_EXPORT RenderWidgetCompositor
   void WillCommit() override;
   void DidCommit() override;
   void DidCommitAndDrawFrame() override;
-  void DidCompleteSwapBuffers() override;
+  void DidReceiveCompositorFrameAck() override;
   void DidCompletePageScaleAnimation() override;
 
   // cc::LayerTreeHostSingleThreadClient implementation.
   void RequestScheduleAnimation() override;
-  void DidPostSwapBuffers() override;
-  void DidAbortSwapBuffers() override;
+  void DidSubmitCompositorFrame() override;
+  void DidLoseCompositorFrameSink() override;
 
-  // cc::RemoteProtoChannel implementation.
+  // RemoteProtoChannel implementation.
   void SetProtoReceiver(ProtoReceiver* receiver) override;
   void SendCompositorProto(const cc::proto::CompositorMessage& proto) override;
 
@@ -224,12 +225,13 @@ class CONTENT_EXPORT RenderWidgetCompositor
   RenderWidgetCompositorDelegate* const delegate_;
   CompositorDependencies* const compositor_deps_;
   const bool threaded_;
+  std::unique_ptr<cc::AnimationHost> animation_host_;
   std::unique_ptr<cc::LayerTreeHost> layer_tree_host_;
   bool never_visible_;
 
   blink::WebLayoutAndPaintAsyncCallback* layout_and_paint_async_callback_;
 
-  cc::RemoteProtoChannel::ProtoReceiver* remote_proto_channel_receiver_;
+  RemoteProtoChannel::ProtoReceiver* remote_proto_channel_receiver_;
 
   base::WeakPtrFactory<RenderWidgetCompositor> weak_factory_;
 };

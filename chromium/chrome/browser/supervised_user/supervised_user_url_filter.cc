@@ -20,27 +20,27 @@
 #include "base/strings/string_util.h"
 #include "base/task_runner_util.h"
 #include "base/threading/sequenced_worker_pool.h"
-#include "chrome/browser/supervised_user/experimental/supervised_user_async_url_checker.h"
 #include "chrome/browser/supervised_user/experimental/supervised_user_blacklist.h"
 #include "components/google/core/browser/google_util.h"
 #include "components/policy/core/browser/url_blacklist_manager.h"
 #include "components/url_formatter/url_fixer.h"
 #include "components/url_matcher/url_matcher.h"
 #include "content/public/browser/browser_thread.h"
+#include "extensions/features/features.h"
 #include "net/base/escape.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "net/base/url_util.h"
 #include "url/gurl.h"
 #include "url/url_constants.h"
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "extensions/common/extension_urls.h"
 #endif
 
 using content::BrowserThread;
 using net::registry_controlled_domains::EXCLUDE_UNKNOWN_REGISTRIES;
 using net::registry_controlled_domains::EXCLUDE_PRIVATE_REGISTRIES;
-using net::registry_controlled_domains::GetRegistryLength;
+using net::registry_controlled_domains::GetCanonicalHostRegistryLength;
 using policy::URLBlacklist;
 using url_matcher::URLMatcher;
 using url_matcher::URLMatcherConditionSet;
@@ -54,6 +54,19 @@ struct HashHostnameHash {
     return value.hash();
   }
 };
+
+SupervisedUserURLFilter::FilteringBehavior
+GetBehaviorFromSafeSearchClassification(
+    SafeSearchURLChecker::Classification classification) {
+  switch (classification) {
+    case SafeSearchURLChecker::Classification::SAFE:
+      return SupervisedUserURLFilter::ALLOW;
+    case SafeSearchURLChecker::Classification::UNSAFE:
+      return SupervisedUserURLFilter::BLOCK;
+  }
+  NOTREACHED();
+  return SupervisedUserURLFilter::BLOCK;
+}
 
 }  // namespace
 
@@ -80,7 +93,7 @@ const char* kFilteredSchemes[] = {
   "wss"
 };
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 const char* kCrxDownloadUrls[] = {
     "https://clients2.googleusercontent.com/crx/blobs/",
     "https://chrome.google.com/webstore/download/"
@@ -128,11 +141,9 @@ URLMatcherConditionSet::ID FilterBuilder::AddPattern(
   std::string path;
   std::string query;
   bool match_subdomains = true;
-  URLBlacklist::SegmentURLCallback callback =
-      static_cast<URLBlacklist::SegmentURLCallback>(url_formatter::SegmentURL);
-  if (!URLBlacklist::FilterToComponents(
-          callback, pattern,
-          &scheme, &host, &match_subdomains, &port, &path, &query)) {
+  if (!URLBlacklist::FilterToComponents(pattern, &scheme, &host,
+                                        &match_subdomains, &port, &path,
+                                        &query)) {
     LOG(ERROR) << "Invalid pattern " << pattern;
     return -1;
   }
@@ -209,6 +220,9 @@ const char kGoogleWebCachePathPrefix[] = "/search";
 const char kGoogleWebCacheQueryPattern[] =
     "cache:(.{12}:)?(https?://)?([^ :]*)( [^:]*)?";
 
+const char kGoogleTranslateSubdomain[] = "translate.";
+const char kAlternateGoogleTranslateHost[] = "translate.googleusercontent.com";
+
 GURL BuildURL(bool is_https, const std::string& host_and_path) {
   std::string scheme = is_https ? url::kHttpsScheme : url::kHttpScheme;
   return GURL(scheme + "://" + host_and_path);
@@ -270,12 +284,13 @@ bool SupervisedUserURLFilter::HasFilteredScheme(const GURL& url) {
 }
 
 // static
-bool SupervisedUserURLFilter::HostMatchesPattern(const std::string& host,
-                                                 const std::string& pattern) {
+bool SupervisedUserURLFilter::HostMatchesPattern(
+    const std::string& canonical_host,
+    const std::string& pattern) {
   std::string trimmed_pattern = pattern;
-  std::string trimmed_host = host;
+  std::string trimmed_host = canonical_host;
   if (base::EndsWith(pattern, ".*", base::CompareCase::SENSITIVE)) {
-    size_t registry_length = GetRegistryLength(
+    size_t registry_length = GetCanonicalHostRegistryLength(
         trimmed_host, EXCLUDE_UNKNOWN_REGISTRIES, EXCLUDE_PRIVATE_REGISTRIES);
     // A host without a known registry part does not match.
     if (registry_length == 0)
@@ -338,7 +353,7 @@ SupervisedUserURLFilter::GetFilteringBehaviorForURL(
   if (!HasFilteredScheme(effective_url))
     return ALLOW;
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   // Allow webstore crx downloads. This applies to both extension installation
   // and updates.
   if (extension_urls::GetWebstoreUpdateUrl() == Normalize(effective_url))
@@ -415,8 +430,8 @@ bool SupervisedUserURLFilter::GetFilteringBehaviorForURLWithAsyncChecks(
   if (reason != supervised_user_error_page::DEFAULT || behavior == BLOCK ||
       !async_url_checker_) {
     callback.Run(behavior, reason, false);
-    FOR_EACH_OBSERVER(Observer, observers_,
-                      OnURLChecked(url, behavior, reason, false));
+    for (Observer& observer : observers_)
+      observer.OnURLChecked(url, behavior, reason, false);
     return true;
   }
 
@@ -516,7 +531,7 @@ void SupervisedUserURLFilter::SetManualURLs(
 
 void SupervisedUserURLFilter::InitAsyncURLChecker(
     net::URLRequestContextGetter* context) {
-  async_url_checker_.reset(new SupervisedUserAsyncURLChecker(context));
+  async_url_checker_.reset(new SafeSearchURLChecker(context));
 }
 
 void SupervisedUserURLFilter::ClearAsyncURLChecker() {
@@ -593,25 +608,60 @@ GURL SupervisedUserURLFilter::GetEmbeddedURL(const GURL& url) const {
     }
   }
 
+  // Check for Google translate URLs ("translate.google.TLD/...?...&u=URL" or
+  // "translate.googleusercontent.com/...?...&u=URL").
+  bool is_translate = false;
+  if (base::StartsWith(url.host_piece(), kGoogleTranslateSubdomain,
+                       base::CompareCase::SENSITIVE)) {
+    // Remove the "translate." prefix.
+    GURL::Replacements replace;
+    replace.SetHostStr(
+        url.host_piece().substr(strlen(kGoogleTranslateSubdomain)));
+    GURL trimmed = url.ReplaceComponents(replace);
+    // Check that the remainder is a Google URL. Note: IsGoogleDomainUrl checks
+    // for [www.]google.TLD, but we don't want the "www.", so explicitly exclude
+    // that.
+    // TODO(treib,pam): Instead of excluding "www." manually, teach
+    // IsGoogleDomainUrl a mode that doesn't allow it.
+    is_translate = google_util::IsGoogleDomainUrl(
+                       trimmed, google_util::DISALLOW_SUBDOMAIN,
+                       google_util::DISALLOW_NON_STANDARD_PORTS) &&
+                   !base::StartsWith(trimmed.host_piece(), "www.",
+                                     base::CompareCase::SENSITIVE);
+  }
+  bool is_alternate_translate =
+      url.host_piece() == kAlternateGoogleTranslateHost;
+  if (is_translate || is_alternate_translate) {
+    std::string embedded;
+    if (net::GetValueForKeyInQuery(url, "u", &embedded)) {
+      // The embedded URL may or may not include a scheme. Fix it if necessary.
+      return url_formatter::FixupURL(embedded, /*desired_tld=*/std::string());
+    }
+  }
+
   return GURL();
 }
 
 void SupervisedUserURLFilter::SetContents(std::unique_ptr<Contents> contents) {
   DCHECK(CalledOnValidThread());
   contents_ = std::move(contents);
-  FOR_EACH_OBSERVER(Observer, observers_, OnSiteListUpdated());
+  for (Observer& observer : observers_)
+    observer.OnSiteListUpdated();
 }
 
 void SupervisedUserURLFilter::CheckCallback(
     const FilteringBehaviorCallback& callback,
     const GURL& url,
-    FilteringBehavior behavior,
+    SafeSearchURLChecker::Classification classification,
     bool uncertain) const {
   DCHECK(default_behavior_ != BLOCK);
 
+  FilteringBehavior behavior =
+      GetBehaviorFromSafeSearchClassification(classification);
+
   callback.Run(behavior, supervised_user_error_page::ASYNC_CHECKER, uncertain);
-  FOR_EACH_OBSERVER(
-      Observer, observers_,
-      OnURLChecked(url, behavior, supervised_user_error_page::ASYNC_CHECKER,
-                   uncertain));
+  for (Observer& observer : observers_) {
+    observer.OnURLChecked(url, behavior,
+                          supervised_user_error_page::ASYNC_CHECKER, uncertain);
+  }
 }

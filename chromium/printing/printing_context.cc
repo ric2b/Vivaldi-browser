@@ -6,6 +6,7 @@
 
 #include "base/logging.h"
 #include "base/values.h"
+#include "printing/features/features.h"
 #include "printing/page_setup.h"
 #include "printing/page_size_margins.h"
 #include "printing/print_job_constants.h"
@@ -71,6 +72,7 @@ PrintingContext::Result PrintingContext::UsePdfSettings() {
   pdf_settings->SetBoolean(kSettingCloudPrintDialog, false);
   pdf_settings->SetBoolean(kSettingPrintWithPrivet, false);
   pdf_settings->SetBoolean(kSettingPrintWithExtension, false);
+  pdf_settings->SetInteger(kSettingScaleFactor, 100);
   return UpdatePrintSettings(*pdf_settings);
 }
 
@@ -125,7 +127,7 @@ PrintingContext::Result PrintingContext::UpdatePrintSettings(
   }
 
   bool show_system_dialog = false;
-#if defined(ENABLE_BASIC_PRINTING)
+#if BUILDFLAG(ENABLE_BASIC_PRINTING)
   job_settings.GetBoolean(kSettingShowSystemDialog, &show_system_dialog);
 #endif
 

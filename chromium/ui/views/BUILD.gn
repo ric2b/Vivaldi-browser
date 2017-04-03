@@ -24,6 +24,7 @@ component("views") {
     "animation/bounds_animator.h",
     "animation/flood_fill_ink_drop_ripple.cc",
     "animation/flood_fill_ink_drop_ripple.h",
+    "animation/ink_drop.cc",
     "animation/ink_drop.h",
     "animation/ink_drop_animation_ended_reason.cc",
     "animation/ink_drop_animation_ended_reason.h",
@@ -35,6 +36,8 @@ component("views") {
     "animation/ink_drop_host_view.h",
     "animation/ink_drop_impl.cc",
     "animation/ink_drop_impl.h",
+    "animation/ink_drop_mask.cc",
+    "animation/ink_drop_mask.h",
     "animation/ink_drop_painted_layer_delegates.cc",
     "animation/ink_drop_painted_layer_delegates.h",
     "animation/ink_drop_ripple.cc",
@@ -62,6 +65,7 @@ component("views") {
     "button_drag_utils.h",
     "cocoa/bridged_content_view.h",
     "cocoa/bridged_content_view.mm",
+    "cocoa/bridged_content_view_touch_bar.mm",
     "cocoa/bridged_native_widget.h",
     "cocoa/bridged_native_widget.mm",
     "cocoa/bridged_native_widget_owner.h",
@@ -207,15 +211,12 @@ component("views") {
     "controls/scrollbar/base_scroll_bar_thumb.h",
     "controls/scrollbar/cocoa_scroll_bar.h",
     "controls/scrollbar/cocoa_scroll_bar.mm",
-    "controls/scrollbar/native_scroll_bar.cc",
-    "controls/scrollbar/native_scroll_bar.h",
-    "controls/scrollbar/native_scroll_bar_views.cc",
-    "controls/scrollbar/native_scroll_bar_views.h",
-    "controls/scrollbar/native_scroll_bar_wrapper.h",
     "controls/scrollbar/overlay_scroll_bar.cc",
     "controls/scrollbar/overlay_scroll_bar.h",
     "controls/scrollbar/scroll_bar.cc",
     "controls/scrollbar/scroll_bar.h",
+    "controls/scrollbar/scroll_bar_views.cc",
+    "controls/scrollbar/scroll_bar_views.h",
     "controls/separator.cc",
     "controls/separator.h",
     "controls/slide_out_view.cc",
@@ -307,10 +308,11 @@ component("views") {
     "repeat_controller.h",
     "round_rect_painter.cc",
     "round_rect_painter.h",
+    "selection_controller.cc",
+    "selection_controller.h",
+    "selection_controller_delegate.h",
     "shadow_border.cc",
     "shadow_border.h",
-    "style/mac/combobox_background_mac.cc",
-    "style/mac/combobox_background_mac.h",
     "style/platform_style.cc",
     "style/platform_style.h",
     "style/platform_style_mac.mm",
@@ -442,6 +444,10 @@ component("views") {
       "linux_ui/status_icon_linux.cc",
       "linux_ui/status_icon_linux.h",
     ]
+    sources += [
+      "widget/desktop_aura/desktop_cursor_loader_updater_chromeos.cc",
+      "widget/desktop_aura/desktop_window_tree_host_chromeos.cc",
+    ]
   }
 
   if (is_win) {
@@ -531,6 +537,23 @@ component("views") {
       "view_constants_aura.cc",
       "view_constants_aura.h",
       "views_touch_selection_controller_factory_aura.cc",
+      "widget/desktop_aura/desktop_capture_client.cc",
+      "widget/desktop_aura/desktop_capture_client.h",
+      "widget/desktop_aura/desktop_cursor_loader_updater.h",
+      "widget/desktop_aura/desktop_drop_target_win.cc",
+      "widget/desktop_aura/desktop_drop_target_win.h",
+      "widget/desktop_aura/desktop_event_client.cc",
+      "widget/desktop_aura/desktop_event_client.h",
+      "widget/desktop_aura/desktop_focus_rules.cc",
+      "widget/desktop_aura/desktop_focus_rules.h",
+      "widget/desktop_aura/desktop_native_cursor_manager.cc",
+      "widget/desktop_aura/desktop_native_cursor_manager.h",
+      "widget/desktop_aura/desktop_native_widget_aura.cc",
+      "widget/desktop_aura/desktop_native_widget_aura.h",
+      "widget/desktop_aura/desktop_screen.h",
+      "widget/desktop_aura/desktop_screen_position_client.cc",
+      "widget/desktop_aura/desktop_screen_position_client.h",
+      "widget/desktop_aura/desktop_window_tree_host.h",
       "widget/focus_manager_event_handler.cc",
       "widget/focus_manager_event_handler.h",
       "widget/native_widget_aura.cc",
@@ -546,25 +569,6 @@ component("views") {
       "//ui/wm",
     ]
     if (!is_chromeos) {
-      sources += [
-        "widget/desktop_aura/desktop_capture_client.cc",
-        "widget/desktop_aura/desktop_capture_client.h",
-        "widget/desktop_aura/desktop_cursor_loader_updater.h",
-        "widget/desktop_aura/desktop_drop_target_win.cc",
-        "widget/desktop_aura/desktop_drop_target_win.h",
-        "widget/desktop_aura/desktop_event_client.cc",
-        "widget/desktop_aura/desktop_event_client.h",
-        "widget/desktop_aura/desktop_focus_rules.cc",
-        "widget/desktop_aura/desktop_focus_rules.h",
-        "widget/desktop_aura/desktop_native_cursor_manager.cc",
-        "widget/desktop_aura/desktop_native_cursor_manager.h",
-        "widget/desktop_aura/desktop_native_widget_aura.cc",
-        "widget/desktop_aura/desktop_native_widget_aura.h",
-        "widget/desktop_aura/desktop_screen.h",
-        "widget/desktop_aura/desktop_screen_position_client.cc",
-        "widget/desktop_aura/desktop_screen_position_client.h",
-        "widget/desktop_aura/desktop_window_tree_host.h",
-      ]
       if (use_x11) {
         sources += [
           "widget/desktop_aura/desktop_drag_drop_client_aurax11.cc",
@@ -679,12 +683,14 @@ static_library("test_support_internal") {
     "test/menu_runner_test_api.h",
     "test/menu_test_utils.cc",
     "test/menu_test_utils.h",
-    "test/native_widget_factory.cc",
     "test/native_widget_factory.h",
     "test/scoped_views_test_helper.cc",
     "test/scoped_views_test_helper.h",
     "test/slider_test_api.cc",
     "test/slider_test_api.h",
+    "test/test_layout_manager.cc",
+    "test/test_layout_manager.h",
+    "test/test_platform_native_widget.h",
     "test/test_slider.cc",
     "test/test_slider.h",
     "test/test_views.cc",
@@ -693,6 +699,8 @@ static_library("test_support_internal") {
     "test/test_views_delegate_mac.mm",
     "test/test_widget_observer.cc",
     "test/test_widget_observer.h",
+    "test/views_interactive_ui_test_base.cc",
+    "test/views_interactive_ui_test_base.h",
     "test/views_test_base.cc",
     "test/views_test_base.h",
     "test/views_test_helper.cc",
@@ -739,6 +747,7 @@ static_library("test_support_internal") {
   sources += [
     "test/platform_test_helper.cc",
     "test/platform_test_helper.h",
+    "test/platform_test_helper_cocoa.mm",
   ]
 
   if (use_aura) {
@@ -820,6 +829,7 @@ source_set("views_unittests_sources") {
     "controls/button/image_button_unittest.cc",
     "controls/button/label_button_unittest.cc",
     "controls/button/menu_button_unittest.cc",
+    "controls/button/toggle_button_unittest.cc",
     "controls/combobox/combobox_unittest.cc",
     "controls/label_unittest.cc",
     "controls/menu/menu_controller_unittest.cc",
@@ -848,6 +858,7 @@ source_set("views_unittests_sources") {
     "focus/focus_manager_unittest.cc",
     "focus/focus_traversal_unittest.cc",
     "layout/box_layout_unittest.cc",
+    "layout/fill_layout_unittest.cc",
     "layout/grid_layout_unittest.cc",
     "rect_based_targeting_utils_unittest.cc",
     "view_model_unittest.cc",
@@ -930,6 +941,7 @@ source_set("views_unittests_sources") {
     sources += [
       "accessibility/ax_aura_obj_cache_unittest.cc",
       "controls/native/native_view_host_aura_unittest.cc",
+      "corewm/tooltip_controller_unittest.cc",
       "touchui/touch_selection_menu_runner_views_unittest.cc",
       "view_unittest_aura.cc",
       "widget/native_widget_aura_unittest.cc",
@@ -965,9 +977,6 @@ test("views_unittests") {
 
   if (use_aura) {
     sources += [
-      # Tooltips. Can not be shared with mus: crbug.com/599558
-      "corewm/tooltip_controller_unittest.cc",
-
       # Some of the tests need drag-drop support. crbug.com/614037
       "touchui/touch_selection_controller_impl_unittest.cc",
     ]

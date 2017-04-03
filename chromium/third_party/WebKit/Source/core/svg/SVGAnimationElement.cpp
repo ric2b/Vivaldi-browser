@@ -328,15 +328,6 @@ bool SVGAnimationElement::isAccumulated() const {
   return value == sum && getAnimationMode() != ToAnimation;
 }
 
-bool SVGAnimationElement::isTargetAttributeCSSProperty(
-    SVGElement* targetElement,
-    const QualifiedName& attributeName) {
-  ASSERT(targetElement);
-
-  return SVGElement::isAnimatableCSSProperty(attributeName) ||
-         targetElement->isPresentationAttribute(attributeName);
-}
-
 void SVGAnimationElement::calculateKeyTimesForCalcModePaced() {
   ASSERT(getCalcMode() == CalcModePaced);
   ASSERT(getAnimationMode() == ValuesAnimation);
@@ -397,7 +388,7 @@ float SVGAnimationElement::calculatePercentForSpline(
     float percent,
     unsigned splineIndex) const {
   ASSERT(getCalcMode() == CalcModeSpline);
-  ASSERT_WITH_SECURITY_IMPLICATION(splineIndex < m_keySplines.size());
+  SECURITY_DCHECK(splineIndex < m_keySplines.size());
   gfx::CubicBezier bezier = m_keySplines[splineIndex];
   SMILTime duration = simpleDuration();
   if (!duration.isFinite())
@@ -527,11 +518,7 @@ void SVGAnimationElement::currentValuesForValuesAnimation(
 void SVGAnimationElement::startedActiveInterval() {
   m_animationValid = false;
 
-  if (!isValid())
-    return;
-  if (!targetElement())
-    return;
-  if (!hasValidAttributeType())
+  if (!isValid() || !hasValidTarget())
     return;
 
   // These validations are appropriate for all animation modes.

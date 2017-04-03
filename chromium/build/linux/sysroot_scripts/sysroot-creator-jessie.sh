@@ -7,7 +7,10 @@ SCRIPT_DIR=$(cd $(dirname $0) && pwd)
 
 DISTRO=debian
 DIST=jessie
+DIST_UPDATES=jessie-updates
+
 PACKAGES_EXT=xz
+
 APT_REPO=http://http.us.debian.org/debian
 # gpg keyring file generated using:
 #   export KEYS="518E17E1 46925553 2B90D010"
@@ -56,6 +59,8 @@ DEBIAN_PACKAGES="\
   libdrm-dev
   libdrm-nouveau2
   libdrm-radeon1
+  libegl1-mesa
+  libegl1-mesa-dev
   libelf1
   libelf-dev
   libexpat1
@@ -91,6 +96,8 @@ DEBIAN_PACKAGES="\
   libgpg-error-dev
   libgssapi-krb5-2
   libgssrpc4
+  libgtk-3-0
+  libgtk-3-dev
   libgtk2.0-0
   libgtk2.0-dev
   libharfbuzz0b
@@ -145,6 +152,11 @@ DEBIAN_PACKAGES="\
   libtasn1-6
   libudev-dev
   libudev1
+  libwayland-client0
+  libwayland-cursor0
+  libwayland-dev
+  libwayland-egl1-mesa
+  libwayland-server0
   libx11-6
   libx11-dev
   libx11-xcb1

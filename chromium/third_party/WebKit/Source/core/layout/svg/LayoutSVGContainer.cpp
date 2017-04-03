@@ -168,15 +168,13 @@ void LayoutSVGContainer::addOutlineRects(
     Vector<LayoutRect>& rects,
     const LayoutPoint&,
     IncludeBlockVisualOverflowOrNot) const {
-  rects.append(LayoutRect(paintInvalidationRectInLocalSVGCoordinates()));
+  rects.append(LayoutRect(visualRectInLocalSVGCoordinates()));
 }
 
 void LayoutSVGContainer::updateCachedBoundaries() {
   SVGLayoutSupport::computeContainerBoundingBoxes(
       this, m_objectBoundingBox, m_objectBoundingBoxValid, m_strokeBoundingBox,
-      m_paintInvalidationBoundingBox);
-  SVGLayoutSupport::intersectPaintInvalidationRectWithResources(
-      this, m_paintInvalidationBoundingBox);
+      m_localVisualRect);
   if (element())
     element()->setNeedsResizeObserverUpdate();
 }
@@ -196,7 +194,7 @@ bool LayoutSVGContainer::nodeAtFloatPoint(HitTestResult& result,
   for (LayoutObject* child = lastChild(); child;
        child = child->previousSibling()) {
     if (child->nodeAtFloatPoint(result, localPoint, hitTestAction)) {
-      const LayoutPoint& localLayoutPoint = roundedLayoutPoint(localPoint);
+      const LayoutPoint& localLayoutPoint = LayoutPoint(localPoint);
       updateHitTestResult(result, localLayoutPoint);
       if (result.addNodeToListBasedTestResult(
               child->node(), localLayoutPoint) == StopHitTesting)
@@ -211,7 +209,7 @@ bool LayoutSVGContainer::nodeAtFloatPoint(HitTestResult& result,
     // containers.
     if (isObjectBoundingBoxValid() &&
         objectBoundingBox().contains(localPoint)) {
-      const LayoutPoint& localLayoutPoint = roundedLayoutPoint(localPoint);
+      const LayoutPoint& localLayoutPoint = LayoutPoint(localPoint);
       updateHitTestResult(result, localLayoutPoint);
       if (result.addNodeToListBasedTestResult(element(), localLayoutPoint) ==
           StopHitTesting)

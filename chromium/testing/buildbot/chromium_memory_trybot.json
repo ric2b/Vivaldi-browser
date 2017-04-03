@@ -105,12 +105,6 @@
       "swarming": {
         "can_use_on_swarming_builders": true
       },
-      "test": "media_mojo_unittests"
-    },
-    {
-      "swarming": {
-        "can_use_on_swarming_builders": true
-      },
       "test": "midi_unittests"
     },
     {
@@ -120,6 +114,7 @@
       },
       "test": "net_unittests"
     },
+    "pdf_unittests",
     "ppapi_unittests",
     "printing_unittests",
     "remoting_unittests",
@@ -131,6 +126,12 @@
     },
     "skia_unittests",
     "sql_unittests",
+    {
+      "swarming": {
+        "can_use_on_swarming_builders": true
+      },
+      "test": "storage_unittests"
+    },
     "ui_base_unittests",
     {
       "swarming": {

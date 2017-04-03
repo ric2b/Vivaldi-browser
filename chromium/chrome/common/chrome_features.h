@@ -9,15 +9,27 @@
 #define CHROME_COMMON_CHROME_FEATURES_H_
 
 #include "base/feature_list.h"
+#include "extensions/features/features.h"
+#include "printing/features/features.h"
 
 namespace features {
 
 // All features in alphabetical order. The features should be documented
 // alongside the definition of their values in the .cc file.
 
+#if defined(OS_MACOSX)
+extern const base::Feature kAppleScriptExecuteJavaScript;
+#endif  // defined(OS_MACOSX)
+
 #if defined(OS_CHROMEOS)
 extern const base::Feature kArcMemoryManagement;
 #endif  // defined(OS_CHROMEOS)
+
+extern const base::Feature kAssetDownloadSuggestionsFeature;
+
+#if !defined(OS_ANDROID) && !defined(OS_IOS)
+extern const base::Feature kAutoDismissingDialogs;
+#endif
 
 #if defined(OS_WIN) || defined(OS_MACOSX)
 extern const base::Feature kAutomaticTabDiscarding;
@@ -34,6 +46,10 @@ extern const base::Feature kBlockPromptsIfDismissedOften;
 extern const base::Feature kBlockSmallContent;
 
 extern const base::Feature kBrowserHangFixesExperiment;
+
+#if defined(OS_ANDROID)
+extern const base::Feature kConsistentOmniboxGeolocation;
+#endif
 
 #if defined(OS_WIN)
 extern const base::Feature kDisableFirstRunAutoImportWin;
@@ -53,7 +69,9 @@ extern const base::Feature kHappinessTrackingSystem;
 extern const base::Feature kLinuxObsoleteSystemIsEndOfTheLine;
 #endif
 
-#if defined(ENABLE_EXTENSIONS)
+extern const base::Feature kMaterialDesignBookmarks;
+
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 extern const base::Feature kMaterialDesignExtensions;
 #endif
 
@@ -61,11 +79,23 @@ extern const base::Feature kMaterialDesignHistory;
 
 extern const base::Feature kMaterialDesignSettings;
 
+extern const base::Feature kModalPermissionPrompts;
+
+#if defined(OS_MACOSX)
+extern const base::Feature kNativeNotifications;
+#endif  // defined(OS_MACOSX)
+
+extern const base::Feature kOfflinePageDownloadSuggestionsFeature;
+
+extern const base::Feature kOverrideYouTubeFlashEmbed;
+
 #if defined(ENABLE_PLUGINS)
 extern const base::Feature kPreferHtmlOverPlugins;
 #endif
 
-extern const base::Feature kOverrideYouTubeFlashEmbed;
+#if BUILDFLAG(ENABLE_PRINT_PREVIEW)
+extern const base::Feature kPrintScaling;
+#endif
 
 extern const base::Feature kPushMessagingBackgroundMode;
 
@@ -89,12 +119,16 @@ extern const base::Feature kSecurityChip;
 extern const base::Feature kSyzyasanDeferredFree;
 #endif
 
+extern const base::Feature kUseGroupedPermissionInfobars;
+
 #if defined(OS_CHROMEOS)
 extern const base::Feature kOptInImeMenu;
 
 extern const base::Feature kQuickUnlockPin;
 
 extern const base::Feature kEHVInputOnImeMenu;
+
+extern const base::Feature kCrosCompUpdates;
 #endif  // defined(OS_CHROMEOS)
 
 // DON'T ADD RANDOM STUFF HERE. Put it in the main section above in

@@ -109,10 +109,6 @@ class CORE_EXPORT Range final : public GarbageCollected<Range>,
                                      ExceptionState&);
   bool boundaryPointsValid() const;
   bool intersectsNode(Node* refNode, ExceptionState&);
-  static bool intersectsNode(Node* refNode,
-                             const Position& start,
-                             const Position& end,
-                             ExceptionState&);
   void deleteContents(ExceptionState&);
   DocumentFragment* extractContents(ExceptionState&);
   DocumentFragment* cloneContents(ExceptionState&);
@@ -186,6 +182,7 @@ class CORE_EXPORT Range final : public GarbageCollected<Range>,
 
   void checkNodeBA(Node*, ExceptionState&) const;
   void checkExtractPrecondition(ExceptionState&);
+  bool hasSameRoot(const Node&) const;
 
   enum ActionType { DELETE_CONTENTS, EXTRACT_CONTENTS, CLONE_CONTENTS };
   DocumentFragment* processContents(ActionType, ExceptionState&);

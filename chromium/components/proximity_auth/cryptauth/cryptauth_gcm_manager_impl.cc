@@ -83,6 +83,12 @@ void CryptAuthGCMManagerImpl::RemoveObserver(Observer* observer) {
 void CryptAuthGCMManagerImpl::ShutdownHandler() {
 }
 
+void CryptAuthGCMManagerImpl::OnStoreReset() {
+  // We will automatically re-register to GCM and re-enroll the new registration
+  // ID to Cryptauth during the next scheduled sync.
+  pref_service_->ClearPref(prefs::kCryptAuthGCMRegistrationId);
+}
+
 void CryptAuthGCMManagerImpl::OnMessage(const std::string& app_id,
                                         const gcm::IncomingMessage& message) {
   std::vector<std::string> fields;
@@ -102,9 +108,11 @@ void CryptAuthGCMManagerImpl::OnMessage(const std::string& app_id,
     if (tickle_type == kRegistrationTickleTypeForceEnrollment ||
         tickle_type == kRegistrationTickleTypeUpdateEnrollment) {
       // These tickle types correspond to re-enrollment messages.
-      FOR_EACH_OBSERVER(Observer, observers_, OnReenrollMessage());
+      for (auto& observer : observers_)
+        observer.OnReenrollMessage();
     } else if (tickle_type == kRegistrationTickleTypeDevicesSync) {
-      FOR_EACH_OBSERVER(Observer, observers_, OnResyncMessage());
+      for (auto& observer : observers_)
+        observer.OnResyncMessage();
     } else {
       PA_LOG(WARNING) << "Unknown tickle type in GCM message.";
     }
@@ -133,14 +141,16 @@ void CryptAuthGCMManagerImpl::OnRegistrationCompleted(
   if (result != gcm::GCMClient::SUCCESS) {
     PA_LOG(WARNING) << "GCM registration failed with result="
                     << static_cast<int>(result);
-    FOR_EACH_OBSERVER(Observer, observers_, OnGCMRegistrationResult(false));
+    for (auto& observer : observers_)
+      observer.OnGCMRegistrationResult(false);
     return;
   }
 
   PA_LOG(INFO) << "GCM registration success, registration_id="
                << registration_id;
   pref_service_->SetString(prefs::kCryptAuthGCMRegistrationId, registration_id);
-  FOR_EACH_OBSERVER(Observer, observers_, OnGCMRegistrationResult(true));
+  for (auto& observer : observers_)
+    observer.OnGCMRegistrationResult(true);
 }
 
 }  // namespace proximity_auth

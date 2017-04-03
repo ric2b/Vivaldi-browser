@@ -6,7 +6,7 @@
 
 #include "base/memory/ptr_util.h"
 #include "base/values.h"
-#include "components/sync/api/sync_merge_result.h"
+#include "components/sync/model/sync_merge_result.h"
 
 namespace syncer {
 
@@ -62,6 +62,12 @@ void ProxyDataTypeController::DeactivateDataType(
 
 void ProxyDataTypeController::GetAllNodes(const AllNodesCallback& callback) {
   callback.Run(type(), base::MakeUnique<base::ListValue>());
+}
+
+void ProxyDataTypeController::GetStatusCounters(
+    const StatusCountersCallback& callback) {
+  syncer::StatusCounters counters;
+  callback.Run(type(), counters);
 }
 
 std::unique_ptr<DataTypeErrorHandler>

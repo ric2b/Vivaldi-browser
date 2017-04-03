@@ -7,12 +7,14 @@
 
 #include <memory>
 #include <string>
+#include <utility>
 
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/supports_user_data.h"
+#include "content/browser/service_worker/service_worker_context_wrapper.h"
 #include "content/common/resource_request_body_impl.h"
 #include "content/public/browser/navigation_ui_data.h"
 #include "content/public/browser/resource_request_info.h"
@@ -21,7 +23,6 @@
 #include "net/base/load_states.h"
 
 namespace content {
-class CrossSiteResourceHandler;
 class DetachableResourceHandler;
 class ResourceContext;
 class ResourceMessageFilter;
@@ -78,6 +79,7 @@ class ResourceRequestInfoImpl : public ResourceRequestInfo,
   ResourceContext* GetContext() const override;
   int GetChildID() const override;
   int GetRouteID() const override;
+  GlobalRequestID GetGlobalRequestID() const override;
   int GetOriginPID() const override;
   int GetRenderFrameID() const override;
   int GetFrameTreeNodeId() const override;
@@ -101,7 +103,6 @@ class ResourceRequestInfoImpl : public ResourceRequestInfo,
   CONTENT_EXPORT void AssociateWithRequest(net::URLRequest* request);
 
   CONTENT_EXPORT int GetRequestID() const;
-  CONTENT_EXPORT GlobalRequestID GetGlobalRequestID() const;
   GlobalRoutingID GetGlobalRoutingID() const;
 
   // PlzNavigate
@@ -124,14 +125,6 @@ class ResourceRequestInfoImpl : public ResourceRequestInfo,
                          int origin_pid,
                          int request_id,
                          base::WeakPtr<ResourceMessageFilter> filter);
-
-  // CrossSiteResourceHandler for this request.  May be null.
-  CrossSiteResourceHandler* cross_site_handler() {
-    return cross_site_handler_;
-  }
-  void set_cross_site_handler(CrossSiteResourceHandler* h) {
-    cross_site_handler_ = h;
-  }
 
   // Whether this request is part of a navigation that should replace the
   // current session history entry. This state is shuffled up and down the stack
@@ -205,6 +198,17 @@ class ResourceRequestInfoImpl : public ResourceRequestInfo,
     navigation_ui_data_ = std::move(navigation_ui_data);
   }
 
+  // PlzNavigate: used in navigations to store the ServiceWorkerContext, since
+  // the ResourceMessageFilter will be null in this case. All other requests
+  // should access the ServiceWorkerContext through the ResourceMessageFilter.
+  void set_service_worker_context(
+      scoped_refptr<ServiceWorkerContextWrapper> service_worker_context) {
+    service_worker_context_ = service_worker_context;
+  }
+  ServiceWorkerContextWrapper* service_worker_context() const {
+    return service_worker_context_.get();
+  }
+
   // Vivaldi specific
   void set_ask_for_save_target(bool ask) {
       ask_for_save_target_ = ask;
@@ -226,7 +230,6 @@ class ResourceRequestInfoImpl : public ResourceRequestInfo,
   FRIEND_TEST_ALL_PREFIXES(ResourceDispatcherHostTest,
                            DeletedFilterDetachedRedirect);
   // Non-owning, may be NULL.
-  CrossSiteResourceHandler* cross_site_handler_;
   DetachableResourceHandler* detachable_handler_;
 
   int process_type_;
@@ -264,6 +267,7 @@ class ResourceRequestInfoImpl : public ResourceRequestInfo,
   scoped_refptr<ResourceRequestBodyImpl> body_;
   bool initiated_in_secure_context_;
   std::unique_ptr<NavigationUIData> navigation_ui_data_;
+  scoped_refptr<ServiceWorkerContextWrapper> service_worker_context_;
 
   // Vivaldi additions to pass save info to defered downloads. blobs etc.
   bool ask_for_save_target_ = false;

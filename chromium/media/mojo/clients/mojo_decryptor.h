@@ -50,13 +50,16 @@ class MojoDecryptor : public Decryptor {
  private:
   // Called when a buffer is decrypted.
   void OnBufferDecrypted(const DecryptCB& decrypt_cb,
-                         mojom::Decryptor::Status status,
+                         Status status,
                          mojom::DecoderBufferPtr buffer);
+  void OnBufferRead(const DecryptCB& decrypt_cb,
+                    Status status,
+                    scoped_refptr<DecoderBuffer> buffer);
   void OnAudioDecoded(const AudioDecodeCB& audio_decode_cb,
-                      mojom::Decryptor::Status status,
-                      mojo::Array<mojom::AudioBufferPtr> audio_buffers);
+                      Status status,
+                      std::vector<mojom::AudioBufferPtr> audio_buffers);
   void OnVideoDecoded(const VideoDecodeCB& video_decode_cb,
-                      mojom::Decryptor::Status status,
+                      Status status,
                       mojom::VideoFramePtr video_frame);
 
   // Called when done with a VideoFrame in order to reuse the shared memory.

@@ -120,6 +120,9 @@ IPC_STRUCT_BEGIN(ExtensionMsg_AccessibilityEventParams)
 
   // The source of this event.
   IPC_STRUCT_MEMBER(ui::AXEventFrom, event_from)
+
+  // The mouse location in screen coordinates.
+  IPC_STRUCT_MEMBER(gfx::Point, mouse_location)
 IPC_STRUCT_END()
 
 IPC_STRUCT_BEGIN(ExtensionMsg_AccessibilityLocationChangeParams)
@@ -149,9 +152,8 @@ IPC_MESSAGE_ROUTED1(ExtensionMsg_AccessibilityLocationChange,
 
 
 // Sent by the renderer to implement chrome.webstore.install().
-IPC_MESSAGE_ROUTED5(ExtensionHostMsg_InlineWebstoreInstall,
+IPC_MESSAGE_ROUTED4(ExtensionHostMsg_InlineWebstoreInstall,
                     int32_t /* install id */,
                     int32_t /* return route id */,
                     std::string /* Web Store item ID */,
-                    GURL /* requestor URL */,
                     int /* listeners_mask */)

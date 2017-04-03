@@ -4,8 +4,8 @@
 
 import("//build/config/ui.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
-import("//services/shell/public/cpp/service.gni")
-import("//services/shell/public/service_manifest.gni")
+import("//services/service_manager/public/cpp/service.gni")
+import("//services/service_manager/public/service_manifest.gni")
 import("//tools/grit/repack.gni")
 
 source_set("lib") {
@@ -16,8 +16,6 @@ source_set("lib") {
     "accelerators/accelerator_controller_registrar.h",
     "accelerators/accelerator_handler.h",
     "accelerators/accelerator_ids.h",
-    "accelerators/accelerator_registrar_impl.cc",
-    "accelerators/accelerator_registrar_impl.h",
     "accessibility_delegate_mus.cc",
     "accessibility_delegate_mus.h",
     "app_list_presenter_mus.cc",
@@ -38,8 +36,6 @@ source_set("lib") {
     "bridge/wm_window_mus.h",
     "bridge/workspace_event_handler_mus.cc",
     "bridge/workspace_event_handler_mus.h",
-    "container_ids.cc",
-    "container_ids.h",
     "context_menu_mus.cc",
     "context_menu_mus.h",
     "disconnected_app_handler.cc",
@@ -59,8 +55,6 @@ source_set("lib") {
     "move_event_handler.h",
     "native_widget_factory_mus.cc",
     "native_widget_factory_mus.h",
-    "new_window_delegate_mus.cc",
-    "new_window_delegate_mus.h",
     "non_client_frame_controller.cc",
     "non_client_frame_controller.h",
     "property_util.cc",
@@ -100,13 +94,14 @@ source_set("lib") {
 
   public_deps = [
     "//ash",
+    "//ash/public/cpp",
     "//ash/public/interfaces",
     "//base",
     "//base:i18n",
     "//mash/public/interfaces",
     "//mash/session/public/interfaces",
     "//mojo/common:common_base",
-    "//services/shell/public/cpp",
+    "//services/service_manager/public/cpp",
     "//services/tracing/public/cpp",
     "//services/ui/common:mus_common",
     "//services/ui/public/cpp",
@@ -131,6 +126,8 @@ source_set("lib") {
 
   if (is_chromeos) {
     sources += [
+      "network_connect_delegate_mus.cc",
+      "network_connect_delegate_mus.h",
       "system_tray_delegate_mus.cc",
       "system_tray_delegate_mus.h",
       "vpn_delegate_mus.cc",
@@ -157,7 +154,7 @@ service("mus") {
     ":lib",
     ":resources",
     ":resources_200",
-    "//services/shell/public/cpp",
+    "//services/service_manager/public/cpp",
   ]
 
   # TODO(beng): This target relies on //mash/session, but there is a cycle so we
@@ -234,11 +231,9 @@ source_set("unittests") {
   testonly = true
 
   sources = [
-    "../common/wm_window_unittest.cc",
     "accelerators/accelerator_controller_registrar_test_api.cc",
     "accelerators/accelerator_controller_registrar_test_api.h",
     "accelerators/accelerator_controller_unittest.cc",
-    "accelerators/accelerator_registrar_unittest.cc",
     "app_launch_unittest.cc",
     "bridge/wm_shell_mus_test_api.h",
     "bridge/wm_window_mus_test_api.h",
@@ -251,22 +246,19 @@ source_set("unittests") {
     "test/wm_test_helper.cc",
     "test/wm_test_helper.h",
     "window_manager_unittest.cc",
-    "wm/container_finder_unittest.cc",
-    "wm/mru_window_tracker_unittest.cc",
-    "workspace/workspace_layout_manager_unittest.cc",
   ]
 
   deps = [
     ":lib",
     ":resources",
     "//ash",
-    "//ash:test_support_without_content",
+    "//ash/common/test:test_support",
     "//ash/public/interfaces",
     "//base",
     "//base/test:test_config",
     "//base/test:test_support",
     "//mojo/public/cpp/system",
-    "//services/shell/public/cpp:service_test_support",
+    "//services/service_manager/public/cpp:service_test_support",
     "//services/ui/common:mus_common",
     "//services/ui/public/cpp",
     "//services/ui/public/cpp/tests:test_support",
@@ -294,9 +286,4 @@ source_set("unittests") {
   ]
 
   defines = [ "NOTIMPLEMENTED_POLICY=5" ]
-
-  if (is_chromeos) {
-    sources +=
-        [ "../common/system/chromeos/brightness/tray_brightness_unittest.cc" ]
-  }
 }

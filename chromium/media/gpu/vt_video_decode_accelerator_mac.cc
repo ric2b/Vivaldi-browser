@@ -283,10 +283,7 @@ VTVideoDecodeAccelerator::PictureInfo::PictureInfo(uint32_t client_texture_id,
     : client_texture_id(client_texture_id),
       service_texture_id(service_texture_id) {}
 
-VTVideoDecodeAccelerator::PictureInfo::~PictureInfo() {
-  if (gl_image)
-    gl_image->Destroy(false);
-}
+VTVideoDecodeAccelerator::PictureInfo::~PictureInfo() {}
 
 bool VTVideoDecodeAccelerator::FrameOrder::operator()(
     const linked_ptr<Frame>& lhs,
@@ -882,12 +879,12 @@ void VTVideoDecodeAccelerator::AssignPictureBuffers(
     DCHECK(!picture_info_map_.count(picture.id()));
     assigned_picture_ids_.insert(picture.id());
     available_picture_ids_.push_back(picture.id());
-    DCHECK_LE(1u, picture.internal_texture_ids().size());
-    DCHECK_LE(1u, picture.texture_ids().size());
+    DCHECK_LE(1u, picture.client_texture_ids().size());
+    DCHECK_LE(1u, picture.service_texture_ids().size());
     picture_info_map_.insert(std::make_pair(
         picture.id(),
-        base::MakeUnique<PictureInfo>(picture.internal_texture_ids()[0],
-                                      picture.texture_ids()[0])));
+        base::MakeUnique<PictureInfo>(picture.client_texture_ids()[0],
+                                      picture.service_texture_ids()[0])));
   }
 
   // Pictures are not marked as uncleared until after this method returns, and
@@ -906,7 +903,6 @@ void VTVideoDecodeAccelerator::ReusePictureBuffer(int32_t picture_id) {
   if (it != picture_info_map_.end()) {
     PictureInfo* picture_info = it->second.get();
     picture_info->cv_image.reset();
-    picture_info->gl_image->Destroy(false);
     picture_info->gl_image = nullptr;
   }
 
@@ -1113,8 +1109,10 @@ bool VTVideoDecodeAccelerator::SendFrame(const Frame& frame) {
 
   DVLOG(3) << "PictureReady(picture_id=" << picture_id << ", "
            << "bitstream_id=" << frame.bitstream_id << ")";
+  // TODO(hubbe): Use the correct color space.  http://crbug.com/647725
   client_->PictureReady(Picture(picture_id, frame.bitstream_id,
-                                gfx::Rect(frame.image_size), true));
+                                gfx::Rect(frame.image_size), gfx::ColorSpace(),
+                                true));
   return true;
 }
 

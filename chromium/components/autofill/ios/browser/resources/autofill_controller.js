@@ -2,17 +2,19 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// Installs Autofill management functions on the |__gCrWeb| object.
-//
-// It scans the DOM, extracting and storing forms and returns a JSON string
-// representing an array of objects, each of which represents an Autofill form
-// with information about a form to be filled and/or submitted and it can be
-// translated to struct FormData
-// (chromium/src/components/autofill/core/common/form_data.h) for further
-// processing.
+/**
+  * @fileoverview Installs Autofill management functions on the __gCrWeb object.
+  *
+  * It scans the DOM, extracting and storing forms and returns a JSON string
+  * representing an array of objects, each of which represents an Autofill form
+  * with information about a form to be filled and/or submitted and it can be
+  * translated to struct FormData
+  * (chromium/src/components/autofill/core/common/form_data.h) for further
+  * processing.
 
-/** @typedef {HTMLInputElement|HTMLTextAreaElement|HTMLSelectElement} */
-var FormControlElement;
+  * TODO(crbug.com/647084): Enable checkTypes error for this file.
+  * @suppress {checkTypes}
+  */
 
 /**
   * @typedef {{
@@ -50,7 +52,12 @@ var AutofillFormData;
  * Namespace for this file. It depends on |__gCrWeb| having already been
  * injected.
  */
-__gCrWeb['autofill'] = {};
+__gCrWeb.autofill = {};
+
+// Store autofill namespace object in a global __gCrWeb object referenced by a
+// string, so it does not get renamed by closure compiler during the
+// minification.
+__gCrWeb['autofill'] = __gCrWeb.autofill;
 
 /**
  * The maximum length allowed for form data.
@@ -250,7 +257,7 @@ function scanFormControlElements_(controlElements) {
  * In the C++ version, |fieldsets| can be NULL, in which case we do not try to
  * append to it.
  *
- * @param {Array<FormControlElement>} elements elements to look through.
+ * @param {Array<!FormControlElement>} elements elements to look through.
  * @param {Array<Element>} fieldsets out param for unowned fieldsets.
  * @return {Array<FormControlElement>} The elements that are not part of a form.
  */
@@ -631,7 +638,7 @@ __gCrWeb.autofill['fillForm'] = function(data, forceFillFieldName) {
     // TODO(bondd): Handle __gCrWeb.autofill.isCheckableElement(element) ==
     // true. |is_checked| is not currently passed in by the caller.
 
-    element.setAttribute('chrome-autofilled');
+    element.setAttribute('chrome-autofilled', '');
     element.isAutofilled = true;
     element.addEventListener('input', controlElementInputListener);
   }
@@ -1037,7 +1044,7 @@ __gCrWeb.autofill.findChildTextInner = function(node, depth, divsToSkip) {
         node.tagName === 'NOSCRIPT') {
       return '';
     }
-    if (__gCrWeb.common.isFormControlElement(node)) {
+    if (__gCrWeb.common.isFormControlElement(/** @type {Element} */ (node))) {
       var input = /** @type {FormControlElement} */ (node);
       if (__gCrWeb.autofill.isAutofillableElement(input)) {
         return '';

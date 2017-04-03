@@ -37,6 +37,7 @@
 namespace blink {
 
 class DOMWrapperWorld;
+class EventDispatchMediator;
 class EventTarget;
 class ExecutionContext;
 
@@ -83,9 +84,17 @@ class CORE_EXPORT Event : public GarbageCollectedFinalized<Event>,
   };
 
   enum class PassiveMode {
+    // Not passive, default initialized.
+    NotPassiveDefault,
+    // Not passive, explicitly specified.
     NotPassive,
+    // Passive, explicitly specified.
     Passive,
+    // Passive, not explicitly specified and forced due to document level
+    // listener.
     PassiveForcedDocumentLevel,
+    // Passive, default initialized.
+    PassiveDefault,
   };
 
   static Event* create() { return new Event; }
@@ -231,6 +240,11 @@ class CORE_EXPORT Event : public GarbageCollectedFinalized<Event>,
 
   bool isTrusted() const { return m_isTrusted; }
   void setTrusted(bool value) { m_isTrusted = value; }
+
+  void setComposed(bool composed) {
+    DCHECK(!isBeingDispatched());
+    m_composed = composed;
+  }
 
   void setHandlingPassive(PassiveMode);
 

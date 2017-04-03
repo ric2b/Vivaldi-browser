@@ -17,6 +17,8 @@
 
 namespace aura {
 
+class WindowPort;
+
 // The unified WindowTreeHost implementation for platforms
 // that implement PlatformWindow.
 class AURA_EXPORT WindowTreeHostPlatform
@@ -41,7 +43,11 @@ class AURA_EXPORT WindowTreeHostPlatform
   void OnCursorVisibilityChangedNative(bool show) override;
 
  protected:
+  // NOTE: neither of these calls CreateCompositor(); subclasses must call
+  // CreateCompositor() at the appropriate time.
   WindowTreeHostPlatform();
+  explicit WindowTreeHostPlatform(std::unique_ptr<WindowPort> window_port);
+
   void SetPlatformWindow(std::unique_ptr<ui::PlatformWindow> window);
   ui::PlatformWindow* platform_window() { return window_.get(); }
 

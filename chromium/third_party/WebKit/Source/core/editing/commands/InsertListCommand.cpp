@@ -70,6 +70,7 @@ HTMLElement* InsertListCommand::mergeWithNeighboringLists(
     EditingState* editingState) {
   HTMLElement* list = passedList;
   Element* previousList = ElementTraversal::previousSibling(*list);
+  document().updateStyleAndLayoutIgnorePendingStylesheets();
   if (canMergeLists(previousList, list)) {
     mergeIdenticalElements(previousList, list, editingState);
     if (editingState->isAborted())
@@ -84,6 +85,7 @@ HTMLElement* InsertListCommand::mergeWithNeighboringLists(
     return list;
 
   HTMLElement* nextList = toHTMLElement(nextSibling);
+  document().updateStyleAndLayoutIgnorePendingStylesheets();
   if (canMergeLists(list, nextList)) {
     mergeIdenticalElements(list, nextList, editingState);
     if (editingState->isAborted())
@@ -96,19 +98,22 @@ HTMLElement* InsertListCommand::mergeWithNeighboringLists(
 bool InsertListCommand::selectionHasListOfType(
     const VisibleSelection& selection,
     const HTMLQualifiedName& listTag) {
-  VisiblePosition start = selection.visibleStartDeprecated();
+  DCHECK(!document().needsLayoutTreeUpdate());
+  DocumentLifecycle::DisallowTransitionScope disallowTransition(
+      document().lifecycle());
+
+  VisiblePosition start = selection.visibleStart();
 
   if (!enclosingList(start.deepEquivalent().anchorNode()))
     return false;
 
-  VisiblePosition end =
-      startOfParagraphDeprecated(selection.visibleEndDeprecated());
+  VisiblePosition end = startOfParagraph(selection.visibleEnd());
   while (start.isNotNull() && start.deepEquivalent() != end.deepEquivalent()) {
     HTMLElement* listElement =
         enclosingList(start.deepEquivalent().anchorNode());
     if (!listElement || !listElement->hasTagName(listTag))
       return false;
-    start = startOfNextParagraphDeprecated(start);
+    start = startOfNextParagraph(start);
   }
 
   return true;
@@ -117,23 +122,29 @@ bool InsertListCommand::selectionHasListOfType(
 InsertListCommand::InsertListCommand(Document& document, Type type)
     : CompositeEditCommand(document), m_type(type) {}
 
-static bool inSameTreeAndOrdered(const VisiblePosition& shouldBeFormer,
-                                 const VisiblePosition& shouldBeLater) {
-  const Position formerPosition = shouldBeFormer.deepEquivalent();
-  const Position laterPosition = shouldBeLater.deepEquivalent();
-  return Position::commonAncestorTreeScope(formerPosition, laterPosition) &&
-         comparePositions(formerPosition, laterPosition) <= 0;
+static bool inSameTreeAndOrdered(const Position& shouldBeFormer,
+                                 const Position& shouldBeLater) {
+  // Input positions must be canonical positions.
+  DCHECK_EQ(shouldBeFormer, canonicalPositionOf(shouldBeFormer))
+      << shouldBeFormer;
+  DCHECK_EQ(shouldBeLater, canonicalPositionOf(shouldBeLater)) << shouldBeLater;
+  return Position::commonAncestorTreeScope(shouldBeFormer, shouldBeLater) &&
+         comparePositions(shouldBeFormer, shouldBeLater) <= 0;
 }
 
 void InsertListCommand::doApply(EditingState* editingState) {
+  // Only entry points are Editor::Command::execute and
+  // IndentOutdentCommand::outdentParagraph, both of which ensure clean layout.
+  DCHECK(!document().needsLayoutTreeUpdate());
+
   if (!endingSelection().isNonOrphanedCaretOrRange())
     return;
 
   if (!endingSelection().rootEditableElement())
     return;
 
-  VisiblePosition visibleEnd = endingSelection().visibleEndDeprecated();
-  VisiblePosition visibleStart = endingSelection().visibleStartDeprecated();
+  VisiblePosition visibleEnd = endingSelection().visibleEnd();
+  VisiblePosition visibleStart = endingSelection().visibleStart();
   // When a selection ends at the start of a paragraph, we rarely paint
   // the selection gap before that paragraph, because there often is no gap.
   // In a case like this, it's not obvious to the user that the selection
@@ -143,11 +154,15 @@ void InsertListCommand::doApply(EditingState* editingState) {
   // margin/padding, but not others.  We should make the gap painting more
   // consistent and then use a left margin/padding rule here.
   if (visibleEnd.deepEquivalent() != visibleStart.deepEquivalent() &&
-      isStartOfParagraphDeprecated(visibleEnd, CanSkipOverEditingBoundary)) {
-    setEndingSelection(createVisibleSelectionDeprecated(
-        visibleStart,
-        previousPositionOf(visibleEnd, CannotCrossEditingBoundary),
-        endingSelection().isDirectional()));
+      isStartOfParagraph(visibleEnd, CanSkipOverEditingBoundary)) {
+    const VisiblePosition& newEnd =
+        previousPositionOf(visibleEnd, CannotCrossEditingBoundary);
+    SelectionInDOMTree::Builder builder;
+    builder.setIsDirectional(endingSelection().isDirectional());
+    builder.collapse(visibleStart.toPositionWithAffinity());
+    if (newEnd.isNotNull())
+      builder.extend(newEnd.deepEquivalent());
+    setEndingSelection(builder.build());
     if (!endingSelection().rootEditableElement())
       return;
   }
@@ -158,46 +173,55 @@ void InsertListCommand::doApply(EditingState* editingState) {
     VisibleSelection selection =
         selectionForParagraphIteration(endingSelection());
     DCHECK(selection.isRange());
-    VisiblePosition startOfSelection = selection.visibleStartDeprecated();
-    VisiblePosition endOfSelection = selection.visibleEndDeprecated();
-    VisiblePosition startOfLastParagraph =
-        startOfParagraphDeprecated(endOfSelection, CanSkipOverEditingBoundary);
+
+    VisiblePosition visibleStartOfSelection = selection.visibleStart();
+    VisiblePosition visibleEndOfSelection = selection.visibleEnd();
+    PositionWithAffinity startOfSelection =
+        visibleStartOfSelection.toPositionWithAffinity();
+    PositionWithAffinity endOfSelection =
+        visibleEndOfSelection.toPositionWithAffinity();
+    Position startOfLastParagraph =
+        startOfParagraph(visibleEndOfSelection, CanSkipOverEditingBoundary)
+            .deepEquivalent();
 
     Range* currentSelection = firstRangeOf(endingSelection());
     ContainerNode* scopeForStartOfSelection = nullptr;
     ContainerNode* scopeForEndOfSelection = nullptr;
     // FIXME: This is an inefficient way to keep selection alive because
     // indexForVisiblePosition walks from the beginning of the document to the
-    // endOfSelection everytime this code is executed. But not using index is
-    // hard because there are so many ways we can lose selection inside
+    // visibleEndOfSelection everytime this code is executed. But not using
+    // index is hard because there are so many ways we can lose selection inside
     // doApplyForSingleParagraph.
-    int indexForStartOfSelection =
-        indexForVisiblePosition(startOfSelection, scopeForStartOfSelection);
+    int indexForStartOfSelection = indexForVisiblePosition(
+        visibleStartOfSelection, scopeForStartOfSelection);
     int indexForEndOfSelection =
-        indexForVisiblePosition(endOfSelection, scopeForEndOfSelection);
+        indexForVisiblePosition(visibleEndOfSelection, scopeForEndOfSelection);
 
-    if (startOfParagraphDeprecated(startOfSelection, CanSkipOverEditingBoundary)
-            .deepEquivalent() != startOfLastParagraph.deepEquivalent()) {
+    if (startOfParagraph(visibleStartOfSelection, CanSkipOverEditingBoundary)
+            .deepEquivalent() != startOfLastParagraph) {
       forceListCreation = !selectionHasListOfType(selection, listTag);
 
-      VisiblePosition startOfCurrentParagraph = startOfSelection;
-      while (
-          inSameTreeAndOrdered(startOfCurrentParagraph, startOfLastParagraph) &&
-          !inSameParagraphDeprecated(startOfCurrentParagraph,
-                                     startOfLastParagraph,
-                                     CanCrossEditingBoundary)) {
+      VisiblePosition startOfCurrentParagraph = visibleStartOfSelection;
+      while (inSameTreeAndOrdered(startOfCurrentParagraph.deepEquivalent(),
+                                  startOfLastParagraph) &&
+             !inSameParagraph(startOfCurrentParagraph,
+                              createVisiblePosition(startOfLastParagraph),
+                              CanCrossEditingBoundary)) {
         // doApply() may operate on and remove the last paragraph of the
         // selection from the document if it's in the same list item as
         // startOfCurrentParagraph. Return early to avoid an infinite loop and
         // because there is no more work to be done.
         // FIXME(<rdar://problem/5983974>): The endingSelection() may be
-        // incorrect here.  Compute the new location of endOfSelection and use
-        // it as the end of the new selection.
-        if (!startOfLastParagraph.deepEquivalent().isConnected())
+        // incorrect here.  Compute the new location of visibleEndOfSelection
+        // and use it as the end of the new selection.
+        if (!startOfLastParagraph.isConnected())
           return;
-        setEndingSelection(startOfCurrentParagraph);
+        setEndingSelection(
+            SelectionInDOMTree::Builder()
+                .collapse(startOfCurrentParagraph.deepEquivalent())
+                .build());
 
-        // Save and restore endOfSelection and startOfLastParagraph when
+        // Save and restore visibleEndOfSelection and startOfLastParagraph when
         // necessary since moveParagraph and movePragraphWithClones can remove
         // nodes.
         bool singleParagraphResult = doApplyForSingleParagraph(
@@ -206,52 +230,69 @@ void InsertListCommand::doApply(EditingState* editingState) {
           return;
         if (!singleParagraphResult)
           break;
-        if (endOfSelection.isNull() || endOfSelection.isOrphan() ||
-            startOfLastParagraph.isNull() || startOfLastParagraph.isOrphan()) {
-          // TODO(dglazkov): The use of
-          // updateStyleAndLayoutIgnorePendingStylesheets needs to be audited.
-          // see http://crbug.com/590369 for more details.
-          document().updateStyleAndLayoutIgnorePendingStylesheets();
 
-          endOfSelection = visiblePositionForIndex(indexForEndOfSelection,
-                                                   scopeForEndOfSelection);
-          // If endOfSelection is null, then some contents have been deleted
-          // from the document. This should never happen and if it did, exit
-          // early immediately because we've lost the loop invariant.
-          DCHECK(endOfSelection.isNotNull());
-          if (endOfSelection.isNull() || !rootEditableElementOf(endOfSelection))
+        document().updateStyleAndLayoutIgnorePendingStylesheets();
+
+        // Make |visibleEndOfSelection| valid again.
+        if (!endOfSelection.isConnected() ||
+            !startOfLastParagraph.isConnected()) {
+          visibleEndOfSelection = visiblePositionForIndex(
+              indexForEndOfSelection, scopeForEndOfSelection);
+          endOfSelection = visibleEndOfSelection.toPositionWithAffinity();
+          // If visibleEndOfSelection is null, then some contents have been
+          // deleted from the document. This should never happen and if it did,
+          // exit early immediately because we've lost the loop invariant.
+          DCHECK(visibleEndOfSelection.isNotNull());
+          if (visibleEndOfSelection.isNull() ||
+              !rootEditableElementOf(visibleEndOfSelection))
             return;
-          startOfLastParagraph = startOfParagraphDeprecated(
-              endOfSelection, CanSkipOverEditingBoundary);
+          startOfLastParagraph = startOfParagraph(visibleEndOfSelection,
+                                                  CanSkipOverEditingBoundary)
+                                     .deepEquivalent();
+        } else {
+          visibleEndOfSelection = createVisiblePosition(endOfSelection);
         }
 
-        startOfCurrentParagraph = startOfNextParagraphDeprecated(
-            endingSelection().visibleStartDeprecated());
+        startOfCurrentParagraph =
+            startOfNextParagraph(endingSelection().visibleStart());
       }
-      setEndingSelection(endOfSelection);
+      setEndingSelection(SelectionInDOMTree::Builder()
+                             .collapse(visibleEndOfSelection.deepEquivalent())
+                             .build());
     }
     doApplyForSingleParagraph(forceListCreation, listTag, *currentSelection,
                               editingState);
+    if (editingState->isAborted())
+      return;
 
     document().updateStyleAndLayoutIgnorePendingStylesheets();
 
-    if (editingState->isAborted())
-      return;
     // Fetch the end of the selection, for the reason mentioned above.
-    if (endOfSelection.isNull() || endOfSelection.isOrphan()) {
-      endOfSelection = visiblePositionForIndex(indexForEndOfSelection,
-                                               scopeForEndOfSelection);
-      if (endOfSelection.isNull())
+    if (!endOfSelection.isConnected()) {
+      visibleEndOfSelection = visiblePositionForIndex(indexForEndOfSelection,
+                                                      scopeForEndOfSelection);
+      if (visibleEndOfSelection.isNull())
         return;
+    } else {
+      visibleEndOfSelection = createVisiblePosition(endOfSelection);
     }
-    if (startOfSelection.isNull() || startOfSelection.isOrphan()) {
-      startOfSelection = visiblePositionForIndex(indexForStartOfSelection,
-                                                 scopeForStartOfSelection);
-      if (startOfSelection.isNull())
+
+    if (!startOfSelection.isConnected()) {
+      visibleStartOfSelection = visiblePositionForIndex(
+          indexForStartOfSelection, scopeForStartOfSelection);
+      if (visibleStartOfSelection.isNull())
         return;
+    } else {
+      visibleStartOfSelection = createVisiblePosition(startOfSelection);
     }
-    setEndingSelection(createVisibleSelectionDeprecated(
-        startOfSelection, endOfSelection, endingSelection().isDirectional()));
+
+    setEndingSelection(SelectionInDOMTree::Builder()
+                           .setAffinity(visibleStartOfSelection.affinity())
+                           .setBaseAndExtentDeprecated(
+                               visibleStartOfSelection.deepEquivalent(),
+                               visibleEndOfSelection.deepEquivalent())
+                           .setIsDirectional(endingSelection().isDirectional())
+                           .build());
     return;
   }
 
@@ -301,6 +342,7 @@ bool InsertListCommand::doApplyForSingleParagraph(
       listElement = mergeWithNeighboringLists(listElement, editingState);
       if (editingState->isAborted())
         return false;
+      document().updateStyleAndLayoutIgnorePendingStylesheets();
     }
     DCHECK(hasEditableStyle(*listElement));
     DCHECK(hasEditableStyle(*listElement->parentNode()));
@@ -320,11 +362,11 @@ bool InsertListCommand::doApplyForSingleParagraph(
         isNodeVisiblyContainedWithin(*listElement, currentSelection)) {
       bool rangeStartIsInList =
           visiblePositionBeforeNode(*listElement).deepEquivalent() ==
-          createVisiblePositionDeprecated(currentSelection.startPosition())
+          createVisiblePosition(currentSelection.startPosition())
               .deepEquivalent();
       bool rangeEndIsInList =
           visiblePositionAfterNode(*listElement).deepEquivalent() ==
-          createVisiblePositionDeprecated(currentSelection.endPosition())
+          createVisiblePosition(currentSelection.endPosition())
               .deepEquivalent();
 
       HTMLElement* newList = createHTMLElement(document(), listTag);
@@ -332,6 +374,7 @@ bool InsertListCommand::doApplyForSingleParagraph(
       if (editingState->isAborted())
         return false;
 
+      document().updateStyleAndLayoutIgnorePendingStylesheets();
       Node* firstChildInList =
           enclosingListChild(VisiblePosition::firstPositionInNode(listElement)
                                  .deepEquivalent()
@@ -372,20 +415,22 @@ bool InsertListCommand::doApplyForSingleParagraph(
         currentSelection.setEnd(newList, Position::lastOffsetInNode(newList),
                                 IGNORE_EXCEPTION);
 
-      setEndingSelection(VisiblePosition::firstPositionInNode(newList));
+      setEndingSelection(SelectionInDOMTree::Builder()
+                             .collapse(Position::firstPositionInNode(newList))
+                             .build());
 
       return true;
     }
 
-    unlistifyParagraph(endingSelection().visibleStartDeprecated(), listElement,
+    unlistifyParagraph(endingSelection().visibleStart(), listElement,
                        listChildNode, editingState);
     if (editingState->isAborted())
       return false;
+    document().updateStyleAndLayoutIgnorePendingStylesheets();
   }
 
   if (!listChildNode || switchListType || forceCreateList)
-    listifyParagraph(endingSelection().visibleStartDeprecated(), listTag,
-                     editingState);
+    listifyParagraph(endingSelection().visibleStart(), listTag, editingState);
 
   return true;
 }
@@ -410,9 +455,8 @@ void InsertListCommand::unlistifyParagraph(const VisiblePosition& originalStart,
   } else {
     // A paragraph is visually a list item minus a list marker.  The paragraph
     // will be moved.
-    start =
-        startOfParagraphDeprecated(originalStart, CanSkipOverEditingBoundary);
-    end = endOfParagraphDeprecated(start, CanSkipOverEditingBoundary);
+    start = startOfParagraph(originalStart, CanSkipOverEditingBoundary);
+    end = endOfParagraph(start, CanSkipOverEditingBoundary);
     nextListChild = enclosingListChild(
         nextPositionOf(end).deepEquivalent().anchorNode(), listElement);
     DCHECK_NE(nextListChild, listChildNode);
@@ -420,6 +464,11 @@ void InsertListCommand::unlistifyParagraph(const VisiblePosition& originalStart,
         previousPositionOf(start).deepEquivalent().anchorNode(), listElement);
     DCHECK_NE(previousListChild, listChildNode);
   }
+
+  // Helpers for making |start| and |end| valid again after DOM changes.
+  PositionWithAffinity startPosition = start.toPositionWithAffinity();
+  PositionWithAffinity endPosition = end.toPositionWithAffinity();
+
   // When removing a list, we must always create a placeholder to act as a point
   // of insertion for the list content being removed.
   HTMLBRElement* placeholder = HTMLBRElement::create(document());
@@ -460,6 +509,12 @@ void InsertListCommand::unlistifyParagraph(const VisiblePosition& originalStart,
   if (editingState->isAborted())
     return;
 
+  document().updateStyleAndLayoutIgnorePendingStylesheets();
+
+  // Make |start| and |end| valid again.
+  start = createVisiblePosition(startPosition);
+  end = createVisiblePosition(endPosition);
+
   VisiblePosition insertionPoint = VisiblePosition::beforeNode(placeholder);
   moveParagraphs(start, end, insertionPoint, editingState, PreserveSelection,
                  PreserveStyle, listChildNode);
@@ -491,9 +546,9 @@ void InsertListCommand::listifyParagraph(const VisiblePosition& originalStart,
                                          const HTMLQualifiedName& listTag,
                                          EditingState* editingState) {
   const VisiblePosition& start =
-      startOfParagraphDeprecated(originalStart, CanSkipOverEditingBoundary);
+      startOfParagraph(originalStart, CanSkipOverEditingBoundary);
   const VisiblePosition& end =
-      endOfParagraphDeprecated(start, CanSkipOverEditingBoundary);
+      endOfParagraph(start, CanSkipOverEditingBoundary);
 
   if (start.isNull() || end.isNull())
     return;
@@ -519,6 +574,7 @@ void InsertListCommand::listifyParagraph(const VisiblePosition& originalStart,
     if (editingState->isAborted())
       return;
 
+    document().updateStyleAndLayoutIgnorePendingStylesheets();
     if (canMergeLists(previousList, nextList))
       mergeIdenticalElements(previousList, nextList, editingState);
 
@@ -565,19 +621,21 @@ void InsertListCommand::listifyParagraph(const VisiblePosition& originalStart,
   // Layout is necessary since start's node's inline layoutObjects may have been
   // destroyed by the insertion The end of the content may have changed after
   // the insertion and layout so update it as well.
-  if (insertionPos == startPos)
+  if (insertionPos == startPos) {
     moveParagraphOverPositionIntoEmptyListItem(originalStart, listItemElement,
                                                editingState);
-  else
-    moveParagraphOverPositionIntoEmptyListItem(
-        createVisiblePositionDeprecated(startPos), listItemElement,
-        editingState);
+  } else {
+    document().updateStyleAndLayoutIgnorePendingStylesheets();
+    moveParagraphOverPositionIntoEmptyListItem(createVisiblePosition(startPos),
+                                               listItemElement, editingState);
+  }
   if (editingState->isAborted())
     return;
 
   mergeWithNeighboringLists(listElement, editingState);
 }
 
+// TODO(xiaochengh): Stop storing VisiblePositions through mutations.
 void InsertListCommand::moveParagraphOverPositionIntoEmptyListItem(
     const VisiblePosition& pos,
     HTMLLIElement* listItemElement,
@@ -590,10 +648,12 @@ void InsertListCommand::moveParagraphOverPositionIntoEmptyListItem(
   // Inserting list element and list item list may change start of pargraph
   // to move. We calculate start of paragraph again.
   document().updateStyleAndLayoutIgnorePendingStylesheets();
+  const VisiblePosition& validPos =
+      createVisiblePosition(pos.toPositionWithAffinity());
   const VisiblePosition& start =
-      startOfParagraphDeprecated(pos, CanSkipOverEditingBoundary);
+      startOfParagraph(validPos, CanSkipOverEditingBoundary);
   const VisiblePosition& end =
-      endOfParagraphDeprecated(pos, CanSkipOverEditingBoundary);
+      endOfParagraph(validPos, CanSkipOverEditingBoundary);
   moveParagraph(start, end, VisiblePosition::beforeNode(placeholder),
                 editingState, PreserveSelection);
 }

@@ -67,10 +67,6 @@ void GLES2DecoderRGBBackbufferTest::SetUp() {
   SetupDefaultProgram();
 }
 
-// Override default setup so nothing gets setup.
-void GLES2DecoderManualInitTest::SetUp() {
-}
-
 void GLES2DecoderManualInitTest::EnableDisableTest(GLenum cap,
                                                    bool enable,
                                                    bool expect_set) {
@@ -90,20 +86,10 @@ void GLES2DecoderManualInitTest::EnableDisableTest(GLenum cap,
   }
 }
 
-void GLES3DecoderTest::SetUp() {
-  base::CommandLine command_line(0, NULL);
-  command_line.AppendSwitch(switches::kEnableUnsafeES3APIs);
-  InitState init;
-  init.gl_version = "OpenGL ES 3.0";
-  init.bind_generates_resource = true;
-  init.context_type = CONTEXT_TYPE_OPENGLES3;
-  InitDecoderWithCommandLine(init, &command_line);
-}
-
 
 TEST_P(GLES3DecoderTest, Basic) {
   // Make sure the setup is correct for ES3.
-  EXPECT_TRUE(decoder_->unsafe_es3_apis_enabled());
+  EXPECT_TRUE(feature_info()->IsWebGL2OrES3Context());
   EXPECT_TRUE(feature_info()->validators()->texture_bind_target.IsValid(
       GL_TEXTURE_3D));
 }
@@ -306,12 +292,9 @@ TEST_P(GLES3DecoderTest, GetInternalformativValidArgsSamples) {
   GetInternalformativ cmd;
   cmd.Init(GL_RENDERBUFFER, GL_RGBA8, GL_SAMPLES,
            shared_memory_id_, shared_memory_offset_);
-  decoder_->set_unsafe_es3_apis_enabled(true);
   EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
   EXPECT_EQ(kNumSampleCounts, result->GetNumResults());
   EXPECT_EQ(GL_NO_ERROR, GetGLError());
-  decoder_->set_unsafe_es3_apis_enabled(false);
-  EXPECT_EQ(error::kUnknownCommand, ExecuteCmd(cmd));
 }
 
 TEST_P(GLES3DecoderTest, GetInternalformativValidArgsNumSampleCounts) {
@@ -326,13 +309,10 @@ TEST_P(GLES3DecoderTest, GetInternalformativValidArgsNumSampleCounts) {
   GetInternalformativ cmd;
   cmd.Init(GL_RENDERBUFFER, GL_RGBA8, GL_NUM_SAMPLE_COUNTS,
            shared_memory_id_, shared_memory_offset_);
-  decoder_->set_unsafe_es3_apis_enabled(true);
   EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
   EXPECT_EQ(1, result->GetNumResults());
   EXPECT_EQ(kNumSampleCounts, result->GetData()[0]);
   EXPECT_EQ(GL_NO_ERROR, GetGLError());
-  decoder_->set_unsafe_es3_apis_enabled(false);
-  EXPECT_EQ(error::kUnknownCommand, ExecuteCmd(cmd));
 }
 
 TEST_P(GLES3DecoderTest, ClientWaitSyncValid) {
@@ -347,15 +327,12 @@ TEST_P(GLES3DecoderTest, ClientWaitSyncValid) {
       .WillOnce(Return(GL_CONDITION_SATISFIED))
       .RetiresOnSaturation();
   *result = GL_WAIT_FAILED;
-  decoder_->set_unsafe_es3_apis_enabled(true);
   EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
   EXPECT_EQ(static_cast<GLenum>(GL_CONDITION_SATISFIED), *result);
   EXPECT_EQ(GL_NO_ERROR, GetGLError());
-  decoder_->set_unsafe_es3_apis_enabled(false);
-  EXPECT_EQ(error::kUnknownCommand, ExecuteCmd(cmd));
 }
 
-TEST_P(GLES2DecoderTest, ClientWaitSyncNonZeroTimeoutValid) {
+TEST_P(GLES3DecoderTest, ClientWaitSyncNonZeroTimeoutValid) {
   typedef ClientWaitSync::Result Result;
   Result* result = static_cast<Result*>(shared_memory_address_);
   ClientWaitSync cmd;
@@ -368,19 +345,15 @@ TEST_P(GLES2DecoderTest, ClientWaitSyncNonZeroTimeoutValid) {
       .WillOnce(Return(GL_CONDITION_SATISFIED))
       .RetiresOnSaturation();
   *result = GL_WAIT_FAILED;
-  decoder_->set_unsafe_es3_apis_enabled(true);
   EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
   EXPECT_EQ(static_cast<GLenum>(GL_CONDITION_SATISFIED), *result);
   EXPECT_EQ(GL_NO_ERROR, GetGLError());
-  decoder_->set_unsafe_es3_apis_enabled(false);
-  EXPECT_EQ(error::kUnknownCommand, ExecuteCmd(cmd));
 }
 
-TEST_P(GLES2DecoderTest, ClientWaitSyncInvalidSyncFails) {
+TEST_P(GLES3DecoderTest, ClientWaitSyncInvalidSyncFails) {
   typedef ClientWaitSync::Result Result;
   Result* result = static_cast<Result*>(shared_memory_address_);
   ClientWaitSync cmd;
-  decoder_->set_unsafe_es3_apis_enabled(true);
   cmd.Init(kInvalidClientId, GL_SYNC_FLUSH_COMMANDS_BIT, 0,
            shared_memory_id_, shared_memory_offset_);
   *result = GL_WAIT_FAILED;
@@ -389,22 +362,20 @@ TEST_P(GLES2DecoderTest, ClientWaitSyncInvalidSyncFails) {
   EXPECT_EQ(GL_INVALID_VALUE, GetGLError());
 }
 
-TEST_P(GLES2DecoderTest, ClientWaitSyncResultNotInitFails) {
+TEST_P(GLES3DecoderTest, ClientWaitSyncResultNotInitFails) {
   typedef ClientWaitSync::Result Result;
   Result* result = static_cast<Result*>(shared_memory_address_);
   ClientWaitSync cmd;
-  decoder_->set_unsafe_es3_apis_enabled(true);
   cmd.Init(client_sync_id_, GL_SYNC_FLUSH_COMMANDS_BIT, 0,
            shared_memory_id_, shared_memory_offset_);
   *result = 1;  // Any value other than GL_WAIT_FAILED
   EXPECT_NE(error::kNoError, ExecuteCmd(cmd));
 }
 
-TEST_P(GLES2DecoderTest, ClientWaitSyncBadSharedMemoryFails) {
+TEST_P(GLES3DecoderTest, ClientWaitSyncBadSharedMemoryFails) {
   typedef ClientWaitSync::Result Result;
   Result* result = static_cast<Result*>(shared_memory_address_);
   ClientWaitSync cmd;
-  decoder_->set_unsafe_es3_apis_enabled(true);
   *result = GL_WAIT_FAILED;
   cmd.Init(client_sync_id_, GL_SYNC_FLUSH_COMMANDS_BIT, 0,
            kInvalidSharedMemoryId, shared_memory_offset_);
@@ -416,7 +387,7 @@ TEST_P(GLES2DecoderTest, ClientWaitSyncBadSharedMemoryFails) {
   EXPECT_NE(error::kNoError, ExecuteCmd(cmd));
 }
 
-TEST_P(GLES2DecoderTest, WaitSyncValidArgs) {
+TEST_P(GLES3DecoderTest, WaitSyncValidArgs) {
   const GLuint64 kTimeout = GL_TIMEOUT_IGNORED;
   EXPECT_CALL(*gl_, WaitSync(reinterpret_cast<GLsync>(kServiceSyncId),
                              0, kTimeout))
@@ -425,11 +396,8 @@ TEST_P(GLES2DecoderTest, WaitSyncValidArgs) {
 
   WaitSync cmd;
   cmd.Init(client_sync_id_, 0, kTimeout);
-  decoder_->set_unsafe_es3_apis_enabled(true);
   EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
   EXPECT_EQ(GL_NO_ERROR, GetGLError());
-  decoder_->set_unsafe_es3_apis_enabled(false);
-  EXPECT_EQ(error::kUnknownCommand, ExecuteCmd(cmd));
 }
 
 TEST_P(GLES2DecoderManualInitTest, BindGeneratesResourceFalse) {
@@ -1488,67 +1456,6 @@ TEST_P(GLES2DecoderTest, LoseContextCHROMIUMInvalidArgs1_0) {
   EXPECT_EQ(GL_INVALID_ENUM, GetGLError());
 }
 
-TEST_P(GLES3DecoderTest, TransformFeedbackStates) {
-  BeginTransformFeedback begin_cmd;
-  begin_cmd.Init(GL_POINTS);
-  EndTransformFeedback end_cmd;
-  end_cmd.Init();
-  PauseTransformFeedback pause_cmd;
-  pause_cmd.Init();
-  ResumeTransformFeedback resume_cmd;
-  resume_cmd.Init();
-
-  // Before Begin: Pause, Resume, and End is invalid.
-  EXPECT_EQ(error::kNoError, ExecuteCmd(end_cmd));
-  EXPECT_EQ(GL_INVALID_OPERATION, GetGLError());
-
-  EXPECT_EQ(error::kNoError, ExecuteCmd(pause_cmd));
-  EXPECT_EQ(GL_INVALID_OPERATION, GetGLError());
-
-  EXPECT_EQ(error::kNoError, ExecuteCmd(resume_cmd));
-  EXPECT_EQ(GL_INVALID_OPERATION, GetGLError());
-
-  // Begin
-  EXPECT_CALL(*gl_, BeginTransformFeedback(GL_POINTS))
-      .Times(1)
-      .RetiresOnSaturation();
-  EXPECT_EQ(error::kNoError, ExecuteCmd(begin_cmd));
-  EXPECT_EQ(GL_NO_ERROR, GetGLError());
-
-  // Begin again is invalid.
-  EXPECT_EQ(error::kNoError, ExecuteCmd(begin_cmd));
-  EXPECT_EQ(GL_INVALID_OPERATION, GetGLError());
-
-  // Before Pause: Resume is invalid.
-  EXPECT_EQ(error::kNoError, ExecuteCmd(resume_cmd));
-  EXPECT_EQ(GL_INVALID_OPERATION, GetGLError());
-
-  // Pause
-  EXPECT_CALL(*gl_, PauseTransformFeedback())
-      .Times(1)
-      .RetiresOnSaturation();
-  EXPECT_EQ(error::kNoError, ExecuteCmd(pause_cmd));
-  EXPECT_EQ(GL_NO_ERROR, GetGLError());
-
-  // Pause again is invalid.
-  EXPECT_EQ(error::kNoError, ExecuteCmd(pause_cmd));
-  EXPECT_EQ(GL_INVALID_OPERATION, GetGLError());
-
-  // Resume
-  EXPECT_CALL(*gl_, ResumeTransformFeedback())
-      .Times(1)
-      .RetiresOnSaturation();
-  EXPECT_EQ(error::kNoError, ExecuteCmd(resume_cmd));
-  EXPECT_EQ(GL_NO_ERROR, GetGLError());
-
-  // End
-  EXPECT_CALL(*gl_, EndTransformFeedback())
-      .Times(1)
-      .RetiresOnSaturation();
-  EXPECT_EQ(error::kNoError, ExecuteCmd(end_cmd));
-  EXPECT_EQ(GL_NO_ERROR, GetGLError());
-}
-
 class GLES2DecoderDoCommandsTest : public GLES2DecoderTest {
  public:
   GLES2DecoderDoCommandsTest() {
@@ -1780,9 +1687,28 @@ TEST_P(GLES2DecoderDescheduleUntilFinishedTest, NotYetSignalled) {
   EXPECT_EQ(0, reschedule_after_finished_callback_count_);
 }
 
-void GLES3DecoderWithESSL3ShaderTest::SetUp() {
+void GLES3DecoderTest::SetUp() {
+  InitState init;
+  init.gl_version = "OpenGL ES 3.0";
+  init.bind_generates_resource = true;
+  init.context_type = CONTEXT_TYPE_OPENGLES3;
+  InitDecoder(init);
+}
+
+void GLES3DecoderWithShaderTest::SetUp() {
+  InitState init;
+  init.gl_version = "OpenGL ES 3.0";
+  init.bind_generates_resource = true;
+  init.context_type = CONTEXT_TYPE_OPENGLES3;
+  InitDecoder(init);
+  SetupDefaultProgram();
+}
+
+void GLES3DecoderRGBBackbufferTest::SetUp() {
   base::CommandLine command_line(0, nullptr);
-  command_line.AppendSwitch(switches::kEnableUnsafeES3APIs);
+  command_line.AppendSwitchASCII(
+      switches::kGpuDriverBugWorkarounds,
+      base::IntToString(gpu::CLEAR_ALPHA_IN_READPIXELS));
   InitState init;
   init.gl_version = "OpenGL ES 3.0";
   init.bind_generates_resource = true;
@@ -1809,8 +1735,12 @@ INSTANTIATE_TEST_CASE_P(Service,
 
 INSTANTIATE_TEST_CASE_P(Service, GLES3DecoderTest, ::testing::Bool());
 
+INSTANTIATE_TEST_CASE_P(Service, GLES3DecoderWithShaderTest, ::testing::Bool());
+
+INSTANTIATE_TEST_CASE_P(Service, GLES3DecoderManualInitTest, ::testing::Bool());
+
 INSTANTIATE_TEST_CASE_P(Service,
-                        GLES3DecoderWithESSL3ShaderTest,
+                        GLES3DecoderRGBBackbufferTest,
                         ::testing::Bool());
 
 }  // namespace gles2

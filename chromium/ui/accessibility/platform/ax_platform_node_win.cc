@@ -454,7 +454,7 @@ STDMETHODIMP AXPlatformNodeWin::get_accValue(VARIANT var_id, BSTR* value) {
 STDMETHODIMP AXPlatformNodeWin::put_accValue(VARIANT var_id,
                                              BSTR new_value) {
   COM_OBJECT_VALIDATE_VAR_ID(var_id);
-  if (delegate_->SetStringValue(new_value))
+  if (delegate_->SetStringValue(new_value, true))
     return S_OK;
   return E_FAIL;
 }
@@ -511,6 +511,8 @@ STDMETHODIMP AXPlatformNodeWin::get_states(AccessibleStates* states) {
   *states = IA2_STATE_OPAQUE;
   if (GetData().state & (1 << ui::AX_STATE_EDITABLE))
     *states |= IA2_STATE_EDITABLE;
+  if (GetData().state & (1 << ui::AX_STATE_VERTICAL))
+    *states |= IA2_STATE_VERTICAL;
 
   return S_OK;
 }
@@ -897,9 +899,10 @@ STDMETHODIMP AXPlatformNodeWin::QueryService(
   COM_OBJECT_VALIDATE_1_ARG(object);
 
   if (riid == IID_IAccessible2) {
-    FOR_EACH_OBSERVER(IAccessible2UsageObserver,
-                      GetIAccessible2UsageObserverList(),
-                      OnIAccessible2Used());
+    for (IAccessible2UsageObserver& observer :
+         GetIAccessible2UsageObserverList()) {
+      observer.OnIAccessible2Used();
+    }
   }
 
   if (guidService == IID_IAccessible ||

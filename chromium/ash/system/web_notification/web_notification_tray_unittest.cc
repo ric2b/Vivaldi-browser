@@ -7,24 +7,25 @@
 #include <utility>
 #include <vector>
 
+#include "ash/common/material_design/material_design_controller.h"
 #include "ash/common/shelf/shelf_layout_manager.h"
 #include "ash/common/shelf/wm_shelf.h"
-#include "ash/common/shell_window_ids.h"
 #include "ash/common/system/status_area_widget.h"
 #include "ash/common/system/tray/system_tray.h"
 #include "ash/common/system/tray/system_tray_item.h"
 #include "ash/common/system/web_notification/ash_popup_alignment_delegate.h"
+#include "ash/common/test/test_system_tray_delegate.h"
 #include "ash/common/wm/window_state.h"
 #include "ash/common/wm_lookup.h"
 #include "ash/common/wm_window.h"
-#include "ash/display/display_manager.h"
+#include "ash/public/cpp/shell_window_ids.h"
 #include "ash/shell.h"
 #include "ash/test/ash_md_test_base.h"
 #include "ash/test/status_area_widget_test_helper.h"
-#include "ash/test/test_system_tray_delegate.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "ui/display/display.h"
+#include "ui/display/manager/display_manager.h"
 #include "ui/display/screen.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/gfx/geometry/point.h"
@@ -39,6 +40,10 @@
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
+
+#if defined(OS_CHROMEOS)
+#include "ash/system/chromeos/screen_layout_observer.h"
+#endif
 
 namespace ash {
 
@@ -136,7 +141,7 @@ class WebNotificationTrayTest : public test::AshMDTestBase {
   }
 
   int GetPopupWorkAreaBottomForTray(WebNotificationTray* tray) {
-    return tray->popup_alignment_delegate_->GetWorkAreaBottom();
+    return tray->popup_alignment_delegate_->GetWorkArea().bottom();
   }
 
   bool IsPopupVisible() { return GetTray()->IsPopupVisible(); }
@@ -269,10 +274,9 @@ TEST_P(WebNotificationTrayTest, PopupShownOnBothDisplays) {
   if (!SupportsMultipleDisplays())
     return;
 
-  // Enables to appear the notification for display changes.
-  test::TestSystemTrayDelegate* tray_delegate = GetSystemTrayDelegate();
-  tray_delegate->set_should_show_display_notification(true);
-
+  Shell::GetInstance()
+      ->screen_layout_observer()
+      ->set_show_notifications_for_testing(true);
   UpdateDisplay("400x400,200x200");
   // UpdateDisplay() creates the display notifications, so popup is visible.
   EXPECT_TRUE(GetTray()->IsPopupVisible());
@@ -284,14 +288,13 @@ TEST_P(WebNotificationTrayTest, PopupShownOnBothDisplays) {
   // root window controller and shelf with having notifications. This code
   // verifies it doesn't cause crash and popups are still visible. See
   // http://crbug.com/263664
-  DisplayManager* display_manager = Shell::GetInstance()->display_manager();
 
-  display_manager->SetMultiDisplayMode(DisplayManager::MIRRORING);
+  display_manager()->SetMultiDisplayMode(display::DisplayManager::MIRRORING);
   UpdateDisplay("400x400,200x200");
   EXPECT_TRUE(GetTray()->IsPopupVisible());
   EXPECT_FALSE(GetSecondaryTray());
 
-  display_manager->SetMultiDisplayMode(DisplayManager::EXTENDED);
+  display_manager()->SetMultiDisplayMode(display::DisplayManager::EXTENDED);
   UpdateDisplay("400x400,200x200");
   EXPECT_TRUE(GetTray()->IsPopupVisible());
   secondary_tray = GetSecondaryTray();
@@ -470,6 +473,10 @@ TEST_P(WebNotificationTrayTest, PopupAndSystemTrayMultiDisplay) {
 
 // Tests that there is visual feedback for touch presses.
 TEST_P(WebNotificationTrayTest, TouchFeedback) {
+  // Touch feedback is not available in material mode.
+  if (MaterialDesignController::IsShelfMaterial())
+    return;
+
   AddNotification("test_id");
   RunAllPendingInMessageLoop();
   WebNotificationTray* tray = GetTray();
@@ -480,20 +487,24 @@ TEST_P(WebNotificationTrayTest, TouchFeedback) {
   generator.set_current_location(center_point);
 
   generator.PressTouch();
-  EXPECT_TRUE(tray->draw_background_as_active());
+  EXPECT_TRUE(tray->is_active());
 
   generator.ReleaseTouch();
-  EXPECT_TRUE(tray->draw_background_as_active());
+  EXPECT_TRUE(tray->is_active());
   EXPECT_TRUE(tray->IsMessageCenterBubbleVisible());
 
   generator.GestureTapAt(center_point);
-  EXPECT_FALSE(tray->draw_background_as_active());
+  EXPECT_FALSE(tray->is_active());
   EXPECT_FALSE(tray->IsMessageCenterBubbleVisible());
 }
 
 // Tests that while touch presses trigger visual feedback, that subsequent non
 // tap gestures cancel the feedback without triggering the message center.
 TEST_P(WebNotificationTrayTest, TouchFeedbackCancellation) {
+  // Touch feedback is not available in material mode.
+  if (MaterialDesignController::IsShelfMaterial())
+    return;
+
   AddNotification("test_id");
   RunAllPendingInMessageLoop();
   WebNotificationTray* tray = GetTray();
@@ -505,14 +516,14 @@ TEST_P(WebNotificationTrayTest, TouchFeedbackCancellation) {
   generator.set_current_location(center_point);
 
   generator.PressTouch();
-  EXPECT_TRUE(tray->draw_background_as_active());
+  EXPECT_TRUE(tray->is_active());
 
   gfx::Point out_of_bounds(bounds.x() - 1, center_point.y());
   generator.MoveTouch(out_of_bounds);
-  EXPECT_FALSE(tray->draw_background_as_active());
+  EXPECT_FALSE(tray->is_active());
 
   generator.ReleaseTouch();
-  EXPECT_FALSE(tray->draw_background_as_active());
+  EXPECT_FALSE(tray->is_active());
   EXPECT_FALSE(tray->IsMessageCenterBubbleVisible());
 }
 

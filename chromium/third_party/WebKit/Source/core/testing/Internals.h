@@ -42,6 +42,7 @@
 
 namespace blink {
 
+class Animation;
 class CallbackFunctionTest;
 class CanvasRenderingContext;
 class ClientRect;
@@ -54,13 +55,15 @@ class DocumentMarker;
 class Element;
 class ExceptionState;
 class GCObservation;
+class HTMLInputElement;
 class HTMLMediaElement;
+class HTMLSelectElement;
 class InternalRuntimeFlags;
 class InternalSettings;
-class Iterator;
 class LayerRectList;
 class LocalDOMWindow;
 class LocalFrame;
+class Location;
 class Node;
 class OriginTrialsTest;
 class Page;
@@ -83,7 +86,9 @@ class Internals final : public GarbageCollectedFinalized<Internals>,
   USING_GARBAGE_COLLECTED_MIXIN(Internals);
 
  public:
-  static Internals* create(ScriptState*);
+  static Internals* create(ExecutionContext* context) {
+    return new Internals(context);
+  }
   virtual ~Internals();
 
   static void resetToConsistentState(Page*);
@@ -180,6 +185,7 @@ class Internals final : public GarbageCollectedFinalized<Internals>,
 
   ClientRect* boundingBox(Element*);
 
+  void setMarker(Document*, const Range*, const String&, ExceptionState&);
   unsigned markerCountForNode(Node*, const String&, ExceptionState&);
   unsigned activeMarkerCountForNode(Node*);
   Range* markerRangeForNode(Node*,
@@ -286,9 +292,10 @@ class Internals final : public GarbageCollectedFinalized<Internals>,
                                 bool allowChildFrameContent,
                                 ExceptionState&) const;
 
-  bool hasSpellingMarker(Document*, int from, int length);
-  bool hasGrammarMarker(Document*, int from, int length);
-  void setSpellCheckingEnabled(bool);
+  bool hasSpellingMarker(Document*, int from, int length, ExceptionState&);
+  bool hasGrammarMarker(Document*, int from, int length, ExceptionState&);
+  void setSpellCheckingEnabled(bool, ExceptionState&);
+  void replaceMisspelled(Document*, const String&, ExceptionState&);
 
   bool canHyphenate(const AtomicString& locale);
   void setMockHyphenation(const AtomicString& locale);
@@ -299,8 +306,6 @@ class Internals final : public GarbageCollectedFinalized<Internals>,
   unsigned numberOfScrollableAreas(Document*);
 
   bool isPageBoxVisible(Document*, int pageNumber);
-
-  static const char* internalsId;
 
   InternalSettings* settings() const;
   InternalRuntimeFlags* runtimeFlags() const;
@@ -333,9 +338,6 @@ class Internals final : public GarbageCollectedFinalized<Internals>,
   String dumpRefCountedInstanceCounts() const;
   LocalDOMWindow* openDummyInspectorFrontend(const String& url);
   void closeDummyInspectorFrontend();
-  Vector<unsigned long> setMemoryCacheCapacities(unsigned long minDeadBytes,
-                                                 unsigned long maxDeadBytes,
-                                                 unsigned long totalBytes);
 
   String counterValue(Element*);
 
@@ -367,12 +369,10 @@ class Internals final : public GarbageCollectedFinalized<Internals>,
 
   void setIsCursorVisible(Document*, bool, ExceptionState&);
 
-  double effectiveMediaVolume(HTMLMediaElement*);
   String effectivePreload(HTMLMediaElement*);
 
   void mediaPlayerRemoteRouteAvailabilityChanged(HTMLMediaElement*, bool);
   void mediaPlayerPlayingRemotelyChanged(HTMLMediaElement*, bool);
-  void setAllowHiddenVolumeControls(HTMLMediaElement*, bool);
 
   void registerURLSchemeAsBypassingContentSecurityPolicy(const String& scheme);
   void registerURLSchemeAsBypassingContentSecurityPolicy(
@@ -450,7 +450,7 @@ class Internals final : public GarbageCollectedFinalized<Internals>,
 
   DECLARE_TRACE();
 
-  void setValueForUser(Element*, const String&);
+  void setValueForUser(HTMLInputElement*, const String&);
 
   String textSurroundingNode(Node*, int x, int y, unsigned long maxLength);
 
@@ -487,8 +487,8 @@ class Internals final : public GarbageCollectedFinalized<Internals>,
   int visualViewportHeight();
   int visualViewportWidth();
   // The scroll position of the visual viewport relative to the document origin.
-  double visualViewportScrollX();
-  double visualViewportScrollY();
+  float visualViewportScrollX();
+  float visualViewportScrollY();
 
   // Return true if the given use counter exists for the given document.
   // |useCounterId| must be one of the values from the UseCounter::Feature enum.
@@ -530,8 +530,11 @@ class Internals final : public GarbageCollectedFinalized<Internals>,
   // Intentional crash.
   void crash();
 
+  // Overrides if the device is low-end (low on memory).
+  void setIsLowEndDevice(bool);
+
  private:
-  explicit Internals(ScriptState*);
+  explicit Internals(ExecutionContext*);
   Document* contextDocument() const;
   LocalFrame* frame() const;
   Vector<String> iconURLs(Document*, int iconTypesMask) const;

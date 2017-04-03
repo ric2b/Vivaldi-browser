@@ -1,16 +1,18 @@
 // Copyright (c) 2015 Vivaldi Technologies AS. All rights reserved
 
 #include "base/path_service.h"
+#include "base/vivaldi_paths.h"
 #include "chrome/browser/extensions/extension_apitest.h"
-#include "chrome/common/chrome_paths.h"
 
 namespace extensions {
 
 class VivaldiExtensionApiTest : public ExtensionApiTest {
  public:
   void SetUpCommandLine(base::CommandLine* command_line) override {
+    vivaldi::RegisterVivaldiPaths();
     ExtensionApiTest::SetUpCommandLine(command_line);
-    PathService::Get(chrome::DIR_VIVALDI_TEST_DATA, &test_data_dir_);
+
+    PathService::Get(vivaldi::DIR_VIVALDI_TEST_DATA, &test_data_dir_);
     test_data_dir_ = test_data_dir_.AppendASCII("extensions");
   }
 };

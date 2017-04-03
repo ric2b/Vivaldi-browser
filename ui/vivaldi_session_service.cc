@@ -32,6 +32,8 @@
 #include "content/public/browser/storage_partition.h"
 #include "extensions/browser/extension_function_dispatcher.h"
 
+#include "components/sessions/vivaldi_session_service_commands.h"
+
 using sessions::ContentSerializedNavigationBuilder;
 using sessions::SerializedNavigationEntry;
 using content::NavigationEntry;
@@ -432,9 +434,6 @@ content::WebContents* VivaldiSessionService::RestoreTab(
   // focused tab will be loaded by Browser, and TabLoader will load the rest.
   DCHECK(web_contents->GetController().NeedsReload());
 
-  if (browser->is_vivaldi())
-    web_contents->GetController().LoadIfNecessary();
-
   return web_contents;
 }
 
@@ -532,7 +531,7 @@ Browser* VivaldiSessionService::ProcessSessionWindows(
   if (browser_to_activate && browser_to_activate->is_type_tabbed())
     last_browser = browser_to_activate;
 
-  if (browser_to_activate && !browser_to_activate->is_vivaldi())
+  if (browser_to_activate)
     browser_to_activate->window()->Activate();
 
   // sessionStorages needed for the session restore have now been recreated

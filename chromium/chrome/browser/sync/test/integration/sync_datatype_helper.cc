@@ -9,20 +9,20 @@
 namespace {
 
 // The SyncTest instance associated with sync_datatype_helper.
-static SyncTest* test = NULL;
+static SyncTest* test = nullptr;
 
 }  // namespace
 
 namespace sync_datatype_helper {
 
 void AssociateWithTest(SyncTest* test) {
-  ASSERT_TRUE(test != NULL) << "Cannot associate with null test.";
-  ASSERT_TRUE(::test == NULL) << "Already associated with a test.";
+  ASSERT_NE(nullptr, test) << "Cannot associate with null test.";
+  ASSERT_EQ(nullptr, ::test) << "Already associated with a test.";
   ::test = test;
 }
 
 SyncTest* test() {
-  EXPECT_TRUE(::test != NULL) << "Must call AssociateWithTest first.";
+  EXPECT_NE(nullptr, ::test) << "Must call AssociateWithTest first.";
   return ::test;
 }
 

@@ -20,12 +20,13 @@
 #include "content/public/renderer/render_thread.h"
 #include "media/base/eme_constants.h"
 #include "media/base/key_system_properties.h"
+#include "ppapi/features/features.h"
 
 #if defined(OS_ANDROID)
 #include "components/cdm/renderer/android_key_systems.h"
 #endif
 
-#if defined(ENABLE_PEPPER_CDMS)
+#if BUILDFLAG(ENABLE_PEPPER_CDMS)
 #include "base/feature_list.h"
 #include "media/base/media_switches.h"
 #endif
@@ -42,7 +43,7 @@
 using media::KeySystemProperties;
 using media::SupportedCodecs;
 
-#if defined(ENABLE_PEPPER_CDMS)
+#if BUILDFLAG(ENABLE_PEPPER_CDMS)
 static bool IsPepperCdmAvailable(
     const std::string& pepper_type,
     std::vector<base::string16>* additional_param_names,
@@ -71,6 +72,8 @@ static void AddExternalClearKey(
       "org.chromium.externalclearkey.fileiotest";
   static const char kExternalClearKeyOutputProtectionTestKeySystem[] =
       "org.chromium.externalclearkey.outputprotectiontest";
+  static const char kExternalClearKeyPlatformVerificationTestKeySystem[] =
+      "org.chromium.externalclearkey.platformverificationtest";
   static const char kExternalClearKeyInitializeFailKeySystem[] =
       "org.chromium.externalclearkey.initializefail";
   static const char kExternalClearKeyCrashKeySystem[] =
@@ -102,6 +105,10 @@ static void AddExternalClearKey(
   // A key system that triggers the output protection test in ClearKeyCdm.
   concrete_key_systems->emplace_back(new cdm::ExternalClearKeyProperties(
       kExternalClearKeyOutputProtectionTestKeySystem));
+
+  // A key system that triggers the platform verification test in ClearKeyCdm.
+  concrete_key_systems->emplace_back(new cdm::ExternalClearKeyProperties(
+      kExternalClearKeyPlatformVerificationTestKeySystem));
 
   // A key system that Chrome thinks is supported by ClearKeyCdm, but actually
   // will be refused by ClearKeyCdm. This is to test the CDM initialization
@@ -213,11 +220,11 @@ static void AddPepperBasedWidevine(
 #endif  // defined(OS_CHROMEOS)
 }
 #endif  // defined(WIDEVINE_CDM_AVAILABLE)
-#endif  // defined(ENABLE_PEPPER_CDMS)
+#endif  // BUILDFLAG(ENABLE_PEPPER_CDMS)
 
 void AddChromeKeySystems(
     std::vector<std::unique_ptr<KeySystemProperties>>* key_systems_properties) {
-#if defined(ENABLE_PEPPER_CDMS)
+#if BUILDFLAG(ENABLE_PEPPER_CDMS)
   if (base::FeatureList::IsEnabled(media::kExternalClearKeyForTesting))
     AddExternalClearKey(key_systems_properties);
 
@@ -225,7 +232,7 @@ void AddChromeKeySystems(
   AddPepperBasedWidevine(key_systems_properties);
 #endif  // defined(WIDEVINE_CDM_AVAILABLE)
 
-#endif  // defined(ENABLE_PEPPER_CDMS)
+#endif  // BUILDFLAG(ENABLE_PEPPER_CDMS)
 
 #if defined(OS_ANDROID)
   cdm::AddAndroidWidevine(key_systems_properties);

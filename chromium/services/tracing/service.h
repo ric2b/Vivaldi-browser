@@ -14,44 +14,43 @@
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "mojo/public/cpp/bindings/interface_ptr_set.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
-#include "services/shell/public/cpp/interface_factory.h"
-#include "services/shell/public/cpp/service.h"
+#include "services/service_manager/public/cpp/interface_factory.h"
+#include "services/service_manager/public/cpp/service.h"
 #include "services/tracing/data_sink.h"
 #include "services/tracing/public/interfaces/tracing.mojom.h"
 #include "services/tracing/recorder.h"
 
 namespace tracing {
 
-class Service
-    : public shell::Service,
-      public shell::InterfaceFactory<mojom::Factory>,
-      public shell::InterfaceFactory<mojom::Collector>,
-      public shell::InterfaceFactory<mojom::StartupPerformanceDataCollector>,
-      public mojom::Factory,
-      public mojom::Collector,
-      public mojom::StartupPerformanceDataCollector {
+class Service : public service_manager::Service,
+                public service_manager::InterfaceFactory<mojom::Factory>,
+                public service_manager::InterfaceFactory<mojom::Collector>,
+                public service_manager::InterfaceFactory<
+                    mojom::StartupPerformanceDataCollector>,
+                public mojom::Factory,
+                public mojom::Collector,
+                public mojom::StartupPerformanceDataCollector {
  public:
   Service();
   ~Service() override;
 
  private:
-  // shell::Service implementation.
-  bool OnConnect(const shell::Identity& remote_identity,
-                 shell::InterfaceRegistry* registry) override;
+  // service_manager::Service implementation.
+  bool OnConnect(const service_manager::ServiceInfo& remote_info,
+                 service_manager::InterfaceRegistry* registry) override;
   bool OnStop() override;
 
-  // shell::InterfaceFactory<mojom::Factory>:
-  void Create(const shell::Identity& remote_identity,
+  // service_manager::InterfaceFactory<mojom::Factory>:
+  void Create(const service_manager::Identity& remote_identity,
               mojom::FactoryRequest request) override;
 
-  // shell::InterfaceFactory<mojom::Collector>:
-  void Create(const shell::Identity& remote_identity,
+  // service_manager::InterfaceFactory<mojom::Collector>:
+  void Create(const service_manager::Identity& remote_identity,
               mojom::CollectorRequest request) override;
 
-  // shell::InterfaceFactory<mojom::StartupPerformanceDataCollector>:
-  void Create(
-      const shell::Identity& remote_identity,
-      mojom::StartupPerformanceDataCollectorRequest request) override;
+  // service_manager::InterfaceFactory<mojom::StartupPerformanceDataCollector>:
+  void Create(const service_manager::Identity& remote_identity,
+              mojom::StartupPerformanceDataCollectorRequest request) override;
 
   // mojom::Factory:
   void CreateRecorder(mojom::ProviderPtr provider) override;
@@ -62,8 +61,8 @@ class Service
   void StopAndFlush() override;
 
   // mojom::StartupPerformanceDataCollector:
-  void SetShellProcessCreationTime(int64_t time) override;
-  void SetShellMainEntryPointTime(int64_t time) override;
+  void SetServiceManagerProcessCreationTime(int64_t time) override;
+  void SetServiceManagerMainEntryPointTime(int64_t time) override;
   void SetBrowserMessageLoopStartTicks(int64_t ticks) override;
   void SetBrowserWindowDisplayTicks(int64_t ticks) override;
   void SetBrowserOpenTabsTimeDelta(int64_t delta) override;

@@ -9,11 +9,9 @@
 #include "content/common/input/input_event_ack_state.h"
 #include "content/public/browser/native_web_keyboard_event.h"
 #include "ipc/ipc_listener.h"
-#include "third_party/WebKit/public/web/WebInputEvent.h"
+#include "third_party/WebKit/public/platform/WebInputEvent.h"
 
 namespace content {
-
-class InputRouterClient;
 
 // The InputRouter allows the embedder to customize how input events are
 // sent to the renderer, and how responses are dispatched to the browser.

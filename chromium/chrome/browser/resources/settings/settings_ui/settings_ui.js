@@ -19,6 +19,8 @@ settings.defaultResourceLoaded = true;
 Polymer({
   is: 'settings-ui',
 
+  behaviors: [settings.RouteObserverBehavior],
+
   properties: {
     /**
      * Preferences state.
@@ -32,6 +34,13 @@ Polymer({
       value: new settings.DirectionDelegateImpl(),
     },
 
+    /** @private */
+    advancedOpened_: {
+      type: Boolean,
+      value: false,
+      notify: true,
+    },
+
     /** @private {boolean} */
     toolbarSpinnerActive_: {
       type: Boolean,
@@ -43,6 +52,16 @@ Polymer({
      * @private {!GuestModePageVisibility}
      */
     pageVisibility_: Object,
+
+    /** @private */
+    lastSearchQuery_: {
+      type: String,
+      value: '',
+    }
+  },
+
+  listeners: {
+    'refresh-pref': 'onRefreshPref_',
   },
 
   /** @override */
@@ -56,10 +75,6 @@ Polymer({
    *     strict mode.
    */
   ready: function() {
-    this.$$('cr-toolbar').addEventListener('search-changed', function(e) {
-      this.$$('settings-main').searchContents(e.detail);
-    }.bind(this));
-
     // Lazy-create the drawer the first time it is opened or swiped into view.
     var drawer = assert(this.$$('app-drawer'));
     listenOnce(drawer, 'track opened-changed', function() {
@@ -106,6 +121,59 @@ Polymer({
   attached: function() {
     // Preload bold Roboto so it doesn't load and flicker the first time used.
     document.fonts.load('bold 12px Roboto');
+    settings.setGlobalScrollTarget(this.$.headerPanel.scroller);
+  },
+
+  /** @param {!settings.Route} route */
+  currentRouteChanged: function(route) {
+    var urlSearchQuery = settings.getQueryParameters().get('search') || '';
+    if (urlSearchQuery == this.lastSearchQuery_)
+      return;
+
+    this.lastSearchQuery_ = urlSearchQuery;
+
+    var toolbar = /** @type {!CrToolbarElement} */ (this.$$('cr-toolbar'));
+    var searchField = /** @type {CrToolbarSearchFieldElement} */ (
+        toolbar.getSearchField());
+
+    // If the search was initiated by directly entering a search URL, need to
+    // sync the URL parameter to the textbox.
+    if (urlSearchQuery != searchField.getValue()) {
+      // Setting the search box value without triggering a 'search-changed'
+      // event, to prevent an unnecessary duplicate entry in |window.history|.
+      searchField.setValue(urlSearchQuery, true /* noEvent */);
+    }
+
+    this.$.main.searchContents(urlSearchQuery);
+  },
+
+  /**
+   * @param {!CustomEvent} e
+   * @private
+   */
+  onRefreshPref_: function(e) {
+    var prefName = /** @type {string} */(e.detail);
+    return /** @type {SettingsPrefsElement} */(this.$.prefs).refresh(prefName);
+  },
+
+  /**
+   * Handles the 'search-changed' event fired from the toolbar.
+   * @param {!Event} e
+   * @private
+   */
+  onSearchChanged_: function(e) {
+    // Trim leading whitespace only, to prevent searching for empty string. This
+    // still allows the user to search for 'foo bar', while taking a long pause
+    // after typing 'foo '.
+    var query = e.detail.replace(/^\s+/, '');
+    // Prevent duplicate history entries.
+    if (query == this.lastSearchQuery_)
+      return;
+
+    settings.navigateTo(
+        settings.Route.BASIC,
+        query.length > 0 ? new URLSearchParams(`search=${query}`) : undefined,
+        /* removeSearch */ true);
   },
 
   /**

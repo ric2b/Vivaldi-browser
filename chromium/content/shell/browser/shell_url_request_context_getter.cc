@@ -35,6 +35,7 @@
 #include "net/http/http_network_session.h"
 #include "net/http/http_server_properties_impl.h"
 #include "net/http/transport_security_state.h"
+#include "net/net_features.h"
 #include "net/proxy/proxy_service.h"
 #include "net/ssl/channel_id_service.h"
 #include "net/ssl/default_channel_id_store.h"
@@ -113,11 +114,6 @@ ShellURLRequestContextGetter::GetProxyService() {
       std::move(proxy_config_service_), 0, url_request_context_->net_log());
 }
 
-bool ShellURLRequestContextGetter::ShouldEnableReferrerPolicyHeader() {
-  return base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kEnableExperimentalWebPlatformFeatures);
-}
-
 net::URLRequestContext* ShellURLRequestContextGetter::GetURLRequestContext() {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
@@ -129,10 +125,6 @@ net::URLRequestContext* ShellURLRequestContextGetter::GetURLRequestContext() {
     url_request_context_->set_net_log(net_log_);
     network_delegate_ = CreateNetworkDelegate();
     url_request_context_->set_network_delegate(network_delegate_.get());
-    // TODO(estark): Remove this once the Referrer-Policy header is no
-    // longer an experimental feature. https://crbug.com/619228
-    url_request_context_->set_enable_referrer_policy_header(
-        ShouldEnableReferrerPolicyHeader());
     storage_.reset(
         new net::URLRequestContextStorage(url_request_context_.get()));
     storage_->set_cookie_store(CreateCookieStore(CookieStoreConfig()));
@@ -237,7 +229,7 @@ net::URLRequestContext* ShellURLRequestContextGetter::GetURLRequestContext() {
     bool set_protocol = job_factory->SetProtocolHandler(
         url::kDataScheme, base::WrapUnique(new net::DataProtocolHandler));
     DCHECK(set_protocol);
-#if !defined(DISABLE_FILE_SUPPORT)
+#if !BUILDFLAG(DISABLE_FILE_SUPPORT)
     set_protocol = job_factory->SetProtocolHandler(
         url::kFileScheme,
         base::MakeUnique<net::FileProtocolHandler>(

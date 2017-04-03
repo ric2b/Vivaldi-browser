@@ -23,6 +23,7 @@ void UpdateEnabledStateUMA(bool enabled) {
 }
 
 void UpdateProvisioningResultUMA(ProvisioningResult result, bool managed) {
+  DCHECK_NE(result, ProvisioningResult::CHROME_SERVER_COMMUNICATION_ERROR);
   std::string histogram_name = "Arc.Provisioning.Result.";
   histogram_name += managed ? "Managed" : "Unmanaged";
   base::LinearHistogram::FactoryGet(
@@ -46,6 +47,11 @@ void UpdateProvisioningTiming(const base::TimeDelta& elapsed_time,
       base::TimeDelta::FromMinutes(6), 50,
       base::HistogramBase::kUmaTargetedHistogramFlag)
       ->AddTime(elapsed_time);
+}
+
+void UpdateSilentAuthCodeUMA(OptInSilentAuthCode state) {
+  UMA_HISTOGRAM_ENUMERATION("Arc.OptInSilentAuthCode", static_cast<int>(state),
+                            static_cast<int>(OptInSilentAuthCode::SIZE));
 }
 
 }  // namespace arc

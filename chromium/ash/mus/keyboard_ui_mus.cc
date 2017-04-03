@@ -6,15 +6,15 @@
 
 #include "ash/common/keyboard/keyboard_ui_observer.h"
 #include "base/memory/ptr_util.h"
-#include "services/shell/public/cpp/connector.h"
+#include "services/service_manager/public/cpp/connector.h"
 
 namespace ash {
 
-KeyboardUIMus::KeyboardUIMus(::shell::Connector* connector)
+KeyboardUIMus::KeyboardUIMus(service_manager::Connector* connector)
     : is_enabled_(false), observer_binding_(this) {
   if (connector) {
     // TODO(sky): should be something like mojo:keyboard, but need mapping.
-    connector->ConnectToInterface("exe:chrome", &keyboard_);
+    connector->ConnectToInterface("content_browser", &keyboard_);
     keyboard_->AddObserver(observer_binding_.CreateInterfacePtrAndBind());
   }
 }
@@ -23,7 +23,7 @@ KeyboardUIMus::~KeyboardUIMus() {}
 
 // static
 std::unique_ptr<KeyboardUI> KeyboardUIMus::Create(
-    ::shell::Connector* connector) {
+    service_manager::Connector* connector) {
   return base::MakeUnique<KeyboardUIMus>(connector);
 }
 
@@ -47,8 +47,8 @@ void KeyboardUIMus::OnKeyboardStateChanged(bool is_enabled,
     return;
 
   is_enabled_ = is_enabled;
-  FOR_EACH_OBSERVER(KeyboardUIObserver, *observers(),
-                    OnKeyboardEnabledStateChanged(is_enabled));
+  for (auto& observer : *observers())
+    observer.OnKeyboardEnabledStateChanged(is_enabled);
 }
 
 }  // namespace ash

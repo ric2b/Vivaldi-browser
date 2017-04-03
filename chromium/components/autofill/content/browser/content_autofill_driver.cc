@@ -24,7 +24,7 @@
 #include "content/public/browser/site_instance.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
-#include "services/shell/public/cpp/interface_provider.h"
+#include "services/service_manager/public/cpp/interface_provider.h"
 #include "ui/gfx/geometry/size_f.h"
 
 namespace autofill {
@@ -168,6 +168,15 @@ gfx::RectF ContentAutofillDriver::TransformBoundingBoxToViewportCoordinates(
   new_box.SetRect(transformed_point.x(), transformed_point.y(),
                   bounding_box.width(), bounding_box.height());
   return new_box;
+}
+
+void ContentAutofillDriver::DidInteractWithCreditCardForm() {
+  // Notify the WebContents about credit card inputs on HTTP pages.
+  content::WebContents* contents =
+      content::WebContents::FromRenderFrameHost(render_frame_host_);
+  if (contents->GetVisibleURL().SchemeIsCryptographic())
+    return;
+  contents->OnCreditCardInputShownOnHttp();
 }
 
 // mojom::AutofillDriver:

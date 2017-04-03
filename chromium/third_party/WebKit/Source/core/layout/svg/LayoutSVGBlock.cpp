@@ -97,10 +97,10 @@ void LayoutSVGBlock::mapLocalToAncestor(const LayoutBoxModelObject* ancestor,
 
 void LayoutSVGBlock::mapAncestorToLocal(const LayoutBoxModelObject* ancestor,
                                         TransformState& transformState,
-                                        MapCoordinatesFlags) const {
+                                        MapCoordinatesFlags flags) const {
   if (this == ancestor)
     return;
-  SVGLayoutSupport::mapAncestorToLocal(*this, ancestor, transformState);
+  SVGLayoutSupport::mapAncestorToLocal(*this, ancestor, transformState, flags);
 }
 
 const LayoutObject* LayoutSVGBlock::pushMappingToContainer(
@@ -110,9 +110,8 @@ const LayoutObject* LayoutSVGBlock::pushMappingToContainer(
                                                   geometryMap);
 }
 
-LayoutRect LayoutSVGBlock::absoluteClippedOverflowRect() const {
-  return SVGLayoutSupport::clippedOverflowRectForPaintInvalidation(*this,
-                                                                   *view());
+LayoutRect LayoutSVGBlock::absoluteVisualRect() const {
+  return SVGLayoutSupport::visualRectInAncestorSpace(*this, *view());
 }
 
 bool LayoutSVGBlock::mapToVisualRectInAncestorSpace(

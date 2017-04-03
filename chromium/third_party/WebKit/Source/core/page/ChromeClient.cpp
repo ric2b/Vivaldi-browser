@@ -23,11 +23,13 @@
 
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
+#include "core/frame/FrameConsole.h"
 #include "core/frame/LocalFrame.h"
+#include "core/inspector/ConsoleMessage.h"
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/layout/HitTestResult.h"
 #include "core/page/FrameTree.h"
-#include "core/page/ScopedPageLoadDeferrer.h"
+#include "core/page/ScopedPageSuspender.h"
 #include "core/page/WindowFeatures.h"
 #include "platform/geometry/IntRect.h"
 #include "platform/network/NetworkHints.h"
@@ -88,10 +90,10 @@ static bool openJavaScriptDialog(LocalFrame* frame,
                                  const String& message,
                                  ChromeClient::DialogType dialogType,
                                  const Delegate& delegate) {
-  // Defer loads in case the client method runs a new event loop that would
+  // Suspend pages in case the client method runs a new event loop that would
   // otherwise cause the load to continue while we're in the middle of
   // executing JavaScript.
-  ScopedPageLoadDeferrer deferrer;
+  ScopedPageSuspender suspender;
   InspectorInstrumentation::willRunJavaScriptDialog(frame, message, dialogType);
   bool result = delegate();
   InspectorInstrumentation::didRunJavaScriptDialog(frame, result);
@@ -149,13 +151,16 @@ bool ChromeClient::openJavaScriptPrompt(LocalFrame* frame,
 
 void ChromeClient::mouseDidMoveOverElement(LocalFrame& frame,
                                            const HitTestResult& result) {
-  if (result.innerNode() &&
+  if (!result.scrollbar() && result.innerNode() &&
       result.innerNode()->document().isDNSPrefetchEnabled())
     prefetchDNS(result.absoluteLinkURL().host());
 
   showMouseOverURL(result);
 
-  setToolTip(frame, result);
+  if (result.scrollbar())
+    clearToolTip(frame);
+  else
+    setToolTip(frame, result);
 }
 
 void ChromeClient::setToolTip(LocalFrame& frame, const HitTestResult& result) {
@@ -194,13 +199,23 @@ void ChromeClient::clearToolTip(LocalFrame& frame) {
   setToolTip(frame, String(), LTR);
 }
 
-void ChromeClient::print(LocalFrame* frame) {
-  // Defer loads in case the client method runs a new event loop that would
+bool ChromeClient::print(LocalFrame* frame) {
+  if (frame->document()->isSandboxed(SandboxModals)) {
+    UseCounter::count(frame, UseCounter::DialogInSandboxedContext);
+    frame->console().addMessage(ConsoleMessage::create(
+        SecurityMessageSource, ErrorMessageLevel,
+        "Ignored call to 'print()'. The document is sandboxed, and the "
+        "'allow-modals' keyword is not set."));
+    return false;
+  }
+
+  // Suspend pages in case the client method runs a new event loop that would
   // otherwise cause the load to continue while we're in the middle of
   // executing JavaScript.
-  ScopedPageLoadDeferrer deferrer;
+  ScopedPageSuspender suspender;
 
   printDelegate(frame);
+  return true;
 }
 
 }  // namespace blink

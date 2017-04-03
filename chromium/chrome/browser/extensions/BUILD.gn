@@ -5,6 +5,7 @@
 import("//build/config/features.gni")
 import("//build/config/ui.gni")
 import("//chrome/common/features.gni")
+import("//extensions/features/features.gni")
 
 assert(enable_extensions)
 
@@ -291,8 +292,6 @@ static_library("extensions") {
     "api/messaging/native_messaging_policy_handler.h",
     "api/metrics_private/chrome_metrics_private_delegate.cc",
     "api/metrics_private/chrome_metrics_private_delegate.h",
-    "api/metrics_private/metrics_private_api.cc",
-    "api/metrics_private/metrics_private_api.h",
     "api/module/module.cc",
     "api/module/module.h",
     "api/music_manager_private/device_id.cc",
@@ -837,6 +836,7 @@ static_library("extensions") {
     "//components/crx_file",
     "//components/data_reduction_proxy/core/browser",
     "//components/dom_distiller/core",
+    "//components/drive",
     "//components/favicon/content",
     "//components/feedback",
     "//components/gcm_driver",
@@ -861,6 +861,7 @@ static_library("extensions") {
     "//components/rappor",
     "//components/resources",
     "//components/safe_browsing_db:database_manager",
+    "//components/safe_browsing_db:safe_browsing_prefs",
     "//components/safe_json",
     "//components/search_engines",
     "//components/sessions",
@@ -869,8 +870,8 @@ static_library("extensions") {
     "//components/storage_monitor",
     "//components/strings",
     "//components/sync",
+    "//components/sync_preferences",
     "//components/sync_sessions",
-    "//components/syncable_prefs",
     "//components/translate/core/browser",
     "//components/undo",
     "//components/update_client",
@@ -885,10 +886,12 @@ static_library("extensions") {
     "//device/hid",
     "//extensions:extensions_resources",
     "//extensions/browser",
+    "//extensions/browser/api:api_registration",
     "//extensions/common/api",
-    "//extensions/common/api:api_registration",
+    "//extensions/features",
     "//extensions/strings",
     "//net",
+    "//printing/features",
     "//skia",
     "//sql",
     "//storage/browser",
@@ -919,8 +922,6 @@ static_library("extensions") {
 
   if (is_chromeos) {
     sources += [
-      "api/cast_devices_private/cast_devices_private_api.cc",
-      "api/cast_devices_private/cast_devices_private_api.h",
       "api/certificate_provider/certificate_provider_api.cc",
       "api/certificate_provider/certificate_provider_api.h",
       "api/enterprise_device_attributes/enterprise_device_attributes_api.cc",
@@ -1057,6 +1058,16 @@ static_library("extensions") {
       "api/networking_private/networking_private_credentials_getter_win.cc",
     ]
     deps += [ "//components/wifi" ]
+  }
+
+  if (is_win || is_mac || is_chromeos) {
+    sources += [
+      "api/networking_private/networking_private_crypto.cc",
+      "api/networking_private/networking_private_crypto.h",
+    ]
+
+    # networking_private_crypto.cc depends on boringssl.
+    public_deps += [ "//third_party/boringssl" ]
   }
 
   if (is_win) {

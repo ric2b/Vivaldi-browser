@@ -176,6 +176,24 @@ class LayoutTestBluetoothAdapterProvider {
   static scoped_refptr<testing::NiceMock<device::MockBluetoothAdapter>>
   GetDeviceEventAdapter();
 
+  // |DevicesRemovedAdapter|
+  // Inherits from |PoweredAdapter|
+  // Internal Structure:
+  //  - Connected Heart Rate Device
+  //    - IsGattConnected: Returns true.
+  //    - UUIDs:
+  //      - Heart Rate UUID (0x180d)
+  // Mock Functions:
+  //  - StartDiscoverySessionWithFilter: Performs the following steps the first
+  //    time is called:
+  //     1. Post a task to add New Glucose Device (Contains a single
+  //        Glucose UUID (0x1808) and no services).
+  //     2. Post a task to remove Connected Heart Rate Device.
+  //     3. Post a task to remove New Glucose Device.
+  //    Successive calls just return a discovery session.
+  static scoped_refptr<testing::NiceMock<device::MockBluetoothAdapter>>
+  GetDevicesRemovedAdapter();
+
   // |MissingServiceHeartRateAdapter|
   // Inherits from |EmptyAdapter|
   // Internal Structure:
@@ -214,6 +232,18 @@ class LayoutTestBluetoothAdapterProvider {
   //           GetHeartRateService.
   static scoped_refptr<testing::NiceMock<device::MockBluetoothAdapter>>
   GetHeartRateAdapter();
+
+  // |GetEmptyNameDeviceAdapter|
+  // Inherits from |EmptyAdapter|
+  // Contains a single device with an empty name and no UUIDs.
+  static scoped_refptr<testing::NiceMock<device::MockBluetoothAdapter>>
+  GetEmptyNameDeviceAdapter();
+
+  // |GetNoNameDeviceAdapter|
+  // Inherits from |EmptyAdapter|
+  // Contains a single device with no name and no UUIDs.
+  static scoped_refptr<testing::NiceMock<device::MockBluetoothAdapter>>
+  GetNoNameDeviceAdapter();
 
   // |GetEmptyNameHeartRateAdapter|
   // Inherits from |EmptyAdapter|
@@ -277,11 +307,33 @@ class LayoutTestBluetoothAdapterProvider {
   //           GetGenericAccessService.
   //         - Heart Rate Service - Characteristics as described in
   //           GetHeartRateService.
-  //         - Request Disconnection Service:
-  //           - Request Disconnection Characteristic - A write will cause the
-  //             device to disconnect.
+  //         - Request Disconnection Service: - Characteristics as described in
+  //           GetDisconnectingService
   static scoped_refptr<testing::NiceMock<device::MockBluetoothAdapter>>
   GetDisconnectingHeartRateAdapter();
+
+  // |DisconnectingHealthThermometerAdapter|
+  // Inherits from |EmptyAdapter|
+  // Internal Structure:
+  //  - Disconnecting Health Thermometer Device
+  //    - UUIDs:
+  //       - Generic Access UUID (0x1800)
+  //       - Health Thermometer UUID (0x1809)
+  //    - Services:
+  //       - Generic Access Service - Characteristics as described in
+  //         GetGenericAccessService.
+  //       - Request Disconnection Service: - Characteristics as described in
+  //         GetDisconnectingService
+  //       - Health Thermometer:
+  //         - Measurement Interval (0x2a21):
+  //           - Read: Calls GattCharacteristicValueChanged and success
+  //               callback with [1].
+  //           - Write: Calls success callback.
+  //           - StartNotifySession: Run success callback.
+  //           - GetProperties: Returns
+  //               BluetoothRemoteGattCharacteristic::PROPERTY_READ
+  static scoped_refptr<testing::NiceMock<device::MockBluetoothAdapter>>
+  GetDisconnectingHealthThermometer();
 
   // |ServicesDiscoveredAfterReconnectionAdapter|(disconnect)
   // Inherits from |HeartRateAdapter|
@@ -306,20 +358,70 @@ class LayoutTestBluetoothAdapterProvider {
   static scoped_refptr<testing::NiceMock<device::MockBluetoothAdapter>>
   GetServicesDiscoveredAfterReconnectionAdapter(bool disconnect);
 
-  // |BlacklistTestAdapter|
+  // |GATTOperationFinishesAfterReconnectionAdapter|(disconnect, succeeds)
   // Inherits from |EmptyAdapter|
   // Internal Structure:
-  //   - |ConnectableDevice|(adapter, "Blacklist Test Device", uuids)
+  //   - Health Thermometer Device
   //      - UUIDs:
-  //         - Blacklist Test Service UUID
+  //         - Generic Access UUID (0x1800)
+  //         - Health Thermometer UUID (0x1809)
+  //      - Services:
+  //         - Generic Access Service - Characteristics as described in
+  //           GetGenericAccessService.
+  //         - Health Thermometer
+  //            - Measurement Interval:
+  //               - Read: If |succeeds| is true, saves a succeeding callback,
+  //                 otherwise it saves a failing callback. This callback
+  //                 is run during CreateGattConnection. If |disconnect| is true
+  //                 disconnects the device.
+  //               - Write: If |succeeds| is true, saves a succeeding callback,
+  //                 otherwise it saves a failing callback. This callback is run
+  //                 during CreateGattConnection. If |disconnect| is true
+  //                 disconnects the device.
+  //               - StartNotifySession: If |succeeds| is true, saves a
+  //                 succeeding callback, otherwise it saves a failing callback.
+  //                 This calback is run during CreateGattConnection. If
+  //                 |disconnect| is true disconnects the device.
+  //         - CreateGattConnection: Runs success callback with a new GATT
+  //           connection and runs any pending GATT operation callbacks.
+  static scoped_refptr<testing::NiceMock<device::MockBluetoothAdapter>>
+  GetGATTOperationFinishesAfterReconnectionAdapter(bool disconnect,
+                                                   bool succeeds);
+
+  // |StopNotifySessionFinishesAfterReconnection|(disconnect)
+  // Inherits from |EmptyAdapter|
+  // Internal Structure:
+  //   - Health Thermometer Device
+  //      - UUIDs:
+  //         - Generic Access UUID (0x1800)
+  //         - Health Thermometer UUID (0x1809)
+  //      - Services:
+  //         - Generic Access Service - Characteristics as described in
+  //           GetGenericAccessService.
+  //         - Health Thermometer
+  //            - Measurement Interval:
+  //               - StartNotifySession: Calls the success callback with a
+  //                 NotifySession whose Stop function: saves a callback and
+  //                 if |disconnect| is true disconnects the device.
+  //         - CreateGattConnection: Runs success callback with a new GATT
+  //           connection and runs any pending GATT operation callbacks.
+  static scoped_refptr<testing::NiceMock<device::MockBluetoothAdapter>>
+  GetStopNotifySessionFinishesAfterReconnectionAdapter(bool disconnect);
+
+  // |BlocklistTestAdapter|
+  // Inherits from |EmptyAdapter|
+  // Internal Structure:
+  //   - |ConnectableDevice|(adapter, "Blocklist Test Device", uuids)
+  //      - UUIDs:
+  //         - Blocklist Test Service UUID
   //           (611c954a-263b-4f4a-aab6-01ddb953f985)
   //         - Device Information UUID (0x180a)
   //         - Generic Access UUID (0x1800)
   //         - Heart Rate UUID (0x180d)
-  //         - Human Interface Device UUID (0x1812) (a blacklisted service)
+  //         - Human Interface Device UUID (0x1812) (a blocklisted service)
   //      - Services:
-  //         - Blacklist Test Service - Characteristics as described in
-  //           GetBlacklistTestService.
+  //         - Blocklist Test Service - Characteristics as described in
+  //           GetBlocklistTestService.
   //         - Device Information Service - Characteristics as described in
   //           GetDeviceInformationService.
   //         - Generic Access Service - Characteristics as described in
@@ -327,9 +429,9 @@ class LayoutTestBluetoothAdapterProvider {
   //         - Heart Rate Service - Characteristics as described in
   //           GetHeartRateService.
   //         - Human Interface Device Service - No characteristics needed
-  //           because the service is blacklisted.
+  //           because the service is blocklisted.
   static scoped_refptr<testing::NiceMock<device::MockBluetoothAdapter>>
-  GetBlacklistTestAdapter();
+  GetBlocklistTestAdapter();
 
   // |DelayedServicesDiscoveryAdapter|
   // Inherits from |EmptyAdapter|
@@ -421,6 +523,8 @@ class LayoutTestBluetoothAdapterProvider {
   //          - ErrorCharacteristic(
   //              BluetoothRemoteGattService::GATT_ERROR_NOT_SUPPORTED)
   //              errorUUID(0xA8)
+  //      - Request Disconnection Service: - Characteristics as described in
+  //          GetDisconnectingService
   static scoped_refptr<testing::NiceMock<device::MockBluetoothAdapter>>
   GetFailingGATTOperationsAdapter();
 
@@ -562,7 +666,7 @@ class LayoutTestBluetoothAdapterProvider {
   // |DeviceInformationService|
   // Internal Structure:
   //  - Characteristics:
-  //     - Serial Number String: (0x2a25) (a blacklisted characteristic)
+  //     - Serial Number String: (0x2a25) (a blocklisted characteristic)
   //        - Mock Functions:
   //           - Read: Fails test.
   //           - GetProperties: Returns
@@ -570,10 +674,10 @@ class LayoutTestBluetoothAdapterProvider {
   static std::unique_ptr<testing::NiceMock<device::MockBluetoothGattService>>
   GetDeviceInformationService(device::MockBluetoothDevice* device);
 
-  // |BlacklistTestService|
+  // |BlocklistTestService|
   // Internal Structure:
   //  - Characteristics:
-  //     - Blacklist Exclude Reads Characteristic:
+  //     - Blocklist Exclude Reads Characteristic:
   //       (bad1c9a2-9a5b-4015-8b60-1579bbbf2135)
   //        - Mock Functions:
   //           - Read: Fails test.
@@ -582,7 +686,7 @@ class LayoutTestBluetoothAdapterProvider {
   //               BluetoothRemoteGattCharacteristic::PROPERTY_READ |
   //               BluetoothRemoteGattCharacteristic::PROPERTY_WRITE
   static std::unique_ptr<testing::NiceMock<device::MockBluetoothGattService>>
-  GetBlacklistTestService(device::MockBluetoothDevice* device);
+  GetBlocklistTestService(device::MockBluetoothDevice* device);
 
   // |GenericAccessService|
   // Internal Structure:
@@ -594,7 +698,7 @@ class LayoutTestBluetoothAdapterProvider {
   //           - GetProperties: Returns
   //               BluetoothRemoteGattCharacteristic::PROPERTY_READ |
   //               BluetoothRemoteGattCharacteristic::PROPERTY_WRITE
-  //     - Peripheral Privacy Flag: (0x2A02) (blacklisted for writes)
+  //     - Peripheral Privacy Flag: (0x2A02) (blocklisted for writes)
   //        - Mock Functions:
   //           - Read: Calls success callback with boolean value 'false'.
   //           - Write: Fails test.
@@ -633,6 +737,16 @@ class LayoutTestBluetoothAdapterProvider {
   static std::unique_ptr<testing::NiceMock<device::MockBluetoothGattService>>
   GetHeartRateService(device::MockBluetoothAdapter* adapter,
                       device::MockBluetoothDevice* device);
+
+  // |DisconnectingService|
+  // Internal Structure:
+  //  - Characteristics:
+  //     - Request Disconnection Characteristic (
+  //         01d7d889-7451-419f-aeb8-d65e7b9277af)
+  //       - Write: Sets the device to disconnected and calls DeviceChanged.
+  static std::unique_ptr<testing::NiceMock<device::MockBluetoothGattService>>
+  GetDisconnectingService(device::MockBluetoothAdapter* adapter,
+                          device::MockBluetoothDevice* device);
 
   // Characteristics
 

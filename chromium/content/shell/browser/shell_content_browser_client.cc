@@ -23,7 +23,7 @@
 #include "content/public/browser/resource_dispatcher_host.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/content_switches.h"
-#include "content/public/common/service_names.h"
+#include "content/public/common/service_names.mojom.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/common/web_preferences.h"
 #include "content/public/test/test_service.h"
@@ -63,7 +63,11 @@
 #endif
 
 #if defined(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
-#include "media/mojo/services/mojo_media_application_factory.h"  // nogncheck
+#include "media/mojo/services/media_service_factory.h"  // nogncheck
+#endif
+
+#if defined(USE_AURA)
+#include "services/navigation/navigation.h"
 #endif
 
 namespace content {
@@ -154,12 +158,15 @@ bool ShellContentBrowserClient::DoesSiteRequireDedicatedProcess(
   DCHECK(command_line->HasSwitch(switches::kIsolateSitesForTesting));
   std::string pattern =
       command_line->GetSwitchValueASCII(switches::kIsolateSitesForTesting);
+
   url::Origin origin(effective_site_url);
 
-  // Schemes like blob or filesystem, which have an embedded origin, should
-  // already have been canonicalized to the origin site.
-  CHECK_EQ(origin.scheme(), effective_site_url.scheme())
-      << "a site url should have the same scheme as its origin.";
+  if (!origin.unique()) {
+    // Schemes like blob or filesystem, which have an embedded origin, should
+    // already have been canonicalized to the origin site.
+    CHECK_EQ(origin.scheme(), effective_site_url.scheme())
+        << "a site url should have the same scheme as its origin.";
+  }
 
   // Practically |origin.Serialize()| is the same as
   // |effective_site_url.spec()|, except Origin serialization strips the
@@ -190,9 +197,18 @@ bool ShellContentBrowserClient::IsHandledURL(const GURL& url) {
 void ShellContentBrowserClient::RegisterInProcessServices(
     StaticServiceMap* services) {
 #if (ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
-  content::ServiceInfo info;
-  info.factory = base::Bind(&media::CreateMojoMediaApplication);
-  services->insert(std::make_pair("service:media", info));
+  {
+    content::ServiceInfo info;
+    info.factory = base::Bind(&media::CreateMediaServiceForTesting);
+    services->insert(std::make_pair("media", info));
+  }
+#endif
+#if defined(USE_AURA)
+  {
+    content::ServiceInfo info;
+    info.factory = base::Bind(&navigation::CreateNavigationService);
+    services->insert(std::make_pair("navigation", info));
+  }
 #endif
 }
 
@@ -206,11 +222,11 @@ std::unique_ptr<base::Value>
 ShellContentBrowserClient::GetServiceManifestOverlay(
     const std::string& name) {
   int id = -1;
-  if (name == content::kBrowserServiceName)
+  if (name == content::mojom::kBrowserServiceName)
     id = IDR_CONTENT_SHELL_BROWSER_MANIFEST_OVERLAY;
-  else if (name == content::kRendererServiceName)
+  else if (name == content::mojom::kRendererServiceName)
     id = IDR_CONTENT_SHELL_RENDERER_MANIFEST_OVERLAY;
-  else if (name == content::kUtilityServiceName)
+  else if (name == content::mojom::kUtilityServiceName)
     id = IDR_CONTENT_SHELL_UTILITY_MANIFEST_OVERLAY;
   if (id == -1)
     return nullptr;
@@ -294,7 +310,7 @@ net::NetLog* ShellContentBrowserClient::GetNetLog() {
 }
 
 bool ShellContentBrowserClient::ShouldSwapProcessesForRedirect(
-    ResourceContext* resource_context,
+    BrowserContext* browser_context,
     const GURL& current_url,
     const GURL& new_url) {
   return g_swap_processes_for_redirect;

@@ -66,7 +66,7 @@ class PLATFORM_EXPORT ScrollbarThemeMac : public ScrollbarTheme {
   void updateEnabledState(const ScrollbarThemeClient&) override;
   int scrollbarThickness(ScrollbarControlSize = RegularScrollbar) override;
   bool usesOverlayScrollbars() const override;
-  void updateScrollbarOverlayStyle(const ScrollbarThemeClient&) override;
+  void updateScrollbarOverlayColorTheme(const ScrollbarThemeClient&) override;
   WebScrollbarButtonsPlacement buttonsPlacement() const override;
 
   void setNewPainterForScrollbar(ScrollbarThemeClient&, ScrollbarPainter);
@@ -90,11 +90,6 @@ class PLATFORM_EXPORT ScrollbarThemeMac : public ScrollbarTheme {
 
   virtual void updateButtonPlacement(WebScrollbarButtonsPlacement) {}
 
-  void paintGivenTickmarks(SkCanvas*,
-                           const Scrollbar&,
-                           const IntRect&,
-                           const Vector<IntRect>&);
-
   IntRect trackRect(const ScrollbarThemeClient&,
                     bool painting = false) override;
   IntRect backButtonRect(const ScrollbarThemeClient&,
@@ -108,6 +103,8 @@ class PLATFORM_EXPORT ScrollbarThemeMac : public ScrollbarTheme {
   bool hasThumb(const ScrollbarThemeClient&) override;
 
   int minimumThumbLength(const ScrollbarThemeClient&) override;
+
+  int tickmarkBorderWidth() override { return 1; }
 
   RefPtr<Pattern> m_overhangPattern;
 };

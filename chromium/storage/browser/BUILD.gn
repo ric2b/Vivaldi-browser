@@ -1,14 +1,11 @@
 # Copyright 2014 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
+import("//testing/test.gni")
 
 component("browser") {
   output_name = "storage_browser"
   sources = [
-    "blob/blob_async_builder_host.cc",
-    "blob/blob_async_builder_host.h",
-    "blob/blob_async_transport_request_builder.cc",
-    "blob/blob_async_transport_request_builder.h",
     "blob/blob_data_builder.cc",
     "blob/blob_data_builder.h",
     "blob/blob_data_handle.cc",
@@ -17,18 +14,24 @@ component("browser") {
     "blob/blob_data_item.h",
     "blob/blob_data_snapshot.cc",
     "blob/blob_data_snapshot.h",
+    "blob/blob_entry.cc",
+    "blob/blob_entry.h",
+    "blob/blob_memory_controller.cc",
+    "blob/blob_memory_controller.h",
     "blob/blob_reader.cc",
     "blob/blob_reader.h",
     "blob/blob_storage_context.cc",
     "blob/blob_storage_context.h",
     "blob/blob_storage_registry.cc",
     "blob/blob_storage_registry.h",
+    "blob/blob_transport_host.cc",
+    "blob/blob_transport_host.h",
+    "blob/blob_transport_request_builder.cc",
+    "blob/blob_transport_request_builder.h",
     "blob/blob_url_request_job.cc",
     "blob/blob_url_request_job.h",
     "blob/blob_url_request_job_factory.cc",
     "blob/blob_url_request_job_factory.h",
-    "blob/internal_blob_data.cc",
-    "blob/internal_blob_data.h",
     "blob/scoped_file.cc",
     "blob/scoped_file.h",
     "blob/shareable_blob_data_item.cc",
@@ -213,5 +216,23 @@ executable("dump_file_system") {
     "//build/config/sanitizers:deps",
     "//build/win:default_exe_manifest",
     "//storage/common",
+  ]
+}
+
+test("storage_unittests") {
+  sources = [
+    # Do NOT add storage/ tests here until this target is added to the build
+    # bots. http://crbug.com/653751
+
+    # If the sources list is empty, the win_clang builder fails.
+    # This file will be removed when the real tests are moved over from
+    # content_unittests to this target.
+    "crbug653751_unittest.cc",
+  ]
+
+  deps = [
+    "//base/test:run_all_unittests",
+    "//base/test:test_support",
+    "//testing/gtest",
   ]
 }

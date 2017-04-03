@@ -29,6 +29,7 @@
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/graphics/Color.h"
 #include "platform/graphics/GraphicsContext.h"
+#include "platform/graphics/GraphicsContextStateSaver.h"
 #include "platform/graphics/paint/CompositingRecorder.h"
 #include "platform/graphics/paint/CullRect.h"
 #include "platform/graphics/paint/DrawingDisplayItem.h"
@@ -141,7 +142,7 @@ bool ScrollbarTheme::paint(const Scrollbar& scrollbar,
       FloatRect floatThumbRect(thumbRect);
       floatThumbRect.inflate(1);  // some themes inflate thumb bounds
       compositingRecorder.emplace(graphicsContext, scrollbar,
-                                  SkXfermode::kSrcOver_Mode, opacity,
+                                  SkBlendMode::kSrcOver, opacity,
                                   &floatThumbRect);
     }
 
@@ -223,6 +224,50 @@ bool ScrollbarTheme::shouldCenterOnThumb(const ScrollbarThemeClient& scrollbar,
       evt.pointerProperties().button, evt.shiftKey(), evt.altKey());
 }
 
+void ScrollbarTheme::paintTickmarks(GraphicsContext& context,
+                                    const Scrollbar& scrollbar,
+                                    const IntRect& rect) {
+// Android paints tickmarks in the browser at FindResultBar.java.
+#if !OS(ANDROID)
+  if (scrollbar.orientation() != VerticalScrollbar)
+    return;
+
+  if (rect.height() <= 0 || rect.width() <= 0)
+    return;
+
+  // Get the tickmarks for the frameview.
+  Vector<IntRect> tickmarks;
+  scrollbar.getTickmarks(tickmarks);
+  if (!tickmarks.size())
+    return;
+
+  if (DrawingRecorder::useCachedDrawingIfPossible(
+          context, scrollbar, DisplayItem::kScrollbarTickmarks))
+    return;
+
+  DrawingRecorder recorder(context, scrollbar, DisplayItem::kScrollbarTickmarks,
+                           rect);
+  GraphicsContextStateSaver stateSaver(context);
+  context.setShouldAntialias(false);
+
+  for (Vector<IntRect>::const_iterator i = tickmarks.begin();
+       i != tickmarks.end(); ++i) {
+    // Calculate how far down (in %) the tick-mark should appear.
+    const float percent = static_cast<float>(i->y()) / scrollbar.totalSize();
+
+    // Calculate how far down (in pixels) the tick-mark should appear.
+    const int yPos = rect.y() + (rect.height() * percent);
+
+    FloatRect tickRect(rect.x(), yPos, rect.width(), 3);
+    context.fillRect(tickRect, Color(0xCC, 0xAA, 0x00, 0xFF));
+
+    FloatRect tickStroke(rect.x() + tickmarkBorderWidth(), yPos + 1,
+                         rect.width() - 2 * tickmarkBorderWidth(), 1);
+    context.fillRect(tickStroke, Color(0xFF, 0xDD, 0x00, 0xFF));
+  }
+#endif
+}
+
 bool ScrollbarTheme::shouldSnapBackToDragOrigin(
     const ScrollbarThemeClient& scrollbar,
     const PlatformMouseEvent& evt) {
@@ -231,6 +276,16 @@ bool ScrollbarTheme::shouldSnapBackToDragOrigin(
   return Platform::current()->scrollbarBehavior()->shouldSnapBackToDragOrigin(
       mousePosition, trackRect(scrollbar),
       scrollbar.orientation() == HorizontalScrollbar);
+}
+
+double ScrollbarTheme::overlayScrollbarFadeOutDelaySeconds() const {
+  // On Mac, fading is controlled by the painting code in ScrollAnimatorMac.
+  return 0.0;
+}
+
+double ScrollbarTheme::overlayScrollbarFadeOutDurationSeconds() const {
+  // On Mac, fading is controlled by the painting code in ScrollAnimatorMac.
+  return 0.0;
 }
 
 int ScrollbarTheme::thumbPosition(const ScrollbarThemeClient& scrollbar,

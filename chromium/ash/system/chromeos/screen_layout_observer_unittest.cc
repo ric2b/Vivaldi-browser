@@ -6,18 +6,17 @@
 
 #include "ash/common/system/chromeos/devicetype_utils.h"
 #include "ash/common/system/tray/system_tray.h"
-#include "ash/display/display_manager.h"
+#include "ash/common/test/test_system_tray_delegate.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
-#include "ash/test/display_manager_test_api.h"
-#include "ash/test/test_system_tray_delegate.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "grit/ash_strings.h"
-#include "ui/accessibility/ax_view_state.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/display/display.h"
+#include "ui/display/manager/display_manager.h"
 #include "ui/message_center/message_center.h"
 #include "ui/message_center/notification.h"
 #include "ui/message_center/notification_list.h"
@@ -105,8 +104,9 @@ ScreenLayoutObserverTest::GetDisplayNotification() const {
 }
 
 TEST_F(ScreenLayoutObserverTest, DisplayNotifications) {
-  test::TestSystemTrayDelegate* tray_delegate = GetSystemTrayDelegate();
-  tray_delegate->set_should_show_display_notification(true);
+  Shell::GetInstance()
+      ->screen_layout_observer()
+      ->set_show_notifications_for_testing(true);
 
   UpdateDisplay("400x400");
   display::Display::SetInternalDisplayId(display_manager()->first_display_id());
@@ -212,8 +212,9 @@ TEST_F(ScreenLayoutObserverTest, DisplayNotifications) {
 // Verify that notification shows up when display is switched from dock mode to
 // extend mode.
 TEST_F(ScreenLayoutObserverTest, DisplayConfigurationChangedTwice) {
-  test::TestSystemTrayDelegate* tray_delegate = GetSystemTrayDelegate();
-  tray_delegate->set_should_show_display_notification(true);
+  Shell::GetInstance()
+      ->screen_layout_observer()
+      ->set_show_notifications_for_testing(true);
   UpdateDisplay("400x400,200x200");
   EXPECT_EQ(l10n_util::GetStringUTF16(
                 IDS_ASH_STATUS_TRAY_DISPLAY_EXTENDED_NO_INTERNAL),
@@ -238,10 +239,11 @@ TEST_F(ScreenLayoutObserverTest, DisplayConfigurationChangedTwice) {
 TEST_F(ScreenLayoutObserverTest, UpdateAfterSuppressDisplayNotification) {
   UpdateDisplay("400x400,200x200");
 
-  test::TestSystemTrayDelegate* tray_delegate = GetSystemTrayDelegate();
-  tray_delegate->set_should_show_display_notification(true);
+  Shell::GetInstance()
+      ->screen_layout_observer()
+      ->set_show_notifications_for_testing(true);
 
-  // rotate the second.
+  // Rotate the second.
   UpdateDisplay("400x400,200x200/r");
   EXPECT_EQ(l10n_util::GetStringFUTF16(
                 IDS_ASH_STATUS_TRAY_DISPLAY_ROTATED, GetSecondDisplayName(),
@@ -253,8 +255,9 @@ TEST_F(ScreenLayoutObserverTest, UpdateAfterSuppressDisplayNotification) {
 // Verify that no notification is shown when overscan of a screen is changed.
 TEST_F(ScreenLayoutObserverTest, OverscanDisplay) {
   UpdateDisplay("400x400, 300x300");
-  test::TestSystemTrayDelegate* tray_delegate = GetSystemTrayDelegate();
-  tray_delegate->set_should_show_display_notification(true);
+  Shell::GetInstance()
+      ->screen_layout_observer()
+      ->set_show_notifications_for_testing(true);
   display::Display::SetInternalDisplayId(display_manager()->first_display_id());
 
   // /o creates the default overscan.

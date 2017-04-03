@@ -9,7 +9,6 @@
 
 #include "ash/common/material_design/material_design_controller.h"
 #include "ash/common/metrics/user_metrics_action.h"
-#include "ash/common/shell_window_ids.h"
 #include "ash/common/wm/overview/cleanup_animation_observer.h"
 #include "ash/common/wm/overview/overview_animation_type.h"
 #include "ash/common/wm/overview/scoped_overview_animation_settings.h"
@@ -23,21 +22,19 @@
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
 #include "ash/common/wm_window_property.h"
+#include "ash/public/cpp/shell_window_ids.h"
 #include "base/auto_reset.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
-#include "grit/ash_resources.h"
 #include "grit/ash_strings.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/base/resource/resource_bundle.h"
 #include "ui/compositor/layer_animation_sequence.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/gfx/animation/slide_animation.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/geometry/safe_integer_conversions.h"
-#include "ui/gfx/geometry/vector2d.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/transform_util.h"
 #include "ui/gfx/vector_icons_public.h"
@@ -288,7 +285,7 @@ class WindowSelectorItem::RoundedContainerView
     if (0 != (sequence->properties() &
               ui::LayerAnimationElement::AnimatableProperty::OPACITY)) {
       if (item_)
-        item_->HideHeaderAndSetShape(0);
+        item_->HideHeader();
       StopObservingLayerAnimations();
       AnimateColor(gfx::Tween::EASE_IN, kSelectorColorSlideMilliseconds);
     }
@@ -419,6 +416,10 @@ void WindowSelectorItem::RestoreWindow() {
       OverviewAnimationType::OVERVIEW_ANIMATION_LAY_OUT_SELECTOR_ITEMS);
 }
 
+void WindowSelectorItem::EnsureVisible() {
+  transform_window_.EnsureVisible();
+}
+
 void WindowSelectorItem::Shutdown() {
   if (transform_window_.GetTopInset()) {
     // Activating a window (even when it is the window that was active before
@@ -427,18 +428,21 @@ void WindowSelectorItem::Shutdown() {
     // gradual upon exiting the overview mode.
     WmWindow* label_window =
         WmLookup::Get()->GetWindowForWidget(window_label_.get());
-    label_window->GetParent()->StackChildAbove(label_window,
-                                               transform_window_.window());
+
+    // |label_window| was originally created in the same container as the
+    // |transform_window_| but when closing overview the |transform_window_|
+    // could have been reparented if a drag was active. Only change stacking
+    // if the windows still belong to the same container.
+    if (label_window->GetParent() == transform_window_.window()->GetParent()) {
+      label_window->GetParent()->StackChildAbove(label_window,
+                                                 transform_window_.window());
+    }
   }
   if (background_view_) {
     background_view_->OnItemRestored();
     background_view_ = nullptr;
   }
   FadeOut(std::move(window_label_));
-}
-
-void WindowSelectorItem::ShowWindowOnExit() {
-  transform_window_.ShowWindowOnExit();
 }
 
 void WindowSelectorItem::PrepareForOverview() {
@@ -508,8 +512,12 @@ void WindowSelectorItem::CloseWindow() {
   transform_window_.Close();
 }
 
-void WindowSelectorItem::HideHeaderAndSetShape(int radius) {
-  transform_window_.HideHeaderAndSetShape(radius);
+void WindowSelectorItem::HideHeader() {
+  transform_window_.HideHeader();
+}
+
+void WindowSelectorItem::OnMinimizedStateChanged() {
+  transform_window_.UpdateMirrorWindowForMinimizedState();
 }
 
 void WindowSelectorItem::SetDimmed(bool dimmed) {
@@ -525,7 +533,7 @@ void WindowSelectorItem::ButtonPressed(views::Button* sender,
     return;
   }
   CHECK(sender == window_label_button_view_);
-  window_selector_->SelectWindow(transform_window_.window());
+  window_selector_->SelectWindow(this);
 }
 
 void WindowSelectorItem::OnWindowDestroying(WmWindow* window) {
@@ -572,7 +580,6 @@ void WindowSelectorItem::SetItemBounds(const gfx::Rect& target_bounds,
   ScopedTransformOverviewWindow::ScopedAnimationSettings animation_settings;
   transform_window_.BeginScopedAnimation(animation_type, &animation_settings);
   transform_window_.SetTransform(root_window_, transform);
-  transform_window_.set_overview_transform(transform);
 }
 
 void WindowSelectorItem::SetOpacity(float opacity) {
@@ -620,16 +627,16 @@ void WindowSelectorItem::CreateWindowLabel(const base::string16& title) {
   params_label.activatable =
       views::Widget::InitParams::Activatable::ACTIVATABLE_DEFAULT;
   params_label.accept_events = true;
+  window_label_.reset(new views::Widget);
   root_window_->GetRootWindowController()
       ->ConfigureWidgetInitParamsForContainer(
           window_label_.get(),
           transform_window_.window()->GetParent()->GetShellWindowId(),
           &params_label);
-  window_label_.reset(new views::Widget);
   window_label_->set_focus_on_creation(false);
   window_label_->Init(params_label);
   window_label_button_view_ = new OverviewLabelButton(this, title);
-  window_label_button_view_->SetBorder(views::Border::NullBorder());
+  window_label_button_view_->SetBorder(views::NullBorder());
   window_label_button_view_->SetEnabledTextColors(kLabelColor);
   window_label_button_view_->set_animate_on_state_change(false);
   WmWindow* label_window =
@@ -646,9 +653,6 @@ void WindowSelectorItem::CreateWindowLabel(const base::string16& title) {
                                                transform_window_.window());
   }
   window_label_button_view_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-  ui::ResourceBundle& bundle = ui::ResourceBundle::GetSharedInstance();
-  window_label_button_view_->SetFontList(
-      bundle.GetFontList(ui::ResourceBundle::BaseFont));
   // Hint at the background color that the label will be drawn onto (for
   // subpixel antialiasing). Does not actually set the background color.
   window_label_button_view_->SetBackgroundColorHint(kLabelBackgroundColor);
@@ -785,6 +789,10 @@ void WindowSelectorItem::FadeOut(std::unique_ptr<views::Widget> widget) {
 
 gfx::SlideAnimation* WindowSelectorItem::GetBackgroundViewAnimation() {
   return background_view_ ? background_view_->animation() : nullptr;
+}
+
+WmWindow* WindowSelectorItem::GetOverviewWindowForMinimizedStateForTest() {
+  return transform_window_.GetOverviewWindowForMinimizedState();
 }
 
 }  // namespace ash

@@ -1,9 +1,0 @@
-HOST_PLUGIN_FILE_NAME=Vivaldi Remote Desktop Host
-DAEMON_FILE_NAME=Vivaldi Remote Desktop Host Service
-MAC_BUNDLE_ID=com.vivaldi.Vivaldi
-MAC_CREATOR=rimZ
-MAC_HOST_BUNDLE_ID=com.vivaldi.vivaldiremotedesktop.me2me-host
-MAC_UNINSTALLER_NAME=Vivaldi Remote Desktop Host Uninstaller
-MAC_UNINSTALLER_BUNDLE_PREFIX=com.vivaldi.pkg
-MAC_UNINSTALLER_BUNDLE_ID=com.vivaldi.chromeremotedesktop.me2me-host-uninstaller
-MAC_PREFPANE_BUNDLE_ID=com.vivaldi.vivaldiremotedesktop.preferences

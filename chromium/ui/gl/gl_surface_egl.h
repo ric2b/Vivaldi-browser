@@ -24,6 +24,7 @@
 #include "ui/gl/gl_export.h"
 #include "ui/gl/gl_surface.h"
 #include "ui/gl/gl_surface_overlay.h"
+#include "ui/gl/sync_control_vsync_provider.h"
 
 namespace gl {
 
@@ -37,13 +38,34 @@ enum DisplayType {
   ANGLE_D3D11 = 4,
   ANGLE_OPENGL = 5,
   ANGLE_OPENGLES = 6,
-  DISPLAY_TYPE_MAX = 7,
+  ANGLE_NULL = 7,
+  DISPLAY_TYPE_MAX = 8,
 };
 
 GL_EXPORT void GetEGLInitDisplays(bool supports_angle_d3d,
                                   bool supports_angle_opengl,
+                                  bool supports_angle_null,
                                   const base::CommandLine* command_line,
                                   std::vector<DisplayType>* init_displays);
+
+// VSync provider for EGL surface;
+class GL_EXPORT EGLSyncControlVSyncProvider : public SyncControlVSyncProvider {
+ public:
+  explicit EGLSyncControlVSyncProvider(EGLSurface surface);
+  ~EGLSyncControlVSyncProvider() override;
+
+ protected:
+  bool GetSyncValues(int64_t* system_time,
+                     int64_t* media_stream_counter,
+                     int64_t* swap_buffer_counter) override;
+
+  bool GetMscRate(int32_t* numerator, int32_t* denominator) override;
+
+ private:
+  EGLSurface surface_;
+
+  DISALLOW_COPY_AND_ASSIGN(EGLSyncControlVSyncProvider);
+};
 
 // Interface for EGL surface.
 class GL_EXPORT GLSurfaceEGL : public GLSurface {
@@ -67,6 +89,8 @@ class GL_EXPORT GLSurfaceEGL : public GLSurface {
   static const char* GetEGLExtensions();
   static bool HasEGLExtension(const char* name);
   static bool IsCreateContextRobustnessSupported();
+  static bool IsCreateContextBindGeneratesResourceSupported();
+  static bool IsCreateContextWebGLCompatabilitySupported();
   static bool IsEGLSurfacelessContextSupported();
   static bool IsDirectCompositionSupported();
 

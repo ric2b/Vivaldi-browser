@@ -869,6 +869,75 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewTest, BasicTextOperations) {
   EXPECT_EQ(old_text.size(), end);
 }
 
+// Make sure the cursor position doesn't get set past the last character of
+// user input text when the URL is longer than the keyword.
+// (http://crbug.com/656209)
+IN_PROC_BROWSER_TEST_F(OmniboxViewTest, FocusSearchLongUrl) {
+  OmniboxView* omnibox_view = NULL;
+  ASSERT_NO_FATAL_FAILURE(GetOmniboxView(&omnibox_view));
+
+  ASSERT_GT(strlen(url::kAboutBlankURL), strlen(kSearchKeyword));
+  ui_test_utils::NavigateToURL(browser(), GURL(url::kAboutBlankURL));
+
+  // Make sure nothing DCHECKs.
+  chrome::FocusSearch(browser());
+  ASSERT_NO_FATAL_FAILURE(WaitForAutocompleteControllerDone());
+}
+
+// Make sure the display text is preserved when calling FocusSearch() when the
+// display text is not the permanent text.
+IN_PROC_BROWSER_TEST_F(OmniboxViewTest, PreserveDisplayTextOnFocusSearch) {
+  OmniboxView* omnibox_view = NULL;
+  ASSERT_NO_FATAL_FAILURE(GetOmniboxView(&omnibox_view));
+
+  OmniboxPopupModel* popup_model = omnibox_view->model()->popup_model();
+  ASSERT_TRUE(popup_model);
+
+  // Input something that can match history items.
+  omnibox_view->SetUserText(ASCIIToUTF16("site.com/p"));
+  ASSERT_NO_FATAL_FAILURE(WaitForAutocompleteControllerDone());
+  EXPECT_TRUE(popup_model->IsOpen());
+  EXPECT_EQ(ASCIIToUTF16("site.com/path/1"), omnibox_view->GetText());
+  base::string16::size_type start, end;
+  omnibox_view->GetSelectionBounds(&start, &end);
+  EXPECT_EQ(10U, std::min(start, end));
+  EXPECT_EQ(15U, std::max(start, end));
+
+  // Calling FocusSearch() with an inline autocompletion should preserve the
+  // autocompleted text, and should select all.
+  chrome::FocusSearch(browser());
+  ASSERT_NO_FATAL_FAILURE(WaitForAutocompleteControllerDone());
+  EXPECT_EQ(ASCIIToUTF16("site.com/path/1"), omnibox_view->GetText());
+  omnibox_view->GetSelectionBounds(&start, &end);
+  EXPECT_EQ(0U, std::min(start, end));
+  EXPECT_EQ(15U, std::max(start, end));
+
+  // Press backspace twice and the omnibox should be empty.
+  ASSERT_NO_FATAL_FAILURE(SendKey(ui::VKEY_BACK, 0));
+  ASSERT_NO_FATAL_FAILURE(SendKey(ui::VKEY_BACK, 0));
+  EXPECT_EQ(base::string16(), omnibox_view->GetText());
+  omnibox_view->GetSelectionBounds(&start, &end);
+  EXPECT_EQ(0U, start);
+  EXPECT_EQ(0U, end);
+
+  // Calling FocusSearch() with temporary text showing should preserve the
+  // suggested text, and should select all.
+  omnibox_view->SetUserText(ASCIIToUTF16("site.com/p"));
+  ASSERT_NO_FATAL_FAILURE(WaitForAutocompleteControllerDone());
+  EXPECT_TRUE(popup_model->IsOpen());
+  omnibox_view->model()->OnUpOrDownKeyPressed(1);
+  EXPECT_EQ(ASCIIToUTF16("www.site.com/path/2"), omnibox_view->GetText());
+  omnibox_view->GetSelectionBounds(&start, &end);
+  EXPECT_EQ(start, end);
+
+  chrome::FocusSearch(browser());
+  ASSERT_NO_FATAL_FAILURE(WaitForAutocompleteControllerDone());
+  EXPECT_EQ(ASCIIToUTF16("www.site.com/path/2"), omnibox_view->GetText());
+  omnibox_view->GetSelectionBounds(&start, &end);
+  EXPECT_EQ(0U, std::min(start, end));
+  EXPECT_EQ(19U, std::max(start, end));
+}
+
 IN_PROC_BROWSER_TEST_F(OmniboxViewTest, AcceptKeywordByTypingQuestionMark) {
   OmniboxView* omnibox_view = NULL;
   ASSERT_NO_FATAL_FAILURE(GetOmniboxView(&omnibox_view));
@@ -1677,14 +1746,15 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewTest, CopyURLToClipboard) {
   EXPECT_FALSE(clipboard->IsFormatAvailable(
       ui::Clipboard::GetHtmlFormatType(), ui::CLIPBOARD_TYPE_COPY_PASTE));
 
-  // These platforms should read bookmark format.
-#if defined(OS_WIN) || defined(OS_CHROMEOS) || defined(OS_MACOSX)
-  base::string16 title;
-  std::string url;
-  clipboard->ReadBookmark(&title, &url);
-  EXPECT_EQ(target_url, url);
-  EXPECT_EQ(ASCIIToUTF16(target_url), title);
+// Windows clipboard only supports text URLs.
+#if defined(OS_LINUX) || defined(OS_MACOSX)
+  EXPECT_TRUE(clipboard->IsFormatAvailable(ui::Clipboard::GetUrlFormatType(),
+                                           ui::CLIPBOARD_TYPE_COPY_PASTE));
 #endif
+
+  std::string url;
+  clipboard->ReadAsciiText(ui::CLIPBOARD_TYPE_COPY_PASTE, &url);
+  EXPECT_EQ(target_url, url);
 }
 
 IN_PROC_BROWSER_TEST_F(OmniboxViewTest, CutURLToClipboard) {
@@ -1723,14 +1793,15 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewTest, CutURLToClipboard) {
   EXPECT_FALSE(clipboard->IsFormatAvailable(
       ui::Clipboard::GetHtmlFormatType(), ui::CLIPBOARD_TYPE_COPY_PASTE));
 
-  // These platforms should read bookmark format.
-#if defined(OS_WIN) || defined(OS_CHROMEOS) || defined(OS_MACOSX)
-  base::string16 title;
-  std::string url;
-  clipboard->ReadBookmark(&title, &url);
-  EXPECT_EQ(target_url, url);
-  EXPECT_EQ(ASCIIToUTF16(target_url), title);
+// Windows clipboard only supports text URLs.
+#if defined(OS_LINUX) || defined(OS_MACOSX)
+  EXPECT_TRUE(clipboard->IsFormatAvailable(ui::Clipboard::GetUrlFormatType(),
+                                           ui::CLIPBOARD_TYPE_COPY_PASTE));
 #endif
+
+  std::string url;
+  clipboard->ReadAsciiText(ui::CLIPBOARD_TYPE_COPY_PASTE, &url);
+  EXPECT_EQ(target_url, url);
 }
 
 IN_PROC_BROWSER_TEST_F(OmniboxViewTest, CopyTextToClipboard) {

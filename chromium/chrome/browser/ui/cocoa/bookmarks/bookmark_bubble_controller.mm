@@ -13,6 +13,8 @@
 #import "chrome/browser/ui/cocoa/browser_window_controller.h"
 #import "chrome/browser/ui/cocoa/bubble_sync_promo_controller.h"
 #import "chrome/browser/ui/cocoa/info_bubble_view.h"
+#import "chrome/browser/ui/cocoa/location_bar/location_bar_view_mac.h"
+#import "chrome/browser/ui/cocoa/location_bar/star_decoration.h"
 #include "chrome/browser/ui/sync/sync_promo_ui.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
@@ -74,6 +76,9 @@ using bookmarks::BookmarkNode;
 
   Browser* browser = chrome::FindBrowserWithWindow(self.parentWindow);
   if (SyncPromoUI::ShouldShowSyncPromo(browser->profile())) {
+    content::RecordAction(
+        base::UserMetricsAction("Signin_Impression_FromBookmarkBubble"));
+
     syncPromoController_.reset(
         [[BubbleSyncPromoController alloc]
             initWithBrowser:browser
@@ -176,12 +181,14 @@ using bookmarks::BookmarkNode;
   [self registerKeyStateEventTap];
 
   bookmarkBubbleObserver_->OnBookmarkBubbleShown(node_);
+
+  [self decorationForBubble]->SetActive(true);
 }
 
 - (void)close {
   [[BrowserWindowController browserWindowControllerForWindow:self.parentWindow]
-      releaseBarVisibilityForOwner:self
-                     withAnimation:YES];
+      releaseToolbarVisibilityForOwner:self
+                         withAnimation:YES];
 
   [super close];
 }
@@ -302,6 +309,12 @@ using bookmarks::BookmarkNode;
   NSValue* parentValue = [NSValue valueWithPointer:node_->parent()];
   NSInteger idx = [menu indexOfItemWithRepresentedObject:parentValue];
   [folderPopUpButton_ selectItemAtIndex:idx];
+}
+
+- (LocationBarDecoration*)decorationForBubble {
+  LocationBarViewMac* locationBar =
+      [[[self parentWindow] windowController] locationBarBridge];
+  return locationBar ? locationBar->star_decoration() : nullptr;
 }
 
 @end  // BookmarkBubbleController

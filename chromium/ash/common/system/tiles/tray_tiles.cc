@@ -16,20 +16,24 @@ TrayTiles::TrayTiles(SystemTray* system_tray)
 
 TrayTiles::~TrayTiles() {}
 
-views::View* TrayTiles::CreateDefaultView(LoginStatus status) {
-  WmShell* shell = WmShell::Get();
-  const bool adding_user =
-      shell->GetSessionStateDelegate()->IsInSecondaryLoginScreen();
-
-  if (status == LoginStatus::LOCKED || status == LoginStatus::NOT_LOGGED_IN ||
-      adding_user) {
+views::View* TrayTiles::GetHelpButtonView() const {
+  if (!default_view_)
     return nullptr;
-  }
+  return default_view_->GetHelpButtonView();
+}
 
+TilesDefaultView* TrayTiles::GetDefaultViewForTesting() const {
+  return default_view_;
+}
+
+views::View* TrayTiles::CreateDefaultViewForTesting(LoginStatus status) {
+  return CreateDefaultView(status);
+}
+
+views::View* TrayTiles::CreateDefaultView(LoginStatus status) {
   CHECK(default_view_ == nullptr);
-  default_view_ = new TilesDefaultView(this);
+  default_view_ = new TilesDefaultView(this, status);
   default_view_->Init();
-
   return default_view_;
 }
 

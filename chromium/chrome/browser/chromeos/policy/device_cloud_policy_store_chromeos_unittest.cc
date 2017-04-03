@@ -63,8 +63,9 @@ class DeviceCloudPolicyStoreChromeOSTest
     base::RunLoop loop;
     chromeos::InstallAttributes::LockResult result;
     install_attributes_->LockDevice(
-        PolicyBuilder::kFakeUsername,
         DEVICE_MODE_ENTERPRISE,
+        PolicyBuilder::kFakeDomain,
+        std::string(),  // realm
         PolicyBuilder::kFakeDeviceId,
         base::Bind(&CopyLockResult, &loop, &result));
     loop.Run();
@@ -200,8 +201,8 @@ TEST_F(DeviceCloudPolicyStoreChromeOSTest,
   PrepareExistingPolicy();
   device_policy_.SetDefaultNewSigningKey();
   device_policy_.Build();
-  *device_policy_.policy().mutable_new_public_key_verification_signature() =
-      "garbage";
+  *device_policy_.policy()
+       .mutable_new_public_key_verification_signature_deprecated() = "garbage";
   store_->Store(device_policy_.policy());
   FlushDeviceSettings();
   EXPECT_EQ(CloudPolicyStore::STATUS_VALIDATION_ERROR, store_->status());
@@ -214,7 +215,8 @@ TEST_F(DeviceCloudPolicyStoreChromeOSTest,
   PrepareExistingPolicy();
   device_policy_.SetDefaultNewSigningKey();
   device_policy_.Build();
-  device_policy_.policy().clear_new_public_key_verification_signature();
+  device_policy_.policy()
+      .clear_new_public_key_verification_signature_deprecated();
   store_->Store(device_policy_.policy());
   FlushDeviceSettings();
   EXPECT_EQ(CloudPolicyStore::STATUS_VALIDATION_ERROR, store_->status());
@@ -242,8 +244,8 @@ TEST_F(DeviceCloudPolicyStoreChromeOSTest, InstallInitialPolicyNoSignature) {
 TEST_F(DeviceCloudPolicyStoreChromeOSTest,
        InstallInitialPolicyVerificationFailure) {
   PrepareNewSigningKey();
-  *device_policy_.policy().mutable_new_public_key_verification_signature() =
-      "garbage";
+  *device_policy_.policy()
+       .mutable_new_public_key_verification_signature_deprecated() = "garbage";
   store_->InstallInitialPolicy(device_policy_.policy());
   FlushDeviceSettings();
   ExpectFailure(CloudPolicyStore::STATUS_VALIDATION_ERROR);
@@ -254,7 +256,8 @@ TEST_F(DeviceCloudPolicyStoreChromeOSTest,
 TEST_F(DeviceCloudPolicyStoreChromeOSTest,
        InstallInitialPolicyMissingSignatureFailure) {
   PrepareNewSigningKey();
-  device_policy_.policy().clear_new_public_key_verification_signature();
+  device_policy_.policy()
+      .clear_new_public_key_verification_signature_deprecated();
   store_->InstallInitialPolicy(device_policy_.policy());
   FlushDeviceSettings();
   ExpectFailure(CloudPolicyStore::STATUS_VALIDATION_ERROR);

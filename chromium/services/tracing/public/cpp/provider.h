@@ -13,7 +13,7 @@
 #include "mojo/public/cpp/bindings/interface_request.h"
 #include "services/tracing/public/interfaces/tracing.mojom.h"
 
-namespace shell {
+namespace service_manager {
 class Connector;
 }
 
@@ -24,11 +24,15 @@ class Provider : public mojom::Provider {
   Provider();
   ~Provider() override;
 
-  void Initialize(shell::Connector* connector, const std::string& url);
+  void InitializeWithFactory(mojom::FactoryPtr* factory);
+  void Initialize(service_manager::Connector* connector,
+                  const std::string& url);
 
   void Bind(mojom::ProviderRequest request);
 
  private:
+  void InitializeWithFactoryInternal(mojom::FactoryPtr* factory);
+
   // mojom::Provider implementation:
   void StartTracing(const std::string& categories,
                     mojom::RecorderPtr recorder) override;

@@ -6,7 +6,6 @@
 
 #include "ash/common/material_design/material_design_controller.h"
 #include "ash/common/shelf/wm_shelf.h"
-#include "ash/common/shell_window_ids.h"
 #include "ash/common/system/overview/overview_button_tray.h"
 #include "ash/common/system/status_area_widget_delegate.h"
 #include "ash/common/system/tray/system_tray.h"
@@ -16,6 +15,7 @@
 #include "ash/common/wm_root_window_controller.h"
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
+#include "ash/public/cpp/shell_window_ids.h"
 #include "base/i18n/time_formatting.h"
 #include "ui/native_theme/native_theme_dark_aura.h"
 
@@ -64,10 +64,10 @@ void StatusAreaWidget::CreateTrayViews() {
   AddSystemTray();
   AddWebNotificationTray();
 #if defined(OS_CHROMEOS)
-  AddLogoutButtonTray();
   AddPaletteTray();
   AddVirtualKeyboardTray();
   AddImeMenuTray();
+  AddLogoutButtonTray();
 #endif
 
   SystemTrayDelegate* delegate = WmShell::Get()->system_tray_delegate();
@@ -77,6 +77,8 @@ void StatusAreaWidget::CreateTrayViews() {
   web_notification_tray_->Initialize();
 #if defined(OS_CHROMEOS)
   logout_button_tray_->Initialize();
+  if (palette_tray_)
+    palette_tray_->Initialize();
   virtual_keyboard_tray_->Initialize();
   ime_menu_tray_->Initialize();
 #endif
@@ -144,29 +146,6 @@ void StatusAreaWidget::UpdateAfterLoginStatusChange(LoginStatus login_status) {
     overview_button_tray_->UpdateAfterLoginStatusChange(login_status);
 }
 
-void StatusAreaWidget::OnTrayVisibilityChanged(TrayBackgroundView* tray) {
-  if (!ash::MaterialDesignController::IsShelfMaterial())
-    return;
-
-  // No separator is required between |system_tray_| and |overview_button_tray_|
-  // and no separator is required for the right most tray item.
-  if (tray == overview_button_tray_ || tray == system_tray_) {
-    tray->SetSeparatorVisibility(false);
-    return;
-  }
-#if defined(OS_CHROMEOS)
-  // If |logout_button_tray_| is visible, check if |tray| is visible and to
-  // the left of |logout_button_tray_|. If it is the case, then no separator
-  // is required between |tray| and |logout_button_tray_|. If
-  // |logout_button_tray_| is not visible, then separator should always be
-  // visible.
-  tray->SetSeparatorVisibility(!IsNextVisibleTrayToLogout(tray) &&
-                               tray != logout_button_tray_);
-#else
-  tray->SetSeparatorVisibility(true);
-#endif
-}
-
 bool StatusAreaWidget::ShouldShowShelf() const {
   if ((system_tray_ && system_tray_->ShouldShowShelf()) ||
       (web_notification_tray_ &&
@@ -175,6 +154,9 @@ bool StatusAreaWidget::ShouldShowShelf() const {
 
 #if defined(OS_CHROMEOS)
   if (palette_tray_ && palette_tray_->ShouldBlockShelfAutoHide())
+    return true;
+
+  if (ime_menu_tray_ && ime_menu_tray_->ShouldBlockShelfAutoHide())
     return true;
 #endif
 
@@ -275,23 +257,6 @@ void StatusAreaWidget::AddVirtualKeyboardTray() {
 void StatusAreaWidget::AddImeMenuTray() {
   ime_menu_tray_ = new ImeMenuTray(wm_shelf_);
   status_area_widget_delegate_->AddTray(ime_menu_tray_);
-}
-
-bool StatusAreaWidget::IsNextVisibleTrayToLogout(
-    TrayBackgroundView* tray) const {
-  int logout_button_index =
-      status_area_widget_delegate_->GetIndexOf(logout_button_tray_);
-  // Logout button should always exist.
-  DCHECK_NE(-1, logout_button_index);
-  if (!logout_button_tray_->visible())
-    return false;
-
-  for (int c = logout_button_index + 1;
-       c < status_area_widget_delegate_->child_count(); c++) {
-    if (status_area_widget_delegate_->child_at(c)->visible())
-      return tray == status_area_widget_delegate_->child_at(c);
-  }
-  return false;
 }
 #endif
 

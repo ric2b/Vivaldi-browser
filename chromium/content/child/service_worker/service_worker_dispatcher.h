@@ -15,6 +15,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/strings/string16.h"
+#include "content/common/service_worker/service_worker_types.h"
 #include "content/public/child/worker_thread.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerError.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerProvider.h"
@@ -36,7 +37,6 @@ struct ServiceWorkerMsg_MessageToDocument_Params;
 namespace content {
 
 class ServiceWorkerHandleReference;
-class ServiceWorkerMessageFilter;
 class ServiceWorkerProviderContext;
 class ServiceWorkerRegistrationHandleReference;
 class ThreadSafeSender;
@@ -67,6 +67,12 @@ class CONTENT_EXPORT ServiceWorkerDispatcher : public WorkerThread::Observer {
   typedef blink::WebServiceWorkerProvider::
       WebServiceWorkerGetRegistrationForReadyCallbacks
           WebServiceWorkerGetRegistrationForReadyCallbacks;
+  using WebEnableNavigationPreloadCallbacks =
+      blink::WebServiceWorkerRegistration::WebEnableNavigationPreloadCallbacks;
+  using WebGetNavigationPreloadStateCallbacks = blink::
+      WebServiceWorkerRegistration::WebGetNavigationPreloadStateCallbacks;
+  using WebSetNavigationPreloadHeaderCallbacks = blink::
+      WebServiceWorkerRegistration::WebSetNavigationPreloadHeaderCallbacks;
 
   ServiceWorkerDispatcher(
       ThreadSafeSender* thread_safe_sender,
@@ -102,6 +108,24 @@ class CONTENT_EXPORT ServiceWorkerDispatcher : public WorkerThread::Observer {
   void GetRegistrationForReady(
       int provider_id,
       WebServiceWorkerGetRegistrationForReadyCallbacks* callbacks);
+
+  // Corresponds to NavigationPreloadManager.enable/disable.
+  void EnableNavigationPreload(
+      int provider_id,
+      int64_t registration_id,
+      bool enable,
+      std::unique_ptr<WebEnableNavigationPreloadCallbacks> callbacks);
+  // Corresponds to NavigationPreloadManager.getState.
+  void GetNavigationPreloadState(
+      int provider_id,
+      int64_t registration_id,
+      std::unique_ptr<WebGetNavigationPreloadStateCallbacks> callbacks);
+  // Corresponds to NavigationPreloadManager.setHeaderValue.
+  void SetNavigationPreloadHeader(
+      int provider_id,
+      int64_t registration_id,
+      const std::string& value,
+      std::unique_ptr<WebSetNavigationPreloadHeaderCallbacks> callbacks);
 
   // Called when a new provider context for a document is created. Usually
   // this happens when a new document is being loaded, and is called much
@@ -160,6 +184,12 @@ class CONTENT_EXPORT ServiceWorkerDispatcher : public WorkerThread::Observer {
       IDMapOwnPointer> GetRegistrationsCallbackMap;
   typedef IDMap<WebServiceWorkerGetRegistrationForReadyCallbacks,
       IDMapOwnPointer> GetRegistrationForReadyCallbackMap;
+  using EnableNavigationPreloadCallbackMap =
+      IDMap<WebEnableNavigationPreloadCallbacks, IDMapOwnPointer>;
+  using GetNavigationPreloadStateCallbackMap =
+      IDMap<WebGetNavigationPreloadStateCallbacks, IDMapOwnPointer>;
+  using SetNavigationPreloadHeaderCallbackMap =
+      IDMap<WebSetNavigationPreloadHeaderCallbacks, IDMapOwnPointer>;
 
   typedef std::map<int, blink::WebServiceWorkerProviderClient*>
       ProviderClientMap;
@@ -204,6 +234,11 @@ class CONTENT_EXPORT ServiceWorkerDispatcher : public WorkerThread::Observer {
       int request_id,
       const ServiceWorkerRegistrationObjectInfo& info,
       const ServiceWorkerVersionAttributes& attrs);
+  void OnDidEnableNavigationPreload(int thread_id, int request_id);
+  void OnDidGetNavigationPreloadState(int thread_id,
+                                      int request_id,
+                                      const NavigationPreloadState& state);
+  void OnDidSetNavigationPreloadHeader(int thread_id, int request_id);
   void OnRegistrationError(int thread_id,
                            int request_id,
                            blink::WebServiceWorkerError::ErrorType error_type,
@@ -226,6 +261,21 @@ class CONTENT_EXPORT ServiceWorkerDispatcher : public WorkerThread::Observer {
       int request_id,
       blink::WebServiceWorkerError::ErrorType error_type,
       const base::string16& message);
+  void OnEnableNavigationPreloadError(
+      int thread_id,
+      int request_id,
+      blink::WebServiceWorkerError::ErrorType error_type,
+      const std::string& message);
+  void OnGetNavigationPreloadStateError(
+      int thread_id,
+      int request_id,
+      blink::WebServiceWorkerError::ErrorType error_type,
+      const std::string& message);
+  void OnSetNavigationPreloadHeaderError(
+      int thread_id,
+      int request_id,
+      blink::WebServiceWorkerError::ErrorType error_type,
+      const std::string& message);
   void OnServiceWorkerStateChanged(int thread_id,
                                    int handle_id,
                                    blink::WebServiceWorkerState state);
@@ -265,6 +315,10 @@ class CONTENT_EXPORT ServiceWorkerDispatcher : public WorkerThread::Observer {
   GetRegistrationCallbackMap pending_get_registration_callbacks_;
   GetRegistrationsCallbackMap pending_get_registrations_callbacks_;
   GetRegistrationForReadyCallbackMap get_for_ready_callbacks_;
+  EnableNavigationPreloadCallbackMap enable_navigation_preload_callbacks_;
+  GetNavigationPreloadStateCallbackMap get_navigation_preload_state_callbacks_;
+  SetNavigationPreloadHeaderCallbackMap
+      set_navigation_preload_header_callbacks_;
 
   ProviderClientMap provider_clients_;
   ProviderContextMap provider_contexts_;

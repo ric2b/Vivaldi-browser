@@ -5,34 +5,23 @@
 #include "chrome/browser/notifications/notification_permission_infobar_delegate.h"
 
 #include "chrome/browser/android/android_theme_resources.h"
-#include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/grit/generated_resources.h"
-#include "components/infobars/core/infobar.h"
-
-// static
-infobars::InfoBar* NotificationPermissionInfoBarDelegate::Create(
-    InfoBarService* infobar_service,
-    const GURL& requesting_frame,
-    bool user_gesture,
-    Profile* profile,
-    const PermissionSetCallback& callback) {
-  return infobar_service->AddInfoBar(
-      CreatePermissionInfoBar(std::unique_ptr<PermissionInfoBarDelegate>(
-          new NotificationPermissionInfoBarDelegate(
-              requesting_frame, user_gesture, profile, callback))));
-}
 
 NotificationPermissionInfoBarDelegate::NotificationPermissionInfoBarDelegate(
+    const content::PermissionType& permission_type,
     const GURL& requesting_frame,
     bool user_gesture,
     Profile* profile,
     const PermissionSetCallback& callback)
     : PermissionInfoBarDelegate(requesting_frame,
-                                content::PermissionType::NOTIFICATIONS,
+                                permission_type,
                                 CONTENT_SETTINGS_TYPE_NOTIFICATIONS,
                                 user_gesture,
                                 profile,
-                                callback) {}
+                                callback) {
+  DCHECK(permission_type == content::PermissionType::NOTIFICATIONS ||
+         permission_type == content::PermissionType::PUSH_MESSAGING);
+}
 
 NotificationPermissionInfoBarDelegate::~NotificationPermissionInfoBarDelegate()
     {}

@@ -88,12 +88,6 @@ class CONTENT_EXPORT InterstitialPageImpl
 
   RenderWidgetHostView* GetView();
 
-  // See description above field.
-  void set_reload_on_dont_proceed(bool value) {
-    reload_on_dont_proceed_ = value;
-  }
-  bool reload_on_dont_proceed() const { return reload_on_dont_proceed_; }
-
   bool pause_throbber() const { return pause_throbber_; }
 
   // TODO(nasko): This should move to InterstitialPageNavigatorImpl, but in
@@ -113,7 +107,6 @@ class CONTENT_EXPORT InterstitialPageImpl
                          const IPC::Message& message) override;
   void RenderFrameCreated(RenderFrameHost* render_frame_host) override;
   void UpdateTitle(RenderFrameHost* render_frame_host,
-                   int32_t page_id,
                    const base::string16& title,
                    base::i18n::TextDirection title_direction) override;
   InterstitialPage* GetAsInterstitialPage() override;
@@ -251,12 +244,6 @@ class CONTENT_EXPORT InterstitialPageImpl
   // pending entry was created since this interstitial was shown and we should
   // not discard it.
   bool should_discard_pending_nav_entry_;
-
-  // If true and the user chooses not to proceed the target NavigationController
-  // is reloaded. This is used when two NavigationControllers are merged
-  // (CopyStateFromAndPrune).
-  // The default is false.
-  bool reload_on_dont_proceed_;
 
   // Whether this interstitial is enabled.  See Disable() for more info.
   bool enabled_;

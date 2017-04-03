@@ -263,8 +263,8 @@ Polymer({
 
           var browserService = md_history.BrowserService.getInstance();
           browserService.recordHistogram(
-              'HistoryPage.RemoveEntryPosition', index,
-              UMA_MAX_BUCKET_VALUE);
+              'HistoryPage.RemoveEntryPosition',
+              Math.min(index, UMA_MAX_BUCKET_VALUE), UMA_MAX_BUCKET_VALUE);
           if (index <= UMA_MAX_SUBSET_BUCKET_VALUE) {
             browserService.recordHistogram(
                 'HistoryPage.RemoveEntryPositionSubset', index,
@@ -279,4 +279,9 @@ Polymer({
    * @private
    */
   getSelectedList_: function() { return this.$.content.selectedItem; },
+
+  /** @private */
+  canDeleteHistory_: function() {
+    return loadTimeData.getBoolean('allowDeletingHistory');
+  }
 });

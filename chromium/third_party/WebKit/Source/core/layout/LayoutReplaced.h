@@ -78,7 +78,7 @@ class CORE_EXPORT LayoutReplaced : public LayoutBox {
   void paint(const PaintInfo&, const LayoutPoint&) const override;
 
   // Replaced objects often have contents to paint.
-  bool paintedOutputOfObjectHasNoEffectRegardlessOfSize() const final {
+  bool paintedOutputOfObjectHasNoEffectRegardlessOfSize() const override {
     return false;
   }
 
@@ -110,8 +110,9 @@ class CORE_EXPORT LayoutReplaced : public LayoutBox {
   void computeIntrinsicLogicalWidths(LayoutUnit& minLogicalWidth,
                                      LayoutUnit& maxLogicalWidth) const final;
 
-  // This function calculates the placement of the replaced contents. It takes intrinsic size of
-  // the replaced contents, stretch to fit CSS content box according to object-fit.
+  // This function calculates the placement of the replaced contents. It takes
+  // intrinsic size of the replaced contents, stretch to fit CSS content box
+  // according to object-fit.
   LayoutRect computeObjectFit(
       const LayoutSize* overriddenIntrinsicSize = nullptr) const;
 

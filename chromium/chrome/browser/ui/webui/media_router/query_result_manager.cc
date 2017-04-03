@@ -12,6 +12,7 @@
 #include "chrome/browser/media/router/media_router.h"
 #include "chrome/browser/media/router/media_sinks_observer.h"
 #include "content/public/browser/browser_thread.h"
+#include "url/gurl.h"
 
 namespace media_router {
 
@@ -231,8 +232,8 @@ void QueryResultManager::NotifyOnResultsUpdated() {
     sink_with_cast_modes.cast_modes = sink_pair.second.GetCastModes();
     sinks.push_back(sink_with_cast_modes);
   }
-  FOR_EACH_OBSERVER(QueryResultManager::Observer, observers_,
-                    OnResultsUpdated(sinks));
+  for (QueryResultManager::Observer& observer : observers_)
+    observer.OnResultsUpdated(sinks);
 }
 
 }  // namespace media_router

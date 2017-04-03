@@ -14,7 +14,7 @@
 
 // This class configures an infobar shown when a page requests access to a
 // user's microphone and/or video camera.  The user is shown a message asking
-// which audio and/or video devices he wishes to use with the current page, and
+// which audio and/or video devices they wish to use with the current page, and
 // buttons to give access to the selected devices to the page, or to deny access
 // to them.
 class MediaStreamInfoBarDelegateAndroid : public PermissionInfoBarDelegate {
@@ -24,14 +24,16 @@ class MediaStreamInfoBarDelegateAndroid : public PermissionInfoBarDelegate {
   // found, or just adds the new infobar otherwise.  Returns whether an infobar
   // was created.
   static bool Create(content::WebContents* web_contents,
+                     bool user_gesture,
                      std::unique_ptr<MediaStreamDevicesController> controller);
-
- private:
-  friend class WebRtcTestBase;
 
   MediaStreamInfoBarDelegateAndroid(
       Profile* profile,
+      bool user_gesture,
       std::unique_ptr<MediaStreamDevicesController> controller);
+ private:
+  friend class WebRtcTestBase;
+
   ~MediaStreamInfoBarDelegateAndroid() override;
 
   // PermissionInfoBarDelegate:
@@ -48,7 +50,7 @@ class MediaStreamInfoBarDelegateAndroid : public PermissionInfoBarDelegate {
   base::string16 GetLinkText() const override;
   GURL GetLinkURL() const override;
   int GetMessageResourceId() const override;
-  std::vector<int> content_settings() const override;
+  std::vector<int> content_settings_types() const override;
 
   std::unique_ptr<MediaStreamDevicesController> controller_;
 

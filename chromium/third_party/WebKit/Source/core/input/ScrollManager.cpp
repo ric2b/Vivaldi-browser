@@ -6,9 +6,9 @@
 
 #include "core/dom/DOMNodeIds.h"
 #include "core/events/GestureEvent.h"
+#include "core/frame/BrowserControls.h"
 #include "core/frame/FrameHost.h"
 #include "core/frame/FrameView.h"
-#include "core/frame/TopControls.h"
 #include "core/html/HTMLFrameOwnerElement.h"
 #include "core/input/EventHandler.h"
 #include "core/input/EventHandlingUtil.h"
@@ -83,6 +83,7 @@ void ScrollManager::recomputeScrollChain(const Node& startNode,
 
   DCHECK(startNode.layoutObject());
   LayoutBox* curBox = startNode.layoutObject()->enclosingBox();
+  Element* documentElement = m_frame->document()->documentElement();
 
   // Scrolling propagates along the containing block chain and ends at the
   // RootScroller element. The RootScroller element will have a custom
@@ -98,13 +99,13 @@ void ScrollManager::recomputeScrollChain(const Node& startNode,
       // In normal circumastances, the documentElement will be the root
       // scroller but the documentElement itself isn't a containing block,
       // that'll be the document node rather than the element.
-      curElement = m_frame->document()->documentElement();
-      DCHECK(!curElement || isEffectiveRootScroller(*curElement));
+      curElement = documentElement;
     }
 
     if (curElement) {
       scrollChain.push_front(DOMNodeIds::idForNode(curElement));
-      if (isEffectiveRootScroller(*curElement))
+      if (isEffectiveRootScroller(*curElement) ||
+          curElement->isSameNode(documentElement))
         break;
     }
 
@@ -214,7 +215,8 @@ WebInputEventResult ScrollManager::handleGestureScrollBegin(
   if (!m_scrollGestureHandlingNode)
     m_scrollGestureHandlingNode = m_frame->document()->documentElement();
 
-  if (!m_scrollGestureHandlingNode)
+  if (!m_scrollGestureHandlingNode ||
+      !m_scrollGestureHandlingNode->layoutObject())
     return WebInputEventResult::NotHandled;
 
   passScrollGestureEventToWidget(gestureEvent,
@@ -222,7 +224,7 @@ WebInputEventResult ScrollManager::handleGestureScrollBegin(
 
   m_currentScrollChain.clear();
   std::unique_ptr<ScrollStateData> scrollStateData =
-      wrapUnique(new ScrollStateData());
+      makeUnique<ScrollStateData>();
   scrollStateData->position_x = gestureEvent.position().x();
   scrollStateData->position_y = gestureEvent.position().y();
   scrollStateData->is_beginning = true;
@@ -240,6 +242,10 @@ WebInputEventResult ScrollManager::handleGestureScrollUpdate(
     const PlatformGestureEvent& gestureEvent) {
   DCHECK_EQ(gestureEvent.type(), PlatformEvent::GestureScrollUpdate);
 
+  Node* node = m_scrollGestureHandlingNode.get();
+  if (!node || !node->layoutObject())
+    return WebInputEventResult::NotHandled;
+
   // Negate the deltas since the gesture event stores finger movement and
   // scrolling occurs in the direction opposite the finger's movement
   // direction. e.g. Finger moving up has negative event delta but causes the
@@ -251,14 +257,7 @@ WebInputEventResult ScrollManager::handleGestureScrollUpdate(
   if (delta.isZero())
     return WebInputEventResult::NotHandled;
 
-  Node* node = m_scrollGestureHandlingNode.get();
-
-  if (!node)
-    return WebInputEventResult::NotHandled;
-
   LayoutObject* layoutObject = node->layoutObject();
-  if (!layoutObject)
-    return WebInputEventResult::NotHandled;
 
   // Try to send the event to the correct view.
   WebInputEventResult result =
@@ -271,7 +270,7 @@ WebInputEventResult ScrollManager::handleGestureScrollUpdate(
   }
 
   std::unique_ptr<ScrollStateData> scrollStateData =
-      wrapUnique(new ScrollStateData());
+      makeUnique<ScrollStateData>();
   scrollStateData->delta_x = delta.width();
   scrollStateData->delta_y = delta.height();
   scrollStateData->delta_granularity =
@@ -324,10 +323,10 @@ WebInputEventResult ScrollManager::handleGestureScrollEnd(
     const PlatformGestureEvent& gestureEvent) {
   Node* node = m_scrollGestureHandlingNode;
 
-  if (node) {
+  if (node && node->layoutObject()) {
     passScrollGestureEventToWidget(gestureEvent, node->layoutObject());
     std::unique_ptr<ScrollStateData> scrollStateData =
-        wrapUnique(new ScrollStateData());
+        makeUnique<ScrollStateData>();
     scrollStateData->is_ending = true;
     scrollStateData->is_in_inertial_phase =
         gestureEvent.inertialPhase() == ScrollInertialPhaseMomentum;
@@ -371,7 +370,7 @@ WebInputEventResult ScrollManager::passScrollGestureEventToWidget(
 
 bool ScrollManager::isEffectiveRootScroller(const Node& node) const {
   // The root scroller is the one Element on the page designated to perform
-  // "viewport actions" like top controls movement and overscroll glow.
+  // "viewport actions" like browser controls movement and overscroll glow.
   if (!m_frame->document())
     return false;
 

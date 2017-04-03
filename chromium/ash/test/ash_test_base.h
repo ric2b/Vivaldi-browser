@@ -30,6 +30,14 @@ class Window;
 class WindowDelegate;
 }  // namespace aura
 
+namespace display {
+class DisplayManager;
+
+namespace test {
+class DisplayManagerTestApi;
+}  // namespace test
+}  // namespace display
+
 namespace gfx {
 class Rect;
 }
@@ -47,7 +55,6 @@ class WidgetDelegate;
 
 namespace ash {
 class AshTestImplAura;
-class DisplayManager;
 class SystemTray;
 class WmShelf;
 
@@ -82,8 +89,8 @@ class AshTestBase : public testing::Test {
   // primary root Window.
   aura::Window* CurrentContext();
 
-  // Creates and shows a widget. See ash/common/shell_window_ids.h for values
-  // for |container_id|.
+  // Creates and shows a widget. See ash/public/cpp/shell_window_ids.h for
+  // values for |container_id|.
   static std::unique_ptr<views::Widget> CreateTestWidget(
       views::WidgetDelegate* delegate,
       int container_id,
@@ -115,7 +122,7 @@ class AshTestBase : public testing::Test {
   ui::test::EventGenerator& GetEventGenerator();
 
   // Convenience method to return the DisplayManager.
-  DisplayManager* display_manager();
+  display::DisplayManager* display_manager();
 
   // Test if moving a mouse to |point_in_screen| warps it to another
   // display.
@@ -165,7 +172,7 @@ class AshTestBase : public testing::Test {
   // is called.
   void SetSessionStarting();
   void SetUserLoggedIn(bool user_logged_in);
-  void SetShouldLockScreenBeforeSuspending(bool should_lock);
+  void SetShouldLockScreenAutomatically(bool should_lock);
   void SetUserAddingScreenRunning(bool user_adding_screen_running);
 
   // Methods to emulate blocking and unblocking user session with given

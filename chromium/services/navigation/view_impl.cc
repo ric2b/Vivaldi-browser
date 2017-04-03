@@ -16,7 +16,7 @@
 #include "content/public/browser/notification_source.h"
 #include "content/public/browser/notification_types.h"
 #include "content/public/browser/web_contents.h"
-#include "services/shell/public/cpp/connector.h"
+#include "services/service_manager/public/cpp/connector.h"
 #include "services/ui/public/cpp/window_tree_client.h"
 #include "ui/views/controls/webview/webview.h"
 #include "ui/views/mus/native_widget_mus.h"
@@ -58,10 +58,10 @@ mojom::NavigationEntryPtr EntryPtrFromNavEntry(
 
 }  // namespace
 
-ViewImpl::ViewImpl(std::unique_ptr<shell::Connector> connector,
+ViewImpl::ViewImpl(std::unique_ptr<service_manager::Connector> connector,
                    const std::string& client_user_id,
                    mojom::ViewClientPtr client,
-                   std::unique_ptr<shell::ServiceContextRef> ref)
+                   std::unique_ptr<service_manager::ServiceContextRef> ref)
     : connector_(std::move(connector)),
       client_(std::move(client)),
       ref_(std::move(ref)),
@@ -115,7 +115,7 @@ void ViewImpl::GetWindowTreeClient(ui::mojom::WindowTreeClientRequest request) {
       base::MakeUnique<ui::WindowTreeClient>(this, nullptr, std::move(request));
 }
 
-void ViewImpl::ShowInterstitial(const mojo::String& html) {
+void ViewImpl::ShowInterstitial(const std::string& html) {
   content::InterstitialPage* interstitial =
       content::InterstitialPage::Create(web_view_->GetWebContents(),
                                         false,
@@ -128,10 +128,6 @@ void ViewImpl::HideInterstitial() {
   // TODO(beng): this is not quite right.
   if (web_view_->GetWebContents()->ShowingInterstitialPage())
     web_view_->GetWebContents()->GetInterstitialPage()->Proceed();
-}
-
-void ViewImpl::SetResizerSize(const gfx::Size& size) {
-  resizer_size_ = size;
 }
 
 void ViewImpl::AddNewContents(content::WebContents* source,
@@ -211,13 +207,6 @@ void ViewImpl::UpdateTargetURL(content::WebContents* source, const GURL& url) {
   client_->UpdateHoverURL(url);
 }
 
-gfx::Rect ViewImpl::GetRootWindowResizerRect() const {
-  gfx::Rect bounds = web_view_->GetLocalBounds();
-  return gfx::Rect(bounds.right() - resizer_size_.width(),
-                   bounds.bottom() - resizer_size_.height(),
-                   resizer_size_.width(), resizer_size_.height());
-}
-
 void ViewImpl::Observe(int type,
                        const content::NotificationSource& source,
                        const content::NotificationDetails& details) {
@@ -277,7 +266,7 @@ void ViewImpl::OnEmbed(ui::Window* root) {
   params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
   params.delegate = this;
   params.native_widget = new views::NativeWidgetMus(
-      widget_.get(), root, ui::mojom::SurfaceType::DEFAULT);
+      widget_.get(), root, ui::mojom::CompositorFrameSinkType::DEFAULT);
   widget_->Init(params);
   widget_->Show();
 }

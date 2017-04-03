@@ -375,12 +375,13 @@ float SVGLengthContext::convertValueFromUserUnitsToCHS(float value) const {
   const ComputedStyle* style = computedStyleForLengthResolving(m_context);
   if (!style)
     return 0;
-
+  const SimpleFontData* fontData = style->font().primaryFont();
+  if (!fontData)
+    return 0;
   float zeroWidth =
-      style->getFontMetrics().zeroWidth() / style->effectiveZoom();
+      fontData->getFontMetrics().zeroWidth() / style->effectiveZoom();
   if (!zeroWidth)
     return 0;
-
   return value / zeroWidth;
 }
 
@@ -388,23 +389,27 @@ float SVGLengthContext::convertValueFromCHSToUserUnits(float value) const {
   const ComputedStyle* style = computedStyleForLengthResolving(m_context);
   if (!style)
     return 0;
-
-  return value * style->getFontMetrics().zeroWidth() / style->effectiveZoom();
+  const SimpleFontData* fontData = style->font().primaryFont();
+  if (!fontData)
+    return 0;
+  return value * fontData->getFontMetrics().zeroWidth() /
+         style->effectiveZoom();
 }
 
 float SVGLengthContext::convertValueFromUserUnitsToEXS(float value) const {
   const ComputedStyle* style = computedStyleForLengthResolving(m_context);
   if (!style)
     return 0;
-
+  const SimpleFontData* fontData = style->font().primaryFont();
+  if (!fontData)
+    return 0;
   // Use of ceil allows a pixel match to the W3Cs expected output of
   // coords-units-03-b.svg, if this causes problems in real world cases maybe it
   // would be best to remove this.
   float xHeight =
-      ceilf(style->getFontMetrics().xHeight() / style->effectiveZoom());
+      ceilf(fontData->getFontMetrics().xHeight() / style->effectiveZoom());
   if (!xHeight)
     return 0;
-
   return value / xHeight;
 }
 
@@ -412,12 +417,14 @@ float SVGLengthContext::convertValueFromEXSToUserUnits(float value) const {
   const ComputedStyle* style = computedStyleForLengthResolving(m_context);
   if (!style)
     return 0;
-
+  const SimpleFontData* fontData = style->font().primaryFont();
+  if (!fontData)
+    return 0;
   // Use of ceil allows a pixel match to the W3Cs expected output of
   // coords-units-03-b.svg, if this causes problems in real world cases maybe it
   // would be best to remove this.
   return value *
-         ceilf(style->getFontMetrics().xHeight() / style->effectiveZoom());
+         ceilf(fontData->getFontMetrics().xHeight() / style->effectiveZoom());
 }
 
 bool SVGLengthContext::determineViewport(FloatSize& viewportSize) const {

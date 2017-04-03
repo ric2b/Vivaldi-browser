@@ -282,7 +282,8 @@ LayoutVTTCue::LayoutVTTCue(ContainerNode* node, float snapToLinesPosition)
     : LayoutBlockFlow(node), m_snapToLinesPosition(snapToLinesPosition) {}
 
 void LayoutVTTCue::repositionCueSnapToLinesNotSet() {
-  // FIXME: Implement overlapping detection when snap-to-lines is not set. http://wkb.ug/84296
+  // FIXME: Implement overlapping detection when snap-to-lines is not set.
+  // http://wkb.ug/84296
 
   // http://dev.w3.org/html5/webvtt/#dfn-apply-webvtt-cue-settings
   // Step 13, "If cue's text track cue snap-to-lines flag is not set".
@@ -354,7 +355,7 @@ void LayoutVTTCue::layout() {
 
   DCHECK(firstChild());
 
-  LayoutState state(*this, locationOffset());
+  LayoutState state(*this);
 
   // http://dev.w3.org/html5/webvtt/#dfn-apply-webvtt-cue-settings - step 13.
   if (!std::isnan(m_snapToLinesPosition))

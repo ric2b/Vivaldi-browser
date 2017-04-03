@@ -4,7 +4,7 @@
 
 #include "ash/mus/app_list_presenter_mus.h"
 
-#include "services/shell/public/cpp/connector.h"
+#include "services/service_manager/public/cpp/connector.h"
 
 namespace ash {
 
@@ -16,7 +16,7 @@ bool HasConnection(app_list::mojom::AppListPresenterPtr* interface_ptr) {
 
 }  // namespace
 
-AppListPresenterMus::AppListPresenterMus(::shell::Connector* connector)
+AppListPresenterMus::AppListPresenterMus(service_manager::Connector* connector)
     : connector_(connector) {}
 
 AppListPresenterMus::~AppListPresenterMus() {}
@@ -51,7 +51,7 @@ bool AppListPresenterMus::GetTargetVisibility() const {
 void AppListPresenterMus::ConnectIfNeeded() {
   if (!connector_ || HasConnection(&presenter_))
     return;
-  connector_->ConnectToInterface("exe:chrome", &presenter_);
+  connector_->ConnectToInterface("content_browser", &presenter_);
   CHECK(HasConnection(&presenter_))
       << "Could not connect to app_list::mojom::AppListPresenter.";
 }

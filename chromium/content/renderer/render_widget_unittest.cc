@@ -19,8 +19,8 @@
 #include "ipc/ipc_test_sink.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "third_party/WebKit/public/web/WebDeviceEmulationParams.h"
-#include "third_party/WebKit/public/web/WebInputEvent.h"
 #include "ui/events/blink/web_input_event_traits.h"
 #include "ui/gfx/geometry/rect.h"
 
@@ -53,16 +53,15 @@ class MockWebWidget : public blink::WebWidget {
 class InteractiveRenderWidget : public RenderWidget {
  public:
   explicit InteractiveRenderWidget(CompositorDependencies* compositor_deps)
-      : RenderWidget(compositor_deps,
+      : RenderWidget(++next_routing_id_,
+                     compositor_deps,
                      blink::WebPopupTypeNone,
                      ScreenInfo(),
                      false,
                      false,
                      false),
         always_overscroll_(false) {
-    webwidget_internal_ = &mock_webwidget_;
-    // A RenderWidget is not fully initialized until it has a routing ID.
-    SetRoutingID(++next_routing_id_);
+    Init(MSG_ROUTING_NONE, mock_webwidget());
   }
 
   void SetTouchRegion(const std::vector<gfx::Rect>& rects) {
@@ -135,7 +134,13 @@ int InteractiveRenderWidget::next_routing_id_ = 0;
 class RenderWidgetUnittest : public testing::Test {
  public:
   RenderWidgetUnittest()
-      : widget_(new InteractiveRenderWidget(&compositor_deps_)) {}
+      : widget_(new InteractiveRenderWidget(&compositor_deps_)) {
+    // RenderWidget::Init does an AddRef that's balanced by a browser-initiated
+    // Close IPC. That Close will never happen in this test, so do a Release
+    // here to ensure |widget_| is properly freed.
+    widget_->Release();
+    DCHECK(widget_->HasOneRef());
+  }
   ~RenderWidgetUnittest() override {}
 
   InteractiveRenderWidget* widget() const { return widget_.get(); }
@@ -350,7 +355,6 @@ TEST_F(RenderWidgetUnittest, TouchDuringOrOutsideFlingUmaMetrics) {
   SyntheticWebTouchEvent touch;
   touch.PressPoint(10, 10);
   touch.dispatchType = blink::WebInputEvent::DispatchType::Blocking;
-  touch.dispatchedDuringFling = false;
   touch.touchStartOrFirstTouchMove = true;
   widget()->SendInputEvent(touch);
   histogram_tester().ExpectTotalCount("Event.Touch.TouchLatencyOutsideFling",
@@ -372,15 +376,14 @@ TEST_F(RenderWidgetUnittest, TouchDuringOrOutsideFlingUmaMetrics) {
 class PopupRenderWidget : public RenderWidget {
  public:
   explicit PopupRenderWidget(CompositorDependencies* compositor_deps)
-      : RenderWidget(compositor_deps,
+      : RenderWidget(1,
+                     compositor_deps,
                      blink::WebPopupTypePage,
                      ScreenInfo(),
                      false,
                      false,
                      false) {
-    webwidget_internal_ = &mock_webwidget_;
-    // A RenderWidget is not fully initialized until it has a routing ID.
-    SetRoutingID(1);
+    Init(MSG_ROUTING_NONE, mock_webwidget());
     did_show_ = true;
   }
 
@@ -411,7 +414,13 @@ class PopupRenderWidget : public RenderWidget {
 class RenderWidgetPopupUnittest : public testing::Test {
  public:
   RenderWidgetPopupUnittest()
-      : widget_(new PopupRenderWidget(&compositor_deps_)) {}
+      : widget_(new PopupRenderWidget(&compositor_deps_)) {
+    // RenderWidget::Init does an AddRef that's balanced by a browser-initiated
+    // Close IPC. That Close will never happen in this test, so do a Release
+    // here to ensure |widget_| is properly freed.
+    widget_->Release();
+    DCHECK(widget_->HasOneRef());
+  }
   ~RenderWidgetPopupUnittest() override {}
 
   PopupRenderWidget* widget() const { return widget_.get(); }
@@ -452,6 +461,7 @@ TEST_F(RenderWidgetPopupUnittest, EmulatingPopupRect) {
 
   scoped_refptr<PopupRenderWidget> parent_widget(
       new PopupRenderWidget(&compositor_deps_));
+  parent_widget->Release();  // Balance Init().
   RenderWidgetScreenMetricsEmulator emulator(
       parent_widget.get(), emulation_params, resize_params, parent_window_rect,
       parent_window_rect);

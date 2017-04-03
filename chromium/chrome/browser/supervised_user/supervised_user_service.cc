@@ -51,6 +51,7 @@
 #include "components/signin/core/common/signin_switches.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/user_metrics.h"
+#include "extensions/features/features.h"
 #include "ui/base/l10n/l10n_util.h"
 
 #if !defined(OS_ANDROID)
@@ -69,7 +70,7 @@
 #include "components/user_manager/user_manager.h"
 #endif
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "extensions/browser/extension_prefs.h"
@@ -86,14 +87,14 @@ using base::DictionaryValue;
 using base::UserMetricsAction;
 using content::BrowserThread;
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 using extensions::Extension;
 using extensions::ExtensionPrefs;
 using extensions::ExtensionRegistry;
 using extensions::ExtensionSystem;
 #endif
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 using extensions::ExtensionPrefs;
 #endif
 
@@ -306,9 +307,11 @@ std::string SupervisedUserService::GetCustodianEmailAddress() const {
   // |GetActiveUser()| can return null in unit tests.
   if (email.empty() && !!user_manager::UserManager::Get()->GetActiveUser()) {
     email = chromeos::ChromeUserManager::Get()
-        ->GetSupervisedUserManager()
-        ->GetManagerDisplayEmail(
-            user_manager::UserManager::Get()->GetActiveUser()->email());
+                ->GetSupervisedUserManager()
+                ->GetManagerDisplayEmail(user_manager::UserManager::Get()
+                                             ->GetActiveUser()
+                                             ->GetAccountId()
+                                             .GetUserEmail());
   }
 #endif
   return email;
@@ -320,10 +323,13 @@ std::string SupervisedUserService::GetCustodianName() const {
 #if defined(OS_CHROMEOS)
   // |GetActiveUser()| can return null in unit tests.
   if (name.empty() && !!user_manager::UserManager::Get()->GetActiveUser()) {
-    name = base::UTF16ToUTF8(chromeos::ChromeUserManager::Get()
-        ->GetSupervisedUserManager()
-        ->GetManagerDisplayName(
-            user_manager::UserManager::Get()->GetActiveUser()->email()));
+    name = base::UTF16ToUTF8(
+        chromeos::ChromeUserManager::Get()
+            ->GetSupervisedUserManager()
+            ->GetManagerDisplayName(user_manager::UserManager::Get()
+                                        ->GetActiveUser()
+                                        ->GetAccountId()
+                                        .GetUserEmail()));
   }
 #endif
   return name.empty() ? GetCustodianEmailAddress() : name;
@@ -532,12 +538,12 @@ SupervisedUserService::SupervisedUserService(Profile* profile)
       did_init_(false),
       did_shutdown_(false),
       blacklist_state_(BlacklistLoadState::NOT_LOADED),
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
       registry_observer_(this),
 #endif
       weak_ptr_factory_(this) {
   url_filter_context_.ui_url_filter()->AddObserver(this);
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   registry_observer_.Add(extensions::ExtensionRegistry::Get(profile));
 #endif
 }
@@ -595,7 +601,7 @@ void SupervisedUserService::SetActive(bool active) {
 
   GetSettingsService()->SetActive(active_);
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   SetExtensionsActive();
 #endif
 
@@ -604,7 +610,7 @@ void SupervisedUserService::SetActive(bool active) {
         prefs::kDefaultSupervisedUserFilteringBehavior,
         base::Bind(&SupervisedUserService::OnDefaultFilteringBehaviorChanged,
             base::Unretained(this)));
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
     pref_change_registrar_.Add(
         prefs::kSupervisedUserApprovedExtensions,
         base::Bind(&SupervisedUserService::UpdateApprovedExtensions,
@@ -632,7 +638,7 @@ void SupervisedUserService::SetActive(bool active) {
     UpdateManualHosts();
     UpdateManualURLs();
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
     UpdateApprovedExtensions();
 #endif
 
@@ -647,7 +653,7 @@ void SupervisedUserService::SetActive(bool active) {
 
     pref_change_registrar_.Remove(
         prefs::kDefaultSupervisedUserFilteringBehavior);
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
     pref_change_registrar_.Remove(prefs::kSupervisedUserApprovedExtensions);
 #endif
     pref_change_registrar_.Remove(prefs::kSupervisedUserManualHosts);
@@ -657,8 +663,8 @@ void SupervisedUserService::SetActive(bool active) {
     }
 
     url_filter_context_.Clear();
-    FOR_EACH_OBSERVER(
-        SupervisedUserServiceObserver, observer_list_, OnURLFilterChanged());
+    for (SupervisedUserServiceObserver& observer : observer_list_)
+      observer.OnURLFilterChanged();
 
 #if !defined(OS_ANDROID)
     if (waiting_for_sync_initialization_)
@@ -753,8 +759,8 @@ bool SupervisedUserService::ProfileIsSupervised() const {
 }
 
 void SupervisedUserService::OnCustodianInfoChanged() {
-  FOR_EACH_OBSERVER(
-      SupervisedUserServiceObserver, observer_list_, OnCustodianInfoChanged());
+  for (SupervisedUserServiceObserver& observer : observer_list_)
+    observer.OnCustodianInfoChanged();
 }
 
 SupervisedUserSettingsService* SupervisedUserService::GetSettingsService() {
@@ -812,8 +818,8 @@ void SupervisedUserService::OnDefaultFilteringBehaviorChanged() {
       SupervisedUserURLFilter::BehaviorFromInt(behavior_value);
   url_filter_context_.SetDefaultFilteringBehavior(behavior);
 
-  FOR_EACH_OBSERVER(
-      SupervisedUserServiceObserver, observer_list_, OnURLFilterChanged());
+  for (SupervisedUserServiceObserver& observer : observer_list_)
+    observer.OnURLFilterChanged();
 }
 
 void SupervisedUserService::OnSafeSitesSettingChanged() {
@@ -909,8 +915,8 @@ void SupervisedUserService::OnBlacklistLoaded() {
 void SupervisedUserService::UpdateBlacklist() {
   bool use_blacklist = supervised_users::IsSafeSitesBlacklistEnabled(profile_);
   url_filter_context_.SetBlacklist(use_blacklist ? &blacklist_ : nullptr);
-  FOR_EACH_OBSERVER(
-      SupervisedUserServiceObserver, observer_list_, OnURLFilterChanged());
+  for (SupervisedUserServiceObserver& observer : observer_list_)
+    observer.OnURLFilterChanged();
 }
 
 void SupervisedUserService::UpdateManualHosts() {
@@ -926,8 +932,8 @@ void SupervisedUserService::UpdateManualHosts() {
   }
   url_filter_context_.SetManualHosts(std::move(host_map));
 
-  FOR_EACH_OBSERVER(
-      SupervisedUserServiceObserver, observer_list_, OnURLFilterChanged());
+  for (SupervisedUserServiceObserver& observer : observer_list_)
+    observer.OnURLFilterChanged();
 }
 
 void SupervisedUserService::UpdateManualURLs() {
@@ -942,8 +948,8 @@ void SupervisedUserService::UpdateManualURLs() {
   }
   url_filter_context_.SetManualURLs(std::move(url_map));
 
-  FOR_EACH_OBSERVER(
-      SupervisedUserServiceObserver, observer_list_, OnURLFilterChanged());
+  for (SupervisedUserServiceObserver& observer : observer_list_)
+    observer.OnURLFilterChanged();
 }
 
 std::string SupervisedUserService::GetSupervisedUserName() const {
@@ -985,7 +991,7 @@ void SupervisedUserService::Shutdown() {
     sync_service->RemovePreferenceProvider(this);
 }
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 SupervisedUserService::ExtensionState SupervisedUserService::GetExtensionState(
     const Extension& extension) const {
   bool was_installed_by_default = extension.was_installed_by_default();
@@ -1088,7 +1094,7 @@ bool SupervisedUserService::MustRemainDisabled(const Extension* extension,
 
   if (must_remain_disabled) {
     if (error)
-      *error = l10n_util::GetStringUTF16(IDS_EXTENSIONS_LOCKED_SUPERVISED_USER);
+      *error = GetExtensionsLockedMessage();
     // If the extension must remain disabled due to permission increase,
     // then the update request has been already sent at update time.
     // We do nothing and we don't add an extra disable reason.
@@ -1235,7 +1241,7 @@ void SupervisedUserService::SetExtensionsActive() {
     extension_system->extension_service()->CheckManagementPolicy();
   }
 }
-#endif  // defined(ENABLE_EXTENSIONS)
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
 syncer::ModelTypeSet SupervisedUserService::GetPreferredDataTypes() const {
   if (!ProfileIsSupervised())
@@ -1281,6 +1287,6 @@ void SupervisedUserService::OnBrowserSetLastActive(Browser* browser) {
 #endif  // !defined(OS_ANDROID)
 
 void SupervisedUserService::OnSiteListUpdated() {
-  FOR_EACH_OBSERVER(
-      SupervisedUserServiceObserver, observer_list_, OnURLFilterChanged());
+  for (SupervisedUserServiceObserver& observer : observer_list_)
+    observer.OnURLFilterChanged();
 }

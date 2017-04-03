@@ -31,16 +31,19 @@ namespace {
 
 using ::testing::Pointee;
 
+PaintChunkProperties defaultPaintChunkProperties() {
+  PaintChunkProperties properties;
+  properties.transform = TransformPaintPropertyNode::root();
+  properties.clip = ClipPaintPropertyNode::root();
+  properties.effect = EffectPaintPropertyNode::root();
+  properties.scroll = ScrollPaintPropertyNode::root();
+  return properties;
+}
+
 gfx::Transform translation(SkMScalar x, SkMScalar y) {
   gfx::Transform transform;
   transform.Translate(x, y);
   return transform;
-}
-
-EffectPaintPropertyNode* dummyRootEffect() {
-  DEFINE_STATIC_REF(EffectPaintPropertyNode, node,
-                    EffectPaintPropertyNode::create(nullptr, 1.0));
-  return node;
 }
 
 class WebLayerTreeViewWithCompositorFrameSink
@@ -74,7 +77,7 @@ class PaintArtifactCompositorTestWithPropertyTrees : public ::testing::Test {
     settings.single_thread_proxy_scheduler = false;
     settings.use_layer_lists = true;
     m_webLayerTreeView =
-        wrapUnique(new WebLayerTreeViewWithCompositorFrameSink(settings));
+        makeUnique<WebLayerTreeViewWithCompositorFrameSink>(settings);
     m_webLayerTreeView->setRootLayer(*m_paintArtifactCompositor->getWebLayer());
   }
 
@@ -124,7 +127,7 @@ TEST_F(PaintArtifactCompositorTestWithPropertyTrees, EmptyPaintArtifact) {
 
 TEST_F(PaintArtifactCompositorTestWithPropertyTrees, OneChunkWithAnOffset) {
   TestPaintArtifact artifact;
-  artifact.chunk(PaintChunkProperties())
+  artifact.chunk(defaultPaintChunkProperties())
       .rectDrawing(FloatRect(50, -50, 100, 100), Color::white);
   update(artifact.build());
 
@@ -139,16 +142,22 @@ TEST_F(PaintArtifactCompositorTestWithPropertyTrees, OneChunkWithAnOffset) {
 TEST_F(PaintArtifactCompositorTestWithPropertyTrees, OneTransform) {
   // A 90 degree clockwise rotation about (100, 100).
   RefPtr<TransformPaintPropertyNode> transform =
-      TransformPaintPropertyNode::create(nullptr,
+      TransformPaintPropertyNode::create(TransformPaintPropertyNode::root(),
                                          TransformationMatrix().rotate(90),
                                          FloatPoint3D(100, 100, 0));
 
   TestPaintArtifact artifact;
-  artifact.chunk(transform, nullptr, dummyRootEffect())
+  artifact
+      .chunk(transform, ClipPaintPropertyNode::root(),
+             EffectPaintPropertyNode::root())
       .rectDrawing(FloatRect(0, 0, 100, 100), Color::white);
-  artifact.chunk(nullptr, nullptr, dummyRootEffect())
+  artifact
+      .chunk(TransformPaintPropertyNode::root(), ClipPaintPropertyNode::root(),
+             EffectPaintPropertyNode::root())
       .rectDrawing(FloatRect(0, 0, 100, 100), Color::gray);
-  artifact.chunk(transform, nullptr, dummyRootEffect())
+  artifact
+      .chunk(transform, ClipPaintPropertyNode::root(),
+             EffectPaintPropertyNode::root())
       .rectDrawing(FloatRect(100, 100, 200, 100), Color::black);
   update(artifact.build());
 
@@ -183,16 +192,21 @@ TEST_F(PaintArtifactCompositorTestWithPropertyTrees, OneTransform) {
 TEST_F(PaintArtifactCompositorTestWithPropertyTrees, TransformCombining) {
   // A translation by (5, 5) within a 2x scale about (10, 10).
   RefPtr<TransformPaintPropertyNode> transform1 =
-      TransformPaintPropertyNode::create(
-          nullptr, TransformationMatrix().scale(2), FloatPoint3D(10, 10, 0));
+      TransformPaintPropertyNode::create(TransformPaintPropertyNode::root(),
+                                         TransformationMatrix().scale(2),
+                                         FloatPoint3D(10, 10, 0));
   RefPtr<TransformPaintPropertyNode> transform2 =
       TransformPaintPropertyNode::create(
           transform1, TransformationMatrix().translate(5, 5), FloatPoint3D());
 
   TestPaintArtifact artifact;
-  artifact.chunk(transform1, nullptr, dummyRootEffect())
+  artifact
+      .chunk(transform1, ClipPaintPropertyNode::root(),
+             EffectPaintPropertyNode::root())
       .rectDrawing(FloatRect(0, 0, 300, 200), Color::white);
-  artifact.chunk(transform2, nullptr, dummyRootEffect())
+  artifact
+      .chunk(transform2, ClipPaintPropertyNode::root(),
+             EffectPaintPropertyNode::root())
       .rectDrawing(FloatRect(0, 0, 300, 200), Color::black);
   update(artifact.build());
 
@@ -229,7 +243,8 @@ TEST_F(PaintArtifactCompositorTestWithPropertyTrees,
     // flattening determines whether content within the node's local transform
     // is flattened, while cc's notion applies in the parent's coordinate space.
     RefPtr<TransformPaintPropertyNode> transform1 =
-        TransformPaintPropertyNode::create(nullptr, TransformationMatrix(),
+        TransformPaintPropertyNode::create(TransformPaintPropertyNode::root(),
+                                           TransformationMatrix(),
                                            FloatPoint3D());
     RefPtr<TransformPaintPropertyNode> transform2 =
         TransformPaintPropertyNode::create(
@@ -241,7 +256,9 @@ TEST_F(PaintArtifactCompositorTestWithPropertyTrees,
             FloatPoint3D(), transformIsFlattened);
 
     TestPaintArtifact artifact;
-    artifact.chunk(transform3, nullptr, nullptr)
+    artifact
+        .chunk(transform3, ClipPaintPropertyNode::root(),
+               EffectPaintPropertyNode::root())
         .rectDrawing(FloatRect(0, 0, 300, 200), Color::white);
     update(artifact.build());
 
@@ -277,7 +294,8 @@ TEST_F(PaintArtifactCompositorTestWithPropertyTrees,
 TEST_F(PaintArtifactCompositorTestWithPropertyTrees, SortingContextID) {
   // Has no 3D rendering context.
   RefPtr<TransformPaintPropertyNode> transform1 =
-      TransformPaintPropertyNode::create(nullptr, TransformationMatrix(),
+      TransformPaintPropertyNode::create(TransformPaintPropertyNode::root(),
+                                         TransformationMatrix(),
                                          FloatPoint3D());
   // Establishes a 3D rendering context.
   RefPtr<TransformPaintPropertyNode> transform2 =
@@ -293,13 +311,21 @@ TEST_F(PaintArtifactCompositorTestWithPropertyTrees, SortingContextID) {
                                          FloatPoint3D(), false, 2);
 
   TestPaintArtifact artifact;
-  artifact.chunk(transform1, nullptr, dummyRootEffect())
+  artifact
+      .chunk(transform1, ClipPaintPropertyNode::root(),
+             EffectPaintPropertyNode::root())
       .rectDrawing(FloatRect(0, 0, 300, 200), Color::white);
-  artifact.chunk(transform2, nullptr, dummyRootEffect())
+  artifact
+      .chunk(transform2, ClipPaintPropertyNode::root(),
+             EffectPaintPropertyNode::root())
       .rectDrawing(FloatRect(0, 0, 300, 200), Color::lightGray);
-  artifact.chunk(transform3, nullptr, dummyRootEffect())
+  artifact
+      .chunk(transform3, ClipPaintPropertyNode::root(),
+             EffectPaintPropertyNode::root())
       .rectDrawing(FloatRect(0, 0, 300, 200), Color::darkGray);
-  artifact.chunk(transform4, nullptr, dummyRootEffect())
+  artifact
+      .chunk(transform4, ClipPaintPropertyNode::root(),
+             EffectPaintPropertyNode::root())
       .rectDrawing(FloatRect(0, 0, 300, 200), Color::black);
   update(artifact.build());
 
@@ -349,10 +375,13 @@ TEST_F(PaintArtifactCompositorTestWithPropertyTrees, SortingContextID) {
 
 TEST_F(PaintArtifactCompositorTestWithPropertyTrees, OneClip) {
   RefPtr<ClipPaintPropertyNode> clip = ClipPaintPropertyNode::create(
-      nullptr, nullptr, FloatRoundedRect(100, 100, 300, 200));
+      ClipPaintPropertyNode::root(), TransformPaintPropertyNode::root(),
+      FloatRoundedRect(100, 100, 300, 200));
 
   TestPaintArtifact artifact;
-  artifact.chunk(nullptr, clip, nullptr)
+  artifact
+      .chunk(TransformPaintPropertyNode::root(), clip,
+             EffectPaintPropertyNode::root())
       .rectDrawing(FloatRect(220, 80, 300, 200), Color::black);
   update(artifact.build());
 
@@ -364,25 +393,35 @@ TEST_F(PaintArtifactCompositorTestWithPropertyTrees, OneClip) {
 
   const cc::ClipNode* clipNode =
       propertyTrees().clip_tree.Node(layer->clip_tree_index());
-  EXPECT_TRUE(clipNode->applies_local_clip);
+  EXPECT_EQ(cc::ClipNode::ClipType::APPLIES_LOCAL_CLIP, clipNode->clip_type);
   EXPECT_TRUE(clipNode->layers_are_clipped);
   EXPECT_EQ(gfx::RectF(100, 100, 300, 200), clipNode->clip);
 }
 
 TEST_F(PaintArtifactCompositorTestWithPropertyTrees, NestedClips) {
   RefPtr<ClipPaintPropertyNode> clip1 = ClipPaintPropertyNode::create(
-      nullptr, nullptr, FloatRoundedRect(100, 100, 700, 700));
-  RefPtr<ClipPaintPropertyNode> clip2 = ClipPaintPropertyNode::create(
-      clip1, nullptr, FloatRoundedRect(200, 200, 700, 100));
+      ClipPaintPropertyNode::root(), TransformPaintPropertyNode::root(),
+      FloatRoundedRect(100, 100, 700, 700));
+  RefPtr<ClipPaintPropertyNode> clip2 =
+      ClipPaintPropertyNode::create(clip1, TransformPaintPropertyNode::root(),
+                                    FloatRoundedRect(200, 200, 700, 100));
 
   TestPaintArtifact artifact;
-  artifact.chunk(nullptr, clip1, dummyRootEffect())
+  artifact
+      .chunk(TransformPaintPropertyNode::root(), clip1,
+             EffectPaintPropertyNode::root())
       .rectDrawing(FloatRect(300, 350, 100, 100), Color::white);
-  artifact.chunk(nullptr, clip2, dummyRootEffect())
+  artifact
+      .chunk(TransformPaintPropertyNode::root(), clip2,
+             EffectPaintPropertyNode::root())
       .rectDrawing(FloatRect(300, 350, 100, 100), Color::lightGray);
-  artifact.chunk(nullptr, clip1, dummyRootEffect())
+  artifact
+      .chunk(TransformPaintPropertyNode::root(), clip1,
+             EffectPaintPropertyNode::root())
       .rectDrawing(FloatRect(300, 350, 100, 100), Color::darkGray);
-  artifact.chunk(nullptr, clip2, dummyRootEffect())
+  artifact
+      .chunk(TransformPaintPropertyNode::root(), clip2,
+             EffectPaintPropertyNode::root())
       .rectDrawing(FloatRect(300, 350, 100, 100), Color::black);
   update(artifact.build());
 
@@ -413,14 +452,14 @@ TEST_F(PaintArtifactCompositorTestWithPropertyTrees, NestedClips) {
   EXPECT_EQ(whiteLayer->clip_tree_index(), darkGrayLayer->clip_tree_index());
   const cc::ClipNode* outerClip =
       propertyTrees().clip_tree.Node(whiteLayer->clip_tree_index());
-  EXPECT_TRUE(outerClip->applies_local_clip);
+  EXPECT_EQ(cc::ClipNode::ClipType::APPLIES_LOCAL_CLIP, outerClip->clip_type);
   EXPECT_TRUE(outerClip->layers_are_clipped);
   EXPECT_EQ(gfx::RectF(100, 100, 700, 700), outerClip->clip);
 
   EXPECT_EQ(lightGrayLayer->clip_tree_index(), blackLayer->clip_tree_index());
   const cc::ClipNode* innerClip =
       propertyTrees().clip_tree.Node(blackLayer->clip_tree_index());
-  EXPECT_TRUE(innerClip->applies_local_clip);
+  EXPECT_EQ(cc::ClipNode::ClipType::APPLIES_LOCAL_CLIP, innerClip->clip_type);
   EXPECT_TRUE(innerClip->layers_are_clipped);
   EXPECT_EQ(gfx::RectF(200, 200, 700, 100), innerClip->clip);
   EXPECT_EQ(outerClip->id, innerClip->parent_id);
@@ -430,12 +469,15 @@ TEST_F(PaintArtifactCompositorTestWithPropertyTrees, DeeplyNestedClips) {
   Vector<RefPtr<ClipPaintPropertyNode>> clips;
   for (unsigned i = 1; i <= 10; i++) {
     clips.append(ClipPaintPropertyNode::create(
-        clips.isEmpty() ? nullptr : clips.last(), nullptr,
+        clips.isEmpty() ? ClipPaintPropertyNode::root() : clips.last(),
+        TransformPaintPropertyNode::root(),
         FloatRoundedRect(5 * i, 0, 100, 200 - 10 * i)));
   }
 
   TestPaintArtifact artifact;
-  artifact.chunk(nullptr, clips.last(), dummyRootEffect())
+  artifact
+      .chunk(TransformPaintPropertyNode::root(), clips.last(),
+             EffectPaintPropertyNode::root())
       .rectDrawing(FloatRect(0, 0, 200, 200), Color::white);
   update(artifact.build());
 
@@ -451,7 +493,7 @@ TEST_F(PaintArtifactCompositorTestWithPropertyTrees, DeeplyNestedClips) {
       propertyTrees().clip_tree.Node(drawingLayer->clip_tree_index());
   for (auto it = clips.rbegin(); it != clips.rend(); ++it) {
     const ClipPaintPropertyNode* paintClipNode = it->get();
-    EXPECT_TRUE(clipNode->applies_local_clip);
+    EXPECT_EQ(cc::ClipNode::ClipType::APPLIES_LOCAL_CLIP, clipNode->clip_type);
     EXPECT_TRUE(clipNode->layers_are_clipped);
     EXPECT_EQ(paintClipNode->clipRect().rect(), clipNode->clip);
     clipNode = propertyTrees().clip_tree.Node(clipNode->parent_id);
@@ -460,16 +502,23 @@ TEST_F(PaintArtifactCompositorTestWithPropertyTrees, DeeplyNestedClips) {
 
 TEST_F(PaintArtifactCompositorTestWithPropertyTrees, SiblingClips) {
   RefPtr<ClipPaintPropertyNode> commonClip = ClipPaintPropertyNode::create(
-      nullptr, nullptr, FloatRoundedRect(0, 0, 800, 600));
+      ClipPaintPropertyNode::root(), TransformPaintPropertyNode::root(),
+      FloatRoundedRect(0, 0, 800, 600));
   RefPtr<ClipPaintPropertyNode> clip1 = ClipPaintPropertyNode::create(
-      commonClip, nullptr, FloatRoundedRect(0, 0, 400, 600));
+      commonClip, TransformPaintPropertyNode::root(),
+      FloatRoundedRect(0, 0, 400, 600));
   RefPtr<ClipPaintPropertyNode> clip2 = ClipPaintPropertyNode::create(
-      commonClip, nullptr, FloatRoundedRect(400, 0, 400, 600));
+      commonClip, TransformPaintPropertyNode::root(),
+      FloatRoundedRect(400, 0, 400, 600));
 
   TestPaintArtifact artifact;
-  artifact.chunk(nullptr, clip1, dummyRootEffect())
+  artifact
+      .chunk(TransformPaintPropertyNode::root(), clip1,
+             EffectPaintPropertyNode::root())
       .rectDrawing(FloatRect(0, 0, 640, 480), Color::white);
-  artifact.chunk(nullptr, clip2, dummyRootEffect())
+  artifact
+      .chunk(TransformPaintPropertyNode::root(), clip2,
+             EffectPaintPropertyNode::root())
       .rectDrawing(FloatRect(0, 0, 640, 480), Color::black);
   update(artifact.build());
 
@@ -481,7 +530,7 @@ TEST_F(PaintArtifactCompositorTestWithPropertyTrees, SiblingClips) {
   EXPECT_EQ(gfx::Transform(), whiteLayer->screen_space_transform());
   const cc::ClipNode* whiteClip =
       propertyTrees().clip_tree.Node(whiteLayer->clip_tree_index());
-  EXPECT_TRUE(whiteClip->applies_local_clip);
+  EXPECT_EQ(cc::ClipNode::ClipType::APPLIES_LOCAL_CLIP, whiteClip->clip_type);
   EXPECT_TRUE(whiteClip->layers_are_clipped);
   ASSERT_EQ(gfx::RectF(0, 0, 400, 600), whiteClip->clip);
 
@@ -491,14 +540,15 @@ TEST_F(PaintArtifactCompositorTestWithPropertyTrees, SiblingClips) {
   EXPECT_EQ(gfx::Transform(), blackLayer->screen_space_transform());
   const cc::ClipNode* blackClip =
       propertyTrees().clip_tree.Node(blackLayer->clip_tree_index());
-  EXPECT_TRUE(blackClip->applies_local_clip);
+  EXPECT_EQ(cc::ClipNode::ClipType::APPLIES_LOCAL_CLIP, blackClip->clip_type);
   EXPECT_TRUE(blackClip->layers_are_clipped);
   ASSERT_EQ(gfx::RectF(400, 0, 400, 600), blackClip->clip);
 
   EXPECT_EQ(whiteClip->parent_id, blackClip->parent_id);
   const cc::ClipNode* commonClipNode =
       propertyTrees().clip_tree.Node(whiteClip->parent_id);
-  EXPECT_TRUE(commonClipNode->applies_local_clip);
+  EXPECT_EQ(cc::ClipNode::ClipType::APPLIES_LOCAL_CLIP,
+            commonClipNode->clip_type);
   EXPECT_TRUE(commonClipNode->layers_are_clipped);
   ASSERT_EQ(gfx::RectF(0, 0, 800, 600), commonClipNode->clip);
 }
@@ -508,7 +558,7 @@ TEST_F(PaintArtifactCompositorTestWithPropertyTrees,
   scoped_refptr<cc::Layer> layer = cc::Layer::Create();
 
   TestPaintArtifact artifact;
-  artifact.chunk(PaintChunkProperties())
+  artifact.chunk(defaultPaintChunkProperties())
       .foreignLayer(FloatPoint(50, 100), IntSize(400, 300), layer);
   update(artifact.build());
 
@@ -519,19 +569,28 @@ TEST_F(PaintArtifactCompositorTestWithPropertyTrees,
 }
 
 TEST_F(PaintArtifactCompositorTestWithPropertyTrees, EffectTreeConversion) {
-  RefPtr<EffectPaintPropertyNode> effect1 =
-      EffectPaintPropertyNode::create(dummyRootEffect(), 0.5);
-  RefPtr<EffectPaintPropertyNode> effect2 =
-      EffectPaintPropertyNode::create(effect1, 0.3);
-  RefPtr<EffectPaintPropertyNode> effect3 =
-      EffectPaintPropertyNode::create(dummyRootEffect(), 0.2);
+  RefPtr<EffectPaintPropertyNode> effect1 = EffectPaintPropertyNode::create(
+      EffectPaintPropertyNode::root(), TransformPaintPropertyNode::root(),
+      ClipPaintPropertyNode::root(), CompositorFilterOperations(), 0.5);
+  RefPtr<EffectPaintPropertyNode> effect2 = EffectPaintPropertyNode::create(
+      effect1, TransformPaintPropertyNode::root(),
+      ClipPaintPropertyNode::root(), CompositorFilterOperations(), 0.3);
+  RefPtr<EffectPaintPropertyNode> effect3 = EffectPaintPropertyNode::create(
+      EffectPaintPropertyNode::root(), TransformPaintPropertyNode::root(),
+      ClipPaintPropertyNode::root(), CompositorFilterOperations(), 0.2);
 
   TestPaintArtifact artifact;
-  artifact.chunk(nullptr, nullptr, effect2.get())
+  artifact
+      .chunk(TransformPaintPropertyNode::root(), ClipPaintPropertyNode::root(),
+             effect2.get())
       .rectDrawing(FloatRect(0, 0, 100, 100), Color::white);
-  artifact.chunk(nullptr, nullptr, effect1.get())
+  artifact
+      .chunk(TransformPaintPropertyNode::root(), ClipPaintPropertyNode::root(),
+             effect1.get())
       .rectDrawing(FloatRect(0, 0, 100, 100), Color::white);
-  artifact.chunk(nullptr, nullptr, effect3.get())
+  artifact
+      .chunk(TransformPaintPropertyNode::root(), ClipPaintPropertyNode::root(),
+             effect3.get())
       .rectDrawing(FloatRect(0, 0, 100, 100), Color::white);
   update(artifact.build());
 
@@ -539,22 +598,23 @@ TEST_F(PaintArtifactCompositorTestWithPropertyTrees, EffectTreeConversion) {
 
   const cc::EffectTree& effectTree = propertyTrees().effect_tree;
   // Node #0 reserved for null; #1 for root render surface; #2 for
-  // dummyRootEffect, plus 3 nodes for those created by this test.
-  ASSERT_EQ(6u, effectTree.size());
+  // EffectPaintPropertyNode::root(), plus 3 nodes for those created by
+  // this test.
+  ASSERT_EQ(5u, effectTree.size());
 
-  const cc::EffectNode& convertedDummyRootEffect = *effectTree.Node(2);
-  EXPECT_EQ(1, convertedDummyRootEffect.parent_id);
+  const cc::EffectNode& convertedRootEffect = *effectTree.Node(1);
+  EXPECT_EQ(-1, convertedRootEffect.parent_id);
 
-  const cc::EffectNode& convertedEffect1 = *effectTree.Node(3);
-  EXPECT_EQ(convertedDummyRootEffect.id, convertedEffect1.parent_id);
+  const cc::EffectNode& convertedEffect1 = *effectTree.Node(2);
+  EXPECT_EQ(convertedRootEffect.id, convertedEffect1.parent_id);
   EXPECT_FLOAT_EQ(0.5, convertedEffect1.opacity);
 
-  const cc::EffectNode& convertedEffect2 = *effectTree.Node(4);
+  const cc::EffectNode& convertedEffect2 = *effectTree.Node(3);
   EXPECT_EQ(convertedEffect1.id, convertedEffect2.parent_id);
   EXPECT_FLOAT_EQ(0.3, convertedEffect2.opacity);
 
-  const cc::EffectNode& convertedEffect3 = *effectTree.Node(5);
-  EXPECT_EQ(convertedDummyRootEffect.id, convertedEffect3.parent_id);
+  const cc::EffectNode& convertedEffect3 = *effectTree.Node(4);
+  EXPECT_EQ(convertedRootEffect.id, convertedEffect3.parent_id);
   EXPECT_FLOAT_EQ(0.2, convertedEffect3.opacity);
 
   EXPECT_EQ(convertedEffect2.id, contentLayerAt(0)->effect_tree_index());
@@ -564,14 +624,17 @@ TEST_F(PaintArtifactCompositorTestWithPropertyTrees, EffectTreeConversion) {
 
 TEST_F(PaintArtifactCompositorTestWithPropertyTrees, OneScrollNode) {
   RefPtr<TransformPaintPropertyNode> scrollTranslation =
-      TransformPaintPropertyNode::create(
-          nullptr, TransformationMatrix().translate(7, 9), FloatPoint3D());
+      TransformPaintPropertyNode::create(TransformPaintPropertyNode::root(),
+                                         TransformationMatrix().translate(7, 9),
+                                         FloatPoint3D());
   RefPtr<ScrollPaintPropertyNode> scroll = ScrollPaintPropertyNode::create(
-      nullptr, scrollTranslation, IntSize(11, 13), IntSize(27, 31), true,
-      false);
+      ScrollPaintPropertyNode::root(), scrollTranslation, IntSize(11, 13),
+      IntSize(27, 31), true, false);
 
   TestPaintArtifact artifact;
-  artifact.chunk(scrollTranslation, nullptr, nullptr, scroll)
+  artifact
+      .chunk(scrollTranslation, ClipPaintPropertyNode::root(),
+             EffectPaintPropertyNode::root(), scroll)
       .rectDrawing(FloatRect(11, 13, 17, 19), Color::white);
   update(artifact.build());
 
@@ -598,14 +661,17 @@ TEST_F(PaintArtifactCompositorTestWithPropertyTrees, OneScrollNode) {
 }
 
 TEST_F(PaintArtifactCompositorTestWithPropertyTrees, NestedScrollNodes) {
-  RefPtr<EffectPaintPropertyNode> effect =
-      EffectPaintPropertyNode::create(dummyRootEffect(), 0.5);
+  RefPtr<EffectPaintPropertyNode> effect = EffectPaintPropertyNode::create(
+      EffectPaintPropertyNode::root(), TransformPaintPropertyNode::root(),
+      ClipPaintPropertyNode::root(), CompositorFilterOperations(), 0.5);
 
   RefPtr<TransformPaintPropertyNode> scrollTranslationA =
       TransformPaintPropertyNode::create(
-          nullptr, TransformationMatrix().translate(11, 13), FloatPoint3D());
+          TransformPaintPropertyNode::root(),
+          TransformationMatrix().translate(11, 13), FloatPoint3D());
   RefPtr<ScrollPaintPropertyNode> scrollA = ScrollPaintPropertyNode::create(
-      nullptr, scrollTranslationA, IntSize(2, 3), IntSize(5, 7), false, true);
+      ScrollPaintPropertyNode::root(), scrollTranslationA, IntSize(2, 3),
+      IntSize(5, 7), false, true);
   scrollA->addMainThreadScrollingReasons(
       MainThreadScrollingReason::kHasBackgroundAttachmentFixedObjects);
   RefPtr<TransformPaintPropertyNode> scrollTranslationB =
@@ -616,9 +682,11 @@ TEST_F(PaintArtifactCompositorTestWithPropertyTrees, NestedScrollNodes) {
       scrollA, scrollTranslationB, IntSize(19, 23), IntSize(29, 31), true,
       false);
   TestPaintArtifact artifact;
-  artifact.chunk(scrollTranslationA, nullptr, effect, scrollA)
+  artifact
+      .chunk(scrollTranslationA, ClipPaintPropertyNode::root(), effect, scrollA)
       .rectDrawing(FloatRect(7, 11, 13, 17), Color::white);
-  artifact.chunk(scrollTranslationB, nullptr, effect, scrollB)
+  artifact
+      .chunk(scrollTranslationB, ClipPaintPropertyNode::root(), effect, scrollB)
       .rectDrawing(FloatRect(1, 2, 3, 5), Color::white);
   update(artifact.build());
 

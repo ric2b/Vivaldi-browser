@@ -100,10 +100,45 @@ AutomationPredicate.formField = AutomationPredicate.match({
   ],
   anyRole: [
     Role.checkBox,
+    Role.colorWell,
     Role.listBox,
     Role.slider,
+    Role.switch,
     Role.tab,
     Role.tree
+  ]
+});
+
+/** @type {AutomationPredicate.Unary} */
+AutomationPredicate.control = AutomationPredicate.match({
+  anyPredicate: [
+    AutomationPredicate.formField,
+  ],
+  anyRole: [
+    Role.disclosureTriangle,
+    Role.menuItem,
+    Role.menuItemCheckBox,
+    Role.menuItemRadio,
+    Role.menuListOption,
+    Role.scrollBar
+  ]
+});
+
+/**
+ * @param {!AutomationNode} node
+ * @return {boolean}
+ */
+AutomationPredicate.image = function(node) {
+  return node.role == Role.image && !!(node.name || node.url);
+};
+
+/** @type {AutomationPredicate.Unary} */
+AutomationPredicate.linkOrControl = AutomationPredicate.match({
+  anyPredicate: [
+    AutomationPredicate.control
+  ],
+  anyRole: [
+    Role.link
   ]
 });
 
@@ -235,16 +270,27 @@ AutomationPredicate.linebreak = function(first, second) {
  * @return {boolean}
  */
 AutomationPredicate.container = function(node) {
-  return AutomationPredicate.structuralContainer(node) ||
-      node.role == Role.div ||
-      node.role == Role.document ||
-      node.role == Role.group ||
-      node.role == Role.listItem ||
-      node.role == Role.toolbar ||
-      node.role == Role.window ||
-      // For example, crosh.
-      (node.role == Role.textField && node.state.readOnly) ||
-      (node.state.editable && node.parent && !node.parent.state.editable);
+  return AutomationPredicate.match({
+    anyRole: [
+      Role.div,
+      Role.document,
+      Role.group,
+      Role.listItem,
+      Role.toolbar,
+      Role.window],
+    anyPredicate: [
+      AutomationPredicate.landmark,
+      AutomationPredicate.structuralContainer,
+      function(node) {
+        // For example, crosh.
+        return (node.role == Role.textField && node.state.readOnly);
+      },
+      function(node) {
+        return (node.state.editable &&
+            node.parent &&
+            !node.parent.state.editable);
+      }]
+  })(node);
 };
 
 /**
@@ -255,6 +301,7 @@ AutomationPredicate.container = function(node) {
  */
 AutomationPredicate.structuralContainer = AutomationPredicate.roles([
     Role.rootWebArea,
+    Role.webView,
     Role.embeddedObject,
     Role.iframe,
     Role.iframePresentational]);
@@ -299,8 +346,8 @@ AutomationPredicate.shouldIgnoreNode = function(node) {
   if (node.role == Role.listMarker)
     return true;
 
-  // Don't ignore nodes with names.
-  if (node.name || node.value || node.description)
+  // Don't ignore nodes with names or name-like attribute.
+  if (node.name || node.value || node.description || node.url)
     return false;
 
   // Ignore some roles.
@@ -311,6 +358,7 @@ AutomationPredicate.shouldIgnoreNode = function(node) {
                                   Role.group,
                                   Role.image,
                                   Role.staticText,
+                                  Role.svgRoot,
                                   Role.tableHeaderContainer])(node));
 };
 

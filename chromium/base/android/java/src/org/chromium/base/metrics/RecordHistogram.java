@@ -111,7 +111,7 @@ public class RecordHistogram {
      * UMA_HISTOGRAM_CUSTOM_COUNTS C++ macro.
      * @param name name of the histogram
      * @param sample sample to be recorded, at least |min| and at most |max| - 1
-     * @param min lower bound for expected sample values
+     * @param min lower bound for expected sample values. It must be >= 1
      * @param max upper bounds for expected sample values
      * @param numBuckets the number of buckets
      */
@@ -216,6 +216,19 @@ public class RecordHistogram {
             String name, long duration, long min, long max, TimeUnit timeUnit, int numBuckets) {
         recordCustomTimesHistogramMilliseconds(name, timeUnit.toMillis(duration),
                 timeUnit.toMillis(min), timeUnit.toMillis(max), numBuckets);
+    }
+
+    /**
+     * Records a sample in a histogram of sizes in KB. This is the Java equivalent of the
+     * UMA_HISTOGRAM_MEMORY_KB C++ macro.
+     *
+     * Good for sizes up to about 500MB.
+     *
+     * @param name name of the histogram.
+     * @param sizeInkB Sample to record in KB.
+     */
+    public static void recordMemoryKBHistogram(String name, int sizeInKB) {
+        recordCustomCountHistogram(name, sizeInKB, 1000, 500000, 50);
     }
 
     private static int clampToInt(long value) {

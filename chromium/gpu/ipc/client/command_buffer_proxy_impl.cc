@@ -100,7 +100,8 @@ std::unique_ptr<CommandBufferProxyImpl> CommandBufferProxyImpl::Create(
 }
 
 CommandBufferProxyImpl::~CommandBufferProxyImpl() {
-  FOR_EACH_OBSERVER(DeletionObserver, deletion_observers_, OnWillDeleteImpl());
+  for (auto& observer : deletion_observers_)
+    observer.OnWillDeleteImpl();
   DisconnectChannel();
 }
 
@@ -455,7 +456,7 @@ int32_t CommandBufferProxyImpl::CreateImage(ClientBuffer buffer,
   gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager =
       channel_->gpu_memory_buffer_manager();
   gfx::GpuMemoryBuffer* gpu_memory_buffer =
-      gpu_memory_buffer_manager->GpuMemoryBufferFromClientBuffer(buffer);
+      reinterpret_cast<gfx::GpuMemoryBuffer*>(buffer);
   DCHECK(gpu_memory_buffer);
 
   // This handle is owned by the GPU process and must be passed to it or it

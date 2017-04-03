@@ -1,100 +1,95 @@
 // Copyright 2016 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/**
+ * @interface
+ */
+UI.TextEditorFactory = function() {};
+
+UI.TextEditorFactory.prototype = {
+  /**
+   * @param {!UI.TextEditor.Options} options
+   * @return {!UI.TextEditor}
+   */
+  createEditor: function(options) {}
+};
 
 /**
  * @interface
  */
-WebInspector.TextEditorFactory = function()
-{
-}
+UI.TextEditor = function() {};
 
-WebInspector.TextEditorFactory.prototype = {
-    /**
-     * @param {!WebInspector.TextEditor.Options} options
-     * @return {!WebInspector.TextEditor}
-     */
-    createEditor: function(options) { }
-}
+UI.TextEditor.prototype = {
 
-/**
- * @interface
- */
-WebInspector.TextEditor = function()
-{
-}
+  /**
+   * @return {!UI.Widget}
+   */
+  widget: function() {},
 
-WebInspector.TextEditor.prototype = {
+  /**
+   * @return {!Common.TextRange}
+   */
+  fullRange: function() {},
 
-    /**
-     * @return {!WebInspector.Widget}
-     */
-    widget: function() { },
+  /**
+   * @return {!Common.TextRange}
+   */
+  selection: function() {},
 
-    /**
-     * @return {!WebInspector.TextRange}
-     */
-    fullRange: function(){ },
+  /**
+   * @param {!Common.TextRange} selection
+   */
+  setSelection: function(selection) {},
 
-    /**
-     * @return {!WebInspector.TextRange}
-     */
-    selection: function() { },
+  /**
+   * @param {!Common.TextRange=} textRange
+   * @return {string}
+   */
+  text: function(textRange) {},
 
-    /**
-     * @param {!WebInspector.TextRange} selection
-     */
-    setSelection: function(selection) { },
+  /**
+   * @param {string} text
+   */
+  setText: function(text) {},
 
-    /**
-     * @param {!WebInspector.TextRange=} textRange
-     * @return {string}
-     */
-    text: function(textRange) { },
+  /**
+   * @param {number} lineNumber
+   * @return {string}
+   */
+  line: function(lineNumber) {},
 
-    /**
-     * @param {string} text
-     */
-    setText: function(text) { },
+  newlineAndIndent: function() {},
 
-    /**
-     * @param {number} lineNumber
-     * @return {string}
-     */
-    line: function(lineNumber) { },
+  /**
+   * @param {function(!KeyboardEvent)} handler
+   */
+  addKeyDownHandler: function(handler) {},
 
-    newlineAndIndent: function() { },
+  /**
+   * @param {?UI.AutocompleteConfig} config
+   */
+  configureAutocomplete: function(config) {},
 
-    /**
-     * @param {function(!KeyboardEvent)} handler
-     */
-    addKeyDownHandler: function(handler) { },
-
-    /**
-     * @param {?WebInspector.AutocompleteConfig} config
-     */
-    configureAutocomplete: function(config) { },
-
-    clearAutocomplete: function() { }
-}
+  clearAutocomplete: function() {}
+};
 
 /**
  * @typedef {{
- *  bracketMatchingSetting: (!WebInspector.Setting|undefined),
+ *  bracketMatchingSetting: (!Common.Setting|undefined),
  *  lineNumbers: boolean,
  *  lineWrapping: boolean,
  *  mimeType: (string|undefined),
  *  autoHeight: (boolean|undefined)
  * }}
- **/
-WebInspector.TextEditor.Options;
+ */
+UI.TextEditor.Options;
 
 /**
  * @typedef {{
- *     substituteRangeCallback: ((function(number, number):?WebInspector.TextRange)|undefined),
- *     suggestionsCallback: ((function(!WebInspector.TextRange, !WebInspector.TextRange):?Promise.<!WebInspector.SuggestBox.Suggestions>)|undefined),
+ *     substituteRangeCallback: ((function(number, number):?Common.TextRange)|undefined),
+ *     suggestionsCallback: ((function(!Common.TextRange, !Common.TextRange, boolean=, string=):?Promise.<!UI.SuggestBox.Suggestions>)|undefined),
  *     isWordChar: ((function(string):boolean)|undefined),
  *     captureEnter: (boolean|undefined)
  * }}
- **/
-WebInspector.AutocompleteConfig;
+ */
+UI.AutocompleteConfig;

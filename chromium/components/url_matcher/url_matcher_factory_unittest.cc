@@ -218,7 +218,7 @@ class UrlConditionCaseTest {
   const std::string& expected_value_;
   const std::string& incorrect_case_value_;
   const ResultType expected_result_for_wrong_case_;
-  GURL url_;
+  const GURL& url_;
 
   // Allow implicit copy and assign, because a public copy constructor is
   // needed, but never used (!), for the definition of arrays of this class.

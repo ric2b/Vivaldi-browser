@@ -19,8 +19,7 @@ class VivaldiHistoryDatabase {
 
   UrlVisitCount::TopUrlsPerDayList TopUrlsPerDay(size_t num_hosts);
 
-  Visit::VisitsList VisitSearch(const std::string& text_query,
-    const QueryOptions& options);
+  Visit::VisitsList VisitSearch(const QueryOptions& options);
 
  private:
   // Returns the database for the functions in this interface. The decendent of

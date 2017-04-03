@@ -13,6 +13,7 @@
 #include "ash/public/cpp/shelf_types.h"
 #include "base/macros.h"
 #include "ui/compositor/layer_animation_observer.h"
+#include "ui/gfx/geometry/insets.h"
 #include "ui/views/bubble/tray_bubble_view.h"
 
 namespace ash {
@@ -41,12 +42,7 @@ class ASH_EXPORT TrayBackgroundView : public ActionableView,
 
     void SetAlignment(ShelfAlignment alignment);
 
-    void set_size(const gfx::Size& size) { size_ = size; }
-
     void SetMargin(int main_axis_margin, int cross_axis_margin);
-
-    // views::View:
-    gfx::Size GetPreferredSize() const override;
 
    protected:
     // views::View:
@@ -59,7 +55,6 @@ class ASH_EXPORT TrayBackgroundView : public ActionableView,
     void UpdateLayout();
 
     ShelfAlignment alignment_;
-    gfx::Size size_;
     int main_axis_margin_ = 0;
     int cross_axis_margin_ = 0;
 
@@ -79,13 +74,14 @@ class ASH_EXPORT TrayBackgroundView : public ActionableView,
   void SetVisible(bool visible) override;
   const char* GetClassName() const override;
   void ChildPreferredSizeChanged(views::View* child) override;
-  void GetAccessibleState(ui::AXViewState* state) override;
+  void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
   void AboutToRequestFocusFromTabTraversal(bool reverse) override;
   void OnPaint(gfx::Canvas* canvas) override;
 
   // ActionableView:
-  bool PerformAction(const ui::Event& event) override;
-  gfx::Rect GetFocusBounds() override;
+  std::unique_ptr<views::InkDropRipple> CreateInkDropRipple() const override;
+  std::unique_ptr<views::InkDropHighlight> CreateInkDropHighlight()
+      const override;
   void OnGestureEvent(ui::GestureEvent* event) override;
 
   // Called whenever the shelf alignment changes.
@@ -94,7 +90,7 @@ class ASH_EXPORT TrayBackgroundView : public ActionableView,
   // Called when the anchor (tray or bubble) may have moved or changed.
   virtual void AnchorUpdated() {}
 
-  // Called from GetAccessibleState, must return a valid accessible name.
+  // Called from GetAccessibleNodeData, must return a valid accessible name.
   virtual base::string16 GetAccessibleNameForTray() = 0;
 
   // Called when the bubble is resized.
@@ -111,23 +107,16 @@ class ASH_EXPORT TrayBackgroundView : public ActionableView,
   // Sets |contents| as a child.
   void SetContents(views::View* contents);
 
-  // Creates and sets contents background to |background_|.
-  void SetContentsBackground();
-
-  // Returns the anchor rect for the bubble.
-  gfx::Rect GetBubbleAnchorRect(
-      views::Widget* anchor_widget,
-      views::TrayBubbleView::AnchorType anchor_type,
-      views::TrayBubbleView::AnchorAlignment anchor_alignment) const;
+  // Creates and sets contents background to |background_|. |draws_active|
+  // determines if the view's background should be drawn as active when the view
+  // is in the active state.
+  void SetContentsBackground(bool draws_active);
 
   // Returns the bubble anchor alignment based on |shelf_alignment_|.
   views::TrayBubbleView::AnchorAlignment GetAnchorAlignment() const;
 
-  // Forces the background to be drawn active if set to true.
-  void SetDrawBackgroundAsActive(bool visible);
-
-  // Returns true when the the background was overridden to be drawn as active.
-  bool draw_background_as_active() const { return draw_background_as_active_; }
+  void SetIsActive(bool is_active);
+  bool is_active() const { return is_active_; }
 
   TrayContainer* tray_container() const { return tray_container_; }
   ShelfAlignment shelf_alignment() const { return shelf_alignment_; }
@@ -141,7 +130,24 @@ class ASH_EXPORT TrayBackgroundView : public ActionableView,
   void UpdateShelfItemBackground(int alpha) override;
 
   // Updates the visibility of this tray's separator.
-  void SetSeparatorVisibility(bool is_show);
+  void set_separator_visibility(bool visible) { separator_visible_ = visible; }
+
+  // Gets the anchor for bubbles, which is tray_container().
+  views::View* GetBubbleAnchor() const;
+
+  // Gets additional insets for positioning bubbles relative to
+  // tray_container().
+  gfx::Insets GetBubbleAnchorInsets() const;
+
+ protected:
+  // ActionableView:
+  std::unique_ptr<views::InkDropMask> CreateInkDropMask() const override;
+  bool ShouldEnterPushedState(const ui::Event& event) override;
+  bool PerformAction(const ui::Event& event) override;
+  void HandlePerformActionResult(bool action_performed,
+                                 const ui::Event& event) override;
+  gfx::Rect GetFocusBounds() override;
+  void OnPaintFocus(gfx::Canvas* canvas) override;
 
  private:
   class TrayWidgetObserver;
@@ -153,6 +159,13 @@ class ASH_EXPORT TrayBackgroundView : public ActionableView,
   // Applies transformations to the |layer()| to animate the view when
   // SetVisible(false) is called.
   void HideTransformation();
+
+  // Helper function that calculates background insets relative to local bounds.
+  gfx::Insets GetBackgroundInsets() const;
+
+  // Helper function that calculates background bounds relative to local bounds
+  // based on background insets returned from GetBackgroundInsets().
+  gfx::Rect GetBackgroundBounds() const;
 
   // The shelf containing the system tray for this view.
   WmShelf* wm_shelf_;
@@ -167,13 +180,13 @@ class ASH_EXPORT TrayBackgroundView : public ActionableView,
   // Owned by the view passed to SetContents().
   TrayBackground* background_;
 
-  // This variable stores the activation override which will tint the background
-  // differently if set to true.
-  bool draw_background_as_active_;
+  // Determines if the view is active. This changes how the background is drawn
+  // in non-MD version and how the ink drop ripples behave in MD version.
+  bool is_active_;
 
   // Visibility of this tray's separator which is a line of 1x32px and 4px to
   // right of tray.
-  bool is_separator_visible_;
+  bool separator_visible_;
 
   std::unique_ptr<TrayWidgetObserver> widget_observer_;
   std::unique_ptr<TrayEventFilter> tray_event_filter_;

@@ -40,13 +40,22 @@
 
 namespace blink {
 
+class CORE_EXPORT TraceWrapperBase {
+  WTF_MAKE_NONCOPYABLE(TraceWrapperBase);
+
+ public:
+  TraceWrapperBase() = default;
+
+  DECLARE_VIRTUAL_TRACE_WRAPPERS(){};
+};
+
 // ScriptWrappable provides a way to map from/to C++ DOM implementation to/from
 // JavaScript object (platform object).  toV8() converts a ScriptWrappable to
 // a v8::Object and toScriptWrappable() converts a v8::Object back to
 // a ScriptWrappable.  v8::Object as platform object is called "wrapper object".
 // The wrapepr object for the main world is stored in ScriptWrappable.  Wrapper
 // objects for other worlds are stored in DOMWrapperMap.
-class CORE_EXPORT ScriptWrappable {
+class CORE_EXPORT ScriptWrappable : public TraceWrapperBase {
   WTF_MAKE_NONCOPYABLE(ScriptWrappable);
 
  public:
@@ -152,8 +161,6 @@ class CORE_EXPORT ScriptWrappable {
   //  wrapper in the main world. To mark wrappers in all worlds call
   //  ScriptWrappableVisitor::markWrapper(ScriptWrappable*, v8::Isolate*)
   void markWrapper(const WrapperVisitor*) const;
-
-  DECLARE_VIRTUAL_TRACE_WRAPPERS(){};
 
  private:
   // These classes are exceptionally allowed to use mainWorldWrapper().

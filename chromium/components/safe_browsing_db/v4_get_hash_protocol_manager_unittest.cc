@@ -14,8 +14,8 @@
 #include "base/test/simple_test_clock.h"
 #include "base/time/time.h"
 #include "components/safe_browsing_db/safebrowsing.pb.h"
-#include "components/safe_browsing_db/testing_util.h"
 #include "components/safe_browsing_db/util.h"
+#include "components/safe_browsing_db/v4_test_util.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "net/base/escape.h"
 #include "net/base/load_flags.h"
@@ -25,14 +25,6 @@
 
 using base::Time;
 using base::TimeDelta;
-
-namespace {
-
-const char kClient[] = "unittest";
-const char kAppVer[] = "1.0";
-const char kKeyParam[] = "test_key_param";
-
-}  // namespace
 
 namespace safe_browsing {
 
@@ -76,12 +68,13 @@ class V4GetHashProtocolManagerTest : public PlatformTest {
   }
 
   std::unique_ptr<V4GetHashProtocolManager> CreateProtocolManager() {
-    V4ProtocolConfig config;
-    config.client_name = kClient;
-    config.version = kAppVer;
-    config.key_param = kKeyParam;
-    StoresToCheck stores_to_check({GetUrlMalwareId(), GetChromeUrlApiId()});
-    return V4GetHashProtocolManager::Create(NULL, stores_to_check, config);
+    StoresToCheck stores_to_check(
+        {GetUrlMalwareId(), GetChromeUrlApiId(),
+         ListIdentifier(CHROME_PLATFORM, URL, SOCIAL_ENGINEERING_PUBLIC),
+         ListIdentifier(CHROME_PLATFORM, URL,
+                        POTENTIALLY_HARMFUL_APPLICATION)});
+    return V4GetHashProtocolManager::Create(NULL, stores_to_check,
+                                            GetTestV4ProtocolConfig());
   }
 
   static void SetupFetcherToReturnOKResponse(
@@ -285,13 +278,18 @@ TEST_F(V4GetHashProtocolManagerTest,
 TEST_F(V4GetHashProtocolManagerTest, TestGetHashRequest) {
   FindFullHashesRequest req;
   ThreatInfo* info = req.mutable_threat_info();
-  info->add_platform_types(GetCurrentPlatformType());
-  info->add_platform_types(CHROME_PLATFORM);
+  for (const PlatformType& p :
+       std::set<PlatformType>{GetCurrentPlatformType(), CHROME_PLATFORM}) {
+    info->add_platform_types(p);
+  }
 
   info->add_threat_entry_types(URL);
 
-  info->add_threat_types(MALWARE_THREAT);
-  info->add_threat_types(API_ABUSE);
+  for (const ThreatType& tt :
+       std::set<ThreatType>{MALWARE_THREAT, SOCIAL_ENGINEERING_PUBLIC,
+                            POTENTIALLY_HARMFUL_APPLICATION, API_ABUSE}) {
+    info->add_threat_types(tt);
+  }
 
   HashPrefix one = "hashone";
   HashPrefix two = "hashtwo";
@@ -331,6 +329,14 @@ TEST_F(V4GetHashProtocolManagerTest, TestParseHashResponse) {
       m->mutable_threat_entry_metadata()->add_entries();
   e->set_key("permission");
   e->set_value("NOTIFICATIONS");
+  // Add another ThreatMatch for a list we don't track. This response should
+  // get dropped.
+  m = res.add_matches();
+  m->set_threat_type(THREAT_TYPE_UNSPECIFIED);
+  m->set_platform_type(CHROME_PLATFORM);
+  m->set_threat_entry_type(URL);
+  m->mutable_cache_duration()->set_seconds(300);
+  m->mutable_threat()->set_hash(full_hash);
 
   // Serialize.
   std::string res_data;
@@ -341,6 +347,8 @@ TEST_F(V4GetHashProtocolManagerTest, TestParseHashResponse) {
   EXPECT_TRUE(pm->ParseHashResponse(res_data, &full_hash_infos, &cache_expire));
 
   EXPECT_EQ(now + base::TimeDelta::FromSeconds(600), cache_expire);
+  // Even though the server responded with two ThreatMatch responses, one
+  // should have been dropped.
   ASSERT_EQ(1ul, full_hash_infos.size());
   const FullHashInfo& fhi = full_hash_infos[0];
   EXPECT_EQ(full_hash, fhi.full_hash);
@@ -408,6 +416,8 @@ TEST_F(V4GetHashProtocolManagerTest, TestParseHashThreatPatternType) {
         pm->ParseHashResponse(se_data, &full_hash_infos, &cache_expire));
     EXPECT_EQ(now + base::TimeDelta::FromSeconds(600), cache_expire);
 
+    // Ensure that the threat remains valid since we found a full hash match,
+    // even though the metadata information could not be parsed correctly.
     ASSERT_EQ(1ul, full_hash_infos.size());
     const FullHashInfo& fhi = full_hash_infos[0];
     EXPECT_EQ(full_hash, fhi.full_hash);
@@ -470,9 +480,18 @@ TEST_F(V4GetHashProtocolManagerTest, TestParseHashThreatPatternType) {
     invalid_res.SerializeToString(&invalid_data);
     std::vector<FullHashInfo> full_hash_infos;
     base::Time cache_expire;
-    EXPECT_FALSE(
+    EXPECT_TRUE(
         pm->ParseHashResponse(invalid_data, &full_hash_infos, &cache_expire));
-    EXPECT_EQ(0ul, full_hash_infos.size());
+
+    // Ensure that the threat remains valid since we found a full hash match,
+    // even though the metadata information could not be parsed correctly.
+    ASSERT_EQ(1ul, full_hash_infos.size());
+    const auto& fhi = full_hash_infos[0];
+    EXPECT_EQ(full_hash, fhi.full_hash);
+    EXPECT_EQ(
+        ListIdentifier(CHROME_PLATFORM, URL, POTENTIALLY_HARMFUL_APPLICATION),
+        fhi.list_id);
+    EXPECT_EQ(ThreatPatternType::NONE, fhi.metadata.threat_pattern_type);
   }
 }
 
@@ -484,13 +503,14 @@ TEST_F(V4GetHashProtocolManagerTest,
   base::Time now = base::Time::UnixEpoch();
   SetTestClock(now, pm.get());
 
+  FullHash full_hash("Not to fret.");
   FindFullHashesResponse res;
   res.mutable_negative_cache_duration()->set_seconds(600);
   ThreatMatch* m = res.add_matches();
   m->set_threat_type(API_ABUSE);
   m->set_platform_type(CHROME_PLATFORM);
   m->set_threat_entry_type(URL);
-  m->mutable_threat()->set_hash(FullHash("Not to fret."));
+  m->mutable_threat()->set_hash(full_hash);
   ThreatEntryMetadata::MetadataEntry* e =
       m->mutable_threat_entry_metadata()->add_entries();
   e->set_key("notpermission");
@@ -502,11 +522,14 @@ TEST_F(V4GetHashProtocolManagerTest,
 
   std::vector<FullHashInfo> full_hash_infos;
   base::Time cache_expire;
-  EXPECT_FALSE(
-      pm->ParseHashResponse(res_data, &full_hash_infos, &cache_expire));
+  EXPECT_TRUE(pm->ParseHashResponse(res_data, &full_hash_infos, &cache_expire));
 
   EXPECT_EQ(now + base::TimeDelta::FromSeconds(600), cache_expire);
-  EXPECT_EQ(0ul, full_hash_infos.size());
+  ASSERT_EQ(1ul, full_hash_infos.size());
+  const auto& fhi = full_hash_infos[0];
+  EXPECT_EQ(full_hash, fhi.full_hash);
+  EXPECT_EQ(GetChromeUrlApiId(), fhi.list_id);
+  EXPECT_TRUE(fhi.metadata.api_permissions.empty());
 }
 
 TEST_F(V4GetHashProtocolManagerTest,

@@ -9,9 +9,13 @@
 #include "base/run_loop.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "gpu/ipc/client/gpu_channel_host.h"
-#include "services/shell/public/cpp/connection.h"
+#include "gpu/ipc/client/gpu_memory_buffer_impl_shared_memory.h"
+#include "mojo/public/cpp/system/buffer.h"
+#include "mojo/public/cpp/system/platform_handle.h"
+#include "services/service_manager/public/cpp/connection.h"
 #include "services/ui/ws/gpu_service_proxy_delegate.h"
 #include "services/ui/ws/mus_gpu_memory_buffer_manager.h"
+#include "ui/gfx/buffer_format_util.h"
 
 namespace ui {
 namespace ws {
@@ -31,7 +35,7 @@ GpuServiceProxy::GpuServiceProxy(GpuServiceProxyDelegate* delegate)
                       base::WaitableEvent::InitialState::NOT_SIGNALED) {
   gpu_main_.OnStart();
   // TODO(sad): Once GPU process is split, this would look like:
-  //   connector->ConnectToInterface("service:gpu", &gpu_service_);
+  //   connector->ConnectToInterface("gpu", &gpu_service_);
   gpu_main_.Create(GetProxy(&gpu_service_));
   gpu_service_->Initialize(
       base::Bind(&GpuServiceProxy::OnInitialized, base::Unretained(this)));
@@ -98,14 +102,21 @@ void GpuServiceProxy::CreateGpuMemoryBuffer(
     const gfx::Size& size,
     gfx::BufferFormat format,
     gfx::BufferUsage usage,
-    uint64_t surface_id,
     const mojom::GpuService::CreateGpuMemoryBufferCallback& callback) {
-  NOTIMPLEMENTED();
+  // TODO(sad): Check to see if native gpu memory buffer can be used first.
+  if (!gpu::GpuMemoryBufferImplSharedMemory::IsUsageSupported(usage) ||
+      !gpu::GpuMemoryBufferImplSharedMemory::IsSizeValidForFormat(size,
+                                                                  format)) {
+    callback.Run(gfx::GpuMemoryBufferHandle());
+    return;
+  }
+  callback.Run(gpu::GpuMemoryBufferImplSharedMemory::AllocateForChildProcess(
+      id, size, format));
 }
 
 void GpuServiceProxy::DestroyGpuMemoryBuffer(gfx::GpuMemoryBufferId id,
                                              const gpu::SyncToken& sync_token) {
-  NOTIMPLEMENTED();
+  //  NOTIMPLEMENTED();
 }
 
 bool GpuServiceProxy::IsMainThread() {

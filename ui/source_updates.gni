@@ -1,6 +1,8 @@
 
 post_process_template("//chrome/browser/ui:ui") {
   sources += [
+    "//vivaldi/ui/about/vivaldi_about_version.cc",
+    "//vivaldi/ui/about/vivaldi_about_version.h",
     "//vivaldi/ui/vivaldi_browser_window.cc",
     "//vivaldi/ui/vivaldi_browser_window.h",
     "//vivaldi/ui/vivaldi_session_service.cc",

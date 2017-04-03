@@ -105,7 +105,7 @@ mojom::MediaRoutePtr CreateMojoRoute() {
   route->description = kDescription;
   route->is_local = true;
   route->for_display = true;
-  route->incognito = false;
+  route->is_incognito = false;
   return route;
 }
 
@@ -221,6 +221,7 @@ TEST_F(MediaRouterMojoImplTest, CreateRoute) {
       kSource, kSinkId, GURL(kOrigin), nullptr, route_response_callbacks,
       base::TimeDelta::FromMilliseconds(kTimeoutMillis), false);
   run_loop.Run();
+  ExpectResultBucketCount("CreateRoute", RouteRequestResult::ResultCode::OK, 1);
 }
 
 TEST_F(MediaRouterMojoImplTest, CreateIncognitoRoute) {
@@ -242,7 +243,7 @@ TEST_F(MediaRouterMojoImplTest, CreateIncognitoRoute) {
             mojom::MediaRoutePtr route = CreateMojoRoute();
             route->custom_controller_path =
                 std::string("custom/controller/path");
-            route->incognito = true;
+            route->is_incognito = true;
             cb.Run(std::move(route), std::string(),
                    mojom::RouteRequestResultCode::OK);
           }));
@@ -259,6 +260,7 @@ TEST_F(MediaRouterMojoImplTest, CreateIncognitoRoute) {
       kSource, kSinkId, GURL(kOrigin), nullptr, route_response_callbacks,
       base::TimeDelta::FromMilliseconds(kTimeoutMillis), true);
   run_loop.Run();
+  ExpectResultBucketCount("CreateRoute", RouteRequestResult::ResultCode::OK, 1);
 }
 
 TEST_F(MediaRouterMojoImplTest, CreateRouteFails) {
@@ -287,6 +289,8 @@ TEST_F(MediaRouterMojoImplTest, CreateRouteFails) {
       kSource, kSinkId, GURL(kOrigin), nullptr, route_response_callbacks,
       base::TimeDelta::FromMilliseconds(kTimeoutMillis), false);
   run_loop.Run();
+  ExpectResultBucketCount("CreateRoute",
+                          RouteRequestResult::ResultCode::TIMED_OUT, 1);
 }
 
 TEST_F(MediaRouterMojoImplTest, CreateRouteIncognitoMismatchFails) {
@@ -316,11 +320,13 @@ TEST_F(MediaRouterMojoImplTest, CreateRouteIncognitoMismatchFails) {
       kSource, kSinkId, GURL(kOrigin), nullptr, route_response_callbacks,
       base::TimeDelta::FromMilliseconds(kTimeoutMillis), true);
   run_loop.Run();
+  ExpectResultBucketCount(
+      "CreateRoute", RouteRequestResult::ResultCode::INCOGNITO_MISMATCH, 1);
 }
 
 TEST_F(MediaRouterMojoImplTest, IncognitoRoutesTerminatedOnProfileShutdown) {
   mojom::MediaRoutePtr route = CreateMojoRoute();
-  route->incognito = true;
+  route->is_incognito = true;
 
   EXPECT_CALL(mock_media_route_provider_,
               CreateRoute(kSource, kSinkId, _, kOrigin, kInvalidTabId,
@@ -332,7 +338,7 @@ TEST_F(MediaRouterMojoImplTest, IncognitoRoutesTerminatedOnProfileShutdown) {
              int tab_id, base::TimeDelta timeout, bool incognito,
              const mojom::MediaRouteProvider::CreateRouteCallback& cb) {
             mojom::MediaRoutePtr route = CreateMojoRoute();
-            route->incognito = true;
+            route->is_incognito = true;
             cb.Run(std::move(route), std::string(),
                    mojom::RouteRequestResultCode::OK);
           }));
@@ -404,6 +410,7 @@ TEST_F(MediaRouterMojoImplTest, JoinRoute) {
                       route_response_callbacks,
                       base::TimeDelta::FromMilliseconds(kTimeoutMillis), false);
   run_loop.Run();
+  ExpectResultBucketCount("JoinRoute", RouteRequestResult::ResultCode::OK, 1);
 }
 
 TEST_F(MediaRouterMojoImplTest, JoinRouteNotFoundFails) {
@@ -419,6 +426,8 @@ TEST_F(MediaRouterMojoImplTest, JoinRouteNotFoundFails) {
                       route_response_callbacks,
                       base::TimeDelta::FromMilliseconds(kTimeoutMillis), false);
   run_loop.Run();
+  ExpectResultBucketCount("JoinRoute",
+                          RouteRequestResult::ResultCode::ROUTE_NOT_FOUND, 1);
 }
 
 TEST_F(MediaRouterMojoImplTest, JoinRouteTimedOutFails) {
@@ -455,6 +464,8 @@ TEST_F(MediaRouterMojoImplTest, JoinRouteTimedOutFails) {
                       route_response_callbacks,
                       base::TimeDelta::FromMilliseconds(kTimeoutMillis), false);
   run_loop.Run();
+  ExpectResultBucketCount("JoinRoute",
+                          RouteRequestResult::ResultCode::TIMED_OUT, 1);
 }
 
 TEST_F(MediaRouterMojoImplTest, JoinRouteIncognitoMismatchFails) {
@@ -497,6 +508,8 @@ TEST_F(MediaRouterMojoImplTest, JoinRouteIncognitoMismatchFails) {
                       route_response_callbacks,
                       base::TimeDelta::FromMilliseconds(kTimeoutMillis), true);
   run_loop.Run();
+  ExpectResultBucketCount(
+      "JoinRoute", RouteRequestResult::ResultCode::INCOGNITO_MISMATCH, 1);
 }
 
 TEST_F(MediaRouterMojoImplTest, ConnectRouteByRouteId) {
@@ -535,6 +548,7 @@ TEST_F(MediaRouterMojoImplTest, ConnectRouteByRouteId) {
       kSource, kRouteId, GURL(kOrigin), nullptr, route_response_callbacks,
       base::TimeDelta::FromMilliseconds(kTimeoutMillis), false);
   run_loop.Run();
+  ExpectResultBucketCount("JoinRoute", RouteRequestResult::ResultCode::OK, 1);
 }
 
 TEST_F(MediaRouterMojoImplTest, ConnectRouteByRouteIdFails) {
@@ -564,6 +578,8 @@ TEST_F(MediaRouterMojoImplTest, ConnectRouteByRouteIdFails) {
       kSource, kRouteId, GURL(kOrigin), nullptr, route_response_callbacks,
       base::TimeDelta::FromMilliseconds(kTimeoutMillis), true);
   run_loop.Run();
+  ExpectResultBucketCount("JoinRoute",
+                          RouteRequestResult::ResultCode::TIMED_OUT, 1);
 }
 
 TEST_F(MediaRouterMojoImplTest, ConnectRouteByIdIncognitoMismatchFails) {
@@ -599,6 +615,8 @@ TEST_F(MediaRouterMojoImplTest, ConnectRouteByIdIncognitoMismatchFails) {
       kSource, kRouteId, GURL(kOrigin), nullptr, route_response_callbacks,
       base::TimeDelta::FromMilliseconds(kTimeoutMillis), true);
   run_loop.Run();
+  ExpectResultBucketCount(
+      "JoinRoute", RouteRequestResult::ResultCode::INCOGNITO_MISMATCH, 1);
 }
 
 TEST_F(MediaRouterMojoImplTest, DetachRoute) {
@@ -886,7 +904,7 @@ TEST_F(MediaRouterMojoImplTest, RegisterAndUnregisterMediaRoutesObserver) {
   mojo_routes[0] = CreateMojoRoute();
   mojo_routes[1] = CreateMojoRoute();
   mojo_routes[1]->media_route_id = kRouteId2;
-  mojo_routes[1]->incognito = true;
+  mojo_routes[1]->is_incognito = true;
 
   EXPECT_CALL(routes_observer, OnRoutesUpdated(SequenceEquals(expected_routes),
                                                expected_joinable_route_ids));
@@ -1082,9 +1100,9 @@ TEST_F(MediaRouterMojoImplTest, RouteMessagesMultipleObservers) {
 
 TEST_F(MediaRouterMojoImplTest, PresentationConnectionStateChangedCallback) {
   MediaRoute::Id route_id("route-id");
-  const std::string kPresentationUrl("http://foo.fakeUrl");
+  const GURL presentation_url("http://www.example.com/presentation.html");
   const std::string kPresentationId("pid");
-  content::PresentationSessionInfo connection(kPresentationUrl,
+  content::PresentationSessionInfo connection(presentation_url,
                                               kPresentationId);
   MockPresentationConnectionStateChangedCallback callback;
   std::unique_ptr<PresentationConnectionStateSubscription> subscription =
@@ -1101,7 +1119,7 @@ TEST_F(MediaRouterMojoImplTest, PresentationConnectionStateChangedCallback) {
         content::PRESENTATION_CONNECTION_CLOSE_REASON_WENT_AWAY;
     closed_info.message = "Foo";
 
-    EXPECT_CALL(callback, Run(StateChageInfoEquals(closed_info)))
+    EXPECT_CALL(callback, Run(StateChangeInfoEquals(closed_info)))
         .WillOnce(InvokeWithoutArgs([&run_loop]() { run_loop.Quit(); }));
     media_router_proxy_->OnPresentationConnectionClosed(
         route_id, PresentationConnectionCloseReason::WENT_AWAY, "Foo");
@@ -1113,7 +1131,7 @@ TEST_F(MediaRouterMojoImplTest, PresentationConnectionStateChangedCallback) {
       content::PRESENTATION_CONNECTION_STATE_TERMINATED);
   {
     base::RunLoop run_loop;
-    EXPECT_CALL(callback, Run(StateChageInfoEquals(terminated_info)))
+    EXPECT_CALL(callback, Run(StateChangeInfoEquals(terminated_info)))
         .WillOnce(InvokeWithoutArgs([&run_loop]() { run_loop.Quit(); }));
     media_router_proxy_->OnPresentationConnectionStateChanged(
         route_id, PresentationConnectionState::TERMINATED);

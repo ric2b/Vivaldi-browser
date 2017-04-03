@@ -13,10 +13,9 @@
 
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
-#include "base/memory/weak_ptr.h"
 #include "build/build_config.h"
 #include "components/omnibox/browser/omnibox_view.h"
-#include "components/security_state/security_state_model.h"
+#include "components/security_state/core/security_state.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/gfx/range/range.h"
 #include "ui/views/controls/textfield/textfield.h"
@@ -125,11 +124,6 @@ class OmniboxViewViews
   // Handle keyword hint tab-to-search and tabbing through dropdown results.
   bool HandleEarlyTabActions(const ui::KeyEvent& event);
 
-  // Handles a request to change the value of this text field from software
-  // using an accessibility API (typically automation software, screen readers
-  // don't normally use this). Sets the value and clears the selection.
-  void AccessibilitySetValue(const base::string16& new_value);
-
   // Updates |security_level_| based on the toolbar model's current value.
   void UpdateSecurityLevel();
 
@@ -172,7 +166,8 @@ class OmniboxViewViews
   void OnGestureEvent(ui::GestureEvent* event) override;
   void AboutToRequestFocusFromTabTraversal(bool reverse) override;
   bool SkipDefaultKeyEventProcessing(const ui::KeyEvent& event) override;
-  void GetAccessibleState(ui::AXViewState* state) override;
+  void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
+  bool HandleAccessibleAction(const ui::AXActionData& action_data) override;
   void OnFocus() override;
   void OnBlur() override;
   bool IsCommandIdEnabled(int command_id) const override;
@@ -213,7 +208,7 @@ class OmniboxViewViews
 
   std::unique_ptr<OmniboxPopupView> popup_view_;
 
-  security_state::SecurityStateModel::SecurityLevel security_level_;
+  security_state::SecurityLevel security_level_;
 
   // Selection persisted across temporary text changes, like popup suggestions.
   gfx::Range saved_temporary_selection_;
@@ -251,9 +246,6 @@ class OmniboxViewViews
   // The time of the first character insert operation that has not yet been
   // painted. Used to measure omnibox responsiveness with a histogram.
   base::TimeTicks insert_char_time_;
-
-  // Used to bind callback functions to this object.
-  base::WeakPtrFactory<OmniboxViewViews> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(OmniboxViewViews);
 };

@@ -45,11 +45,11 @@
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
+#include "content/public/test/test_frame_navigation_observer.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "content/public/test/test_utils.h"
 #include "content/shell/browser/shell.h"
 #include "content/test/content_browser_test_utils_internal.h"
-#include "content/test/test_frame_navigation_observer.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/request_handler_util.h"
@@ -159,8 +159,8 @@ class RenderFrameHostManagerTest : public ContentBrowserTest {
   void StartEmbeddedServer() {
     // Support multiple sites on the embedded test server.
     host_resolver()->AddRule("*", "127.0.0.1");
-    ASSERT_TRUE(embedded_test_server()->Start());
     SetupCrossSiteRedirector(embedded_test_server());
+    ASSERT_TRUE(embedded_test_server()->Start());
   }
 
   // Returns a URL on foo.com with the given path.
@@ -2079,7 +2079,6 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostManagerTest,
           NavigationControllerImpl::CreateNavigationEntry(
               url1, Referrer(), ui::PAGE_TRANSITION_RELOAD, false,
               std::string(), shell()->web_contents()->GetBrowserContext()));
-  cloned_entry->SetPageID(0);
   prev_entry = shell()->web_contents()->GetController().GetEntryAtIndex(0);
   cloned_entry->SetPageState(prev_entry->GetPageState());
   const std::vector<base::FilePath>& cloned_files =

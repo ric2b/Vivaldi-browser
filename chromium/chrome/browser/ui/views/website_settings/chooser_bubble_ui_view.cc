@@ -50,7 +50,6 @@ class ChooserBubbleUiViewDelegate : public views::BubbleDialogDelegateView,
   // views::DialogDelegate:
   base::string16 GetDialogButtonLabel(ui::DialogButton button) const override;
   bool IsDialogButtonEnabled(ui::DialogButton button) const override;
-  views::View* CreateExtraView() override;
   views::View* CreateFootnoteView() override;
   bool Accept() override;
   bool Cancel() override;
@@ -97,7 +96,7 @@ ChooserBubbleUiViewDelegate::ChooserBubbleUiViewDelegate(
   // | -------------------------------- |
   // |           [ Connect ] [ Cancel ] |
   // |----------------------------------|
-  // | Not seeing your device? Get help |
+  // | Get help                         |
   // ------------------------------------
 
   chooser_content_view_ =
@@ -120,12 +119,8 @@ bool ChooserBubbleUiViewDelegate::IsDialogButtonEnabled(
   return chooser_content_view_->IsDialogButtonEnabled(button);
 }
 
-views::View* ChooserBubbleUiViewDelegate::CreateExtraView() {
-  return chooser_content_view_->CreateExtraView();
-}
-
 views::View* ChooserBubbleUiViewDelegate::CreateFootnoteView() {
-  return chooser_content_view_->CreateFootnoteView();
+  return chooser_content_view_->footnote_link();
 }
 
 bool ChooserBubbleUiViewDelegate::Accept() {

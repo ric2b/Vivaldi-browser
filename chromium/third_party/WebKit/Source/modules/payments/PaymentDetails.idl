@@ -4,12 +4,10 @@
 
 // https://w3c.github.io/browser-payment-api/#paymentdetails-dictionary
 
-[
-    RuntimeEnabled=PaymentRequest
-] dictionary PaymentDetails {
+dictionary PaymentDetails {
     PaymentItem total;
     sequence<PaymentItem> displayItems;
     sequence<PaymentShippingOption> shippingOptions;
     sequence<PaymentDetailsModifier> modifiers;
-    DOMString error;
+    [RuntimeEnabled=PaymentDetailsError] DOMString error;
 };

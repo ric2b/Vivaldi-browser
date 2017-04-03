@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012 Google Inc.
+ * Copyright (C) 2015 Google Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -27,56 +27,45 @@
 /* WARNING: This css file can only style <audio> and <video> elements */
 
 audio {
-    height: 35px;
+    height: 48px;
 }
 
-audio::-webkit-media-controls-enclosure {
-    height: 35px;
-}
-
-video::-webkit-media-controls-enclosure {
-    height: 40px;
+audio::-webkit-media-controls-enclosure, video::-webkit-media-controls-enclosure {
+    height: 48px;
 }
 
 audio::-webkit-media-controls-panel, video::-webkit-media-controls-panel {
-    height: 35px;
+    height: 48px;
+    min-width: 48px;
+    line-height: 48px;
+    font-size: 14px;
 }
 
-audio::-webkit-media-controls-play-button, video::-webkit-media-controls-play-button {
-    width: 35px;
-    height: 35px;
-    line-height: 35px;
+video::-internal-media-controls-overlay-cast-button {
+    width: 48px;
+    height: 48px;
 }
 
-audio::-webkit-media-controls-current-time-display, video::-webkit-media-controls-current-time-display,
+audio::-webkit-media-controls-timeline-container, video::-webkit-media-controls-timeline-container {
+    height: 48px;
+}
+
+audio::-webkit-media-controls-current-time-display, video::-webkit-media-controls-current-time-display {
+    height: 48px;
+}
+
 audio::-webkit-media-controls-time-remaining-display, video::-webkit-media-controls-time-remaining-display {
-    height: 35px;
-    line-height: 35px;
-    font-size: 18px;
+    height: 48px;
 }
 
-audio::-webkit-media-controls-volume-slider, video::-webkit-media-controls-volume-slider {
-    display: none;
-}
-
-video::-webkit-media-controls-fullscreen-button {
-    width: 35px;
-    height: 35px;
-    line-height: 35px;
-}
-
-audio::-webkit-media-controls-fullscreen-button {
-    display: none;
-}
-
-audio::-internal-media-controls-cast-button, video::-internal-media-controls-cast-button {
-    width: 35px;
-    height: 35px;
-    line-height: 35px;
-}
-
+audio::-webkit-media-controls-play-button, video::-webkit-media-controls-play-button,
+audio::-webkit-media-controls-mute-button, video::-webkit-media-controls-mute-button,
+audio::-webkit-media-controls-fullscreen-button, video::-webkit-media-controls-fullscreen-button,
+audio::-internal-media-controls-cast-button, video::-internal-media-controls-cast-button,
+audio::-internal-media-controls-download-button, video::-internal-media-controls-download-button,
+audio::-internal-media-controls-overflow-button, video::-internal-media-controls-overflow-button,
 video::-webkit-media-controls-toggle-closed-captions-button {
-    width: 35px;
-    height: 35px;
-    line-height: 35px;
+    padding: 8px;
+    width: 48px;
+    height: 48px;
 }

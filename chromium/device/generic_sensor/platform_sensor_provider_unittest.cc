@@ -17,20 +17,6 @@ namespace device {
 using mojom::SensorInitParams;
 using mojom::SensorType;
 
-namespace {
-
-uint64_t GetBufferOffset(mojom::SensorType type) {
-  return (static_cast<uint64_t>(SensorType::LAST) -
-          static_cast<uint64_t>(type)) *
-         SensorInitParams::kReadBufferSize;
-}
-
-using CreateSensorCallback =
-    base::Callback<void(scoped_refptr<PlatformSensor>)>;
-;
-
-}  // namespace
-
 class TestSensorCreateCallback {
  public:
   TestSensorCreateCallback()
@@ -44,7 +30,9 @@ class TestSensorCreateCallback {
     return sensor;
   }
 
-  const CreateSensorCallback& callback() const { return callback_; }
+  const PlatformSensorProvider::CreateSensorCallback& callback() const {
+    return callback_;
+  }
 
  private:
   void SetResult(scoped_refptr<PlatformSensor> sensor) {
@@ -52,7 +40,7 @@ class TestSensorCreateCallback {
     run_loop_.Quit();
   }
 
-  const CreateSensorCallback callback_;
+  const PlatformSensorProvider::CreateSensorCallback callback_;
   base::RunLoop run_loop_;
   scoped_refptr<PlatformSensor> sensor_;
 };
@@ -99,20 +87,19 @@ class PlatformSensorTestClient : public PlatformSensor::Client {
 class PlatformSensorProviderTest : public ::testing::Test {
  public:
   PlatformSensorProviderTest()
-      : sensor_client_(new PlatformSensorTestClient()) {
-    message_loop_.reset(new base::MessageLoopForIO);
-  }
+      : provider_(new FakePlatformSensorProvider()),
+        sensor_client_(new PlatformSensorTestClient()),
+        message_loop_(new base::MessageLoopForIO) {}
 
  protected:
   scoped_refptr<PlatformSensor> CreateSensor(
       mojom::SensorType type,
       TestSensorCreateCallback* callback) {
-    FakePlatformSensorProvider::GetInstance()->CreateSensor(
-        type, SensorInitParams::kReadBufferSize, GetBufferOffset(type),
-        callback->callback());
+    provider_->CreateSensor(type, callback->callback());
     return callback->WaitForResult();
   }
 
+  std::unique_ptr<FakePlatformSensorProvider> provider_;
   std::unique_ptr<PlatformSensorTestClient> sensor_client_;
   std::unique_ptr<base::MessageLoop> message_loop_;
 };
@@ -150,9 +137,6 @@ TEST_F(PlatformSensorProviderTest, CreateSensorsAndCheckType) {
 }
 
 TEST_F(PlatformSensorProviderTest, CreateAndGetSensor) {
-  PlatformSensorProvider* sensor_provider =
-      FakePlatformSensorProvider::GetInstance();
-
   // Create Ambient Light sensor.
   TestSensorCreateCallback callback1;
   scoped_refptr<PlatformSensor> sensor1 =
@@ -162,32 +146,39 @@ TEST_F(PlatformSensorProviderTest, CreateAndGetSensor) {
 
   // Try to get Gyroscope sensor, which has not been created yet.
   scoped_refptr<PlatformSensor> sensor2 =
-      sensor_provider->GetSensor(SensorType::GYROSCOPE);
+      provider_->GetSensor(SensorType::GYROSCOPE);
   EXPECT_FALSE(sensor2);
 
   // Get Ambient Light sensor.
   scoped_refptr<PlatformSensor> sensor3 =
-      sensor_provider->GetSensor(SensorType::AMBIENT_LIGHT);
+      provider_->GetSensor(SensorType::AMBIENT_LIGHT);
   EXPECT_TRUE(sensor3);
 
   EXPECT_EQ(sensor1->GetType(), sensor3->GetType());
+}
 
-  // Try to create a sensor with zero buffer and offset.
-  TestSensorCreateCallback callback4;
-  sensor_provider->CreateSensor(SensorType::GYROSCOPE, 0, 0,
-                                callback4.callback());
-  scoped_refptr<PlatformSensor> sensor4 = callback4.WaitForResult();
-  EXPECT_FALSE(sensor4);
+TEST_F(PlatformSensorProviderTest, CreateAndRemoveSensors) {
+  TestSensorCreateCallback callback1;
+  scoped_refptr<PlatformSensor> sensor1 =
+      CreateSensor(SensorType::AMBIENT_LIGHT, &callback1);
+  EXPECT_TRUE(sensor1);
 
-  scoped_refptr<PlatformSensor> sensor5 =
-      sensor_provider->GetSensor(SensorType::GYROSCOPE);
-  EXPECT_FALSE(sensor5);
+  TestSensorCreateCallback callback2;
+  scoped_refptr<PlatformSensor> sensor2 =
+      CreateSensor(SensorType::PROXIMITY, &callback2);
+  EXPECT_TRUE(sensor2);
+
+  EXPECT_TRUE(provider_->HasSensors());
+
+  EXPECT_CALL(*provider_, AllSensorsRemoved()).Times(1);
+
+  sensor1 = nullptr;
+  sensor2 = nullptr;
+
+  EXPECT_FALSE(provider_->HasSensors());
 }
 
 TEST_F(PlatformSensorProviderTest, TestSensorLeaks) {
-  PlatformSensorProvider* sensor_provider =
-      FakePlatformSensorProvider::GetInstance();
-
   // Create Ambient Light sensor.
   TestSensorCreateCallback callback1;
   scoped_refptr<PlatformSensor> sensor1 =
@@ -198,7 +189,7 @@ TEST_F(PlatformSensorProviderTest, TestSensorLeaks) {
   // Sensor should be automatically destroyed.
   sensor1 = nullptr;
   scoped_refptr<PlatformSensor> sensor2 =
-      sensor_provider->GetSensor(SensorType::AMBIENT_LIGHT);
+      provider_->GetSensor(SensorType::AMBIENT_LIGHT);
   EXPECT_FALSE(sensor2);
 }
 

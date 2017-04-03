@@ -4,4 +4,17 @@
 
 #include "core/layout/ng/ng_fragment.h"
 
-namespace blink {}  // namespace blink
+#include "core/layout/ng/ng_macros.h"
+#include "core/layout/ng/ng_physical_fragment.h"
+
+namespace blink {
+
+NGMarginStrut NGFragment::MarginStrut() const {
+  WRITING_MODE_IGNORED(
+      "Accessing the margin strut is fine here. Changing the writing mode"
+      "establishes a new formatting context, for which a margin strut is never"
+      "set for a fragment.");
+  return toNGPhysicalFragment(physical_fragment_)->MarginStrut();
+}
+
+}  // namespace blink

@@ -6,6 +6,7 @@
 
 #include "base/memory/ptr_util.h"
 #include "services/ui/public/cpp/window.h"
+#include "ui/aura/env.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/events/event.h"
@@ -17,7 +18,12 @@ namespace views {
 
 namespace {
 static uint32_t accelerated_widget_count = 1;
+
+bool IsUsingTestContext() {
+  return aura::Env::GetInstance()->context_factory()->DoesCreateTestContexts();
 }
+
+}  // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 // WindowTreeHostMus, public:
@@ -25,16 +31,22 @@ static uint32_t accelerated_widget_count = 1;
 WindowTreeHostMus::WindowTreeHostMus(NativeWidgetMus* native_widget,
                                      ui::Window* window)
     : native_widget_(native_widget) {
-// We need accelerated widget numbers to be different for each
-// window and fit in the smallest sizeof(AcceleratedWidget) uint32_t
-// has this property.
+  CreateCompositor();
+  gfx::AcceleratedWidget accelerated_widget;
+  if (IsUsingTestContext()) {
+    accelerated_widget = gfx::kNullAcceleratedWidget;
+  } else {
+    // We need accelerated widget numbers to be different for each
+    // window and fit in the smallest sizeof(AcceleratedWidget) uint32_t
+    // has this property.
 #if defined(OS_WIN) || defined(OS_ANDROID)
-  gfx::AcceleratedWidget accelerated_widget =
-      reinterpret_cast<gfx::AcceleratedWidget>(accelerated_widget_count++);
+    accelerated_widget =
+        reinterpret_cast<gfx::AcceleratedWidget>(accelerated_widget_count++);
 #else
-  gfx::AcceleratedWidget accelerated_widget =
-      static_cast<gfx::AcceleratedWidget>(accelerated_widget_count++);
+    accelerated_widget =
+        static_cast<gfx::AcceleratedWidget>(accelerated_widget_count++);
 #endif
+  }
   // TODO(markdittmer): Use correct device-scale-factor from |window|.
   OnAcceleratedWidgetAvailable(accelerated_widget, 1.f);
 
@@ -47,15 +59,7 @@ WindowTreeHostMus::WindowTreeHostMus(NativeWidgetMus* native_widget,
   // Initialize the stub platform window bounds to those of the ui::Window.
   platform_window()->SetBounds(window->bounds());
 
-  // The location of events is already transformed, and there is no way to
-  // correctly determine the reverse transform. So, don't attempt to transform
-  // event locations, else the root location is wrong.
-  // TODO(sky): we need to transform for device scale though.
-  dispatcher()->set_transform_events(false);
   compositor()->SetHostHasTransparentBackground(true);
-
-  input_method_ = base::MakeUnique<InputMethodMus>(this, window);
-  SetSharedInputMethod(input_method_.get());
 }
 
 WindowTreeHostMus::~WindowTreeHostMus() {
@@ -63,15 +67,9 @@ WindowTreeHostMus::~WindowTreeHostMus() {
   DestroyDispatcher();
 }
 
-void WindowTreeHostMus::InitInputMethod(shell::Connector* connector) {
-  input_method_->Init(connector);
-}
-
 void WindowTreeHostMus::DispatchEvent(ui::Event* event) {
-  if (event->IsKeyEvent() && GetInputMethod()) {
-    GetInputMethod()->DispatchKeyEvent(event->AsKeyEvent());
-    return;
-  }
+  // Key events are sent to InputMethodMus directly from NativeWidgetMus.
+  DCHECK(!event->IsKeyEvent());
   WindowTreeHostPlatform::DispatchEvent(event);
 }
 

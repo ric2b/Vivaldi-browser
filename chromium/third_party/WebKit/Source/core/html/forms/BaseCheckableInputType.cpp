@@ -98,12 +98,8 @@ bool BaseCheckableInputType::matchesDefaultPseudoClass() {
   return element().fastHasAttribute(checkedAttr);
 }
 
-String BaseCheckableInputType::fallbackValue() const {
-  return "on";
-}
-
-bool BaseCheckableInputType::storesValueSeparateFromAttribute() {
-  return false;
+InputType::ValueMode BaseCheckableInputType::valueMode() const {
+  return ValueMode::kDefaultOn;
 }
 
 void BaseCheckableInputType::setValue(const String& sanitizedValue,

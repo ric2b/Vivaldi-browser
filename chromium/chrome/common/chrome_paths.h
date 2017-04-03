@@ -29,7 +29,8 @@ enum {
 #endif
   DIR_RESOURCES,                // Directory containing separate file resources
                                 // used by Chrome at runtime.
-  DIR_INSPECTOR,                // Directory where web inspector is located.
+  DIR_INSPECTOR_DEBUG,          // Directory where non-bundled and non-minified
+                                // web inspector is located.
   DIR_APP_DICTIONARIES,         // Directory where the global dictionaries are.
   DIR_USER_DOCUMENTS,           // Directory for a user's "My Documents".
   DIR_USER_MUSIC,               // Directory for a user's music.
@@ -129,10 +130,11 @@ enum {
 #if defined(OS_LINUX)
   FILE_COMPONENT_FLASH_HINT,    // A file in a known location that points to
                                 // the component updated flash plugin.
-#endif // defined(OS_LINUX)
-
-  DIR_VIVALDI_TEST_DATA,        // Directory where unit test date for Vivaldi resides
-
+#endif  // defined(OS_LINUX)
+#if defined(OS_CHROMEOS)
+  FILE_CHROME_OS_COMPONENT_FLASH,  // The location of component updated Flash on
+                                   // Chrome OS.
+#endif  // defined(OS_CHROMEOS)
   PATH_END
 };
 

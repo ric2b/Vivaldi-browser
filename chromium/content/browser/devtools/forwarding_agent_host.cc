@@ -5,6 +5,7 @@
 #include "content/browser/devtools/forwarding_agent_host.h"
 
 #include "base/bind.h"
+#include "content/browser/devtools/devtools_session.h"
 #include "content/browser/devtools/protocol/inspector_handler.h"
 
 namespace content {
@@ -14,13 +15,14 @@ ForwardingAgentHost::ForwardingAgentHost(
     std::unique_ptr<DevToolsExternalAgentProxyDelegate> delegate)
       : DevToolsAgentHostImpl(id),
         delegate_(std::move(delegate)) {
+  NotifyCreated();
 }
 
 ForwardingAgentHost::~ForwardingAgentHost() {
 }
 
 void ForwardingAgentHost::DispatchOnClientHost(const std::string& message) {
-  SendMessageToClient(session_id(), message);
+  SendMessageToClient(session() ? session()->session_id() : 0, message);
 }
 
 void ForwardingAgentHost::ConnectionClosed() {

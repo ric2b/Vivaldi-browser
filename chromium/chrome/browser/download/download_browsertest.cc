@@ -19,7 +19,6 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/path_service.h"
-#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -76,6 +75,7 @@
 #include "components/infobars/core/confirm_infobar_delegate.h"
 #include "components/infobars/core/infobar.h"
 #include "components/prefs/pref_service.h"
+#include "components/safe_browsing_db/safe_browsing_prefs.h"
 #include "content/public/browser/download_danger_type.h"
 #include "content/public/browser/download_interrupt_reasons.h"
 #include "content/public/browser/download_item.h"
@@ -721,7 +721,7 @@ class DownloadTest : public InProcessBrowserTest {
     //    indicates how many members it has.
     //  - Add a member function to |DownloadShelf| to get the status text
     //    of a given member (for example, via the name in |DownloadItemView|'s
-    //    GetAccessibleState() member function), by index.
+    //    GetAccessibleNodeData() member function), by index.
     //  - Iterate over browser->window()->GetDownloadShelf()'s members
     //    to see if any match the status text we want.  Start with the last one.
 
@@ -3311,7 +3311,11 @@ IN_PROC_BROWSER_TEST_F(DownloadTest, SafeSupportedFile) {
   download->Cancel(true);
 }
 
-IN_PROC_BROWSER_TEST_F(DownloadTest, FeedbackService) {
+IN_PROC_BROWSER_TEST_F(DownloadTest, FeedbackServiceDiscardDownload) {
+  PrefService* prefs = browser()->profile()->GetPrefs();
+  prefs->SetBoolean(prefs::kSafeBrowsingEnabled, true);
+  safe_browsing::SetExtendedReportingPref(prefs, true);
+
   // Make a dangerous file.
   GURL download_url(net::URLRequestMockHTTPJob::GetMockUrl(
       "downloads/dangerous/dangerous.swf"));
@@ -3355,15 +3359,70 @@ IN_PROC_BROWSER_TEST_F(DownloadTest, FeedbackService) {
 
   // Begin feedback and check that the file is "stolen".
   download_protection_service->feedback_service()->BeginFeedbackForDownload(
-      downloads[0]);
+      downloads[0], DownloadCommands::DISCARD);
   std::vector<DownloadItem*> updated_downloads;
   GetDownloads(browser(), &updated_downloads);
   ASSERT_TRUE(updated_downloads.empty());
 }
 
-IN_PROC_BROWSER_TEST_F(
-     DownloadTestWithFakeSafeBrowsing,
-     SendUncommonDownloadReportIfUserProceed) {
+IN_PROC_BROWSER_TEST_F(DownloadTest, FeedbackServiceKeepDownload) {
+  PrefService* prefs = browser()->profile()->GetPrefs();
+  prefs->SetBoolean(prefs::kSafeBrowsingEnabled, true);
+  safe_browsing::SetExtendedReportingPref(prefs, true);
+
+  // Make a dangerous file.
+  GURL download_url(net::URLRequestMockHTTPJob::GetMockUrl(
+      "downloads/dangerous/dangerous.swf"));
+  std::unique_ptr<content::DownloadTestObserverInterrupted>
+      interruption_observer(new content::DownloadTestObserverInterrupted(
+          DownloadManagerForBrowser(browser()), 1,
+          content::DownloadTestObserver::ON_DANGEROUS_DOWNLOAD_QUIT));
+  ui_test_utils::NavigateToURLWithDisposition(
+      browser(), GURL(download_url), WindowOpenDisposition::NEW_BACKGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_NONE);
+  interruption_observer->WaitForFinished();
+
+  // Get the download from the DownloadManager.
+  std::vector<DownloadItem*> downloads;
+  DownloadManagerForBrowser(browser())->GetAllDownloads(&downloads);
+  ASSERT_EQ(1u, downloads.size());
+  EXPECT_TRUE(downloads[0]->IsDangerous());
+
+  // Save fake pings for the download.
+  safe_browsing::ClientDownloadReport fake_metadata;
+  fake_metadata.mutable_download_request()->set_url("http://test");
+  fake_metadata.mutable_download_request()->set_length(1);
+  fake_metadata.mutable_download_request()->mutable_digests()->set_sha1("hi");
+  fake_metadata.mutable_download_response()->set_verdict(
+      safe_browsing::ClientDownloadResponse::UNCOMMON);
+  std::string ping_request(
+      fake_metadata.download_request().SerializeAsString());
+  std::string ping_response(
+      fake_metadata.download_response().SerializeAsString());
+  safe_browsing::SafeBrowsingService* sb_service =
+      g_browser_process->safe_browsing_service();
+  safe_browsing::DownloadProtectionService* download_protection_service =
+      sb_service->download_protection_service();
+  download_protection_service->feedback_service()->MaybeStorePingsForDownload(
+      safe_browsing::DownloadProtectionService::UNCOMMON, downloads[0],
+      ping_request, ping_response);
+  ASSERT_TRUE(safe_browsing::DownloadFeedbackService::IsEnabledForDownload(
+      *(downloads[0])));
+
+  // Begin feedback and check that file is still there.
+  download_protection_service->feedback_service()->BeginFeedbackForDownload(
+      downloads[0], DownloadCommands::KEEP);
+
+  std::vector<DownloadItem*> updated_downloads;
+  GetDownloads(browser(), &updated_downloads);
+  ASSERT_EQ(std::size_t(1), updated_downloads.size());
+  ASSERT_FALSE(updated_downloads[0]->IsDangerous());
+  ASSERT_TRUE(PathExists(updated_downloads[0]->GetFullPath()));
+  updated_downloads[0]->Cancel(true);
+}
+
+IN_PROC_BROWSER_TEST_F(DownloadTestWithFakeSafeBrowsing,
+                       SendUncommonDownloadReportIfUserProceed) {
   browser()->profile()->GetPrefs()->SetBoolean(prefs::kSafeBrowsingEnabled,
                                                true);
   // Make a dangerous file.

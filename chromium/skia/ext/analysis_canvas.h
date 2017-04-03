@@ -74,7 +74,7 @@ class SK_API AnalysisCanvas : public SkCanvas, public SkPicture::AbortCallback {
                       const SkPoint vertices[],
                       const SkPoint texs[],
                       const SkColor colors[],
-                      SkXfermode*,
+                      SkBlendMode,
                       const uint16_t indices[],
                       int indexCount,
                       const SkPaint&) override;
@@ -137,6 +137,7 @@ class SK_API AnalysisCanvas : public SkCanvas, public SkPicture::AbortCallback {
   SkColor color_;
   bool is_transparent_;
   int draw_op_count_;
+  int rejected_op_count_;
 };
 
 }  // namespace skia

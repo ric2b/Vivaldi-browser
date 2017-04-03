@@ -17,7 +17,7 @@
 #include "content/shell/renderer/shell_render_view_observer.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/system/message_pipe.h"
-#include "services/shell/public/cpp/interface_registry.h"
+#include "services/service_manager/public/cpp/interface_registry.h"
 #include "third_party/WebKit/public/web/WebTestingSupport.h"
 #include "third_party/WebKit/public/web/WebView.h"
 #include "v8/include/v8.h"
@@ -26,7 +26,7 @@
 #include "ppapi/shared_impl/ppapi_switches.h"
 #endif
 
-#if defined(OS_ANDROID)
+#if defined(ENABLE_MOJO_CDM)
 #include "base/feature_list.h"
 #include "media/base/media_switches.h"
 #endif
@@ -135,12 +135,12 @@ void ShellContentRendererClient::DidInitializeWorkerContextOnWorkerThread(
 }
 
 void ShellContentRendererClient::ExposeInterfacesToBrowser(
-    shell::InterfaceRegistry* interface_registry) {
+    service_manager::InterfaceRegistry* interface_registry) {
   interface_registry->AddInterface<mojom::TestService>(
       base::Bind(&CreateTestService));
 }
 
-#if defined(OS_ANDROID)
+#if defined(ENABLE_MOJO_CDM)
 void ShellContentRendererClient::AddSupportedKeySystems(
     std::vector<std::unique_ptr<media::KeySystemProperties>>* key_systems) {
   if (!base::FeatureList::IsEnabled(media::kExternalClearKeyForTesting))

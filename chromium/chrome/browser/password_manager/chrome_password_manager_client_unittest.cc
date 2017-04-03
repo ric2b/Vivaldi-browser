@@ -20,7 +20,7 @@
 #include "chrome/common/channel_info.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "chrome/test/base/testing_profile.h"
-#include "components/autofill/content/public/interfaces/autofill_agent.mojom.h"
+#include "components/autofill/content/common/autofill_agent.mojom.h"
 #include "components/password_manager/content/browser/password_manager_internals_service_factory.h"
 #include "components/password_manager/core/browser/credentials_filter.h"
 #include "components/password_manager/core/browser/log_manager.h"
@@ -35,12 +35,13 @@
 #include "components/prefs/pref_service.h"
 #include "components/prefs/testing_pref_service.h"
 #include "components/sessions/content/content_record_password_state.h"
-#include "components/syncable_prefs/testing_pref_service_syncable.h"
+#include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/test/web_contents_tester.h"
 #include "mojo/public/cpp/bindings/binding.h"
-#include "services/shell/public/cpp/interface_provider.h"
+#include "services/service_manager/public/cpp/interface_provider.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -53,13 +54,6 @@ using testing::Return;
 using testing::_;
 
 namespace {
-
-const char kPasswordManagerSettingsBehaviourChangeFieldTrialName[] =
-    "PasswordManagerSettingsBehaviourChange";
-const char kPasswordManagerSettingsBehaviourChangeEnabledGroupName[] =
-    "PasswordManagerSettingsBehaviourChange.Active";
-const char kPasswordManagerSettingsBehaviourChangeDisabledGroupName[] =
-    "PasswordManagerSettingsBehaviourChange.NotActive";
 
 // TODO(vabr): Get rid of the mocked client in the client's own test, see
 // http://crbug.com/474577.
@@ -146,14 +140,8 @@ class ChromePasswordManagerClientTest : public ChromeRenderViewHostTestHarness {
   void SetUp() override;
   void TearDown() override;
 
-  syncable_prefs::TestingPrefServiceSyncable* prefs() {
+  sync_preferences::TestingPrefServiceSyncable* prefs() {
     return profile()->GetTestingPrefService();
-  }
-
-  void EnforcePasswordManagerSettingsBehaviourChangeExperimentGroup(
-      const char* name) {
-    ASSERT_TRUE(base::FieldTrialList::CreateFieldTrial(
-        kPasswordManagerSettingsBehaviourChangeFieldTrialName, name));
   }
 
   // Caller does not own the returned pointer.
@@ -197,9 +185,9 @@ class ChromePasswordManagerClientTest : public ChromeRenderViewHostTestHarness {
 void ChromePasswordManagerClientTest::SetUp() {
   ChromeRenderViewHostTestHarness::SetUp();
 
-  shell::InterfaceProvider* remote_interfaces =
+  service_manager::InterfaceProvider* remote_interfaces =
       web_contents()->GetMainFrame()->GetRemoteInterfaces();
-  shell::InterfaceProvider::TestApi test_api(remote_interfaces);
+  service_manager::InterfaceProvider::TestApi test_api(remote_interfaces);
   test_api.SetBinderForName(autofill::mojom::PasswordAutofillAgent::Name_,
                             base::Bind(&FakePasswordAutofillAgent::BindRequest,
                                        base::Unretained(&fake_agent_)));
@@ -339,41 +327,12 @@ TEST_F(ChromePasswordManagerClientTest,
   EXPECT_FALSE(client->IsSavingAndFillingEnabledForCurrentPage());
 }
 
-TEST_F(ChromePasswordManagerClientTest,
-       FillingDependsOnManagerEnabledPreferenceAndExperimentEnabled) {
-  // Test that filing of passwords depends on the password manager enabled
-  // preference and is the user participated in behavior change experiment.
-  ChromePasswordManagerClient* client = GetClient();
-  EnforcePasswordManagerSettingsBehaviourChangeExperimentGroup(
-      kPasswordManagerSettingsBehaviourChangeEnabledGroupName);
-  prefs()->SetUserPref(password_manager::prefs::kPasswordManagerSavingEnabled,
-                       new base::FundamentalValue(true));
-  EXPECT_TRUE(client->IsSavingAndFillingEnabledForCurrentPage());
-  EXPECT_TRUE(client->IsFillingEnabledForCurrentPage());
-  prefs()->SetUserPref(password_manager::prefs::kPasswordManagerSavingEnabled,
-                       new base::FundamentalValue(false));
-  EXPECT_FALSE(client->IsSavingAndFillingEnabledForCurrentPage());
-  EXPECT_FALSE(client->IsFillingEnabledForCurrentPage());
-}
-
-TEST_F(ChromePasswordManagerClientTest,
-       FillingDependsOnManagerEnabledPreferenceAndExperimentDisabled) {
-  // Test that filing of passwords depends on the password manager enabled
-  // preference and is the user participated in behavior change experiment.
-  ChromePasswordManagerClient* client = GetClient();
-  EnforcePasswordManagerSettingsBehaviourChangeExperimentGroup(
-      kPasswordManagerSettingsBehaviourChangeDisabledGroupName);
-  prefs()->SetUserPref(password_manager::prefs::kPasswordManagerSavingEnabled,
-                       new base::FundamentalValue(true));
-  EXPECT_TRUE(client->IsFillingEnabledForCurrentPage());
-  prefs()->SetUserPref(password_manager::prefs::kPasswordManagerSavingEnabled,
-                       new base::FundamentalValue(false));
-  EXPECT_TRUE(client->IsFillingEnabledForCurrentPage());
-}
-
 TEST_F(ChromePasswordManagerClientTest, SavingAndFillingEnabledConditionsTest) {
+  std::unique_ptr<WebContents> test_web_contents(
+      content::WebContentsTester::CreateTestWebContents(
+          web_contents()->GetBrowserContext(), nullptr));
   std::unique_ptr<MockChromePasswordManagerClient> client(
-      new MockChromePasswordManagerClient(web_contents()));
+      new MockChromePasswordManagerClient(test_web_contents.get()));
   // Functionality disabled if there is SSL errors.
   EXPECT_CALL(*client, DidLastPageLoadEncounterSSLErrors())
       .WillRepeatedly(Return(true));

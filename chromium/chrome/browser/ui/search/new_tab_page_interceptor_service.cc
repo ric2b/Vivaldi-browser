@@ -61,10 +61,12 @@ class NewTabPageInterceptor : public net::URLRequestInterceptor {
       net::NetworkDelegate* network_delegate) const override {
     DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
     if ((request->url() != new_tab_url_) ||
-        (new_tab_url_ == GURL(chrome::kChromeSearchLocalNtpUrl))) {
+        (new_tab_url_ == chrome::kChromeSearchLocalNtpUrl)) {
       return nullptr;
     }
     // User has canceled this navigation so it shouldn't be redirected.
+    // TODO(maksims): Remove request->status() and use int net_error
+    // once MaybeInterceptResponse() starts to pass that.
     if (request->status().status() == net::URLRequestStatus::CANCELED ||
         (request->status().status() == net::URLRequestStatus::FAILED &&
          request->status().error() == net::ERR_ABORTED)) {
@@ -72,6 +74,8 @@ class NewTabPageInterceptor : public net::URLRequestInterceptor {
     }
 
     // Request to NTP was successful.
+    // TODO(maksims): Remove request->status() and use int net_error
+    // once MaybeInterceptResponse() starts to pass that.
     if (request->status().is_success() &&
         request->GetResponseCode() != net::HTTP_NO_CONTENT &&
         request->GetResponseCode() < 400) {

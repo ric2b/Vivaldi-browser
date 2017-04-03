@@ -11,11 +11,9 @@
 #include "ash/common/material_design/material_design_controller.h"
 #include "ash/common/session/session_state_delegate.h"
 #include "ash/common/shelf/shelf_constants.h"
-#include "ash/common/shelf/shelf_delegate.h"
 #include "ash/common/shelf/shelf_layout_manager_observer.h"
 #include "ash/common/shelf/wm_shelf.h"
 #include "ash/common/shelf/wm_shelf_util.h"
-#include "ash/common/shell_window_ids.h"
 #include "ash/common/system/status_area_widget.h"
 #include "ash/common/wm/fullscreen_window_finder.h"
 #include "ash/common/wm/mru_window_tracker.h"
@@ -25,6 +23,7 @@
 #include "ash/common/wm_root_window_controller.h"
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
+#include "ash/public/cpp/shell_window_ids.h"
 #include "base/auto_reset.h"
 #include "base/command_line.h"
 #include "base/i18n/rtl.h"
@@ -132,8 +131,8 @@ ShelfLayoutManager::~ShelfLayoutManager() {
   if (update_shelf_observer_)
     update_shelf_observer_->Detach();
 
-  FOR_EACH_OBSERVER(ShelfLayoutManagerObserver, observers_,
-                    WillDeleteShelfLayoutManager());
+  for (auto& observer : observers_)
+    observer.WillDeleteShelfLayoutManager();
   WmShell::Get()->RemoveShellObserver(this);
   WmShell::Get()->RemoveLockStateObserver(this);
   WmShell::Get()->GetSessionStateDelegate()->RemoveSessionStateObserver(this);
@@ -177,8 +176,8 @@ void ShelfLayoutManager::LayoutShelfAndUpdateBounds(bool change_work_area) {
   UpdateBoundsAndOpacity(target_bounds, false, change_work_area, NULL);
 
   // Update insets in ShelfWindowTargeter when shelf bounds change.
-  FOR_EACH_OBSERVER(ShelfLayoutManagerObserver, observers_,
-                    WillChangeVisibilityState(visibility_state()));
+  for (auto& observer : observers_)
+    observer.WillChangeVisibilityState(visibility_state());
 }
 
 void ShelfLayoutManager::LayoutShelf() {
@@ -462,8 +461,8 @@ void ShelfLayoutManager::SetState(ShelfVisibilityState visibility_state) {
   if (!force_update && state_.Equals(state))
     return;  // Nothing changed.
 
-  FOR_EACH_OBSERVER(ShelfLayoutManagerObserver, observers_,
-                    WillChangeVisibilityState(visibility_state));
+  for (auto& observer : observers_)
+    observer.WillChangeVisibilityState(visibility_state);
 
   StopAutoHideTimer();
 
@@ -511,22 +510,14 @@ void ShelfLayoutManager::SetState(ShelfVisibilityState visibility_state) {
       target_bounds, true /* animate */, true /* change_work_area */,
       delay_background_change ? update_shelf_observer_ : NULL);
 
-  // The delegate must be notified after |state_| is updated so that it can
-  // query the new target bounds.
-  ShelfDelegate* shelf_delegate = WmShell::Get()->shelf_delegate();
-  DCHECK(shelf_delegate);
-  if (old_state.visibility_state != state_.visibility_state)
-    shelf_delegate->OnShelfVisibilityStateChanged(wm_shelf_);
-
   // OnAutoHideStateChanged Should be emitted when:
   //  - firstly state changed to auto-hide from other state
   //  - or, auto_hide_state has changed
   if ((old_state.visibility_state != state_.visibility_state &&
        state_.visibility_state == SHELF_AUTO_HIDE) ||
       old_state.auto_hide_state != state_.auto_hide_state) {
-    shelf_delegate->OnShelfAutoHideStateChanged(wm_shelf_);
-    FOR_EACH_OBSERVER(ShelfLayoutManagerObserver, observers_,
-                      OnAutoHideStateChanged(state_.auto_hide_state));
+    for (auto& observer : observers_)
+      observer.OnAutoHideStateChanged(state_.auto_hide_state);
   }
 }
 
@@ -605,7 +596,7 @@ void ShelfLayoutManager::UpdateBoundsAndOpacity(
   // Set an empty border to avoid the shelf view and status area overlapping.
   // TODO(msw): Avoid setting bounds of views within the shelf widget here.
   gfx::Rect shelf_bounds = gfx::Rect(target_bounds.shelf_bounds_in_root.size());
-  shelf_widget_->GetContentsView()->SetBorder(views::Border::CreateEmptyBorder(
+  shelf_widget_->GetContentsView()->SetBorder(views::CreateEmptyBorder(
       shelf_bounds.InsetsFrom(target_bounds.shelf_bounds_in_shelf)));
   shelf_widget_->GetContentsView()->Layout();
 
@@ -799,8 +790,8 @@ void ShelfLayoutManager::UpdateTargetBoundsForGesture(
 void ShelfLayoutManager::UpdateShelfBackground(
     BackgroundAnimatorChangeType type) {
   const ShelfBackgroundType background_type(GetShelfBackgroundType());
-  FOR_EACH_OBSERVER(ShelfLayoutManagerObserver, observers_,
-                    OnBackgroundUpdated(background_type, type));
+  for (auto& observer : observers_)
+    observer.OnBackgroundUpdated(background_type, type);
 }
 
 void ShelfLayoutManager::UpdateAutoHideStateNow() {
@@ -978,10 +969,10 @@ void ShelfLayoutManager::OnLockStateEvent(LockStateObserver::EventType event) {
 }
 
 void ShelfLayoutManager::SessionStateChanged(
-    SessionStateDelegate::SessionState state) {
+    session_manager::SessionState state) {
   // Check transition changes to/from the add user to session and change the
   // shelf alignment accordingly
-  bool add_user = state == SessionStateDelegate::SESSION_STATE_LOGIN_SECONDARY;
+  const bool add_user = state == session_manager::SessionState::LOGIN_SECONDARY;
   if (add_user != state_.is_adding_user_screen) {
     state_.is_adding_user_screen = add_user;
     UpdateShelfVisibilityAfterLoginUIChange();

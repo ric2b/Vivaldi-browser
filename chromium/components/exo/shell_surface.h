@@ -9,7 +9,6 @@
 #include <memory>
 #include <string>
 
-#include "ash/common/system/accessibility_observer.h"
 #include "ash/common/wm/window_state_observer.h"
 #include "base/macros.h"
 #include "base/strings/string16.h"
@@ -43,10 +42,10 @@ class ShellSurface : public SurfaceDelegate,
                      public SurfaceObserver,
                      public views::WidgetDelegate,
                      public views::View,
-                     public ash::AccessibilityObserver,
                      public ash::wm::WindowStateObserver,
                      public aura::WindowObserver,
-                     public WMHelper::ActivationObserver {
+                     public WMHelper::ActivationObserver,
+                     public WMHelper::AccessibilityObserver {
  public:
   ShellSurface(Surface* surface,
                ShellSurface* parent,
@@ -125,11 +124,10 @@ class ShellSurface : public SurfaceDelegate,
 
   // Sets the application ID for the window. The application ID identifies the
   // general class of applications to which the window belongs.
-  static void SetApplicationId(aura::Window* window,
-                               std::string* application_id);
+  static void SetApplicationId(aura::Window* window, const std::string& id);
   static const std::string GetApplicationId(aura::Window* window);
 
-  // Set application id for surface.
+  // Set the application ID for the surface.
   void SetApplicationId(const std::string& application_id);
 
   // Start an interactive move of surface.
@@ -196,10 +194,6 @@ class ShellSurface : public SurfaceDelegate,
   // Overridden from views::View:
   gfx::Size GetPreferredSize() const override;
 
-  // Overridden from ash::AccessibilityObserver:
-  void OnAccessibilityModeChanged(
-      ash::AccessibilityNotificationVisibility notify) override;
-
   // Overridden from ash::wm::WindowStateObserver:
   void OnPreWindowStateTypeChange(ash::wm::WindowState* window_state,
                                   ash::wm::WindowStateType old_type) override;
@@ -216,6 +210,9 @@ class ShellSurface : public SurfaceDelegate,
   void OnWindowActivated(
       aura::Window* gained_active,
       aura::Window* lost_active) override;
+
+  // Overridden from WMHelper::AccessibilityObserver:
+  void OnAccessibilityModeChanged() override;
 
   // Overridden from ui::EventHandler:
   void OnKeyEvent(ui::KeyEvent* event) override;
@@ -273,7 +270,7 @@ class ShellSurface : public SurfaceDelegate,
   aura::Window* parent_;
   const gfx::Rect initial_bounds_;
   const bool activatable_;
-  // Container Window Id (see ash/common/shell_window_ids.h)
+  // Container Window Id (see ash/public/cpp/shell_window_ids.h)
   const int container_;
   bool pending_show_widget_ = false;
   base::string16 title_;

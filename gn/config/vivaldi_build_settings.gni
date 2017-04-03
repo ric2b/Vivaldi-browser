@@ -13,6 +13,7 @@ declare_overrides() {
   # Features we don't want
 
   enable_remoting = false
+  enable_media_remoting = false
 
   enable_nacl = false
 

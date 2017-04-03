@@ -6,12 +6,13 @@
 
 #include "chrome/browser/command_updater.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
-#include "ui/accessibility/ax_view_state.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/events/event.h"
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/native_theme/native_theme.h"
 #include "ui/views/animation/ink_drop_highlight.h"
+#include "ui/views/animation/ink_drop_impl.h"
 #include "ui/views/bubble/bubble_dialog_delegate.h"
 
 BubbleIconView::BubbleIconView(CommandUpdater* command_updater, int command_id)
@@ -47,9 +48,9 @@ void BubbleIconView::SetTooltipText(const base::string16& tooltip) {
   image_->SetTooltipText(tooltip);
 }
 
-void BubbleIconView::GetAccessibleState(ui::AXViewState* state) {
-  image_->GetAccessibleState(state);
-  state->role = ui::AX_ROLE_BUTTON;
+void BubbleIconView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
+  image_->GetAccessibleNodeData(node_data);
+  node_data->role = ui::AX_ROLE_BUTTON;
 }
 
 bool BubbleIconView::GetTooltipText(const gfx::Point& p,
@@ -140,13 +141,15 @@ void BubbleIconView::RemoveInkDropLayer(ui::Layer* ink_drop_layer) {
   image_->SetPaintToLayer(false);
 }
 
+std::unique_ptr<views::InkDrop> BubbleIconView::CreateInkDrop() {
+  std::unique_ptr<views::InkDropImpl> ink_drop = CreateDefaultInkDropImpl();
+  ink_drop->SetShowHighlightOnFocus(true);
+  return std::move(ink_drop);
+}
+
 SkColor BubbleIconView::GetInkDropBaseColor() const {
   return color_utils::DeriveDefaultIconColor(GetNativeTheme()->GetSystemColor(
       ui::NativeTheme::kColorId_TextfieldDefaultColor));
-}
-
-bool BubbleIconView::ShouldShowInkDropForFocus() const {
-  return true;
 }
 
 void BubbleIconView::OnGestureEvent(ui::GestureEvent* event) {

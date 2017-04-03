@@ -14,18 +14,18 @@
 #include "components/data_use_measurement/core/data_use_user_data.h"
 #include "components/invalidation/public/invalidation_util.h"
 #include "components/invalidation/public/object_id_invalidation_map.h"
-#include "components/sync/core/http_post_provider_factory.h"
-#include "components/sync/core/internal_components_factory.h"
-#include "components/sync/core/sync_manager.h"
-#include "components/sync/core/sync_manager_factory.h"
+#include "components/sync/base/invalidation_adapter.h"
 #include "components/sync/device_info/local_device_info_provider_impl.h"
 #include "components/sync/driver/glue/sync_backend_registrar.h"
-#include "components/sync/driver/invalidation_adapter.h"
 #include "components/sync/engine/cycle/commit_counters.h"
 #include "components/sync/engine/cycle/status_counters.h"
 #include "components/sync/engine/cycle/sync_cycle_snapshot.h"
 #include "components/sync/engine/cycle/update_counters.h"
+#include "components/sync/engine/engine_components_factory.h"
 #include "components/sync/engine/events/protocol_event.h"
+#include "components/sync/engine/net/http_post_provider_factory.h"
+#include "components/sync/engine/sync_manager.h"
+#include "components/sync/engine/sync_manager_factory.h"
 
 // Helper macros to log with the syncer thread name; useful when there
 // are multiple syncers involved.
@@ -35,10 +35,6 @@
 #define SDVLOG(verbose_level) DVLOG(verbose_level) << name_ << ": "
 
 static const int kSaveChangesIntervalSeconds = 10;
-
-namespace syncer {
-class InternalComponentsFactory;
-}  // namespace syncer
 
 namespace net {
 class URLFetcher;
@@ -55,6 +51,8 @@ void BindFetcherToDataTracker(net::URLFetcher* fetcher) {
 
 namespace syncer {
 
+class EngineComponentsFactory;
+
 DoInitializeOptions::DoInitializeOptions(
     base::MessageLoop* sync_loop,
     SyncBackendRegistrar* registrar,
@@ -68,9 +66,11 @@ DoInitializeOptions::DoInitializeOptions(
     const std::string& invalidator_client_id,
     std::unique_ptr<SyncManagerFactory> sync_manager_factory,
     bool delete_sync_data_folder,
+    bool enable_local_sync_backend,
+    const base::FilePath& local_sync_backend_folder,
     const std::string& restored_key_for_bootstrapping,
     const std::string& restored_keystore_key_for_bootstrapping,
-    std::unique_ptr<InternalComponentsFactory> internal_components_factory,
+    std::unique_ptr<EngineComponentsFactory> engine_components_factory,
     const WeakHandle<UnrecoverableErrorHandler>& unrecoverable_error_handler,
     const base::Closure& report_unrecoverable_error_function,
     std::unique_ptr<SyncEncryptionHandler::NigoriState> saved_nigori_state,
@@ -87,10 +87,12 @@ DoInitializeOptions::DoInitializeOptions(
       invalidator_client_id(invalidator_client_id),
       sync_manager_factory(std::move(sync_manager_factory)),
       delete_sync_data_folder(delete_sync_data_folder),
+      enable_local_sync_backend(enable_local_sync_backend),
+      local_sync_backend_folder(local_sync_backend_folder),
       restored_key_for_bootstrapping(restored_key_for_bootstrapping),
       restored_keystore_key_for_bootstrapping(
           restored_keystore_key_for_bootstrapping),
-      internal_components_factory(std::move(internal_components_factory)),
+      engine_components_factory(std::move(engine_components_factory)),
       unrecoverable_error_handler(unrecoverable_error_handler),
       report_unrecoverable_error_function(report_unrecoverable_error_function),
       saved_nigori_state(std::move(saved_nigori_state)),
@@ -113,8 +115,8 @@ SyncBackendHostCore::SyncBackendHostCore(
     : name_(name),
       sync_data_folder_path_(sync_data_folder_path),
       host_(backend),
-      sync_loop_(NULL),
-      registrar_(NULL),
+      sync_loop_(nullptr),
+      registrar_(nullptr),
       has_sync_setup_completed_(has_sync_setup_completed),
       forward_protocol_events_(false),
       forward_type_info_(false),
@@ -409,6 +411,8 @@ void SyncBackendHostCore::DoInitialize(
   args.database_location = sync_data_folder_path_;
   args.event_handler = options->event_handler;
   args.service_url = options->service_url;
+  args.enable_local_sync_backend = options->enable_local_sync_backend;
+  args.local_sync_backend_folder = options->local_sync_backend_folder;
   args.post_factory = std::move(options->http_bridge_factory);
   args.workers = options->workers;
   args.extensions_activity = options->extensions_activity.get();
@@ -418,8 +422,8 @@ void SyncBackendHostCore::DoInitialize(
   args.restored_key_for_bootstrapping = options->restored_key_for_bootstrapping;
   args.restored_keystore_key_for_bootstrapping =
       options->restored_keystore_key_for_bootstrapping;
-  args.internal_components_factory =
-      std::move(options->internal_components_factory);
+  args.engine_components_factory =
+      std::move(options->engine_components_factory);
   args.encryptor = &encryptor_;
   args.unrecoverable_error_handler = options->unrecoverable_error_handler;
   args.report_unrecoverable_error_function =
@@ -468,7 +472,7 @@ void SyncBackendHostCore::DoInitialProcessControlTypes() {
   // which is called at the end of every sync cycle.
   // TODO(zea): eventually add an experiment handler and initialize it here.
 
-  if (!sync_manager_->GetUserShare()) {  // NULL in some tests.
+  if (!sync_manager_->GetUserShare()) {  // Null in some tests.
     DVLOG(1) << "Skipping initialization of DeviceInfo";
     host_.Call(FROM_HERE,
                &SyncBackendHostImpl::HandleInitializationFailureOnFrontendLoop);
@@ -529,7 +533,7 @@ void SyncBackendHostCore::DoShutdown(ShutdownReason reason) {
 
   DoDestroySyncManager(reason);
 
-  registrar_ = NULL;
+  registrar_ = nullptr;
 
   if (reason == DISABLE_SYNC)
     DeleteSyncDataFolder();
@@ -657,7 +661,7 @@ void SyncBackendHostCore::StartSavingChanges() {
     return;
   DCHECK(sync_loop_->task_runner()->BelongsToCurrentThread());
   DCHECK(!save_changes_timer_.get());
-  save_changes_timer_.reset(new base::RepeatingTimer());
+  save_changes_timer_ = base::MakeUnique<base::RepeatingTimer>();
   save_changes_timer_->Start(
       FROM_HERE, base::TimeDelta::FromSeconds(kSaveChangesIntervalSeconds),
       this, &SyncBackendHostCore::SaveChanges);

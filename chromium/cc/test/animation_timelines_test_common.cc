@@ -367,8 +367,8 @@ void AnimationTimelinesTest::SetUp() {
 }
 
 void AnimationTimelinesTest::TearDown() {
-  host_impl_->ClearTimelines();
-  host_->ClearTimelines();
+  host_impl_->ClearMutators();
+  host_->ClearMutators();
 }
 
 void AnimationTimelinesTest::CreateTestLayer(
@@ -423,11 +423,13 @@ void AnimationTimelinesTest::ReleaseRefPtrs() {
 void AnimationTimelinesTest::AnimateLayersTransferEvents(
     base::TimeTicks time,
     unsigned expect_events) {
-  std::unique_ptr<AnimationEvents> events = host_->CreateEvents();
+  std::unique_ptr<MutatorEvents> events = host_->CreateEvents();
 
   host_impl_->AnimateLayers(time);
   host_impl_->UpdateAnimationState(true, events.get());
-  EXPECT_EQ(expect_events, events->events_.size());
+
+  auto animation_events = static_cast<const AnimationEvents*>(events.get());
+  EXPECT_EQ(expect_events, animation_events->events_.size());
 
   host_->AnimateLayers(time);
   host_->UpdateAnimationState(true, nullptr);
@@ -438,22 +440,16 @@ AnimationPlayer* AnimationTimelinesTest::GetPlayerForElementId(
     ElementId element_id) {
   const scoped_refptr<ElementAnimations> element_animations =
       host_->GetElementAnimationsForElementId(element_id);
-  return element_animations
-             ? ElementAnimations::PlayersList::Iterator(
-                   &element_animations->players_list())
-                   .GetNext()
-             : nullptr;
+  return element_animations ? &*element_animations->players_list().begin()
+                            : nullptr;
 }
 
 AnimationPlayer* AnimationTimelinesTest::GetImplPlayerForLayerId(
     ElementId element_id) {
   const scoped_refptr<ElementAnimations> element_animations =
       host_impl_->GetElementAnimationsForElementId(element_id);
-  return element_animations
-             ? ElementAnimations::PlayersList::Iterator(
-                   &element_animations->players_list())
-                   .GetNext()
-             : nullptr;
+  return element_animations ? &*element_animations->players_list().begin()
+                            : nullptr;
 }
 
 int AnimationTimelinesTest::NextTestLayerId() {

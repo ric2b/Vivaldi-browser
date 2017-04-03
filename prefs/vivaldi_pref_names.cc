@@ -4,6 +4,10 @@
 
 namespace vivaldiprefs {
 
+// Profile prefs go here.
+
+const char kAlwaysLoadPinnedTabAfterRestore[] =
+    "vivaldi.always_load_restored_pinned_tabs";
 const char kDeferredTabLoadingAfterRestore[] =
     "vivaldi.deferred_tab_loading_after_restore";
 const char kMousegesturesEnabled[] = "mousegestures_enabled";
@@ -22,7 +26,7 @@ const char kVivaldiExperiments[] = "vivaldi.experiments";
 
 #if defined(USE_AURA)
 const char kHideMouseCursorInFullscreen[] = "vivaldi.hide_mouse_in_fullscreen";
-#endif //USE_AURA
+#endif  // USE_AURA
 
 #if defined(OS_MACOSX)
 const char kAppleKeyboardUIMode[] = "vivaldi.apple_keyboard_ui_mode";
@@ -34,5 +38,8 @@ const char kTableViewDefaultSizeMode[] = "vivaldi.table_view_default_size_mode";
 const char kAppleActionOnDoubleClick[] = "vivaldi.apple_action_on_double_click";
 const char kSwipeScrollDirection[] = "vivaldi.swipe_scroll_direction";
 #endif
+
+// Local state prefs go here
+const char kVivaldiUniqueUserId[] = "vivaldi.unique_user_id";
 
 }  // namespace vivaldiprefs

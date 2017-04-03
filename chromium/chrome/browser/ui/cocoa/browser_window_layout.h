@@ -7,12 +7,16 @@
 
 #import <Cocoa/Cocoa.h>
 
-#import "chrome/browser/ui/cocoa/fullscreen_toolbar_controller.h"
+#import "chrome/browser/ui/cocoa/fullscreen/fullscreen_toolbar_controller.h"
 
 namespace chrome {
 
 // The height of the tab strip.
 extern const CGFloat kTabStripHeight;
+
+// Returns true if windows should use NSFullSizeContentViewWindowMask style
+// mask.
+bool ShouldUseFullSizeContentView();
 
 // The parameters used to calculate the layout of the views managed by the
 // BrowserWindowController.
@@ -25,13 +29,13 @@ struct LayoutParameters {
   // Whether the controller is in any fullscreen mode. This parameter should be
   // NO if the controller is in the process of entering fullscreen.
   BOOL inAnyFullscreen;
-  // The fullscreen sliding style. See fullscreen_toolbar_controller.h for more
+  // The fullscreen toolbar style. See fullscreen_toolbar_controller.h for more
   // details.
-  FullscreenSlidingStyle slidingStyle;
+  FullscreenToolbarStyle toolbarStyle;
   // The minY of the AppKit Menu Bar, relative to the top of the screen. Ranges
   // from 0 to -22. Only relevant in fullscreen mode.
   CGFloat menubarOffset;
-  // The fraction of the sliding toolbar that is visible in fullscreenm mode.
+  // The fraction of the toolbar that is visible in fullscreen mode.
   // Ranges from 0 to 1. Only relevant in fullscreen mode.
   CGFloat toolbarFraction;
 
@@ -81,10 +85,10 @@ struct LayoutParameters {
 struct TabStripLayout {
   // The frame of the tab strip in window coordinates.
   NSRect frame;
-  // The left indent for the controls of the TabStripController.
-  CGFloat leftIndent;
-  // The right indent for the controls of the TabStripController.
-  CGFloat rightIndent;
+  // The leading indent for the controls of the TabStripController.
+  CGFloat leadingIndent;
+  // The trailing indent for the controls of the TabStripController.
+  CGFloat trailingIndent;
   // Whether the TabStripController needs to add custom traffic light buttons.
   BOOL addCustomWindowControls;
   // The frame of the avatar in window coordinates.
@@ -147,7 +151,7 @@ struct LayoutOutput {
 // Whether the controller is in any fullscreen mode. |inAnyFullscreen| should
 // be NO if the controller is in the process of entering fullscreen.
 - (void)setInAnyFullscreen:(BOOL)inAnyFullscreen;
-- (void)setSlidingStyle:(FullscreenSlidingStyle)slidingStyle;
+- (void)setFullscreenToolbarStyle:(FullscreenToolbarStyle)toolbarStyle;
 - (void)setFullscreenMenubarOffset:(CGFloat)menubarOffset;
 - (void)setFullscreenToolbarFraction:(CGFloat)toolbarFraction;
 

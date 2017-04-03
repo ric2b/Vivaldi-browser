@@ -6,6 +6,8 @@
 
 #include "net/cert/cert_verifier.h"
 
+#include "app/vivaldi_apptools.h"
+
 namespace net {
 
 const uint16_t kDefaultSSLVersionMin = SSL_PROTOCOL_VERSION_TLS1;
@@ -21,7 +23,7 @@ SSLConfig::CertAndStatus::CertAndStatus(const CertAndStatus& other)
 SSLConfig::CertAndStatus::~CertAndStatus() = default;
 
 SSLConfig::SSLConfig()
-    : rev_checking_enabled(true),
+    : rev_checking_enabled(vivaldi::IsVivaldiRunning()), // false when testing
       rev_checking_required_local_anchors(false),
       sha1_local_anchors_enabled(false),
       version_min(kDefaultSSLVersionMin),

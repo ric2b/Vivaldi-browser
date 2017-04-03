@@ -94,14 +94,14 @@ bool ContentTranslateDriver::IsLinkNavigation() {
 
 void ContentTranslateDriver::OnTranslateEnabledChanged() {
   content::WebContents* web_contents = navigation_controller_->GetWebContents();
-  FOR_EACH_OBSERVER(
-      Observer, observer_list_, OnTranslateEnabledChanged(web_contents));
+  for (auto& observer : observer_list_)
+    observer.OnTranslateEnabledChanged(web_contents);
 }
 
 void ContentTranslateDriver::OnIsPageTranslatedChanged() {
   content::WebContents* web_contents = navigation_controller_->GetWebContents();
-  FOR_EACH_OBSERVER(Observer, observer_list_,
-                    OnIsPageTranslatedChanged(web_contents));
+  for (auto& observer : observer_list_)
+    observer.OnIsPageTranslatedChanged(web_contents);
 }
 
 void ContentTranslateDriver::TranslatePage(int page_seq_no,
@@ -189,6 +189,13 @@ void ContentTranslateDriver::NavigationEntryCommitted(
     return;
   }
 
+  if (entry->GetTransitionType() & ui::PAGE_TRANSITION_FORWARD_BACK) {
+    // Workaround for http://crbug.com/653051: back navigation sometimes have
+    // the reload core type. Once http://crbug.com/669008 got resolved, we
+    // could revisit here for a thorough solution.
+    return;
+  }
+
   if (!translate_manager_->GetLanguageState().page_needs_translation())
     return;
 
@@ -238,7 +245,8 @@ void ContentTranslateDriver::RegisterPage(
   if (web_contents())
     translate_manager_->InitiateTranslation(details.adopted_language);
 
-  FOR_EACH_OBSERVER(Observer, observer_list_, OnLanguageDetermined(details));
+  for (auto& observer : observer_list_)
+    observer.OnLanguageDetermined(details);
 }
 
 void ContentTranslateDriver::OnPageTranslated(
@@ -251,10 +259,8 @@ void ContentTranslateDriver::OnPageTranslated(
 
   translate_manager_->PageTranslated(
       original_lang, translated_lang, error_type);
-  FOR_EACH_OBSERVER(
-      Observer,
-      observer_list_,
-      OnPageTranslated(original_lang, translated_lang, error_type));
+  for (auto& observer : observer_list_)
+    observer.OnPageTranslated(original_lang, translated_lang, error_type);
 }
 
 }  // namespace translate

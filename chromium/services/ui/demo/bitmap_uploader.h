@@ -8,25 +8,30 @@
 #include <stdint.h>
 
 #include <memory>
+#include <unordered_map>
 
 #include "base/compiler_specific.h"
-#include "base/containers/hash_tables.h"
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
+#include "cc/output/compositor_frame_sink_client.h"
 #include "gpu/GLES2/gl2chromium.h"
 #include "gpu/GLES2/gl2extchromium.h"
-#include "services/ui/public/cpp/window_surface.h"
-#include "services/ui/public/cpp/window_surface_client.h"
-#include "services/ui/public/interfaces/surface.mojom.h"
+#include "services/ui/public/cpp/window_compositor_frame_sink.h"
+
+namespace gpu {
+class GpuChannelHost;
+}
 
 namespace ui {
-class GLES2Context;
+
 class GpuService;
+class Window;
 
 extern const char kBitmapUploaderForAcceleratedWidget[];
 
 // BitmapUploader is useful if you want to draw a bitmap or color in a
 // Window.
-class BitmapUploader : public WindowSurfaceClient {
+class BitmapUploader : public cc::CompositorFrameSinkClient {
  public:
   explicit BitmapUploader(Window* window);
   ~BitmapUploader() override;
@@ -49,6 +54,10 @@ class BitmapUploader : public WindowSurfaceClient {
  private:
   void Upload();
 
+  void OnGpuChannelEstablished(
+      gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
+      scoped_refptr<gpu::GpuChannelHost> gpu_channel);
+
   uint32_t BindTextureForSize(const gfx::Size& size);
 
   uint32_t TextureFormat() const {
@@ -57,16 +66,22 @@ class BitmapUploader : public WindowSurfaceClient {
 
   void SetIdNamespace(uint32_t id_namespace);
 
-  // WindowSurfaceClient implementation.
-  void OnResourcesReturned(
-      WindowSurface* surface,
-      mojo::Array<cc::ReturnedResource> resources) override;
+  // cc::CompositorFrameSinkClient implementation.
+  void SetBeginFrameSource(cc::BeginFrameSource* source) override;
+  void ReclaimResources(const cc::ReturnedResourceArray& resources) override;
+  void SetTreeActivationCallback(const base::Closure& callback) override;
+  void DidReceiveCompositorFrameAck() override;
+  void DidLoseCompositorFrameSink() override;
+  void OnDraw(const gfx::Transform& transform,
+              const gfx::Rect& viewport,
+              bool resourceless_software_draw) override;
+  void SetMemoryPolicy(const cc::ManagedMemoryPolicy& policy) override;
+  void SetExternalTilePriorityConstraints(
+      const gfx::Rect& viewport_rect,
+      const gfx::Transform& transform) override;
 
   Window* window_;
-  std::unique_ptr<WindowSurface> surface_;
-  // This may be null if there is an error contacting mus/initializing. We
-  // assume we'll be shutting down soon and do nothing in this case.
-  std::unique_ptr<GLES2Context> gles2_context_;
+  std::unique_ptr<WindowCompositorFrameSink> compositor_frame_sink_;
 
   uint32_t color_;
   int width_;
@@ -74,7 +89,9 @@ class BitmapUploader : public WindowSurfaceClient {
   Format format_;
   std::unique_ptr<std::vector<unsigned char>> bitmap_;
   uint32_t next_resource_id_;
-  base::hash_map<uint32_t, uint32_t> resource_to_texture_id_map_;
+  std::unordered_map<uint32_t, uint32_t> resource_to_texture_id_map_;
+
+  base::WeakPtrFactory<BitmapUploader> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(BitmapUploader);
 };

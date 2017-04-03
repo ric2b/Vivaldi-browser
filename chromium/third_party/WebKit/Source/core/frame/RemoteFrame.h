@@ -41,8 +41,10 @@ class CORE_EXPORT RemoteFrame final : public Frame {
   void detach(FrameDetachType) override;
   RemoteSecurityContext* securityContext() const override;
   void printNavigationErrorMessage(const Frame&, const char* reason) override {}
+  void printNavigationWarning(const String&) override {}
   bool prepareForCommit() override;
   bool shouldClose() override;
+  void setDocumentHasReceivedUserGesture() override;
 
   // FIXME: Remove this method once we have input routing in the browser
   // process. See http://crbug.com/339659.

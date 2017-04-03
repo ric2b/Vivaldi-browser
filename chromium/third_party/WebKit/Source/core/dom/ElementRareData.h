@@ -37,15 +37,13 @@
 #include "core/dom/custom/V0CustomElementDefinition.h"
 #include "core/dom/shadow/ElementShadow.h"
 #include "core/html/ClassList.h"
-#include "core/layout/LayoutObject.h"
-#include "core/style/StyleInheritedData.h"
 #include "platform/heap/Handle.h"
 #include "wtf/HashSet.h"
 #include <memory>
 
 namespace blink {
 
-class HTMLElement;
+class LayoutObject;
 class CompositorProxiedPropertySet;
 class ResizeObservation;
 class ResizeObserver;
@@ -61,15 +59,11 @@ class ElementRareData : public NodeRareData {
   void setPseudoElement(PseudoId, PseudoElement*);
   PseudoElement* pseudoElement(PseudoId) const;
 
-  short tabIndex() const { return m_tabindex; }
-
-  void setTabIndexExplicitly(short index) {
-    m_tabindex = index;
+  void setTabIndexExplicitly() {
     setElementFlag(TabIndexWasSetExplicitly, true);
   }
 
   void clearTabIndexExplicitly() {
-    m_tabindex = 0;
     clearElementFlag(TabIndexWasSetExplicitly);
   }
 
@@ -83,14 +77,17 @@ class ElementRareData : public NodeRareData {
   void clearShadow() { m_shadow = nullptr; }
   ElementShadow* shadow() const { return m_shadow.get(); }
   ElementShadow& ensureShadow() {
-    if (!m_shadow)
+    if (!m_shadow) {
       m_shadow = ElementShadow::create();
+      ScriptWrappableVisitor::writeBarrier(this, m_shadow);
+    }
     return *m_shadow;
   }
 
   NamedNodeMap* attributeMap() const { return m_attributeMap.get(); }
   void setAttributeMap(NamedNodeMap* attributeMap) {
     m_attributeMap = attributeMap;
+    ScriptWrappableVisitor::writeBarrier(this, m_attributeMap);
   }
 
   ComputedStyle* computedStyle() const { return m_computedStyle.get(); }
@@ -100,7 +97,10 @@ class ElementRareData : public NodeRareData {
   void clearComputedStyle() { m_computedStyle = nullptr; }
 
   ClassList* classList() const { return m_classList.get(); }
-  void setClassList(ClassList* classList) { m_classList = classList; }
+  void setClassList(ClassList* classList) {
+    m_classList = classList;
+    ScriptWrappableVisitor::writeBarrier(this, m_classList);
+  }
   void clearClassListValueForQuirksMode() {
     if (!m_classList)
       return;
@@ -108,16 +108,21 @@ class ElementRareData : public NodeRareData {
   }
 
   DatasetDOMStringMap* dataset() const { return m_dataset.get(); }
-  void setDataset(DatasetDOMStringMap* dataset) { m_dataset = dataset; }
+  void setDataset(DatasetDOMStringMap* dataset) {
+    m_dataset = dataset;
+    ScriptWrappableVisitor::writeBarrier(this, m_dataset);
+  }
 
   LayoutSize minimumSizeForResizing() const { return m_minimumSizeForResizing; }
   void setMinimumSizeForResizing(LayoutSize size) {
     m_minimumSizeForResizing = size;
   }
 
-  IntSize savedLayerScrollOffset() const { return m_savedLayerScrollOffset; }
-  void setSavedLayerScrollOffset(IntSize size) {
-    m_savedLayerScrollOffset = size;
+  ScrollOffset savedLayerScrollOffset() const {
+    return m_savedLayerScrollOffset;
+  }
+  void setSavedLayerScrollOffset(ScrollOffset offset) {
+    m_savedLayerScrollOffset = offset;
   }
 
   ElementAnimations* elementAnimations() { return m_elementAnimations.get(); }
@@ -151,6 +156,10 @@ class ElementRareData : public NodeRareData {
   AttrNodeList& ensureAttrNodeList();
   AttrNodeList* attrNodeList() { return m_attrNodeList.get(); }
   void removeAttrNodeList() { m_attrNodeList.clear(); }
+  void addAttr(Attr* attr) {
+    ensureAttrNodeList().append(attr);
+    ScriptWrappableVisitor::writeBarrier(this, attr);
+  }
 
   NodeIntersectionObserverData* intersectionObserverData() const {
     return m_intersectionObserverData.get();
@@ -172,17 +181,14 @@ class ElementRareData : public NodeRareData {
   ResizeObserverDataMap& ensureResizeObserverData();
 
   DECLARE_TRACE_AFTER_DISPATCH();
-
   DECLARE_TRACE_WRAPPERS_AFTER_DISPATCH();
 
  private:
   CompositorProxiedPropertySet& ensureCompositorProxiedPropertySet();
   void clearCompositorProxiedPropertySet() { m_proxiedProperties = nullptr; }
 
-  short m_tabindex;
-
   LayoutSize m_minimumSizeForResizing;
-  IntSize m_savedLayerScrollOffset;
+  ScrollOffset m_savedLayerScrollOffset;
 
   Member<DatasetDOMStringMap> m_dataset;
   Member<ElementShadow> m_shadow;
@@ -213,7 +219,6 @@ inline LayoutSize defaultMinimumSizeForResizing() {
 
 inline ElementRareData::ElementRareData(LayoutObject* layoutObject)
     : NodeRareData(layoutObject),
-      m_tabindex(0),
       m_minimumSizeForResizing(defaultMinimumSizeForResizing()),
       m_classList(nullptr) {
   m_isElementRareData = true;

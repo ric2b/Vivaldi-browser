@@ -14,7 +14,6 @@
 #include "base/macros.h"
 #include "base/observer_list.h"
 #include "base/values.h"
-#include "components/arc/common/arc_bridge.mojom.h"
 #include "components/arc/instance_holder.h"
 
 namespace base {
@@ -24,6 +23,37 @@ class CommandLine;
 namespace arc {
 
 class ArcBridgeTest;
+
+namespace mojom {
+
+// Instead of including components/arc/common/arc_bridge.mojom.h, list all the
+// instance classes here for faster build.
+class AppInstance;
+class AudioInstance;
+class AuthInstance;
+class BluetoothInstance;
+class BootPhaseMonitorInstance;
+class ClipboardInstance;
+class CrashCollectorInstance;
+class EnterpriseReportingInstance;
+class FileSystemInstance;
+class ImeInstance;
+class IntentHelperInstance;
+class KioskInstance;
+class MetricsInstance;
+class NetInstance;
+class NotificationsInstance;
+class ObbMounterInstance;
+class PolicyInstance;
+class PowerInstance;
+class PrintInstance;
+class ProcessInstance;
+class StorageManagerInstance;
+class TtsInstance;
+class VideoInstance;
+class WallpaperInstance;
+
+}  // namespace mojom
 
 // The Chrome-side service that handles ARC instances and ARC bridge creation.
 // This service handles the lifetime of ARC instances and sets up the
@@ -74,11 +104,18 @@ class ArcBridgeService {
   // HandleStartup() should be called upon profile startup.  This will only
   // launch an instance if the instance is enabled.
   // This can only be called on the thread that this class was created on.
-  virtual void HandleStartup() = 0;
 
-  // Shutdown() should be called when the browser is shutting down. This can
-  // only be called on the thread that this class was created on.
-  virtual void Shutdown() = 0;
+  // Starts the ARC service, then it will connect the Mojo channel. When the
+  // bridge becomes ready, OnBridgeReady() is called.
+  virtual void RequestStart() = 0;
+
+  // Stops the ARC service.
+  virtual void RequestStop() = 0;
+
+  // OnShutdown() should be called when the browser is shutting down. This can
+  // only be called on the thread that this class was created on. We assume that
+  // when this function is called, MessageLoop is no longer exists.
+  virtual void OnShutdown() = 0;
 
   // Adds or removes observers. This can only be called on the thread that this
   // class was created on. RemoveObserver does nothing if |observer| is not in
@@ -107,6 +144,7 @@ class ArcBridgeService {
   InstanceHolder<mojom::IntentHelperInstance>* intent_helper() {
     return &intent_helper_;
   }
+  InstanceHolder<mojom::KioskInstance>* kiosk() { return &kiosk_; }
   InstanceHolder<mojom::MetricsInstance>* metrics() { return &metrics_; }
   InstanceHolder<mojom::NetInstance>* net() { return &net_; }
   InstanceHolder<mojom::NotificationsInstance>* notifications() {
@@ -143,7 +181,7 @@ class ArcBridgeService {
   //   OnConnectionEstablished() ->
   // READY
   //
-  // The ArcBridgeBootstrap state machine can be thought of being substates of
+  // The ArcSession state machine can be thought of being substates of
   // ArcBridgeService's CONNECTING state.
   //
   // *
@@ -183,6 +221,7 @@ class ArcBridgeService {
   InstanceHolder<mojom::FileSystemInstance> file_system_;
   InstanceHolder<mojom::ImeInstance> ime_;
   InstanceHolder<mojom::IntentHelperInstance> intent_helper_;
+  InstanceHolder<mojom::KioskInstance> kiosk_;
   InstanceHolder<mojom::MetricsInstance> metrics_;
   InstanceHolder<mojom::NetInstance> net_;
   InstanceHolder<mojom::NotificationsInstance> notifications_;
@@ -215,9 +254,10 @@ class ArcBridgeService {
   friend class ArcBridgeTest;
   FRIEND_TEST_ALL_PREFIXES(ArcBridgeTest, Basic);
   FRIEND_TEST_ALL_PREFIXES(ArcBridgeTest, Prerequisites);
-  FRIEND_TEST_ALL_PREFIXES(ArcBridgeTest, ShutdownMidStartup);
+  FRIEND_TEST_ALL_PREFIXES(ArcBridgeTest, StopMidStartup);
   FRIEND_TEST_ALL_PREFIXES(ArcBridgeTest, Restart);
   FRIEND_TEST_ALL_PREFIXES(ArcBridgeTest, OnBridgeStopped);
+  FRIEND_TEST_ALL_PREFIXES(ArcBridgeTest, Shutdown);
 
   base::ObserverList<Observer> observer_list_;
 

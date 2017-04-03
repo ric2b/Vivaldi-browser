@@ -34,6 +34,7 @@ var WEB_VIEW_API_METHODS = [
   'getPageHistory',
   'getThumbnail',
   'getThumbnailFromService',
+  'resetGestureState',
   'setIsFullscreen',
   'setVisible',
   'showPageInfo',
@@ -117,6 +118,13 @@ WebViewImpl.prototype.getFocusedElementInfo = function (callback) {
     return;
   }
   WebViewPrivate.getFocusedElementInfo(this.guest.getId(), callback);
+};
+
+WebViewImpl.prototype.resetGestureState = function () {
+  if (!this.guest.getId()) {
+    return;
+  }
+  WebViewPrivate.resetGestureState(this.guest.getId());
 };
 
 // -----------------------------------------------------------------------------

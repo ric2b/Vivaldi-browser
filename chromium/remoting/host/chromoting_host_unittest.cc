@@ -129,14 +129,15 @@ class ChromotingHostTest : public testing::Test {
     protocol::ConnectionToClient* connection_ptr = connection.get();
     std::unique_ptr<ClientSession> client(new ClientSession(
         host_.get(), std::move(connection), desktop_environment_factory_.get(),
-        base::TimeDelta(), nullptr, std::vector<HostExtension*>()));
+        DesktopEnvironmentOptions::CreateDefault(), base::TimeDelta(), nullptr,
+        std::vector<HostExtension*>()));
     ClientSession* client_ptr = client.get();
 
     connection_ptr->set_host_stub(client.get());
     get_client(connection_index) = client_ptr;
 
     // |host| is responsible for deleting |client| from now on.
-    host_->clients_.push_back(client.release());
+    host_->clients_.push_back(std::move(client));
 
     if (authenticate) {
       client_ptr->OnConnectionAuthenticated();
@@ -244,11 +245,6 @@ class ChromotingHostTest : public testing::Test {
     return (connection_index == 0) ? client1_ : client2_;
   }
 
-  // Returns the list of clients of the host_.
-  std::list<ClientSession*>& get_clients_from_host() {
-    return host_->clients_;
-  }
-
   const std::string& get_session_jid(int connection_index) {
     return (connection_index == 0) ? session_jid1_ : session_jid2_;
   }
@@ -338,7 +334,8 @@ TEST_F(ChromotingHostTest, LoginBackOffUponConnection) {
   host_->OnIncomingSession(session_unowned1_.release(), &response);
   EXPECT_EQ(protocol::SessionManager::ACCEPT, response);
 
-  host_->OnSessionAuthenticating(get_clients_from_host().front());
+  host_->OnSessionAuthenticating(
+      host_->client_sessions_for_tests().front().get());
   host_->OnIncomingSession(session_unowned2_.get(), &response);
   EXPECT_EQ(protocol::SessionManager::OVERLOAD, response);
 }
@@ -362,13 +359,15 @@ TEST_F(ChromotingHostTest, LoginBackOffUponAuthenticating) {
   EXPECT_EQ(protocol::SessionManager::ACCEPT, response);
 
   // This will set the backoff.
-  host_->OnSessionAuthenticating(get_clients_from_host().front());
+  host_->OnSessionAuthenticating(
+      host_->client_sessions_for_tests().front().get());
 
   // This should disconnect client2.
-  host_->OnSessionAuthenticating(get_clients_from_host().back());
+  host_->OnSessionAuthenticating(
+      host_->client_sessions_for_tests().back().get());
 
   // Verify that the host only has 1 client at this point.
-  EXPECT_EQ(get_clients_from_host().size(), 1U);
+  EXPECT_EQ(host_->client_sessions_for_tests().size(), 1U);
 }
 
 TEST_F(ChromotingHostTest, OnSessionRouteChange) {

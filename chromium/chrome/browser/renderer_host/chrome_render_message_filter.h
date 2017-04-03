@@ -12,6 +12,7 @@
 #include "base/macros.h"
 #include "base/sequenced_task_runner_helpers.h"
 #include "content/public/browser/browser_message_filter.h"
+#include "extensions/features/features.h"
 
 class GURL;
 class Profile;
@@ -84,7 +85,7 @@ class ChromeRenderMessageFilter : public content::BrowserMessageFilter {
                                      const GURL& origin_url,
                                      const GURL& top_origin_url,
                                      IPC::Message* message);
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   static void FileSystemAccessedSyncOnUIThread(
       int render_process_id,
       int render_frame_id,
@@ -105,7 +106,7 @@ class ChromeRenderMessageFilter : public content::BrowserMessageFilter {
                                  const GURL& origin_url,
                                  const GURL& top_origin_url,
                                  base::Callback<void(bool)> callback);
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   static void FileSystemAccessedOnUIThread(int render_process_id,
                                            int render_frame_id,
                                            const GURL& url,
@@ -129,8 +130,6 @@ class ChromeRenderMessageFilter : public content::BrowserMessageFilter {
   // Called when a message is received from a renderer that a trial has been
   // activated (ChromeViewHostMsg_FieldTrialActivated).
   void OnFieldTrialActivated(const std::string& trial_name);
-  void OnRecordRappor(const std::string& metric, const std::string& sample);
-  void OnRecordRapporURL(const std::string& metric, const GURL& sample);
 
   const int render_process_id_;
 

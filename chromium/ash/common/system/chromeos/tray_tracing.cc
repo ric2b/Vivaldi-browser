@@ -13,62 +13,68 @@
 #include "ash/common/system/tray/system_tray_notifier.h"
 #include "ash/common/system/tray/tray_constants.h"
 #include "ash/common/system/tray/tray_popup_item_style.h"
+#include "ash/common/system/tray/tray_popup_utils.h"
+#include "ash/common/system/tray/tri_view.h"
 #include "ash/common/wm_shell.h"
+#include "ash/resources/vector_icons/vector_icons.h"
 #include "grit/ash_resources.h"
 #include "grit/ash_strings.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/paint_vector_icon.h"
-#include "ui/gfx/vector_icons_public.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
-#include "ui/views/layout/box_layout.h"
+#include "ui/views/layout/fill_layout.h"
 
 namespace ash {
 namespace tray {
 
 class DefaultTracingView : public ActionableView {
  public:
-  explicit DefaultTracingView(SystemTrayItem* owner) : ActionableView(owner) {
-    SetLayoutManager(new views::BoxLayout(views::BoxLayout::kHorizontal,
-                                          kTrayPopupPaddingHorizontal, 0,
-                                          kTrayPopupPaddingBetweenItems));
-
+  explicit DefaultTracingView(SystemTrayItem* owner)
+      : ActionableView(owner, TrayPopupInkDropStyle::FILL_BOUNDS) {
     ui::ResourceBundle& bundle = ui::ResourceBundle::GetSharedInstance();
-    image_ =
-        new FixedSizedImageView(0, GetTrayConstant(TRAY_POPUP_ITEM_HEIGHT));
-    if (!MaterialDesignController::UseMaterialDesignSystemIcons()) {
+
+    SetLayoutManager(new views::FillLayout);
+    TriView* tri_view = TrayPopupUtils::CreateDefaultRowView();
+    AddChildView(tri_view);
+    image_ = TrayPopupUtils::CreateMainImageView();
+    tri_view->AddView(TriView::Container::START, image_);
+
+    label_ = TrayPopupUtils::CreateDefaultLabel();
+    label_->SetMultiLine(true);
+    label_->SetText(bundle.GetLocalizedString(IDS_ASH_STATUS_TRAY_TRACING));
+    tri_view->AddView(TriView::Container::CENTER, label_);
+
+    if (MaterialDesignController::UseMaterialDesignSystemIcons()) {
+      UpdateStyle();
+      SetInkDropMode(InkDropHostView::InkDropMode::ON);
+    } else {
       // The icon doesn't change in non-md.
       image_->SetImage(
           bundle.GetImageNamed(IDR_AURA_UBER_TRAY_TRACING).ToImageSkia());
     }
-    AddChildView(image_);
-
-    label_ = new views::Label();
-    label_->SetMultiLine(true);
-    label_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-    label_->SetText(bundle.GetLocalizedString(IDS_ASH_STATUS_TRAY_TRACING));
-    AddChildView(label_);
   }
 
   ~DefaultTracingView() override {}
 
  private:
+  // Update text and image color based on the current theme of the system.
+  void UpdateStyle() {
+    TrayPopupItemStyle style(GetNativeTheme(),
+                             TrayPopupItemStyle::FontStyle::DEFAULT_VIEW_LABEL);
+    style.SetupLabel(label_);
+    image_->SetImage(
+        gfx::CreateVectorIcon(kSystemMenuTracingIcon, style.GetIconColor()));
+  }
+
   // ActionableView:
   void OnNativeThemeChanged(const ui::NativeTheme* theme) override {
     ActionableView::OnNativeThemeChanged(theme);
 
     if (!MaterialDesignController::IsSystemTrayMenuMaterial())
       return;
-
-    TrayPopupItemStyle style(GetNativeTheme(),
-                             TrayPopupItemStyle::FontStyle::DEFAULT_VIEW_LABEL);
-    style.SetupLabel(label_);
-
-    // TODO(tdanderson): Update the icon used for tracing or remove it from
-    // the system menu. See crbug.com/625691.
-    image_->SetImage(CreateVectorIcon(gfx::VectorIconId::CODE, kMenuIconSize,
-                                      style.GetForegroundColor()));
+    UpdateStyle();
   }
 
   bool PerformAction(const ui::Event& event) override {

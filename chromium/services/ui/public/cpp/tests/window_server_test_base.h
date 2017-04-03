@@ -9,12 +9,12 @@
 #include <set>
 
 #include "base/macros.h"
-#include "services/shell/public/cpp/interface_factory.h"
+#include "services/service_manager/public/cpp/interface_factory.h"
 #include "services/ui/public/cpp/tests/window_server_shelltest_base.h"
 #include "services/ui/public/cpp/window_manager_delegate.h"
 #include "services/ui/public/cpp/window_tree_client_delegate.h"
 #include "services/ui/public/interfaces/window_tree.mojom.h"
-#include "services/ui/public/interfaces/window_tree_host.mojom.h"
+#include "ui/display/test/test_screen.h"
 
 namespace ui {
 
@@ -26,7 +26,7 @@ class WindowServerTestBase
     : public WindowServerServiceTestBase,
       public WindowTreeClientDelegate,
       public WindowManagerDelegate,
-      public shell::InterfaceFactory<mojom::WindowTreeClient> {
+      public service_manager::InterfaceFactory<mojom::WindowTreeClient> {
  public:
   WindowServerTestBase();
   ~WindowServerTestBase() override;
@@ -51,11 +51,6 @@ class WindowServerTestBase
   }
 
  protected:
-  mojom::WindowTreeHost* host() { return host_.get(); }
-  WindowTreeClient* most_recent_client() {
-    return most_recent_client_;
-  }
-
   void set_window_manager_delegate(WindowManagerDelegate* delegate) {
     window_manager_delegate_ = delegate;
   }
@@ -67,8 +62,8 @@ class WindowServerTestBase
   void SetUp() override;
 
   // WindowServerServiceTestBase:
-  bool OnConnect(const shell::Identity& remote_identity,
-                 shell::InterfaceRegistry* registry) override;
+  bool OnConnect(const service_manager::Identity& remote_identity,
+                 service_manager::InterfaceRegistry* registry) override;
 
   // WindowTreeClientDelegate:
   void OnEmbed(Window* root) override;
@@ -90,6 +85,7 @@ class WindowServerTestBase
                                   bool not_responding) override;
   void OnWmNewDisplay(Window* window, const display::Display& display) override;
   void OnWmDisplayRemoved(Window* window) override;
+  void OnWmDisplayModified(const display::Display& display) override;
   void OnWmPerformMoveLoop(Window* window,
                            mojom::MoveLoopSource source,
                            const gfx::Point& cursor_location,
@@ -99,16 +95,10 @@ class WindowServerTestBase
                                    const ui::Event& event) override;
 
   // InterfaceFactory<WindowTreeClient>:
-  void Create(const shell::Identity& remote_identity,
+  void Create(const service_manager::Identity& remote_identity,
               mojo::InterfaceRequest<mojom::WindowTreeClient> request) override;
 
-  // Used to receive the most recent window tree client loaded by an embed
-  // action.
-  WindowTreeClient* most_recent_client_;
-
  private:
-  mojom::WindowTreeHostPtr host_;
-
   std::set<std::unique_ptr<WindowTreeClient>> window_tree_clients_;
 
   // The window server connection held by the window manager (app running at
@@ -120,6 +110,9 @@ class WindowServerTestBase
   WindowManagerDelegate* window_manager_delegate_;
 
   WindowManagerClient* window_manager_client_;
+
+  // Dummy screen required to be the screen instance.
+  display::test::TestScreen test_screen_;
 
   bool window_tree_client_lost_connection_ = false;
 

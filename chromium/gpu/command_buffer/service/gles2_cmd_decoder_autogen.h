@@ -50,7 +50,7 @@ error::Error GLES2DecoderImpl::HandleBindBuffer(uint32_t immediate_data_size,
 error::Error GLES2DecoderImpl::HandleBindBufferBase(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::BindBufferBase& c =
       *static_cast<const volatile gles2::cmds::BindBufferBase*>(cmd_data);
@@ -68,7 +68,7 @@ error::Error GLES2DecoderImpl::HandleBindBufferBase(
 error::Error GLES2DecoderImpl::HandleBindBufferRange(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::BindBufferRange& c =
       *static_cast<const volatile gles2::cmds::BindBufferRange*>(cmd_data);
@@ -122,7 +122,7 @@ error::Error GLES2DecoderImpl::HandleBindRenderbuffer(
 error::Error GLES2DecoderImpl::HandleBindSampler(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::BindSampler& c =
       *static_cast<const volatile gles2::cmds::BindSampler*>(cmd_data);
@@ -150,7 +150,7 @@ error::Error GLES2DecoderImpl::HandleBindTexture(
 error::Error GLES2DecoderImpl::HandleBindTransformFeedback(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::BindTransformFeedback& c =
       *static_cast<const volatile gles2::cmds::BindTransformFeedback*>(
@@ -360,7 +360,7 @@ error::Error GLES2DecoderImpl::HandleClear(uint32_t immediate_data_size,
 error::Error GLES2DecoderImpl::HandleClearBufferfi(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::ClearBufferfi& c =
       *static_cast<const volatile gles2::cmds::ClearBufferfi*>(cmd_data);
@@ -379,7 +379,7 @@ error::Error GLES2DecoderImpl::HandleClearBufferfi(
 error::Error GLES2DecoderImpl::HandleClearBufferfvImmediate(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::ClearBufferfvImmediate& c =
       *static_cast<const volatile gles2::cmds::ClearBufferfvImmediate*>(
@@ -409,7 +409,7 @@ error::Error GLES2DecoderImpl::HandleClearBufferfvImmediate(
 error::Error GLES2DecoderImpl::HandleClearBufferivImmediate(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::ClearBufferivImmediate& c =
       *static_cast<const volatile gles2::cmds::ClearBufferivImmediate*>(
@@ -439,7 +439,7 @@ error::Error GLES2DecoderImpl::HandleClearBufferivImmediate(
 error::Error GLES2DecoderImpl::HandleClearBufferuivImmediate(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::ClearBufferuivImmediate& c =
       *static_cast<const volatile gles2::cmds::ClearBufferuivImmediate*>(
@@ -540,426 +540,10 @@ error::Error GLES2DecoderImpl::HandleCompileShader(
   return error::kNoError;
 }
 
-error::Error GLES2DecoderImpl::HandleCompressedTexImage2DBucket(
-    uint32_t immediate_data_size,
-    const volatile void* cmd_data) {
-  const volatile gles2::cmds::CompressedTexImage2DBucket& c =
-      *static_cast<const volatile gles2::cmds::CompressedTexImage2DBucket*>(
-          cmd_data);
-  GLenum target = static_cast<GLenum>(c.target);
-  GLint level = static_cast<GLint>(c.level);
-  GLenum internalformat = static_cast<GLenum>(c.internalformat);
-  GLsizei width = static_cast<GLsizei>(c.width);
-  GLsizei height = static_cast<GLsizei>(c.height);
-  GLuint bucket_id = static_cast<GLuint>(c.bucket_id);
-  GLint border = static_cast<GLint>(c.border);
-  Bucket* bucket = GetBucket(bucket_id);
-  if (!bucket)
-    return error::kInvalidArguments;
-  uint32_t data_size = bucket->size();
-  GLsizei imageSize = data_size;
-  const void* data = bucket->GetData(0, data_size);
-  DCHECK(data || !imageSize);
-  if (!validators_->texture_target.IsValid(target)) {
-    LOCAL_SET_GL_ERROR_INVALID_ENUM("glCompressedTexImage2D", target, "target");
-    return error::kNoError;
-  }
-  if (!validators_->compressed_texture_format.IsValid(internalformat)) {
-    LOCAL_SET_GL_ERROR_INVALID_ENUM("glCompressedTexImage2D", internalformat,
-                                    "internalformat");
-    return error::kNoError;
-  }
-  if (width < 0) {
-    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCompressedTexImage2D", "width < 0");
-    return error::kNoError;
-  }
-  if (height < 0) {
-    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCompressedTexImage2D",
-                       "height < 0");
-    return error::kNoError;
-  }
-  if (imageSize < 0) {
-    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCompressedTexImage2D",
-                       "imageSize < 0");
-    return error::kNoError;
-  }
-  DoCompressedTexImage2D(target, level, internalformat, width, height, border,
-                         imageSize, data);
-  return error::kNoError;
-}
-
-error::Error GLES2DecoderImpl::HandleCompressedTexImage2D(
-    uint32_t immediate_data_size,
-    const volatile void* cmd_data) {
-  const volatile gles2::cmds::CompressedTexImage2D& c =
-      *static_cast<const volatile gles2::cmds::CompressedTexImage2D*>(cmd_data);
-  GLenum target = static_cast<GLenum>(c.target);
-  GLint level = static_cast<GLint>(c.level);
-  GLenum internalformat = static_cast<GLenum>(c.internalformat);
-  GLsizei width = static_cast<GLsizei>(c.width);
-  GLsizei height = static_cast<GLsizei>(c.height);
-  GLint border = static_cast<GLint>(c.border);
-  GLsizei imageSize = static_cast<GLsizei>(c.imageSize);
-  uint32_t data_size = imageSize;
-  const void* data = GetSharedMemoryAs<const void*>(
-      c.data_shm_id, c.data_shm_offset, data_size);
-  if (!validators_->texture_target.IsValid(target)) {
-    LOCAL_SET_GL_ERROR_INVALID_ENUM("glCompressedTexImage2D", target, "target");
-    return error::kNoError;
-  }
-  if (!validators_->compressed_texture_format.IsValid(internalformat)) {
-    LOCAL_SET_GL_ERROR_INVALID_ENUM("glCompressedTexImage2D", internalformat,
-                                    "internalformat");
-    return error::kNoError;
-  }
-  if (width < 0) {
-    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCompressedTexImage2D", "width < 0");
-    return error::kNoError;
-  }
-  if (height < 0) {
-    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCompressedTexImage2D",
-                       "height < 0");
-    return error::kNoError;
-  }
-  if (imageSize < 0) {
-    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCompressedTexImage2D",
-                       "imageSize < 0");
-    return error::kNoError;
-  }
-  DoCompressedTexImage2D(target, level, internalformat, width, height, border,
-                         imageSize, data);
-  return error::kNoError;
-}
-
-error::Error GLES2DecoderImpl::HandleCompressedTexSubImage2DBucket(
-    uint32_t immediate_data_size,
-    const volatile void* cmd_data) {
-  const volatile gles2::cmds::CompressedTexSubImage2DBucket& c =
-      *static_cast<const volatile gles2::cmds::CompressedTexSubImage2DBucket*>(
-          cmd_data);
-  GLenum target = static_cast<GLenum>(c.target);
-  GLint level = static_cast<GLint>(c.level);
-  GLint xoffset = static_cast<GLint>(c.xoffset);
-  GLint yoffset = static_cast<GLint>(c.yoffset);
-  GLsizei width = static_cast<GLsizei>(c.width);
-  GLsizei height = static_cast<GLsizei>(c.height);
-  GLenum format = static_cast<GLenum>(c.format);
-  GLuint bucket_id = static_cast<GLuint>(c.bucket_id);
-  Bucket* bucket = GetBucket(bucket_id);
-  if (!bucket)
-    return error::kInvalidArguments;
-  uint32_t data_size = bucket->size();
-  GLsizei imageSize = data_size;
-  const void* data = bucket->GetData(0, data_size);
-  DCHECK(data || !imageSize);
-  if (!validators_->texture_target.IsValid(target)) {
-    LOCAL_SET_GL_ERROR_INVALID_ENUM("glCompressedTexSubImage2D", target,
-                                    "target");
-    return error::kNoError;
-  }
-  if (width < 0) {
-    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCompressedTexSubImage2D",
-                       "width < 0");
-    return error::kNoError;
-  }
-  if (height < 0) {
-    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCompressedTexSubImage2D",
-                       "height < 0");
-    return error::kNoError;
-  }
-  if (!validators_->compressed_texture_format.IsValid(format)) {
-    LOCAL_SET_GL_ERROR_INVALID_ENUM("glCompressedTexSubImage2D", format,
-                                    "format");
-    return error::kNoError;
-  }
-  if (imageSize < 0) {
-    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCompressedTexSubImage2D",
-                       "imageSize < 0");
-    return error::kNoError;
-  }
-  DoCompressedTexSubImage2D(target, level, xoffset, yoffset, width, height,
-                            format, imageSize, data);
-  return error::kNoError;
-}
-
-error::Error GLES2DecoderImpl::HandleCompressedTexSubImage2D(
-    uint32_t immediate_data_size,
-    const volatile void* cmd_data) {
-  const volatile gles2::cmds::CompressedTexSubImage2D& c =
-      *static_cast<const volatile gles2::cmds::CompressedTexSubImage2D*>(
-          cmd_data);
-  GLenum target = static_cast<GLenum>(c.target);
-  GLint level = static_cast<GLint>(c.level);
-  GLint xoffset = static_cast<GLint>(c.xoffset);
-  GLint yoffset = static_cast<GLint>(c.yoffset);
-  GLsizei width = static_cast<GLsizei>(c.width);
-  GLsizei height = static_cast<GLsizei>(c.height);
-  GLenum format = static_cast<GLenum>(c.format);
-  GLsizei imageSize = static_cast<GLsizei>(c.imageSize);
-  uint32_t data_size = imageSize;
-  const void* data = GetSharedMemoryAs<const void*>(
-      c.data_shm_id, c.data_shm_offset, data_size);
-  if (!validators_->texture_target.IsValid(target)) {
-    LOCAL_SET_GL_ERROR_INVALID_ENUM("glCompressedTexSubImage2D", target,
-                                    "target");
-    return error::kNoError;
-  }
-  if (width < 0) {
-    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCompressedTexSubImage2D",
-                       "width < 0");
-    return error::kNoError;
-  }
-  if (height < 0) {
-    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCompressedTexSubImage2D",
-                       "height < 0");
-    return error::kNoError;
-  }
-  if (!validators_->compressed_texture_format.IsValid(format)) {
-    LOCAL_SET_GL_ERROR_INVALID_ENUM("glCompressedTexSubImage2D", format,
-                                    "format");
-    return error::kNoError;
-  }
-  if (imageSize < 0) {
-    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCompressedTexSubImage2D",
-                       "imageSize < 0");
-    return error::kNoError;
-  }
-  if (data == NULL) {
-    return error::kOutOfBounds;
-  }
-  DoCompressedTexSubImage2D(target, level, xoffset, yoffset, width, height,
-                            format, imageSize, data);
-  return error::kNoError;
-}
-
-error::Error GLES2DecoderImpl::HandleCompressedTexImage3DBucket(
-    uint32_t immediate_data_size,
-    const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
-    return error::kUnknownCommand;
-  const volatile gles2::cmds::CompressedTexImage3DBucket& c =
-      *static_cast<const volatile gles2::cmds::CompressedTexImage3DBucket*>(
-          cmd_data);
-  GLenum target = static_cast<GLenum>(c.target);
-  GLint level = static_cast<GLint>(c.level);
-  GLenum internalformat = static_cast<GLenum>(c.internalformat);
-  GLsizei width = static_cast<GLsizei>(c.width);
-  GLsizei height = static_cast<GLsizei>(c.height);
-  GLsizei depth = static_cast<GLsizei>(c.depth);
-  GLuint bucket_id = static_cast<GLuint>(c.bucket_id);
-  GLint border = static_cast<GLint>(c.border);
-  Bucket* bucket = GetBucket(bucket_id);
-  if (!bucket)
-    return error::kInvalidArguments;
-  uint32_t data_size = bucket->size();
-  GLsizei imageSize = data_size;
-  const void* data = bucket->GetData(0, data_size);
-  DCHECK(data || !imageSize);
-  if (!validators_->texture_3_d_target.IsValid(target)) {
-    LOCAL_SET_GL_ERROR_INVALID_ENUM("glCompressedTexImage3D", target, "target");
-    return error::kNoError;
-  }
-  if (!validators_->compressed_texture_format.IsValid(internalformat)) {
-    LOCAL_SET_GL_ERROR_INVALID_ENUM("glCompressedTexImage3D", internalformat,
-                                    "internalformat");
-    return error::kNoError;
-  }
-  if (width < 0) {
-    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCompressedTexImage3D", "width < 0");
-    return error::kNoError;
-  }
-  if (height < 0) {
-    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCompressedTexImage3D",
-                       "height < 0");
-    return error::kNoError;
-  }
-  if (depth < 0) {
-    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCompressedTexImage3D", "depth < 0");
-    return error::kNoError;
-  }
-  if (imageSize < 0) {
-    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCompressedTexImage3D",
-                       "imageSize < 0");
-    return error::kNoError;
-  }
-  DoCompressedTexImage3D(target, level, internalformat, width, height, depth,
-                         border, imageSize, data);
-  return error::kNoError;
-}
-
-error::Error GLES2DecoderImpl::HandleCompressedTexImage3D(
-    uint32_t immediate_data_size,
-    const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
-    return error::kUnknownCommand;
-  const volatile gles2::cmds::CompressedTexImage3D& c =
-      *static_cast<const volatile gles2::cmds::CompressedTexImage3D*>(cmd_data);
-  GLenum target = static_cast<GLenum>(c.target);
-  GLint level = static_cast<GLint>(c.level);
-  GLenum internalformat = static_cast<GLenum>(c.internalformat);
-  GLsizei width = static_cast<GLsizei>(c.width);
-  GLsizei height = static_cast<GLsizei>(c.height);
-  GLsizei depth = static_cast<GLsizei>(c.depth);
-  GLint border = static_cast<GLint>(c.border);
-  GLsizei imageSize = static_cast<GLsizei>(c.imageSize);
-  uint32_t data_size = imageSize;
-  const void* data = GetSharedMemoryAs<const void*>(
-      c.data_shm_id, c.data_shm_offset, data_size);
-  if (!validators_->texture_3_d_target.IsValid(target)) {
-    LOCAL_SET_GL_ERROR_INVALID_ENUM("glCompressedTexImage3D", target, "target");
-    return error::kNoError;
-  }
-  if (!validators_->compressed_texture_format.IsValid(internalformat)) {
-    LOCAL_SET_GL_ERROR_INVALID_ENUM("glCompressedTexImage3D", internalformat,
-                                    "internalformat");
-    return error::kNoError;
-  }
-  if (width < 0) {
-    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCompressedTexImage3D", "width < 0");
-    return error::kNoError;
-  }
-  if (height < 0) {
-    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCompressedTexImage3D",
-                       "height < 0");
-    return error::kNoError;
-  }
-  if (depth < 0) {
-    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCompressedTexImage3D", "depth < 0");
-    return error::kNoError;
-  }
-  if (imageSize < 0) {
-    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCompressedTexImage3D",
-                       "imageSize < 0");
-    return error::kNoError;
-  }
-  DoCompressedTexImage3D(target, level, internalformat, width, height, depth,
-                         border, imageSize, data);
-  return error::kNoError;
-}
-
-error::Error GLES2DecoderImpl::HandleCompressedTexSubImage3DBucket(
-    uint32_t immediate_data_size,
-    const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
-    return error::kUnknownCommand;
-  const volatile gles2::cmds::CompressedTexSubImage3DBucket& c =
-      *static_cast<const volatile gles2::cmds::CompressedTexSubImage3DBucket*>(
-          cmd_data);
-  GLenum target = static_cast<GLenum>(c.target);
-  GLint level = static_cast<GLint>(c.level);
-  GLint xoffset = static_cast<GLint>(c.xoffset);
-  GLint yoffset = static_cast<GLint>(c.yoffset);
-  GLint zoffset = static_cast<GLint>(c.zoffset);
-  GLsizei width = static_cast<GLsizei>(c.width);
-  GLsizei height = static_cast<GLsizei>(c.height);
-  GLsizei depth = static_cast<GLsizei>(c.depth);
-  GLenum format = static_cast<GLenum>(c.format);
-  GLuint bucket_id = static_cast<GLuint>(c.bucket_id);
-  Bucket* bucket = GetBucket(bucket_id);
-  if (!bucket)
-    return error::kInvalidArguments;
-  uint32_t data_size = bucket->size();
-  GLsizei imageSize = data_size;
-  const void* data = bucket->GetData(0, data_size);
-  DCHECK(data || !imageSize);
-  if (!validators_->texture_3_d_target.IsValid(target)) {
-    LOCAL_SET_GL_ERROR_INVALID_ENUM("glCompressedTexSubImage3D", target,
-                                    "target");
-    return error::kNoError;
-  }
-  if (width < 0) {
-    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCompressedTexSubImage3D",
-                       "width < 0");
-    return error::kNoError;
-  }
-  if (height < 0) {
-    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCompressedTexSubImage3D",
-                       "height < 0");
-    return error::kNoError;
-  }
-  if (depth < 0) {
-    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCompressedTexSubImage3D",
-                       "depth < 0");
-    return error::kNoError;
-  }
-  if (!validators_->compressed_texture_format.IsValid(format)) {
-    LOCAL_SET_GL_ERROR_INVALID_ENUM("glCompressedTexSubImage3D", format,
-                                    "format");
-    return error::kNoError;
-  }
-  if (imageSize < 0) {
-    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCompressedTexSubImage3D",
-                       "imageSize < 0");
-    return error::kNoError;
-  }
-  DoCompressedTexSubImage3D(target, level, xoffset, yoffset, zoffset, width,
-                            height, depth, format, imageSize, data);
-  return error::kNoError;
-}
-
-error::Error GLES2DecoderImpl::HandleCompressedTexSubImage3D(
-    uint32_t immediate_data_size,
-    const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
-    return error::kUnknownCommand;
-  const volatile gles2::cmds::CompressedTexSubImage3D& c =
-      *static_cast<const volatile gles2::cmds::CompressedTexSubImage3D*>(
-          cmd_data);
-  GLenum target = static_cast<GLenum>(c.target);
-  GLint level = static_cast<GLint>(c.level);
-  GLint xoffset = static_cast<GLint>(c.xoffset);
-  GLint yoffset = static_cast<GLint>(c.yoffset);
-  GLint zoffset = static_cast<GLint>(c.zoffset);
-  GLsizei width = static_cast<GLsizei>(c.width);
-  GLsizei height = static_cast<GLsizei>(c.height);
-  GLsizei depth = static_cast<GLsizei>(c.depth);
-  GLenum format = static_cast<GLenum>(c.format);
-  GLsizei imageSize = static_cast<GLsizei>(c.imageSize);
-  uint32_t data_size = imageSize;
-  const void* data = GetSharedMemoryAs<const void*>(
-      c.data_shm_id, c.data_shm_offset, data_size);
-  if (!validators_->texture_3_d_target.IsValid(target)) {
-    LOCAL_SET_GL_ERROR_INVALID_ENUM("glCompressedTexSubImage3D", target,
-                                    "target");
-    return error::kNoError;
-  }
-  if (width < 0) {
-    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCompressedTexSubImage3D",
-                       "width < 0");
-    return error::kNoError;
-  }
-  if (height < 0) {
-    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCompressedTexSubImage3D",
-                       "height < 0");
-    return error::kNoError;
-  }
-  if (depth < 0) {
-    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCompressedTexSubImage3D",
-                       "depth < 0");
-    return error::kNoError;
-  }
-  if (!validators_->compressed_texture_format.IsValid(format)) {
-    LOCAL_SET_GL_ERROR_INVALID_ENUM("glCompressedTexSubImage3D", format,
-                                    "format");
-    return error::kNoError;
-  }
-  if (imageSize < 0) {
-    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCompressedTexSubImage3D",
-                       "imageSize < 0");
-    return error::kNoError;
-  }
-  if (data == NULL) {
-    return error::kOutOfBounds;
-  }
-  DoCompressedTexSubImage3D(target, level, xoffset, yoffset, zoffset, width,
-                            height, depth, format, imageSize, data);
-  return error::kNoError;
-}
-
 error::Error GLES2DecoderImpl::HandleCopyBufferSubData(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::CopyBufferSubData& c =
       *static_cast<const volatile gles2::cmds::CopyBufferSubData*>(cmd_data);
@@ -1060,7 +644,7 @@ error::Error GLES2DecoderImpl::HandleCopyTexSubImage2D(
 error::Error GLES2DecoderImpl::HandleCopyTexSubImage3D(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::CopyTexSubImage3D& c =
       *static_cast<const volatile gles2::cmds::CopyTexSubImage3D*>(cmd_data);
@@ -1212,7 +796,7 @@ error::Error GLES2DecoderImpl::HandleDeleteRenderbuffersImmediate(
 error::Error GLES2DecoderImpl::HandleDeleteSamplersImmediate(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::DeleteSamplersImmediate& c =
       *static_cast<const volatile gles2::cmds::DeleteSamplersImmediate*>(
@@ -1233,7 +817,7 @@ error::Error GLES2DecoderImpl::HandleDeleteSamplersImmediate(
 
 error::Error GLES2DecoderImpl::HandleDeleteSync(uint32_t immediate_data_size,
                                                 const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::DeleteSync& c =
       *static_cast<const volatile gles2::cmds::DeleteSync*>(cmd_data);
@@ -1265,7 +849,7 @@ error::Error GLES2DecoderImpl::HandleDeleteTexturesImmediate(
 error::Error GLES2DecoderImpl::HandleDeleteTransformFeedbacksImmediate(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::DeleteTransformFeedbacksImmediate& c =
       *static_cast<
@@ -1385,7 +969,7 @@ error::Error GLES2DecoderImpl::HandleEnableVertexAttribArray(
 
 error::Error GLES2DecoderImpl::HandleFenceSync(uint32_t immediate_data_size,
                                                const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::FenceSync& c =
       *static_cast<const volatile gles2::cmds::FenceSync*>(cmd_data);
@@ -1480,7 +1064,7 @@ error::Error GLES2DecoderImpl::HandleFramebufferTexture2D(
 error::Error GLES2DecoderImpl::HandleFramebufferTextureLayer(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::FramebufferTextureLayer& c =
       *static_cast<const volatile gles2::cmds::FramebufferTextureLayer*>(
@@ -1614,7 +1198,7 @@ error::Error GLES2DecoderImpl::HandleGenRenderbuffersImmediate(
 error::Error GLES2DecoderImpl::HandleGenSamplersImmediate(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::GenSamplersImmediate& c =
       *static_cast<const volatile gles2::cmds::GenSamplersImmediate*>(cmd_data);
@@ -1666,7 +1250,7 @@ error::Error GLES2DecoderImpl::HandleGenTexturesImmediate(
 error::Error GLES2DecoderImpl::HandleGenTransformFeedbacksImmediate(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::GenTransformFeedbacksImmediate& c =
       *static_cast<const volatile gles2::cmds::GenTransformFeedbacksImmediate*>(
@@ -1699,7 +1283,10 @@ error::Error GLES2DecoderImpl::HandleGetBooleanv(
   GLenum pname = static_cast<GLenum>(c.pname);
   typedef cmds::GetBooleanv::Result Result;
   GLsizei num_values = 0;
-  GetNumValuesReturnedForGLGet(pname, &num_values);
+  if (!GetNumValuesReturnedForGLGet(pname, &num_values)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM(":GetBooleanv", pname, "pname");
+    return error::kNoError;
+  }
   Result* result = GetSharedMemoryAs<Result*>(
       c.params_shm_id, c.params_shm_offset, Result::ComputeSize(num_values));
   GLboolean* params = result ? result->GetData() : NULL;
@@ -1715,7 +1302,7 @@ error::Error GLES2DecoderImpl::HandleGetBooleanv(
   if (result->size != 0) {
     return error::kInvalidArguments;
   }
-  DoGetBooleanv(pname, params);
+  DoGetBooleanv(pname, params, num_values);
   GLenum error = LOCAL_PEEK_GL_ERROR("GetBooleanv");
   if (error == GL_NO_ERROR) {
     result->SetNumResults(num_values);
@@ -1726,7 +1313,7 @@ error::Error GLES2DecoderImpl::HandleGetBooleanv(
 error::Error GLES2DecoderImpl::HandleGetBufferParameteri64v(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::GetBufferParameteri64v& c =
       *static_cast<const volatile gles2::cmds::GetBufferParameteri64v*>(
@@ -1735,7 +1322,10 @@ error::Error GLES2DecoderImpl::HandleGetBufferParameteri64v(
   GLenum pname = static_cast<GLenum>(c.pname);
   typedef cmds::GetBufferParameteri64v::Result Result;
   GLsizei num_values = 0;
-  GetNumValuesReturnedForGLGet(pname, &num_values);
+  if (!GetNumValuesReturnedForGLGet(pname, &num_values)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM(":GetBufferParameteri64v", pname, "pname");
+    return error::kNoError;
+  }
   Result* result = GetSharedMemoryAs<Result*>(
       c.params_shm_id, c.params_shm_offset, Result::ComputeSize(num_values));
   GLint64* params = result ? result->GetData() : NULL;
@@ -1755,7 +1345,7 @@ error::Error GLES2DecoderImpl::HandleGetBufferParameteri64v(
   if (result->size != 0) {
     return error::kInvalidArguments;
   }
-  DoGetBufferParameteri64v(target, pname, params);
+  DoGetBufferParameteri64v(target, pname, params, num_values);
   result->SetNumResults(num_values);
   return error::kNoError;
 }
@@ -1768,7 +1358,10 @@ error::Error GLES2DecoderImpl::HandleGetBufferParameteriv(
   GLenum pname = static_cast<GLenum>(c.pname);
   typedef cmds::GetBufferParameteriv::Result Result;
   GLsizei num_values = 0;
-  GetNumValuesReturnedForGLGet(pname, &num_values);
+  if (!GetNumValuesReturnedForGLGet(pname, &num_values)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM(":GetBufferParameteriv", pname, "pname");
+    return error::kNoError;
+  }
   Result* result = GetSharedMemoryAs<Result*>(
       c.params_shm_id, c.params_shm_offset, Result::ComputeSize(num_values));
   GLint* params = result ? result->GetData() : NULL;
@@ -1787,7 +1380,7 @@ error::Error GLES2DecoderImpl::HandleGetBufferParameteriv(
   if (result->size != 0) {
     return error::kInvalidArguments;
   }
-  DoGetBufferParameteriv(target, pname, params);
+  DoGetBufferParameteriv(target, pname, params, num_values);
   result->SetNumResults(num_values);
   return error::kNoError;
 }
@@ -1812,7 +1405,10 @@ error::Error GLES2DecoderImpl::HandleGetFloatv(uint32_t immediate_data_size,
   GLenum pname = static_cast<GLenum>(c.pname);
   typedef cmds::GetFloatv::Result Result;
   GLsizei num_values = 0;
-  GetNumValuesReturnedForGLGet(pname, &num_values);
+  if (!GetNumValuesReturnedForGLGet(pname, &num_values)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM(":GetFloatv", pname, "pname");
+    return error::kNoError;
+  }
   Result* result = GetSharedMemoryAs<Result*>(
       c.params_shm_id, c.params_shm_offset, Result::ComputeSize(num_values));
   GLfloat* params = result ? result->GetData() : NULL;
@@ -1828,7 +1424,7 @@ error::Error GLES2DecoderImpl::HandleGetFloatv(uint32_t immediate_data_size,
   if (result->size != 0) {
     return error::kInvalidArguments;
   }
-  DoGetFloatv(pname, params);
+  DoGetFloatv(pname, params, num_values);
   GLenum error = LOCAL_PEEK_GL_ERROR("GetFloatv");
   if (error == GL_NO_ERROR) {
     result->SetNumResults(num_values);
@@ -1848,7 +1444,11 @@ error::Error GLES2DecoderImpl::HandleGetFramebufferAttachmentParameteriv(
   GLenum pname = static_cast<GLenum>(c.pname);
   typedef cmds::GetFramebufferAttachmentParameteriv::Result Result;
   GLsizei num_values = 0;
-  GetNumValuesReturnedForGLGet(pname, &num_values);
+  if (!GetNumValuesReturnedForGLGet(pname, &num_values)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM(":GetFramebufferAttachmentParameteriv",
+                                    pname, "pname");
+    return error::kNoError;
+  }
   Result* result = GetSharedMemoryAs<Result*>(
       c.params_shm_id, c.params_shm_offset, Result::ComputeSize(num_values));
   GLint* params = result ? result->GetData() : NULL;
@@ -1875,7 +1475,8 @@ error::Error GLES2DecoderImpl::HandleGetFramebufferAttachmentParameteriv(
   if (result->size != 0) {
     return error::kInvalidArguments;
   }
-  DoGetFramebufferAttachmentParameteriv(target, attachment, pname, params);
+  DoGetFramebufferAttachmentParameteriv(target, attachment, pname, params,
+                                        num_values);
   GLenum error = LOCAL_PEEK_GL_ERROR("GetFramebufferAttachmentParameteriv");
   if (error == GL_NO_ERROR) {
     result->SetNumResults(num_values);
@@ -1886,14 +1487,17 @@ error::Error GLES2DecoderImpl::HandleGetFramebufferAttachmentParameteriv(
 error::Error GLES2DecoderImpl::HandleGetInteger64v(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::GetInteger64v& c =
       *static_cast<const volatile gles2::cmds::GetInteger64v*>(cmd_data);
   GLenum pname = static_cast<GLenum>(c.pname);
   typedef cmds::GetInteger64v::Result Result;
   GLsizei num_values = 0;
-  GetNumValuesReturnedForGLGet(pname, &num_values);
+  if (!GetNumValuesReturnedForGLGet(pname, &num_values)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM(":GetInteger64v", pname, "pname");
+    return error::kNoError;
+  }
   Result* result = GetSharedMemoryAs<Result*>(
       c.params_shm_id, c.params_shm_offset, Result::ComputeSize(num_values));
   GLint64* params = result ? result->GetData() : NULL;
@@ -1909,7 +1513,7 @@ error::Error GLES2DecoderImpl::HandleGetInteger64v(
   if (result->size != 0) {
     return error::kInvalidArguments;
   }
-  DoGetInteger64v(pname, params);
+  DoGetInteger64v(pname, params, num_values);
   GLenum error = LOCAL_PEEK_GL_ERROR("GetInteger64v");
   if (error == GL_NO_ERROR) {
     result->SetNumResults(num_values);
@@ -1920,7 +1524,7 @@ error::Error GLES2DecoderImpl::HandleGetInteger64v(
 error::Error GLES2DecoderImpl::HandleGetIntegeri_v(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::GetIntegeri_v& c =
       *static_cast<const volatile gles2::cmds::GetIntegeri_v*>(cmd_data);
@@ -1928,7 +1532,10 @@ error::Error GLES2DecoderImpl::HandleGetIntegeri_v(
   GLuint index = static_cast<GLuint>(c.index);
   typedef cmds::GetIntegeri_v::Result Result;
   GLsizei num_values = 0;
-  GetNumValuesReturnedForGLGet(pname, &num_values);
+  if (!GetNumValuesReturnedForGLGet(pname, &num_values)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM(":GetIntegeri_v", pname, "pname");
+    return error::kNoError;
+  }
   Result* result = GetSharedMemoryAs<Result*>(c.data_shm_id, c.data_shm_offset,
                                               Result::ComputeSize(num_values));
   GLint* data = result ? result->GetData() : NULL;
@@ -1943,14 +1550,14 @@ error::Error GLES2DecoderImpl::HandleGetIntegeri_v(
   if (result->size != 0) {
     return error::kInvalidArguments;
   }
-  DoGetIntegeri_v(pname, index, data);
+  DoGetIntegeri_v(pname, index, data, num_values);
   result->SetNumResults(num_values);
   return error::kNoError;
 }
 error::Error GLES2DecoderImpl::HandleGetInteger64i_v(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::GetInteger64i_v& c =
       *static_cast<const volatile gles2::cmds::GetInteger64i_v*>(cmd_data);
@@ -1958,7 +1565,10 @@ error::Error GLES2DecoderImpl::HandleGetInteger64i_v(
   GLuint index = static_cast<GLuint>(c.index);
   typedef cmds::GetInteger64i_v::Result Result;
   GLsizei num_values = 0;
-  GetNumValuesReturnedForGLGet(pname, &num_values);
+  if (!GetNumValuesReturnedForGLGet(pname, &num_values)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM(":GetInteger64i_v", pname, "pname");
+    return error::kNoError;
+  }
   Result* result = GetSharedMemoryAs<Result*>(c.data_shm_id, c.data_shm_offset,
                                               Result::ComputeSize(num_values));
   GLint64* data = result ? result->GetData() : NULL;
@@ -1973,7 +1583,7 @@ error::Error GLES2DecoderImpl::HandleGetInteger64i_v(
   if (result->size != 0) {
     return error::kInvalidArguments;
   }
-  DoGetInteger64i_v(pname, index, data);
+  DoGetInteger64i_v(pname, index, data, num_values);
   result->SetNumResults(num_values);
   return error::kNoError;
 }
@@ -1985,7 +1595,10 @@ error::Error GLES2DecoderImpl::HandleGetIntegerv(
   GLenum pname = static_cast<GLenum>(c.pname);
   typedef cmds::GetIntegerv::Result Result;
   GLsizei num_values = 0;
-  GetNumValuesReturnedForGLGet(pname, &num_values);
+  if (!GetNumValuesReturnedForGLGet(pname, &num_values)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM(":GetIntegerv", pname, "pname");
+    return error::kNoError;
+  }
   Result* result = GetSharedMemoryAs<Result*>(
       c.params_shm_id, c.params_shm_offset, Result::ComputeSize(num_values));
   GLint* params = result ? result->GetData() : NULL;
@@ -2001,7 +1614,7 @@ error::Error GLES2DecoderImpl::HandleGetIntegerv(
   if (result->size != 0) {
     return error::kInvalidArguments;
   }
-  DoGetIntegerv(pname, params);
+  DoGetIntegerv(pname, params, num_values);
   GLenum error = LOCAL_PEEK_GL_ERROR("GetIntegerv");
   if (error == GL_NO_ERROR) {
     result->SetNumResults(num_values);
@@ -2018,7 +1631,10 @@ error::Error GLES2DecoderImpl::HandleGetProgramiv(
   GLenum pname = static_cast<GLenum>(c.pname);
   typedef cmds::GetProgramiv::Result Result;
   GLsizei num_values = 0;
-  GetNumValuesReturnedForGLGet(pname, &num_values);
+  if (!GetNumValuesReturnedForGLGet(pname, &num_values)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM(":GetProgramiv", pname, "pname");
+    return error::kNoError;
+  }
   Result* result = GetSharedMemoryAs<Result*>(
       c.params_shm_id, c.params_shm_offset, Result::ComputeSize(num_values));
   GLint* params = result ? result->GetData() : NULL;
@@ -2034,7 +1650,7 @@ error::Error GLES2DecoderImpl::HandleGetProgramiv(
   if (result->size != 0) {
     return error::kInvalidArguments;
   }
-  DoGetProgramiv(program, pname, params);
+  DoGetProgramiv(program, pname, params, num_values);
   GLenum error = LOCAL_PEEK_GL_ERROR("GetProgramiv");
   if (error == GL_NO_ERROR) {
     result->SetNumResults(num_values);
@@ -2052,7 +1668,11 @@ error::Error GLES2DecoderImpl::HandleGetRenderbufferParameteriv(
   GLenum pname = static_cast<GLenum>(c.pname);
   typedef cmds::GetRenderbufferParameteriv::Result Result;
   GLsizei num_values = 0;
-  GetNumValuesReturnedForGLGet(pname, &num_values);
+  if (!GetNumValuesReturnedForGLGet(pname, &num_values)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM(":GetRenderbufferParameteriv", pname,
+                                    "pname");
+    return error::kNoError;
+  }
   Result* result = GetSharedMemoryAs<Result*>(
       c.params_shm_id, c.params_shm_offset, Result::ComputeSize(num_values));
   GLint* params = result ? result->GetData() : NULL;
@@ -2074,7 +1694,7 @@ error::Error GLES2DecoderImpl::HandleGetRenderbufferParameteriv(
   if (result->size != 0) {
     return error::kInvalidArguments;
   }
-  DoGetRenderbufferParameteriv(target, pname, params);
+  DoGetRenderbufferParameteriv(target, pname, params, num_values);
   GLenum error = LOCAL_PEEK_GL_ERROR("GetRenderbufferParameteriv");
   if (error == GL_NO_ERROR) {
     result->SetNumResults(num_values);
@@ -2085,7 +1705,7 @@ error::Error GLES2DecoderImpl::HandleGetRenderbufferParameteriv(
 error::Error GLES2DecoderImpl::HandleGetSamplerParameterfv(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::GetSamplerParameterfv& c =
       *static_cast<const volatile gles2::cmds::GetSamplerParameterfv*>(
@@ -2094,7 +1714,10 @@ error::Error GLES2DecoderImpl::HandleGetSamplerParameterfv(
   GLenum pname = static_cast<GLenum>(c.pname);
   typedef cmds::GetSamplerParameterfv::Result Result;
   GLsizei num_values = 0;
-  GetNumValuesReturnedForGLGet(pname, &num_values);
+  if (!GetNumValuesReturnedForGLGet(pname, &num_values)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM(":GetSamplerParameterfv", pname, "pname");
+    return error::kNoError;
+  }
   Result* result = GetSharedMemoryAs<Result*>(
       c.params_shm_id, c.params_shm_offset, Result::ComputeSize(num_values));
   GLfloat* params = result ? result->GetData() : NULL;
@@ -2110,7 +1733,7 @@ error::Error GLES2DecoderImpl::HandleGetSamplerParameterfv(
   if (result->size != 0) {
     return error::kInvalidArguments;
   }
-  DoGetSamplerParameterfv(sampler, pname, params);
+  DoGetSamplerParameterfv(sampler, pname, params, num_values);
   GLenum error = LOCAL_PEEK_GL_ERROR("GetSamplerParameterfv");
   if (error == GL_NO_ERROR) {
     result->SetNumResults(num_values);
@@ -2121,7 +1744,7 @@ error::Error GLES2DecoderImpl::HandleGetSamplerParameterfv(
 error::Error GLES2DecoderImpl::HandleGetSamplerParameteriv(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::GetSamplerParameteriv& c =
       *static_cast<const volatile gles2::cmds::GetSamplerParameteriv*>(
@@ -2130,7 +1753,10 @@ error::Error GLES2DecoderImpl::HandleGetSamplerParameteriv(
   GLenum pname = static_cast<GLenum>(c.pname);
   typedef cmds::GetSamplerParameteriv::Result Result;
   GLsizei num_values = 0;
-  GetNumValuesReturnedForGLGet(pname, &num_values);
+  if (!GetNumValuesReturnedForGLGet(pname, &num_values)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM(":GetSamplerParameteriv", pname, "pname");
+    return error::kNoError;
+  }
   Result* result = GetSharedMemoryAs<Result*>(
       c.params_shm_id, c.params_shm_offset, Result::ComputeSize(num_values));
   GLint* params = result ? result->GetData() : NULL;
@@ -2146,7 +1772,7 @@ error::Error GLES2DecoderImpl::HandleGetSamplerParameteriv(
   if (result->size != 0) {
     return error::kInvalidArguments;
   }
-  DoGetSamplerParameteriv(sampler, pname, params);
+  DoGetSamplerParameteriv(sampler, pname, params, num_values);
   GLenum error = LOCAL_PEEK_GL_ERROR("GetSamplerParameteriv");
   if (error == GL_NO_ERROR) {
     result->SetNumResults(num_values);
@@ -2163,7 +1789,10 @@ error::Error GLES2DecoderImpl::HandleGetShaderiv(
   GLenum pname = static_cast<GLenum>(c.pname);
   typedef cmds::GetShaderiv::Result Result;
   GLsizei num_values = 0;
-  GetNumValuesReturnedForGLGet(pname, &num_values);
+  if (!GetNumValuesReturnedForGLGet(pname, &num_values)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM(":GetShaderiv", pname, "pname");
+    return error::kNoError;
+  }
   Result* result = GetSharedMemoryAs<Result*>(
       c.params_shm_id, c.params_shm_offset, Result::ComputeSize(num_values));
   GLint* params = result ? result->GetData() : NULL;
@@ -2179,7 +1808,7 @@ error::Error GLES2DecoderImpl::HandleGetShaderiv(
   if (result->size != 0) {
     return error::kInvalidArguments;
   }
-  DoGetShaderiv(shader, pname, params);
+  DoGetShaderiv(shader, pname, params, num_values);
   GLenum error = LOCAL_PEEK_GL_ERROR("GetShaderiv");
   if (error == GL_NO_ERROR) {
     result->SetNumResults(num_values);
@@ -2189,7 +1818,7 @@ error::Error GLES2DecoderImpl::HandleGetShaderiv(
 
 error::Error GLES2DecoderImpl::HandleGetSynciv(uint32_t immediate_data_size,
                                                const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::GetSynciv& c =
       *static_cast<const volatile gles2::cmds::GetSynciv*>(cmd_data);
@@ -2197,7 +1826,10 @@ error::Error GLES2DecoderImpl::HandleGetSynciv(uint32_t immediate_data_size,
   GLenum pname = static_cast<GLenum>(c.pname);
   typedef cmds::GetSynciv::Result Result;
   GLsizei num_values = 0;
-  GetNumValuesReturnedForGLGet(pname, &num_values);
+  if (!GetNumValuesReturnedForGLGet(pname, &num_values)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM(":GetSynciv", pname, "pname");
+    return error::kNoError;
+  }
   Result* result = GetSharedMemoryAs<Result*>(
       c.values_shm_id, c.values_shm_offset, Result::ComputeSize(num_values));
   GLint* values = result ? result->GetData() : NULL;
@@ -2235,7 +1867,10 @@ error::Error GLES2DecoderImpl::HandleGetTexParameterfv(
   GLenum pname = static_cast<GLenum>(c.pname);
   typedef cmds::GetTexParameterfv::Result Result;
   GLsizei num_values = 0;
-  GetNumValuesReturnedForGLGet(pname, &num_values);
+  if (!GetNumValuesReturnedForGLGet(pname, &num_values)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM(":GetTexParameterfv", pname, "pname");
+    return error::kNoError;
+  }
   Result* result = GetSharedMemoryAs<Result*>(
       c.params_shm_id, c.params_shm_offset, Result::ComputeSize(num_values));
   GLfloat* params = result ? result->GetData() : NULL;
@@ -2255,7 +1890,7 @@ error::Error GLES2DecoderImpl::HandleGetTexParameterfv(
   if (result->size != 0) {
     return error::kInvalidArguments;
   }
-  DoGetTexParameterfv(target, pname, params);
+  DoGetTexParameterfv(target, pname, params, num_values);
   GLenum error = LOCAL_PEEK_GL_ERROR("GetTexParameterfv");
   if (error == GL_NO_ERROR) {
     result->SetNumResults(num_values);
@@ -2272,7 +1907,10 @@ error::Error GLES2DecoderImpl::HandleGetTexParameteriv(
   GLenum pname = static_cast<GLenum>(c.pname);
   typedef cmds::GetTexParameteriv::Result Result;
   GLsizei num_values = 0;
-  GetNumValuesReturnedForGLGet(pname, &num_values);
+  if (!GetNumValuesReturnedForGLGet(pname, &num_values)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM(":GetTexParameteriv", pname, "pname");
+    return error::kNoError;
+  }
   Result* result = GetSharedMemoryAs<Result*>(
       c.params_shm_id, c.params_shm_offset, Result::ComputeSize(num_values));
   GLint* params = result ? result->GetData() : NULL;
@@ -2292,7 +1930,7 @@ error::Error GLES2DecoderImpl::HandleGetTexParameteriv(
   if (result->size != 0) {
     return error::kInvalidArguments;
   }
-  DoGetTexParameteriv(target, pname, params);
+  DoGetTexParameteriv(target, pname, params, num_values);
   GLenum error = LOCAL_PEEK_GL_ERROR("GetTexParameteriv");
   if (error == GL_NO_ERROR) {
     result->SetNumResults(num_values);
@@ -2309,7 +1947,10 @@ error::Error GLES2DecoderImpl::HandleGetVertexAttribfv(
   GLenum pname = static_cast<GLenum>(c.pname);
   typedef cmds::GetVertexAttribfv::Result Result;
   GLsizei num_values = 0;
-  GetNumValuesReturnedForGLGet(pname, &num_values);
+  if (!GetNumValuesReturnedForGLGet(pname, &num_values)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM(":GetVertexAttribfv", pname, "pname");
+    return error::kNoError;
+  }
   Result* result = GetSharedMemoryAs<Result*>(
       c.params_shm_id, c.params_shm_offset, Result::ComputeSize(num_values));
   GLfloat* params = result ? result->GetData() : NULL;
@@ -2325,7 +1966,7 @@ error::Error GLES2DecoderImpl::HandleGetVertexAttribfv(
   if (result->size != 0) {
     return error::kInvalidArguments;
   }
-  DoGetVertexAttribfv(index, pname, params);
+  DoGetVertexAttribfv(index, pname, params, num_values);
   GLenum error = LOCAL_PEEK_GL_ERROR("GetVertexAttribfv");
   if (error == GL_NO_ERROR) {
     result->SetNumResults(num_values);
@@ -2342,7 +1983,10 @@ error::Error GLES2DecoderImpl::HandleGetVertexAttribiv(
   GLenum pname = static_cast<GLenum>(c.pname);
   typedef cmds::GetVertexAttribiv::Result Result;
   GLsizei num_values = 0;
-  GetNumValuesReturnedForGLGet(pname, &num_values);
+  if (!GetNumValuesReturnedForGLGet(pname, &num_values)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM(":GetVertexAttribiv", pname, "pname");
+    return error::kNoError;
+  }
   Result* result = GetSharedMemoryAs<Result*>(
       c.params_shm_id, c.params_shm_offset, Result::ComputeSize(num_values));
   GLint* params = result ? result->GetData() : NULL;
@@ -2358,7 +2002,7 @@ error::Error GLES2DecoderImpl::HandleGetVertexAttribiv(
   if (result->size != 0) {
     return error::kInvalidArguments;
   }
-  DoGetVertexAttribiv(index, pname, params);
+  DoGetVertexAttribiv(index, pname, params, num_values);
   GLenum error = LOCAL_PEEK_GL_ERROR("GetVertexAttribiv");
   if (error == GL_NO_ERROR) {
     result->SetNumResults(num_values);
@@ -2369,7 +2013,7 @@ error::Error GLES2DecoderImpl::HandleGetVertexAttribiv(
 error::Error GLES2DecoderImpl::HandleGetVertexAttribIiv(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::GetVertexAttribIiv& c =
       *static_cast<const volatile gles2::cmds::GetVertexAttribIiv*>(cmd_data);
@@ -2377,7 +2021,10 @@ error::Error GLES2DecoderImpl::HandleGetVertexAttribIiv(
   GLenum pname = static_cast<GLenum>(c.pname);
   typedef cmds::GetVertexAttribIiv::Result Result;
   GLsizei num_values = 0;
-  GetNumValuesReturnedForGLGet(pname, &num_values);
+  if (!GetNumValuesReturnedForGLGet(pname, &num_values)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM(":GetVertexAttribIiv", pname, "pname");
+    return error::kNoError;
+  }
   Result* result = GetSharedMemoryAs<Result*>(
       c.params_shm_id, c.params_shm_offset, Result::ComputeSize(num_values));
   GLint* params = result ? result->GetData() : NULL;
@@ -2393,7 +2040,7 @@ error::Error GLES2DecoderImpl::HandleGetVertexAttribIiv(
   if (result->size != 0) {
     return error::kInvalidArguments;
   }
-  DoGetVertexAttribIiv(index, pname, params);
+  DoGetVertexAttribIiv(index, pname, params, num_values);
   GLenum error = LOCAL_PEEK_GL_ERROR("GetVertexAttribIiv");
   if (error == GL_NO_ERROR) {
     result->SetNumResults(num_values);
@@ -2404,7 +2051,7 @@ error::Error GLES2DecoderImpl::HandleGetVertexAttribIiv(
 error::Error GLES2DecoderImpl::HandleGetVertexAttribIuiv(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::GetVertexAttribIuiv& c =
       *static_cast<const volatile gles2::cmds::GetVertexAttribIuiv*>(cmd_data);
@@ -2412,7 +2059,10 @@ error::Error GLES2DecoderImpl::HandleGetVertexAttribIuiv(
   GLenum pname = static_cast<GLenum>(c.pname);
   typedef cmds::GetVertexAttribIuiv::Result Result;
   GLsizei num_values = 0;
-  GetNumValuesReturnedForGLGet(pname, &num_values);
+  if (!GetNumValuesReturnedForGLGet(pname, &num_values)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM(":GetVertexAttribIuiv", pname, "pname");
+    return error::kNoError;
+  }
   Result* result = GetSharedMemoryAs<Result*>(
       c.params_shm_id, c.params_shm_offset, Result::ComputeSize(num_values));
   GLuint* params = result ? result->GetData() : NULL;
@@ -2428,7 +2078,7 @@ error::Error GLES2DecoderImpl::HandleGetVertexAttribIuiv(
   if (result->size != 0) {
     return error::kInvalidArguments;
   }
-  DoGetVertexAttribIuiv(index, pname, params);
+  DoGetVertexAttribIuiv(index, pname, params, num_values);
   GLenum error = LOCAL_PEEK_GL_ERROR("GetVertexAttribIuiv");
   if (error == GL_NO_ERROR) {
     result->SetNumResults(num_values);
@@ -2476,7 +2126,7 @@ error::Error GLES2DecoderImpl::HandleHint(uint32_t immediate_data_size,
 error::Error GLES2DecoderImpl::HandleInvalidateFramebufferImmediate(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::InvalidateFramebufferImmediate& c =
       *static_cast<const volatile gles2::cmds::InvalidateFramebufferImmediate*>(
@@ -2514,7 +2164,7 @@ error::Error GLES2DecoderImpl::HandleInvalidateFramebufferImmediate(
 error::Error GLES2DecoderImpl::HandleInvalidateSubFramebufferImmediate(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::InvalidateSubFramebufferImmediate& c =
       *static_cast<
@@ -2647,7 +2297,7 @@ error::Error GLES2DecoderImpl::HandleIsRenderbuffer(
 
 error::Error GLES2DecoderImpl::HandleIsSampler(uint32_t immediate_data_size,
                                                const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::IsSampler& c =
       *static_cast<const volatile gles2::cmds::IsSampler*>(cmd_data);
@@ -2679,7 +2329,7 @@ error::Error GLES2DecoderImpl::HandleIsShader(uint32_t immediate_data_size,
 
 error::Error GLES2DecoderImpl::HandleIsSync(uint32_t immediate_data_size,
                                             const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::IsSync& c =
       *static_cast<const volatile gles2::cmds::IsSync*>(cmd_data);
@@ -2712,7 +2362,7 @@ error::Error GLES2DecoderImpl::HandleIsTexture(uint32_t immediate_data_size,
 error::Error GLES2DecoderImpl::HandleIsTransformFeedback(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::IsTransformFeedback& c =
       *static_cast<const volatile gles2::cmds::IsTransformFeedback*>(cmd_data);
@@ -2756,7 +2406,7 @@ error::Error GLES2DecoderImpl::HandleLinkProgram(
 error::Error GLES2DecoderImpl::HandlePauseTransformFeedback(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   DoPauseTransformFeedback();
   return error::kNoError;
@@ -2780,7 +2430,7 @@ error::Error GLES2DecoderImpl::HandlePolygonOffset(
 
 error::Error GLES2DecoderImpl::HandleReadBuffer(uint32_t immediate_data_size,
                                                 const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::ReadBuffer& c =
       *static_cast<const volatile gles2::cmds::ReadBuffer*>(cmd_data);
@@ -2833,7 +2483,7 @@ error::Error GLES2DecoderImpl::HandleRenderbufferStorage(
 error::Error GLES2DecoderImpl::HandleResumeTransformFeedback(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   DoResumeTransformFeedback();
   return error::kNoError;
@@ -2853,7 +2503,7 @@ error::Error GLES2DecoderImpl::HandleSampleCoverage(
 error::Error GLES2DecoderImpl::HandleSamplerParameterf(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::SamplerParameterf& c =
       *static_cast<const volatile gles2::cmds::SamplerParameterf*>(cmd_data);
@@ -2871,7 +2521,7 @@ error::Error GLES2DecoderImpl::HandleSamplerParameterf(
 error::Error GLES2DecoderImpl::HandleSamplerParameterfvImmediate(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::SamplerParameterfvImmediate& c =
       *static_cast<const volatile gles2::cmds::SamplerParameterfvImmediate*>(
@@ -2901,7 +2551,7 @@ error::Error GLES2DecoderImpl::HandleSamplerParameterfvImmediate(
 error::Error GLES2DecoderImpl::HandleSamplerParameteri(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::SamplerParameteri& c =
       *static_cast<const volatile gles2::cmds::SamplerParameteri*>(cmd_data);
@@ -2919,7 +2569,7 @@ error::Error GLES2DecoderImpl::HandleSamplerParameteri(
 error::Error GLES2DecoderImpl::HandleSamplerParameterivImmediate(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::SamplerParameterivImmediate& c =
       *static_cast<const volatile gles2::cmds::SamplerParameterivImmediate*>(
@@ -3309,7 +2959,7 @@ error::Error GLES2DecoderImpl::HandleTexParameterivImmediate(
 error::Error GLES2DecoderImpl::HandleTexStorage3D(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::TexStorage3D& c =
       *static_cast<const volatile gles2::cmds::TexStorage3D*>(cmd_data);
@@ -3351,7 +3001,7 @@ error::Error GLES2DecoderImpl::HandleTexStorage3D(
 error::Error GLES2DecoderImpl::HandleTransformFeedbackVaryingsBucket(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::TransformFeedbackVaryingsBucket& c = *static_cast<
       const volatile gles2::cmds::TransformFeedbackVaryingsBucket*>(cmd_data);
@@ -3463,7 +3113,7 @@ error::Error GLES2DecoderImpl::HandleUniform1ivImmediate(
 
 error::Error GLES2DecoderImpl::HandleUniform1ui(uint32_t immediate_data_size,
                                                 const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::Uniform1ui& c =
       *static_cast<const volatile gles2::cmds::Uniform1ui*>(cmd_data);
@@ -3479,7 +3129,7 @@ error::Error GLES2DecoderImpl::HandleUniform1ui(uint32_t immediate_data_size,
 error::Error GLES2DecoderImpl::HandleUniform1uivImmediate(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::Uniform1uivImmediate& c =
       *static_cast<const volatile gles2::cmds::Uniform1uivImmediate*>(cmd_data);
@@ -3592,7 +3242,7 @@ error::Error GLES2DecoderImpl::HandleUniform2ivImmediate(
 
 error::Error GLES2DecoderImpl::HandleUniform2ui(uint32_t immediate_data_size,
                                                 const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::Uniform2ui& c =
       *static_cast<const volatile gles2::cmds::Uniform2ui*>(cmd_data);
@@ -3609,7 +3259,7 @@ error::Error GLES2DecoderImpl::HandleUniform2ui(uint32_t immediate_data_size,
 error::Error GLES2DecoderImpl::HandleUniform2uivImmediate(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::Uniform2uivImmediate& c =
       *static_cast<const volatile gles2::cmds::Uniform2uivImmediate*>(cmd_data);
@@ -3724,7 +3374,7 @@ error::Error GLES2DecoderImpl::HandleUniform3ivImmediate(
 
 error::Error GLES2DecoderImpl::HandleUniform3ui(uint32_t immediate_data_size,
                                                 const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::Uniform3ui& c =
       *static_cast<const volatile gles2::cmds::Uniform3ui*>(cmd_data);
@@ -3742,7 +3392,7 @@ error::Error GLES2DecoderImpl::HandleUniform3ui(uint32_t immediate_data_size,
 error::Error GLES2DecoderImpl::HandleUniform3uivImmediate(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::Uniform3uivImmediate& c =
       *static_cast<const volatile gles2::cmds::Uniform3uivImmediate*>(cmd_data);
@@ -3859,7 +3509,7 @@ error::Error GLES2DecoderImpl::HandleUniform4ivImmediate(
 
 error::Error GLES2DecoderImpl::HandleUniform4ui(uint32_t immediate_data_size,
                                                 const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::Uniform4ui& c =
       *static_cast<const volatile gles2::cmds::Uniform4ui*>(cmd_data);
@@ -3878,7 +3528,7 @@ error::Error GLES2DecoderImpl::HandleUniform4ui(uint32_t immediate_data_size,
 error::Error GLES2DecoderImpl::HandleUniform4uivImmediate(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::Uniform4uivImmediate& c =
       *static_cast<const volatile gles2::cmds::Uniform4uivImmediate*>(cmd_data);
@@ -3938,7 +3588,7 @@ error::Error GLES2DecoderImpl::HandleUniformMatrix2fvImmediate(
 error::Error GLES2DecoderImpl::HandleUniformMatrix2x3fvImmediate(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::UniformMatrix2x3fvImmediate& c =
       *static_cast<const volatile gles2::cmds::UniformMatrix2x3fvImmediate*>(
@@ -3970,7 +3620,7 @@ error::Error GLES2DecoderImpl::HandleUniformMatrix2x3fvImmediate(
 error::Error GLES2DecoderImpl::HandleUniformMatrix2x4fvImmediate(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::UniformMatrix2x4fvImmediate& c =
       *static_cast<const volatile gles2::cmds::UniformMatrix2x4fvImmediate*>(
@@ -4032,7 +3682,7 @@ error::Error GLES2DecoderImpl::HandleUniformMatrix3fvImmediate(
 error::Error GLES2DecoderImpl::HandleUniformMatrix3x2fvImmediate(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::UniformMatrix3x2fvImmediate& c =
       *static_cast<const volatile gles2::cmds::UniformMatrix3x2fvImmediate*>(
@@ -4064,7 +3714,7 @@ error::Error GLES2DecoderImpl::HandleUniformMatrix3x2fvImmediate(
 error::Error GLES2DecoderImpl::HandleUniformMatrix3x4fvImmediate(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::UniformMatrix3x4fvImmediate& c =
       *static_cast<const volatile gles2::cmds::UniformMatrix3x4fvImmediate*>(
@@ -4126,7 +3776,7 @@ error::Error GLES2DecoderImpl::HandleUniformMatrix4fvImmediate(
 error::Error GLES2DecoderImpl::HandleUniformMatrix4x2fvImmediate(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::UniformMatrix4x2fvImmediate& c =
       *static_cast<const volatile gles2::cmds::UniformMatrix4x2fvImmediate*>(
@@ -4158,7 +3808,7 @@ error::Error GLES2DecoderImpl::HandleUniformMatrix4x2fvImmediate(
 error::Error GLES2DecoderImpl::HandleUniformMatrix4x3fvImmediate(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::UniformMatrix4x3fvImmediate& c =
       *static_cast<const volatile gles2::cmds::UniformMatrix4x3fvImmediate*>(
@@ -4351,7 +4001,7 @@ error::Error GLES2DecoderImpl::HandleVertexAttrib4fvImmediate(
 error::Error GLES2DecoderImpl::HandleVertexAttribI4i(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::VertexAttribI4i& c =
       *static_cast<const volatile gles2::cmds::VertexAttribI4i*>(cmd_data);
@@ -4367,7 +4017,7 @@ error::Error GLES2DecoderImpl::HandleVertexAttribI4i(
 error::Error GLES2DecoderImpl::HandleVertexAttribI4ivImmediate(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::VertexAttribI4ivImmediate& c =
       *static_cast<const volatile gles2::cmds::VertexAttribI4ivImmediate*>(
@@ -4392,7 +4042,7 @@ error::Error GLES2DecoderImpl::HandleVertexAttribI4ivImmediate(
 error::Error GLES2DecoderImpl::HandleVertexAttribI4ui(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::VertexAttribI4ui& c =
       *static_cast<const volatile gles2::cmds::VertexAttribI4ui*>(cmd_data);
@@ -4408,7 +4058,7 @@ error::Error GLES2DecoderImpl::HandleVertexAttribI4ui(
 error::Error GLES2DecoderImpl::HandleVertexAttribI4uivImmediate(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::VertexAttribI4uivImmediate& c =
       *static_cast<const volatile gles2::cmds::VertexAttribI4uivImmediate*>(
@@ -4711,7 +4361,7 @@ error::Error GLES2DecoderImpl::HandleDeleteQueriesEXTImmediate(
 error::Error GLES2DecoderImpl::HandleBeginTransformFeedback(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::BeginTransformFeedback& c =
       *static_cast<const volatile gles2::cmds::BeginTransformFeedback*>(
@@ -4729,7 +4379,7 @@ error::Error GLES2DecoderImpl::HandleBeginTransformFeedback(
 error::Error GLES2DecoderImpl::HandleEndTransformFeedback(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   DoEndTransformFeedback();
   return error::kNoError;
@@ -4892,7 +4542,7 @@ error::Error GLES2DecoderImpl::HandleGetMaxValueInBufferCHROMIUM(
 error::Error GLES2DecoderImpl::HandleFlushMappedBufferRange(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::FlushMappedBufferRange& c =
       *static_cast<const volatile gles2::cmds::FlushMappedBufferRange*>(
@@ -4998,7 +4648,7 @@ error::Error GLES2DecoderImpl::HandleProduceTextureCHROMIUMImmediate(
       const volatile gles2::cmds::ProduceTextureCHROMIUMImmediate*>(cmd_data);
   GLenum target = static_cast<GLenum>(c.target);
   uint32_t data_size;
-  if (!GLES2Util::ComputeDataSize(1, sizeof(GLbyte), 64, &data_size)) {
+  if (!GLES2Util::ComputeDataSize(1, sizeof(GLbyte), 16, &data_size)) {
     return error::kOutOfBounds;
   }
   if (data_size > immediate_data_size) {
@@ -5028,7 +4678,7 @@ error::Error GLES2DecoderImpl::HandleProduceTextureDirectCHROMIUMImmediate(
   GLuint texture = c.texture;
   GLenum target = static_cast<GLenum>(c.target);
   uint32_t data_size;
-  if (!GLES2Util::ComputeDataSize(1, sizeof(GLbyte), 64, &data_size)) {
+  if (!GLES2Util::ComputeDataSize(1, sizeof(GLbyte), 16, &data_size)) {
     return error::kOutOfBounds;
   }
   if (data_size > immediate_data_size) {
@@ -5055,7 +4705,7 @@ error::Error GLES2DecoderImpl::HandleConsumeTextureCHROMIUMImmediate(
       const volatile gles2::cmds::ConsumeTextureCHROMIUMImmediate*>(cmd_data);
   GLenum target = static_cast<GLenum>(c.target);
   uint32_t data_size;
-  if (!GLES2Util::ComputeDataSize(1, sizeof(GLbyte), 64, &data_size)) {
+  if (!GLES2Util::ComputeDataSize(1, sizeof(GLbyte), 16, &data_size)) {
     return error::kOutOfBounds;
   }
   if (data_size > immediate_data_size) {
@@ -5084,7 +4734,7 @@ error::Error GLES2DecoderImpl::HandleCreateAndConsumeTextureINTERNALImmediate(
   GLenum target = static_cast<GLenum>(c.target);
   GLuint texture = static_cast<GLuint>(c.texture);
   uint32_t data_size;
-  if (!GLES2Util::ComputeDataSize(1, sizeof(GLbyte), 64, &data_size)) {
+  if (!GLES2Util::ComputeDataSize(1, sizeof(GLbyte), 16, &data_size)) {
     return error::kOutOfBounds;
   }
   if (data_size > immediate_data_size) {

@@ -18,12 +18,13 @@
  * Boston, MA 02110-1301, USA.
  */
 
-callback CustomElementConstructor = Element ();
+[Custom] callback CustomElementConstructor = Element ();
 
 // https://html.spec.whatwg.org/#the-document-object
 enum DocumentReadyState { "loading", "interactive", "complete" };
 
-// http://www.w3.org/TR/page-visibility/#VisibilityState
+
+// https://w3c.github.io/page-visibility/#visibility-states-and-the-visibilitystate-enum
 enum VisibilityState { "hidden", "visible", "prerender", "unloaded" };
 
 // https://mikewest.github.io/cors-rfc1918/#feature-detect
@@ -77,7 +78,7 @@ interface Document : Node {
     [NewObject] TreeWalker createTreeWalker(Node root, optional unsigned long whatToShow = 0xFFFFFFFF, optional NodeFilter? filter = null);
 
     // NonDocumentRootScroller (https://github.com/bokand/NonDocumentRootScroller)
-    [RaisesException=Setter, RuntimeEnabled=SetRootScroller] attribute Element? rootScroller;
+    [RaisesException=Setter, RuntimeEnabled=SetRootScroller, Measure] attribute Element? rootScroller;
 
     // FIXME: xmlEncoding/xmlVersion/xmlStandalone have been removed from the spec.
     [MeasureAs=DocumentXMLEncoding] readonly attribute DOMString? xmlEncoding;
@@ -176,8 +177,8 @@ interface Document : Node {
     [CallWith=ScriptState, CustomElementCallbacks, RaisesException, MeasureAs=DocumentRegisterElement] CustomElementConstructor registerElement(DOMString type, optional ElementRegistrationOptions options);
     // http://w3c.github.io/webcomponents/spec/custom/#extensions-to-document-interface-to-instantiate
     // FIXME: The typeExtension arguments should not be nullable.
-    [CustomElementCallbacks, PerWorldBindings, RaisesException] Element createElement(DOMString localName, DOMString? typeExtension);
-    [CustomElementCallbacks, RaisesException] Element createElementNS(DOMString? namespaceURI, DOMString qualifiedName, DOMString? typeExtension);
+    [CustomElementCallbacks, PerWorldBindings, RaisesException] Element createElement(DOMString localName, (DOMString or Dictionary)? options);
+    [CustomElementCallbacks, RaisesException] Element createElementNS(DOMString? namespaceURI, DOMString qualifiedName, (DOMString or Dictionary)? options);
 
     // Page Visibility
     // http://www.w3.org/TR/page-visibility/#sec-document-interface

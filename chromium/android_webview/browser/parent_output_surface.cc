@@ -20,10 +20,7 @@ ParentOutputSurface::ParentOutputSurface(
 ParentOutputSurface::~ParentOutputSurface() {
 }
 
-void ParentOutputSurface::DidLoseOutputSurface() {
-  // Android WebView does not handle context loss.
-  LOG(FATAL) << "Render thread context loss";
-}
+void ParentOutputSurface::BindToClient(cc::OutputSurfaceClient* client) {}
 
 void ParentOutputSurface::EnsureBackbuffer() {}
 
@@ -38,10 +35,7 @@ void ParentOutputSurface::BindFramebuffer() {
 void ParentOutputSurface::Reshape(const gfx::Size& size,
                                   float scale_factor,
                                   const gfx::ColorSpace& color_space,
-                                  bool has_alpha) {
-  DCHECK_EQ(1.f, scale_factor);
-  surface_size_ = size;
-}
+                                  bool has_alpha) {}
 
 void ParentOutputSurface::SwapBuffers(cc::OutputSurfaceFrame frame) {
   context_provider_->ContextGL()->ShallowFlushCHROMIUM();

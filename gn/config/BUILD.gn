@@ -45,3 +45,9 @@ if (is_win) {
     #description = "HUGE_" + description
   }
 }
+
+config("disable_new_dtags") {
+  if (is_linux) {
+    ldflags = [ "-Wl,--disable-new-dtags" ]
+  }
+}

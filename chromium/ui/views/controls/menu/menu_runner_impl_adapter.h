@@ -9,16 +9,22 @@
 
 #include "base/macros.h"
 #include "ui/views/controls/menu/menu_runner_impl_interface.h"
+#include "ui/views/views_export.h"
 
 namespace views {
+
+class MenuModelAdapter;
+
 namespace internal {
 
 class MenuRunnerImpl;
 
 // Given a MenuModel, adapts MenuRunnerImpl which expects a MenuItemView.
-class MenuRunnerImplAdapter : public MenuRunnerImplInterface {
+class VIEWS_EXPORT MenuRunnerImplAdapter
+    : public NON_EXPORTED_BASE(MenuRunnerImplInterface) {
  public:
-  explicit MenuRunnerImplAdapter(ui::MenuModel* menu_model);
+  MenuRunnerImplAdapter(ui::MenuModel* menu_model,
+                        const base::Closure& on_menu_closed_callback);
 
   // MenuRunnerImplInterface:
   bool IsRunning() const override;

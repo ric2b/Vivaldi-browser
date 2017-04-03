@@ -5,8 +5,10 @@
 #ifndef CHROME_TEST_CHROMEDRIVER_CHROME_UI_EVENTS_H_
 #define CHROME_TEST_CHROMEDRIVER_CHROME_UI_EVENTS_H_
 
+#include <list>
 #include <string>
 
+#include "base/macros.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 
 // Specifies the type of the mouse event.
@@ -65,7 +67,8 @@ enum KeyEventType {
   kKeyDownEventType = 0,
   kKeyUpEventType,
   kRawKeyDownEventType,
-  kCharEventType
+  kCharEventType,
+  kInvalidEventType  // used by KeyEventBuilder
 };
 
 // Specifies modifier keys as stated in
@@ -81,18 +84,38 @@ enum KeyModifierMask {
 };
 
 struct KeyEvent {
-  KeyEvent(KeyEventType type,
-           int modifiers,
-           const std::string& modified_text,
-           const std::string& unmodified_text,
-           ui::KeyboardCode key_code);
+  KeyEvent();
+  KeyEvent(const KeyEvent& that);
   ~KeyEvent();
 
   KeyEventType type;
   int modifiers;
   std::string modified_text;
   std::string unmodified_text;
+  std::string key;
   ui::KeyboardCode key_code;
+};
+
+class KeyEventBuilder {
+ public:
+  KeyEventBuilder();
+  virtual ~KeyEventBuilder();
+
+  KeyEventBuilder* SetType(KeyEventType type);
+  KeyEventBuilder* AddModifiers(int modifiers);
+  KeyEventBuilder* SetModifiers(int modifiers);
+  KeyEventBuilder* SetText(const std::string& unmodified_text,
+                           const std::string& modified_text);
+  KeyEventBuilder* SetKeyCode(ui::KeyboardCode key_code);
+  KeyEvent Build();
+  void Generate(std::list<KeyEvent>* key_events);
+
+ private:
+  void UpdateKeyString();
+
+  KeyEvent key_event_;
+
+  DISALLOW_COPY_AND_ASSIGN(KeyEventBuilder);
 };
 
 #endif  // CHROME_TEST_CHROMEDRIVER_CHROME_UI_EVENTS_H_

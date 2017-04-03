@@ -8,7 +8,6 @@ import android.graphics.Bitmap;
 import android.graphics.Rect;
 import android.os.Parcelable;
 
-import org.chromium.base.ObserverList;
 import org.chromium.base.VisibleForTesting;
 
 /**
@@ -119,6 +118,11 @@ public interface WebContents extends Parcelable {
     void onShow();
 
     /**
+     * Removes handles used in text selection.
+     */
+    void dismissTextHandles();
+
+    /**
      * Suspends all media players for this WebContents.  Note: There may still
      * be activities generating audio, so setAudioMuted() should also be called
      * to ensure all audible activity is silenced.
@@ -171,19 +175,13 @@ public interface WebContents extends Parcelable {
     void exitFullscreen();
 
     /**
-     * Changes whether hiding the top controls is enabled.
+     * Changes whether hiding the browser controls is enabled.
      *
-     * @param enableHiding Whether hiding the top controls should be enabled or not.
-     * @param enableShowing Whether showing the top controls should be enabled or not.
+     * @param enableHiding Whether hiding the browser controls should be enabled or not.
+     * @param enableShowing Whether showing the browser controls should be enabled or not.
      * @param animate Whether the transition should be animated or not.
      */
-    void updateTopControlsState(boolean enableHiding, boolean enableShowing,
-            boolean animate);
-
-    /**
-     * Shows the IME if the focused widget could accept text input.
-     */
-    void showImeIfNeeded();
+    void updateBrowserControlsState(boolean enableHiding, boolean enableShowing, boolean animate);
 
     /**
      * Brings the Editable to the visible area while IME is up to make easier for inputing text.
@@ -269,7 +267,16 @@ public interface WebContents extends Parcelable {
     /**
      * Dispatches a Message event to the specified frame.
      */
-    void sendMessageToFrame(String frameName, String message, String targetOrigin);
+    void postMessageToFrame(
+            String frameName, String message, String targetOrigin, int[] sentPortIds);
+
+    /**
+     * Creates a message channel for sending postMessage requests and returns the ports for
+     * each end of the channel.
+     * @param service The message port service to register the channel with.
+     * @return The ports that forms the ends of the message channel created.
+     */
+    MessagePort[] createMessageChannel(MessagePortService service);
 
     /**
      * Returns whether the initial empty page has been accessed by a script from another
@@ -298,21 +305,6 @@ public interface WebContents extends Parcelable {
     void requestAccessibilitySnapshot(AccessibilitySnapshotCallback callback);
 
     /**
-     * Resumes the current media session.
-     */
-    void resumeMediaSession();
-
-    /**
-     * Suspends the current media session.
-     */
-    void suspendMediaSession();
-
-    /**
-     * Stops the current media session.
-     */
-    void stopMediaSession();
-
-    /**
      * Add an observer to the WebContents
      *
      * @param observer The observer to add.
@@ -325,12 +317,6 @@ public interface WebContents extends Parcelable {
      * @param observer The observer to remove.
      */
     void removeObserver(WebContentsObserver observer);
-
-    /**
-     * @return The list of observers.
-     */
-    @VisibleForTesting
-    ObserverList.RewindableIterator<WebContentsObserver> getObserversForTesting();
 
     public void getContentBitmapAsync(Bitmap.Config config, float scale, Rect srcRect,
             ContentBitmapCallback callback);

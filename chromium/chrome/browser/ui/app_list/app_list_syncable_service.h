@@ -11,16 +11,17 @@
 #include <memory>
 
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "build/build_config.h"
 #include "chrome/browser/apps/drive/drive_app_uninstall_sync_service.h"
 #include "chrome/browser/sync/glue/sync_start_util.h"
 #include "components/keyed_service/core/keyed_service.h"
-#include "components/sync/api/string_ordinal.h"
-#include "components/sync/api/sync_change.h"
-#include "components/sync/api/sync_change_processor.h"
-#include "components/sync/api/sync_error_factory.h"
-#include "components/sync/api/syncable_service.h"
+#include "components/sync/model/string_ordinal.h"
+#include "components/sync/model/sync_change.h"
+#include "components/sync/model/sync_change_processor.h"
+#include "components/sync/model/sync_error_factory.h"
+#include "components/sync/model/syncable_service.h"
 #include "components/sync/protocol/app_list_specifics.pb.h"
 
 #if defined(OS_CHROMEOS)
@@ -39,12 +40,15 @@ namespace sync_pb {
 class AppListSpecifics;
 }
 
+namespace user_prefs {
+class PrefRegistrySyncable;
+}
+
 namespace app_list {
 
 class AppListFolderItem;
 class AppListItem;
 class AppListModel;
-class ModelPrefUpdater;
 
 // Keyed Service that owns, stores, and syncs an AppListModel for a profile.
 class AppListSyncableService : public syncer::SyncableService,
@@ -82,6 +86,9 @@ class AppListSyncableService : public syncer::SyncableService,
 
   ~AppListSyncableService() override;
 
+  // Registers prefs to support local storage.
+  static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
+
   // Adds |item| to |sync_items_| and |model_|. If a sync item already exists,
   // updates the existing sync item instead.
   void AddItem(std::unique_ptr<AppListItem> app_item);
@@ -111,8 +118,11 @@ class AppListSyncableService : public syncer::SyncableService,
   void SetPinPosition(const std::string& app_id,
                       const syncer::StringOrdinal& item_pin_ordinal);
 
-  // Gets the app list model, building it if it doesn't yet exist.
+  // Gets the app list model.
   AppListModel* GetModel();
+
+  // Returns true if this service was initialized.
+  bool IsInitialized() const;
 
   // Registers new observers and makes sure that service is started.
   void AddObserverAndStart(Observer* observer);
@@ -230,14 +240,24 @@ class AppListSyncableService : public syncer::SyncableService,
   // an OEM (extension->was_installed_by_oem() is true).
   bool AppIsOem(const std::string& id);
 
+  // Initializes sync items from the local storage while sync service is not
+  // enabled.
+  void InitFromLocalStorage();
+
   // Helper that notifies observers that sync model has been updated.
   void NotifyObserversSyncUpdated();
+
+  // Handles model update start/finish.
+  void HandleUpdateStarted();
+  void HandleUpdateFinished();
+
+  // Returns true if extension service is ready.
+  bool IsExtensionServiceReady() const;
 
   Profile* profile_;
   extensions::ExtensionSystem* extension_system_;
   std::unique_ptr<AppListModel> model_;
   std::unique_ptr<ModelObserver> model_observer_;
-  std::unique_ptr<ModelPrefUpdater> model_pref_updater_;
   std::unique_ptr<ExtensionAppModelBuilder> apps_builder_;
 #if defined(OS_CHROMEOS)
   std::unique_ptr<ArcAppModelBuilder> arc_apps_builder_;
@@ -255,6 +275,8 @@ class AppListSyncableService : public syncer::SyncableService,
 
   // Provides integration with Drive apps.
   std::unique_ptr<DriveAppProvider> drive_app_provider_;
+
+  base::WeakPtrFactory<AppListSyncableService> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(AppListSyncableService);
 };

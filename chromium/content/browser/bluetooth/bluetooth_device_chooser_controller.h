@@ -8,6 +8,7 @@
 #include <string>
 
 #include "base/memory/weak_ptr.h"
+#include "base/optional.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "content/common/content_export.h"
@@ -17,7 +18,6 @@
 namespace device {
 class BluetoothAdapter;
 class BluetoothDevice;
-class BluetoothDiscoveryFilter;
 class BluetoothDiscoverySession;
 }
 
@@ -35,7 +35,7 @@ class CONTENT_EXPORT BluetoothDeviceChooserController final {
   typedef base::Callback<void(blink::mojom::WebBluetoothRequestDeviceOptionsPtr,
                               const std::string& device_address)>
       SuccessCallback;
-  typedef base::Callback<void(blink::mojom::WebBluetoothError error)>
+  typedef base::Callback<void(blink::mojom::WebBluetoothResult result)>
       ErrorCallback;
 
   // |web_bluetooth_service_| service that owns this class.
@@ -51,7 +51,7 @@ class CONTENT_EXPORT BluetoothDeviceChooserController final {
   // This function performs the following checks before starting a discovery
   // session:
   //   - Validates filters in |request_device_options|.
-  //   - Removes any blacklisted UUIDs from
+  //   - Removes any blocklisted UUIDs from
   //     |request_device_options.optinal_services|.
   //   - Checks if the request came from a cross-origin iframe.
   //   - Checks if the request came from a unique origin.
@@ -112,7 +112,7 @@ class CONTENT_EXPORT BluetoothDeviceChooserController final {
   // Helper function to asynchronously run success_callback_.
   void PostSuccessCallback(const std::string& device_address);
   // Helper function to asynchronously run error_callback_.
-  void PostErrorCallback(blink::mojom::WebBluetoothError error);
+  void PostErrorCallback(blink::mojom::WebBluetoothResult result);
 
   // If true all new instances of this class will have a scan duration of 0.
   static bool use_test_scan_duration_;
@@ -145,6 +145,9 @@ class CONTENT_EXPORT BluetoothDeviceChooserController final {
   // session. We need to null it when the platform stops discovery.
   // http://crbug.com/611852
   std::unique_ptr<device::BluetoothDiscoverySession> discovery_session_;
+
+  // The time when scanning starts.
+  base::Optional<base::TimeTicks> scanning_start_time_;
 
   // Weak pointer factory for generating 'this' pointers that might live longer
   // than we do.

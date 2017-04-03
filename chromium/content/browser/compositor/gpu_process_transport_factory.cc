@@ -47,7 +47,7 @@
 #include "gpu/command_buffer/client/shared_memory_limits.h"
 #include "gpu/command_buffer/common/mailbox.h"
 #include "gpu/ipc/client/gpu_channel_host.h"
-#include "services/shell/runner/common/client_util.h"
+#include "services/service_manager/runner/common/client_util.h"
 #include "third_party/khronos/GLES2/gl2.h"
 #include "ui/compositor/compositor.h"
 #include "ui/compositor/compositor_constants.h"
@@ -59,6 +59,7 @@
 #if defined(USE_AURA)
 #include "content/browser/compositor/mus_browser_compositor_output_surface.h"
 #include "content/public/common/service_manager_connection.h"
+#include "ui/aura/window_tree_host.h"
 #endif
 
 #if defined(OS_WIN)
@@ -85,7 +86,7 @@
 #include "components/display_compositor/compositor_overlay_candidate_validator_android.h"
 #endif
 #if !defined(GPU_SURFACE_HANDLE_IS_ACCELERATED_WINDOW)
-#include "content/browser/gpu/gpu_surface_tracker.h"
+#include "gpu/ipc/common/gpu_surface_tracker.h"
 #endif
 
 #if defined(ENABLE_VULKAN)
@@ -100,7 +101,7 @@ namespace {
 const int kNumRetriesBeforeSoftwareFallback = 4;
 
 bool IsUsingMus() {
-  return shell::ShellIsRemote();
+  return service_manager::ServiceManagerIsRemote();
 }
 
 scoped_refptr<content::ContextProviderCommandBuffer> CreateContextCommon(
@@ -196,7 +197,7 @@ std::unique_ptr<cc::SoftwareOutputDevice>
 GpuProcessTransportFactory::CreateSoftwareOutputDevice(
     ui::Compositor* compositor) {
 #if defined(USE_AURA)
-  if (shell::ShellIsRemote()) {
+  if (service_manager::ServiceManagerIsRemote()) {
     NOTREACHED();
     return nullptr;
   }
@@ -452,7 +453,7 @@ void GpuProcessTransportFactory::EstablishedGpuChannel(
   if (vulkan_context_provider) {
     vulkan_surface.reset(new VulkanBrowserCompositorOutputSurface(
         vulkan_context_provider, compositor->vsync_manager(),
-        compositor->task_runner().get()));
+        begin_frame_source.get()));
     if (!vulkan_surface->Initialize(compositor.get()->widget())) {
       vulkan_surface->Destroy();
       vulkan_surface.reset();
@@ -467,7 +468,8 @@ void GpuProcessTransportFactory::EstablishedGpuChannel(
       display_output_surface =
           base::MakeUnique<SoftwareBrowserCompositorOutputSurface>(
               CreateSoftwareOutputDevice(compositor.get()),
-              compositor->vsync_manager(), begin_frame_source.get());
+              compositor->vsync_manager(), begin_frame_source.get(),
+              compositor->task_runner());
     } else {
       DCHECK(context_provider);
       const auto& capabilities = context_provider->ContextCapabilities();
@@ -510,11 +512,24 @@ void GpuProcessTransportFactory::EstablishedGpuChannel(
                   begin_frame_source.get(), std::move(validator));
         } else {
 #if defined(USE_AURA)
-          display_output_surface =
-              base::MakeUnique<MusBrowserCompositorOutputSurface>(
-                  compositor->window(), context_provider,
-                  compositor->vsync_manager(), begin_frame_source.get(),
-                  std::move(validator));
+          if (compositor->window()) {
+            // TODO(mfomitchev): Remove this clause once we complete the switch
+            // to Aura-Mus.
+            display_output_surface =
+                base::MakeUnique<MusBrowserCompositorOutputSurface>(
+                    compositor->window(), context_provider,
+                    GetGpuMemoryBufferManager(), compositor->vsync_manager(),
+                    begin_frame_source.get(), std::move(validator));
+          } else {
+            aura::WindowTreeHost* host =
+                aura::WindowTreeHost::GetForAcceleratedWidget(
+                    compositor->widget());
+            display_output_surface =
+                base::MakeUnique<MusBrowserCompositorOutputSurface>(
+                    host->window(), context_provider,
+                    GetGpuMemoryBufferManager(), compositor->vsync_manager(),
+                    begin_frame_source.get(), std::move(validator));
+          }
 #else
           NOTREACHED();
 #endif
@@ -539,12 +554,11 @@ void GpuProcessTransportFactory::EstablishedGpuChannel(
 
   // The Display owns and uses the |display_output_surface| created above.
   data->display = base::MakeUnique<cc::Display>(
-      HostSharedBitmapManager::current(),
-      GetGpuMemoryBufferManager(),
-      compositor->GetRendererSettings(), std::move(begin_frame_source),
-      std::move(display_output_surface), std::move(scheduler),
-      base::MakeUnique<cc::TextureMailboxDeleter>(
-          compositor->task_runner().get()));
+      HostSharedBitmapManager::current(), GetGpuMemoryBufferManager(),
+      compositor->GetRendererSettings(), compositor->frame_sink_id(),
+      std::move(begin_frame_source), std::move(display_output_surface),
+      std::move(scheduler), base::MakeUnique<cc::TextureMailboxDeleter>(
+                                compositor->task_runner().get()));
 
   // The |delegated_output_surface| is given back to the compositor, it
   // delegates to the Display as its root surface. Importantly, it shares the
@@ -559,7 +573,8 @@ void GpuProcessTransportFactory::EstablishedGpuChannel(
           : base::MakeUnique<cc::DirectCompositorFrameSink>(
                 compositor->frame_sink_id(), surface_manager_.get(),
                 data->display.get(), context_provider,
-                shared_worker_context_provider_);
+                shared_worker_context_provider_, GetGpuMemoryBufferManager(),
+                HostSharedBitmapManager::current());
   data->display->Resize(compositor->size());
   data->display->SetOutputIsSecure(data->output_is_secure);
   compositor->SetCompositorFrameSink(std::move(compositor_frame_sink));
@@ -597,7 +612,7 @@ void GpuProcessTransportFactory::RemoveCompositor(ui::Compositor* compositor) {
   DCHECK(data);
 #if !defined(GPU_SURFACE_HANDLE_IS_ACCELERATED_WINDOW)
   if (data->surface_handle)
-    GpuSurfaceTracker::Get()->RemoveSurface(data->surface_handle);
+    gpu::GpuSurfaceTracker::Get()->RemoveSurface(data->surface_handle);
 #endif
   per_compositor_data_.erase(it);
   if (per_compositor_data_.empty()) {
@@ -611,8 +626,8 @@ void GpuProcessTransportFactory::RemoveCompositor(ui::Compositor* compositor) {
 
     // If there are any observer left at this point, make sure they clean up
     // before we destroy the GLHelper.
-    FOR_EACH_OBSERVER(ui::ContextFactoryObserver, observer_list_,
-                      OnLostResources());
+    for (auto& observer : observer_list_)
+      observer.OnLostResources();
 
     helper.reset();
     DCHECK(!gl_helper_) << "Destroying the GLHelper should not cause a new "
@@ -630,10 +645,6 @@ uint32_t GpuProcessTransportFactory::GetImageTextureTarget(
     gfx::BufferFormat format,
     gfx::BufferUsage usage) {
   return BrowserGpuMemoryBufferManager::GetImageTextureTarget(format, usage);
-}
-
-cc::SharedBitmapManager* GpuProcessTransportFactory::GetSharedBitmapManager() {
-  return HostSharedBitmapManager::current();
 }
 
 gpu::GpuMemoryBufferManager*
@@ -823,7 +834,7 @@ GpuProcessTransportFactory::CreatePerCompositorData(
 #if defined(GPU_SURFACE_HANDLE_IS_ACCELERATED_WINDOW)
     data->surface_handle = widget;
 #else
-    GpuSurfaceTracker* tracker = GpuSurfaceTracker::Get();
+    gpu::GpuSurfaceTracker* tracker = gpu::GpuSurfaceTracker::Get();
     data->surface_handle = tracker->AddSurfaceForNativeWidget(widget);
 #endif
   }
@@ -854,8 +865,8 @@ void GpuProcessTransportFactory::OnLostMainThreadSharedContext() {
   std::unique_ptr<display_compositor::GLHelper> lost_gl_helper =
       std::move(gl_helper_);
 
-  FOR_EACH_OBSERVER(ui::ContextFactoryObserver, observer_list_,
-                    OnLostResources());
+  for (auto& observer : observer_list_)
+    observer.OnLostResources();
 
   // Kill things that use the shared context before killing the shared context.
   lost_gl_helper.reset();

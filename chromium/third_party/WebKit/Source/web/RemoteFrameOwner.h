@@ -35,11 +35,13 @@ class RemoteFrameOwner final
   void setSandboxFlags(SandboxFlags flags) { m_sandboxFlags = flags; }
   void dispatchLoad() override;
   // TODO(dcheng): Implement.
+  bool canRenderFallbackContent() const override { return false; }
   void renderFallbackContent() override {}
   ScrollbarMode scrollingMode() const override { return m_scrolling; }
   int marginWidth() const override { return m_marginWidth; }
   int marginHeight() const override { return m_marginHeight; }
   bool allowFullscreen() const override { return m_allowFullscreen; }
+  bool allowPaymentRequest() const override { return m_allowPaymentRequest; }
   AtomicString csp() const override { return m_csp; }
   const WebVector<WebPermissionType>& delegatedPermissions() const override {
     return m_delegatedPermissions;
@@ -50,6 +52,9 @@ class RemoteFrameOwner final
   void setMarginHeight(int marginHeight) { m_marginHeight = marginHeight; }
   void setAllowFullscreen(bool allowFullscreen) {
     m_allowFullscreen = allowFullscreen;
+  }
+  void setAllowPaymentRequest(bool allowPaymentRequest) {
+    m_allowPaymentRequest = allowPaymentRequest;
   }
   void setCsp(const WebString& csp) { m_csp = csp; }
   void setDelegatedpermissions(
@@ -73,6 +78,7 @@ class RemoteFrameOwner final
   int m_marginWidth;
   int m_marginHeight;
   bool m_allowFullscreen;
+  bool m_allowPaymentRequest;
   WebString m_csp;
   WebVector<WebPermissionType> m_delegatedPermissions;
 };

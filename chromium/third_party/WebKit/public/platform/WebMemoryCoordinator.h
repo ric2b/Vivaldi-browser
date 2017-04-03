@@ -7,6 +7,7 @@
 
 #include "public/platform/WebCommon.h"
 #include "public/platform/WebMemoryPressureLevel.h"
+#include "public/platform/WebMemoryState.h"
 
 namespace blink {
 
@@ -17,8 +18,7 @@ class WebMemoryCoordinator {
   // gone.
   BLINK_PLATFORM_EXPORT static void onMemoryPressure(WebMemoryPressureLevel);
 
-  // Called when Blink is going to be suspended.
-  BLINK_PLATFORM_EXPORT static void prepareToSuspend();
+  BLINK_PLATFORM_EXPORT static void onMemoryStateChange(MemoryState);
 };
 
 }  // namespace blink

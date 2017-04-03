@@ -85,6 +85,8 @@ DelegatedFrameHostAndroid::DelegatedFrameHostAndroid(
       ui::ContextProviderFactory::GetInstance()->GetSurfaceManager();
   surface_id_allocator_.reset(new cc::SurfaceIdAllocator());
   surface_manager_->RegisterFrameSinkId(frame_sink_id_);
+  surface_factory_ = base::WrapUnique(
+      new cc::SurfaceFactory(frame_sink_id_, surface_manager_, this));
 
   background_layer_->SetBackgroundColor(background_color);
   view_->GetLayer()->AddChild(background_layer_);
@@ -106,11 +108,6 @@ DelegatedFrameHostAndroid::FrameData::~FrameData() = default;
 void DelegatedFrameHostAndroid::SubmitCompositorFrame(
     cc::CompositorFrame frame,
     cc::SurfaceFactory::DrawCallback draw_callback) {
-  if (!surface_factory_) {
-    surface_factory_ = base::WrapUnique(
-        new cc::SurfaceFactory(frame_sink_id_, surface_manager_, this));
-  }
-
   cc::RenderPass* root_pass =
       frame.delegated_frame_data->render_pass_list.back().get();
   gfx::Size surface_size = root_pass->output_rect.size();
@@ -193,7 +190,6 @@ void DelegatedFrameHostAndroid::DestroyDelegatedContent() {
   if (!current_frame_)
     return;
 
-  DCHECK(surface_factory_.get());
   DCHECK(content_layer_);
 
   content_layer_->RemoveFromParent();
@@ -210,7 +206,7 @@ bool DelegatedFrameHostAndroid::HasDelegatedContent() const {
 
 void DelegatedFrameHostAndroid::CompositorFrameSinkChanged() {
   DestroyDelegatedContent();
-  surface_factory_.reset();
+  surface_factory_->Reset();
 }
 
 void DelegatedFrameHostAndroid::UpdateBackgroundColor(SkColor color) {
@@ -227,7 +223,7 @@ void DelegatedFrameHostAndroid::UpdateContainerSizeinDIP(
 
 void DelegatedFrameHostAndroid::RegisterFrameSinkHierarchy(
     const cc::FrameSinkId& parent_id) {
-  if (!registered_parent_frame_sink_id_.is_null())
+  if (registered_parent_frame_sink_id_.is_valid())
     UnregisterFrameSinkHierarchy();
   registered_parent_frame_sink_id_ = parent_id;
   surface_manager_->RegisterSurfaceFactoryClient(frame_sink_id_, this);
@@ -235,7 +231,7 @@ void DelegatedFrameHostAndroid::RegisterFrameSinkHierarchy(
 }
 
 void DelegatedFrameHostAndroid::UnregisterFrameSinkHierarchy() {
-  if (registered_parent_frame_sink_id_.is_null())
+  if (!registered_parent_frame_sink_id_.is_valid())
     return;
   surface_manager_->UnregisterSurfaceFactoryClient(frame_sink_id_);
   surface_manager_->UnregisterFrameSinkHierarchy(

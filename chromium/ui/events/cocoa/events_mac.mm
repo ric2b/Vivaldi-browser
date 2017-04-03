@@ -25,9 +25,9 @@ EventType EventTypeFromNative(const base::NativeEvent& native_event) {
   NSEventType type = [native_event type];
   switch (type) {
     case NSKeyDown:
-      return ET_KEY_PRESSED;
     case NSKeyUp:
-      return ET_KEY_RELEASED;
+    case NSFlagsChanged:
+      return IsKeyUpEvent(native_event) ? ET_KEY_RELEASED : ET_KEY_PRESSED;
     case NSLeftMouseDown:
     case NSRightMouseDown:
     case NSOtherMouseDown:
@@ -53,7 +53,6 @@ EventType EventTypeFromNative(const base::NativeEvent& native_event) {
     case NSAppKitDefined:
     case NSSystemDefined:
       return ET_UNKNOWN;
-    case NSFlagsChanged:
     case NSApplicationDefined:
     case NSPeriodic:
     case NSCursorUpdate:
@@ -91,14 +90,18 @@ base::TimeTicks EventTimeFromNative(const base::NativeEvent& native_event) {
 }
 
 gfx::Point EventLocationFromNative(const base::NativeEvent& native_event) {
+  return gfx::ToFlooredPoint(EventLocationFromNativeF(native_event));
+}
+
+gfx::PointF EventLocationFromNativeF(const base::NativeEvent& native_event) {
   NSWindow* window = [native_event window];
   if (!window) {
     NOTIMPLEMENTED();  // Point will be in screen coordinates.
-    return gfx::Point();
+    return gfx::PointF();
   }
   NSPoint location = [native_event locationInWindow];
   NSRect content_rect = [window contentRectForFrameRect:[window frame]];
-  return gfx::Point(location.x, NSHeight(content_rect) - location.y);
+  return gfx::PointF(location.x, NSHeight(content_rect) - location.y);
 }
 
 gfx::Point EventSystemLocationFromNative(

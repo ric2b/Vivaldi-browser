@@ -17,6 +17,7 @@ component("gpu") {
     "//gpu/command_buffer/common:common_sources",
     "//gpu/command_buffer/service:service_sources",
     "//gpu/config:config_sources",
+    "//gpu/ipc:command_buffer_sources",
     "//gpu/ipc/client:ipc_client_sources",
     "//gpu/ipc/common:ipc_common_sources",
     "//gpu/ipc/service:ipc_service_sources",
@@ -121,6 +122,7 @@ test("gl_tests") {
   sources = [
     "command_buffer/tests/compressed_texture_test.cc",
     "command_buffer/tests/es3_misc_functions_unittest.cc",
+    "command_buffer/tests/gl_apply_screen_space_antialiasing_CHROMIUM_unittest.cc",
     "command_buffer/tests/gl_bgra_mipmap_unittest.cc",
     "command_buffer/tests/gl_bind_uniform_location_unittest.cc",
     "command_buffer/tests/gl_chromium_framebuffer_mixed_samples_unittest.cc",
@@ -143,6 +145,7 @@ test("gl_tests") {
     "command_buffer/tests/gl_lose_context_chromium_unittest.cc",
     "command_buffer/tests/gl_manager.cc",
     "command_buffer/tests/gl_manager.h",
+    "command_buffer/tests/gl_map_buffer_range_unittest.cc",
     "command_buffer/tests/gl_native_gmb_backbuffer_unittest.cc",
     "command_buffer/tests/gl_pointcoord_unittest.cc",
     "command_buffer/tests/gl_program_unittest.cc",
@@ -176,10 +179,10 @@ test("gl_tests") {
     "//base",
     "//base/test:test_support",
     "//base/third_party/dynamic_annotations",
-    "//gpu/command_buffer/client:gl_in_process_context",
     "//gpu/command_buffer/client:gles2_c_lib",
     "//gpu/command_buffer/client:gles2_implementation",
     "//gpu/command_buffer/common:gles2_utils",
+    "//gpu/ipc:gl_in_process_context",
     "//testing/gmock",
     "//testing/gtest",
     "//third_party/angle:translator",
@@ -317,10 +320,10 @@ test("gpu_unittests") {
     "//base",
     "//base/test:test_support",
     "//base/third_party/dynamic_annotations",
-    "//gpu/command_buffer/client:gl_in_process_context",
     "//gpu/command_buffer/client:gles2_c_lib",
     "//gpu/command_buffer/client:gles2_implementation",
     "//gpu/command_buffer/common:gles2_utils",
+    "//gpu/ipc:gl_in_process_context",
     "//gpu/ipc/common:test_interfaces",
     "//mojo/edk/system",
     "//mojo/public/cpp/bindings",
@@ -366,6 +369,14 @@ test("gpu_perftests") {
     "//ui/gfx/geometry",
     "//ui/gl",
     "//ui/gl/init",
+  ]
+
+  data = [
+    # Needed for isolate script to execute.
+    "//testing/scripts/common.py",
+    "//testing/xvfb.py",
+    "//testing/scripts/run_gtest_perf_test.py",
+    "//tools/perf/generate_legacy_perf_dashboard_json.py",
   ]
 
   # This target should not require the Chrome executable to run.

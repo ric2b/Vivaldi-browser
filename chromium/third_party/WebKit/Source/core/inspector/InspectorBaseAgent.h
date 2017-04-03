@@ -42,8 +42,8 @@ namespace blink {
 
 class LocalFrame;
 
-using protocol::ErrorString;
 using protocol::Maybe;
+using protocol::Response;
 
 class CORE_EXPORT InspectorAgent
     : public GarbageCollectedFinalized<InspectorAgent> {
@@ -85,11 +85,10 @@ class InspectorBaseAgent : public InspectorAgent,
     }
   }
 
-  void disable(ErrorString*) override {}
+  Response disable() override { return Response::OK(); }
 
   void dispose() override {
-    ErrorString error;
-    disable(&error);
+    disable();
     m_frontend.reset();
     m_state = nullptr;
     m_instrumentingAgents = nullptr;

@@ -10,13 +10,14 @@
 
 #include <deque>
 #include <list>
+#include <memory>
 
 #include "base/macros.h"
 #include "base/time/time.h"
 #include "content/browser/renderer_host/event_with_latency_info.h"
 #include "content/common/content_export.h"
 #include "content/common/input/input_event_ack_state.h"
-#include "third_party/WebKit/public/web/WebInputEvent.h"
+#include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "ui/gfx/geometry/point_f.h"
 
 namespace content {
@@ -183,8 +184,7 @@ class CONTENT_EXPORT TouchEventQueue {
   // Handles touch event forwarding and ack'ed event dispatch.
   TouchEventQueueClient* client_;
 
-  typedef std::list<CoalescedWebTouchEvent*> TouchQueue;
-  TouchQueue touch_queue_;
+  std::list<std::unique_ptr<CoalescedWebTouchEvent>> touch_queue_;
 
   // Position of the first touch in the most recent sequence forwarded to the
   // client.

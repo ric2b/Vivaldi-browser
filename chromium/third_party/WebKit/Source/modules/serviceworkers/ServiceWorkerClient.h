@@ -18,7 +18,6 @@ namespace blink {
 
 class ExecutionContext;
 class ScriptPromiseResolver;
-class ScriptState;
 
 class MODULES_EXPORT ServiceWorkerClient
     : public GarbageCollectedFinalized<ServiceWorkerClient>,
@@ -43,6 +42,8 @@ class MODULES_EXPORT ServiceWorkerClient
                    PassRefPtr<SerializedScriptValue> message,
                    const MessagePortArray&,
                    ExceptionState&);
+
+  static bool canTransferArrayBuffer() { return false; }
 
   DEFINE_INLINE_VIRTUAL_TRACE() {}
 

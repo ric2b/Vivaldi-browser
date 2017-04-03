@@ -11,9 +11,6 @@
 #include "base/memory/ref_counted.h"
 #include "content/child/worker_thread_message_filter.h"
 
-struct IndexedDBDatabaseMetadata;
-struct IndexedDBMsg_CallbacksUpgradeNeeded_Params;
-
 namespace content {
 
 class IndexedDBMessageFilter : public WorkerThreadMessageFilter {
@@ -29,16 +26,6 @@ class IndexedDBMessageFilter : public WorkerThreadMessageFilter {
   void OnFilteredMessageReceived(const IPC::Message& msg) override;
   bool GetWorkerThreadIdForMessage(const IPC::Message& msg,
                                    int* ipc_thread_id) override;
-
-  // ChildMessageFilter:
-  void OnStaleMessageReceived(const IPC::Message& msg) override;
-
-  void OnStaleSuccessIDBDatabase(int32_t ipc_thread_id,
-                                 int32_t ipc_callbacks_id,
-                                 int32_t ipc_database_callbacks_id,
-                                 int32_t ipc_object_id,
-                                 const IndexedDBDatabaseMetadata&);
-  void OnStaleUpgradeNeeded(const IndexedDBMsg_CallbacksUpgradeNeeded_Params&);
 
   DISALLOW_COPY_AND_ASSIGN(IndexedDBMessageFilter);
 };

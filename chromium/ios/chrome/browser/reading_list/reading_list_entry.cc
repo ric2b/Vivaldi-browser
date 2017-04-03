@@ -5,6 +5,7 @@
 #include "ios/chrome/browser/reading_list/reading_list_entry.h"
 
 #include "base/memory/ptr_util.h"
+#include "ios/chrome/browser/reading_list/offline_url_utils.h"
 
 // The backoff time is the following: 10min, 10min, 1h, 2h, 2h..., starting
 // after the first failure.
@@ -55,7 +56,7 @@ ReadingListEntry::ReadingListEntry(const GURL& url,
 ReadingListEntry::ReadingListEntry(ReadingListEntry&& entry)
     : url_(std::move(entry.url_)),
       title_(std::move(entry.title_)),
-      distilled_url_(std::move(entry.distilled_url_)),
+      distilled_path_(std::move(entry.distilled_path_)),
       distilled_state_(std::move(entry.distilled_state_)),
       backoff_(std::move(entry.backoff_)),
       failed_download_counter_(std::move(entry.failed_download_counter_)) {}
@@ -74,8 +75,12 @@ ReadingListEntry::DistillationState ReadingListEntry::DistilledState() const {
   return distilled_state_;
 }
 
-const GURL& ReadingListEntry::DistilledURL() const {
-  return distilled_url_;
+const base::FilePath& ReadingListEntry::DistilledPath() const {
+  return distilled_path_;
+}
+
+const GURL ReadingListEntry::DistilledURL() const {
+  return reading_list::DistilledURLForPath(distilled_path_);
 }
 
 base::TimeDelta ReadingListEntry::TimeUntilNextTry() const {
@@ -89,7 +94,7 @@ int ReadingListEntry::FailedDownloadCounter() const {
 ReadingListEntry& ReadingListEntry::operator=(ReadingListEntry&& other) {
   url_ = std::move(other.url_);
   title_ = std::move(other.title_);
-  distilled_url_ = std::move(other.distilled_url_);
+  distilled_path_ = std::move(other.distilled_path_);
   distilled_state_ = std::move(other.distilled_state_);
   backoff_ = std::move(other.backoff_);
   failed_download_counter_ = std::move(other.failed_download_counter_);
@@ -104,16 +109,16 @@ void ReadingListEntry::SetTitle(const std::string& title) {
   title_ = title;
 }
 
-void ReadingListEntry::SetDistilledURL(const GURL& url) {
-  DCHECK(url.is_valid());
-  distilled_url_ = url;
+void ReadingListEntry::SetDistilledPath(const base::FilePath& path) {
+  DCHECK(!path.empty());
+  distilled_path_ = path;
   distilled_state_ = PROCESSED;
   backoff_->Reset();
   failed_download_counter_ = 0;
 }
 
 void ReadingListEntry::SetDistilledState(DistillationState distilled_state) {
-  DCHECK(distilled_state != PROCESSED);  // use SetDistilledURL instead.
+  DCHECK(distilled_state != PROCESSED);  // use SetDistilledPath instead.
   DCHECK(distilled_state != WAITING);
   // Increase time until next retry exponentially if the state change from a
   // non-error state to an error state.
@@ -124,5 +129,5 @@ void ReadingListEntry::SetDistilledState(DistillationState distilled_state) {
   }
 
   distilled_state_ = distilled_state;
-  distilled_url_ = GURL();
+  distilled_path_ = base::FilePath();
 }

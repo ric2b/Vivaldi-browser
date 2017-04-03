@@ -108,14 +108,14 @@ KeyedService* PolicyCertServiceFactory::BuildServiceInstanceFor(
   // TODO(joaodasilva): remove this, eventually.
   PrefService* prefs = profile->GetOriginalProfile()->GetPrefs();
   if (prefs->GetBoolean(prefs::kUsedPolicyCertificatesOnce)) {
-    SetUsedPolicyCertificates(user->email());
+    SetUsedPolicyCertificates(user->GetAccountId().GetUserEmail());
     prefs->ClearPref(prefs::kUsedPolicyCertificatesOnce);
 
     if (user_manager->GetLoggedInUsers().size() > 1u) {
       // This login should not have been allowed. After rebooting, local_state
       // will contain the updated list of users that used policy-pushed
       // certificates and this won't happen again.
-      // Note that a user becomes logged in before his profile is created.
+      // Note that a user becomes logged in before their profile is created.
       LOG(ERROR) << "Shutdown session because a tainted profile was added.";
       g_browser_process->local_state()->CommitPendingWrite();
       prefs->CommitPendingWrite();
@@ -128,7 +128,8 @@ KeyedService* PolicyCertServiceFactory::BuildServiceInstanceFor(
   if (!net_conf_updater)
     return NULL;
 
-  return new PolicyCertService(user->email(), net_conf_updater, user_manager);
+  return new PolicyCertService(user->GetAccountId().GetUserEmail(),
+                               net_conf_updater, user_manager);
 }
 
 content::BrowserContext* PolicyCertServiceFactory::GetBrowserContextToUse(

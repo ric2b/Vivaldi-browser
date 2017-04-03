@@ -5,6 +5,11 @@
 #ifndef IOS_CHROME_BROWSER_PREF_NAMES_H_
 #define IOS_CHROME_BROWSER_PREF_NAMES_H_
 
+// TODO(crbug.com/663469): Remove these includes once embedders are migrated to
+// use the new pref header.
+#include "components/handoff/pref_names_ios.h"
+#include "ios/public/provider/chrome/browser/voice/voice_search_prefs.h"
+
 namespace prefs {
 
 extern const char kAcceptLanguages[];
@@ -22,7 +27,6 @@ extern const char kEnableDoNotTrack[];
 extern const char kHttpServerProperties[];
 extern const char kIosBookmarkFolderDefault[];
 extern const char kIosBookmarkPromoAlreadySeen[];
-extern const char kIosHandoffToOtherDevices[];
 extern const char kIosPhysicalWebEnabled[];
 extern const char kLastSessionExitedCleanly[];
 extern const char kMetricsReportingWifiOnly[];
@@ -37,9 +41,6 @@ extern const char kNetworkPredictionWifiOnly[];
 
 extern const char kNtpShownBookmarksFolder[];
 extern const char kShowMemoryDebuggingTools[];
-
-extern const char kVoiceSearchLocale[];
-extern const char kVoiceSearchTTS[];
 
 extern const char kSigninLastAccounts[];
 extern const char kSigninLastAccountsMigrated[];

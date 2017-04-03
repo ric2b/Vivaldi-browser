@@ -38,6 +38,7 @@ class ChromeRenderViewTest;
 class GURL;
 class ModuleSystem;
 class URLPattern;
+struct ExtensionMsg_DispatchEvent_Params;
 struct ExtensionMsg_ExternalConnectionInfo;
 struct ExtensionMsg_Loaded_Params;
 struct ExtensionMsg_TabConnectionInfo;
@@ -102,7 +103,7 @@ class Dispatcher : public content::RenderThreadObserver,
   // variables.
   void DidInitializeServiceWorkerContextOnWorkerThread(
       v8::Local<v8::Context> v8_context,
-      int embedded_worker_id,
+      int64_t service_worker_version_id,
       const GURL& url);
 
   void WillReleaseScriptContext(blink::WebLocalFrame* frame,
@@ -112,7 +113,7 @@ class Dispatcher : public content::RenderThreadObserver,
   // Runs on a different thread and should not use any member variables.
   static void WillDestroyServiceWorkerContextOnWorkerThread(
       v8::Local<v8::Context> v8_context,
-      int embedded_worker_id,
+      int64_t service_worker_version_id,
       const GURL& url);
 
   // This method is not allowed to run JavaScript code in the frame.
@@ -130,15 +131,16 @@ class Dispatcher : public content::RenderThreadObserver,
 
   // Dispatches the event named |event_name| to all render views.
   void DispatchEvent(const std::string& extension_id,
-                     const std::string& event_name) const;
+                     const std::string& event_name,
+                     const base::ListValue& event_args,
+                     const base::DictionaryValue& filtering_info) const;
 
   // Shared implementation of the various MessageInvoke IPCs.
   void InvokeModuleSystemMethod(content::RenderFrame* render_frame,
                                 const std::string& extension_id,
                                 const std::string& module_name,
                                 const std::string& function_name,
-                                const base::ListValue& args,
-                                bool user_gesture);
+                                const base::ListValue& args);
 
   // Returns a list of (module name, resource id) pairs for the JS modules to
   // add to the source map.
@@ -148,8 +150,6 @@ class Dispatcher : public content::RenderThreadObserver,
                                      Dispatcher* dispatcher,
                                      RequestSender* request_sender,
                                      V8SchemaRegistry* v8_schema_registry);
-
-  bool WasWebRequestUsedBySomeExtensions() const { return webrequest_used_; }
 
  private:
   // The RendererPermissionsPolicyDelegateTest.CannotScriptWebstore test needs
@@ -179,8 +179,9 @@ class Dispatcher : public content::RenderThreadObserver,
   void OnMessageInvoke(const std::string& extension_id,
                        const std::string& module_name,
                        const std::string& function_name,
-                       const base::ListValue& args,
-                       bool user_gesture);
+                       const base::ListValue& args);
+  void OnDispatchEvent(const ExtensionMsg_DispatchEvent_Params& params,
+                       const base::ListValue& event_args);
   void OnSetSessionInfo(version_info::Channel channel,
                         FeatureSessionType session_type);
   void OnSetScriptingWhitelist(
@@ -202,7 +203,7 @@ class Dispatcher : public content::RenderThreadObserver,
       const std::vector<std::string>& extension_ids,
       bool update_origin_whitelist,
       int tab_id);
-  void OnUsingWebRequestAPI(bool webrequest_used);
+
   void OnSetActivityLoggingEnabled(bool enabled);
 
   // UserScriptSetManager::Observer implementation.
@@ -309,9 +310,6 @@ class Dispatcher : public content::RenderThreadObserver,
   // the observer is destroyed before the UserScriptSet.
   ScopedObserver<UserScriptSetManager, UserScriptSetManager::Observer>
       user_script_set_manager_observer_;
-
-  // Status of webrequest usage.
-  bool webrequest_used_;
 
   // Whether or not extension activity is enabled.
   bool activity_logging_enabled_;

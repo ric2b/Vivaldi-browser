@@ -11,9 +11,8 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/shared_memory.h"
 #include "base/trace_event/trace_event_argument.h"
-#include "content/browser/android/synchronous_compositor_observer.h"
+#include "content/browser/android/synchronous_compositor_browser_filter.h"
 #include "content/browser/renderer_host/render_widget_host_view_android.h"
-#include "content/browser/web_contents/web_contents_android.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/common/android/sync_compositor_messages.h"
 #include "content/common/android/sync_compositor_statics.h"
@@ -32,45 +31,26 @@
 namespace content {
 
 // static
-void SynchronousCompositor::SetClientForWebContents(
-    WebContents* contents,
-    SynchronousCompositorClient* client) {
-  DCHECK(contents);
-  DCHECK(client);
-  WebContentsAndroid* web_contents_android =
-      static_cast<WebContentsImpl*>(contents)->GetWebContentsAndroid();
-  DCHECK(!web_contents_android->synchronous_compositor_client());
-  web_contents_android->set_synchronous_compositor_client(client);
-}
-
-// static
 std::unique_ptr<SynchronousCompositorHost> SynchronousCompositorHost::Create(
-    RenderWidgetHostViewAndroid* rwhva,
-    WebContents* web_contents) {
-  DCHECK(web_contents);
-  WebContentsAndroid* web_contents_android =
-      static_cast<WebContentsImpl*>(web_contents)->GetWebContentsAndroid();
-  if (!web_contents_android->synchronous_compositor_client())
+    RenderWidgetHostViewAndroid* rwhva) {
+  if (!rwhva->synchronous_compositor_client())
     return nullptr;  // Not using sync compositing.
 
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   bool use_in_proc_software_draw =
       command_line->HasSwitch(switches::kSingleProcess);
   return base::WrapUnique(new SynchronousCompositorHost(
-      rwhva, web_contents_android->synchronous_compositor_client(),
-      use_in_proc_software_draw));
+      rwhva, use_in_proc_software_draw));
 }
 
 SynchronousCompositorHost::SynchronousCompositorHost(
     RenderWidgetHostViewAndroid* rwhva,
-    SynchronousCompositorClient* client,
     bool use_in_proc_software_draw)
     : rwhva_(rwhva),
-      client_(client),
+      client_(rwhva->synchronous_compositor_client()),
       ui_task_runner_(BrowserThread::GetTaskRunnerForThread(BrowserThread::UI)),
       process_id_(rwhva_->GetRenderWidgetHost()->GetProcess()->GetID()),
       routing_id_(rwhva_->GetRenderWidgetHost()->GetRoutingID()),
-      rph_observer_(SynchronousCompositorObserver::GetOrCreateFor(process_id_)),
       sender_(rwhva_->GetRenderWidgetHost()),
       use_in_process_zero_copy_software_draw_(use_in_proc_software_draw),
       bytes_limit_(0u),
@@ -83,6 +63,10 @@ SynchronousCompositorHost::SynchronousCompositorHost(
 
 SynchronousCompositorHost::~SynchronousCompositorHost() {
   client_->DidDestroyCompositor(this, process_id_, routing_id_);
+  if (registered_with_filter_) {
+    if (SynchronousCompositorBrowserFilter* filter = GetFilter())
+      filter->UnregisterHost(this);
+  }
 }
 
 bool SynchronousCompositorHost::OnMessageReceived(const IPC::Message& message) {
@@ -91,21 +75,40 @@ bool SynchronousCompositorHost::OnMessageReceived(const IPC::Message& message) {
     IPC_MESSAGE_HANDLER(SyncCompositorHostMsg_CompositorFrameSinkCreated,
                         CompositorFrameSinkCreated)
     IPC_MESSAGE_HANDLER(SyncCompositorHostMsg_UpdateState, ProcessCommonParams)
-    IPC_MESSAGE_HANDLER_GENERIC(SyncCompositorHostMsg_ReturnFrame,
-                                DemandDrawHwReceiveFrame(message))
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
   return handled;
 }
 
-void SynchronousCompositorHost::DemandDrawHwAsync(
+scoped_refptr<SynchronousCompositor::FrameFuture>
+SynchronousCompositorHost::DemandDrawHwAsync(
     const gfx::Size& viewport_size,
     const gfx::Rect& viewport_rect_for_tile_priority,
     const gfx::Transform& transform_for_tile_priority) {
+  scoped_refptr<FrameFuture> frame_future = new FrameFuture();
+  if (compute_scroll_needs_synchronous_draw_) {
+    compute_scroll_needs_synchronous_draw_ = false;
+    auto frame_ptr = base::MakeUnique<Frame>();
+    *frame_ptr = DemandDrawHw(viewport_size, viewport_rect_for_tile_priority,
+                              transform_for_tile_priority);
+    frame_future->SetFrame(std::move(frame_ptr));
+    return frame_future;
+  }
+
   SyncCompositorDemandDrawHwParams params(viewport_size,
                                           viewport_rect_for_tile_priority,
                                           transform_for_tile_priority);
-  sender_->Send(new SyncCompositorMsg_DemandDrawHwAsync(routing_id_, params));
+  if (SynchronousCompositorBrowserFilter* filter = GetFilter()) {
+    if (!registered_with_filter_) {
+      filter->RegisterHost(this);
+      registered_with_filter_ = true;
+    }
+    filter->SetFrameFuture(routing_id_, frame_future);
+    sender_->Send(new SyncCompositorMsg_DemandDrawHwAsync(routing_id_, params));
+  } else {
+    frame_future->SetFrame(nullptr);
+  }
+  return frame_future;
 }
 
 SynchronousCompositor::Frame SynchronousCompositorHost::DemandDrawHw(
@@ -116,7 +119,7 @@ SynchronousCompositor::Frame SynchronousCompositorHost::DemandDrawHw(
                                           viewport_rect_for_tile_priority,
                                           transform_for_tile_priority);
   uint32_t compositor_frame_sink_id;
-  cc::CompositorFrame compositor_frame;
+  base::Optional<cc::CompositorFrame> compositor_frame;
   SyncCompositorCommonRendererParams common_renderer_params;
 
   if (!sender_->Send(new SyncCompositorMsg_DemandDrawHw(
@@ -127,52 +130,26 @@ SynchronousCompositor::Frame SynchronousCompositorHost::DemandDrawHw(
 
   ProcessCommonParams(common_renderer_params);
 
-  return ProcessHardwareFrame(compositor_frame_sink_id,
-                              std::move(compositor_frame));
-}
+  if (!compositor_frame)
+    return SynchronousCompositor::Frame();
 
-bool SynchronousCompositorHost::DemandDrawHwReceiveFrame(
-    const IPC::Message& message) {
-  SyncCompositorHostMsg_ReturnFrame::Param param;
-  if (!SyncCompositorHostMsg_ReturnFrame::Read(&message, &param))
-    return false;
-  uint32_t compositor_frame_sink_id = std::get<0>(param);
-  cc::CompositorFrame compositor_frame = std::move(std::get<1>(param));
-  scoped_refptr<SynchronousCompositor::FrameFuture> frame_future =
-      new FrameFuture();
-  SynchronousCompositor::Frame frame = ProcessHardwareFrame(
-      compositor_frame_sink_id, std::move(compositor_frame));
-  if (!frame.frame)
-    return true;
-  std::unique_ptr<SynchronousCompositor::Frame> frame_ptr =
-      base::MakeUnique<SynchronousCompositor::Frame>();
-  frame_ptr->frame = std::move(frame.frame);
-  frame_ptr->compositor_frame_sink_id = frame.compositor_frame_sink_id;
-  frame_future->setFrame(std::move(frame_ptr));
-  client_->OnDrawHardwareProcessFrameFuture(std::move(frame_future));
-  return true;
-}
-
-SynchronousCompositor::Frame SynchronousCompositorHost::ProcessHardwareFrame(
-    uint32_t compositor_frame_sink_id,
-    cc::CompositorFrame compositor_frame) {
   SynchronousCompositor::Frame frame;
   frame.frame.reset(new cc::CompositorFrame);
   frame.compositor_frame_sink_id = compositor_frame_sink_id;
-  *frame.frame = std::move(compositor_frame);
-  if (!frame.frame->delegated_frame_data) {
-    // This can happen if compositor did not swap in this draw.
-    frame.frame.reset();
-  }
-  if (frame.frame) {
-    UpdateFrameMetaData(frame.frame->metadata.Clone());
-  }
+  *frame.frame = std::move(*compositor_frame);
+  UpdateFrameMetaData(frame.frame->metadata.Clone());
   return frame;
 }
 
 void SynchronousCompositorHost::UpdateFrameMetaData(
     cc::CompositorFrameMetadata frame_metadata) {
   rwhva_->SynchronousFrameMetadata(std::move(frame_metadata));
+}
+
+SynchronousCompositorBrowserFilter* SynchronousCompositorHost::GetFilter() {
+  return static_cast<RenderProcessHostImpl*>(
+             rwhva_->GetRenderWidgetHost()->GetProcess())
+      ->synchronous_compositor_filter();
 }
 
 namespace {
@@ -376,6 +353,7 @@ void SynchronousCompositorHost::OnComputeScroll(
   SyncCompositorCommonRendererParams common_renderer_params;
   sender_->Send(
       new SyncCompositorMsg_ComputeScroll(routing_id_, animation_time));
+  compute_scroll_needs_synchronous_draw_ = true;
 }
 
 void SynchronousCompositorHost::DidOverscroll(
@@ -387,7 +365,9 @@ void SynchronousCompositorHost::DidOverscroll(
 
 void SynchronousCompositorHost::DidSendBeginFrame(
     ui::WindowAndroid* window_android) {
-  rph_observer_->SyncStateAfterVSync(window_android, this);
+  compute_scroll_needs_synchronous_draw_ = false;
+  if (SynchronousCompositorBrowserFilter* filter = GetFilter())
+    filter->SyncStateAfterVSync(window_android, this);
 }
 
 void SynchronousCompositorHost::CompositorFrameSinkCreated() {

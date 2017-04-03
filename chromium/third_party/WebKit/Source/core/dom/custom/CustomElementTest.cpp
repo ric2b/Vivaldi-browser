@@ -7,6 +7,9 @@
 #include "core/HTMLNames.h"
 #include "core/SVGNames.h"
 #include "core/dom/Document.h"
+#include "core/dom/custom/CustomElementDefinition.h"
+#include "core/dom/custom/CustomElementRegistry.h"
+#include "core/dom/custom/CustomElementTestHelpers.h"
 #include "core/html/HTMLElement.h"
 #include "core/testing/DummyPageHolder.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -146,8 +149,7 @@ TEST(CustomElementTest, StateByParser) {
       "<font-face id=v0></font-face>";
   std::unique_ptr<DummyPageHolder> pageHolder = DummyPageHolder::create();
   Document& document = pageHolder->document();
-  document.body()->setInnerHTML(String::fromUTF8(bodyContent),
-                                ASSERT_NO_EXCEPTION);
+  document.body()->setInnerHTML(String::fromUTF8(bodyContent));
 
   struct {
     const char* id;
@@ -183,7 +185,7 @@ TEST(CustomElementTest, StateByCreateElement) {
   std::unique_ptr<DummyPageHolder> pageHolder = DummyPageHolder::create();
   Document& document = pageHolder->document();
   for (const auto& data : createElementData) {
-    Element* element = document.createElement(data.name, ASSERT_NO_EXCEPTION);
+    Element* element = document.createElement(data.name);
     EXPECT_EQ(data.state, element->getCustomElementState()) << data.name;
     EXPECT_EQ(data.v0state, element->getV0CustomElementState()) << data.name;
 
@@ -199,6 +201,31 @@ TEST(CustomElementTest, StateByCreateElement) {
         << data.name;
     EXPECT_EQ(data.v0state, element->getV0CustomElementState()) << data.name;
   }
+}
+
+TEST(CustomElementTest,
+     CreateElement_TagNameCaseHandlingCreatingCustomElement) {
+  // register a definition
+  std::unique_ptr<DummyPageHolder> holder(DummyPageHolder::create());
+  CustomElementRegistry* registry =
+      holder->frame().localDOMWindow()->customElements();
+  NonThrowableExceptionState shouldNotThrow;
+  {
+    CEReactionsScope reactions;
+    TestCustomElementDefinitionBuilder builder;
+    registry->define("a-a", builder, ElementDefinitionOptions(),
+                     shouldNotThrow);
+  }
+  CustomElementDefinition* definition =
+      registry->definitionFor(CustomElementDescriptor("a-a", "a-a"));
+  EXPECT_NE(nullptr, definition) << "a-a should be registered";
+
+  // create an element with an uppercase tag name
+  Document& document = holder->document();
+  EXPECT_TRUE(document.isHTMLDocument())
+      << "this test requires a HTML document";
+  Element* element = document.createElement("A-A", shouldNotThrow);
+  EXPECT_EQ(definition, element->customElementDefinition());
 }
 
 }  // namespace blink

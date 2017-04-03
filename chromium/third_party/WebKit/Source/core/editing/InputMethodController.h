@@ -33,6 +33,8 @@
 #include "core/editing/FrameSelection.h"
 #include "core/editing/PlainTextRange.h"
 #include "platform/heap/Handle.h"
+#include "public/platform/WebTextInputInfo.h"
+#include "public/platform/WebTextInputType.h"
 #include "wtf/Vector.h"
 
 namespace blink {
@@ -94,8 +96,14 @@ class CORE_EXPORT InputMethodController final
   PlainTextRange createRangeForSelection(int start,
                                          int end,
                                          size_t textLength) const;
+  void deleteSurroundingText(int before, int after);
+  WebTextInputInfo textInputInfo() const;
+  WebTextInputType textInputType() const;
 
  private:
+  Document& document() const;
+  bool isAvailable() const;
+
   Member<LocalFrame> m_frame;
   Member<Range> m_compositionRange;
   bool m_isDirty;
@@ -135,6 +143,8 @@ class CORE_EXPORT InputMethodController final
                                          const Vector<CompositionUnderline>&,
                                          int selectionStart,
                                          int selectionEnd);
+  int textInputFlags() const;
+  WebTextInputMode inputModeOfFocusedElement() const;
 };
 
 }  // namespace blink

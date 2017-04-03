@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <string>
+#include <utility>
 
 #include "base/format_macros.h"
 #include "base/logging.h"
@@ -76,14 +77,6 @@ SpdyHeadersHandlerInterface* SpdyFramerVisitorAdapter::OnHeaderFrameStart(
 void SpdyFramerVisitorAdapter::OnHeaderFrameEnd(SpdyStreamId stream_id,
                                                 bool end_headers) {
   visitor_->OnHeaderFrameEnd(stream_id, end_headers);
-}
-
-bool SpdyFramerVisitorAdapter::OnControlFrameHeaderData(
-    SpdyStreamId stream_id,
-    const char* header_data,
-    size_t header_data_len) {
-  return visitor_->OnControlFrameHeaderData(stream_id, header_data,
-                                            header_data_len);
 }
 
 void SpdyFramerVisitorAdapter::OnSynStream(SpdyStreamId stream_id,
@@ -233,12 +226,6 @@ class NestedSpdyFramerDecoder : public SpdyFramerDecoderAdapter {
 
   size_t ProcessInput(const char* data, size_t len) override {
     DVLOG(2) << "ProcessInput(data, " << len << ")";
-    const bool use_new_methods = outer_->use_new_methods_for_test();
-    if (framer_.use_new_methods_for_test() != use_new_methods) {
-      DVLOG(1) << "Overriding use_new_methods_ in nested framer, setting="
-               << (use_new_methods ? "true" : "false");
-      framer_.set_use_new_methods_for_test(use_new_methods);
-    }
     size_t result = framer_.ProcessInput(data, len);
     DVLOG(2) << "ProcessInput(data, " << len << ")  returning " << result;
     return result;

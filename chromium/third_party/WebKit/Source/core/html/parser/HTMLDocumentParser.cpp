@@ -481,8 +481,8 @@ size_t HTMLDocumentParser::processTokenizedChunkFromBackgroundParser(
       popChunk.get(), TRACE_EVENT_FLAG_FLOW_IN);
   AutoReset<bool> hasLineNumber(&m_isParsingAtLineNumber, true);
 
-  ASSERT_WITH_SECURITY_IMPLICATION(m_pumpSpeculationsSessionNestingLevel == 1);
-  ASSERT_WITH_SECURITY_IMPLICATION(!inPumpSession());
+  SECURITY_DCHECK(m_pumpSpeculationsSessionNestingLevel == 1);
+  SECURITY_DCHECK(!inPumpSession());
   ASSERT(!isParsingFragment());
   ASSERT(!isWaitingForScripts());
   ASSERT(!isStopped());
@@ -1142,7 +1142,7 @@ void HTMLDocumentParser::appendBytes(const char* data, size_t length) {
     if (!m_haveBackgroundParser)
       startBackgroundParser();
 
-    std::unique_ptr<Vector<char>> buffer = wrapUnique(new Vector<char>(length));
+    std::unique_ptr<Vector<char>> buffer = makeUnique<Vector<char>>(length);
     memcpy(buffer->data(), data, length);
     TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("blink.debug"),
                  "HTMLDocumentParser::appendBytes", "size", (unsigned)length);

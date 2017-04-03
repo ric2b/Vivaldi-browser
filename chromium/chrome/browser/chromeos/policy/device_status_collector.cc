@@ -10,7 +10,6 @@
 #include <algorithm>
 #include <cstdio>
 #include <limits>
-#include <memory>
 #include <sstream>
 
 #include "base/bind.h"
@@ -389,8 +388,8 @@ class GetStatusState : public base::RefCountedThreadSafe<GetStatusState> {
       *device_status_->add_cpu_temp_info() = info;
   }
 
-  void OnAndroidInfoReceived(mojo::String status,
-                             mojo::String droid_guard_info) {
+  void OnAndroidInfoReceived(const std::string& status,
+                             const std::string& droid_guard_info) {
     em::AndroidStatus* const android_status =
         session_status_->mutable_android_status();
     android_status->set_status_payload(status);
@@ -945,9 +944,10 @@ bool DeviceStatusCollector::GetUsers(em::DeviceStatusReportRequest* status) {
       continue;
 
     em::DeviceUser* device_user = status->add_user();
-    if (chromeos::ChromeUserManager::Get()->ShouldReportUser(user->email())) {
+    if (chromeos::ChromeUserManager::Get()->ShouldReportUser(
+            user->GetAccountId().GetUserEmail())) {
       device_user->set_type(em::DeviceUser::USER_TYPE_MANAGED);
-      device_user->set_email(user->email());
+      device_user->set_email(user->GetAccountId().GetUserEmail());
     } else {
       device_user->set_type(em::DeviceUser::USER_TYPE_UNMANAGED);
       // Do not report the email address of unmanaged users.

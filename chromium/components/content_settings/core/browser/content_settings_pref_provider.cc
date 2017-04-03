@@ -33,6 +33,20 @@
 
 namespace content_settings {
 
+namespace {
+
+// These settings are no longer used, and should be deleted on profile startup.
+#if !defined(OS_IOS)
+const char kObsoleteFullscreenExceptionsPref[] =
+    "profile.content_settings.exceptions.fullscreen";
+#if !defined(OS_ANDROID)
+const char kObsoleteMouseLockExceptionsPref[] =
+    "profile.content_settings.exceptions.mouselock";
+#endif  // !defined(OS_ANDROID)
+#endif  // !defined(OS_IOS)
+
+}  // namespace
+
 // ////////////////////////////////////////////////////////////////////////////
 // PrefProvider:
 //
@@ -50,6 +64,21 @@ void PrefProvider::RegisterProfilePrefs(
     registry->RegisterDictionaryPref(info->pref_name(),
                                      info->GetPrefRegistrationFlags());
   }
+
+  // Obsolete prefs ----------------------------------------------------------
+
+  // These prefs have been removed, but need to be registered so they can
+  // be deleted on startup.
+#if !defined(OS_IOS)
+  registry->RegisterDictionaryPref(
+      kObsoleteFullscreenExceptionsPref,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+#if !defined(OS_ANDROID)
+  registry->RegisterDictionaryPref(
+      kObsoleteMouseLockExceptionsPref,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+#endif  // !defined(OS_ANDROID)
+#endif  // !defined(OS_IOS)
 }
 
 PrefProvider::PrefProvider(PrefService* prefs, bool incognito)
@@ -66,6 +95,8 @@ PrefProvider::PrefProvider(PrefService* prefs, bool incognito)
       ContentSettingsPattern::kContentSettingsPatternVersion) {
     return;
   }
+
+  DiscardObsoletePreferences();
 
   pref_change_registrar_.Init(prefs_);
 
@@ -185,6 +216,17 @@ void PrefProvider::Notify(
                   secondary_pattern,
                   content_type,
                   resource_identifier);
+}
+
+void PrefProvider::DiscardObsoletePreferences() {
+  // These prefs were never stored on iOS/Android so they don't need to be
+  // deleted.
+#if !defined(OS_IOS)
+  prefs_->ClearPref(kObsoleteFullscreenExceptionsPref);
+#if !defined(OS_ANDROID)
+  prefs_->ClearPref(kObsoleteMouseLockExceptionsPref);
+#endif  // !defined(OS_ANDROID)
+#endif  // !defined(OS_IOS)
 }
 
 }  // namespace content_settings

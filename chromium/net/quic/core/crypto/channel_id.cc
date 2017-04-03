@@ -4,14 +4,13 @@
 
 #include "net/quic/core/crypto/channel_id.h"
 
-#include <openssl/bn.h>
-#include <openssl/ec.h>
-#include <openssl/ecdsa.h>
-#include <openssl/obj_mac.h>
-#include <openssl/sha.h>
-
 #include "crypto/openssl_util.h"
-#include "crypto/scoped_openssl_types.h"
+#include "third_party/boringssl/src/include/openssl/bn.h"
+#include "third_party/boringssl/src/include/openssl/ec.h"
+#include "third_party/boringssl/src/include/openssl/ec_key.h"
+#include "third_party/boringssl/src/include/openssl/ecdsa.h"
+#include "third_party/boringssl/src/include/openssl/nid.h"
+#include "third_party/boringssl/src/include/openssl/sha.h"
 
 using base::StringPiece;
 
@@ -38,12 +37,13 @@ bool ChannelIDVerifier::VerifyRaw(StringPiece key,
     return false;
   }
 
-  crypto::ScopedEC_GROUP p256(EC_GROUP_new_by_curve_name(NID_X9_62_prime256v1));
+  bssl::UniquePtr<EC_GROUP> p256(
+      EC_GROUP_new_by_curve_name(NID_X9_62_prime256v1));
   if (!p256) {
     return false;
   }
 
-  crypto::ScopedBIGNUM x(BN_new()), y(BN_new()), r(BN_new()), s(BN_new());
+  bssl::UniquePtr<BIGNUM> x(BN_new()), y(BN_new()), r(BN_new()), s(BN_new());
 
   ECDSA_SIG sig;
   sig.r = r.get();
@@ -60,14 +60,14 @@ bool ChannelIDVerifier::VerifyRaw(StringPiece key,
     return false;
   }
 
-  crypto::ScopedEC_POINT point(EC_POINT_new(p256.get()));
-  if (!point ||
+  bssl::UniquePtr<EC_POINT> point(EC_POINT_new(p256.get()));
+  if (point.get() == nullptr ||
       !EC_POINT_set_affine_coordinates_GFp(p256.get(), point.get(), x.get(),
                                            y.get(), nullptr)) {
     return false;
   }
 
-  crypto::ScopedEC_KEY ecdsa_key(EC_KEY_new());
+  bssl::UniquePtr<EC_KEY> ecdsa_key(EC_KEY_new());
   if (ecdsa_key.get() == nullptr ||
       !EC_KEY_set_group(ecdsa_key.get(), p256.get()) ||
       !EC_KEY_set_public_key(ecdsa_key.get(), point.get())) {

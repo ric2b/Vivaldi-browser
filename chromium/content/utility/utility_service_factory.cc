@@ -11,7 +11,7 @@
 #include "content/utility/utility_thread_impl.h"
 
 #if defined(ENABLE_MOJO_MEDIA_IN_UTILITY_PROCESS)
-#include "media/mojo/services/mojo_media_application_factory.h"  // nogncheck
+#include "media/mojo/services/media_service_factory.h"  // nogncheck
 #endif
 
 namespace content {
@@ -25,8 +25,8 @@ void UtilityServiceFactory::RegisterServices(ServiceMap* services) {
 
 #if defined(ENABLE_MOJO_MEDIA_IN_UTILITY_PROCESS)
   ServiceInfo info;
-  info.factory = base::Bind(&media::CreateMojoMediaApplication);
-  services->insert(std::make_pair("service:media", info));
+  info.factory = base::Bind(&media::CreateMediaService);
+  services->insert(std::make_pair("media", info));
 #endif
 }
 

@@ -21,7 +21,6 @@
 #include "chrome/browser/policy/schema_registry_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/extensions/api/storage/storage_schema_manifest_handler.h"
-#include "components/policy/core/common/policy_namespace.h"
 #include "components/policy/core/common/schema.h"
 #include "components/policy/core/common/schema_map.h"
 #include "components/policy/core/common/schema_registry.h"
@@ -39,6 +38,10 @@
 #include "extensions/common/manifest.h"
 #include "extensions/common/manifest_constants.h"
 #include "extensions/common/one_shot_event.h"
+
+#if defined(OS_CHROMEOS)
+#include "chrome/browser/chromeos/profiles/profile_helper.h"
+#endif
 
 using content::BrowserContext;
 using content::BrowserThread;
@@ -67,7 +70,7 @@ const ValueStoreFactory::ModelType kManagedModelType =
 class ManagedValueStoreCache::ExtensionTracker
     : public ExtensionRegistryObserver {
  public:
-  explicit ExtensionTracker(Profile* profile);
+  ExtensionTracker(Profile* profile, policy::PolicyDomain policy_domain);
   ~ExtensionTracker() override {}
 
  private:
@@ -96,6 +99,7 @@ class ManagedValueStoreCache::ExtensionTracker
   void Register(const policy::ComponentMap* components);
 
   Profile* profile_;
+  policy::PolicyDomain policy_domain_;
   ScopedObserver<ExtensionRegistry, ExtensionRegistryObserver>
       extension_registry_observer_;
   policy::SchemaRegistry* schema_registry_;
@@ -104,11 +108,15 @@ class ManagedValueStoreCache::ExtensionTracker
   DISALLOW_COPY_AND_ASSIGN(ExtensionTracker);
 };
 
-ManagedValueStoreCache::ExtensionTracker::ExtensionTracker(Profile* profile)
+ManagedValueStoreCache::ExtensionTracker::ExtensionTracker(
+    Profile* profile,
+    policy::PolicyDomain policy_domain)
     : profile_(profile),
+      policy_domain_(policy_domain),
       extension_registry_observer_(this),
-      schema_registry_(policy::SchemaRegistryServiceFactory::GetForContext(
-                           profile)->registry()),
+      schema_registry_(
+          policy::SchemaRegistryServiceFactory::GetForContext(profile)
+              ->registry()),
       weak_factory_(this) {
   extension_registry_observer_.Add(ExtensionRegistry::Get(profile_));
   // Load schemas when the extension system is ready. It might be ready now.
@@ -141,8 +149,8 @@ void ManagedValueStoreCache::ExtensionTracker::OnExtensionUninstalled(
   if (!ExtensionSystem::Get(profile_)->ready().is_signaled())
     return;
   if (extension && UsesManagedStorage(extension)) {
-    schema_registry_->UnregisterComponent(policy::PolicyNamespace(
-        policy::POLICY_DOMAIN_EXTENSIONS, extension->id()));
+    schema_registry_->UnregisterComponent(
+        policy::PolicyNamespace(policy_domain_, extension->id()));
   }
 }
 
@@ -214,16 +222,19 @@ void ManagedValueStoreCache::ExtensionTracker::LoadSchemasOnBlockingPool(
 void ManagedValueStoreCache::ExtensionTracker::Register(
     const policy::ComponentMap* components) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  schema_registry_->RegisterComponents(policy::POLICY_DOMAIN_EXTENSIONS,
-                                       *components);
+  schema_registry_->RegisterComponents(policy_domain_, *components);
 
-  // The first SetReady() call is performed after the ExtensionSystem is ready,
-  // even if there are no managed extensions. It will trigger a loading of the
-  // initial policy for any managed extensions, and eventually the PolicyService
-  // will become ready for POLICY_DOMAIN_EXTENSIONS, and
-  // OnPolicyServiceInitialized() will be invoked.
-  // Subsequent calls to SetReady() are ignored.
-  schema_registry_->SetReady(policy::POLICY_DOMAIN_EXTENSIONS);
+  // The first SetExtensionsDomainsReady() call is performed after the
+  // ExtensionSystem is ready, even if there are no managed extensions. It will
+  // trigger a loading of the initial policy for any managed extensions, and
+  // eventually the PolicyService will become ready for policy for extensions,
+  // and OnPolicyServiceInitialized() will be invoked.
+  // Subsequent calls to SetExtensionsDomainsReady() are ignored.
+  //
+  // Note that there is only ever one |ManagedValueStoreCache| instance for each
+  // profile, regardless of its type, therefore all extensions policy domains
+  // are marked as ready here.
+  schema_registry_->SetExtensionsDomainsReady();
 }
 
 ManagedValueStoreCache::ManagedValueStoreCache(
@@ -231,6 +242,7 @@ ManagedValueStoreCache::ManagedValueStoreCache(
     const scoped_refptr<ValueStoreFactory>& factory,
     const scoped_refptr<SettingsObserverList>& observers)
     : profile_(Profile::FromBrowserContext(context)),
+      policy_domain_(GetPolicyDomain(profile_)),
       policy_service_(
           policy::ProfilePolicyConnectorFactory::GetForBrowserContext(context)
               ->policy_service()),
@@ -238,14 +250,12 @@ ManagedValueStoreCache::ManagedValueStoreCache(
       observers_(observers) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  policy_service_->AddObserver(policy::POLICY_DOMAIN_EXTENSIONS, this);
+  policy_service_->AddObserver(policy_domain_, this);
 
-  extension_tracker_.reset(new ExtensionTracker(profile_));
+  extension_tracker_.reset(new ExtensionTracker(profile_, policy_domain_));
 
-  if (policy_service_->IsInitializationComplete(
-          policy::POLICY_DOMAIN_EXTENSIONS)) {
-    OnPolicyServiceInitialized(policy::POLICY_DOMAIN_EXTENSIONS);
-  }
+  if (policy_service_->IsInitializationComplete(policy_domain_))
+    OnPolicyServiceInitialized(policy_domain_);
 }
 
 ManagedValueStoreCache::~ManagedValueStoreCache() {
@@ -256,7 +266,7 @@ ManagedValueStoreCache::~ManagedValueStoreCache() {
 
 void ManagedValueStoreCache::ShutdownOnUI() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  policy_service_->RemoveObserver(policy::POLICY_DOMAIN_EXTENSIONS, this);
+  policy_service_->RemoveObserver(policy_domain_, this);
   extension_tracker_.reset();
 }
 
@@ -283,23 +293,22 @@ void ManagedValueStoreCache::OnPolicyServiceInitialized(
     policy::PolicyDomain domain) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  if (domain != policy::POLICY_DOMAIN_EXTENSIONS)
+  if (domain != policy_domain_)
     return;
 
   // The PolicyService now has all the initial policies ready. Send policy
   // for all the managed extensions to their backing stores now.
   policy::SchemaRegistry* registry =
       policy::SchemaRegistryServiceFactory::GetForContext(profile_)->registry();
-  const policy::ComponentMap* map = registry->schema_map()->GetComponents(
-      policy::POLICY_DOMAIN_EXTENSIONS);
+  const policy::ComponentMap* map =
+      registry->schema_map()->GetComponents(policy_domain_);
   if (!map)
     return;
 
   const policy::PolicyMap empty_map;
   for (policy::ComponentMap::const_iterator it = map->begin();
        it != map->end(); ++it) {
-    const policy::PolicyNamespace ns(policy::POLICY_DOMAIN_EXTENSIONS,
-                                     it->first);
+    const policy::PolicyNamespace ns(policy_domain_, it->first);
     // If there is no policy for |ns| then this will clear the previous store,
     // if there is one.
     OnPolicyUpdated(ns, empty_map, policy_service_->GetPolicies(ns));
@@ -311,8 +320,7 @@ void ManagedValueStoreCache::OnPolicyUpdated(const policy::PolicyNamespace& ns,
                                              const policy::PolicyMap& current) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  if (!policy_service_->IsInitializationComplete(
-           policy::POLICY_DOMAIN_EXTENSIONS)) {
+  if (!policy_service_->IsInitializationComplete(policy_domain_)) {
     // OnPolicyUpdated is called whenever a policy changes, but it doesn't
     // mean that all the policy providers are ready; wait until we get the
     // final policy values before passing them to the store.
@@ -325,6 +333,17 @@ void ManagedValueStoreCache::OnPolicyUpdated(const policy::PolicyNamespace& ns,
                  base::Unretained(this),
                  ns.component_id,
                  base::Passed(current.DeepCopy())));
+}
+
+// static
+policy::PolicyDomain ManagedValueStoreCache::GetPolicyDomain(Profile* profile) {
+#if defined(OS_CHROMEOS)
+  return chromeos::ProfileHelper::IsSigninProfile(profile)
+             ? policy::POLICY_DOMAIN_SIGNIN_EXTENSIONS
+             : policy::POLICY_DOMAIN_EXTENSIONS;
+#else
+  return policy::POLICY_DOMAIN_EXTENSIONS;
+#endif
 }
 
 void ManagedValueStoreCache::UpdatePolicyOnFILE(
@@ -346,19 +365,20 @@ PolicyValueStore* ManagedValueStoreCache::GetStoreFor(
     const std::string& extension_id) {
   DCHECK_CURRENTLY_ON(BrowserThread::FILE);
 
-  PolicyValueStoreMap::iterator it = store_map_.find(extension_id);
+  auto it = store_map_.find(extension_id);
   if (it != store_map_.end())
     return it->second.get();
 
   // Create the store now, and serve the cached policy until the PolicyService
   // sends updated values.
-  PolicyValueStore* store = new PolicyValueStore(
+  std::unique_ptr<PolicyValueStore> store(new PolicyValueStore(
       extension_id, observers_,
       storage_factory_->CreateSettingsStore(settings_namespace::MANAGED,
-                                            kManagedModelType, extension_id));
-  store_map_[extension_id] = make_linked_ptr(store);
+                                            kManagedModelType, extension_id)));
+  PolicyValueStore* raw_store = store.get();
+  store_map_[extension_id] = std::move(store);
 
-  return store;
+  return raw_store;
 }
 
 bool ManagedValueStoreCache::HasStore(const std::string& extension_id) const {

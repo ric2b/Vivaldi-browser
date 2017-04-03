@@ -16,8 +16,6 @@
 #include "url/url_canon.h"
 #include "url/url_util.h"
 
-using content::ResourceType;
-
 namespace prerender {
 
 namespace {
@@ -82,7 +80,7 @@ bool IsGoogleSearchResultURL(const GURL& url) {
   return (url.path_piece().empty() ||
           base::StartsWith(url.path_piece(), "/search",
                            base::CompareCase::SENSITIVE) ||
-          (url.path() == "/") ||
+          (url.path_piece() == "/") ||
           base::StartsWith(url.path_piece(), "/webhp",
                            base::CompareCase::SENSITIVE));
 }

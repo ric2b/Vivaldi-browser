@@ -9,6 +9,7 @@
 #include "base/base64.h"
 #include "base/strings/stringprintf.h"
 #include "base/time/time.h"
+#include "components/safe_browsing_db/v4_test_util.h"
 #include "net/base/escape.h"
 #include "net/http/http_request_headers.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -17,10 +18,6 @@ using base::Time;
 using base::TimeDelta;
 
 namespace {
-
-const char kClient[] = "unittest";
-const char kAppVer[] = "1.0";
-const char kKeyParam[] = "test_key_param";
 
 bool VectorContains(const std::vector<std::string>& data,
                     const std::string& str) {
@@ -32,12 +29,6 @@ bool VectorContains(const std::vector<std::string>& data,
 namespace safe_browsing {
 
 class V4ProtocolManagerUtilTest : public testing::Test {
- protected:
-  void PopulateV4ProtocolConfig(V4ProtocolConfig* config) {
-    config->client_name = kClient;
-    config->version = kAppVer;
-    config->key_param = kKeyParam;
-  }
 };
 
 TEST_F(V4ProtocolManagerUtilTest, TestBackOffLogic) {
@@ -115,13 +106,11 @@ TEST_F(V4ProtocolManagerUtilTest, TestBackOffLogic) {
 }
 
 TEST_F(V4ProtocolManagerUtilTest, TestGetRequestUrlAndUpdateHeaders) {
-  V4ProtocolConfig config;
-  PopulateV4ProtocolConfig(&config);
-
   net::HttpRequestHeaders headers;
   GURL gurl;
   V4ProtocolManagerUtil::GetRequestUrlAndHeaders("request_base64", "someMethod",
-                                                 config, &gurl, &headers);
+                                                 GetTestV4ProtocolConfig(),
+                                                 &gurl, &headers);
   std::string expectedUrl =
       "https://safebrowsing.googleapis.com/v4/someMethod?"
       "$req=request_base64&$ct=application/x-protobuf&key=test_key_param";
@@ -246,6 +235,37 @@ TEST_F(V4ProtocolManagerUtilTest, CanonicalizeUrl) {
     EXPECT_EQ(tests[i].expected_canonicalized_hostname, canonicalized_hostname);
     EXPECT_EQ(tests[i].expected_canonicalized_path, canonicalized_path);
     EXPECT_EQ(tests[i].expected_canonicalized_query, canonicalized_query);
+  }
+}
+
+TEST_F(V4ProtocolManagerUtilTest, TestIPAddressToEncodedIPV6) {
+  // To verify the test values, here's the python code:
+  // >> import socket, hashlib, binascii
+  // >> hashlib.sha1(socket.inet_pton(socket.AF_INET6, input)).digest() +
+  // chr(128)
+  // For example:
+  // >>> hashlib.sha1(socket.inet_pton(socket.AF_INET6,
+  // '::ffff:192.168.1.1')).digest() + chr(128)
+  // 'X\xf8\xa1\x17I\xe6Pl\xfd\xdb\xbb\xa0\x0c\x02\x9d#\n|\xe7\xcd\x80'
+  std::vector<std::tuple<bool, std::string, std::string>> test_cases = {
+      std::make_tuple(false, "", ""),
+      std::make_tuple(
+          true, "192.168.1.1",
+          "X\xF8\xA1\x17I\xE6Pl\xFD\xDB\xBB\xA0\f\x2\x9D#\n|\xE7\xCD\x80"),
+      std::make_tuple(
+          true, "::",
+          "\xE1)\xF2|Q\x3\xBC\\\xC4K\xCD\xF0\xA1^\x16\rDPf\xFF\x80")};
+  for (size_t i = 0; i < test_cases.size(); i++) {
+    DVLOG(1) << "Running case: " << i;
+    bool success = std::get<0>(test_cases[i]);
+    const auto& input = std::get<1>(test_cases[i]);
+    const auto& expected_output = std::get<2>(test_cases[i]);
+    std::string encoded_ip;
+    ASSERT_EQ(success, V4ProtocolManagerUtil::IPAddressToEncodedIPV6Hash(
+                           input, &encoded_ip));
+    if (success) {
+      ASSERT_EQ(expected_output, encoded_ip);
+    }
   }
 }
 

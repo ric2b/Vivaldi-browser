@@ -30,7 +30,6 @@ cr.define('site_list', function() {
           background_sync: [],
           camera: [],
           cookies: [],
-          fullscreen: [],
           geolocation: [
             {
               embeddingOrigin: 'https://foo-allow.com:443',
@@ -101,7 +100,6 @@ cr.define('site_list', function() {
           background_sync: [],
           camera: [],
           cookies: [],
-          fullscreen: [],
           geolocation: [
             {
               origin: 'https://foo.com',
@@ -139,7 +137,6 @@ cr.define('site_list', function() {
           background_sync: [],
           camera: [],
           cookies: [],
-          fullscreen: [],
           geolocation: [
             {
               embeddingOrigin: 'https://foo.com',
@@ -319,15 +316,17 @@ cr.define('site_list', function() {
         document.body.appendChild(testElement);
       });
 
+      teardown(function() {
+        closeActionMenu();
+      });
+
       /**
-       * Fetch the non-hidden menu items from the list.
-       * @param {!HTMLElement} parentElement
-       * @param {number} index The index of the child element (which site) to
-       *     fetch.
+       * Fetch the non-hidden menu items from the action menu.
        */
-      function getMenuItems(listContainer, index) {
-        return listContainer.children[index].querySelectorAll(
-            'iron-dropdown .dropdown-item:not([hidden])');
+      function getMenuItems() {
+        var menu = testElement.$$('dialog[is=cr-action-menu]');
+        assertTrue(!!menu);
+        return menu.querySelectorAll('button:not([hidden])');
       }
 
       /**
@@ -342,14 +341,19 @@ cr.define('site_list', function() {
         Polymer.dom.flush();
       }
 
+      /** Closes the action menu. */
+      function closeActionMenu() {
+        var menu = testElement.$$('dialog[is=cr-action-menu]');
+        if (menu.open)
+          menu.close();
+      }
+
       /**
        * Asserts the menu looks as expected.
        * @param {Array<string>} items The items expected to show in the menu.
-       * @param {!HTMLElement} parentElement The parent node to start looking
-       *     in.
        */
-      function assertMenu(items, parentElement) {
-        var menuItems = getMenuItems(parentElement.$.listContainer, 0);
+      function assertMenu(items) {
+        var menuItems = getMenuItems();
         assertEquals(items.length, menuItems.length);
         for (var i = 0; i < items.length; i++)
           assertEquals(items[i], menuItems[i].textContent.trim());
@@ -357,11 +361,11 @@ cr.define('site_list', function() {
 
       /**
        * Configures the test element for a particular category.
-       * @param {settings.ContentSettingsTypes} category The category to setup.
+       * @param {settings.ContentSettingsTypes} category The category to set up.
        * @param {settings.PermissionValues} subtype Type of list to use.
        * @param {Array<dictionary>} prefs The prefs to use.
        */
-      function setupCategory(category, subtype, prefs) {
+      function setUpCategory(category, subtype, prefs) {
         browserProxy.setPrefs(prefs);
         if (category == settings.ALL_SITES) {
           testElement.categorySubtype = settings.INVALID_CATEGORY_SUBTYPE;
@@ -380,7 +384,7 @@ cr.define('site_list', function() {
       }
 
       test('getExceptionList API used', function() {
-        setupCategory(settings.ContentSettingsTypes.GEOLOCATION,
+        setUpCategory(settings.ContentSettingsTypes.GEOLOCATION,
             settings.PermissionValues.ALLOW, prefsEmpty);
         return browserProxy.whenCalled('getExceptionList').then(
             function(contentType) {
@@ -390,7 +394,7 @@ cr.define('site_list', function() {
       });
 
       test('Empty list', function() {
-        setupCategory(settings.ContentSettingsTypes.GEOLOCATION,
+        setUpCategory(settings.ContentSettingsTypes.GEOLOCATION,
             settings.PermissionValues.ALLOW, prefsEmpty);
         return browserProxy.whenCalled('getExceptionList').then(
             function(contentType) {
@@ -401,21 +405,13 @@ cr.define('site_list', function() {
 
               assertEquals(
                   settings.PermissionValues.ALLOW, testElement.categorySubtype);
-              assertEquals('Allow - 0', testElement.$.header.innerText.trim());
 
               assertFalse(testElement.$.category.hidden);
-              browserProxy.resetResolver('getExceptionList');
-              testElement.categoryEnabled = false;
-              return browserProxy.whenCalled('getExceptionList');
-            }).then(function(contentType) {
-              assertFalse(testElement.$.category.hidden);
-              assertEquals('Exceptions - 0',
-                  testElement.$.header.innerText.trim());
             });
       });
 
       test('initial ALLOW state is correct', function() {
-        setupCategory(settings.ContentSettingsTypes.GEOLOCATION,
+        setUpCategory(settings.ContentSettingsTypes.GEOLOCATION,
             settings.PermissionValues.ALLOW, prefs);
         return browserProxy.whenCalled('getExceptionList').then(
             function(contentType) {
@@ -430,23 +426,13 @@ cr.define('site_list', function() {
               Polymer.dom.flush();  // Populates action menu.
               openActionMenu(0);
               assertMenu(['Block', 'Remove'], testElement);
-              assertEquals('Allow - 2', testElement.$.header.innerText.trim());
 
-              // Site list should show, no matter what category default is set
-              // to.
               assertFalse(testElement.$.category.hidden);
-              browserProxy.resetResolver('getExceptionList');
-              testElement.categoryEnabled = false;
-              return browserProxy.whenCalled('getExceptionList');
-            }).then(function(contentType) {
-              assertFalse(testElement.$.category.hidden);
-              assertEquals('Exceptions - 2',
-                  testElement.$.header.innerText.trim());
             });
       });
 
       test('initial BLOCK state is correct', function() {
-        setupCategory(settings.ContentSettingsTypes.GEOLOCATION,
+        setUpCategory(settings.ContentSettingsTypes.GEOLOCATION,
             settings.PermissionValues.BLOCK, prefs);
         return browserProxy.whenCalled('getExceptionList').then(
             function(contentType) {
@@ -462,20 +448,13 @@ cr.define('site_list', function() {
               Polymer.dom.flush();  // Populates action menu.
               openActionMenu(0);
               assertMenu(['Allow', 'Remove'], testElement);
-              assertEquals('Block - 2', testElement.$.header.innerText.trim());
 
-              // Site list should only show when category default is enabled.
               assertFalse(testElement.$.category.hidden);
-              browserProxy.resetResolver('getExceptionList');
-              testElement.categoryEnabled = false;
-              return browserProxy.whenCalled('getExceptionList');
-            }).then(function(contentType) {
-              assertTrue(testElement.$.category.hidden);
             });
       });
 
       test('initial SESSION ONLY state is correct', function() {
-        setupCategory(settings.ContentSettingsTypes.COOKIES,
+        setUpCategory(settings.ContentSettingsTypes.COOKIES,
             settings.PermissionValues.SESSION_ONLY, prefsSessionOnly);
         return browserProxy.whenCalled('getExceptionList').then(
             function(contentType) {
@@ -491,23 +470,13 @@ cr.define('site_list', function() {
               Polymer.dom.flush();  // Populates action menu.
               openActionMenu(0);
               assertMenu(['Allow', 'Block', 'Remove'], testElement);
-              assertEquals('Clear on exit - 1',
-                  testElement.$.header.innerText.trim());
 
-              // Site list should show, no matter what category default is set
-              // to.
               assertFalse(testElement.$.category.hidden);
-              browserProxy.resetResolver('getExceptionList');
-              testElement.categoryEnabled = false;
-              return browserProxy.whenCalled('getExceptionList');
-            }).then(function(contentType) {
-              assertFalse(testElement.$.category.hidden);
-              assertEquals('Clear on exit - 1', testElement.$.header.innerText);
             });
       });
 
       test('initial INCOGNITO BLOCK state is correct', function() {
-        setupCategory(settings.ContentSettingsTypes.COOKIES,
+        setUpCategory(settings.ContentSettingsTypes.COOKIES,
             settings.PermissionValues.BLOCK, prefsIncognito);
         return browserProxy.whenCalled('getExceptionList').then(
             function(contentType) {
@@ -523,11 +492,9 @@ cr.define('site_list', function() {
               openActionMenu(0);
               // 'Clear on exit' is visible as this is not an incognito item.
               assertMenu(['Allow', 'Clear on exit', 'Remove'], testElement);
-              assertEquals('Block - 1',
-                  testElement.$.header.innerText.trim());
 
               // Select 'Remove from menu'.
-              var menuItems = getMenuItems(testElement.$.listContainer, 0);
+              var menuItems = getMenuItems();
               assertTrue(!!menuItems);
               MockInteractions.tap(menuItems[2]);
               return browserProxy.whenCalled(
@@ -541,7 +508,7 @@ cr.define('site_list', function() {
       });
 
       test('initial INCOGNITO ALLOW state is correct', function() {
-        setupCategory(settings.ContentSettingsTypes.COOKIES,
+        setUpCategory(settings.ContentSettingsTypes.COOKIES,
             settings.PermissionValues.ALLOW, prefsIncognito);
         return browserProxy.whenCalled('getExceptionList').then(
             function(contentType) {
@@ -560,12 +527,11 @@ cr.define('site_list', function() {
               openActionMenu(0);
               // 'Clear on exit' is hidden for incognito items.
               assertMenu(['Block', 'Remove'], testElement);
-              assertEquals('Allow - 2',
-                  testElement.$.header.innerText.trim());
+              closeActionMenu();
 
               // Select 'Remove' from menu on 'foo.com'.
               openActionMenu(1);
-              var menuItems = getMenuItems(testElement.$.listContainer, 1);
+              var menuItems = getMenuItems();
               assertTrue(!!menuItems);
               MockInteractions.tap(menuItems[1]);
               return browserProxy.whenCalled(
@@ -579,10 +545,11 @@ cr.define('site_list', function() {
       });
 
       test('list items shown and clickable when data is present', function() {
-        setupCategory(settings.ContentSettingsTypes.GEOLOCATION,
+        setUpCategory(settings.ContentSettingsTypes.GEOLOCATION,
             settings.PermissionValues.ALLOW, prefs);
         return browserProxy.whenCalled('getExceptionList').then(
             function(contentType) {
+              testElement.enableSiteSettings_ = true;
               assertEquals(
                   settings.ContentSettingsTypes.GEOLOCATION, contentType);
 
@@ -607,15 +574,13 @@ cr.define('site_list', function() {
 
       test('Block list open when Allow list is empty', function() {
         // Prefs: One item in Block list, nothing in Allow list.
-        setupCategory(settings.ContentSettingsTypes.GEOLOCATION,
+        setUpCategory(settings.ContentSettingsTypes.GEOLOCATION,
             settings.PermissionValues.BLOCK, prefsOneDisabled);
         return browserProxy.whenCalled('getExceptionList').then(
             function(contentType) {
               assertEquals(
                   settings.ContentSettingsTypes.GEOLOCATION, contentType);
-
               assertFalse(testElement.$.category.hidden);
-              assertTrue(testElement.$.category.opened);
             }).then(function() {
               assertNotEquals(0, testElement.$.listContainer.offsetHeight);
             });
@@ -623,22 +588,20 @@ cr.define('site_list', function() {
 
       test('Block list closed when Allow list is not empty', function() {
         // Prefs: Items in both Block and Allow list.
-        setupCategory(settings.ContentSettingsTypes.GEOLOCATION,
+        setUpCategory(settings.ContentSettingsTypes.GEOLOCATION,
             settings.PermissionValues.BLOCK, prefs);
         return browserProxy.whenCalled('getExceptionList').then(
             function(contentType) {
               assertEquals(
                   settings.ContentSettingsTypes.GEOLOCATION, contentType);
-
               assertFalse(testElement.$.category.hidden);
-              assertFalse(testElement.$.category.opened);
               assertEquals(0, testElement.$.listContainer.offsetHeight);
             });
       });
 
       test('Allow list is always open (Block list empty)', function() {
         // Prefs: One item in Allow list, nothing in Block list.
-        setupCategory(settings.ContentSettingsTypes.GEOLOCATION,
+        setUpCategory(settings.ContentSettingsTypes.GEOLOCATION,
             settings.PermissionValues.ALLOW, prefsOneEnabled);
         return browserProxy.whenCalled('getExceptionList').then(
             function(contentType) {
@@ -646,7 +609,6 @@ cr.define('site_list', function() {
                   settings.ContentSettingsTypes.GEOLOCATION, contentType);
 
               assertFalse(testElement.$.category.hidden);
-              assertTrue(testElement.$.category.opened);
             }).then(function() {
               assertNotEquals(0, testElement.$.listContainer.offsetHeight);
             });
@@ -654,15 +616,13 @@ cr.define('site_list', function() {
 
       test('Allow list is always open (Block list non-empty)', function() {
         // Prefs: Items in both Block and Allow list.
-        setupCategory(settings.ContentSettingsTypes.GEOLOCATION,
+        setUpCategory(settings.ContentSettingsTypes.GEOLOCATION,
             settings.PermissionValues.ALLOW, prefs);
         return browserProxy.whenCalled('getExceptionList').then(
             function(contentType) {
               assertEquals(
                   settings.ContentSettingsTypes.GEOLOCATION, contentType);
-
               assertFalse(testElement.$.category.hidden);
-              assertTrue(testElement.$.category.opened);
             }).then(function() {
               assertNotEquals(0, testElement.$.listContainer.offsetHeight);
             });
@@ -670,33 +630,31 @@ cr.define('site_list', function() {
 
       test('Block list not hidden when empty', function() {
         // Prefs: One item in Allow list, nothing in Block list.
-        setupCategory(settings.ContentSettingsTypes.GEOLOCATION,
+        setUpCategory(settings.ContentSettingsTypes.GEOLOCATION,
             settings.PermissionValues.BLOCK, prefsOneEnabled);
         return browserProxy.whenCalled('getExceptionList').then(
             function(contentType) {
               assertEquals(
                   settings.ContentSettingsTypes.GEOLOCATION, contentType);
-
               assertFalse(testElement.$.category.hidden);
             });
       });
 
       test('Allow list not hidden when empty', function() {
         // Prefs: One item in Block list, nothing in Allow list.
-        setupCategory(settings.ContentSettingsTypes.GEOLOCATION,
+        setUpCategory(settings.ContentSettingsTypes.GEOLOCATION,
             settings.PermissionValues.ALLOW, prefsOneDisabled);
         return browserProxy.whenCalled('getExceptionList').then(
             function(contentType) {
               assertEquals(
                   settings.ContentSettingsTypes.GEOLOCATION, contentType);
-
               assertFalse(testElement.$.category.hidden);
             });
       });
 
       test('All sites category', function() {
         // Prefs: Multiple and overlapping sites.
-        setupCategory(settings.ALL_SITES, '', prefsVarious);
+        setUpCategory(settings.ALL_SITES, '', prefsVarious);
 
         return browserProxy.whenCalled('getExceptionList').then(
             function(contentType) {
@@ -705,6 +663,7 @@ cr.define('site_list', function() {
               var resolver = new PromiseResolver();
               testElement.async(resolver.resolve);
               return resolver.promise.then(function() {
+                testElement.enableSiteSettings_ = true;
                 // All Sites calls getExceptionList for all categories, starting
                 // with Cookies.
                 assertEquals(
@@ -713,7 +672,6 @@ cr.define('site_list', function() {
                 // Required for firstItem to be found below.
                 Polymer.dom.flush();
 
-                assertTrue(testElement.$.category.opened);
                 assertFalse(testElement.$.category.hidden);
                 // Validate that the sites gets populated from pre-canned prefs.
                 assertEquals(3, testElement.sites.length,
@@ -740,7 +698,7 @@ cr.define('site_list', function() {
 
       test('All sites mixed pattern and origin', function() {
         // Prefs: One site, represented as origin and pattern.
-        setupCategory(settings.ALL_SITES, '', prefsMixedOriginAndPattern);
+        setUpCategory(settings.ALL_SITES, '', prefsMixedOriginAndPattern);
 
         return browserProxy.whenCalled('getExceptionList').then(
             function(contentType) {
@@ -749,6 +707,7 @@ cr.define('site_list', function() {
               var resolver = new PromiseResolver();
               testElement.async(resolver.resolve);
               return resolver.promise.then(function() {
+                testElement.enableSiteSettings_ = true;
                 // All Sites calls getExceptionList for all categories, starting
                 // with Cookies.
                 assertEquals(
@@ -757,15 +716,21 @@ cr.define('site_list', function() {
                 // Required for firstItem to be found below.
                 Polymer.dom.flush();
 
-                assertTrue(testElement.$.category.opened);
                 assertFalse(testElement.$.category.hidden);
                 // Validate that the sites gets populated from pre-canned prefs.
-                assertEquals(1, testElement.sites.length,
-                    'If this fails with 2 instead of the expected 1, then ' +
-                    'the de-duping of sites is not working for site_list');
-                assertEquals(
-                    prefsMixedOriginAndPattern.exceptions.geolocation[0].origin,
-                    testElement.sites[0].originForDisplay);
+                // TODO(dschuyler): de-duping of sites is under discussion, so
+                // it is currently disabled. It should be enabled again or this
+                // code should be removed.
+                assertEquals(2, testElement.sites.length,
+                    'If this fails with 1 instead of the expected 2, then ' +
+                    'the de-duping of sites has been enabled for site_list.');
+                if (testElement.sites.length == 1) {
+                  assertEquals(
+                      prefsMixedOriginAndPattern.exceptions.
+                                                 geolocation[0].
+                                                 origin,
+                      testElement.sites[0].originForDisplay);
+                }
 
                 assertEquals(undefined, testElement.selectedOrigin);
                 // Validate that the sites are shown in UI and can be selected.
@@ -773,16 +738,20 @@ cr.define('site_list', function() {
                 var clickable = firstItem.querySelector('.middle');
                 assertNotEquals(undefined, clickable);
                 MockInteractions.tap(clickable);
-                assertEquals(
-                    prefsMixedOriginAndPattern.exceptions.geolocation[0].origin,
-                    testElement.selectedSite.originForDisplay);
+                if (testElement.sites.length == 1) {
+                  assertEquals(
+                      prefsMixedOriginAndPattern.exceptions.
+                                                 geolocation[0].
+                                                 origin,
+                      testElement.selectedSite.originForDisplay);
+                }
               });
             });
       });
 
       test('Mixed schemes (present and absent)', function() {
         // Prefs: One item with scheme and one without.
-        setupCategory(settings.ContentSettingsTypes.GEOLOCATION,
+        setUpCategory(settings.ContentSettingsTypes.GEOLOCATION,
             settings.PermissionValues.ALLOW, prefsMixedSchemes);
         return browserProxy.whenCalled('getExceptionList').then(
             function(contentType) {
@@ -792,13 +761,13 @@ cr.define('site_list', function() {
 
       test('Select menu item', function() {
         // Test for error: "Cannot read property 'origin' of undefined".
-        setupCategory(settings.ContentSettingsTypes.GEOLOCATION,
+        setUpCategory(settings.ContentSettingsTypes.GEOLOCATION,
             settings.PermissionValues.ALLOW, prefs);
         return browserProxy.whenCalled('getExceptionList').then(function(
             contentType) {
           Polymer.dom.flush();
           openActionMenu(0);
-          var menuItems = getMenuItems(testElement.$.listContainer, 0);
+          var menuItems = getMenuItems();
           assertTrue(!!menuItems);
           MockInteractions.tap(menuItems[0]);
           return browserProxy.whenCalled('setCategoryPermissionForOrigin');
@@ -806,7 +775,7 @@ cr.define('site_list', function() {
       });
 
       test('Chrome Extension scheme', function() {
-        setupCategory(settings.ContentSettingsTypes.JAVASCRIPT,
+        setUpCategory(settings.ContentSettingsTypes.JAVASCRIPT,
             settings.PermissionValues.BLOCK, prefsChromeExtension);
         return browserProxy.whenCalled('getExceptionList').then(function(
             contentType) {
@@ -814,7 +783,7 @@ cr.define('site_list', function() {
           openActionMenu(0);
           assertMenu(['Allow', 'Remove'], testElement);
 
-          var menuItems = getMenuItems(testElement.$.listContainer, 0);
+          var menuItems = getMenuItems();
           assertTrue(!!menuItems);
           MockInteractions.tap(menuItems[0]);  // Action: Allow.
           return browserProxy.whenCalled('setCategoryPermissionForOrigin');

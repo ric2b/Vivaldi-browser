@@ -86,7 +86,6 @@ class RecyclableCompositorMac : public ui::CompositorObserver {
   void OnCompositingStarted(ui::Compositor* compositor,
                             base::TimeTicks start_time) override {}
   void OnCompositingEnded(ui::Compositor* compositor) override {}
-  void OnCompositingAborted(ui::Compositor* compositor) override {}
   void OnCompositingLockStateChanged(ui::Compositor* compositor) override {}
   void OnCompositingShuttingDown(ui::Compositor* compositor) override {}
 
@@ -443,10 +442,6 @@ void BrowserCompositorMac::DelegatedFrameHostSendReclaimCompositorResources(
     const cc::ReturnedResourceArray& resources) {
   client_->BrowserCompositorMacSendReclaimCompositorResources(
       compositor_frame_sink_id, is_swap_ack, resources);
-}
-
-void BrowserCompositorMac::DelegatedFrameHostOnLostCompositorResources() {
-  client_->BrowserCompositorMacOnLostCompositorResources();
 }
 
 void BrowserCompositorMac::SetBeginFrameSource(cc::BeginFrameSource* source) {

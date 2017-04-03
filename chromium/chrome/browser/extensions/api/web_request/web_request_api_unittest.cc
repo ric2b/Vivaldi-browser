@@ -29,6 +29,7 @@
 #include "base/time/time.h"
 #include "chrome/browser/content_settings/cookie_settings_factory.h"
 #include "chrome/browser/extensions/event_router_forwarder.h"
+#include "chrome/browser/net/chrome_extensions_network_delegate.h"
 #include "chrome/browser/net/chrome_network_delegate.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
@@ -36,7 +37,7 @@
 #include "components/about_handler/about_protocol_handler.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/prefs/pref_member.h"
-#include "components/syncable_prefs/testing_pref_service_syncable.h"
+#include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "extensions/browser/api/web_request/upload_data_presenter.h"
@@ -125,19 +126,15 @@ bool HasWarning(const WarningSet& warnings,
 }
 
 // Parses the JSON data attached to the |message| and tries to return it.
-// |param| must outlive |out|. Returns NULL on failure.
+// |param| must outlive |out|.
 void GetPartOfMessageArguments(IPC::Message* message,
                                const base::DictionaryValue** out,
-                               ExtensionMsg_MessageInvoke::Param* param) {
-  ASSERT_EQ(ExtensionMsg_MessageInvoke::ID, message->type());
-  ASSERT_TRUE(ExtensionMsg_MessageInvoke::Read(message, param));
-  ASSERT_GE(std::get<3>(*param).GetSize(), 2u);
-  const base::Value* value = NULL;
-  ASSERT_TRUE(std::get<3>(*param).Get(1, &value));
-  const base::ListValue* list = NULL;
-  ASSERT_TRUE(value->GetAsList(&list));
-  ASSERT_EQ(1u, list->GetSize());
-  ASSERT_TRUE(list->GetDictionary(0, out));
+                               ExtensionMsg_DispatchEvent::Param* param) {
+  ASSERT_EQ(ExtensionMsg_DispatchEvent::ID, message->type());
+  ASSERT_TRUE(ExtensionMsg_DispatchEvent::Read(message, param));
+  const base::ListValue& list = std::get<1>(*param);
+  ASSERT_EQ(1u, list.GetSize());
+  ASSERT_TRUE(list.GetDictionary(0, out));
 }
 
 }  // namespace
@@ -167,7 +164,7 @@ class TestIPCSender : public IPC::Sender {
  private:
   // IPC::Sender
   bool Send(IPC::Message* message) override {
-    EXPECT_EQ(ExtensionMsg_MessageInvoke::ID, message->type());
+    EXPECT_EQ(ExtensionMsg_DispatchEvent::ID, message->type());
 
     EXPECT_FALSE(task_queue_.empty());
     base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
@@ -196,8 +193,7 @@ class ExtensionWebRequestTest : public testing::Test {
         &enable_referrers_, nullptr, nullptr, nullptr, nullptr,
         profile_.GetTestingPrefService());
     network_delegate_.reset(
-        new ChromeNetworkDelegate(event_router_.get(), &enable_referrers_,
-                                  metrics::UpdateUsagePrefCallbackType()));
+        new ChromeNetworkDelegate(event_router_.get(), &enable_referrers_));
     network_delegate_->set_profile(&profile_);
     network_delegate_->set_cookie_settings(
         CookieSettingsFactory::GetForProfile(&profile_).get());
@@ -299,8 +295,7 @@ TEST_F(ExtensionWebRequestTest, BlockingEventPrecedenceRedirect) {
     base::RunLoop().Run();
 
     EXPECT_TRUE(!request->is_pending());
-    EXPECT_EQ(net::URLRequestStatus::SUCCESS, request->status().status());
-    EXPECT_EQ(0, request->status().error());
+    EXPECT_EQ(net::OK, delegate_.request_status());
     EXPECT_EQ(redirect_url, request->url());
     EXPECT_EQ(2U, request->url_chain().size());
     EXPECT_EQ(0U, ipc_sender_.GetNumTasks());
@@ -350,8 +345,7 @@ TEST_F(ExtensionWebRequestTest, BlockingEventPrecedenceRedirect) {
     base::RunLoop().Run();
 
     EXPECT_TRUE(!request2->is_pending());
-    EXPECT_EQ(net::URLRequestStatus::SUCCESS, request2->status().status());
-    EXPECT_EQ(0, request2->status().error());
+    EXPECT_EQ(net::OK, delegate_.request_status());
     EXPECT_EQ(redirect_url, request2->url());
     EXPECT_EQ(2U, request2->url_chain().size());
     EXPECT_EQ(0U, ipc_sender_.GetNumTasks());
@@ -419,8 +413,7 @@ TEST_F(ExtensionWebRequestTest, BlockingEventPrecedenceCancel) {
   base::RunLoop().Run();
 
   EXPECT_TRUE(!request->is_pending());
-  EXPECT_EQ(net::URLRequestStatus::FAILED, request->status().status());
-  EXPECT_EQ(net::ERR_BLOCKED_BY_CLIENT, request->status().error());
+  EXPECT_EQ(net::ERR_BLOCKED_BY_CLIENT, delegate_.request_status());
   EXPECT_EQ(request_url, request->url());
   EXPECT_EQ(1U, request->url_chain().size());
   EXPECT_EQ(0U, ipc_sender_.GetNumTasks());
@@ -483,12 +476,11 @@ TEST_F(ExtensionWebRequestTest, SimulateChancelWhileBlocked) {
 
   request->Start();
   // request->Start() will have submitted OnBeforeRequest by the time we cancel.
-  request->Cancel();
+  int net_error = request->Cancel();
   run_loop.Run();
 
+  EXPECT_EQ(net::ERR_ABORTED, net_error);
   EXPECT_TRUE(!request->is_pending());
-  EXPECT_EQ(net::URLRequestStatus::CANCELED, request->status().status());
-  EXPECT_EQ(net::ERR_ABORTED, request->status().error());
   EXPECT_EQ(request_url, request->url());
   EXPECT_EQ(1U, request->url_chain().size());
   EXPECT_EQ(0U, ipc_sender_.GetNumTasks());
@@ -702,8 +694,8 @@ TEST_F(ExtensionWebRequestTest, AccessRequestBodyData) {
     SCOPED_TRACE(testing::Message("iteration number ") << test);
     EXPECT_NE(i, ipc_sender_.sent_end());
     message = (i++)->get();
-    const base::DictionaryValue* details;
-    ExtensionMsg_MessageInvoke::Param param;
+    const base::DictionaryValue* details = nullptr;
+    ExtensionMsg_DispatchEvent::Param param;
     GetPartOfMessageArguments(message, &details, &param);
     ASSERT_TRUE(details != NULL);
     const base::Value* result = NULL;
@@ -794,7 +786,7 @@ TEST_F(ExtensionWebRequestTest, MinimalAccessRequestBodyData) {
     EXPECT_NE(i, ipc_sender_.sent_end());
     IPC::Message* message = i->get();
     const base::DictionaryValue* details = nullptr;
-    ExtensionMsg_MessageInvoke::Param param;
+    ExtensionMsg_DispatchEvent::Param param;
     GetPartOfMessageArguments(message, &details, &param);
     ASSERT_TRUE(details != nullptr);
     EXPECT_EQ(kExpected[test], details->HasKey(keys::kRequestBodyKey));
@@ -850,8 +842,8 @@ TEST_F(ExtensionWebRequestTest, NoAccessRequestBodyData) {
     SCOPED_TRACE(testing::Message("iteration number ") << test);
     EXPECT_NE(i, ipc_sender_.sent_end());
     IPC::Message* message = i->get();
-    const base::DictionaryValue* details = NULL;
-    ExtensionMsg_MessageInvoke::Param param;
+    const base::DictionaryValue* details = nullptr;
+    ExtensionMsg_DispatchEvent::Param param;
     GetPartOfMessageArguments(message, &details, &param);
     ASSERT_TRUE(details != NULL);
     EXPECT_FALSE(details->HasKey(keys::kRequestBodyKey));
@@ -1007,8 +999,7 @@ class ExtensionWebRequestHeaderModificationTest
         &enable_referrers_, nullptr, nullptr, nullptr, nullptr,
         profile_.GetTestingPrefService());
     network_delegate_.reset(
-        new ChromeNetworkDelegate(event_router_.get(), &enable_referrers_,
-                                  metrics::UpdateUsagePrefCallbackType()));
+        new ChromeNetworkDelegate(event_router_.get(), &enable_referrers_));
     network_delegate_->set_profile(&profile_);
     network_delegate_->set_cookie_settings(
         CookieSettingsFactory::GetForProfile(&profile_).get());
@@ -1121,7 +1112,7 @@ TEST_P(ExtensionWebRequestHeaderModificationTest, TestModifications) {
 
   EXPECT_TRUE(!request->is_pending());
   // This cannot succeed as we send the request to a server that does not exist.
-  EXPECT_EQ(net::URLRequestStatus::FAILED, request->status().status());
+  EXPECT_EQ(net::ERR_NAME_NOT_RESOLVED, delegate_.request_status());
   EXPECT_EQ(request_url, request->url());
   EXPECT_EQ(1U, request->url_chain().size());
   EXPECT_EQ(0U, ipc_sender_.GetNumTasks());
@@ -1141,31 +1132,27 @@ TEST_P(ExtensionWebRequestHeaderModificationTest, TestModifications) {
   TestIPCSender::SentMessages::const_iterator i;
   for (i = ipc_sender_.sent_begin(); i != ipc_sender_.sent_end(); ++i) {
     IPC::Message* message = i->get();
-    if (ExtensionMsg_MessageInvoke::ID != message->type())
+    if (ExtensionMsg_DispatchEvent::ID != message->type())
       continue;
-    ExtensionMsg_MessageInvoke::Param message_tuple;
-    ExtensionMsg_MessageInvoke::Read(message, &message_tuple);
-    base::ListValue& args = std::get<3>(message_tuple);
+    ExtensionMsg_DispatchEvent::Param message_tuple;
+    ExtensionMsg_DispatchEvent::Read(message, &message_tuple);
+    const ExtensionMsg_DispatchEvent_Params& params =
+        std::get<0>(message_tuple);
 
-    std::string event_name;
-    if (!args.GetString(0, &event_name) ||
-        event_name !=  std::string(keys::kOnSendHeadersEvent) + "/3") {
+    if (params.event_name != std::string(keys::kOnSendHeadersEvent) + "/3")
       continue;
-    }
 
-    base::ListValue* event_arg = NULL;
-    ASSERT_TRUE(args.GetList(1, &event_arg));
+    const base::ListValue& event_args = std::get<1>(message_tuple);
+    const base::DictionaryValue* event_arg_dict = nullptr;
+    ASSERT_TRUE(event_args.GetDictionary(0, &event_arg_dict));
 
-    base::DictionaryValue* event_arg_dict = NULL;
-    ASSERT_TRUE(event_arg->GetDictionary(0, &event_arg_dict));
-
-    base::ListValue* request_headers = NULL;
+    const base::ListValue* request_headers = nullptr;
     ASSERT_TRUE(event_arg_dict->GetList(keys::kRequestHeadersKey,
                                         &request_headers));
 
     net::HttpRequestHeaders observed_headers;
     for (size_t j = 0; j < request_headers->GetSize(); ++j) {
-      base::DictionaryValue* header = NULL;
+      const base::DictionaryValue* header = nullptr;
       ASSERT_TRUE(request_headers->GetDictionary(j, &header));
       std::string key;
       std::string value;

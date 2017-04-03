@@ -6,7 +6,6 @@ package org.chromium.chrome.browser.media.remote;
 
 import android.app.Dialog;
 import android.graphics.Rect;
-import android.os.Environment;
 import android.os.StrictMode;
 import android.support.v4.app.DialogFragment;
 import android.support.v4.app.FragmentManager;
@@ -138,8 +137,7 @@ public abstract class CastTestBase extends ChromeActivityTestCaseBase<ChromeActi
                 StrictMode.allowThreadDiskWrites();
             }
         });
-        mTestServer = EmbeddedTestServer.createAndStartFileServer(
-                getInstrumentation().getContext(), Environment.getExternalStorageDirectory());
+        mTestServer = EmbeddedTestServer.createAndStartServer(getInstrumentation().getContext());
     }
 
     @Override
@@ -561,9 +559,8 @@ public abstract class CastTestBase extends ChromeActivityTestCaseBase<ChromeActi
         int clickX =
                 (int) core.getRenderCoordinates().fromLocalCssToPix(
                         ((float) (rect.left + rect.right)) / 2);
-        int clickY =
-                (int) core.getRenderCoordinates().fromLocalCssToPix(
-                        ((float) (rect.top + rect.bottom)) / 2)
+        int clickY = (int) core.getRenderCoordinates().fromLocalCssToPix(
+                             ((float) (rect.top + rect.bottom)) / 2)
                 + core.getTopControlsHeightPix();
         // Click using a virtual mouse, since a touch may result in a disambiguation pop-up.
         RouterTestUtils.mouseSingleClickView(getInstrumentation(), tab.getView(), clickX, clickY);

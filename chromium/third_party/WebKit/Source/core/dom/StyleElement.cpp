@@ -148,7 +148,7 @@ StyleElement::ProcessingResult StyleElement::createSheet(Element& element,
   bool passesContentSecurityPolicyChecks =
       shouldBypassMainWorldCSP(element) ||
       csp->allowStyleWithHash(text, ContentSecurityPolicy::InlineType::Block) ||
-      csp->allowInlineStyle(document.url(),
+      csp->allowInlineStyle(&element, document.url(),
                             element.fastGetAttribute(HTMLNames::nonceAttr),
                             m_startPosition.m_line, text);
 
@@ -161,8 +161,8 @@ StyleElement::ProcessingResult StyleElement::createSheet(Element& element,
   if (isCSS(element, type) && passesContentSecurityPolicyChecks) {
     MediaQuerySet* mediaQueries = MediaQuerySet::create(media());
 
-    MediaQueryEvaluator screenEval("screen", true);
-    MediaQueryEvaluator printEval("print", true);
+    MediaQueryEvaluator screenEval("screen");
+    MediaQueryEvaluator printEval("print");
     if (screenEval.eval(mediaQueries) || printEval.eval(mediaQueries)) {
       m_loading = true;
       TextPosition startPosition =

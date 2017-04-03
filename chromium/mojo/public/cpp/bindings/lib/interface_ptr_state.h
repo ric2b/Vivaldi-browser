@@ -331,6 +331,17 @@ class InterfacePtrState<Interface, true> {
     router_->EnableTestingMode();
   }
 
+  void ForwardMessage(Message message) {
+    ConfigureProxyIfNecessary();
+    endpoint_client_->Accept(&message);
+  }
+
+  void ForwardMessageWithResponder(Message message,
+                                   std::unique_ptr<MessageReceiver> responder) {
+    ConfigureProxyIfNecessary();
+    endpoint_client_->AcceptWithResponder(&message, responder.release());
+  }
+
  private:
   using Proxy = typename Interface::Proxy_;
 
@@ -361,8 +372,8 @@ class InterfacePtrState<Interface, true> {
         // will not be used.
         0u));
     proxy_.reset(new Proxy(endpoint_client_.get()));
-    proxy_->serialization_context()->group_controller =
-        endpoint_client_->group_controller();
+    if (Interface::PassesAssociatedKinds_)
+      proxy_->set_group_controller(endpoint_client_->group_controller());
   }
 
   void OnQueryVersion(const base::Callback<void(uint32_t)>& callback,

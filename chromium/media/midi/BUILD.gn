@@ -6,6 +6,7 @@ import("//build/config/android/config.gni")
 import("//build/config/features.gni")
 import("//build/config/ui.gni")
 import("//media/media_options.gni")
+import("//mojo/public/tools/bindings/mojom.gni")
 import("//testing/test.gni")
 
 if (is_android) {
@@ -50,30 +51,32 @@ if (is_android) {
     ]
 
     java_files = [
-      "java/src/org/chromium/media/midi/MidiDeviceAndroid.java",
-      "java/src/org/chromium/media/midi/MidiInputPortAndroid.java",
-      "java/src/org/chromium/media/midi/MidiManagerAndroid.java",
-      "java/src/org/chromium/media/midi/MidiOutputPortAndroid.java",
-      "java/src/org/chromium/media/midi/UsbMidiDeviceAndroid.java",
-      "java/src/org/chromium/media/midi/UsbMidiDeviceFactoryAndroid.java",
+      "java/src/org/chromium/midi/MidiDeviceAndroid.java",
+      "java/src/org/chromium/midi/MidiInputPortAndroid.java",
+      "java/src/org/chromium/midi/MidiManagerAndroid.java",
+      "java/src/org/chromium/midi/MidiOutputPortAndroid.java",
+      "java/src/org/chromium/midi/UsbMidiDeviceAndroid.java",
+      "java/src/org/chromium/midi/UsbMidiDeviceFactoryAndroid.java",
     ]
   }
 
   generate_jni("midi_jni_headers") {
     sources = [
-      "java/src/org/chromium/media/midi/MidiDeviceAndroid.java",
-      "java/src/org/chromium/media/midi/MidiInputPortAndroid.java",
-      "java/src/org/chromium/media/midi/MidiManagerAndroid.java",
-      "java/src/org/chromium/media/midi/MidiOutputPortAndroid.java",
-      "java/src/org/chromium/media/midi/UsbMidiDeviceAndroid.java",
-      "java/src/org/chromium/media/midi/UsbMidiDeviceFactoryAndroid.java",
+      "java/src/org/chromium/midi/MidiDeviceAndroid.java",
+      "java/src/org/chromium/midi/MidiInputPortAndroid.java",
+      "java/src/org/chromium/midi/MidiManagerAndroid.java",
+      "java/src/org/chromium/midi/MidiOutputPortAndroid.java",
+      "java/src/org/chromium/midi/UsbMidiDeviceAndroid.java",
+      "java/src/org/chromium/midi/UsbMidiDeviceFactoryAndroid.java",
     ]
-    jni_package = "media/midi"
+    jni_package = "midi"
   }
 }
 
 component("midi") {
   sources = [
+    "message_util.cc",
+    "message_util.h",
     "midi_export.h",
     "midi_manager.cc",
     "midi_manager.h",
@@ -81,8 +84,6 @@ component("midi") {
     "midi_manager_mac.h",
     "midi_message_queue.cc",
     "midi_message_queue.h",
-    "midi_message_util.cc",
-    "midi_message_util.h",
     "midi_port_info.cc",
     "midi_port_info.h",
     "midi_scheduler.cc",
@@ -95,6 +96,7 @@ component("midi") {
 
   defines = [ "MIDI_IMPLEMENTATION" ]
   deps = [
+    ":mojo",
     "//base",
   ]
   libs = []
@@ -167,12 +169,18 @@ component("midi") {
   }
 }
 
+mojom("mojo") {
+  sources = [
+    "midi_service.mojom",
+  ]
+}
+
 test("midi_unittests") {
   sources = [
+    "message_util_unittest.cc",
     "midi_manager_unittest.cc",
     "midi_manager_usb_unittest.cc",
     "midi_message_queue_unittest.cc",
-    "midi_message_util_unittest.cc",
     "usb_midi_descriptor_parser_unittest.cc",
     "usb_midi_input_stream_unittest.cc",
     "usb_midi_output_stream_unittest.cc",

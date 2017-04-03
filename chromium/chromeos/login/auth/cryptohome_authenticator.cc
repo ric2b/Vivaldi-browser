@@ -25,11 +25,11 @@
 #include "chromeos/login/auth/key.h"
 #include "chromeos/login/auth/user_context.h"
 #include "chromeos/login/login_state.h"
-#include "chromeos/login/user_names.h"
 #include "chromeos/login_event_recorder.h"
 #include "components/device_event_log/device_event_log.h"
 #include "components/signin/core/account_id/account_id.h"
 #include "components/user_manager/known_user.h"
+#include "components/user_manager/user_names.h"
 #include "components/user_manager/user_type.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
 
@@ -239,7 +239,7 @@ void EnsureCryptohomeMigratedToGaiaId(
     const std::string& cryptohome_id_from =
         attempt->user_context.GetAccountId().GetUserEmail();  // Migrated
     const std::string cryptohome_id_to =
-        attempt->user_context.GetAccountId().GetGaiaIdKey();
+        attempt->user_context.GetAccountId().GetAccountIdKey();
 
     cryptohome::HomedirMethods::GetInstance()->RenameCryptohome(
         cryptohome::Identification::FromString(cryptohome_id_from),
@@ -555,11 +555,12 @@ void CryptohomeAuthenticator::LoginAsSupervisedUser(
 
 void CryptohomeAuthenticator::LoginOffTheRecord() {
   DCHECK(task_runner_->RunsTasksOnCurrentThread());
-  current_state_.reset(new AuthAttemptState(
-      UserContext(user_manager::USER_TYPE_GUEST, login::GuestAccountId()),
-      false,    // unlock
-      false,    // online_complete
-      false));  // user_is_new
+  current_state_.reset(
+      new AuthAttemptState(UserContext(user_manager::USER_TYPE_GUEST,
+                                       user_manager::GuestAccountId()),
+                           false,    // unlock
+                           false,    // online_complete
+                           false));  // user_is_new
   remove_user_data_on_failure_ = false;
   ephemeral_mount_attempted_ = true;
   MountGuestAndGetHash(current_state_->AsWeakPtr(),
@@ -589,7 +590,7 @@ void CryptohomeAuthenticator::LoginAsKioskAccount(
   DCHECK(task_runner_->RunsTasksOnCurrentThread());
 
   const AccountId& account_id =
-      use_guest_mount ? login::GuestAccountId() : app_account_id;
+      use_guest_mount ? user_manager::GuestAccountId() : app_account_id;
   current_state_.reset(new AuthAttemptState(
       UserContext(user_manager::USER_TYPE_KIOSK_APP, account_id),
       false,    // unlock
@@ -606,6 +607,22 @@ void CryptohomeAuthenticator::LoginAsKioskAccount(
     MountGuestAndGetHash(current_state_->AsWeakPtr(),
                          scoped_refptr<CryptohomeAuthenticator>(this));
   }
+}
+
+void CryptohomeAuthenticator::LoginAsArcKioskAccount(
+    const AccountId& app_account_id) {
+  DCHECK(task_runner_->RunsTasksOnCurrentThread());
+
+  current_state_.reset(new AuthAttemptState(
+      UserContext(user_manager::USER_TYPE_ARC_KIOSK_APP, app_account_id),
+      false,    // unlock
+      false,    // online_complete
+      false));  // user_is_new
+
+  remove_user_data_on_failure_ = true;
+  MountPublic(current_state_->AsWeakPtr(),
+              scoped_refptr<CryptohomeAuthenticator>(this),
+              cryptohome::CREATE_IF_MISSING);
 }
 
 void CryptohomeAuthenticator::OnAuthSuccess() {
@@ -722,7 +739,7 @@ void CryptohomeAuthenticator::Resolve() {
                      AuthFailure(AuthFailure::COULD_NOT_MOUNT_CRYPTOHOME)));
       break;
     case FAILED_REMOVE:
-      // In this case, we tried to remove the user's old cryptohome at her
+      // In this case, we tried to remove the user's old cryptohome at their
       // request, and the remove failed.
       remove_user_data_on_failure_ = false;
       task_runner_->PostTask(
@@ -911,7 +928,7 @@ CryptohomeAuthenticator::ResolveCryptohomeFailureState() {
     if (current_state_->cryptohome_code() ==
         cryptohome::MOUNT_ERROR_KEY_FAILURE) {
       // If we tried a mount but they used the wrong key, we may need to
-      // ask the user for her old password.  We'll only know once we've
+      // ask the user for their old password.  We'll only know once we've
       // done the online check.
       return POSSIBLE_PW_CHANGE;
     }

@@ -122,19 +122,6 @@ bool IsHiddenLoginItem(LSSharedFileListItemRef item) {
 
 }  // namespace
 
-std::string PathFromFSRef(const FSRef& ref) {
-  ScopedCFTypeRef<CFURLRef> url(
-      CFURLCreateFromFSRef(kCFAllocatorDefault, &ref));
-  NSString *path_string = [(NSURL *)url.get() path];
-  return [path_string fileSystemRepresentation];
-}
-
-bool FSRefFromPath(const std::string& path, FSRef* ref) {
-  OSStatus status = FSPathMakeRef((const UInt8*)path.c_str(),
-                                  ref, nil);
-  return status == noErr;
-}
-
 CGColorSpaceRef GetGenericRGBColorSpace() {
   // Leaked. That's OK, it's scoped to the lifetime of the application.
   static CGColorSpaceRef g_color_space_generic_rgb(
@@ -309,11 +296,21 @@ bool WasLaunchedAsLoginOrResumeItem() {
   ProcessInfoRec info = {};
   info.processInfoLength = sizeof(info);
 
+// GetProcessInformation has been deprecated since macOS 10.9, but there is no
+// replacement that provides the information we need. See
+// https://crbug.com/650854.
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
   if (GetProcessInformation(&psn, &info) == noErr) {
+#pragma clang diagnostic pop
     ProcessInfoRec parent_info = {};
     parent_info.processInfoLength = sizeof(parent_info);
-    if (GetProcessInformation(&info.processLauncher, &parent_info) == noErr)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+    if (GetProcessInformation(&info.processLauncher, &parent_info) == noErr) {
+#pragma clang diagnostic pop
       return parent_info.processSignature == 'lgnw';
+    }
   }
   return false;
 }

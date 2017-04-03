@@ -36,6 +36,10 @@ namespace chromeos {
 
 namespace {
 
+// TODO(hidehiko): Share the constant between Chrome and ChromeOS.
+constexpr char kArcLowDiskError[] =
+    "org.chromium.SessionManagerInterface.LowFreeDisk";
+
 // Returns a location for |file| that is specific to the given |cryptohome_id|.
 // These paths will be relative to DIR_USER_POLICY_KEYS, and can be used only
 // to store stub files.
@@ -101,7 +105,8 @@ class SessionManagerClientImpl : public SessionManagerClient {
   void EmitLoginPromptVisible() override {
     SimpleMethodCallToSessionManager(
         login_manager::kSessionManagerEmitLoginPromptVisible);
-    FOR_EACH_OBSERVER(Observer, observers_, EmitLoginPromptVisibleCalled());
+    for (auto& observer : observers_)
+      observer.EmitLoginPromptVisibleCalled();
   }
 
   void RestartJob(int socket_fd,
@@ -310,18 +315,19 @@ class SessionManagerClientImpl : public SessionManagerClient {
 
   void StartArcInstance(const cryptohome::Identification& cryptohome_id,
                         bool disable_boot_completed_broadcast,
-                        const ArcCallback& callback) override {
+                        const StartArcInstanceCallback& callback) override {
     dbus::MethodCall method_call(
         login_manager::kSessionManagerInterface,
         login_manager::kSessionManagerStartArcInstance);
     dbus::MessageWriter writer(&method_call);
     writer.AppendString(cryptohome_id.id());
     writer.AppendBool(disable_boot_completed_broadcast);
-    session_manager_proxy_->CallMethod(
+    session_manager_proxy_->CallMethodWithErrorCallback(
         &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
-        base::Bind(&SessionManagerClientImpl::OnArcMethod,
-                   weak_ptr_factory_.GetWeakPtr(),
-                   login_manager::kSessionManagerStartArcInstance, callback));
+        base::Bind(&SessionManagerClientImpl::OnStartArcInstanceSucceeded,
+                   weak_ptr_factory_.GetWeakPtr(), callback),
+        base::Bind(&SessionManagerClientImpl::OnStartArcInstanceFailed,
+                   weak_ptr_factory_.GetWeakPtr(), callback));
   }
 
   void StopArcInstance(const ArcCallback& callback) override {
@@ -595,7 +601,8 @@ class SessionManagerClientImpl : public SessionManagerClient {
     }
     const bool success = base::StartsWith(result_string, "success",
                                           base::CompareCase::INSENSITIVE_ASCII);
-    FOR_EACH_OBSERVER(Observer, observers_, OwnerKeySet(success));
+    for (auto& observer : observers_)
+      observer.OwnerKeySet(success);
   }
 
   // Called when the property change complete signal is received.
@@ -608,17 +615,20 @@ class SessionManagerClientImpl : public SessionManagerClient {
     }
     const bool success = base::StartsWith(result_string, "success",
                                           base::CompareCase::INSENSITIVE_ASCII);
-    FOR_EACH_OBSERVER(Observer, observers_, PropertyChangeComplete(success));
+    for (auto& observer : observers_)
+      observer.PropertyChangeComplete(success);
   }
 
   void ScreenIsLockedReceived(dbus::Signal* signal) {
     screen_is_locked_ = true;
-    FOR_EACH_OBSERVER(Observer, observers_, ScreenIsLocked());
+    for (auto& observer : observers_)
+      observer.ScreenIsLocked();
   }
 
   void ScreenIsUnlockedReceived(dbus::Signal* signal) {
     screen_is_locked_ = false;
-    FOR_EACH_OBSERVER(Observer, observers_, ScreenIsUnlocked());
+    for (auto& observer : observers_)
+      observer.ScreenIsUnlocked();
   }
 
   void ArcInstanceStoppedReceived(dbus::Signal* signal) {
@@ -628,7 +638,8 @@ class SessionManagerClientImpl : public SessionManagerClient {
       LOG(ERROR) << "Invalid signal: " << signal->ToString();
       return;
     }
-    FOR_EACH_OBSERVER(Observer, observers_, ArcInstanceStopped(clean));
+    for (auto& observer : observers_)
+      observer.ArcInstanceStopped(clean);
   }
 
   // Called when the object is connected to the signal.
@@ -722,6 +733,22 @@ class SessionManagerClientImpl : public SessionManagerClient {
       callback.Run(success);
   }
 
+  void OnStartArcInstanceSucceeded(const StartArcInstanceCallback& callback,
+                                   dbus::Response* response) {
+    if (!callback.is_null())
+      callback.Run(StartArcInstanceResult::SUCCESS);
+  }
+
+  void OnStartArcInstanceFailed(const StartArcInstanceCallback& callback,
+                                dbus::ErrorResponse* response) {
+    LOG(ERROR) << "Failed to call StartArcInstance: "
+               << (response ? response->ToString() : "(null)");
+    if (!callback.is_null())
+      callback.Run(response && response->GetErrorName() == kArcLowDiskError
+                       ? StartArcInstanceResult::LOW_FREE_DISK_SPACE
+                       : StartArcInstanceResult::UNKNOWN_ERROR);
+  }
+
   dbus::ObjectProxy* session_manager_proxy_;
   std::unique_ptr<BlockingMethodCaller> blocking_method_caller_;
   base::ObserverList<Observer> observers_;
@@ -773,11 +800,13 @@ class SessionManagerClientStubImpl : public SessionManagerClient {
   }
   void NotifyLockScreenShown() override {
     screen_is_locked_ = true;
-    FOR_EACH_OBSERVER(Observer, observers_, ScreenIsLocked());
+    for (auto& observer : observers_)
+      observer.ScreenIsLocked();
   }
   void NotifyLockScreenDismissed() override {
     screen_is_locked_ = false;
-    FOR_EACH_OBSERVER(Observer, observers_, ScreenIsUnlocked());
+    for (auto& observer : observers_)
+      observer.ScreenIsUnlocked();
   }
   void RetrieveActiveSessions(const ActiveSessionsCallback& callback) override {
   }
@@ -898,8 +927,8 @@ class SessionManagerClientStubImpl : public SessionManagerClient {
 
   void StartArcInstance(const cryptohome::Identification& cryptohome_id,
                         bool disable_boot_completed_broadcast,
-                        const ArcCallback& callback) override {
-    callback.Run(false);
+                        const StartArcInstanceCallback& callback) override {
+    callback.Run(StartArcInstanceResult::UNKNOWN_ERROR);
   }
 
   void PrioritizeArcInstance(const ArcCallback& callback) override {

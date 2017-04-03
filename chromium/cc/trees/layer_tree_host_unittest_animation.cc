@@ -44,20 +44,25 @@ class LayerTreeHostAnimationTest : public LayerTreeTest {
   }
 
   void AttachPlayersToTimeline() {
-    layer_tree()->animation_host()->AddAnimationTimeline(timeline_.get());
+    animation_host()->AddAnimationTimeline(timeline_.get());
     layer_tree()->SetElementIdsForTesting();
     timeline_->AttachPlayer(player_.get());
     timeline_->AttachPlayer(player_child_.get());
   }
 
   void GetImplTimelineAndPlayerByID(const LayerTreeHostImpl& host_impl) {
-    AnimationHost* animation_host_impl = host_impl.animation_host();
+    AnimationHost* animation_host_impl = GetImplAnimationHost(&host_impl);
     timeline_impl_ = animation_host_impl->GetTimelineById(timeline_id_);
     EXPECT_TRUE(timeline_impl_);
     player_impl_ = timeline_impl_->GetPlayerById(player_id_);
     EXPECT_TRUE(player_impl_);
     player_child_impl_ = timeline_impl_->GetPlayerById(player_child_id_);
     EXPECT_TRUE(player_child_impl_);
+  }
+
+  AnimationHost* GetImplAnimationHost(
+      const LayerTreeHostImpl* host_impl) const {
+    return static_cast<AnimationHost*>(host_impl->mutator_host());
   }
 
  protected:
@@ -245,7 +250,7 @@ class LayerTreeHostAnimationTestAnimationsGetDeleted
 
   void AnimateLayers(LayerTreeHostImpl* host_impl,
                      base::TimeTicks monotonic_time) override {
-    bool have_animations = !host_impl->animation_host()
+    bool have_animations = !GetImplAnimationHost(host_impl)
                                 ->active_element_animations_for_testing()
                                 .empty();
     if (!started_animating_ && have_animations) {
@@ -304,7 +309,7 @@ class LayerTreeHostAnimationTestAddAnimationWithTimingFunction
       return;
 
     scoped_refptr<AnimationTimeline> timeline_impl =
-        host_impl->animation_host()->GetTimelineById(timeline_id_);
+        GetImplAnimationHost(host_impl)->GetTimelineById(timeline_id_);
     scoped_refptr<AnimationPlayer> player_child_impl =
         timeline_impl->GetPlayerById(player_child_id_);
 
@@ -369,7 +374,7 @@ class LayerTreeHostAnimationTestSynchronizeAnimationStartTimes
   void UpdateAnimationState(LayerTreeHostImpl* impl_host,
                             bool has_unfinished_animation) override {
     scoped_refptr<AnimationTimeline> timeline_impl =
-        impl_host->animation_host()->GetTimelineById(timeline_id_);
+        GetImplAnimationHost(impl_host)->GetTimelineById(timeline_id_);
     scoped_refptr<AnimationPlayer> player_child_impl =
         timeline_impl->GetPlayerById(player_child_id_);
 
@@ -446,7 +451,7 @@ class LayerTreeHostAnimationTestDoNotSkipLayersWithAnimatedOpacity
 
   void DidActivateTreeOnThread(LayerTreeHostImpl* host_impl) override {
     scoped_refptr<AnimationTimeline> timeline_impl =
-        host_impl->animation_host()->GetTimelineById(timeline_id_);
+        GetImplAnimationHost(host_impl)->GetTimelineById(timeline_id_);
     scoped_refptr<AnimationPlayer> player_impl =
         timeline_impl->GetPlayerById(player_id_);
 
@@ -795,20 +800,16 @@ class LayerTreeHostAnimationTestScrollOffsetAnimationTakeover
     if (layer_tree_host()->SourceFrameNumber() == 1) {
       // Add an update after the first commit to trigger the animation takeover
       // path.
-      layer_tree()
-          ->animation_host()
-          ->scroll_offset_animations()
-          .AddTakeoverUpdate(scroll_layer_->element_id());
-      EXPECT_TRUE(layer_tree()
-                      ->animation_host()
-                      ->scroll_offset_animations()
-                      .HasUpdatesForTesting());
+      animation_host()->scroll_offset_animations().AddTakeoverUpdate(
+          scroll_layer_->element_id());
+      EXPECT_TRUE(
+          animation_host()->scroll_offset_animations().HasUpdatesForTesting());
     }
   }
 
   void WillCommitCompleteOnThread(LayerTreeHostImpl* host_impl) override {
     if (host_impl->sync_tree()->source_frame_number() == 0) {
-      host_impl->animation_host()->ImplOnlyScrollAnimationCreate(
+      GetImplAnimationHost(host_impl)->ImplOnlyScrollAnimationCreate(
           scroll_layer_->element_id(), gfx::ScrollOffset(650.f, 750.f),
           gfx::ScrollOffset(10, 20), base::TimeDelta());
     }
@@ -854,14 +855,11 @@ class LayerTreeHostAnimationTestScrollOffsetAnimationAdjusted
       const LayerTreeHostImpl& host_impl,
       scoped_refptr<FakePictureLayer> layer) const {
     scoped_refptr<ElementAnimations> element_animations =
-        host_impl.animation_host()->GetElementAnimationsForElementId(
-            layer->element_id());
+        GetImplAnimationHost(&host_impl)
+            ->GetElementAnimationsForElementId(layer->element_id());
     DCHECK(element_animations);
     DCHECK(element_animations->players_list().might_have_observers());
-
-    ElementAnimations::PlayersList::Iterator it(
-        &element_animations->players_list());
-    AnimationPlayer* player = it.GetNext();
+    AnimationPlayer* player = &*element_animations->players_list().begin();
     DCHECK(player);
     return *player;
   }
@@ -872,21 +870,14 @@ class LayerTreeHostAnimationTestScrollOffsetAnimationAdjusted
     if (layer_tree_host()->SourceFrameNumber() == 1) {
       // Add an update after the first commit to trigger the animation update
       // path.
-      layer_tree()
-          ->animation_host()
-          ->scroll_offset_animations()
-          .AddAdjustmentUpdate(scroll_layer_->element_id(),
-                               gfx::Vector2dF(100.f, 100.f));
-      EXPECT_TRUE(layer_tree()
-                      ->animation_host()
-                      ->scroll_offset_animations()
-                      .HasUpdatesForTesting());
+      animation_host()->scroll_offset_animations().AddAdjustmentUpdate(
+          scroll_layer_->element_id(), gfx::Vector2dF(100.f, 100.f));
+      EXPECT_TRUE(
+          animation_host()->scroll_offset_animations().HasUpdatesForTesting());
     } else if (layer_tree_host()->SourceFrameNumber() == 2) {
       // Verify that the update queue is cleared after the update is applied.
-      EXPECT_FALSE(layer_tree()
-                       ->animation_host()
-                       ->scroll_offset_animations()
-                       .HasUpdatesForTesting());
+      EXPECT_FALSE(
+          animation_host()->scroll_offset_animations().HasUpdatesForTesting());
     }
   }
 
@@ -914,7 +905,7 @@ class LayerTreeHostAnimationTestScrollOffsetAnimationAdjusted
 
   void WillCommitCompleteOnThread(LayerTreeHostImpl* host_impl) override {
     if (host_impl->sync_tree()->source_frame_number() == 0) {
-      host_impl->animation_host()->ImplOnlyScrollAnimationCreate(
+      GetImplAnimationHost(host_impl)->ImplOnlyScrollAnimationCreate(
           scroll_layer_->element_id(), gfx::ScrollOffset(650.f, 750.f),
           gfx::ScrollOffset(10, 20), base::TimeDelta());
     }
@@ -1040,7 +1031,7 @@ class LayerTreeHostAnimationTestScrollOffsetAnimationRemoval
       return false;
 
     scoped_refptr<AnimationTimeline> timeline_impl =
-        host_impl->animation_host()->GetTimelineById(timeline_id_);
+        GetImplAnimationHost(host_impl)->GetTimelineById(timeline_id_);
     scoped_refptr<AnimationPlayer> player_impl =
         timeline_impl->GetPlayerById(player_child_id_);
 
@@ -1130,7 +1121,7 @@ class LayerTreeHostAnimationTestAnimationsAddedToNewAndExistingLayers
   void UpdateAnimationState(LayerTreeHostImpl* host_impl,
                             bool has_unfinished_animation) override {
     scoped_refptr<AnimationTimeline> timeline_impl =
-        host_impl->animation_host()->GetTimelineById(timeline_id_);
+        GetImplAnimationHost(host_impl)->GetTimelineById(timeline_id_);
     scoped_refptr<AnimationPlayer> player_impl =
         timeline_impl->GetPlayerById(player_id_);
     scoped_refptr<AnimationPlayer> player_child_impl =
@@ -1208,7 +1199,7 @@ class LayerTreeHostAnimationTestPendingTreeAnimatesFirstCommit
       return;
 
     scoped_refptr<AnimationTimeline> timeline_impl =
-        host_impl->animation_host()->GetTimelineById(timeline_id_);
+        GetImplAnimationHost(host_impl)->GetTimelineById(timeline_id_);
     scoped_refptr<AnimationPlayer> player_impl =
         timeline_impl->GetPlayerById(player_id_);
 
@@ -1252,7 +1243,7 @@ class LayerTreeHostAnimationTestAnimatedLayerRemovedAndAdded
 
     layer_tree()->SetElementIdsForTesting();
 
-    layer_tree()->animation_host()->AddAnimationTimeline(timeline_.get());
+    animation_host()->AddAnimationTimeline(timeline_.get());
     timeline_->AttachPlayer(player_.get());
     player_->AttachElement(layer_->element_id());
     DCHECK(player_->element_animations());
@@ -1269,7 +1260,7 @@ class LayerTreeHostAnimationTestAnimatedLayerRemovedAndAdded
             player_->element_animations()->has_element_in_active_list());
         EXPECT_FALSE(
             player_->element_animations()->has_element_in_pending_list());
-        EXPECT_TRUE(layer_tree()->animation_host()->NeedsAnimateLayers());
+        EXPECT_TRUE(animation_host()->NeedsAnimateLayers());
         break;
       case 1:
         layer_->RemoveFromParent();
@@ -1277,7 +1268,7 @@ class LayerTreeHostAnimationTestAnimatedLayerRemovedAndAdded
             player_->element_animations()->has_element_in_active_list());
         EXPECT_FALSE(
             player_->element_animations()->has_element_in_pending_list());
-        EXPECT_FALSE(layer_tree()->animation_host()->NeedsAnimateLayers());
+        EXPECT_FALSE(animation_host()->NeedsAnimateLayers());
         break;
       case 2:
         layer_tree()->root_layer()->AddChild(layer_);
@@ -1285,14 +1276,14 @@ class LayerTreeHostAnimationTestAnimatedLayerRemovedAndAdded
             player_->element_animations()->has_element_in_active_list());
         EXPECT_FALSE(
             player_->element_animations()->has_element_in_pending_list());
-        EXPECT_TRUE(layer_tree()->animation_host()->NeedsAnimateLayers());
+        EXPECT_TRUE(animation_host()->NeedsAnimateLayers());
         break;
     }
   }
 
   void DidActivateTreeOnThread(LayerTreeHostImpl* host_impl) override {
     scoped_refptr<AnimationTimeline> timeline_impl =
-        host_impl->animation_host()->GetTimelineById(timeline_id_);
+        GetImplAnimationHost(host_impl)->GetTimelineById(timeline_id_);
     scoped_refptr<AnimationPlayer> player_impl =
         timeline_impl->GetPlayerById(player_id_);
 
@@ -1300,17 +1291,17 @@ class LayerTreeHostAnimationTestAnimatedLayerRemovedAndAdded
       case 0:
         EXPECT_TRUE(
             player_impl->element_animations()->has_element_in_active_list());
-        EXPECT_TRUE(host_impl->animation_host()->NeedsAnimateLayers());
+        EXPECT_TRUE(GetImplAnimationHost(host_impl)->NeedsAnimateLayers());
         break;
       case 1:
         EXPECT_FALSE(
             player_impl->element_animations()->has_element_in_active_list());
-        EXPECT_FALSE(host_impl->animation_host()->NeedsAnimateLayers());
+        EXPECT_FALSE(GetImplAnimationHost(host_impl)->NeedsAnimateLayers());
         break;
       case 2:
         EXPECT_TRUE(
             player_impl->element_animations()->has_element_in_active_list());
-        EXPECT_TRUE(host_impl->animation_host()->NeedsAnimateLayers());
+        EXPECT_TRUE(GetImplAnimationHost(host_impl)->NeedsAnimateLayers());
         EndTest();
         break;
     }
@@ -1375,7 +1366,7 @@ class LayerTreeHostAnimationTestAddAnimationAfterAnimating
   void CheckAnimations(LayerTreeHostImpl* host_impl) {
     GetImplTimelineAndPlayerByID(*host_impl);
 
-    EXPECT_EQ(2u, host_impl->animation_host()
+    EXPECT_EQ(2u, GetImplAnimationHost(host_impl)
                       ->active_element_animations_for_testing()
                       .size());
 

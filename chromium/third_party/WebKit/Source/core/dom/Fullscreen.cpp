@@ -45,6 +45,7 @@
 #include "core/layout/LayoutFullScreen.h"
 #include "core/layout/api/LayoutFullScreenItem.h"
 #include "core/page/ChromeClient.h"
+#include "core/svg/SVGSVGElement.h"
 #include "platform/ScopedOrientationChangeIndicator.h"
 #include "platform/UserGestureIndicator.h"
 
@@ -86,8 +87,11 @@ bool allowedToRequestFullscreen(Document& document) {
     return true;
 
   //  The algorithm is triggered by a user generated orientation change.
-  if (ScopedOrientationChangeIndicator::processingOrientationChange())
+  if (ScopedOrientationChangeIndicator::processingOrientationChange()) {
+    UseCounter::count(document,
+                      UseCounter::FullscreenAllowedByOrientationChange);
     return true;
+  }
 
   String message = ExceptionMessages::failedToExecute(
       "requestFullscreen", "Element",
@@ -212,10 +216,47 @@ Element* Fullscreen::fullscreenElementFrom(Document& document) {
   return nullptr;
 }
 
+Element* Fullscreen::fullscreenElementForBindingFrom(TreeScope& scope) {
+  Element* element = fullscreenElementFrom(scope.document());
+  if (!element || !RuntimeEnabledFeatures::fullscreenUnprefixedEnabled())
+    return element;
+
+  // TODO(kochi): Once V0 code is removed, we can use the same logic for
+  // Document and ShadowRoot.
+  if (!scope.rootNode().isShadowRoot()) {
+    // For Shadow DOM V0 compatibility: We allow returning an element in V0
+    // shadow tree, even though it leaks the Shadow DOM.
+    if (element->isInV0ShadowTree()) {
+      UseCounter::count(scope.document(),
+                        UseCounter::DocumentFullscreenElementInV0Shadow);
+      return element;
+    }
+  } else if (!toShadowRoot(scope.rootNode()).isV1()) {
+    return nullptr;
+  }
+  return scope.adjustedElement(*element);
+}
+
 Element* Fullscreen::currentFullScreenElementFrom(Document& document) {
   if (Fullscreen* found = fromIfExists(document))
     return found->currentFullScreenElement();
   return nullptr;
+}
+
+Element* Fullscreen::currentFullScreenElementForBindingFrom(
+    Document& document) {
+  Element* element = currentFullScreenElementFrom(document);
+  if (!element || !RuntimeEnabledFeatures::fullscreenUnprefixedEnabled())
+    return element;
+
+  // For Shadow DOM V0 compatibility: We allow returning an element in V0 shadow
+  // tree, even though it leaks the Shadow DOM.
+  if (element->isInV0ShadowTree()) {
+    UseCounter::count(document,
+                      UseCounter::DocumentFullscreenElementInV0Shadow);
+    return element;
+  }
+  return document.adjustedElement(*element);
 }
 
 Fullscreen::Fullscreen(Document& document)
@@ -270,19 +311,25 @@ void Fullscreen::requestFullscreen(Element& element,
     return;
 
   do {
-    // 1. If any of the following conditions are true, terminate these steps and
-    // queue a task to fire an event named fullscreenerror with its bubbles
-    // attribute set to true on the context object's node document:
+    // 1. If any of the following conditions are false, then terminate these
+    // steps and queue a task to fire an event named fullscreenerror with its
+    // bubbles attribute set to true on the context object's node document:
 
-    // The fullscreen element ready check returns false.
+    // |element|'s namespace is the HTML namespace or |element| is an SVG
+    // svg or MathML math element.
+    // Note: MathML is not supported.
+    if (!element.isHTMLElement() && !isSVGSVGElement(element))
+      break;
+
+    // The fullscreen element ready check for |element| returns true.
     if (!fullscreenElementReady(element))
       break;
 
-    // Fullscreen is not supported.
+    // Fullscreen is supported.
     if (!fullscreenIsSupported(document))
       break;
 
-    // This algorithm is not allowed to request fullscreen.
+    // This algorithm is allowed to request fullscreen.
     // OOPIF: If |forCrossProcessDescendant| is true, requestFullscreen was
     // already called on a descendant element in another process, and
     // getting here means that it was already allowed to request fullscreen.
@@ -488,16 +535,7 @@ void Fullscreen::exitFullscreen(Document& document) {
   // Only exit out of full screen window mode if there are no remaining elements
   // in the full screen stack.
   if (!newTop) {
-    // FIXME: if the frame exiting fullscreen is not the frame that entered
-    // fullscreen (but a parent frame for example),
-    // m_currentFullScreenElement might be null. We want to pass an element
-    // that is part of the document so we will pass the documentElement in
-    // that case. This should be fix by exiting fullscreen for a frame
-    // instead of an element, see https://crbug.com/441259
-    Element* currentFullScreenElement = currentFullScreenElementFrom(document);
-    host->chromeClient().exitFullscreenForElement(
-        currentFullScreenElement ? currentFullScreenElement
-                                 : document.documentElement());
+    host->chromeClient().exitFullscreen(document.frame());
     return;
   }
 
@@ -559,7 +597,7 @@ void Fullscreen::didEnterFullscreenForElement(Element* element) {
   m_currentFullScreenElement
       ->setContainsFullScreenElementOnAncestorsCrossingFrameBoundaries(true);
 
-  document()->styleEngine().ensureFullscreenUAStyle();
+  document()->styleEngine().ensureUAStyleForFullscreen();
   m_currentFullScreenElement->pseudoStateChanged(CSSSelector::PseudoFullScreen);
 
   // FIXME: This should not call updateStyleAndLayoutTree.
@@ -591,7 +629,7 @@ void Fullscreen::didExitFullscreen() {
   if (m_fullScreenLayoutObject)
     LayoutFullScreenItem(m_fullScreenLayoutObject).unwrapLayoutObject();
 
-  document()->styleEngine().ensureFullscreenUAStyle();
+  document()->styleEngine().ensureUAStyleForFullscreen();
   m_currentFullScreenElement->pseudoStateChanged(CSSSelector::PseudoFullScreen);
   m_currentFullScreenElement = nullptr;
 
@@ -717,7 +755,7 @@ void Fullscreen::popFullscreenElementStack() {
   if (m_fullscreenElementStack.isEmpty())
     return;
 
-  m_fullscreenElementStack.removeLast();
+  m_fullscreenElementStack.pop_back();
 }
 
 void Fullscreen::pushFullscreenElementStack(Element& element,

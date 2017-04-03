@@ -31,10 +31,12 @@ class RebaselineCLTest(BaseTestCase, LoggingTestCase):
                     {
                         'builder': 'MOCK Try Win',
                         'buildnumber': 5000,
+                        'result': 0,
                     },
                     {
-                        'builder': 'MOCK Mac Try',
+                        'builder': 'MOCK Try Mac',
                         'buildnumber': 4000,
+                        'result': 0,
                     },
                 ],
                 'files': {
@@ -57,15 +59,25 @@ class RebaselineCLTest(BaseTestCase, LoggingTestCase):
         })
         self.command.rietveld = Rietveld(web)
 
+        self.tool.buildbot.set_retry_sumary_json(Build('MOCK Try Win', 5000), json.dumps({
+            'failures': [
+                'fast/dom/prototype-newtest.html',
+                'fast/dom/prototype-taco.html',
+                'fast/dom/prototype-inheritance.html',
+                'svg/dynamic-updates/SVGFEDropShadowElement-dom-stdDeviation-attr.html',
+            ],
+            'ignored': [],
+        }))
+
         # Write to the mock filesystem so that these tests are considered to exist.
         port = self.mac_port
         tests = [
             'fast/dom/prototype-taco.html',
             'fast/dom/prototype-inheritance.html',
+            'fast/dom/prototype-newtest.html',
             'svg/dynamic-updates/SVGFEDropShadowElement-dom-stdDeviation-attr.html',
         ]
         for test in tests:
-            # pylint: disable=protected-access
             self._write(port.host.filesystem.join(port.layout_tests_dir(), test), 'contents')
 
     def tearDown(self):
@@ -88,13 +100,9 @@ class RebaselineCLTest(BaseTestCase, LoggingTestCase):
 
     def test_execute_with_issue_number_given(self):
         self.command.execute(self.command_options(issue=11112222), [], self.tool)
-        print self._log.messages()
         self.assertLog([
-            'INFO: Tests to rebaseline:\n',
-            'INFO:   svg/dynamic-updates/SVGFEDropShadowElement-dom-stdDeviation-attr.html: MOCK Try Win (5000)\n',
-            'INFO:   fast/dom/prototype-inheritance.html: MOCK Try Win (5000)\n',
-            'INFO:   fast/dom/prototype-taco.html: MOCK Try Win (5000)\n',
             'INFO: Rebaselining fast/dom/prototype-inheritance.html\n',
+            'INFO: Rebaselining fast/dom/prototype-newtest.html\n',
             'INFO: Rebaselining fast/dom/prototype-taco.html\n',
             'INFO: Rebaselining svg/dynamic-updates/SVGFEDropShadowElement-dom-stdDeviation-attr.html\n',
         ])
@@ -106,16 +114,13 @@ class RebaselineCLTest(BaseTestCase, LoggingTestCase):
                         'option to download baselines for another existing CL.\n'])
 
     def test_execute_with_issue_number_from_branch(self):
-        git_cl = GitCL(MockExecutive2())
+        git_cl = GitCL(self.tool)
         git_cl.get_issue_number = lambda: '11112222'
         self.command.git_cl = lambda: git_cl
         self.command.execute(self.command_options(), [], self.tool)
         self.assertLog([
-            'INFO: Tests to rebaseline:\n',
-            'INFO:   svg/dynamic-updates/SVGFEDropShadowElement-dom-stdDeviation-attr.html: MOCK Try Win (5000)\n',
-            'INFO:   fast/dom/prototype-inheritance.html: MOCK Try Win (5000)\n',
-            'INFO:   fast/dom/prototype-taco.html: MOCK Try Win (5000)\n',
             'INFO: Rebaselining fast/dom/prototype-inheritance.html\n',
+            'INFO: Rebaselining fast/dom/prototype-newtest.html\n',
             'INFO: Rebaselining fast/dom/prototype-taco.html\n',
             'INFO: Rebaselining svg/dynamic-updates/SVGFEDropShadowElement-dom-stdDeviation-attr.html\n',
         ])
@@ -126,36 +131,54 @@ class RebaselineCLTest(BaseTestCase, LoggingTestCase):
         # is in the list of failed tests, but not in the list of files modified
         # in the given CL; it should be included because all_tests is set to True.
         self.assertLog([
-            'INFO: Tests to rebaseline:\n',
-            'INFO:   fast/dom/prototype-inheritance.html: MOCK Try Win (5000)\n',
-            'INFO:   fast/dom/prototype-taco.html: MOCK Try Win (5000)\n',
             'INFO: Rebaselining fast/dom/prototype-inheritance.html\n',
             'INFO: Rebaselining fast/dom/prototype-taco.html\n',
         ])
 
-    def test_execute_with_nonexistent_test(self):
-        self.command.execute(self.command_options(issue=11112222), ['some/non/existent/test.html'], self.tool)
+    def test_execute_with_flaky_test_that_fails_on_retry(self):
+        # In this example, the --only-changed-tests flag is not given, but
+        # svg/dynamic-updates/SVGFEDropShadowElement-dom-stdDeviation-attr.html
+        # failed both with and without the patch in the try job, so it is not
+        # rebaselined.
+        self.tool.buildbot.set_retry_sumary_json(Build('MOCK Try Win', 5000), json.dumps({
+            'failures': [
+                'fast/dom/prototype-taco.html',
+                'fast/dom/prototype-inheritance.html',
+            ],
+            'ignored': ['svg/dynamic-updates/SVGFEDropShadowElement-dom-stdDeviation-attr.html'],
+        }))
+        self.command.execute(self.command_options(issue=11112222), [], self.tool)
         self.assertLog([
-            'WARNING: /test.checkout/LayoutTests/some/non/existent/test.html not found, removing from list.\n',
-            'INFO: No tests to rebaseline; exiting.\n',
+            'INFO: Rebaselining fast/dom/prototype-inheritance.html\n',
+            'INFO: Rebaselining fast/dom/prototype-taco.html\n',
+        ])
+
+    def test_execute_with_no_retry_summary_downloaded(self):
+        # In this example, the --only-changed-tests flag is not given, but
+        # svg/dynamic-updates/SVGFEDropShadowElement-dom-stdDeviation-attr.html
+        # failed both with and without the patch in the try job, so it is not
+        # rebaselined.
+        self.tool.buildbot.set_retry_sumary_json(
+            Build('MOCK Try Win', 5000), None)
+        self.command.execute(self.command_options(issue=11112222), [], self.tool)
+        self.assertLog([
+            'WARNING: No retry summary available for build Build(builder_name=u\'MOCK Try Win\', build_number=5000).\n',
+            'INFO: Rebaselining fast/dom/prototype-inheritance.html\n',
+            'INFO: Rebaselining fast/dom/prototype-newtest.html\n',
+            'INFO: Rebaselining fast/dom/prototype-taco.html\n',
+            'INFO: Rebaselining svg/dynamic-updates/SVGFEDropShadowElement-dom-stdDeviation-attr.html\n',
         ])
 
     def test_execute_with_trigger_jobs_option(self):
         self.command.execute(self.command_options(issue=11112222, trigger_jobs=True), [], self.tool)
-        # A message is printed showing that some try jobs are triggered.
         self.assertLog([
             'INFO: Triggering try jobs for:\n',
             'INFO:   MOCK Try Linux\n',
-            'INFO: Tests to rebaseline:\n',
-            'INFO:   svg/dynamic-updates/SVGFEDropShadowElement-dom-stdDeviation-attr.html: MOCK Try Win (5000)\n',
-            'INFO:   fast/dom/prototype-inheritance.html: MOCK Try Win (5000)\n',
-            'INFO:   fast/dom/prototype-taco.html: MOCK Try Win (5000)\n',
-            'INFO: Rebaselining fast/dom/prototype-inheritance.html\n',
-            'INFO: Rebaselining fast/dom/prototype-taco.html\n',
-            'INFO: Rebaselining svg/dynamic-updates/SVGFEDropShadowElement-dom-stdDeviation-attr.html\n',
+            'INFO: Please re-run webkit-patch rebaseline-cl once all pending try jobs have finished.\n',
         ])
-        # The first executive call, before the rebaseline calls, is triggering try jobs.
-        self.assertEqual(self.tool.executive.calls[0], ['git', 'cl', 'try', '-b', 'MOCK Try Linux'])
+        self.assertEqual(
+            self.tool.executive.calls,
+            [['git', 'cl', 'try', '-b', 'MOCK Try Linux']])
 
     def test_rebaseline_calls(self):
         """Tests the list of commands that are invoked when rebaseline is called."""
@@ -177,5 +200,41 @@ class RebaselineCLTest(BaseTestCase, LoggingTestCase):
                   '--builder', 'MOCK Try Win', '--test', 'fast/dom/prototype-taco.html']],
                 [['python', 'echo', 'rebaseline-test-internal', '--suffixes', 'txt',
                   '--builder', 'MOCK Try Win', '--test', 'fast/dom/prototype-taco.html', '--build-number', '5000']],
-                [['python', 'echo', 'optimize-baselines', '--no-modify-scm', '--suffixes', 'txt', 'fast/dom/prototype-taco.html']]
+                [['python', 'echo', 'optimize-baselines', '--suffixes', 'txt', 'fast/dom/prototype-taco.html']]
             ])
+
+    def test_trigger_jobs_for_missing_builds_empty_list(self):
+        # Passing in no builds implies that no try jobs were started.
+        self.assertTrue(self.command.trigger_jobs_for_missing_builds([]))
+        self.assertEqual(
+            self.tool.executive.calls,
+            [['git', 'cl', 'try', '-b', 'MOCK Try Linux', '-b', 'MOCK Try Win']])
+        self.assertLog([
+            'INFO: Triggering try jobs for:\n',
+            'INFO:   MOCK Try Linux\n',
+            'INFO:   MOCK Try Win\n',
+        ])
+
+    def test_trigger_jobs_for_missing_builds_started_and_successful(self):
+        # A build number of None implies that a job has been started but not finished yet.
+        self.assertTrue(self.command.trigger_jobs_for_missing_builds([
+            Build('MOCK Try Linux', None),
+            Build('MOCK Try Win', 123),
+        ]))
+        self.assertEqual(self.tool.executive.calls, [])
+        self.assertLog([
+            'INFO: There are existing pending builds for:\n',
+            'INFO:   MOCK Try Linux\n',
+        ])
+
+    def test_trigger_jobs_for_missing_builds_one_started(self):
+        self.assertTrue(self.command.trigger_jobs_for_missing_builds([
+            Build('MOCK Try Linux', None),
+        ]))
+        self.assertEqual(self.tool.executive.calls, [['git', 'cl', 'try', '-b', 'MOCK Try Win']])
+        self.assertLog([
+            'INFO: There are existing pending builds for:\n',
+            'INFO:   MOCK Try Linux\n',
+            'INFO: Triggering try jobs for:\n',
+            'INFO:   MOCK Try Win\n',
+        ])

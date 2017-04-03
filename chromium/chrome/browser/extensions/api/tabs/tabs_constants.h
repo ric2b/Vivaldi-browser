@@ -60,9 +60,6 @@ extern const char kWindowTypeLongKey[];
 extern const char kWindowTypesKey[];
 extern const char kZoomSettingsMode[];
 extern const char kZoomSettingsScope[];
-extern const char kExtDataKey[];
-extern const char kLastActiveTimeKey[];
-extern const char kWindowExtDataKey[];
 
 // Value consts.
 extern const char kCanOnlyMoveTabsWithinNormalWindowsError[];
@@ -76,7 +73,6 @@ extern const char kStatusValueLoading[];
 extern const char kWindowTypeValueNormal[];
 extern const char kWindowTypeValuePopup[];
 extern const char kWindowTypeValuePanel[];
-extern const char kWindowTypeValueDetachedPanel[];
 extern const char kWindowTypeValueApp[];
 extern const char kWindowTypeValueDevTools[];
 

@@ -23,8 +23,11 @@
 #include "build/build_config.h"
 #include "cc/animation/animation_host.h"
 #include "cc/animation/animation_timeline.h"
-#include "cc/animation/layer_tree_mutator.h"
 #include "cc/base/switches.h"
+#include "cc/blimp/engine_picture_cache.h"
+#include "cc/blimp/image_serialization_processor.h"
+#include "cc/blimp/layer_tree_host_remote.h"
+#include "cc/blimp/remote_compositor_bridge.h"
 #include "cc/blink/web_layer_impl.h"
 #include "cc/debug/layer_tree_debug_state.h"
 #include "cc/debug/micro_benchmark.h"
@@ -40,12 +43,13 @@
 #include "cc/scheduler/begin_frame_source.h"
 #include "cc/trees/latency_info_swap_promise_monitor.h"
 #include "cc/trees/layer_tree_host_in_process.h"
-#include "cc/trees/remote_proto_channel.h"
+#include "cc/trees/layer_tree_mutator.h"
 #include "content/common/content_switches_internal.h"
 #include "content/common/gpu/client/context_provider_command_buffer.h"
 #include "content/common/layer_tree_settings_factory.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
+#include "content/public/renderer/content_renderer_client.h"
 #include "content/renderer/gpu/render_widget_compositor_delegate.h"
 #include "content/renderer/input/input_handler_manager.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
@@ -60,6 +64,7 @@
 #include "third_party/WebKit/public/web/WebSelection.h"
 #include "ui/gl/gl_switches.h"
 #include "ui/native_theme/native_theme_switches.h"
+#include "ui/native_theme/overlay_scrollbar_constants_aura.h"
 
 #if defined(OS_ANDROID)
 #include "base/android/build_info.h"
@@ -78,7 +83,7 @@ using blink::WebFloatPoint;
 using blink::WebRect;
 using blink::WebSelection;
 using blink::WebSize;
-using blink::WebTopControlsState;
+using blink::WebBrowserControlsState;
 
 namespace content {
 namespace {
@@ -189,18 +194,18 @@ gfx::Size CalculateDefaultTileSize(float initial_device_scale_factor) {
   return gfx::Size(default_tile_size, default_tile_size);
 }
 
-// Check cc::TopControlsState, and blink::WebTopControlsState
+// Check cc::BrowserControlsState, and blink::WebBrowserControlsState
 // are kept in sync.
-static_assert(int(blink::WebTopControlsBoth) == int(cc::BOTH),
+static_assert(int(blink::WebBrowserControlsBoth) == int(cc::BOTH),
               "mismatching enums: BOTH");
-static_assert(int(blink::WebTopControlsHidden) == int(cc::HIDDEN),
+static_assert(int(blink::WebBrowserControlsHidden) == int(cc::HIDDEN),
               "mismatching enums: HIDDEN");
-static_assert(int(blink::WebTopControlsShown) == int(cc::SHOWN),
+static_assert(int(blink::WebBrowserControlsShown) == int(cc::SHOWN),
               "mismatching enums: SHOWN");
 
-static cc::TopControlsState ConvertTopControlsState(
-    WebTopControlsState state) {
-  return static_cast<cc::TopControlsState>(state);
+static cc::BrowserControlsState ConvertBrowserControlsState(
+    WebBrowserControlsState state) {
+  return static_cast<cc::BrowserControlsState>(state);
 }
 
 }  // namespace
@@ -232,31 +237,43 @@ void RenderWidgetCompositor::Initialize(float device_scale_factor) {
   base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
   cc::LayerTreeSettings settings =
       GenerateLayerTreeSettings(*cmd, compositor_deps_, device_scale_factor);
-  cc::LayerTreeHostInProcess::InitParams params;
-  params.client = this;
-  params.shared_bitmap_manager = compositor_deps_->GetSharedBitmapManager();
-  params.gpu_memory_buffer_manager =
-      compositor_deps_->GetGpuMemoryBufferManager();
-  params.settings = &settings;
-  params.task_graph_runner = compositor_deps_->GetTaskGraphRunner();
-  params.main_task_runner =
-      compositor_deps_->GetCompositorMainThreadTaskRunner();
-  params.animation_host = cc::AnimationHost::CreateMainInstance();
+
+  animation_host_ = cc::AnimationHost::CreateMainInstance();
 
   if (cmd->HasSwitch(switches::kUseRemoteCompositing)) {
     DCHECK(!threaded_);
-    params.image_serialization_processor =
-        compositor_deps_->GetImageSerializationProcessor();
-    layer_tree_host_ =
-        cc::LayerTreeHostInProcess::CreateRemoteServer(this, &params);
-  } else if (!threaded_) {
-    // Single-threaded layout tests.
-    layer_tree_host_ =
-        cc::LayerTreeHostInProcess::CreateSingleThreaded(this, &params);
+
+    cc::LayerTreeHostRemote::InitParams params;
+    params.client = this;
+    params.main_task_runner =
+        compositor_deps_->GetCompositorMainThreadTaskRunner();
+    params.mutator_host = animation_host_.get();
+    params.remote_compositor_bridge =
+        GetContentClient()->renderer()->CreateRemoteCompositorBridge(
+            this, params.main_task_runner);
+    params.engine_picture_cache =
+        compositor_deps_->GetImageSerializationProcessor()
+            ->CreateEnginePictureCache();
+    params.settings = &settings;
+    layer_tree_host_ = base::MakeUnique<cc::LayerTreeHostRemote>(&params);
   } else {
-    layer_tree_host_ = cc::LayerTreeHostInProcess::CreateThreaded(
-        compositor_deps_->GetCompositorImplThreadTaskRunner(), &params);
+    cc::LayerTreeHostInProcess::InitParams params;
+    params.client = this;
+    params.settings = &settings;
+    params.task_graph_runner = compositor_deps_->GetTaskGraphRunner();
+    params.main_task_runner =
+        compositor_deps_->GetCompositorMainThreadTaskRunner();
+    params.mutator_host = animation_host_.get();
+    if (!threaded_) {
+      // Single-threaded layout tests.
+      layer_tree_host_ =
+          cc::LayerTreeHostInProcess::CreateSingleThreaded(this, &params);
+    } else {
+      layer_tree_host_ = cc::LayerTreeHostInProcess::CreateThreaded(
+          compositor_deps_->GetCompositorImplThreadTaskRunner(), &params);
+    }
   }
+
   DCHECK(layer_tree_host_);
 }
 
@@ -334,7 +351,7 @@ cc::LayerTreeSettings RenderWidgetCompositor::GenerateLayerTreeSettings(
       compositor_deps->AreImageDecodeTasksEnabled();
 
   // Build LayerTreeSettings from command line args.
-  LayerTreeSettingsFactory::SetTopControlsSettings(settings, cmd);
+  LayerTreeSettingsFactory::SetBrowserControlsSettings(settings, cmd);
 
   settings.use_layer_lists = cmd.HasSwitch(cc::switches::kEnableLayerLists);
 
@@ -383,9 +400,10 @@ cc::LayerTreeSettings RenderWidgetCompositor::GenerateLayerTreeSettings(
     settings.gpu_rasterization_enabled = false;
   settings.using_synchronous_renderer_compositor = using_synchronous_compositor;
   settings.scrollbar_animator = cc::LayerTreeSettings::LINEAR_FADE;
-  settings.scrollbar_fade_delay_ms = 300;
-  settings.scrollbar_fade_resize_delay_ms = 2000;
-  settings.scrollbar_fade_duration_ms = 300;
+  settings.scrollbar_fade_delay = base::TimeDelta::FromMilliseconds(300);
+  settings.scrollbar_fade_resize_delay =
+      base::TimeDelta::FromMilliseconds(2000);
+  settings.scrollbar_fade_duration = base::TimeDelta::FromMilliseconds(300);
   settings.solid_color_scrollbar_color = SkColorSetARGB(128, 128, 128, 128);
   settings.renderer_settings.highp_threshold_min = 2048;
   // Android WebView handles root layer flings itself.
@@ -420,14 +438,23 @@ cc::LayerTreeSettings RenderWidgetCompositor::GenerateLayerTreeSettings(
 #if !defined(OS_MACOSX)
   if (ui::IsOverlayScrollbarEnabled()) {
     settings.scrollbar_animator = cc::LayerTreeSettings::THINNING;
-    settings.solid_color_scrollbar_color = SkColorSetARGB(128, 128, 128, 128);
+    settings.scrollbar_fade_delay = ui::kOverlayScrollbarFadeOutDelay;
+    settings.scrollbar_fade_resize_delay =
+        ui::kOverlayScrollbarFadeOutDelay;
+    settings.scrollbar_fade_duration =
+        ui::kOverlayScrollbarFadeOutDuration;
+    settings.scrollbar_thinning_duration =
+        ui::kOverlayScrollbarThinningDuration;
   } else {
+    // TODO(bokan): This section is probably unneeded? We don't use scrollbar
+    // animations for non overlay scrollbars.
     settings.scrollbar_animator = cc::LayerTreeSettings::LINEAR_FADE;
     settings.solid_color_scrollbar_color = SkColorSetARGB(128, 128, 128, 128);
+    settings.scrollbar_fade_delay = base::TimeDelta::FromMilliseconds(500);
+    settings.scrollbar_fade_resize_delay =
+        base::TimeDelta::FromMilliseconds(500);
+    settings.scrollbar_fade_duration = base::TimeDelta::FromMilliseconds(300);
   }
-  settings.scrollbar_fade_delay_ms = 500;
-  settings.scrollbar_fade_resize_delay_ms = 500;
-  settings.scrollbar_fade_duration_ms = 300;
 #endif  // !defined(OS_MACOSX)
 
   // On desktop, if there's over 4GB of memory on the machine, increase the
@@ -646,18 +673,16 @@ void RenderWidgetCompositor::clearRootLayer() {
 
 void RenderWidgetCompositor::attachCompositorAnimationTimeline(
     cc::AnimationTimeline* compositor_timeline) {
-  cc::AnimationHost* animation_host =
-      layer_tree_host_->GetLayerTree()->animation_host();
-  DCHECK(animation_host);
-  animation_host->AddAnimationTimeline(compositor_timeline);
+  DCHECK(animation_host_);
+  DCHECK(compositor_deps_->IsThreadedAnimationEnabled());
+  animation_host_->AddAnimationTimeline(compositor_timeline);
 }
 
 void RenderWidgetCompositor::detachCompositorAnimationTimeline(
     cc::AnimationTimeline* compositor_timeline) {
-  cc::AnimationHost* animation_host =
-      layer_tree_host_->GetLayerTree()->animation_host();
-  DCHECK(animation_host);
-  animation_host->RemoveAnimationTimeline(compositor_timeline);
+  DCHECK(animation_host_);
+  DCHECK(compositor_deps_->IsThreadedAnimationEnabled());
+  animation_host_->RemoveAnimationTimeline(compositor_timeline);
 }
 
 void RenderWidgetCompositor::setViewportSize(
@@ -954,21 +979,22 @@ void RenderWidgetCompositor::setShowScrollBottleneckRects(bool show) {
   layer_tree_host_->SetDebugState(debug_state);
 }
 
-void RenderWidgetCompositor::updateTopControlsState(
-    WebTopControlsState constraints,
-    WebTopControlsState current,
+void RenderWidgetCompositor::updateBrowserControlsState(
+    WebBrowserControlsState constraints,
+    WebBrowserControlsState current,
     bool animate) {
-  layer_tree_host_->UpdateTopControlsState(ConvertTopControlsState(constraints),
-                                           ConvertTopControlsState(current),
-                                           animate);
+  layer_tree_host_->UpdateBrowserControlsState(
+      ConvertBrowserControlsState(constraints),
+      ConvertBrowserControlsState(current), animate);
 }
 
-void RenderWidgetCompositor::setTopControlsHeight(float height, bool shrink) {
-  layer_tree_host_->GetLayerTree()->SetTopControlsHeight(height, shrink);
+void RenderWidgetCompositor::setBrowserControlsHeight(float height,
+                                                      bool shrink) {
+  layer_tree_host_->GetLayerTree()->SetBrowserControlsHeight(height, shrink);
 }
 
-void RenderWidgetCompositor::setTopControlsShownRatio(float ratio) {
-  layer_tree_host_->GetLayerTree()->SetTopControlsShownRatio(ratio);
+void RenderWidgetCompositor::setBrowserControlsShownRatio(float ratio) {
+  layer_tree_host_->GetLayerTree()->SetBrowserControlsShownRatio(ratio);
 }
 
 void RenderWidgetCompositor::setBottomControlsHeight(float height) {
@@ -1058,10 +1084,8 @@ void RenderWidgetCompositor::DidCommitAndDrawFrame() {
   delegate_->DidCommitAndDrawCompositorFrame();
 }
 
-void RenderWidgetCompositor::DidCompleteSwapBuffers() {
-  delegate_->DidCompleteSwapBuffers();
-  if (!threaded_)
-    delegate_->OnSwapBuffersComplete();
+void RenderWidgetCompositor::DidReceiveCompositorFrameAck() {
+  delegate_->DidReceiveCompositorFrameAck();
 }
 
 void RenderWidgetCompositor::DidCompletePageScaleAnimation() {
@@ -1072,12 +1096,11 @@ void RenderWidgetCompositor::RequestScheduleAnimation() {
   delegate_->RequestScheduleAnimation();
 }
 
-void RenderWidgetCompositor::DidPostSwapBuffers() {
-  delegate_->OnSwapBuffersPosted();
-}
+void RenderWidgetCompositor::DidSubmitCompositorFrame() {}
 
-void RenderWidgetCompositor::DidAbortSwapBuffers() {
-  delegate_->OnSwapBuffersAborted();
+void RenderWidgetCompositor::DidLoseCompositorFrameSink() {
+  // The CompositorFrameSink is not lost in layout tests (single thread mode).
+  NOTREACHED();
 }
 
 void RenderWidgetCompositor::SetProtoReceiver(ProtoReceiver* receiver) {

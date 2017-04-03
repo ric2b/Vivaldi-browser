@@ -1,10 +1,11 @@
 {
-  "manifest_version":  1,
-  "name": "service:test_wm",
+  "name": "test_wm",
   "display_name": "Test Window Manager",
-  "capabilities": {
-    "required": {
-      "service:ui": { "interfaces": [ "ui::mojom::WindowManagerWindowTreeFactory" ] }
+  "interface_provider_specs": {
+    "service_manager:connector": {
+      "requires": {
+        "ui": [ "ui:window_manager" ]
+      }
     }
   }
 }

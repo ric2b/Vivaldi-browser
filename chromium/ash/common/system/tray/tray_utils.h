@@ -12,6 +12,7 @@
 
 namespace views {
 class Label;
+class Separator;
 class View;
 }
 

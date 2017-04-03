@@ -31,6 +31,7 @@
 #define ClipPathOperation_h
 
 #include "core/style/BasicShapes.h"
+#include "core/svg/SVGElementProxy.h"
 #include "platform/graphics/Path.h"
 #include "wtf/PtrUtil.h"
 #include "wtf/RefCounted.h"
@@ -38,6 +39,10 @@
 #include <memory>
 
 namespace blink {
+
+class SVGElement;
+class SVGResourceClient;
+class TreeScope;
 
 class ClipPathOperation : public RefCounted<ClipPathOperation> {
  public:
@@ -48,39 +53,39 @@ class ClipPathOperation : public RefCounted<ClipPathOperation> {
   virtual bool operator==(const ClipPathOperation&) const = 0;
   bool operator!=(const ClipPathOperation& o) const { return !(*this == o); }
 
-  OperationType type() const { return m_type; }
+  virtual OperationType type() const = 0;
   bool isSameType(const ClipPathOperation& o) const {
-    return o.type() == m_type;
+    return o.type() == type();
   }
 
  protected:
-  ClipPathOperation(OperationType type) : m_type(type) {}
-
-  OperationType m_type;
+  ClipPathOperation() {}
 };
 
 class ReferenceClipPathOperation final : public ClipPathOperation {
  public:
   static PassRefPtr<ReferenceClipPathOperation> create(
       const String& url,
-      const AtomicString& fragment) {
-    return adoptRef(new ReferenceClipPathOperation(url, fragment));
+      SVGElementProxy& elementProxy) {
+    return adoptRef(new ReferenceClipPathOperation(url, elementProxy));
   }
+
+  void addClient(SVGResourceClient*);
+  void removeClient(SVGResourceClient*);
+
+  SVGElement* findElement(TreeScope&) const;
 
   const String& url() const { return m_url; }
-  const AtomicString& fragment() const { return m_fragment; }
 
  private:
-  bool operator==(const ClipPathOperation& o) const override {
-    return isSameType(o) &&
-           m_url == static_cast<const ReferenceClipPathOperation&>(o).m_url;
-  }
+  bool operator==(const ClipPathOperation&) const override;
+  OperationType type() const override { return REFERENCE; }
 
-  ReferenceClipPathOperation(const String& url, const AtomicString& fragment)
-      : ClipPathOperation(REFERENCE), m_url(url), m_fragment(fragment) {}
+  ReferenceClipPathOperation(const String& url, SVGElementProxy& elementProxy)
+      : m_elementProxy(&elementProxy), m_url(url) {}
 
+  Persistent<SVGElementProxy> m_elementProxy;
   String m_url;
-  AtomicString m_fragment;
 };
 
 DEFINE_TYPE_CASTS(ReferenceClipPathOperation,
@@ -109,9 +114,9 @@ class ShapeClipPathOperation final : public ClipPathOperation {
 
  private:
   bool operator==(const ClipPathOperation&) const override;
+  OperationType type() const override { return SHAPE; }
 
-  ShapeClipPathOperation(PassRefPtr<BasicShape> shape)
-      : ClipPathOperation(SHAPE), m_shape(shape) {}
+  ShapeClipPathOperation(PassRefPtr<BasicShape> shape) : m_shape(shape) {}
 
   RefPtr<BasicShape> m_shape;
   std::unique_ptr<Path> m_path;

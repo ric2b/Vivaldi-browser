@@ -38,12 +38,15 @@ namespace {
 // be too short, so we use this as a default and minimum height for any
 // detailed view.
 int GetDetailedBubbleMaxHeight() {
-  return GetTrayConstant(TRAY_POPUP_ITEM_HEIGHT) * 5;
+  return GetTrayConstant(TRAY_POPUP_ITEM_MIN_HEIGHT) * 5;
 }
 
 // Duration of swipe animation used when transitioning from a default to
 // detailed view or vice versa.
 const int kSwipeDelayMS = 150;
+
+// Extra bottom padding when showing the BUBBLE_TYPE_DEFAULT view.
+const int kDefaultViewBottomPadding = 4;
 
 // Implicit animation observer that deletes itself and the layer at the end of
 // the animation.
@@ -150,6 +153,7 @@ void SystemTrayBubble::UpdateView(
     return;
   }
 
+  UpdateBottomPadding();
   bubble_view_->GetWidget()->GetContentsView()->Layout();
   // Make sure that the bubble is large enough for the default view.
   if (bubble_type_ == BUBBLE_TYPE_DEFAULT) {
@@ -195,9 +199,9 @@ void SystemTrayBubble::InitView(views::View* anchor,
   } else if (bubble_type_ == BUBBLE_TYPE_NOTIFICATION) {
     init_params->close_on_deactivate = false;
   }
-  // The TrayBubbleView will use |anchor| and |tray_| to determine the parent
-  // container for the bubble.
+
   bubble_view_ = TrayBubbleView::Create(anchor, tray_, init_params);
+  UpdateBottomPadding();
   bubble_view_->set_adjust_if_offscreen(false);
   CreateItemViews(login_status);
 
@@ -303,6 +307,15 @@ void SystemTrayBubble::RecordVisibleRowMetrics() {
   }
 }
 
+void SystemTrayBubble::UpdateBottomPadding() {
+  if (bubble_type_ == BUBBLE_TYPE_DEFAULT &&
+      MaterialDesignController::IsSystemTrayMenuMaterial()) {
+    bubble_view_->SetBottomPadding(kDefaultViewBottomPadding);
+  } else {
+    bubble_view_->SetBottomPadding(0);
+  }
+}
+
 void SystemTrayBubble::CreateItemViews(LoginStatus login_status) {
   tray_item_view_map_.clear();
 
@@ -350,8 +363,8 @@ void SystemTrayBubble::CreateItemViews(LoginStatus login_status) {
       const int last_item_with_border =
           static_cast<int>(item_containers.size()) - 2;
       for (int i = 0; i < last_item_with_border; ++i) {
-        item_containers.at(i)->SetBorder(views::Border::CreateSolidSidedBorder(
-            0, 0, 1, 0, kBorderLightColor));
+        item_containers.at(i)->SetBorder(
+            views::CreateSolidSidedBorder(0, 0, 1, 0, kBorderLightColor));
       }
     }
   }

@@ -1,10 +1,19 @@
 {
-  "manifest_version": 1,
-  "name": "exe:mash_browser_tests",
+  "name": "mash_browser_tests",
   "display_name": "Mash Browser Tests",
-  "capabilities": {
-    "required": {
-      "*": { "classes": [ "app" ] }
+  "interface_provider_specs": {
+    "service_manager:connector": {
+      "provides": {
+        "service_manager:service_factory": [
+          "service_manager::mojom::ServiceFactory"
+        ]
+      },
+      "requires": {
+        "*": [ "app" ],
+        "service_manager": [
+           "service_manager:instance_per_child"
+        ]
+      }
     }
   }
 }

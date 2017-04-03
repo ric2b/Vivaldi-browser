@@ -15,7 +15,7 @@
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/controls/button/label_button_border.h"
 #include "ui/views/controls/focusable_border.h"
-#include "ui/views/controls/scrollbar/native_scroll_bar.h"
+#include "ui/views/controls/scrollbar/scroll_bar_views.h"
 
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
 #define DESKTOP_LINUX
@@ -39,9 +39,10 @@ const int PlatformStyle::kMinLabelButtonWidth = 70;
 const int PlatformStyle::kMinLabelButtonHeight = 33;
 const bool PlatformStyle::kDefaultLabelButtonHasBoldFont = true;
 const bool PlatformStyle::kDialogDefaultButtonCanBeCancel = true;
-const bool PlatformStyle::kTextfieldDragVerticallyDragsToEnd = false;
+const bool PlatformStyle::kTextDragVerticallyDragsToEnd = false;
 const CustomButton::NotifyAction PlatformStyle::kMenuNotifyActivationAction =
     CustomButton::NOTIFY_ON_RELEASE;
+const bool PlatformStyle::kTreeViewHasFocusRing = false;
 const bool PlatformStyle::kTreeViewSelectionPaintsEntireRow = false;
 const bool PlatformStyle::kUseRipples = true;
 
@@ -53,19 +54,8 @@ gfx::ImageSkia PlatformStyle::CreateComboboxArrow(bool is_enabled,
 }
 
 // static
-std::unique_ptr<FocusableBorder> PlatformStyle::CreateComboboxBorder() {
-  return base::MakeUnique<FocusableBorder>();
-}
-
-// static
-std::unique_ptr<Background> PlatformStyle::CreateComboboxBackground(
-    int shoulder_width) {
-  return nullptr;
-}
-
-// static
 std::unique_ptr<ScrollBar> PlatformStyle::CreateScrollBar(bool is_horizontal) {
-  return base::MakeUnique<NativeScrollBar>(is_horizontal);
+  return base::MakeUnique<ScrollBarViews>(is_horizontal);
 }
 
 // static
@@ -76,7 +66,7 @@ SkColor PlatformStyle::TextColorForButton(
 }
 
 // static
-void PlatformStyle::OnTextfieldKeypressUnhandled() {}
+void PlatformStyle::OnTextfieldEditFailed() {}
 
 #endif  // OS_MACOSX
 

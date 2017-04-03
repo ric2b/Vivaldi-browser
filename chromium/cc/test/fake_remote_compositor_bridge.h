@@ -9,6 +9,7 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/single_thread_task_runner.h"
 #include "cc/blimp/compositor_proto_state.h"
 #include "cc/blimp/remote_compositor_bridge.h"
 
@@ -28,10 +29,15 @@ class FakeRemoteCompositorBridge : public RemoteCompositorBridge {
   void ProcessCompositorStateUpdate(
       std::unique_ptr<CompositorProtoState> compositor_proto_state) override {}
 
- private:
+  bool has_pending_update() const { return has_pending_update_; }
+
+ protected:
   void BeginMainFrame();
 
   RemoteCompositorBridgeClient* client_;
+
+ private:
+  bool has_pending_update_ = false;
   base::WeakPtrFactory<FakeRemoteCompositorBridge> weak_factory_;
 };
 

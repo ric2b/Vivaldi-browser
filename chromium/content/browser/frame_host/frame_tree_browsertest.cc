@@ -20,7 +20,6 @@
 #include "content/shell/browser/shell.h"
 #include "content/shell/common/shell_switches.h"
 #include "content/test/content_browser_test_utils_internal.h"
-#include "content/test/test_frame_navigation_observer.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "third_party/WebKit/public/web/WebSandboxFlags.h"
@@ -50,8 +49,8 @@ class FrameTreeBrowserTest : public ContentBrowserTest {
 
   void SetUpOnMainThread() override {
     host_resolver()->AddRule("*", "127.0.0.1");
-    ASSERT_TRUE(embedded_test_server()->Start());
     SetupCrossSiteRedirector(embedded_test_server());
+    ASSERT_TRUE(embedded_test_server()->Start());
   }
 
  private:
@@ -323,6 +322,7 @@ IN_PROC_BROWSER_TEST_F(FrameTreeBrowserTest, NavigateGrandchildToBlob) {
   FrameTreeNode* target = root->child_at(0)->child_at(0);
 
   std::string blob_url_string;
+  RenderFrameDeletedObserver deleted_observer(target->current_frame_host());
   EXPECT_TRUE(ExecuteScriptAndExtractString(
       root,
       "function receiveMessage(event) {"
@@ -337,6 +337,9 @@ IN_PROC_BROWSER_TEST_F(FrameTreeBrowserTest, NavigateGrandchildToBlob) {
       "var blob_url = URL.createObjectURL(blob);"
       "frames[0][0].location.href = blob_url;",
       &blob_url_string));
+  // Wait for the RenderFrame to go away, if this will be cross-process.
+  if (AreAllSitesIsolatedForTesting())
+    deleted_observer.WaitUntilDeleted();
   EXPECT_EQ(GURL(blob_url_string), target->current_url());
   EXPECT_EQ(url::kBlobScheme, target->current_url().scheme());
   EXPECT_FALSE(target->current_origin().unique());
@@ -591,8 +594,8 @@ class CrossProcessFrameTreeBrowserTest : public ContentBrowserTest {
 
   void SetUpOnMainThread() override {
     host_resolver()->AddRule("*", "127.0.0.1");
-    ASSERT_TRUE(embedded_test_server()->Start());
     SetupCrossSiteRedirector(embedded_test_server());
+    ASSERT_TRUE(embedded_test_server()->Start());
   }
 
  private:
@@ -710,8 +713,8 @@ class IsolateIcelandFrameTreeBrowserTest : public ContentBrowserTest {
 
   void SetUpOnMainThread() override {
     host_resolver()->AddRule("*", "127.0.0.1");
-    ASSERT_TRUE(embedded_test_server()->Start());
     SetupCrossSiteRedirector(embedded_test_server());
+    ASSERT_TRUE(embedded_test_server()->Start());
   }
 
  private:

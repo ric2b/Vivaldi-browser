@@ -20,7 +20,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/url_formatter/elide_url.h"
-#include "ui/accessibility/ax_view_state.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/models/combobox_model.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -73,7 +73,7 @@ class PermissionCombobox : public views::MenuButton,
 
   int index() const { return index_; }
 
-  void GetAccessibleState(ui::AXViewState* state) override;
+  void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
 
   // MenuButtonListener:
   void OnMenuButtonClicked(views::MenuButton* source,
@@ -110,9 +110,9 @@ PermissionCombobox::PermissionCombobox(Profile* profile,
 
 PermissionCombobox::~PermissionCombobox() {}
 
-void PermissionCombobox::GetAccessibleState(ui::AXViewState* state) {
-  MenuButton::GetAccessibleState(state);
-  state->value = GetText();
+void PermissionCombobox::GetAccessibleNodeData(ui::AXNodeData* node_data) {
+  MenuButton::GetAccessibleNodeData(node_data);
+  node_data->SetValue(GetText());
 }
 
 void PermissionCombobox::OnMenuButtonClicked(views::MenuButton* source,
@@ -159,7 +159,7 @@ class PermissionsBubbleDialogDelegateView
   base::string16 GetWindowTitle() const override;
   void OnWidgetDestroying(views::Widget* widget) override;
   gfx::Size GetPreferredSize() const override;
-  void GetAccessibleState(ui::AXViewState* state) override;
+  void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
   bool Cancel() override;
   bool Accept() override;
   bool Close() override;
@@ -308,10 +308,10 @@ gfx::Size PermissionsBubbleDialogDelegateView::GetPreferredSize() const {
   return gfx::Size(kWidth, GetHeightForWidth(kWidth));
 }
 
-void PermissionsBubbleDialogDelegateView::GetAccessibleState(
-    ui::AXViewState* state) {
-  views::BubbleDialogDelegateView::GetAccessibleState(state);
-  state->role = ui::AX_ROLE_ALERT_DIALOG;
+void PermissionsBubbleDialogDelegateView::GetAccessibleNodeData(
+    ui::AXNodeData* node_data) {
+  views::BubbleDialogDelegateView::GetAccessibleNodeData(node_data);
+  node_data->role = ui::AX_ROLE_ALERT_DIALOG;
 }
 
 int PermissionsBubbleDialogDelegateView::GetDefaultDialogButton() const {
@@ -393,10 +393,7 @@ void PermissionsBubbleDialogDelegateView::UpdateAnchor(
 PermissionPromptImpl::PermissionPromptImpl(Browser* browser)
     : browser_(browser),
       delegate_(nullptr),
-      bubble_delegate_(nullptr) {
-  DCHECK(browser);
-  DCHECK(browser->window());
-}
+      bubble_delegate_(nullptr) {}
 
 PermissionPromptImpl::~PermissionPromptImpl() {
 }
@@ -407,6 +404,9 @@ void PermissionPromptImpl::SetDelegate(Delegate* delegate) {
 
 void PermissionPromptImpl::Show(const std::vector<PermissionRequest*>& requests,
                                 const std::vector<bool>& values) {
+  DCHECK(browser_);
+  DCHECK(browser_->window());
+
   if (bubble_delegate_)
     bubble_delegate_->CloseBubble();
 
@@ -441,6 +441,9 @@ bool PermissionPromptImpl::IsVisible() {
 }
 
 void PermissionPromptImpl::UpdateAnchorPosition() {
+  DCHECK(browser_);
+  DCHECK(browser_->window());
+
   if (IsVisible()) {
     bubble_delegate_->set_parent_window(
         platform_util::GetViewForWindow(browser_->window()->GetNativeWindow()));

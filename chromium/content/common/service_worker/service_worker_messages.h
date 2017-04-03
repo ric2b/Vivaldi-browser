@@ -57,6 +57,11 @@ IPC_STRUCT_TRAITS_BEGIN(content::ExtendableMessageEventSource)
   IPC_STRUCT_TRAITS_MEMBER(service_worker_info)
 IPC_STRUCT_TRAITS_END()
 
+IPC_STRUCT_TRAITS_BEGIN(content::NavigationPreloadState)
+  IPC_STRUCT_TRAITS_MEMBER(enabled)
+  IPC_STRUCT_TRAITS_MEMBER(header)
+IPC_STRUCT_TRAITS_END()
+
 IPC_STRUCT_TRAITS_BEGIN(content::ServiceWorkerFetchRequest)
   IPC_STRUCT_TRAITS_MEMBER(mode)
   IPC_STRUCT_TRAITS_MEMBER(is_main_resource_load)
@@ -187,6 +192,29 @@ IPC_MESSAGE_CONTROL3(ServiceWorkerHostMsg_GetRegistrationForReady,
                      int /* request_id */,
                      int /* provider_id */)
 
+// Asks the browser to enable/disable navigation preload for a registration.
+IPC_MESSAGE_CONTROL5(ServiceWorkerHostMsg_EnableNavigationPreload,
+                     int /* thread_id */,
+                     int /* request_id */,
+                     int /* provider_id */,
+                     int64_t /* registration_id */,
+                     bool /* enable */)
+
+// Asks the browser to get navigation preload state for a registration.
+IPC_MESSAGE_CONTROL4(ServiceWorkerHostMsg_GetNavigationPreloadState,
+                     int /* thread_id */,
+                     int /* request_id */,
+                     int /* provider_id */,
+                     int64_t /* registration_id */)
+
+// Asks the browser to set navigation preload header value for a registration.
+IPC_MESSAGE_CONTROL5(ServiceWorkerHostMsg_SetNavigationPreloadHeader,
+                     int /* thread_id */,
+                     int /* request_id */,
+                     int /* provider_id */,
+                     int64_t /* registration_id */,
+                     std::string /* header_value */)
+
 // Sends ExtendableMessageEvent to a service worker (renderer->browser).
 IPC_MESSAGE_CONTROL5(
     ServiceWorkerHostMsg_PostMessageToWorker,
@@ -271,13 +299,9 @@ IPC_MESSAGE_ROUTED3(ServiceWorkerHostMsg_ExtendableMessageEventFinished,
                     blink::WebServiceWorkerEventResult,
                     base::Time /* dispatch_event_time */)
 IPC_MESSAGE_ROUTED4(ServiceWorkerHostMsg_FetchEventResponse,
-                    int /* response_id */,
+                    int /* fetch_event_id */,
                     content::ServiceWorkerFetchEventResult,
                     content::ServiceWorkerResponse,
-                    base::Time /* dispatch_event_time */)
-IPC_MESSAGE_ROUTED3(ServiceWorkerHostMsg_FetchEventFinished,
-                    int /* event_finish_id */,
-                    blink::WebServiceWorkerEventResult,
                     base::Time /* dispatch_event_time */)
 IPC_MESSAGE_ROUTED3(ServiceWorkerHostMsg_NotificationClickEventFinished,
                     int /* request_id */,
@@ -479,6 +503,32 @@ IPC_MESSAGE_CONTROL4(ServiceWorkerMsg_SetControllerServiceWorker,
                      content::ServiceWorkerObjectInfo,
                      bool /* should_notify_controllerchange */)
 
+IPC_MESSAGE_CONTROL2(ServiceWorkerMsg_DidEnableNavigationPreload,
+                     int /* thread_id */,
+                     int /* request_id */)
+IPC_MESSAGE_CONTROL4(ServiceWorkerMsg_EnableNavigationPreloadError,
+                     int /* thread_id */,
+                     int /* request_id */,
+                     blink::WebServiceWorkerError::ErrorType /* code */,
+                     std::string /* message */)
+IPC_MESSAGE_CONTROL3(ServiceWorkerMsg_DidGetNavigationPreloadState,
+                     int /* thread_id */,
+                     int /* request_id */,
+                     content::NavigationPreloadState /* state */)
+IPC_MESSAGE_CONTROL4(ServiceWorkerMsg_GetNavigationPreloadStateError,
+                     int /* thread_id */,
+                     int /* request_id */,
+                     blink::WebServiceWorkerError::ErrorType /* code */,
+                     std::string /* message */)
+IPC_MESSAGE_CONTROL2(ServiceWorkerMsg_DidSetNavigationPreloadHeader,
+                     int /* thread_id */,
+                     int /* request_id */)
+IPC_MESSAGE_CONTROL4(ServiceWorkerMsg_SetNavigationPreloadHeaderError,
+                     int /* thread_id */,
+                     int /* request_id */,
+                     blink::WebServiceWorkerError::ErrorType /* code */,
+                     std::string /* message */)
+
 // Sends MessageEvent to a client document (browser->renderer).
 IPC_MESSAGE_CONTROL1(ServiceWorkerMsg_MessageToDocument,
                      ServiceWorkerMsg_MessageToDocument_Params)
@@ -491,15 +541,12 @@ IPC_MESSAGE_CONTROL1(ServiceWorkerMsg_ActivateEvent,
 IPC_MESSAGE_CONTROL2(ServiceWorkerMsg_ExtendableMessageEvent,
                      int /* request_id */,
                      ServiceWorkerMsg_ExtendableMessageEvent_Params)
-IPC_MESSAGE_CONTROL3(ServiceWorkerMsg_FetchEvent,
-                     int /* response_id */,
-                     int /* event_finish_id */,
-                     content::ServiceWorkerFetchRequest)
-IPC_MESSAGE_CONTROL4(ServiceWorkerMsg_NotificationClickEvent,
+IPC_MESSAGE_CONTROL5(ServiceWorkerMsg_NotificationClickEvent,
                      int /* request_id */,
                      std::string /* notification_id */,
                      content::PlatformNotificationData /* notification_data */,
-                     int /* action_index */)
+                     int /* action_index */,
+                     base::NullableString16 /* notification reply */)
 IPC_MESSAGE_CONTROL3(ServiceWorkerMsg_NotificationCloseEvent,
                      int /* request_id */,
                      std::string /* notification_id */,

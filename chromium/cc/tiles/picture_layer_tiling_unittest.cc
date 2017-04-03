@@ -18,7 +18,6 @@
 #include "cc/test/fake_picture_layer_tiling_client.h"
 #include "cc/test/fake_raster_source.h"
 #include "cc/test/test_context_provider.h"
-#include "cc/test/test_shared_bitmap_manager.h"
 #include "cc/tiles/picture_layer_tiling_set.h"
 #include "cc/trees/layer_tree_settings.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -77,7 +76,7 @@ class TestablePictureLayerTiling : public PictureLayerTiling {
                              float min_preraster_distance,
                              float max_preraster_distance)
       : PictureLayerTiling(tree,
-                           contents_scale,
+                           gfx::SizeF(contents_scale, contents_scale),
                            raster_source,
                            client,
                            min_preraster_distance,
@@ -134,7 +133,7 @@ class PictureLayerTilingIteratorTest : public testing::Test {
     // tiling scale. This is because coverage computation is done in integer
     // grids in the dest space, and the overlap between tiles may not guarantee
     // to enclose an integer grid line to round to if scaled down.
-    ASSERT_GE(rect_scale, tiling_->contents_scale());
+    ASSERT_GE(rect_scale, tiling_->contents_scale_key());
 
     Region remaining = expect_rect;
     for (PictureLayerTiling::CoverageIterator
@@ -202,7 +201,7 @@ class PictureLayerTilingIteratorTest : public testing::Test {
 
   void VerifyTilesCoverNonContainedRect(float rect_scale,
                                         const gfx::Rect& dest_rect) {
-    float dest_to_contents_scale = tiling_->contents_scale() / rect_scale;
+    float dest_to_contents_scale = tiling_->contents_scale_key() / rect_scale;
     gfx::Rect clamped_rect = gfx::ScaleToEnclosingRect(
         gfx::Rect(tiling_->tiling_size()), 1.f / dest_to_contents_scale);
     clamped_rect.Intersect(dest_rect);

@@ -15,14 +15,17 @@ import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.MainDex;
 
+import java.util.Arrays;
+import java.util.List;
 import java.util.Locale;
 
 /**
  * A collection of MediaCodec utility functions.
  */
 @JNINamespace("media")
+@MainDex
 class MediaCodecUtil {
-    private static final String TAG = "MediaCodecUtil";
+    private static final String TAG = "cr_MediaCodecUtil";
 
     // Codec direction.  Keep this in sync with media_codec_direction.h.
     static final int MEDIA_CODEC_DECODER = 0;
@@ -31,13 +34,12 @@ class MediaCodecUtil {
     /**
      * Class to pass parameters from createDecoder()
      */
-    @MainDex
     public static class CodecCreationInfo {
         public MediaCodec mediaCodec = null;
         public boolean supportsAdaptivePlayback = false;
+        public BitrateAdjustmentTypes bitrateAdjustmentType = BitrateAdjustmentTypes.NO_ADJUSTMENT;
     }
 
-    @MainDex
     public static final class MimeTypes {
         public static final String VIDEO_MP4 = "video/mp4";
         public static final String VIDEO_WEBM = "video/webm";
@@ -47,11 +49,20 @@ class MediaCodecUtil {
         public static final String VIDEO_VP9 = "video/x-vnd.on2.vp9";
     }
 
+    // Type of bitrate adjustment for video encoder.
+    public enum BitrateAdjustmentTypes {
+        // No adjustment - video encoder has no known bitrate problem.
+        NO_ADJUSTMENT,
+        // Framerate based bitrate adjustment is required - HW encoder does not use frame
+        // timestamps to calculate frame bitrate budget and instead is relying on initial
+        // fps configuration assuming that all frames are coming at fixed initial frame rate.
+        FRAMERATE_ADJUSTMENT,
+    }
+
     /**
      * Class to abstract platform version API differences for interacting with
      * the MediaCodecList.
      */
-    @MainDex
     private static class MediaCodecListHelper {
         @TargetApi(Build.VERSION_CODES.LOLLIPOP)
         public MediaCodecListHelper() {
@@ -355,5 +366,152 @@ class MediaCodecUtil {
             Log.e(TAG, "Cannot retrieve codec information", e);
         }
         return false;
+    }
+
+    // List of supported HW encoders.
+    private static enum HWEncoderProperties {
+        QcomVp8(MimeTypes.VIDEO_VP8, "OMX.qcom.", Build.VERSION_CODES.KITKAT,
+                BitrateAdjustmentTypes.NO_ADJUSTMENT),
+        QcomH264(MimeTypes.VIDEO_H264, "OMX.qcom.", Build.VERSION_CODES.KITKAT,
+                BitrateAdjustmentTypes.NO_ADJUSTMENT),
+        ExynosVp8(MimeTypes.VIDEO_VP8, "OMX.Exynos.", Build.VERSION_CODES.M,
+                BitrateAdjustmentTypes.NO_ADJUSTMENT),
+        ExynosH264(MimeTypes.VIDEO_H264, "OMX.Exynos.", Build.VERSION_CODES.LOLLIPOP,
+                BitrateAdjustmentTypes.FRAMERATE_ADJUSTMENT);
+
+        private final String mMime;
+        private final String mPrefix;
+        private final int mMinSDK;
+        private final BitrateAdjustmentTypes mBitrateAdjustmentType;
+
+        private HWEncoderProperties(String mime, String prefix, int minSDK,
+                BitrateAdjustmentTypes bitrateAdjustmentType) {
+            this.mMime = mime;
+            this.mPrefix = prefix;
+            this.mMinSDK = minSDK;
+            this.mBitrateAdjustmentType = bitrateAdjustmentType;
+        }
+
+        public String getMime() {
+            return mMime;
+        }
+
+        public String getPrefix() {
+            return mPrefix;
+        }
+
+        public int getMinSDK() {
+            return mMinSDK;
+        }
+
+        public BitrateAdjustmentTypes getBitrateAdjustmentType() {
+            return mBitrateAdjustmentType;
+        }
+    }
+
+    // List of devices with poor H.264 encoder quality.
+    private static final String[] H264_ENCODER_MODEL_BLACKLIST = new String[] {
+            // HW H.264 encoder on below devices has poor bitrate control - actual bitrates deviates
+            // a lot from the target value.
+            "SAMSUNG-SGH-I337", "Nexus 7", "Nexus 4"};
+
+    /**
+     * Creates MediaCodec encoder.
+     * @param mime MIME type of the media.
+     * @return CodecCreationInfo object
+     */
+    static CodecCreationInfo createEncoder(String mime) {
+        // Always return a valid CodecCreationInfo, its |mediaCodec| field will be null
+        // if we cannot create the codec.
+        CodecCreationInfo result = new CodecCreationInfo();
+
+        HWEncoderProperties encoderProperties = findHWEncoder(mime);
+        if (encoderProperties == null) {
+            return result;
+        }
+
+        try {
+            result.mediaCodec = MediaCodec.createEncoderByType(mime);
+            result.supportsAdaptivePlayback = false;
+            result.bitrateAdjustmentType = encoderProperties.getBitrateAdjustmentType();
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to create MediaCodec: %s", mime, e);
+        }
+        return result;
+    }
+
+    /**
+     * This is a way to blacklist misbehaving devices.
+     * @param mime MIME type as passed to mediaCodec.createEncoderByType(mime).
+     * @return true if this codec is supported for encoder on this device.
+     */
+    @CalledByNative
+    static boolean isEncoderSupportedByDevice(String mime) {
+        // MediaCodec.setParameters is missing for JB and below, so bitrate
+        // can not be adjusted dynamically.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.KITKAT) {
+            return false;
+        }
+
+        // Check if this is supported HW encoder.
+        if (mime.equals(MimeTypes.VIDEO_H264)) {
+            // Check if device is in H.264 exception list.
+            List<String> exceptionModels = Arrays.asList(H264_ENCODER_MODEL_BLACKLIST);
+            if (exceptionModels.contains(Build.MODEL)) {
+                Log.w(TAG, "Model: " + Build.MODEL + " has blacklisted H.264 encoder.");
+                return false;
+            }
+        }
+
+        if (findHWEncoder(mime) == null) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Find HW encoder with given MIME type.
+     * @param mime MIME type of the media.
+     * @return HWEncoderProperties object.
+     */
+    private static HWEncoderProperties findHWEncoder(String mime) {
+        MediaCodecListHelper codecListHelper = new MediaCodecListHelper();
+        int codecCount = codecListHelper.getCodecCount();
+        for (int i = 0; i < codecCount; ++i) {
+            MediaCodecInfo info = codecListHelper.getCodecInfoAt(i);
+
+            if (!info.isEncoder() || isSoftwareCodec(info.getName())) continue;
+
+            String encoderName = null;
+            for (String mimeType : info.getSupportedTypes()) {
+                if (mimeType.equalsIgnoreCase(mime)) {
+                    encoderName = info.getName();
+                    break;
+                }
+            }
+
+            if (encoderName == null) {
+                continue; // No HW support in this codec; try the next one.
+            }
+
+            // Check if this is supported HW encoder.
+            for (HWEncoderProperties codecProperties : HWEncoderProperties.values()) {
+                if (!mime.equalsIgnoreCase(codecProperties.getMime())) continue;
+
+                if (encoderName.startsWith(codecProperties.getPrefix())) {
+                    if (Build.VERSION.SDK_INT < codecProperties.getMinSDK()) {
+                        Log.w(TAG, "Codec " + encoderName + " is disabled due to SDK version "
+                                        + Build.VERSION.SDK_INT);
+                        continue;
+                    }
+                    Log.d(TAG, "Found target encoder for mime " + mime + " : " + encoderName);
+                    return codecProperties;
+                }
+            }
+        }
+
+        Log.w(TAG, "HW encoder for " + mime + " is not available on this device.");
+        return null;
     }
 }

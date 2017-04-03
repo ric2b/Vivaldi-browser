@@ -10,6 +10,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/feature_list.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
@@ -22,6 +23,7 @@
 #include "content/browser/media/capture/desktop_capture_device_uma_types.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/desktop_media_id.h"
+#include "content/public/common/content_switches.h"
 #include "device/power_save_blocker/power_save_blocker.h"
 #include "media/base/video_util.h"
 #include "media/capture/content/capture_resolution_chooser.h"
@@ -32,7 +34,6 @@
 #include "third_party/webrtc/modules/desktop_capture/desktop_capturer.h"
 #include "third_party/webrtc/modules/desktop_capture/desktop_frame.h"
 #include "third_party/webrtc/modules/desktop_capture/mouse_cursor_monitor.h"
-#include "third_party/webrtc/modules/desktop_capture/screen_capturer.h"
 
 namespace content {
 
@@ -60,6 +61,11 @@ bool IsFrameUnpackedOrInverted(webrtc::DesktopFrame* frame) {
 }
 
 }  // namespace
+
+#if defined(OS_WIN)
+const base::Feature kDirectXCapturer{"DirectXCapturer",
+                                     base::FEATURE_DISABLED_BY_DEFAULT};
+#endif
 
 class DesktopCaptureDevice::Core : public webrtc::DesktopCapturer::Callback {
  public:
@@ -349,7 +355,7 @@ void DesktopCaptureDevice::Core::DoCapture() {
   DCHECK(!capture_in_progress_);
 
   capture_in_progress_ = true;
-  desktop_capturer_->Capture(webrtc::DesktopRegion());
+  desktop_capturer_->CaptureFrame();
 
   // Currently only synchronous implementations of DesktopCapturer are
   // supported.
@@ -365,47 +371,46 @@ std::unique_ptr<media::VideoCaptureDevice> DesktopCaptureDevice::Create(
   options.set_disable_effects(false);
 
 #if defined(OS_WIN)
-      options.set_allow_use_magnification_api(true);
+  if (!base::FeatureList::IsEnabled(kDirectXCapturer)) {
+    options.set_allow_use_magnification_api(true);
+  } else {
+    options.set_allow_directx_capturer(true);
+    options.set_allow_use_magnification_api(false);
+  }
 #endif
 
-      std::unique_ptr<webrtc::DesktopCapturer> capturer;
+  std::unique_ptr<webrtc::DesktopCapturer> capturer;
 
-      switch (source.type) {
-        case DesktopMediaID::TYPE_SCREEN: {
-          std::unique_ptr<webrtc::ScreenCapturer> screen_capturer(
-              webrtc::ScreenCapturer::Create(options));
-          if (screen_capturer && screen_capturer->SelectScreen(source.id)) {
-            capturer.reset(new webrtc::DesktopAndCursorComposer(
-                screen_capturer.release(),
-                webrtc::MouseCursorMonitor::CreateForScreen(options,
-                                                            source.id)));
-            IncrementDesktopCaptureCounter(SCREEN_CAPTURER_CREATED);
-            if (source.audio_share) {
-              IncrementDesktopCaptureCounter(
-                  SCREEN_CAPTURER_CREATED_WITH_AUDIO);
-            } else {
-              IncrementDesktopCaptureCounter(
-                  SCREEN_CAPTURER_CREATED_WITHOUT_AUDIO);
-            }
-          }
-          break;
-        }
+  switch (source.type) {
+    case DesktopMediaID::TYPE_SCREEN: {
+      std::unique_ptr<webrtc::DesktopCapturer> screen_capturer(
+          webrtc::DesktopCapturer::CreateScreenCapturer(options));
+      if (screen_capturer && screen_capturer->SelectSource(source.id)) {
+        capturer.reset(new webrtc::DesktopAndCursorComposer(
+            screen_capturer.release(),
+            webrtc::MouseCursorMonitor::CreateForScreen(options, source.id)));
+        IncrementDesktopCaptureCounter(SCREEN_CAPTURER_CREATED);
+        IncrementDesktopCaptureCounter(
+            source.audio_share ? SCREEN_CAPTURER_CREATED_WITH_AUDIO
+                               : SCREEN_CAPTURER_CREATED_WITHOUT_AUDIO);
+      }
+      break;
+    }
 
-        case DesktopMediaID::TYPE_WINDOW: {
-          std::unique_ptr<webrtc::WindowCapturer> window_capturer(
-              webrtc::CroppingWindowCapturer::Create(options));
-          if (window_capturer && window_capturer->SelectWindow(source.id)) {
-            window_capturer->BringSelectedWindowToFront();
-            capturer.reset(new webrtc::DesktopAndCursorComposer(
-                window_capturer.release(),
-                webrtc::MouseCursorMonitor::CreateForWindow(options,
-                                                            source.id)));
-            IncrementDesktopCaptureCounter(WINDOW_CAPTURER_CREATED);
-          }
-          break;
-        }
+    case DesktopMediaID::TYPE_WINDOW: {
+      std::unique_ptr<webrtc::DesktopCapturer> window_capturer(
+          webrtc::CroppingWindowCapturer::Create(options));
+      if (window_capturer && window_capturer->SelectSource(source.id)) {
+        window_capturer->FocusOnSelectedSource();
+        capturer.reset(new webrtc::DesktopAndCursorComposer(
+            window_capturer.release(),
+            webrtc::MouseCursorMonitor::CreateForWindow(options, source.id)));
+        IncrementDesktopCaptureCounter(WINDOW_CAPTURER_CREATED);
+      }
+      break;
+    }
 
-        default: { NOTREACHED(); }
+    default: { NOTREACHED(); }
   }
 
   std::unique_ptr<media::VideoCaptureDevice> result;

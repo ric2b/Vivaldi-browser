@@ -5,7 +5,6 @@
 #include "chrome/installer/util/product.h"
 
 #include <algorithm>
-#include <shellapi.h>
 
 #include "base/command_line.h"
 #include "base/logging.h"
@@ -21,6 +20,8 @@
 #include "chrome/installer/util/master_preferences.h"
 #include "chrome/installer/util/master_preferences_constants.h"
 #include "chrome/installer/util/product_operations.h"
+
+#include <shellapi.h>
 
 using base::win::RegKey;
 using installer::MasterPreferences;

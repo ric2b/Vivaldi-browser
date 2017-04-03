@@ -19,8 +19,8 @@ class SavePageRequest {
   // GENERATED_JAVA_ENUM_PACKAGE: org.chromium.components.offlinepages
   enum class RequestState {
     AVAILABLE = 0,     // Request can be scheduled when preconditions are met.
-    PAUSED = 1,        // Request is not available until it is unpaused
-    PRERENDERING = 2,  // Request is active in the pre-renderer
+    PAUSED = 1,        // Request is not available until it is unpaused.
+    OFFLINING = 2,     // Request is actively offlining.
   };
 
   SavePageRequest(int64_t request_id,
@@ -45,8 +45,8 @@ class SavePageRequest {
   // Marks attempt as completed and clears |last_attempt_time_|.
   void MarkAttemptCompleted();
 
-  // Marks attempt as aborted. Specifically it clears |last_attempt_time_|
-  // and decrements |attempt_count_|.
+  // Marks attempt as aborted. This will change the state of an OFFLINING
+  // request to be AVAILABLE.  It will not change the state of a PAUSED request
   void MarkAttemptAborted();
 
   // Mark the attempt as paused.  It is not available for future prerendering

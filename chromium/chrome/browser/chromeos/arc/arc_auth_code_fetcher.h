@@ -8,7 +8,11 @@
 #include <memory>
 #include <string>
 
+#include "base/callback.h"
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
+#include "chrome/browser/chromeos/arc/arc_auth_context.h"
+#include "chrome/browser/chromeos/arc/arc_optin_uma.h"
 #include "google_apis/gaia/oauth2_token_service.h"
 #include "net/url_request/url_fetcher_delegate.h"
 
@@ -21,16 +25,18 @@ class URLRequestContextGetter;
 
 namespace arc {
 
-class ArcAuthCodeFetcherDelegate;
-
+// The instance is not reusable, so for each Fetch(), the instance must be
+// re-created. Deleting the instance cancels inflight operation.
 class ArcAuthCodeFetcher : public OAuth2TokenService::Consumer,
                            public net::URLFetcherDelegate {
  public:
-  ArcAuthCodeFetcher(ArcAuthCodeFetcherDelegate* delegate,
-                     net::URLRequestContextGetter* request_context_getter,
-                     Profile* profile,
-                     const std::string& auth_endpoint);
+  ArcAuthCodeFetcher(Profile* profile, ArcAuthContext* context);
   ~ArcAuthCodeFetcher() override;
+
+  // Starts to fetch the token. On success fetched |auth_token| is passed.
+  // On error, auth_token is empty.
+  using FetchCallback = base::Callback<void(const std::string& auth_token)>;
+  void Fetch(const FetchCallback& callback);
 
   // OAuth2TokenService::Consumer:
   void OnGetTokenSuccess(const OAuth2TokenService::Request* request,
@@ -44,17 +50,22 @@ class ArcAuthCodeFetcher : public OAuth2TokenService::Consumer,
 
  private:
   void ResetFetchers();
+  void OnPrepared(net::URLRequestContextGetter* request_context_getter);
+
+  void ReportResult(const std::string& auth_code,
+                    OptInSilentAuthCode uma_status);
 
   // Unowned pointers.
-  ArcAuthCodeFetcherDelegate* const delegate_;
-  net::URLRequestContextGetter* const request_context_getter_;
   Profile* const profile_;
+  ArcAuthContext* const context_;
+  net::URLRequestContextGetter* request_context_getter_ = nullptr;
 
-  // URL to request auth code.
-  const std::string auth_endpoint_;
+  FetchCallback callback_;
 
   std::unique_ptr<OAuth2TokenService::Request> login_token_request_;
   std::unique_ptr<net::URLFetcher> auth_code_fetcher_;
+
+  base::WeakPtrFactory<ArcAuthCodeFetcher> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(ArcAuthCodeFetcher);
 };

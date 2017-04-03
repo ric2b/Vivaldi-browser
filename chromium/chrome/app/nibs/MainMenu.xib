@@ -33,12 +33,6 @@
                                 </connections>
                             </menuItem>
                             <menuItem isSeparatorItem="YES" id="492"/>
-                            <menuItem title="^IDS_SYNC_MENU_PRE_SYNCED_LABEL$IDS_PRODUCT_NAME" tag="40030" hidden="YES" enabled="NO" id="664">
-                                <modifierMask key="keyEquivalentModifierMask"/>
-                                <connections>
-                                    <action selector="commandDispatch:" target="-1" id="666"/>
-                                </connections>
-                            </menuItem>
                             <menuItem title="^IDS_CLEAR_BROWSING_DATA" tag="40013" id="491">
                                 <string key="keyEquivalent" base64-UTF8="YES">
 CA
@@ -360,6 +354,13 @@ CA
                             <menuItem title="^IDS_TEXT_SMALLER_MAC" tag="38003" keyEquivalent="-" id="459">
                                 <connections>
                                     <action selector="commandDispatch:" target="-1" id="555"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="AAx-VM-UbD"/>
+                            <menuItem title="^IDS_MEDIA_ROUTER_MENU_ITEM_TITLE" tag="35011" id="OVr-QF-3s6">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="commandDispatch:" target="-1" id="i0s-9w-Djk"/>
                                 </connections>
                             </menuItem>
                             <menuItem isSeparatorItem="YES" id="631"/>

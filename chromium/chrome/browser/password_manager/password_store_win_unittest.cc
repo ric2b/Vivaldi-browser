@@ -19,7 +19,6 @@
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
-#include "base/stl_util.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
@@ -66,8 +65,13 @@ class MockPasswordStoreConsumer : public PasswordStoreConsumer {
 
 class MockWebDataServiceConsumer : public WebDataServiceConsumer {
  public:
-  MOCK_METHOD2(OnWebDataServiceRequestDone,
-               void(PasswordWebDataService::Handle, const WDTypedResult*));
+  MOCK_METHOD0(OnWebDataServiceRequestDoneStub, void());
+
+  // GMock cannot mock methods with move-only args.
+  void OnWebDataServiceRequestDone(WebDataServiceBase::Handle h,
+                                   std::unique_ptr<WDTypedResult> result) {
+    OnWebDataServiceRequestDoneStub();
+  }
 };
 
 }  // anonymous namespace
@@ -188,17 +192,14 @@ class PasswordStoreWinTest : public testing::Test {
   scoped_refptr<PasswordStore> store_;
 };
 
-ACTION(STLDeleteElements0) {
-  base::STLDeleteContainerPointers(arg0.begin(), arg0.end());
-}
-
 ACTION(QuitUIMessageLoop) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   base::MessageLoop::current()->QuitWhenIdle();
 }
 
 MATCHER(EmptyWDResult, "") {
-  return static_cast<const WDResult<std::vector<PasswordForm*>>*>(arg)
+  return static_cast<
+             const WDResult<std::vector<std::unique_ptr<PasswordForm>>>*>(arg)
       ->GetValue()
       .empty();
 }
@@ -378,7 +379,7 @@ TEST_F(PasswordStoreWinTest, DISABLED_MultipleWDSQueriesOnDifferentThreads) {
 
   MockWebDataServiceConsumer wds_consumer;
 
-  EXPECT_CALL(wds_consumer, OnWebDataServiceRequestDone(_, _))
+  EXPECT_CALL(wds_consumer, OnWebDataServiceRequestDoneStub())
       .WillOnce(QuitUIMessageLoop());
 
   wds_->GetIE7Login(password_info, &wds_consumer);

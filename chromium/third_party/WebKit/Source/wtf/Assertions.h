@@ -223,21 +223,6 @@ class WTF_EXPORT ScopedLogger {
 
 #endif
 
-// ASSERT_WITH_SECURITY_IMPLICATION
-// It is deprecated.  ASSERT_WITH_SECURITY_IMPLICATION should be replaced
-// with SECURITY_DCHECK.
-#ifdef ADDRESS_SANITIZER
-
-#define ASSERT_WITH_SECURITY_IMPLICATION(assertion)                            \
-  (!(assertion) ? (WTFReportAssertionFailure(__FILE__, __LINE__,               \
-                                             WTF_PRETTY_FUNCTION, #assertion), \
-                   CRASH())                                                    \
-                : (void)0)
-
-#else
-#define ASSERT_WITH_SECURITY_IMPLICATION(assertion) ASSERT(assertion)
-#endif
-
 // Users must test "#if ENABLE(SECURITY_ASSERT)", which helps ensure
 // that code testing this macro has included this header.
 #if defined(ADDRESS_SANITIZER) || ENABLE(ASSERT)
@@ -305,27 +290,52 @@ class WTF_EXPORT ScopedLogger {
   }
 
 // DEFINE_TYPE_CASTS
-// Provide static_cast<> wrappers with ASSERT_WITH_SECURITY_IMPLICATION for bad
-// casts.
-#define DEFINE_TYPE_CASTS(thisType, argumentType, argumentName,            \
-                          pointerPredicate, referencePredicate)            \
-  inline thisType* to##thisType(argumentType* argumentName) {              \
-    ASSERT_WITH_SECURITY_IMPLICATION(!argumentName || (pointerPredicate)); \
-    return static_cast<thisType*>(argumentName);                           \
-  }                                                                        \
-  inline const thisType* to##thisType(const argumentType* argumentName) {  \
-    ASSERT_WITH_SECURITY_IMPLICATION(!argumentName || (pointerPredicate)); \
-    return static_cast<const thisType*>(argumentName);                     \
-  }                                                                        \
-  inline thisType& to##thisType(argumentType& argumentName) {              \
-    ASSERT_WITH_SECURITY_IMPLICATION(referencePredicate);                  \
-    return static_cast<thisType&>(argumentName);                           \
-  }                                                                        \
-  inline const thisType& to##thisType(const argumentType& argumentName) {  \
-    ASSERT_WITH_SECURITY_IMPLICATION(referencePredicate);                  \
-    return static_cast<const thisType&>(argumentName);                     \
-  }                                                                        \
-  void to##thisType(const thisType*);                                      \
-  void to##thisType(const thisType&)
+//
+// toType() functions are static_cast<> wrappers with SECURITY_DCHECK. It's
+// helpful to find bad casts.
+//
+// toTypeOrDie() has a runtime type check, and it crashes if the specified
+// object is not an instance of the destination type. It is used if
+// * it's hard to prevent from passing unexpected objects,
+// * proceeding with the following code doesn't make sense, and
+// * cost of runtime type check is acceptable.
+#define DEFINE_TYPE_CASTS(thisType, argumentType, argument, pointerPredicate, \
+                          referencePredicate)                                 \
+  inline thisType* to##thisType(argumentType* argument) {                     \
+    SECURITY_DCHECK(!argument || (pointerPredicate));                         \
+    return static_cast<thisType*>(argument);                                  \
+  }                                                                           \
+  inline const thisType* to##thisType(const argumentType* argument) {         \
+    SECURITY_DCHECK(!argument || (pointerPredicate));                         \
+    return static_cast<const thisType*>(argument);                            \
+  }                                                                           \
+  inline thisType& to##thisType(argumentType& argument) {                     \
+    SECURITY_DCHECK(referencePredicate);                                      \
+    return static_cast<thisType&>(argument);                                  \
+  }                                                                           \
+  inline const thisType& to##thisType(const argumentType& argument) {         \
+    SECURITY_DCHECK(referencePredicate);                                      \
+    return static_cast<const thisType&>(argument);                            \
+  }                                                                           \
+  void to##thisType(const thisType*);                                         \
+  void to##thisType(const thisType&);                                         \
+  inline thisType* to##thisType##OrDie(argumentType* argument) {              \
+    CHECK(!argument || (pointerPredicate));                                   \
+    return static_cast<thisType*>(argument);                                  \
+  }                                                                           \
+  inline const thisType* to##thisType##OrDie(const argumentType* argument) {  \
+    CHECK(!argument || (pointerPredicate));                                   \
+    return static_cast<const thisType*>(argument);                            \
+  }                                                                           \
+  inline thisType& to##thisType##OrDie(argumentType& argument) {              \
+    CHECK(referencePredicate);                                                \
+    return static_cast<thisType&>(argument);                                  \
+  }                                                                           \
+  inline const thisType& to##thisType##OrDie(const argumentType& argument) {  \
+    CHECK(referencePredicate);                                                \
+    return static_cast<const thisType&>(argument);                            \
+  }                                                                           \
+  void to##thisType##OrDie(const thisType*);                                  \
+  void to##thisType##OrDie(const thisType&)
 
 #endif  // WTF_Assertions_h

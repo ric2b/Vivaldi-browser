@@ -4,6 +4,8 @@
 
 #include "blimp/client/core/settings/settings_feature.h"
 
+#include "blimp/client/core/settings/settings.h"
+#include "blimp/client/core/settings/user_agent.h"
 #include "blimp/common/create_blimp_message.h"
 #include "blimp/common/proto/blimp_message.pb.h"
 #include "blimp/common/proto/settings.pb.h"
@@ -12,34 +14,15 @@
 namespace blimp {
 namespace client {
 
-SettingsFeature::SettingsFeature() : record_whole_document_(false) {}
+SettingsFeature::SettingsFeature(Settings* settings) : settings_(settings) {
+  DCHECK(settings_);
+}
 
-SettingsFeature::~SettingsFeature() {}
+SettingsFeature::~SettingsFeature() = default;
 
 void SettingsFeature::set_outgoing_message_processor(
     std::unique_ptr<BlimpMessageProcessor> processor) {
   outgoing_message_processor_ = std::move(processor);
-}
-
-void SettingsFeature::SetRecordWholeDocument(bool record_whole_document) {
-  if (record_whole_document_ == record_whole_document)
-    return;
-
-  record_whole_document_ = record_whole_document;
-
-  EngineSettingsMessage* engine_settings;
-  std::unique_ptr<BlimpMessage> message = CreateBlimpMessage(&engine_settings);
-  engine_settings->set_record_whole_document(record_whole_document_);
-  outgoing_message_processor_->ProcessMessage(std::move(message),
-                                              net::CompletionCallback());
-}
-
-void SettingsFeature::SendUserAgentOSVersionInfo(const std::string& osVersion) {
-  EngineSettingsMessage* engine_settings;
-  std::unique_ptr<BlimpMessage> message = CreateBlimpMessage(&engine_settings);
-  engine_settings->set_client_os_info(osVersion);
-  outgoing_message_processor_->ProcessMessage(std::move(message),
-                                              net::CompletionCallback());
 }
 
 void SettingsFeature::ProcessMessage(std::unique_ptr<BlimpMessage> message,
@@ -47,6 +30,24 @@ void SettingsFeature::ProcessMessage(std::unique_ptr<BlimpMessage> message,
   // We don't receive any messages from the engine yet.
   NOTREACHED() << "Invalid settings message received from the engine.";
   callback.Run(net::OK);
+}
+
+void SettingsFeature::OnRecordWholeDocumentChanged(bool enable) {
+  EngineSettingsMessage* engine_settings;
+  std::unique_ptr<BlimpMessage> message = CreateBlimpMessage(&engine_settings);
+  engine_settings->set_record_whole_document(enable);
+  outgoing_message_processor_->ProcessMessage(std::move(message),
+                                              net::CompletionCallback());
+}
+
+void SettingsFeature::PushSettings() {
+  EngineSettingsMessage* engine_settings;
+  std::unique_ptr<BlimpMessage> message = CreateBlimpMessage(&engine_settings);
+  engine_settings->set_record_whole_document(
+      settings_->IsRecordWholeDocument());
+  engine_settings->set_client_os_info(GetOSVersionInfoForUserAgent());
+  outgoing_message_processor_->ProcessMessage(std::move(message),
+                                              net::CompletionCallback());
 }
 
 }  // namespace client

@@ -73,11 +73,6 @@ void RecordFirstMeaningfulPaintStatus(
 
 namespace internal {
 
-const char kHistogramCommit[] = "PageLoad.Timing2.NavigationToCommit";
-
-const char kBackgroundHistogramCommit[] =
-    "PageLoad.Timing2.NavigationToCommit.Background";
-
 const char kHistogramDomContentLoaded[] =
     "PageLoad.DocumentTiming.NavigationToDOMContentLoadedEventFired";
 const char kBackgroundHistogramDomContentLoaded[] =
@@ -167,17 +162,9 @@ const char kHistogramLoadTypeParseStartForwardBackNoStore[] =
 const char kHistogramLoadTypeParseStartNewNavigation[] =
     "PageLoad.ParseTiming.NavigationToParseStart.LoadType.NewNavigation";
 
-const char kHistogramFirstBackground[] =
-    "PageLoad.Timing2.NavigationToFirstBackground";
 const char kHistogramFirstForeground[] =
     "PageLoad.Timing2.NavigationToFirstForeground";
 
-const char kHistogramBackgroundBeforePaint[] =
-    "PageLoad.Timing2.NavigationToFirstBackground.AfterCommit.BeforePaint";
-const char kHistogramBackgroundBeforeCommit[] =
-    "PageLoad.Timing2.NavigationToFirstBackground.BeforeCommit";
-const char kHistogramBackgroundDuringParse[] =
-    "PageLoad.Timing2.NavigationToFirstBackground.DuringParse";
 const char kHistogramFailedProvisionalLoad[] =
     "PageLoad.Timing2.NavigationToFailedProvisionalLoad";
 
@@ -212,7 +199,6 @@ const char kHistogramFirstScrollInputAfterFirstPaint[] =
 
 CorePageLoadMetricsObserver::CorePageLoadMetricsObserver()
     : transition_(ui::PAGE_TRANSITION_LINK),
-      initiated_by_user_gesture_(false),
       was_no_store_main_resource_(false) {}
 
 CorePageLoadMetricsObserver::~CorePageLoadMetricsObserver() {}
@@ -221,7 +207,6 @@ page_load_metrics::PageLoadMetricsObserver::ObservePolicy
 CorePageLoadMetricsObserver::OnCommit(
     content::NavigationHandle* navigation_handle) {
   transition_ = navigation_handle->GetPageTransition();
-  initiated_by_user_gesture_ = navigation_handle->HasUserGesture();
   navigation_start_ = navigation_handle->NavigationStart();
   const net::HttpResponseHeaders* headers =
       navigation_handle->GetResponseHeaders();
@@ -340,9 +325,17 @@ void CorePageLoadMetricsObserver::OnFirstContentfulPaint(
                           timing.first_contentful_paint.value());
     }
 
-    if (info.user_gesture) {
+    if (info.user_initiated) {
       PAGE_LOAD_HISTOGRAM(internal::kHistogramFirstContentfulPaintUserInitiated,
                           timing.first_contentful_paint.value());
+    }
+
+    if (timing.style_sheet_timing
+            .author_style_sheet_parse_duration_before_fcp) {
+      PAGE_LOAD_HISTOGRAM(
+          "PageLoad.CSSTiming.Parse.BeforeFirstContentfulPaint",
+          timing.style_sheet_timing.author_style_sheet_parse_duration_before_fcp
+              .value());
     }
 
     switch (GetPageLoadType(transition_)) {
@@ -350,7 +343,7 @@ void CorePageLoadMetricsObserver::OnFirstContentfulPaint(
         PAGE_LOAD_HISTOGRAM(
             internal::kHistogramLoadTypeFirstContentfulPaintReload,
             timing.first_contentful_paint.value());
-        if (initiated_by_user_gesture_) {
+        if (info.user_initiated) {
           PAGE_LOAD_HISTOGRAM(
               internal::kHistogramLoadTypeFirstContentfulPaintReloadByGesture,
               timing.first_contentful_paint.value());
@@ -515,11 +508,6 @@ void CorePageLoadMetricsObserver::OnComplete(
 void CorePageLoadMetricsObserver::OnFailedProvisionalLoad(
     const page_load_metrics::FailedProvisionalLoadInfo& failed_load_info,
     const page_load_metrics::PageLoadExtraInfo& extra_info) {
-  if (extra_info.started_in_foreground && extra_info.first_background_time) {
-    PAGE_LOAD_HISTOGRAM(internal::kHistogramBackgroundBeforeCommit,
-                        extra_info.first_background_time.value());
-  }
-
   // Only handle actual failures; provisional loads that failed due to another
   // committed load or due to user action are recorded in
   // AbortsPageLoadMetricsObserver.
@@ -571,34 +559,9 @@ void CorePageLoadMetricsObserver::OnUserInput(
 void CorePageLoadMetricsObserver::RecordTimingHistograms(
     const page_load_metrics::PageLoadTiming& timing,
     const page_load_metrics::PageLoadExtraInfo& info) {
-  const base::TimeDelta time_to_commit = info.time_to_commit.value();
-  if (WasStartedInForegroundOptionalEventInForeground(info.time_to_commit,
-                                                      info)) {
-    PAGE_LOAD_HISTOGRAM(internal::kHistogramCommit, time_to_commit);
-  } else {
-    PAGE_LOAD_HISTOGRAM(internal::kBackgroundHistogramCommit, time_to_commit);
-  }
-
   // Log time to first foreground / time to first background. Log counts that we
   // started a relevant page load in the foreground / background.
-  if (info.started_in_foreground) {
-    if (info.first_background_time) {
-      const base::TimeDelta first_background_time =
-          info.first_background_time.value();
-
-      PAGE_LOAD_HISTOGRAM(internal::kHistogramFirstBackground,
-                          first_background_time);
-      if (!timing.first_paint || timing.first_paint > first_background_time) {
-        PAGE_LOAD_HISTOGRAM(internal::kHistogramBackgroundBeforePaint,
-                            first_background_time);
-      }
-      if (timing.parse_start && first_background_time >= timing.parse_start &&
-          (!timing.parse_stop || timing.parse_stop > first_background_time)) {
-        PAGE_LOAD_HISTOGRAM(internal::kHistogramBackgroundDuringParse,
-                            first_background_time);
-      }
-    }
-  } else {
+  if (!info.started_in_foreground) {
     if (info.first_foreground_time)
       PAGE_LOAD_HISTOGRAM(internal::kHistogramFirstForeground,
                           info.first_foreground_time.value());
@@ -624,9 +587,8 @@ void CorePageLoadMetricsObserver::RecordRappor(
   rappor::RapporService* rappor_service = g_browser_process->rappor_service();
   if (!rappor_service)
     return;
-  if (!info.time_to_commit)
+  if (info.committed_url.is_empty())
     return;
-  DCHECK(!info.committed_url.is_empty());
 
   // Log the eTLD+1 of sites that show poor loading performance.
   if (WasStartedInForegroundOptionalEventInForeground(

@@ -17,7 +17,7 @@ QuicClientSessionBase::QuicClientSessionBase(
     QuicConnection* connection,
     QuicClientPushPromiseIndex* push_promise_index,
     const QuicConfig& config)
-    : QuicSpdySession(connection, config),
+    : QuicSpdySession(connection, nullptr, config),
       push_promise_index_(push_promise_index),
       largest_promised_stream_id_(kInvalidStreamId) {}
 
@@ -38,16 +38,6 @@ void QuicClientSessionBase::OnCryptoHandshakeEvent(CryptoHandshakeEvent event) {
   QuicSession::OnCryptoHandshakeEvent(event);
 }
 
-void QuicClientSessionBase::OnPromiseHeaders(QuicStreamId stream_id,
-                                             StringPiece headers_data) {
-  QuicSpdyStream* stream = GetSpdyDataStream(stream_id);
-  if (!stream) {
-    // It's quite possible to receive headers after a stream has been reset.
-    return;
-  }
-  stream->OnPromiseHeaders(headers_data);
-}
-
 void QuicClientSessionBase::OnInitialHeadersComplete(
     QuicStreamId stream_id,
     const SpdyHeaderBlock& response_headers) {
@@ -61,29 +51,6 @@ void QuicClientSessionBase::OnInitialHeadersComplete(
     return;
 
   promised->OnResponseHeaders(response_headers);
-}
-
-void QuicClientSessionBase::OnPromiseHeadersComplete(
-    QuicStreamId stream_id,
-    QuicStreamId promised_stream_id,
-    size_t frame_len) {
-  if (promised_stream_id != kInvalidStreamId &&
-      promised_stream_id <= largest_promised_stream_id_) {
-    connection()->CloseConnection(
-        QUIC_INVALID_STREAM_ID,
-        "Received push stream id lesser or equal to the"
-        " last accepted before",
-        ConnectionCloseBehavior::SEND_CONNECTION_CLOSE_PACKET);
-    return;
-  }
-  largest_promised_stream_id_ = promised_stream_id;
-
-  QuicSpdyStream* stream = GetSpdyDataStream(stream_id);
-  if (!stream) {
-    // It's quite possible to receive headers after a stream has been reset.
-    return;
-  }
-  stream->OnPromiseHeadersComplete(promised_stream_id, frame_len);
 }
 
 void QuicClientSessionBase::OnPromiseHeaderList(
@@ -110,7 +77,7 @@ void QuicClientSessionBase::OnPromiseHeaderList(
   stream->OnPromiseHeaderList(promised_stream_id, frame_len, header_list);
 }
 
-void QuicClientSessionBase::HandlePromised(QuicStreamId /* associated_id */,
+bool QuicClientSessionBase::HandlePromised(QuicStreamId /* associated_id */,
                                            QuicStreamId id,
                                            const SpdyHeaderBlock& headers) {
   // Due to pathalogical packet re-ordering, it is possible that
@@ -121,13 +88,13 @@ void QuicClientSessionBase::HandlePromised(QuicStreamId /* associated_id */,
     // QUIC_REFUSED_STREAM?
     DVLOG(1) << "Promise ignored for stream " << id
              << " that is already closed";
-    return;
+    return false;
   }
 
   if (push_promise_index_->promised_by_url()->size() >= get_max_promises()) {
     DVLOG(1) << "Too many promises, rejecting promise for stream " << id;
     ResetPromised(id, QUIC_REFUSED_STREAM);
-    return;
+    return false;
   }
 
   const string url = SpdyUtils::GetUrlFromHeaderBlock(headers);
@@ -136,14 +103,14 @@ void QuicClientSessionBase::HandlePromised(QuicStreamId /* associated_id */,
     DVLOG(1) << "Promise for stream " << id << " is duplicate URL " << url
              << " of previous promise for stream " << old_promised->id();
     ResetPromised(id, QUIC_DUPLICATE_PROMISE_URL);
-    return;
+    return false;
   }
 
   if (GetPromisedById(id)) {
     // OnPromiseHeadersComplete() would have closed the connection if
     // promised id is a duplicate.
     QUIC_BUG << "Duplicate promise for id " << id;
-    return;
+    return false;
   }
 
   QuicClientPromisedInfo* promised = new QuicClientPromisedInfo(this, id, url);
@@ -153,6 +120,7 @@ void QuicClientSessionBase::HandlePromised(QuicStreamId /* associated_id */,
   (*push_promise_index_->promised_by_url())[url] = promised;
   promised_by_id_[id] = std::move(promised_owner);
   promised->OnPromiseHeaders(headers);
+  return true;
 }
 
 QuicClientPromisedInfo* QuicClientSessionBase::GetPromisedByUrl(
@@ -176,14 +144,10 @@ QuicClientPromisedInfo* QuicClientSessionBase::GetPromisedById(
 
 QuicSpdyStream* QuicClientSessionBase::GetPromisedStream(
     const QuicStreamId id) {
-  if (IsClosedStream(id)) {
-    return nullptr;
-  }
   DynamicStreamMap::iterator it = dynamic_streams().find(id);
   if (it != dynamic_streams().end()) {
-    return static_cast<QuicSpdyStream*>(it->second);
+    return static_cast<QuicSpdyStream*>(it->second.get());
   }
-  QUIC_BUG << "Open promised stream " << id << " is missing!";
   return nullptr;
 }
 
@@ -192,7 +156,10 @@ void QuicClientSessionBase::DeletePromised(QuicClientPromisedInfo* promised) {
   // Since promised_by_id_ contains the unique_ptr, this will destroy
   // promised.
   promised_by_id_.erase(promised->id());
+  headers_stream()->MaybeReleaseSequencerBuffer();
 }
+
+void QuicClientSessionBase::OnPushStreamTimedOut(QuicStreamId stream_id) {}
 
 void QuicClientSessionBase::ResetPromised(QuicStreamId id,
                                           QuicRstStreamErrorCode error_code) {
@@ -203,6 +170,16 @@ void QuicClientSessionBase::ResetPromised(QuicStreamId id,
       InsertLocallyClosedStreamsHighestOffset(id, 0);
     }
   }
+}
+
+void QuicClientSessionBase::CloseStreamInner(QuicStreamId stream_id,
+                                             bool locally_reset) {
+  QuicSpdySession::CloseStreamInner(stream_id, locally_reset);
+  headers_stream()->MaybeReleaseSequencerBuffer();
+}
+
+bool QuicClientSessionBase::ShouldReleaseHeadersStreamSequencerBuffer() {
+  return num_active_requests() == 0 && promised_by_id_.empty();
 }
 
 }  // namespace net

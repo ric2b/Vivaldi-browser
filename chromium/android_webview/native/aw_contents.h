@@ -13,7 +13,6 @@
 #include <utility>
 
 #include "android_webview/browser/aw_browser_permission_request_delegate.h"
-#include "android_webview/browser/aw_message_port_message_filter.h"
 #include "android_webview/browser/browser_view_renderer.h"
 #include "android_webview/browser/browser_view_renderer_client.h"
 #include "android_webview/browser/find_helper.h"
@@ -76,6 +75,8 @@ class AwContents : public FindHelper::Listener,
   static AwContents* FromID(int render_process_id, int render_view_id);
 
   static std::string GetLocale();
+
+  static std::string GetLocaleList();
 
   AwContents(std::unique_ptr<content::WebContents> web_contents);
   ~AwContents() override;
@@ -314,8 +315,6 @@ class AwContents : public FindHelper::Listener,
                   const base::android::JavaParamRef<jobject>& obj,
                   jint level,
                   jboolean visible);
-
-  scoped_refptr<AwMessagePortMessageFilter> GetMessagePortMessageFilter();
   void PostMessageToFrame(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj,
@@ -363,7 +362,6 @@ class AwContents : public FindHelper::Listener,
   std::unique_ptr<AwContents> pending_contents_;
   std::unique_ptr<AwPdfExporter> pdf_exporter_;
   std::unique_ptr<PermissionRequestHandler> permission_request_handler_;
-  scoped_refptr<AwMessagePortMessageFilter> message_port_message_filter_;
 
   // GURL is supplied by the content layer as requesting frame.
   // Callback is supplied by the content layer, and is invoked with the result

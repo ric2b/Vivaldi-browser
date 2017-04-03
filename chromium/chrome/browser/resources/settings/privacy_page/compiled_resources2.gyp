@@ -7,6 +7,7 @@
       'target_name': 'privacy_page_browser_proxy',
       'dependencies': [
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:cr',
+        '../compiled_resources2.gyp:lifetime_browser_proxy',
         '<(EXTERNS_GYP):chrome_send',
       ],
       'includes': ['../../../../../third_party/closure_compiler/compile_js2.gypi'],
@@ -19,6 +20,7 @@
         '../settings_page/compiled_resources2.gyp:settings_animated_pages',
         '../settings_ui/compiled_resources2.gyp:settings_ui_types',
         '../site_settings/compiled_resources2.gyp:constants',
+        '../site_settings/compiled_resources2.gyp:site_data_details_subpage',
         'privacy_page_browser_proxy',
       ],
       'includes': ['../../../../../third_party/closure_compiler/compile_js2.gypi'],

@@ -4,14 +4,12 @@
 
 static_library("browser") {
   sources = [
-    "content_ruleset_distributor.cc",
-    "content_ruleset_distributor.h",
+    "content_ruleset_service_delegate.cc",
+    "content_ruleset_service_delegate.h",
     "content_subresource_filter_driver.cc",
     "content_subresource_filter_driver.h",
     "content_subresource_filter_driver_factory.cc",
     "content_subresource_filter_driver_factory.h",
-    "subresource_filter_navigation_throttle.cc",
-    "subresource_filter_navigation_throttle.h",
   ]
   deps = [
     "//base",
@@ -29,9 +27,8 @@ static_library("browser") {
 source_set("unit_tests") {
   testonly = true
   sources = [
-    "content_ruleset_distributor_unittest.cc",
+    "content_ruleset_service_delegate_unittest.cc",
     "content_subresource_filter_driver_factory_unittest.cc",
-    "subresource_filter_navigation_throttle_unittests.cc",
   ]
   deps = [
     ":browser",

@@ -6,6 +6,7 @@
 
 #include "base/memory/ptr_util.h"
 #include "components/printing/renderer/print_web_view_helper.h"
+#include "printing/features/features.h"
 #include "third_party/WebKit/public/web/WebElement.h"
 
 namespace printing {
@@ -15,15 +16,15 @@ namespace {
 class PrintWebViewHelperDelegate : public PrintWebViewHelper::Delegate {
  public:
   ~PrintWebViewHelperDelegate() override {}
-  bool CancelPrerender(content::RenderView* render_view,
-                       int routing_id) override {
+
+  bool CancelPrerender(content::RenderFrame* render_frame) override {
     return false;
   }
   blink::WebElement GetPdfElement(blink::WebLocalFrame* frame) override {
     return blink::WebElement();
   }
   bool IsPrintPreviewEnabled() override {
-#if defined(ENABLE_PRINT_PREVIEW)
+#if BUILDFLAG(ENABLE_PRINT_PREVIEW)
     return true;
 #else
     return false;
@@ -40,10 +41,10 @@ PrintTestContentRendererClient::PrintTestContentRendererClient() {
 PrintTestContentRendererClient::~PrintTestContentRendererClient() {
 }
 
-void PrintTestContentRendererClient::RenderViewCreated(
-    content::RenderView* render_view) {
-  new printing::PrintWebViewHelper(
-      render_view, base::MakeUnique<PrintWebViewHelperDelegate>());
+void PrintTestContentRendererClient::RenderFrameCreated(
+    content::RenderFrame* render_frame) {
+  new PrintWebViewHelper(render_frame,
+                         base::MakeUnique<PrintWebViewHelperDelegate>());
 }
 
 }  // namespace printing

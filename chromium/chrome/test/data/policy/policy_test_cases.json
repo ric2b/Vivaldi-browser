@@ -279,6 +279,29 @@
     ]
   },
 
+  "NativePrinters": {
+    "os": ["chromeos"],
+    "test_policy": {
+      "NativePrinters": [
+        {
+          "display_name": "Break Room",
+          "description": "The blue one",
+          "manufacturer": "PrtrMfgr",
+          "model": "MegaLazer",
+          "uri": "ipps://192.168.2.14",
+          "uuid": "aaaa-aaaa-eeee-eeee-1234",
+          "ppd_resource": {
+            "effective_manufacturer": "Printers, Ink",
+            "effective_model": "LaserMaster 2100"
+          }
+        }
+      ]
+    },
+    "pref_mappings": [
+      { "pref": "native_printing.recommended_printers" }
+    ]
+  },
+
   "SafeBrowsingEnabled": {
     "os": ["win", "linux", "mac", "chromeos"],
     "can_be_recommended": true,
@@ -367,28 +390,65 @@
     ]
   },
 
-  "DisabledPlugins": {
+  "DisabledPlugins.0": {
+    "note": "This policy is deprecated. This test tests its migration path.",
     "os": ["win", "linux", "mac", "chromeos"],
-    "test_policy": { "DisabledPlugins": ["Flash"] },
+    "test_policy": { "DisabledPlugins": ["*Flash*"] },
     "pref_mappings": [
-      { "pref": "plugins.plugins_disabled" }
+      { "pref": "profile.managed_default_content_settings.plugins",
+        "indicator_selector": "[content-setting=plugins]",
+        "indicator_tests": [
+          { "policy": { "DisabledPlugins": ["*Flash*"] },
+            "value": "block"}
+        ]
+      }
     ]
   },
 
-  "EnabledPlugins": {
+  "DisabledPlugins.1": {
+    "note": "This policy is deprecated. This test tests its migration path.",
     "os": ["win", "linux", "mac", "chromeos"],
-    "test_policy": { "EnabledPlugins": ["Flash"] },
+    "test_policy": { "DisabledPlugins": ["*PDF*"] },
     "pref_mappings": [
-      { "pref": "plugins.plugins_enabled" }
+      { "pref": "plugins.always_open_pdf_externally",
+        "indicator_tests": [
+          { "policy": { "DisabledPlugins": ["*PDF*"] }}
+        ]
+      }
+    ]
+  },
+
+  "EnabledPlugins.0": {
+    "note": "This policy is deprecated. This test tests its migration path.",
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "EnabledPlugins": ["*Flash*"] },
+    "pref_mappings": [
+      { "pref": "profile.managed_default_content_settings.plugins",
+        "indicator_selector": "[content-setting=plugins]",
+        "indicator_tests": [
+          { "policy": { "EnabledPlugins": ["*Flash*"] },
+            "value": "allow"}
+        ]
+      }
+    ]
+  },
+
+  "EnabledPlugins.1": {
+    "note": "This policy is deprecated. This test tests its migration path.",
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "EnabledPlugins": ["*PDF*"] },
+    "pref_mappings": [
+      { "pref": "plugins.always_open_pdf_externally",
+        "indicator_tests": [
+          { "policy": { "EnabledPlugins": ["*PDF*"] }}
+        ]
+      }
     ]
   },
 
   "DisabledPluginsExceptions": {
-    "os": ["win", "linux", "mac", "chromeos"],
-    "test_policy": { "DisabledPluginsExceptions": ["Flash"] },
-    "pref_mappings": [
-      { "pref": "plugins.plugins_disabled_exceptions" }
-    ]
+    "note": "This policy is deprecated it doesn't map to a pref value anymore.",
+    "os": ["win", "linux", "mac", "chromeos"]
   },
 
   "AlwaysOpenPdfExternally": {
@@ -2598,6 +2658,22 @@
     ]
   },
 
+  "QuickUnlockModeWhitelist": {
+    "os": ["chromeos"],
+    "test_policy": { "QuickUnlockModeWhitelist": ["PIN"] },
+    "pref_mappings": [
+      { "pref": "quick_unlock_mode_whitelist"}
+    ]
+  },
+
+  "QuickUnlockTimeout": {
+    "os": ["chromeos"],
+    "test_policy": { "QuickUnlockTimeout": 0 },
+    "pref_mappings": [
+      { "pref": "quick_unlock_timeout"}
+    ]
+  },
+
   "ArcCertificatesSyncMode": {
     "os": ["chromeos"],
     "can_be_recommended": false,
@@ -2885,6 +2961,16 @@
     "pref_mappings": [
       {
         "pref": "task_manager.end_process_enabled",
+        "local_state": true
+      }
+    ]
+  },
+
+  "NetworkThrottlingEnabled": {
+    "os": ["chromeos"],
+    "test_policy": { "NetworkThrottlingEnabled": {"enabled": "true", "upload_rate_kbits": "5600", "download_rate_kbits": "5600"} },
+    "pref_mappings": [
+      { "pref": "net.throttling_enabled",
         "local_state": true
       }
     ]

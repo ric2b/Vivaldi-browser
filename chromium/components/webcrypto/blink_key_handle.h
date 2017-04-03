@@ -5,13 +5,12 @@
 #ifndef COMPONENTS_WEBCRYPTO_BLINK_KEY_HANDLE_H_
 #define COMPONENTS_WEBCRYPTO_BLINK_KEY_HANDLE_H_
 
-#include <openssl/base.h>
 #include <stdint.h>
 
 #include <vector>
 
-#include "crypto/scoped_openssl_types.h"
 #include "third_party/WebKit/public/platform/WebCryptoKey.h"
+#include "third_party/boringssl/src/include/openssl/base.h"
 
 // Blink keys (blink::WebCryptoKey) have an associated key handle
 // (blink::WebCryptoKeyHandle) used to store custom data. This is where the
@@ -53,7 +52,7 @@ blink::WebCryptoKeyHandle* CreateSymmetricKeyHandle(
 // create a copy, since all the callers are passing in vectors that are later
 // thrown away anyway.
 blink::WebCryptoKeyHandle* CreateAsymmetricKeyHandle(
-    crypto::ScopedEVP_PKEY pkey,
+    bssl::UniquePtr<EVP_PKEY> pkey,
     const std::vector<uint8_t>& serialized_key_data);
 
 }  // namespace webcrypto

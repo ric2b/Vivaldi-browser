@@ -31,10 +31,6 @@ namespace {
 
 typedef std::vector<const DisplayMode*> DisplayModeList;
 
-// The delay to perform configuration after RRNotify. See the comment for
-// |configure_timer_|.
-const int kConfigureDelayMs = 500;
-
 // The EDID specification marks the top bit of the manufacturer id as reserved.
 const int16_t kReservedManufacturerID = static_cast<int16_t>(1 << 15);
 
@@ -66,6 +62,12 @@ bool DisplayConfigurator::TestApi::TriggerConfigureTimeout() {
   } else {
     return false;
   }
+}
+
+base::TimeDelta DisplayConfigurator::TestApi::GetConfigureDelay() const {
+  return configurator_->configure_timer_.IsRunning()
+             ? configurator_->configure_timer_.GetCurrentDelay()
+             : base::TimeDelta();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -526,10 +528,10 @@ void DisplayConfigurator::Init(
 
   // If the delegate is already initialized don't update it (For example, tests
   // set their own delegates).
-  if (!native_display_delegate_) {
+  if (!native_display_delegate_)
     native_display_delegate_ = std::move(display_delegate);
-    native_display_delegate_->AddObserver(this);
-  }
+
+  native_display_delegate_->AddObserver(this);
 }
 
 void DisplayConfigurator::TakeControl(const DisplayControlCallback& callback) {
@@ -555,8 +557,11 @@ void DisplayConfigurator::OnDisplayControlTaken(
   display_control_changing_ = false;
   display_externally_controlled_ = !success;
   if (success) {
+    // Force a configuration since the display configuration may have changed.
     force_configure_ = true;
-    RunPendingConfiguration();
+    // Restore the last power state used before releasing control.
+    SetDisplayPower(requested_power_state_, kSetDisplayPowerNoFlags,
+                    base::Bind(&DoNothing));
   }
 
   callback.Run(success);
@@ -580,13 +585,29 @@ void DisplayConfigurator::RelinquishControl(
     return;
   }
 
-  // Set the flag early such that an incoming configuration event won't start
-  // while we're releasing control of the displays.
   display_control_changing_ = true;
-  display_externally_controlled_ = true;
-  native_display_delegate_->RelinquishDisplayControl(
-      base::Bind(&DisplayConfigurator::OnDisplayControlRelinquished,
+
+  // Turn off the displays before releasing control since we're no longer using
+  // them for output.
+  SetDisplayPowerInternal(
+      chromeos::DISPLAY_POWER_ALL_OFF, kSetDisplayPowerNoFlags,
+      base::Bind(&DisplayConfigurator::SendRelinquishDisplayControl,
                  weak_ptr_factory_.GetWeakPtr(), callback));
+}
+
+void DisplayConfigurator::SendRelinquishDisplayControl(
+    const DisplayControlCallback& callback, bool success) {
+  if (success) {
+    // Set the flag early such that an incoming configuration event won't start
+    // while we're releasing control of the displays.
+    display_externally_controlled_ = true;
+    native_display_delegate_->RelinquishDisplayControl(
+        base::Bind(&DisplayConfigurator::OnDisplayControlRelinquished,
+                   weak_ptr_factory_.GetWeakPtr(), callback));
+  } else {
+    display_control_changing_ = false;
+    callback.Run(false);
+  }
 }
 
 void DisplayConfigurator::OnDisplayControlRelinquished(
@@ -862,6 +883,14 @@ void DisplayConfigurator::SetDisplayPowerInternal(
   pending_power_flags_ = flags;
   queued_configuration_callbacks_.push_back(callback);
 
+  if (configure_timer_.IsRunning()) {
+    // If there is a configuration task scheduled, avoid performing
+    // configuration immediately. Instead reset the timer to wait for things to
+    // settle.
+    configure_timer_.Reset();
+    return;
+  }
+
   RunPendingConfiguration();
 }
 
@@ -916,21 +945,14 @@ void DisplayConfigurator::OnConfigurationChanged() {
 
   // Configure displays with |kConfigureDelayMs| delay,
   // so that time-consuming ConfigureDisplays() won't be called multiple times.
-  if (configure_timer_.IsRunning()) {
-    // Note: when the timer is running it is possible that a different task
-    // (RestoreRequestedPowerStateAfterResume()) is scheduled. In these cases,
-    // prefer the already scheduled task to ConfigureDisplays() since
-    // ConfigureDisplays() performs only basic configuration while
-    // RestoreRequestedPowerStateAfterResume() will perform additional
-    // operations.
-    configure_timer_.Reset();
-  } else {
-    configure_timer_.Start(
-        FROM_HERE,
-        base::TimeDelta::FromMilliseconds(kConfigureDelayMs),
-        this,
-        &DisplayConfigurator::ConfigureDisplays);
-  }
+  configure_timer_.Start(FROM_HERE,
+                         base::TimeDelta::FromMilliseconds(kConfigureDelayMs),
+                         this, &DisplayConfigurator::ConfigureDisplays);
+}
+
+void DisplayConfigurator::OnDisplaySnapshotsInvalidated() {
+  VLOG(1) << "Display snapshots invalidated.";
+  cached_displays_.clear();
 }
 
 void DisplayConfigurator::AddObserver(Observer* observer) {
@@ -971,6 +993,20 @@ void DisplayConfigurator::ResumeDisplays() {
     return;
 
   displays_suspended_ = false;
+
+  if (current_display_state_ == MULTIPLE_DISPLAY_STATE_DUAL_MIRROR ||
+      current_display_state_ == MULTIPLE_DISPLAY_STATE_DUAL_EXTENDED ||
+      current_display_state_ == MULTIPLE_DISPLAY_STATE_MULTI_EXTENDED) {
+    // When waking up from suspend while being in a multi display mode, we
+    // schedule a delayed forced configuration, which will make
+    // SetDisplayPowerInternal() avoid performing the configuration immediately.
+    // This gives a chance to wait for all displays to be added and detected
+    // before configuration is performed, so we won't immediately resize the
+    // desktops and the windows on it to fit on a single display.
+    configure_timer_.Start(FROM_HERE, base::TimeDelta::FromMilliseconds(
+                                          kResumeConfigureMultiDisplayDelayMs),
+                           this, &DisplayConfigurator::ConfigureDisplays);
+  }
 
   // If requested_power_state_ is ALL_OFF due to idle suspend, powerd will turn
   // the display power on when it enables the backlight.
@@ -1109,18 +1145,17 @@ void DisplayConfigurator::NotifyDisplayStateObservers(
     bool success,
     MultipleDisplayState attempted_state) {
   if (success) {
-    FOR_EACH_OBSERVER(
-        Observer, observers_, OnDisplayModeChanged(cached_displays_));
+    for (Observer& observer : observers_)
+      observer.OnDisplayModeChanged(cached_displays_);
   } else {
-    FOR_EACH_OBSERVER(
-        Observer, observers_, OnDisplayModeChangeFailed(cached_displays_,
-                                                        attempted_state));
+    for (Observer& observer : observers_)
+      observer.OnDisplayModeChangeFailed(cached_displays_, attempted_state);
   }
 }
 
 void DisplayConfigurator::NotifyPowerStateObservers() {
-  FOR_EACH_OBSERVER(
-      Observer, observers_, OnPowerStateChanged(current_power_state_));
+  for (Observer& observer : observers_)
+    observer.OnPowerStateChanged(current_power_state_);
 }
 
 int64_t DisplayConfigurator::AddVirtualDisplay(const gfx::Size& display_size) {

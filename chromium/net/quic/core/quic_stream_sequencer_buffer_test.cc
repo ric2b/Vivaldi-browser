@@ -111,9 +111,7 @@ TEST_F(QuicStreamSequencerBufferTest, OnStreamData0length) {
 }
 
 TEST_F(QuicStreamSequencerBufferTest, OnStreamDataWithinBlock) {
-  if (FLAGS_quic_reduce_sequencer_buffer_memory_life_time) {  // NOLINT
-    EXPECT_FALSE(helper_->IsBufferAllocated());
-  }
+  EXPECT_FALSE(helper_->IsBufferAllocated());
   string source(1024, 'a');
   size_t written;
   clock_.AdvanceTime(QuicTime::Delta::FromSeconds(1));
@@ -137,7 +135,6 @@ TEST_F(QuicStreamSequencerBufferTest, OnStreamDataWithinBlock) {
 }
 
 TEST_F(QuicStreamSequencerBufferTest, OnStreamDataInvalidSource) {
-  FLAGS_quic_stream_sequencer_buffer_debug = true;
   // Pass in an invalid source, expects to return error.
   StringPiece source;
   source.set(nullptr, 1024);
@@ -336,7 +333,6 @@ TEST_F(QuicStreamSequencerBufferTest, Readv100Bytes) {
 }
 
 TEST_F(QuicStreamSequencerBufferTest, ReadvError) {
-  FLAGS_quic_stream_sequencer_buffer_debug = true;
   string source = string(100, 'b');
   clock_.AdvanceTime(QuicTime::Delta::FromSeconds(1));
   QuicTime t1 = clock_.ApproximateNow();
@@ -494,10 +490,6 @@ TEST_F(QuicStreamSequencerBufferTest, GetReadableRegionsEmpty) {
 
 TEST_F(QuicStreamSequencerBufferTest, ReleaseWholeBuffer) {
   // Tests that buffer is not deallocated unless ReleaseWholeBuffer() is called.
-  if (!FLAGS_quic_reduce_sequencer_buffer_memory_life_time) {  // NOLINT
-    // Won't release buffer when flag is off.
-    return;
-  }
 
   string source(100, 'b');
   clock_.AdvanceTime(QuicTime::Delta::FromSeconds(1));

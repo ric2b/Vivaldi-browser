@@ -10,11 +10,11 @@
 #include "base/command_line.h"
 #include "base/location.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "components/bookmarks/browser/bookmark_utils.h"
@@ -426,7 +426,7 @@ HistoryURLProviderParams::HistoryURLProviderParams(
     const AutocompleteMatch& what_you_typed_match,
     TemplateURL* default_search_provider,
     const SearchTermsData& search_terms_data)
-    : message_loop(base::MessageLoop::current()),
+    : origin_task_runner(base::SequencedTaskRunnerHandle::Get()),
       input(input),
       prevent_inline_autocomplete(input.prevent_inline_autocomplete()),
       trim_http(trim_http),
@@ -434,10 +434,11 @@ HistoryURLProviderParams::HistoryURLProviderParams(
       failed(false),
       exact_suggestion_is_in_history(false),
       promote_type(NEITHER),
-      default_search_provider(default_search_provider ?
-          new TemplateURL(default_search_provider->data()) : nullptr),
-      search_terms_data(new SearchTermsDataSnapshot(search_terms_data)) {
-}
+      default_search_provider(
+          default_search_provider
+              ? new TemplateURL(default_search_provider->data())
+              : nullptr),
+      search_terms_data(new SearchTermsDataSnapshot(search_terms_data)) {}
 
 HistoryURLProviderParams::~HistoryURLProviderParams() {
 }
@@ -640,8 +641,8 @@ void HistoryURLProvider::ExecuteWithDB(HistoryURLProviderParams* params,
                         base::TimeTicks::Now() - beginning_time);
   }
 
-  // Return the results (if any) to the main thread.
-  params->message_loop->task_runner()->PostTask(
+  // Return the results (if any) to the originating sequence.
+  params->origin_task_runner->PostTask(
       FROM_HERE, base::Bind(&HistoryURLProvider::QueryComplete, this, params));
 }
 
@@ -944,8 +945,8 @@ bool HistoryURLProvider::FixupExactSuggestion(
   // which will have empty reference fragments.)
   if ((type == UNVISITED_INTRANET) &&
       (params->input.type() != metrics::OmniboxInputType::URL) &&
-      url.username().empty() && url.password().empty() &&
-      url.port().empty() && (url.path() == "/") && url.query().empty() &&
+      url.username().empty() && url.password().empty() && url.port().empty() &&
+      (url.path_piece() == "/") && url.query().empty() &&
       (parsed.CountCharactersBefore(url::Parsed::REF, true) !=
        parsed.CountCharactersBefore(url::Parsed::REF, false))) {
     return false;
@@ -981,12 +982,11 @@ bool HistoryURLProvider::CanFindIntranetURL(
     return false;
   const std::string host(base::UTF16ToUTF8(
       input.text().substr(input.parts().host.begin, input.parts().host.len)));
-  const size_t registry_length =
-      net::registry_controlled_domains::GetRegistryLength(
-          host,
-          net::registry_controlled_domains::EXCLUDE_UNKNOWN_REGISTRIES,
+  const bool has_registry_domain =
+      net::registry_controlled_domains::HostHasRegistryControlledDomain(
+          host, net::registry_controlled_domains::EXCLUDE_UNKNOWN_REGISTRIES,
           net::registry_controlled_domains::EXCLUDE_PRIVATE_REGISTRIES);
-  return registry_length == 0 && db->IsTypedHost(host);
+  return !has_registry_domain && db->IsTypedHost(host);
 }
 
 bool HistoryURLProvider::PromoteOrCreateShorterSuggestion(

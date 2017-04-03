@@ -6,12 +6,17 @@
 #import "base/mac/foundation_util.h"
 #import "base/mac/scoped_nsobject.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #import "chrome/browser/ui/cocoa/cocoa_test_helper.h"
 #import "chrome/browser/ui/cocoa/extensions/toolbar_actions_bar_bubble_mac.h"
 #include "chrome/browser/ui/cocoa/run_loop_testing.h"
 #include "chrome/browser/ui/toolbar/test_toolbar_actions_bar_bubble_delegate.h"
+#include "chrome/grit/generated_resources.h"
+#include "components/grit/components_scaled_resources.h"
+#include "ui/base/l10n/l10n_util.h"
 #import "ui/events/test/cocoa_test_event_utils.h"
+#include "ui/gfx/vector_icons_public.h"
 
 // A simple class to observe when a window is destructing.
 @interface WindowObserver : NSObject {
@@ -107,7 +112,14 @@ void ToolbarActionsBarBubbleMacTest::TestBubbleButton(
   TestToolbarActionsBarBubbleDelegate delegate(
       HeadingString(), BodyString(), ActionString());
   delegate.set_dismiss_button_text(DismissString());
-  delegate.set_learn_more_button_text(LearnMoreString());
+
+  std::unique_ptr<ToolbarActionsBarBubbleDelegate::ExtraViewInfo>
+      extra_view_info_linked_text =
+          base::MakeUnique<ToolbarActionsBarBubbleDelegate::ExtraViewInfo>();
+  extra_view_info_linked_text->text = LearnMoreString();
+  extra_view_info_linked_text->is_text_linked = true;
+  delegate.set_extra_view_info(std::move(extra_view_info_linked_text));
+
   ToolbarActionsBarBubbleMac* bubble = CreateAndShowBubble(&delegate);
   base::scoped_nsobject<WindowObserver> windowObserver(
       [[WindowObserver alloc] initWithWindow:[bubble window]]);
@@ -123,7 +135,7 @@ void ToolbarActionsBarBubbleMacTest::TestBubbleButton(
       button = [bubble dismissButton];
       break;
     case ToolbarActionsBarBubbleDelegate::CLOSE_LEARN_MORE:
-      button = [bubble learnMoreButton];
+      button = [bubble link];
       break;
     case ToolbarActionsBarBubbleDelegate::CLOSE_DISMISS_DEACTIVATION:
       NOTREACHED();  // Deactivation is tested below.
@@ -151,7 +163,6 @@ TEST_F(ToolbarActionsBarBubbleMacTest, CloseActionAndDismiss) {
   TestBubbleButton(ToolbarActionsBarBubbleDelegate::CLOSE_EXECUTE);
   TestBubbleButton(ToolbarActionsBarBubbleDelegate::CLOSE_DISMISS_USER_ACTION);
   TestBubbleButton(ToolbarActionsBarBubbleDelegate::CLOSE_LEARN_MORE);
-
   {
     // Test dismissing the bubble without clicking the button.
     TestToolbarActionsBarBubbleDelegate delegate(
@@ -160,7 +171,6 @@ TEST_F(ToolbarActionsBarBubbleMacTest, CloseActionAndDismiss) {
     base::scoped_nsobject<WindowObserver> windowObserver(
         [[WindowObserver alloc] initWithWindow:[bubble window]]);
     EXPECT_FALSE([windowObserver windowIsClosing]);
-
     // Close the bubble. The delegate should be told it was dismissed.
     [bubble close];
     chrome::testing::NSRunLoopRunAllPending();
@@ -179,7 +189,9 @@ TEST_F(ToolbarActionsBarBubbleMacTest, ToolbarActionsBarBubbleLayout) {
         HeadingString(), BodyString(), ActionString());
     ToolbarActionsBarBubbleMac* bubble = CreateAndShowBubble(&delegate);
     EXPECT_TRUE([bubble actionButton]);
-    EXPECT_FALSE([bubble learnMoreButton]);
+    EXPECT_FALSE([bubble iconView]);
+    EXPECT_FALSE([bubble label]);
+    EXPECT_FALSE([bubble link]);
     EXPECT_FALSE([bubble dismissButton]);
     EXPECT_FALSE([bubble itemList]);
 
@@ -187,15 +199,24 @@ TEST_F(ToolbarActionsBarBubbleMacTest, ToolbarActionsBarBubbleLayout) {
     chrome::testing::NSRunLoopRunAllPending();
   }
 
-  // Test with all possible buttons (action, learn more, dismiss).
+  // Test with all possible buttons (action, link, dismiss).
   {
     TestToolbarActionsBarBubbleDelegate delegate(
         HeadingString(), BodyString(), ActionString());
+
+    std::unique_ptr<ToolbarActionsBarBubbleDelegate::ExtraViewInfo>
+        extra_view_info_linked_text =
+            base::MakeUnique<ToolbarActionsBarBubbleDelegate::ExtraViewInfo>();
+    extra_view_info_linked_text->text = LearnMoreString();
+    extra_view_info_linked_text->is_text_linked = true;
+    delegate.set_extra_view_info(std::move(extra_view_info_linked_text));
+
     delegate.set_dismiss_button_text(DismissString());
-    delegate.set_learn_more_button_text(LearnMoreString());
     ToolbarActionsBarBubbleMac* bubble = CreateAndShowBubble(&delegate);
     EXPECT_TRUE([bubble actionButton]);
-    EXPECT_TRUE([bubble learnMoreButton]);
+    EXPECT_FALSE([bubble iconView]);
+    EXPECT_FALSE([bubble label]);
+    EXPECT_TRUE([bubble link]);
     EXPECT_TRUE([bubble dismissButton]);
     EXPECT_FALSE([bubble itemList]);
 
@@ -210,7 +231,9 @@ TEST_F(ToolbarActionsBarBubbleMacTest, ToolbarActionsBarBubbleLayout) {
     delegate.set_dismiss_button_text(DismissString());
     ToolbarActionsBarBubbleMac* bubble = CreateAndShowBubble(&delegate);
     EXPECT_FALSE([bubble actionButton]);
-    EXPECT_FALSE([bubble learnMoreButton]);
+    EXPECT_FALSE([bubble iconView]);
+    EXPECT_FALSE([bubble label]);
+    EXPECT_FALSE([bubble link]);
     EXPECT_TRUE([bubble dismissButton]);
     EXPECT_FALSE([bubble itemList]);
 
@@ -225,9 +248,53 @@ TEST_F(ToolbarActionsBarBubbleMacTest, ToolbarActionsBarBubbleLayout) {
     delegate.set_item_list_text(ItemListString());
     ToolbarActionsBarBubbleMac* bubble = CreateAndShowBubble(&delegate);
     EXPECT_TRUE([bubble actionButton]);
-    EXPECT_FALSE([bubble learnMoreButton]);
+    EXPECT_FALSE([bubble iconView]);
+    EXPECT_FALSE([bubble label]);
+    EXPECT_FALSE([bubble link]);
     EXPECT_FALSE([bubble dismissButton]);
     EXPECT_TRUE([bubble itemList]);
+
+    [bubble close];
+    chrome::testing::NSRunLoopRunAllPending();
+  }
+
+  // Test with a null extra view.
+  {
+    TestToolbarActionsBarBubbleDelegate delegate(HeadingString(), BodyString(),
+                                                 ActionString());
+    ToolbarActionsBarBubbleMac* bubble = CreateAndShowBubble(&delegate);
+    EXPECT_TRUE([bubble actionButton]);
+    EXPECT_FALSE([bubble iconView]);
+    EXPECT_FALSE([bubble label]);
+    EXPECT_FALSE([bubble link]);
+    EXPECT_FALSE([bubble dismissButton]);
+    EXPECT_FALSE([bubble itemList]);
+
+    [bubble close];
+    chrome::testing::NSRunLoopRunAllPending();
+  }
+
+  // Test with an extra view of a (unlinked) text and icon and action button.
+  {
+    TestToolbarActionsBarBubbleDelegate delegate(HeadingString(), BodyString(),
+                                                 ActionString());
+
+    std::unique_ptr<ToolbarActionsBarBubbleDelegate::ExtraViewInfo>
+        extra_view_info =
+            base::MakeUnique<ToolbarActionsBarBubbleDelegate::ExtraViewInfo>();
+    extra_view_info->resource_id = gfx::VectorIconId::BUSINESS;
+    extra_view_info->text =
+        l10n_util::GetStringUTF16(IDS_EXTENSIONS_INSTALLED_BY_ADMIN);
+    extra_view_info->is_text_linked = false;
+    delegate.set_extra_view_info(std::move(extra_view_info));
+
+    ToolbarActionsBarBubbleMac* bubble = CreateAndShowBubble(&delegate);
+    EXPECT_TRUE([bubble actionButton]);
+    EXPECT_TRUE([bubble iconView]);
+    EXPECT_TRUE([bubble label]);
+    EXPECT_FALSE([bubble link]);
+    EXPECT_FALSE([bubble dismissButton]);
+    EXPECT_FALSE([bubble itemList]);
 
     [bubble close];
     chrome::testing::NSRunLoopRunAllPending();
@@ -237,12 +304,21 @@ TEST_F(ToolbarActionsBarBubbleMacTest, ToolbarActionsBarBubbleLayout) {
   {
     TestToolbarActionsBarBubbleDelegate delegate(
         HeadingString(), BodyString(), ActionString());
+
+    std::unique_ptr<ToolbarActionsBarBubbleDelegate::ExtraViewInfo>
+        extra_view_info_linked_text =
+            base::MakeUnique<ToolbarActionsBarBubbleDelegate::ExtraViewInfo>();
+    extra_view_info_linked_text->text = LearnMoreString();
+    extra_view_info_linked_text->is_text_linked = true;
+    delegate.set_extra_view_info(std::move(extra_view_info_linked_text));
+
     delegate.set_dismiss_button_text(DismissString());
-    delegate.set_learn_more_button_text(LearnMoreString());
     delegate.set_item_list_text(ItemListString());
     ToolbarActionsBarBubbleMac* bubble = CreateAndShowBubble(&delegate);
     EXPECT_TRUE([bubble actionButton]);
-    EXPECT_TRUE([bubble learnMoreButton]);
+    EXPECT_FALSE([bubble iconView]);
+    EXPECT_FALSE([bubble label]);
+    EXPECT_TRUE([bubble link]);
     EXPECT_TRUE([bubble dismissButton]);
     EXPECT_TRUE([bubble itemList]);
 

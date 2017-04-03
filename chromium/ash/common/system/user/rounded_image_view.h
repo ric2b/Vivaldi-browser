@@ -32,11 +32,11 @@ class RoundedImageView : public views::View {
                       int bottom_right,
                       int bottom_left);
 
- private:
   // Overridden from views::View.
   gfx::Size GetPreferredSize() const override;
   void OnPaint(gfx::Canvas* canvas) override;
 
+ private:
   gfx::ImageSkia image_;
   gfx::ImageSkia resized_;
   gfx::Size image_size_;
@@ -44,6 +44,7 @@ class RoundedImageView : public views::View {
 
   // True if the given user is the active user and the icon should get
   // painted as active.
+  // TODO(estade): remove this, it's not used in Material Design.
   bool active_user_;
 
   DISALLOW_COPY_AND_ASSIGN(RoundedImageView);

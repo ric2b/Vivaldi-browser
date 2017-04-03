@@ -21,6 +21,8 @@
 
 namespace subresource_filter {
 
+class FirstPartyOrigin;
+
 // The integer type used to represent N-grams.
 using NGram = uint64_t;
 // The hasher used for hashing N-grams.
@@ -28,7 +30,7 @@ using NGramHasher = Uint64Hasher;
 // The hash table probe sequence used both by the ruleset builder and matcher.
 using NGramHashTableProber = DefaultProber<NGram, NGramHasher>;
 
-constexpr size_t kNGramSize = 6;
+constexpr size_t kNGramSize = 5;
 static_assert(kNGramSize <= sizeof(NGram), "NGram type is too narrow.");
 
 // The class used to construct flat data structures representing the set of URL
@@ -121,25 +123,16 @@ class IndexedRulesetMatcher {
       const GURL& document_url,
       const url::Origin& parent_document_origin,
       proto::ActivationType activation_type) const;
-  // TODO(pkalinnikov): GetActivationTypesForDocument.
 
   // Returns whether the network request to |url| of |element_type| initiated by
   // |document_origin| is not allowed to proceed. Always returns false if the
   // |url| is not valid or |element_type| == ELEMENT_TYPE_UNSPECIFIED.
   bool ShouldDisallowResourceLoad(const GURL& url,
-                                  const url::Origin& document_origin,
-                                  proto::ElementType element_type) const;
+                                  const FirstPartyOrigin& first_party,
+                                  proto::ElementType element_type,
+                                  bool disable_generic_rules) const;
 
  private:
-  // Returns whether the network request matches a particular part of the index.
-  // |is_third_party| should reflect relation between |url| and |initiator|.
-  static bool IsMatch(const flat::UrlPatternIndex* index,
-                      const GURL& url,
-                      const url::Origin& initiator,
-                      proto::ElementType element_type,
-                      proto::ActivationType activation_type,
-                      bool is_third_party);
-
   const flat::IndexedRuleset* root_;
 
   DISALLOW_COPY_AND_ASSIGN(IndexedRulesetMatcher);

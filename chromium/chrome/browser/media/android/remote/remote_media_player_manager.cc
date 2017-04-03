@@ -7,6 +7,7 @@
 #include "chrome/browser/android/tab_android.h"
 #include "chrome/common/chrome_content_client.h"
 #include "content/common/media/media_player_messages_android.h"
+#include "third_party/WebKit/public/platform/modules/remoteplayback/WebRemotePlaybackAvailability.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/gfx/android/java_bitmap.h"
 
@@ -72,6 +73,12 @@ void RemoteMediaPlayerManager::OnRequestRemotePlaybackControl(int player_id) {
   RemoteMediaPlayerBridge* player = GetRemotePlayer(player_id);
   if (player)
     player->RequestRemotePlaybackControl();
+}
+
+void RemoteMediaPlayerManager::OnRequestRemotePlaybackStop(int player_id) {
+  RemoteMediaPlayerBridge* player = GetRemotePlayer(player_id);
+  if (player)
+    player->RequestRemotePlaybackStop();
 }
 
 bool RemoteMediaPlayerManager::IsPlayingRemotely(int player_id) {
@@ -202,15 +209,18 @@ void RemoteMediaPlayerManager::OnRemoteDeviceUnselected(int player_id) {
   ReplaceRemotePlayerWithLocal(player_id);
 }
 
+void RemoteMediaPlayerManager::OnRemotePlaybackStarted(int player_id) {
+  Send(new MediaPlayerMsg_RemotePlaybackStarted(RoutingID(), player_id));
+}
+
 void RemoteMediaPlayerManager::OnRemotePlaybackFinished(int player_id) {
   ReplaceRemotePlayerWithLocal(player_id);
 }
 
 void RemoteMediaPlayerManager::OnRouteAvailabilityChanged(
-    int player_id, bool routes_available) {
-  Send(
-      new MediaPlayerMsg_RemoteRouteAvailabilityChanged(RoutingID(), player_id,
-                                                        routes_available));
+    int player_id, blink::WebRemotePlaybackAvailability availability) {
+  Send(new MediaPlayerMsg_RemoteRouteAvailabilityChanged(
+      RoutingID(), player_id, availability));
 }
 
 void RemoteMediaPlayerManager::OnCancelledRemotePlaybackRequest(int player_id) {

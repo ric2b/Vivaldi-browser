@@ -265,13 +265,14 @@ QuicConnection::QuicConnection(QuicConnectionId connection_id,
       time_of_last_sent_new_packet_(clock_->ApproximateNow()),
       last_send_for_timeout_(clock_->ApproximateNow()),
       packet_number_of_last_sent_packet_(0),
-      sent_packet_manager_(new QuicSentPacketManager(perspective,
-                                                     kDefaultPathId,
-                                                     clock_,
-                                                     &stats_,
-                                                     kCubic,
-                                                     kNack,
-                                                     /*delegate=*/nullptr)),
+      sent_packet_manager_(new QuicSentPacketManager(
+          perspective,
+          kDefaultPathId,
+          clock_,
+          &stats_,
+          FLAGS_quic_default_enable_cubic_bytes ? kCubicBytes : kCubic,
+          kNack,
+          /*delegate=*/nullptr)),
       version_negotiation_state_(START_NEGOTIATION),
       perspective_(perspective),
       connected_(true),
@@ -281,7 +282,6 @@ QuicConnection::QuicConnection(QuicConnectionId connection_id,
       packets_between_mtu_probes_(kPacketsBetweenMtuProbesBase),
       next_mtu_probe_at_(kPacketsBetweenMtuProbesBase),
       largest_received_packet_size_(0),
-      largest_packet_size_supported_(std::numeric_limits<QuicByteCount>::max()),
       goaway_sent_(false),
       goaway_received_(false),
       multipath_enabled_(false),
@@ -313,7 +313,6 @@ QuicConnection::~QuicConnection() {
   if (owns_writer_) {
     delete writer_;
   }
-  base::STLDeleteElements(&undecryptable_packets_);
   ClearQueuedPackets();
 }
 
@@ -332,7 +331,7 @@ void QuicConnection::SetFromConfig(const QuicConfig& config) {
   if (config.negotiated()) {
     // Handshake complete, set handshake timeout to Infinite.
     SetNetworkTimeouts(QuicTime::Delta::Infinite(),
-                       config.IdleConnectionStateLifetime());
+                       config.IdleNetworkTimeout());
     if (config.SilentClose()) {
       idle_timeout_connection_close_behavior_ =
           ConnectionCloseBehavior::SILENT_CLOSE;
@@ -979,6 +978,7 @@ bool QuicConnection::OnBlockedFrame(const QuicBlockedFrame& frame) {
            << "BLOCKED_FRAME received for stream: " << frame.stream_id;
   visitor_->OnBlockedFrame(frame);
   visitor_->PostProcessAfterData();
+  stats_.blocked_frames_received++;
   should_last_packet_instigate_acks_ = true;
   return connected_;
 }
@@ -1231,8 +1231,8 @@ void QuicConnection::SendRstStream(QuicStreamId id,
                                    QuicStreamOffset bytes_written) {
   // Opportunistically bundle an ack with this outgoing packet.
   ScopedPacketBundler ack_bundler(this, SEND_ACK_IF_PENDING);
-  packet_generator_.AddControlFrame(QuicFrame(new QuicRstStreamFrame(
-      id, AdjustErrorForVersion(error, version()), bytes_written)));
+  packet_generator_.AddControlFrame(
+      QuicFrame(new QuicRstStreamFrame(id, error, bytes_written)));
 
   if (error == QUIC_STREAM_NO_ERROR) {
     // All data for streams which are reset with QUIC_STREAM_NO_ERROR must
@@ -1273,6 +1273,7 @@ void QuicConnection::SendBlocked(QuicStreamId id) {
   // Opportunistically bundle an ack with this outgoing packet.
   ScopedPacketBundler ack_bundler(this, SEND_ACK_IF_PENDING);
   packet_generator_.AddControlFrame(QuicFrame(new QuicBlockedFrame(id)));
+  stats_.blocked_frames_sent++;
 }
 
 void QuicConnection::SendPathClose(QuicPathId path_id) {
@@ -1418,21 +1419,10 @@ void QuicConnection::WriteAndBundleAcksIfNotBlocked() {
 }
 
 bool QuicConnection::ProcessValidatedPacket(const QuicPacketHeader& header) {
-  if (header.fec_flag) {
-    // Drop any FEC packet.
-    return false;
-  }
-
   if (perspective_ == Perspective::IS_SERVER &&
       IsInitializedIPEndPoint(self_address_) &&
       IsInitializedIPEndPoint(last_packet_destination_address_) &&
       (!(self_address_ == last_packet_destination_address_))) {
-    if (!FLAGS_quic_allow_server_address_change_for_mapped_ipv4) {
-      CloseConnection(QUIC_ERROR_MIGRATING_ADDRESS,
-                      "Self address migration is not supported at the server.",
-                      ConnectionCloseBehavior::SEND_CONNECTION_CLOSE_PACKET);
-      return false;
-    }
     // Allow change between pure IPv4 and equivalent mapped IPv4 address.
     IPAddress self_ip = self_address_.address();
     if (self_ip.IsIPv4MappedIPv6()) {
@@ -1712,8 +1702,7 @@ bool QuicConnection::WritePacket(SerializedPacket* packet) {
   if (FLAGS_quic_only_track_sent_packets) {
     // In some cases, an MTU probe can cause EMSGSIZE. This indicates that the
     // MTU discovery is permanently unsuccessful.
-    if (FLAGS_graceful_emsgsize_on_mtu_probe &&
-        result.status == WRITE_STATUS_ERROR &&
+    if (result.status == WRITE_STATUS_ERROR &&
         result.error_code == kMessageTooBigErrorCode &&
         packet->retransmittable_frames.empty() &&
         packet->encrypted_length > long_term_mtu_) {
@@ -1782,8 +1771,7 @@ bool QuicConnection::WritePacket(SerializedPacket* packet) {
   if (!FLAGS_quic_only_track_sent_packets) {
     // In some cases, an MTU probe can cause EMSGSIZE. This indicates that the
     // MTU discovery is permanently unsuccessful.
-    if (FLAGS_graceful_emsgsize_on_mtu_probe &&
-        result.status == WRITE_STATUS_ERROR &&
+    if (result.status == WRITE_STATUS_ERROR &&
         result.error_code == kMessageTooBigErrorCode &&
         packet->retransmittable_frames.empty() &&
         packet->encrypted_length > long_term_mtu_) {
@@ -2044,7 +2032,7 @@ void QuicConnection::MaybeProcessUndecryptablePackets() {
 
   while (connected_ && !undecryptable_packets_.empty()) {
     DVLOG(1) << ENDPOINT << "Attempting to process undecryptable packet";
-    QuicEncryptedPacket* packet = undecryptable_packets_.front();
+    QuicEncryptedPacket* packet = undecryptable_packets_.front().get();
     if (!framer_.ProcessPacket(*packet) &&
         framer_.error() == QUIC_DECRYPTION_FAILURE) {
       DVLOG(1) << ENDPOINT << "Unable to process undecryptable packet...";
@@ -2052,7 +2040,6 @@ void QuicConnection::MaybeProcessUndecryptablePackets() {
     }
     DVLOG(1) << ENDPOINT << "Processed undecryptable packet!";
     ++stats_.packets_processed;
-    delete packet;
     undecryptable_packets_.pop_front();
   }
 
@@ -2068,7 +2055,7 @@ void QuicConnection::MaybeProcessUndecryptablePackets() {
         debug_visitor_->OnUndecryptablePacket();
       }
     }
-    base::STLDeleteElements(&undecryptable_packets_);
+    undecryptable_packets_.clear();
   }
 }
 
@@ -2454,8 +2441,14 @@ QuicByteCount QuicConnection::GetLimitedMaxPacketSize(
 
   const QuicByteCount writer_limit = writer_->GetMaxPacketSize(peer_address());
 
-  return std::min({suggested_max_packet_size, writer_limit, kMaxPacketSize,
-                   largest_packet_size_supported_});
+  QuicByteCount max_packet_size = suggested_max_packet_size;
+  if (max_packet_size > writer_limit) {
+    max_packet_size = writer_limit;
+  }
+  if (max_packet_size > kMaxPacketSize) {
+    max_packet_size = kMaxPacketSize;
+  }
+  return max_packet_size;
 }
 
 void QuicConnection::SendMtuDiscoveryPacket(QuicByteCount target_mtu) {

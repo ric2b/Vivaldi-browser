@@ -38,18 +38,6 @@
   // Additional menu items for hosted apps.
   base::scoped_nsobject<NSMenuItem> viewMenuItem_;
   base::scoped_nsobject<NSMenuItem> historyMenuItem_;
-
-
-  // Menu items for the currently focused packaged app.
-  base::scoped_nsobject<NSMenuItem> vivAppMenuItem_;
-  base::scoped_nsobject<NSMenuItem> vivFileMenuItem_;
-  base::scoped_nsobject<NSMenuItem> vivEditMenuItem_;
-  base::scoped_nsobject<NSMenuItem> vivViewMenuItem_;
-  base::scoped_nsobject<NSMenuItem> vivWindowMenuItem_;
-  base::scoped_nsobject<NSMenuItem> vivToolsMenuItem_;
-  base::scoped_nsobject<NSMenuItem> vivHelpMenuItem_;
-
-
 }
 
 @end

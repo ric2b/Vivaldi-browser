@@ -169,14 +169,8 @@ class USER_MANAGER_EXPORT UserManager {
   // restore has completed).
   virtual void SwitchToLastActiveUser() = 0;
 
-  // Called when browser session is started i.e. after
-  // browser_creator.LaunchBrowser(...) was called after user sign in.
-  // When user is at the image screen IsUserLoggedIn() will return true
-  // but IsSessionStarted() will return false. During the kiosk splash screen,
-  // we perform additional initialization after the user is logged in but
-  // before the session has been started.
-  // Fires NOTIFICATION_SESSION_STARTED.
-  virtual void SessionStarted() = 0;
+  // Invoked by session manager to inform session start.
+  virtual void OnSessionStarted() = 0;
 
   // Removes the user from the device. Note, it will verify that the given user
   // isn't the owner, so calling this method for the owner will take no effect.
@@ -200,12 +194,6 @@ class USER_MANAGER_EXPORT UserManager {
   // list or currently logged in as ephemeral. Returns |NULL| otherwise.
   // Same as FindUser but returns non-const pointer to User object.
   virtual User* FindUserAndModify(const AccountId& account_id) = 0;
-
-  // Returns the logged-in user.
-  // TODO(nkostylev): Deprecate this call, move clients to GetActiveUser().
-  // http://crbug.com/230852
-  virtual const User* GetLoggedInUser() const = 0;
-  virtual User* GetLoggedInUser() = 0;
 
   // Returns the logged-in user that is currently active within this session.
   // There could be multiple users logged in at the the same but for now
@@ -298,13 +286,11 @@ class USER_MANAGER_EXPORT UserManager {
   // Returns true if we're logged in as a kiosk app.
   virtual bool IsLoggedInAsKioskApp() const = 0;
 
+  // Returns true if we're logged in as a ARC kiosk app.
+  virtual bool IsLoggedInAsArcKioskApp() const = 0;
+
   // Returns true if we're logged in as the stub user used for testing on Linux.
   virtual bool IsLoggedInAsStub() const = 0;
-
-  // Returns true if we're logged in and browser has been started i.e.
-  // browser_creator.LaunchBrowser(...) was called after sign in
-  // or restart after crash.
-  virtual bool IsSessionStarted() const = 0;
 
   // Returns true if data stored or cached for the user with the given
   // |account_id|

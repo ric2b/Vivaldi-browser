@@ -59,9 +59,6 @@ class CRYPTO_EXPORT Encryptor {
   // If |mode| is CBC, |iv| must not be empty; if it is CTR, then |iv| must be
   // empty.
   bool Init(SymmetricKey* key, Mode mode, const base::StringPiece& iv);
-  bool Init(SymmetricKey* key, Mode mode, 
-                     const unsigned char *raw_key, 
-                     unsigned int raw_key_len);
 
   // Encrypts |plaintext| into |ciphertext|.  |plaintext| may only be empty if
   // the mode is CBC.

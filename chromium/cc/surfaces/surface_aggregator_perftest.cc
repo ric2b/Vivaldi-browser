@@ -23,6 +23,8 @@ namespace cc {
 namespace {
 
 static constexpr FrameSinkId kArbitraryFrameSinkId(1, 1);
+static const base::UnguessableToken kArbitraryToken =
+    base::UnguessableToken::Create();
 
 class EmptySurfaceFactoryClient : public SurfaceFactoryClient {
  public:
@@ -51,7 +53,7 @@ class SurfaceAggregatorPerfTest : public testing::Test {
     aggregator_.reset(new SurfaceAggregator(&manager_, resource_provider_.get(),
                                             optimize_damage));
     for (int i = 1; i <= num_surfaces; i++) {
-      LocalFrameId local_frame_id(i, 0);
+      LocalFrameId local_frame_id(i, kArbitraryToken);
       factory_.Create(local_frame_id);
       std::unique_ptr<RenderPass> pass(RenderPass::Create());
       std::unique_ptr<DelegatedFrameData> frame_data(new DelegatedFrameData);
@@ -88,9 +90,9 @@ class SurfaceAggregatorPerfTest : public testing::Test {
       if (i > 1) {
         SurfaceDrawQuad* surface_quad =
             pass->CreateAndAppendDrawQuad<SurfaceDrawQuad>();
-        surface_quad->SetNew(
-            sqs, gfx::Rect(0, 0, 1, 1), gfx::Rect(0, 0, 1, 1),
-            SurfaceId(kArbitraryFrameSinkId, LocalFrameId(i - 1, 0)));
+        surface_quad->SetNew(sqs, gfx::Rect(0, 0, 1, 1), gfx::Rect(0, 0, 1, 1),
+                             SurfaceId(kArbitraryFrameSinkId,
+                                       LocalFrameId(i - 1, kArbitraryToken)));
       }
 
       frame_data->render_pass_list.push_back(std::move(pass));
@@ -100,7 +102,7 @@ class SurfaceAggregatorPerfTest : public testing::Test {
                                      SurfaceFactory::DrawCallback());
     }
 
-    factory_.Create(LocalFrameId(num_surfaces + 1, 0));
+    factory_.Create(LocalFrameId(num_surfaces + 1, kArbitraryToken));
     timer_.Reset();
     do {
       std::unique_ptr<RenderPass> pass(RenderPass::Create());
@@ -111,7 +113,8 @@ class SurfaceAggregatorPerfTest : public testing::Test {
           pass->CreateAndAppendDrawQuad<SurfaceDrawQuad>();
       surface_quad->SetNew(
           sqs, gfx::Rect(0, 0, 100, 100), gfx::Rect(0, 0, 100, 100),
-          SurfaceId(kArbitraryFrameSinkId, LocalFrameId(num_surfaces, 0)));
+          SurfaceId(kArbitraryFrameSinkId,
+                    LocalFrameId(num_surfaces, kArbitraryToken)));
 
       if (full_damage)
         pass->damage_rect = gfx::Rect(0, 0, 100, 100);
@@ -121,21 +124,22 @@ class SurfaceAggregatorPerfTest : public testing::Test {
       frame_data->render_pass_list.push_back(std::move(pass));
       CompositorFrame frame;
       frame.delegated_frame_data = std::move(frame_data);
-      factory_.SubmitCompositorFrame(LocalFrameId(num_surfaces + 1, 0),
-                                     std::move(frame),
-                                     SurfaceFactory::DrawCallback());
+      factory_.SubmitCompositorFrame(
+          LocalFrameId(num_surfaces + 1, kArbitraryToken), std::move(frame),
+          SurfaceFactory::DrawCallback());
 
       CompositorFrame aggregated = aggregator_->Aggregate(
-          SurfaceId(kArbitraryFrameSinkId, LocalFrameId(num_surfaces + 1, 0)));
+          SurfaceId(kArbitraryFrameSinkId,
+                    LocalFrameId(num_surfaces + 1, kArbitraryToken)));
       timer_.NextLap();
     } while (!timer_.HasTimeLimitExpired());
 
     perf_test::PrintResult("aggregator_speed", "", name, timer_.LapsPerSecond(),
                            "runs/s", true);
 
-    factory_.Destroy(LocalFrameId(num_surfaces + 1, 0));
+    factory_.Destroy(LocalFrameId(num_surfaces + 1, kArbitraryToken));
     for (int i = 1; i <= num_surfaces; i++)
-      factory_.Destroy(LocalFrameId(i, 0));
+      factory_.Destroy(LocalFrameId(i, kArbitraryToken));
   }
 
  protected:

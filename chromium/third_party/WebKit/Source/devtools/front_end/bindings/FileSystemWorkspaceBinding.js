@@ -29,505 +29,519 @@
  */
 
 /**
- * @constructor
- * @param {!WebInspector.IsolatedFileSystemManager} isolatedFileSystemManager
- * @param {!WebInspector.Workspace} workspace
+ * @unrestricted
  */
-WebInspector.FileSystemWorkspaceBinding = function(isolatedFileSystemManager, workspace)
-{
+Bindings.FileSystemWorkspaceBinding = class {
+  /**
+   * @param {!Workspace.IsolatedFileSystemManager} isolatedFileSystemManager
+   * @param {!Workspace.Workspace} workspace
+   */
+  constructor(isolatedFileSystemManager, workspace) {
     this._isolatedFileSystemManager = isolatedFileSystemManager;
     this._workspace = workspace;
     this._eventListeners = [
-        this._isolatedFileSystemManager.addEventListener(WebInspector.IsolatedFileSystemManager.Events.FileSystemAdded, this._onFileSystemAdded, this),
-        this._isolatedFileSystemManager.addEventListener(WebInspector.IsolatedFileSystemManager.Events.FileSystemRemoved, this._onFileSystemRemoved, this),
-        this._isolatedFileSystemManager.addEventListener(WebInspector.IsolatedFileSystemManager.Events.FileSystemFilesChanged, this._fileSystemFilesChanged, this)
+      this._isolatedFileSystemManager.addEventListener(
+          Workspace.IsolatedFileSystemManager.Events.FileSystemAdded, this._onFileSystemAdded, this),
+      this._isolatedFileSystemManager.addEventListener(
+          Workspace.IsolatedFileSystemManager.Events.FileSystemRemoved, this._onFileSystemRemoved, this),
+      this._isolatedFileSystemManager.addEventListener(
+          Workspace.IsolatedFileSystemManager.Events.FileSystemFilesChanged, this._fileSystemFilesChanged, this)
     ];
-    /** @type {!Map.<string, !WebInspector.FileSystemWorkspaceBinding.FileSystem>} */
+    /** @type {!Map.<string, !Bindings.FileSystemWorkspaceBinding.FileSystem>} */
     this._boundFileSystems = new Map();
-    this._isolatedFileSystemManager.waitForFileSystems()
-        .then(this._onFileSystemsLoaded.bind(this));
-}
+    this._isolatedFileSystemManager.waitForFileSystems().then(this._onFileSystemsLoaded.bind(this));
+  }
 
-WebInspector.FileSystemWorkspaceBinding._styleSheetExtensions = new Set(["css", "scss", "sass", "less"]);
-WebInspector.FileSystemWorkspaceBinding._documentExtensions = new Set(["htm", "html", "asp", "aspx", "phtml", "jsp"]);
-WebInspector.FileSystemWorkspaceBinding._scriptExtensions = new Set(["asp", "aspx", "c", "cc", "cljs", "coffee", "cpp", "cs", "dart", "java", "js", "jsp", "jsx", "h", "m", "mm", "py", "sh", "ts", "tsx", "ls"]);
-
-WebInspector.FileSystemWorkspaceBinding._imageExtensions = WebInspector.IsolatedFileSystem.ImageExtensions;
-
-/**
- * @param {string} fileSystemPath
- * @return {string}
- */
-WebInspector.FileSystemWorkspaceBinding.projectId = function(fileSystemPath)
-{
+  /**
+   * @param {string} fileSystemPath
+   * @return {string}
+   */
+  static projectId(fileSystemPath) {
     return fileSystemPath;
-}
+  }
 
-/**
- * @param {!WebInspector.UISourceCode} uiSourceCode
- * @return {!Array<string>}
- */
-WebInspector.FileSystemWorkspaceBinding.relativePath = function(uiSourceCode)
-{
-    var baseURL = /** @type {!WebInspector.FileSystemWorkspaceBinding.FileSystem}*/(uiSourceCode.project())._fileSystemBaseURL;
-    return uiSourceCode.url().substring(baseURL.length).split("/");
-}
+  /**
+   * @param {!Workspace.UISourceCode} uiSourceCode
+   * @return {!Array<string>}
+   */
+  static relativePath(uiSourceCode) {
+    var baseURL =
+        /** @type {!Bindings.FileSystemWorkspaceBinding.FileSystem}*/ (uiSourceCode.project())._fileSystemBaseURL;
+    return uiSourceCode.url().substring(baseURL.length).split('/');
+  }
 
-/**
- * @param {!WebInspector.Project} project
- * @param {string} relativePath
- * @return {string}
- */
-WebInspector.FileSystemWorkspaceBinding.completeURL = function(project, relativePath)
-{
-    var fsProject = /** @type {!WebInspector.FileSystemWorkspaceBinding.FileSystem}*/(project);
+  /**
+   * @param {!Workspace.Project} project
+   * @param {string} relativePath
+   * @return {string}
+   */
+  static completeURL(project, relativePath) {
+    var fsProject = /** @type {!Bindings.FileSystemWorkspaceBinding.FileSystem}*/ (project);
     return fsProject._fileSystemBaseURL + relativePath;
-}
+  }
 
-/**
- * @param {string} extension
- * @return {!WebInspector.ResourceType}
- */
-WebInspector.FileSystemWorkspaceBinding._contentTypeForExtension = function(extension)
-{
-    if (WebInspector.FileSystemWorkspaceBinding._styleSheetExtensions.has(extension))
-        return WebInspector.resourceTypes.Stylesheet;
-    if (WebInspector.FileSystemWorkspaceBinding._documentExtensions.has(extension))
-        return WebInspector.resourceTypes.Document;
-    if (WebInspector.FileSystemWorkspaceBinding._imageExtensions.has(extension))
-        return WebInspector.resourceTypes.Image;
-    if (WebInspector.FileSystemWorkspaceBinding._scriptExtensions.has(extension))
-        return WebInspector.resourceTypes.Script;
-    return WebInspector.resourceTypes.Other;
-}
+  /**
+   * @param {string} extension
+   * @return {!Common.ResourceType}
+   */
+  static _contentTypeForExtension(extension) {
+    if (Bindings.FileSystemWorkspaceBinding._styleSheetExtensions.has(extension))
+      return Common.resourceTypes.Stylesheet;
+    if (Bindings.FileSystemWorkspaceBinding._documentExtensions.has(extension))
+      return Common.resourceTypes.Document;
+    if (Bindings.FileSystemWorkspaceBinding._imageExtensions.has(extension))
+      return Common.resourceTypes.Image;
+    if (Bindings.FileSystemWorkspaceBinding._scriptExtensions.has(extension))
+      return Common.resourceTypes.Script;
+    return Common.resourceTypes.Other;
+  }
 
-WebInspector.FileSystemWorkspaceBinding.prototype = {
-    /**
-     * @return {!WebInspector.IsolatedFileSystemManager}
-     */
-    fileSystemManager: function()
-    {
-        return this._isolatedFileSystemManager;
-    },
-
-    /**
-     * @param {!Array<!WebInspector.IsolatedFileSystem>} fileSystems
-     */
-    _onFileSystemsLoaded: function(fileSystems)
-    {
-        for (var fileSystem of fileSystems)
-            this._addFileSystem(fileSystem);
-    },
-
-    /**
-     * @param {!WebInspector.Event} event
-     */
-    _onFileSystemAdded: function(event)
-    {
-        var fileSystem = /** @type {!WebInspector.IsolatedFileSystem} */ (event.data);
-        this._addFileSystem(fileSystem);
-    },
-
-    /**
-     * @param {!WebInspector.IsolatedFileSystem} fileSystem
-     */
-    _addFileSystem: function(fileSystem)
-    {
-        var boundFileSystem = new WebInspector.FileSystemWorkspaceBinding.FileSystem(this, fileSystem, this._workspace);
-        this._boundFileSystems.set(fileSystem.path(), boundFileSystem);
-    },
-
-    /**
-     * @param {!WebInspector.Event} event
-     */
-    _onFileSystemRemoved: function(event)
-    {
-        var fileSystem = /** @type {!WebInspector.IsolatedFileSystem} */ (event.data);
-        var boundFileSystem = this._boundFileSystems.get(fileSystem.path());
-        boundFileSystem.dispose();
-        this._boundFileSystems.remove(fileSystem.path());
-    },
-
-    /**
-     * @param {!WebInspector.Event} event
-     */
-    _fileSystemFilesChanged: function(event)
-    {
-        var paths = /** @type {!Array<string>} */ (event.data);
-        for (var path of paths) {
-            for (var key of this._boundFileSystems.keys()) {
-                if (!path.startsWith(key))
-                    continue;
-                this._boundFileSystems.get(key)._fileChanged(path);
-            }
-        }
-    },
-
-    dispose: function()
-    {
-        WebInspector.EventTarget.removeEventListeners(this._eventListeners);
-        for (var fileSystem of this._boundFileSystems.values()) {
-            fileSystem.dispose();
-            this._boundFileSystems.remove(fileSystem._fileSystem.path());
-        }
-    }
-}
-
-/**
- * @param {string} projectId
- * @return {string}
- */
-WebInspector.FileSystemWorkspaceBinding.fileSystemPath = function(projectId)
-{
+  /**
+   * @param {string} projectId
+   * @return {string}
+   */
+  static fileSystemPath(projectId) {
     return projectId;
-}
+  }
+
+  /**
+   * @return {!Workspace.IsolatedFileSystemManager}
+   */
+  fileSystemManager() {
+    return this._isolatedFileSystemManager;
+  }
+
+  /**
+   * @param {!Array<!Workspace.IsolatedFileSystem>} fileSystems
+   */
+  _onFileSystemsLoaded(fileSystems) {
+    for (var fileSystem of fileSystems)
+      this._addFileSystem(fileSystem);
+  }
+
+  /**
+   * @param {!Common.Event} event
+   */
+  _onFileSystemAdded(event) {
+    var fileSystem = /** @type {!Workspace.IsolatedFileSystem} */ (event.data);
+    this._addFileSystem(fileSystem);
+  }
+
+  /**
+   * @param {!Workspace.IsolatedFileSystem} fileSystem
+   */
+  _addFileSystem(fileSystem) {
+    var boundFileSystem = new Bindings.FileSystemWorkspaceBinding.FileSystem(this, fileSystem, this._workspace);
+    this._boundFileSystems.set(fileSystem.path(), boundFileSystem);
+  }
+
+  /**
+   * @param {!Common.Event} event
+   */
+  _onFileSystemRemoved(event) {
+    var fileSystem = /** @type {!Workspace.IsolatedFileSystem} */ (event.data);
+    var boundFileSystem = this._boundFileSystems.get(fileSystem.path());
+    boundFileSystem.dispose();
+    this._boundFileSystems.remove(fileSystem.path());
+  }
+
+  /**
+   * @param {!Common.Event} event
+   */
+  _fileSystemFilesChanged(event) {
+    var paths = /** @type {!Array<string>} */ (event.data);
+    for (var path of paths) {
+      for (var key of this._boundFileSystems.keys()) {
+        if (!path.startsWith(key))
+          continue;
+        this._boundFileSystems.get(key)._fileChanged(path);
+      }
+    }
+  }
+
+  dispose() {
+    Common.EventTarget.removeEventListeners(this._eventListeners);
+    for (var fileSystem of this._boundFileSystems.values()) {
+      fileSystem.dispose();
+      this._boundFileSystems.remove(fileSystem._fileSystem.path());
+    }
+  }
+};
+
+Bindings.FileSystemWorkspaceBinding._styleSheetExtensions = new Set(['css', 'scss', 'sass', 'less']);
+Bindings.FileSystemWorkspaceBinding._documentExtensions = new Set(['htm', 'html', 'asp', 'aspx', 'phtml', 'jsp']);
+Bindings.FileSystemWorkspaceBinding._scriptExtensions = new Set([
+  'asp', 'aspx', 'c', 'cc', 'cljs', 'coffee', 'cpp', 'cs', 'dart', 'java', 'js',
+  'jsp', 'jsx',  'h', 'm',  'mm',   'py',     'sh',  'ts', 'tsx',  'ls'
+]);
+
+Bindings.FileSystemWorkspaceBinding._imageExtensions = Workspace.IsolatedFileSystem.ImageExtensions;
+
 
 /**
- * @constructor
- * @extends {WebInspector.ProjectStore}
- * @implements {WebInspector.Project}
- * @param {!WebInspector.FileSystemWorkspaceBinding} fileSystemWorkspaceBinding
- * @param {!WebInspector.IsolatedFileSystem} isolatedFileSystem
- * @param {!WebInspector.Workspace} workspace
+ * @implements {Workspace.Project}
+ * @unrestricted
  */
-WebInspector.FileSystemWorkspaceBinding.FileSystem = function(fileSystemWorkspaceBinding, isolatedFileSystem, workspace)
-{
-    this._fileSystemWorkspaceBinding = fileSystemWorkspaceBinding;
-    this._fileSystem = isolatedFileSystem;
-    this._fileSystemBaseURL = this._fileSystem.path() + "/";
-    this._fileSystemPath = this._fileSystem.path();
-
-    var id = WebInspector.FileSystemWorkspaceBinding.projectId(this._fileSystemPath);
+Bindings.FileSystemWorkspaceBinding.FileSystem = class extends Workspace.ProjectStore {
+  /**
+   * @param {!Bindings.FileSystemWorkspaceBinding} fileSystemWorkspaceBinding
+   * @param {!Workspace.IsolatedFileSystem} isolatedFileSystem
+   * @param {!Workspace.Workspace} workspace
+   */
+  constructor(fileSystemWorkspaceBinding, isolatedFileSystem, workspace) {
+    var fileSystemPath = isolatedFileSystem.path();
+    var id = Bindings.FileSystemWorkspaceBinding.projectId(fileSystemPath);
     console.assert(!workspace.project(id));
+    var displayName = fileSystemPath.substr(fileSystemPath.lastIndexOf('/') + 1);
 
-    var displayName = this._fileSystemPath.substr(this._fileSystemPath.lastIndexOf("/") + 1);
-    WebInspector.ProjectStore.call(this, workspace, id, WebInspector.projectTypes.FileSystem, displayName);
+    super(workspace, id, Workspace.projectTypes.FileSystem, displayName);
+
+    this._fileSystem = isolatedFileSystem;
+    this._fileSystemBaseURL = this._fileSystem.path() + '/';
+    this._fileSystemWorkspaceBinding = fileSystemWorkspaceBinding;
+    this._fileSystemPath = fileSystemPath;
 
     workspace.addProject(this);
     this.populate();
-}
+  }
 
-WebInspector.FileSystemWorkspaceBinding.FileSystem.prototype = {
-    /**
-     * @return {string}
-     */
-    fileSystemPath: function()
-    {
-        return this._fileSystemPath;
-    },
+  /**
+   * @return {string}
+   */
+  fileSystemPath() {
+    return this._fileSystemPath;
+  }
 
-    /**
-     * @param {!WebInspector.UISourceCode} uiSourceCode
-     * @return {string}
-     */
-    _filePathForUISourceCode: function(uiSourceCode)
-    {
-        return uiSourceCode.url().substring(this._fileSystemPath.length);
-    },
+  /**
+   * @return {!Array<string>}
+   */
+  gitFolders() {
+    return this._fileSystem.gitFolders().map(folder => this._fileSystemPath + '/' + folder);
+  }
 
-    /**
-     * @override
-     * @param {!WebInspector.UISourceCode} uiSourceCode
-     * @param {function(?string)} callback
-     */
-    requestFileContent: function(uiSourceCode, callback)
-    {
-        var filePath = this._filePathForUISourceCode(uiSourceCode);
-        var isImage = WebInspector.FileSystemWorkspaceBinding._imageExtensions.has(WebInspector.ParsedURL.extractExtension(filePath));
+  /**
+   * @param {!Workspace.UISourceCode} uiSourceCode
+   * @return {string}
+   */
+  _filePathForUISourceCode(uiSourceCode) {
+    return uiSourceCode.url().substring(this._fileSystemPath.length);
+  }
 
-        this._fileSystem.requestFileContent(filePath, isImage ? base64CallbackWrapper : callback);
-
-        /**
-         * @param {?string} result
-         */
-        function base64CallbackWrapper(result)
-        {
-            if (!result) {
-                callback(result);
-                return;
-            }
-            var index = result.indexOf(",");
-            callback(result.substring(index + 1));
-        }
-    },
+  /**
+   * @override
+   * @param {!Workspace.UISourceCode} uiSourceCode
+   * @return {!Promise<?Workspace.UISourceCodeMetadata>}
+   */
+  requestMetadata(uiSourceCode) {
+    if (uiSourceCode[Bindings.FileSystemWorkspaceBinding._metadata])
+      return uiSourceCode[Bindings.FileSystemWorkspaceBinding._metadata];
+    var relativePath = this._filePathForUISourceCode(uiSourceCode);
+    var promise = this._fileSystem.getMetadata(relativePath).then(onMetadata);
+    uiSourceCode[Bindings.FileSystemWorkspaceBinding._metadata] = promise;
+    return promise;
 
     /**
-     * @override
-     * @return {boolean}
+     * @param {?{modificationTime: !Date, size: number}} metadata
+     * @return {?Workspace.UISourceCodeMetadata}
      */
-    canSetFileContent: function()
-    {
-        return true;
-    },
+    function onMetadata(metadata) {
+      if (!metadata)
+        return null;
+      return new Workspace.UISourceCodeMetadata(metadata.modificationTime, metadata.size);
+    }
+  }
+
+  /**
+   * @override
+   * @param {!Workspace.UISourceCode} uiSourceCode
+   * @param {function(?string)} callback
+   */
+  requestFileContent(uiSourceCode, callback) {
+    var filePath = this._filePathForUISourceCode(uiSourceCode);
+    var isImage = Bindings.FileSystemWorkspaceBinding._imageExtensions.has(Common.ParsedURL.extractExtension(filePath));
+
+    this._fileSystem.requestFileContent(filePath, isImage ? base64CallbackWrapper : callback);
 
     /**
-     * @override
-     * @param {!WebInspector.UISourceCode} uiSourceCode
-     * @param {string} newContent
-     * @param {function(?string)} callback
+     * @param {?string} result
      */
-    setFileContent: function(uiSourceCode, newContent, callback)
-    {
-        var filePath = this._filePathForUISourceCode(uiSourceCode);
-        this._fileSystem.setFileContent(filePath, newContent, callback.bind(this, ""));
-    },
+    function base64CallbackWrapper(result) {
+      if (!result) {
+        callback(result);
+        return;
+      }
+      var index = result.indexOf(',');
+      callback(result.substring(index + 1));
+    }
+  }
+
+  /**
+   * @override
+   * @return {boolean}
+   */
+  canSetFileContent() {
+    return true;
+  }
+
+  /**
+   * @override
+   * @param {!Workspace.UISourceCode} uiSourceCode
+   * @param {string} newContent
+   * @param {function(?string)} callback
+   */
+  setFileContent(uiSourceCode, newContent, callback) {
+    var filePath = this._filePathForUISourceCode(uiSourceCode);
+    this._fileSystem.setFileContent(filePath, newContent, callback.bind(this, ''));
+  }
+
+  /**
+   * @override
+   * @return {boolean}
+   */
+  canRename() {
+    return true;
+  }
+
+  /**
+   * @override
+   * @param {!Workspace.UISourceCode} uiSourceCode
+   * @param {string} newName
+   * @param {function(boolean, string=, string=, !Common.ResourceType=)} callback
+   */
+  rename(uiSourceCode, newName, callback) {
+    if (newName === uiSourceCode.name()) {
+      callback(true, uiSourceCode.name(), uiSourceCode.url(), uiSourceCode.contentType());
+      return;
+    }
+
+    var filePath = this._filePathForUISourceCode(uiSourceCode);
+    this._fileSystem.renameFile(filePath, newName, innerCallback.bind(this));
 
     /**
-     * @override
-     * @return {boolean}
+     * @param {boolean} success
+     * @param {string=} newName
+     * @this {Bindings.FileSystemWorkspaceBinding.FileSystem}
      */
-    canRename: function()
-    {
-        return true;
-    },
+    function innerCallback(success, newName) {
+      if (!success || !newName) {
+        callback(false, newName);
+        return;
+      }
+      console.assert(newName);
+      var slash = filePath.lastIndexOf('/');
+      var parentPath = filePath.substring(0, slash);
+      filePath = parentPath + '/' + newName;
+      filePath = filePath.substr(1);
+      var extension = this._extensionForPath(newName);
+      var newURL = this._fileSystemBaseURL + filePath;
+      var newContentType = Bindings.FileSystemWorkspaceBinding._contentTypeForExtension(extension);
+      this.renameUISourceCode(uiSourceCode, newName);
+      callback(true, newName, newURL, newContentType);
+    }
+  }
+
+  /**
+   * @override
+   * @param {!Workspace.UISourceCode} uiSourceCode
+   * @param {string} query
+   * @param {boolean} caseSensitive
+   * @param {boolean} isRegex
+   * @param {function(!Array.<!Common.ContentProvider.SearchMatch>)} callback
+   */
+  searchInFileContent(uiSourceCode, query, caseSensitive, isRegex, callback) {
+    var filePath = this._filePathForUISourceCode(uiSourceCode);
+    this._fileSystem.requestFileContent(filePath, contentCallback);
 
     /**
-     * @override
-     * @param {!WebInspector.UISourceCode} uiSourceCode
-     * @param {string} newName
-     * @param {function(boolean, string=, string=, !WebInspector.ResourceType=)} callback
+     * @param {?string} content
      */
-    rename: function(uiSourceCode, newName, callback)
-    {
-        if (newName === uiSourceCode.name()) {
-            callback(true, uiSourceCode.name(), uiSourceCode.url(), uiSourceCode.contentType());
-            return;
-        }
+    function contentCallback(content) {
+      var result = [];
+      if (content !== null)
+        result = Common.ContentProvider.performSearchInContent(content, query, caseSensitive, isRegex);
+      callback(result);
+    }
+  }
 
-        var filePath = this._filePathForUISourceCode(uiSourceCode);
-        this._fileSystem.renameFile(filePath, newName, innerCallback.bind(this));
-
-        /**
-         * @param {boolean} success
-         * @param {string=} newName
-         * @this {WebInspector.FileSystemWorkspaceBinding.FileSystem}
-         */
-        function innerCallback(success, newName)
-        {
-            if (!success || !newName) {
-                callback(false, newName);
-                return;
-            }
-            console.assert(newName);
-            var slash = filePath.lastIndexOf("/");
-            var parentPath = filePath.substring(0, slash);
-            filePath = parentPath + "/" + newName;
-            filePath = filePath.substr(1);
-            var extension = this._extensionForPath(newName);
-            var newURL = this._fileSystemBaseURL + filePath;
-            var newContentType = WebInspector.FileSystemWorkspaceBinding._contentTypeForExtension(extension);
-            this.renameUISourceCode(uiSourceCode, newName);
-            callback(true, newName, newURL, newContentType);
-        }
-    },
+  /**
+   * @override
+   * @param {!Workspace.ProjectSearchConfig} searchConfig
+   * @param {!Array.<string>} filesMathingFileQuery
+   * @param {!Common.Progress} progress
+   * @param {function(!Array.<string>)} callback
+   */
+  findFilesMatchingSearchRequest(searchConfig, filesMathingFileQuery, progress, callback) {
+    var result = filesMathingFileQuery;
+    var queriesToRun = searchConfig.queries().slice();
+    if (!queriesToRun.length)
+      queriesToRun.push('');
+    progress.setTotalWork(queriesToRun.length);
+    searchNextQuery.call(this);
 
     /**
-     * @override
-     * @param {!WebInspector.UISourceCode} uiSourceCode
-     * @param {string} query
-     * @param {boolean} caseSensitive
-     * @param {boolean} isRegex
-     * @param {function(!Array.<!WebInspector.ContentProvider.SearchMatch>)} callback
+     * @this {Bindings.FileSystemWorkspaceBinding.FileSystem}
      */
-    searchInFileContent: function(uiSourceCode, query, caseSensitive, isRegex, callback)
-    {
-        var filePath = this._filePathForUISourceCode(uiSourceCode);
-        this._fileSystem.requestFileContent(filePath, contentCallback);
-
-        /**
-         * @param {?string} content
-         */
-        function contentCallback(content)
-        {
-            var result = [];
-            if (content !== null)
-                result = WebInspector.ContentProvider.performSearchInContent(content, query, caseSensitive, isRegex);
-            callback(result);
-        }
-    },
+    function searchNextQuery() {
+      if (!queriesToRun.length) {
+        progress.done();
+        callback(result);
+        return;
+      }
+      var query = queriesToRun.shift();
+      this._fileSystem.searchInPath(searchConfig.isRegex() ? '' : query, progress, innerCallback.bind(this));
+    }
 
     /**
-     * @override
-     * @param {!WebInspector.ProjectSearchConfig} searchConfig
-     * @param {!Array.<string>} filesMathingFileQuery
-     * @param {!WebInspector.Progress} progress
-     * @param {function(!Array.<string>)} callback
+     * @param {!Array.<string>} files
+     * @this {Bindings.FileSystemWorkspaceBinding.FileSystem}
      */
-    findFilesMatchingSearchRequest: function(searchConfig, filesMathingFileQuery, progress, callback)
-    {
-        var result = filesMathingFileQuery;
-        var queriesToRun = searchConfig.queries().slice();
-        if (!queriesToRun.length)
-            queriesToRun.push("");
-        progress.setTotalWork(queriesToRun.length);
-        searchNextQuery.call(this);
+    function innerCallback(files) {
+      files = files.sort();
+      progress.worked(1);
+      result = result.intersectOrdered(files, String.naturalOrderComparator);
+      searchNextQuery.call(this);
+    }
+  }
 
-        /**
-         * @this {WebInspector.FileSystemWorkspaceBinding.FileSystem}
-         */
-        function searchNextQuery()
-        {
-            if (!queriesToRun.length) {
-                progress.done();
-                callback(result);
-                return;
-            }
-            var query = queriesToRun.shift();
-            this._fileSystem.searchInPath(searchConfig.isRegex() ? "" : query, progress, innerCallback.bind(this));
-        }
+  /**
+   * @override
+   * @param {!Common.Progress} progress
+   */
+  indexContent(progress) {
+    this._fileSystem.indexContent(progress);
+  }
 
-        /**
-         * @param {!Array.<string>} files
-         * @this {WebInspector.FileSystemWorkspaceBinding.FileSystem}
-         */
-        function innerCallback(files)
-        {
-            files = files.sort();
-            progress.worked(1);
-            result = result.intersectOrdered(files, String.naturalOrderComparator);
-            searchNextQuery.call(this);
-        }
-    },
+  /**
+   * @param {string} path
+   * @return {string}
+   */
+  _extensionForPath(path) {
+    var extensionIndex = path.lastIndexOf('.');
+    if (extensionIndex === -1)
+      return '';
+    return path.substring(extensionIndex + 1).toLowerCase();
+  }
+
+  populate() {
+    var chunkSize = 1000;
+    var filePaths = this._fileSystem.filePaths();
+    reportFileChunk.call(this, 0);
 
     /**
-     * @override
-     * @param {!WebInspector.Progress} progress
+     * @param {number} from
+     * @this {Bindings.FileSystemWorkspaceBinding.FileSystem}
      */
-    indexContent: function(progress)
-    {
-        this._fileSystem.indexContent(progress);
-    },
+    function reportFileChunk(from) {
+      var to = Math.min(from + chunkSize, filePaths.length);
+      for (var i = from; i < to; ++i)
+        this._addFile(filePaths[i]);
+      if (to < filePaths.length)
+        setTimeout(reportFileChunk.bind(this, to), 100);
+    }
+  }
+
+  /**
+   * @override
+   * @param {string} url
+   */
+  excludeFolder(url) {
+    var relativeFolder = url.substring(this._fileSystemBaseURL.length);
+    if (!relativeFolder.startsWith('/'))
+      relativeFolder = '/' + relativeFolder;
+    if (!relativeFolder.endsWith('/'))
+      relativeFolder += '/';
+    this._fileSystem.addExcludedFolder(relativeFolder);
+
+    var uiSourceCodes = this.uiSourceCodes().slice();
+    for (var i = 0; i < uiSourceCodes.length; ++i) {
+      var uiSourceCode = uiSourceCodes[i];
+      if (uiSourceCode.url().startsWith(url))
+        this.removeUISourceCode(uiSourceCode.url());
+    }
+  }
+
+  /**
+   * @override
+   * @param {string} path
+   * @param {?string} name
+   * @param {string} content
+   * @param {function(?Workspace.UISourceCode)} callback
+   */
+  createFile(path, name, content, callback) {
+    this._fileSystem.createFile(path, name, innerCallback.bind(this));
+    var createFilePath;
 
     /**
-     * @param {string} path
-     * @return {string}
+     * @param {?string} filePath
+     * @this {Bindings.FileSystemWorkspaceBinding.FileSystem}
      */
-    _extensionForPath: function(path)
-    {
-        var extensionIndex = path.lastIndexOf(".");
-        if (extensionIndex === -1)
-            return "";
-        return path.substring(extensionIndex + 1).toLowerCase();
-    },
-
-    populate: function()
-    {
-        this._fileSystem.requestFilesRecursive("", this._addFile.bind(this));
-    },
+    function innerCallback(filePath) {
+      if (!filePath) {
+        callback(null);
+        return;
+      }
+      createFilePath = filePath;
+      if (!content) {
+        contentSet.call(this);
+        return;
+      }
+      this._fileSystem.setFileContent(filePath, content, contentSet.bind(this));
+    }
 
     /**
-     * @override
-     * @param {string} url
+     * @this {Bindings.FileSystemWorkspaceBinding.FileSystem}
      */
-    excludeFolder: function(url)
-    {
-        var relativeFolder = url.substring(this._fileSystemBaseURL.length);
-        if (!relativeFolder.startsWith("/"))
-            relativeFolder = "/" + relativeFolder;
-        if (!relativeFolder.endsWith("/"))
-            relativeFolder += "/";
-        this._fileSystem.addExcludedFolder(relativeFolder);
+    function contentSet() {
+      callback(this._addFile(createFilePath));
+    }
+  }
 
-        var uiSourceCodes = this.uiSourceCodes().slice();
-        for (var i = 0; i < uiSourceCodes.length; ++i) {
-            var uiSourceCode = uiSourceCodes[i];
-            if (uiSourceCode.url().startsWith(url))
-                this.removeUISourceCode(uiSourceCode.url());
-        }
-    },
+  /**
+   * @override
+   * @param {string} path
+   */
+  deleteFile(path) {
+    this._fileSystem.deleteFile(path);
+    this.removeUISourceCode(path);
+  }
 
-    /**
-     * @override
-     * @param {string} path
-     * @param {?string} name
-     * @param {string} content
-     * @param {function(?WebInspector.UISourceCode)} callback
-     */
-    createFile: function(path, name, content, callback)
-    {
-        this._fileSystem.createFile(path, name, innerCallback.bind(this));
-        var createFilePath;
+  /**
+   * @override
+   */
+  remove() {
+    this._fileSystemWorkspaceBinding._isolatedFileSystemManager.removeFileSystem(this._fileSystem);
+  }
 
-        /**
-         * @param {?string} filePath
-         * @this {WebInspector.FileSystemWorkspaceBinding.FileSystem}
-         */
-        function innerCallback(filePath)
-        {
-            if (!filePath) {
-                callback(null);
-                return;
-            }
-            createFilePath = filePath;
-            if (!content) {
-                contentSet.call(this);
-                return;
-            }
-            this._fileSystem.setFileContent(filePath, content, contentSet.bind(this));
-        }
+  /**
+   * @param {string} filePath
+   * @return {!Workspace.UISourceCode}
+   */
+  _addFile(filePath) {
+    var extension = this._extensionForPath(filePath);
+    var contentType = Bindings.FileSystemWorkspaceBinding._contentTypeForExtension(extension);
 
-        /**
-         * @this {WebInspector.FileSystemWorkspaceBinding.FileSystem}
-         */
-        function contentSet()
-        {
-            callback(this._addFile(createFilePath));
-        }
-    },
+    var uiSourceCode = this.createUISourceCode(this._fileSystemBaseURL + filePath, contentType);
+    this.addUISourceCode(uiSourceCode);
+    return uiSourceCode;
+  }
 
-    /**
-     * @override
-     * @param {string} path
-     */
-    deleteFile: function(path)
-    {
-        this._fileSystem.deleteFile(path);
-        this.removeUISourceCode(path);
-    },
+  /**
+   * @param {string} path
+   */
+  _fileChanged(path) {
+    var uiSourceCode = this.uiSourceCodeForURL(path);
+    if (!uiSourceCode) {
+      var contentType = Bindings.FileSystemWorkspaceBinding._contentTypeForExtension(this._extensionForPath(path));
+      this.addUISourceCode(this.createUISourceCode(path, contentType));
+      return;
+    }
+    uiSourceCode[Bindings.FileSystemWorkspaceBinding._metadata] = null;
+    uiSourceCode.checkContentUpdated();
+  }
 
-    /**
-     * @override
-     */
-    remove: function()
-    {
-        this._fileSystemWorkspaceBinding._isolatedFileSystemManager.removeFileSystem(this._fileSystem);
-    },
+  dispose() {
+    this.removeProject();
+  }
+};
 
-    /**
-     * @param {string} filePath
-     * @return {!WebInspector.UISourceCode}
-     */
-    _addFile: function(filePath)
-    {
-        if (!filePath)
-            console.assert(false);
-
-        var extension = this._extensionForPath(filePath);
-        var contentType = WebInspector.FileSystemWorkspaceBinding._contentTypeForExtension(extension);
-
-        var uiSourceCode = this.createUISourceCode(this._fileSystemBaseURL + filePath, contentType);
-        this.addUISourceCode(uiSourceCode);
-        return uiSourceCode;
-    },
-
-    /**
-     * @param {string} path
-     */
-    _fileChanged: function(path)
-    {
-        var uiSourceCode = this.uiSourceCodeForURL(path);
-        if (!uiSourceCode) {
-            var contentType = WebInspector.FileSystemWorkspaceBinding._contentTypeForExtension(this._extensionForPath(path));
-            this.addUISourceCode(this.createUISourceCode(path, contentType));
-            return;
-        }
-        uiSourceCode.checkContentUpdated();
-    },
-
-    dispose: function()
-    {
-        this.removeProject();
-    },
-
-    __proto__: WebInspector.ProjectStore.prototype
-}
+Bindings.FileSystemWorkspaceBinding._metadata = Symbol('FileSystemWorkspaceBinding.Metadata');

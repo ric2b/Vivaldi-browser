@@ -29,9 +29,9 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_features.h"
 #include "jni/ImeAdapter_jni.h"
+#include "third_party/WebKit/public/platform/WebInputEvent.h"
+#include "third_party/WebKit/public/platform/WebTextInputType.h"
 #include "third_party/WebKit/public/web/WebCompositionUnderline.h"
-#include "third_party/WebKit/public/web/WebInputEvent.h"
-#include "third_party/WebKit/public/web/WebTextInputType.h"
 
 using base::android::AttachCurrentThread;
 using base::android::ConvertJavaStringToUTF16;
@@ -285,7 +285,7 @@ void ImeAdapterAndroid::DeleteSurroundingText(JNIEnv*,
   RenderFrameHostImpl* rfh =
       static_cast<RenderFrameHostImpl*>(GetFocusedFrame());
   if (rfh)
-    rfh->ExtendSelectionAndDelete(before, after);
+    rfh->DeleteSurroundingText(before, after);
 }
 
 bool ImeAdapterAndroid::RequestTextInputStateUpdate(

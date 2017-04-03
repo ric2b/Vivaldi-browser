@@ -174,8 +174,9 @@ class ChromeTests:
   def _AppendGtestFilter(self, tool, name, cmd):
     '''Append an appropriate --gtest_filter flag to the googletest binary
        invocation.
-       If the user passed his own filter mentioning only one test, just use it.
-       Othewise, filter out tests listed in the appropriate gtest_exclude files.
+       If the user passed their own filter mentioning only one test, just use
+       it. Otherwise, filter out tests listed in the appropriate gtest_exclude
+       files.
     '''
     if (self._gtest_filter and
         ":" not in self._gtest_filter and
@@ -453,6 +454,9 @@ class ChromeTests:
   def TestSql(self):
     return self.SimpleTest("chrome", "sql_unittests")
 
+  def TestStorage(self):
+    return self.SimpleTest("storage", "storage_unittests")
+
   def TestLinuxSandbox(self):
     return self.SimpleTest("sandbox", "sandbox_linux_unittests")
 
@@ -706,6 +710,7 @@ class ChromeTests:
     "sandbox": TestLinuxSandbox, "sandbox_linux_unittests": TestLinuxSandbox,
     "skia": TestSkia,            "skia_unittests": TestSkia,
     "sql": TestSql,              "sql_unittests": TestSql,
+    "storage": TestStorage,      "storage_unittests": TestStorage,
     "sync_integration_tests": TestSyncIntegration,
     "sync_integration": TestSyncIntegration,
     "ui_base_unit": TestUIBaseUnit,       "ui_base_unittests": TestUIBaseUnit,

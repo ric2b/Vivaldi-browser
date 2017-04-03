@@ -7,10 +7,10 @@
 
 #include <memory>
 
+#include "base/callback_forward.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "base/timer/timer.h"
-#include "content/browser/loader/resource_handler.h"
+#include "base/time/time.h"
 #include "content/browser/ssl/ssl_client_auth_handler.h"
 #include "content/browser/ssl/ssl_error_handler.h"
 #include "content/common/content_export.h"
@@ -23,6 +23,7 @@ class X509Certificate;
 
 namespace content {
 class ResourceDispatcherHostLoginDelegate;
+class ResourceHandler;
 class ResourceLoaderDelegate;
 class ResourceRequestInfoImpl;
 
@@ -43,7 +44,7 @@ class CONTENT_EXPORT ResourceLoader : public net::URLRequest::Delegate,
   void CancelRequest(bool from_renderer);
 
   bool is_transferring() const { return is_transferring_; }
-  void MarkAsTransferring(const scoped_refptr<ResourceResponse>& response);
+  void MarkAsTransferring(const base::Closure& on_transfer_complete_callback);
   void CompleteTransfer();
 
   net::URLRequest* request() { return request_.get(); }
@@ -128,6 +129,9 @@ class CONTENT_EXPORT ResourceLoader : public net::URLRequest::Delegate,
   // consumer.  We are waiting for a notification to complete the transfer, at
   // which point we'll receive a new ResourceHandler.
   bool is_transferring_;
+
+  // Called when a navigation has finished transfer.
+  base::Closure on_transfer_complete_callback_;
 
   // Instrumentation add to investigate http://crbug.com/503306.
   // TODO(mmenke): Remove once bug is fixed.

@@ -5,10 +5,10 @@
 #ifndef ScriptWrappableVisitor_h
 #define ScriptWrappableVisitor_h
 
-#include "bindings/core/v8/ScopedPersistent.h"
 #include "bindings/core/v8/ScriptWrappable.h"
 #include "core/CoreExport.h"
 #include "platform/RuntimeEnabledFeatures.h"
+#include "platform/heap/HeapPage.h"
 #include "platform/heap/WrapperVisitor.h"
 #include "wtf/Deque.h"
 #include "wtf/Vector.h"
@@ -19,6 +19,8 @@ namespace blink {
 class HeapObjectHeader;
 template <typename T>
 class Member;
+template <typename T>
+class TraceWrapperV8Reference;
 
 class WrapperMarkingData {
  public:
@@ -82,8 +84,10 @@ class WrapperMarkingData {
  * TraceEpilogue. Everytime V8 finds new wrappers, it will let the tracer know
  * using RegisterV8References.
  */
-class CORE_EXPORT ScriptWrappableVisitor : public WrapperVisitor,
-                                           public v8::EmbedderHeapTracer {
+class CORE_EXPORT ScriptWrappableVisitor : public v8::EmbedderHeapTracer,
+                                           public WrapperVisitor {
+  DISALLOW_IMPLICIT_CONSTRUCTORS(ScriptWrappableVisitor);
+
  public:
   ScriptWrappableVisitor(v8::Isolate* isolate) : m_isolate(isolate){};
   ~ScriptWrappableVisitor() override;
@@ -98,9 +102,12 @@ class CORE_EXPORT ScriptWrappableVisitor : public WrapperVisitor,
      */
   static void performCleanup(v8::Isolate*);
 
-  void TracePrologue(v8::EmbedderReachableReferenceReporter*) override;
+  void TracePrologue() override;
 
   static WrapperVisitor* currentVisitor(v8::Isolate*);
+
+  static void writeBarrier(const void*,
+                           const TraceWrapperV8Reference<v8::Value>*);
 
   template <typename T>
   static void writeBarrier(const void* object, const Member<T> value) {
@@ -108,22 +115,33 @@ class CORE_EXPORT ScriptWrappableVisitor : public WrapperVisitor,
   }
 
   template <typename T>
-  static void writeBarrier(const void* object, const T* other) {
+  static void writeBarrier(const void* srcObject, const T* dstObject) {
     if (!RuntimeEnabledFeatures::traceWrappablesEnabled()) {
       return;
     }
-    if (!object || !other) {
+    if (!srcObject || !dstObject) {
       return;
     }
-    if (!HeapObjectHeader::fromPayload(object)->isWrapperHeaderMarked()) {
+    // We only require a write barrier if |srcObject|  is already marked. Note
+    // that this implicitly disables the write barrier when the GC is not
+    // active as object will not be marked in this case.
+    if (!HeapObjectHeader::fromPayload(srcObject)->isWrapperHeaderMarked()) {
       return;
     }
-    HeapObjectHeader* otherObjectHeader =
-        TraceTrait<T>::heapObjectHeader(other);
-    if (!otherObjectHeader->isWrapperHeaderMarked()) {
-      currentVisitor(ThreadState::current()->isolate())
-          ->traceWrappers(otherObjectHeader->payload());
+
+    const ThreadState* threadState = ThreadState::current();
+    DCHECK(threadState);
+    // We can only safely check the marking state of |dstObject| for non-mixin
+    // objects or if we are outside of object construction.
+    if (!IsGarbageCollectedMixin<T>::value ||
+        !threadState->isMixinInConstruction()) {
+      if (TraceTrait<T>::heapObjectHeader(dstObject)->isWrapperHeaderMarked())
+        return;
     }
+
+    currentVisitor(threadState->isolate())
+        ->pushToMarkingDeque(TraceTrait<T>::markWrapper,
+                             TraceTrait<T>::heapObjectHeader, dstObject);
   }
 
   void RegisterV8References(const std::vector<std::pair<void*, void*>>&
@@ -136,19 +154,22 @@ class CORE_EXPORT ScriptWrappableVisitor : public WrapperVisitor,
   void EnterFinalPause() override;
   size_t NumberOfWrappersToTrace() override;
 
-  void dispatchTraceWrappers(const ScriptWrappable*) const override;
+  void dispatchTraceWrappers(const TraceWrapperBase*) const override;
 #define DECLARE_DISPATCH_TRACE_WRAPPERS(className) \
   void dispatchTraceWrappers(const className*) const override;
 
   WRAPPER_VISITOR_SPECIAL_CLASSES(DECLARE_DISPATCH_TRACE_WRAPPERS);
 
 #undef DECLARE_DISPATCH_TRACE_WRAPPERS
-  void dispatchTraceWrappers(const void*) const override {}
 
-  void traceWrappers(const ScopedPersistent<v8::Value>*) const override;
-  void traceWrappers(const ScopedPersistent<v8::Object>*) const override;
-  void markWrapper(const v8::PersistentBase<v8::Value>* handle) const;
-  void markWrapper(const v8::PersistentBase<v8::Object>* handle) const override;
+  void dispatchTraceWrappers(const void*) const override {
+    // Getting here means that we lack the proper infrastructure for handling
+    // a specific type. Crash instead of failing silently to flush out issues.
+    NOTREACHED();
+  }
+
+  void traceWrappers(const TraceWrapperV8Reference<v8::Value>&) const override;
+  void markWrapper(const v8::PersistentBase<v8::Value>*) const override;
 
   void invalidateDeadObjectsInMarkingDeque();
 
@@ -249,12 +270,8 @@ class CORE_EXPORT ScriptWrappableVisitor : public WrapperVisitor,
      */
   mutable WTF::Vector<HeapObjectHeader*> m_headersToUnmark;
   v8::Isolate* m_isolate;
-
-  /**
-     * A reporter instance set in TracePrologue and cleared in TraceEpilogue,
-     * which is used to report all reachable references back to v8.
-     */
-  v8::EmbedderReachableReferenceReporter* m_reporter = nullptr;
 };
-}
-#endif
+
+}  // namespace blink
+
+#endif  // ScriptWrappableVisitor_h

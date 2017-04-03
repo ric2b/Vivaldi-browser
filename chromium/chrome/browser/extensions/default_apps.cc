@@ -9,6 +9,7 @@
 #include <set>
 #include <string>
 
+#include "base/command_line.h"
 #include "base/macros.h"
 #include "base/strings/string_util.h"
 #include "chrome/browser/browser_process.h"

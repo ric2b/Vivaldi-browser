@@ -135,7 +135,7 @@ class BackgroundSyncServiceImplTest : public testing::Test {
     storage_partition_impl_.reset(new StoragePartitionImpl(
         embedded_worker_helper_->browser_context(), base::FilePath(), nullptr,
         nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
-        nullptr, nullptr, nullptr, nullptr));
+        nullptr, nullptr, nullptr, nullptr, nullptr));
     embedded_worker_helper_->context_wrapper()->set_storage_partition(
         storage_partition_impl_.get());
   }
@@ -186,7 +186,7 @@ class BackgroundSyncServiceImplTest : public testing::Test {
     background_sync_context_->CreateService(std::move(service_request));
     base::RunLoop().RunUntilIdle();
 
-    service_impl_ = *background_sync_context_->services_.begin();
+    service_impl_ = background_sync_context_->services_.begin()->first;
     ASSERT_TRUE(service_impl_);
   }
 

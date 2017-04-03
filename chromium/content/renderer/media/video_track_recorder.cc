@@ -52,6 +52,11 @@ namespace content {
 
 namespace {
 
+// HW encoders expect a nonzero bitrate, so |kVEADefaultBitratePerPixel| is used
+// to estimate bits per second for ~30 fps with ~1/16 compression rate.
+const int kVEADefaultBitratePerPixel = 2;
+// Number of output buffers used to copy the encoded data coming from HW
+// encoders.
 const int kVEAEncoderOutputBufferCount = 4;
 
 static struct {
@@ -502,7 +507,8 @@ VEAEncoder::VEAEncoder(
     media::VideoCodecProfile codec,
     const gfx::Size& size)
     : Encoder(on_encoded_video_callback,
-              bits_per_second,
+              bits_per_second > 0 ? bits_per_second
+                                  : size.GetArea() * kVEADefaultBitratePerPixel,
               RenderThreadImpl::current()->GetGpuFactories()->GetTaskRunner()),
       gpu_factories_(RenderThreadImpl::current()->GetGpuFactories()),
       codec_(codec),
@@ -685,6 +691,7 @@ void VEAEncoder::ConfigureEncoderOnEncodingTaskRunner(const gfx::Size& size) {
   DVLOG(3) << __func__;
   DCHECK(encoding_task_runner_->BelongsToCurrentThread());
   DCHECK(gpu_factories_->GetTaskRunner()->BelongsToCurrentThread());
+  DCHECK_GT(bits_per_second_, 0);
 
   input_size_ = size;
   video_encoder_ = gpu_factories_->CreateVideoEncodeAccelerator();
@@ -1023,7 +1030,7 @@ void H264Encoder::ConfigureEncoderOnEncodingTaskRunner(const gfx::Size& size) {
   init_params.iMultipleThreadIdc = 1;
 
   // TODO(mcasas): consider reducing complexity if there are few CPUs available.
-  DCHECK_EQ(MEDIUM_COMPLEXITY, init_params.iComplexityMode);
+  init_params.iComplexityMode = MEDIUM_COMPLEXITY;
   DCHECK(!init_params.bEnableDenoise);
   DCHECK(init_params.bEnableFrameSkip);
 
@@ -1032,8 +1039,14 @@ void H264Encoder::ConfigureEncoderOnEncodingTaskRunner(const gfx::Size& size) {
   init_params.sSpatialLayers[0].iVideoWidth        = init_params.iPicWidth;
   init_params.sSpatialLayers[0].iVideoHeight       = init_params.iPicHeight;
   init_params.sSpatialLayers[0].iSpatialBitrate    = init_params.iTargetBitrate;
-  // Slice num according to number of threads.
-  init_params.sSpatialLayers[0].sSliceCfg.uiSliceMode = SM_AUTO_SLICE;
+
+  // When uiSliceMode = SM_FIXEDSLCNUM_SLICE, uiSliceNum = 0 means auto design
+  // it with cpu core number.
+  // TODO(sprang): Set to 0 when we understand why the rate controller borks
+  // when uiSliceNum > 1. See https://github.com/cisco/openh264/issues/2591
+  init_params.sSpatialLayers[0].sSliceArgument.uiSliceNum = 1;
+  init_params.sSpatialLayers[0].sSliceArgument.uiSliceMode =
+      SM_FIXEDSLCNUM_SLICE;
 
   if (openh264_encoder_->InitializeExt(&init_params) != cmResultSuccess) {
     NOTREACHED() << "Failed to initialize OpenH264 encoder";

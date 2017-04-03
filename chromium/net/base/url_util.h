@@ -16,7 +16,6 @@
 #include "base/strings/string16.h"
 #include "base/strings/string_piece.h"
 #include "net/base/net_export.h"
-#include "url/gurl.h"
 #include "url/third_party/mozilla/url_parse.h"
 
 class GURL;
@@ -72,7 +71,7 @@ class NET_EXPORT QueryIterator {
   void Advance();
 
  private:
-  GURL url_;
+  const GURL& url_;
   url::Component query_;
   bool at_end_;
   url::Component key_;

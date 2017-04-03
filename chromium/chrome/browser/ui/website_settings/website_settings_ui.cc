@@ -99,10 +99,6 @@ const PermissionsUIInfo kPermissionsUIInfo[] = {
     {CONTENT_SETTINGS_TYPE_NOTIFICATIONS,
      IDS_WEBSITE_SETTINGS_TYPE_NOTIFICATIONS, IDR_BLOCKED_NOTIFICATION,
      IDR_ALLOWED_NOTIFICATION},
-    {CONTENT_SETTINGS_TYPE_FULLSCREEN, IDS_WEBSITE_SETTINGS_TYPE_FULLSCREEN,
-     IDR_ALLOWED_FULLSCREEN, IDR_ALLOWED_FULLSCREEN},
-    {CONTENT_SETTINGS_TYPE_MOUSELOCK, IDS_WEBSITE_SETTINGS_TYPE_MOUSELOCK,
-     IDR_BLOCKED_MOUSE_CURSOR, IDR_ALLOWED_MOUSE_CURSOR},
     {CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC, IDS_WEBSITE_SETTINGS_TYPE_MIC,
      IDR_BLOCKED_MIC, IDR_ALLOWED_MIC},
     {CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA, IDS_WEBSITE_SETTINGS_TYPE_CAMERA,
@@ -170,7 +166,6 @@ WebsiteSettingsUI::IdentityInfo::GetSecurityDescription() const {
     case WebsiteSettings::SITE_IDENTITY_STATUS_CERT:
     case WebsiteSettings::SITE_IDENTITY_STATUS_EV_CERT:
     case WebsiteSettings::SITE_IDENTITY_STATUS_CERT_REVOCATION_UNKNOWN:
-    case WebsiteSettings::SITE_IDENTITY_STATUS_CT_ERROR:
     case WebsiteSettings::SITE_IDENTITY_STATUS_ADMIN_PROVIDED_CERT:
       switch (connection_status) {
         case WebsiteSettings::
@@ -187,6 +182,17 @@ WebsiteSettingsUI::IdentityInfo::GetSecurityDescription() const {
           return CreateSecurityDescription(IDS_WEBSITE_SETTINGS_SECURE_SUMMARY,
                                            IDS_WEBSITE_SETTINGS_SECURE_DETAILS);
       }
+    case WebsiteSettings::SITE_IDENTITY_STATUS_MALWARE:
+      return CreateSecurityDescription(IDS_WEBSITE_SETTINGS_MALWARE_SUMMARY,
+                                       IDS_WEBSITE_SETTINGS_MALWARE_DETAILS);
+    case WebsiteSettings::SITE_IDENTITY_STATUS_SOCIAL_ENGINEERING:
+      return CreateSecurityDescription(
+          IDS_WEBSITE_SETTINGS_SOCIAL_ENGINEERING_SUMMARY,
+          IDS_WEBSITE_SETTINGS_SOCIAL_ENGINEERING_DETAILS);
+    case WebsiteSettings::SITE_IDENTITY_STATUS_UNWANTED_SOFTWARE:
+      return CreateSecurityDescription(
+          IDS_WEBSITE_SETTINGS_UNWANTED_SOFTWARE_SUMMARY,
+          IDS_WEBSITE_SETTINGS_UNWANTED_SOFTWARE_DETAILS);
     case WebsiteSettings::
         SITE_IDENTITY_STATUS_DEPRECATED_SIGNATURE_ALGORITHM_MINOR:
     case WebsiteSettings::
@@ -338,7 +344,6 @@ int WebsiteSettingsUI::GetIdentityIconID(
       resource_id = IDR_PAGEINFO_WARNING_MAJOR;
       break;
     case WebsiteSettings::SITE_IDENTITY_STATUS_ERROR:
-    case WebsiteSettings::SITE_IDENTITY_STATUS_CT_ERROR:
       resource_id = IDR_PAGEINFO_BAD;
       break;
     case WebsiteSettings::SITE_IDENTITY_STATUS_ADMIN_PROVIDED_CERT:

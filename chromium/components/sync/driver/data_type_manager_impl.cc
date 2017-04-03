@@ -16,10 +16,10 @@
 #include "base/strings/stringprintf.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
-#include "components/sync/core/data_type_debug_info_listener.h"
 #include "components/sync/driver/data_type_encryption_handler.h"
 #include "components/sync/driver/data_type_manager_observer.h"
 #include "components/sync/driver/data_type_status_table.h"
+#include "components/sync/engine/data_type_debug_info_listener.h"
 
 namespace syncer {
 
@@ -84,21 +84,6 @@ void DataTypeManagerImpl::Configure(ModelTypeSet desired_types,
     DataTypeController::TypeMap::const_iterator iter =
         controllers_->find(type.Get());
     if (IsControlType(type.Get()) || iter != controllers_->end()) {
-      if (iter != controllers_->end()) {
-        if (!iter->second->ReadyForStart() &&
-            !data_type_status_table_.GetUnreadyErrorTypes().Has(type.Get())) {
-          // Add the type to the unready types set to prevent purging it. It's
-          // up to the datatype controller to, if necessary, explicitly
-          // mark the type as broken to trigger a purge.
-          SyncError error(FROM_HERE, SyncError::UNREADY_ERROR,
-                          "Datatype not ready at config time.", type.Get());
-          std::map<ModelType, SyncError> errors;
-          errors[type.Get()] = error;
-          data_type_status_table_.UpdateFailedDataTypes(errors);
-        } else if (iter->second->ReadyForStart()) {
-          data_type_status_table_.ResetUnreadyErrorFor(type.Get());
-        }
-      }
       filtered_desired_types.Put(type.Get());
     }
   }
@@ -166,8 +151,16 @@ void DataTypeManagerImpl::RegisterTypesWithBackend() {
   for (auto type_iter = last_enabled_types_.First(); type_iter.Good();
        type_iter.Inc()) {
     const auto& dtc_iter = controllers_->find(type_iter.Get());
-    if (dtc_iter != controllers_->end())
-      dtc_iter->second->RegisterWithBackend(configurer_);
+    if (dtc_iter == controllers_->end())
+      continue;
+    DataTypeController* dtc = dtc_iter->second.get();
+    if (dtc->state() == DataTypeController::MODEL_LOADED) {
+      // Only call RegisterWithBackend for types that completed LoadModels
+      // successfully. Such types shouldn't be in an error state at the same
+      // time.
+      DCHECK(!data_type_status_table_.GetFailedTypes().Has(dtc->type()));
+      dtc->RegisterWithBackend(configurer_);
+    }
   }
 }
 
@@ -257,6 +250,8 @@ void DataTypeManagerImpl::Restart(ConfigureReason reason) {
     data_type_status_table_.ResetCryptoErrors();
   }
 
+  UpdateUnreadyTypeErrors(last_requested_types_);
+
   last_enabled_types_ = GetEnabledTypes();
   last_restart_time_ = base::Time::Now();
   configuration_stats_.clear();
@@ -323,6 +318,32 @@ TypeSetPriorityList DataTypeManagerImpl::PrioritizeTypes(
     result.push(ModelTypeSet());
 
   return result;
+}
+
+void DataTypeManagerImpl::UpdateUnreadyTypeErrors(
+    const ModelTypeSet& desired_types) {
+  for (ModelTypeSet::Iterator type = desired_types.First(); type.Good();
+       type.Inc()) {
+    const auto& iter = controllers_->find(type.Get());
+    if (iter == controllers_->end())
+      continue;
+    const DataTypeController* dtc = iter->second.get();
+    bool unready_status =
+        data_type_status_table_.GetUnreadyErrorTypes().Has(type.Get());
+    if (dtc->ReadyForStart() != (unready_status == false)) {
+      // Adjust data_type_status_table_ if unready state in it doesn't match
+      // DataTypeController::ReadyForStart().
+      if (dtc->ReadyForStart()) {
+        data_type_status_table_.ResetUnreadyErrorFor(type.Get());
+      } else {
+        SyncError error(FROM_HERE, SyncError::UNREADY_ERROR,
+                        "Datatype not ready at config time.", type.Get());
+        std::map<ModelType, SyncError> errors;
+        errors[type.Get()] = error;
+        data_type_status_table_.UpdateFailedDataTypes(errors);
+      }
+    }
+  }
 }
 
 void DataTypeManagerImpl::ProcessReconfigure() {
@@ -630,18 +651,18 @@ void DataTypeManagerImpl::NotifyStart() {
 void DataTypeManagerImpl::NotifyDone(const ConfigureResult& raw_result) {
   catch_up_in_progress_ = false;
 
-  AddToConfigureTime();
+  DCHECK(!last_restart_time_.is_null());
+  base::TimeDelta configure_time = base::Time::Now() - last_restart_time_;
 
   ConfigureResult result = raw_result;
   result.data_type_status_table = data_type_status_table_;
 
-  DVLOG(1) << "Total time spent configuring: "
-           << configure_time_delta_.InSecondsF() << "s";
+  DVLOG(1) << "Total time spent configuring: " << configure_time.InSecondsF()
+           << "s";
   switch (result.status) {
     case DataTypeManager::OK:
       DVLOG(1) << "NotifyDone called with result: OK";
-      UMA_HISTOGRAM_LONG_TIMES("Sync.ConfigureTime_Long.OK",
-                               configure_time_delta_);
+      UMA_HISTOGRAM_LONG_TIMES("Sync.ConfigureTime_Long.OK", configure_time);
       if (debug_info_listener_.IsInitialized() &&
           !configuration_stats_.empty()) {
         debug_info_listener_.Call(
@@ -653,12 +674,12 @@ void DataTypeManagerImpl::NotifyDone(const ConfigureResult& raw_result) {
     case DataTypeManager::ABORTED:
       DVLOG(1) << "NotifyDone called with result: ABORTED";
       UMA_HISTOGRAM_LONG_TIMES("Sync.ConfigureTime_Long.ABORTED",
-                               configure_time_delta_);
+                               configure_time);
       break;
     case DataTypeManager::UNRECOVERABLE_ERROR:
       DVLOG(1) << "NotifyDone called with result: UNRECOVERABLE_ERROR";
       UMA_HISTOGRAM_LONG_TIMES("Sync.ConfigureTime_Long.UNRECOVERABLE_ERROR",
-                               configure_time_delta_);
+                               configure_time);
       break;
     case DataTypeManager::UNKNOWN:
       NOTREACHED();
@@ -669,11 +690,6 @@ void DataTypeManagerImpl::NotifyDone(const ConfigureResult& raw_result) {
 
 DataTypeManager::State DataTypeManagerImpl::state() const {
   return state_;
-}
-
-void DataTypeManagerImpl::AddToConfigureTime() {
-  DCHECK(!last_restart_time_.is_null());
-  configure_time_delta_ += (base::Time::Now() - last_restart_time_);
 }
 
 ModelTypeSet DataTypeManagerImpl::GetEnabledTypes() const {

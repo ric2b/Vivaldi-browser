@@ -9,8 +9,7 @@
 #include "base/macros.h"
 #include "base/path_service.h"
 #include "base/values.h"
-#include "services/shell/public/cpp/capabilities.h"
-#include "services/shell/public/cpp/names.h"
+#include "services/service_manager/public/cpp/interface_provider_spec.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace catalog {
@@ -55,34 +54,28 @@ class EntryTest : public testing::Test {
 
 TEST_F(EntryTest, Simple) {
   std::unique_ptr<Entry> entry = ReadEntry("simple", nullptr);
-  EXPECT_EQ("service:foo", entry->name());
-  EXPECT_EQ(shell::GetNamePath(entry->name()), entry->qualifier());
+  EXPECT_EQ("foo", entry->name());
   EXPECT_EQ("Foo", entry->display_name());
-}
-
-TEST_F(EntryTest, NoWildcardInInterfaces) {
-  std::unique_ptr<Entry> entry = ReadEntry("wildcard_interfaces", nullptr);
-  EXPECT_EQ(nullptr, entry.get());
 }
 
 TEST_F(EntryTest, Instance) {
   std::unique_ptr<Entry> entry = ReadEntry("instance", nullptr);
-  EXPECT_EQ("service:foo", entry->name());
-  EXPECT_EQ("bar", entry->qualifier());
+  EXPECT_EQ("foo", entry->name());
   EXPECT_EQ("Foo", entry->display_name());
 }
 
-TEST_F(EntryTest, Capabilities) {
-  std::unique_ptr<Entry> entry = ReadEntry("capabilities", nullptr);
+TEST_F(EntryTest, ConnectionSpec) {
+  std::unique_ptr<Entry> entry = ReadEntry("connection_spec", nullptr);
 
-  EXPECT_EQ("service:foo", entry->name());
-  EXPECT_EQ("bar", entry->qualifier());
+  EXPECT_EQ("foo", entry->name());
   EXPECT_EQ("Foo", entry->display_name());
-  shell::CapabilitySpec spec;
-  shell::CapabilityRequest request;
-  request.interfaces.insert("mojo::Bar");
-  spec.required["service:bar"] = request;
-  EXPECT_EQ(spec, entry->capabilities());
+  service_manager::InterfaceProviderSpec spec;
+  service_manager::CapabilitySet capabilities;
+  capabilities.insert("bar:bar");
+  spec.requires["bar"] = capabilities;
+  service_manager::InterfaceProviderSpecMap specs;
+  specs[service_manager::mojom::kServiceManager_ConnectorSpec] = spec;
+  EXPECT_EQ(specs, entry->interface_provider_specs());
 }
 
 TEST_F(EntryTest, Serialization) {

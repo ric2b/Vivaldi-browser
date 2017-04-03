@@ -10,6 +10,7 @@ import android.app.Instrumentation;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.os.Build;
+import android.util.AndroidRuntimeException;
 import android.util.Log;
 
 import org.chromium.android_webview.AwBrowserContext;
@@ -22,12 +23,12 @@ import org.chromium.android_webview.test.util.GraphicsTestUtils;
 import org.chromium.android_webview.test.util.JSUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.BaseActivityInstrumentationTestCase;
+import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.InMemorySharedPreferences;
 import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.base.test.util.parameter.Parameter;
 import org.chromium.base.test.util.parameter.ParameterizedTest;
-import org.chromium.content.browser.test.util.CallbackHelper;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
 import org.chromium.content.browser.test.util.TestCallbackHelperContainer.OnPageFinishedHelper;
@@ -80,13 +81,22 @@ public class AwTestBase
 
     @Override
     protected void setUp() throws Exception {
-        Context appContext = getInstrumentation().getTargetContext().getApplicationContext();
-        mBrowserContext = new AwBrowserContext(new InMemorySharedPreferences(), appContext);
+        if (needsAwBrowserContextCreated()) {
+            createAwBrowserContext();
+        }
 
         super.setUp();
         if (needsBrowserProcessStarted()) {
             startBrowserProcess();
         }
+    }
+
+    protected void createAwBrowserContext() {
+        if (mBrowserContext != null) {
+            throw new AndroidRuntimeException("There should only be one browser context.");
+        }
+        Context appContext = getInstrumentation().getTargetContext().getApplicationContext();
+        mBrowserContext = new AwBrowserContext(new InMemorySharedPreferences(), appContext);
     }
 
     protected void startBrowserProcess() throws Exception {
@@ -98,6 +108,14 @@ public class AwTestBase
                 AwBrowserProcess.start();
             }
         });
+    }
+
+    /**
+     * Override this to return false if the test doesn't want to create an AwBrowserContext
+     * automatically.
+     */
+    protected boolean needsAwBrowserContextCreated() {
+        return true;
     }
 
     /**

@@ -1,13 +1,13 @@
 import base64
 import cgi
 import Cookie
-import os
 import StringIO
 import tempfile
-import urlparse
 
-import stash
-from utils import HTTPException
+from six.moves.urllib.parse import parse_qsl, urlsplit
+
+from . import stash
+from .utils import HTTPException
 
 missing = object()
 
@@ -179,6 +179,10 @@ class Request(object):
 
     Request path as it appears in the HTTP request.
 
+    .. attribute:: url_base
+
+    The prefix part of the path; typically / unless the handler has a url_base set
+
     .. attribute:: url
 
     Absolute URL for the request.
@@ -253,6 +257,7 @@ class Request(object):
                 host, port = host.split(":", 1)
 
         self.request_path = request_handler.path
+        self.url_base = "/"
 
         if self.request_path.startswith(scheme + "://"):
             self.url = request_handler.path
@@ -261,7 +266,7 @@ class Request(object):
                                       host,
                                       port,
                                       self.request_path)
-        self.url_parts = urlparse.urlsplit(self.url)
+        self.url_parts = urlsplit(self.url)
 
         self._raw_headers = request_handler.headers
 
@@ -286,7 +291,7 @@ class Request(object):
     @property
     def GET(self):
         if self._GET is None:
-            params = urlparse.parse_qsl(self.url_parts.query, keep_blank_values=True)
+            params = parse_qsl(self.url_parts.query, keep_blank_values=True)
             self._GET = MultiDict()
             for key, value in params:
                 self._GET.add(key, value)

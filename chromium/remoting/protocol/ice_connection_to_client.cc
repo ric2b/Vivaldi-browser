@@ -32,11 +32,17 @@ namespace {
 
 std::unique_ptr<AudioEncoder> CreateAudioEncoder(
     const protocol::SessionConfig& config) {
+#if defined(OS_IOS)
+  // TODO(nicholss): iOS should not use Opus. This is to prevent us from
+  // depending on //media. In the future we will use webrtc for conneciton
+  // and this will be a non-issue.
+  return nullptr;
+#else
   const protocol::ChannelConfig& audio_config = config.audio_config();
-
   if (audio_config.codec == protocol::ChannelConfig::CODEC_OPUS) {
     return base::WrapUnique(new AudioEncoderOpus());
   }
+#endif
 
   NOTREACHED();
   return nullptr;
@@ -51,8 +57,8 @@ IceConnectionToClient::IceConnectionToClient(
     scoped_refptr<base::SingleThreadTaskRunner> audio_task_runner)
     : event_handler_(nullptr),
       session_(std::move(session)),
-      video_encode_task_runner_(video_encode_task_runner),
-      audio_task_runner_(audio_task_runner),
+      video_encode_task_runner_(std::move(video_encode_task_runner)),
+      audio_task_runner_(std::move(audio_task_runner)),
       transport_(transport_context, this),
       control_dispatcher_(new HostControlDispatcher()),
       event_dispatcher_(new HostEventDispatcher()),
@@ -92,6 +98,7 @@ std::unique_ptr<VideoStream> IceConnectionToClient::StartVideoStream(
   std::unique_ptr<VideoFramePump> pump(
       new VideoFramePump(video_encode_task_runner_, std::move(desktop_capturer),
                          std::move(video_encoder), video_dispatcher_.get()));
+  pump->SetEventTimestampsSource(event_dispatcher_->event_timestamps_source());
   video_dispatcher_->set_video_feedback_stub(pump->video_feedback_stub());
   return std::move(pump);
 }
@@ -152,12 +159,7 @@ void IceConnectionToClient::OnSessionStateChange(Session::State state) {
       // Initialize channels.
       control_dispatcher_->Init(transport_.GetMultiplexedChannelFactory(),
                                 this);
-
       event_dispatcher_->Init(transport_.GetMultiplexedChannelFactory(), this);
-      event_dispatcher_->set_on_input_event_callback(
-          base::Bind(&IceConnectionToClient::OnInputEventReceived,
-                     base::Unretained(this)));
-
       video_dispatcher_->Init(transport_.GetChannelFactory(), this);
 
       audio_writer_ = AudioWriter::Create(session_->config());
@@ -202,11 +204,6 @@ void IceConnectionToClient::OnChannelClosed(
     ChannelDispatcherBase* channel_dispatcher) {
   // ICE transport doesn't close channels dynamically.
   NOTREACHED();
-}
-
-void IceConnectionToClient::OnInputEventReceived(int64_t timestamp) {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  event_handler_->OnInputEventReceived(timestamp);
 }
 
 void IceConnectionToClient::NotifyIfChannelsReady() {

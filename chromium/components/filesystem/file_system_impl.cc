@@ -18,12 +18,12 @@
 #include "components/filesystem/directory_impl.h"
 #include "components/filesystem/lock_table.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
-#include "services/shell/public/cpp/identity.h"
+#include "services/service_manager/public/cpp/identity.h"
 #include "url/gurl.h"
 
 namespace filesystem {
 
-FileSystemImpl::FileSystemImpl(const shell::Identity& remote_identity,
+FileSystemImpl::FileSystemImpl(const service_manager::Identity& remote_identity,
                                base::FilePath persistent_dir,
                                scoped_refptr<LockTable> lock_table)
     : remote_application_name_(remote_identity.name()),

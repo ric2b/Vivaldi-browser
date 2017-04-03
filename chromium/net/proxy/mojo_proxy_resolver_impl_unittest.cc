@@ -12,7 +12,6 @@
 #include "mojo/public/cpp/bindings/binding.h"
 #include "net/base/net_errors.h"
 #include "net/proxy/mock_proxy_resolver.h"
-#include "net/proxy/mojo_proxy_type_converters.h"
 #include "net/proxy/proxy_info.h"
 #include "net/proxy/proxy_resolver_v8_tracing.h"
 #include "net/proxy/proxy_server.h"
@@ -40,16 +39,15 @@ class TestRequestClient : public interfaces::ProxyResolverRequestClient {
   void WaitForResult();
 
   Error error() { return error_; }
-  const mojo::Array<interfaces::ProxyServerPtr>& results() { return results_; }
+  const ProxyInfo& results() { return results_; }
   EventWaiter<Event>& event_waiter() { return event_waiter_; }
 
  private:
   // interfaces::ProxyResolverRequestClient override.
-  void ReportResult(int32_t error,
-                    mojo::Array<interfaces::ProxyServerPtr> results) override;
-  void Alert(const mojo::String& message) override;
-  void OnError(int32_t line_number, const mojo::String& message) override;
-  void ResolveDns(interfaces::HostResolverRequestInfoPtr request_info,
+  void ReportResult(int32_t error, const ProxyInfo& results) override;
+  void Alert(const std::string& message) override;
+  void OnError(int32_t line_number, const std::string& message) override;
+  void ResolveDns(std::unique_ptr<HostResolver::RequestInfo> request_info,
                   interfaces::HostResolverRequestClientPtr client) override;
 
   // Mojo error handler.
@@ -57,7 +55,7 @@ class TestRequestClient : public interfaces::ProxyResolverRequestClient {
 
   bool done_ = false;
   Error error_ = ERR_FAILED;
-  mojo::Array<interfaces::ProxyServerPtr> results_;
+  ProxyInfo results_;
 
   mojo::Binding<interfaces::ProxyResolverRequestClient> binding_;
 
@@ -79,27 +77,22 @@ void TestRequestClient::WaitForResult() {
   ASSERT_TRUE(done_);
 }
 
-void TestRequestClient::ReportResult(
-    int32_t error,
-    mojo::Array<interfaces::ProxyServerPtr> results) {
+void TestRequestClient::ReportResult(int32_t error, const ProxyInfo& results) {
   event_waiter_.NotifyEvent(RESULT_RECEIVED);
   ASSERT_FALSE(done_);
   error_ = static_cast<Error>(error);
-  results_ = std::move(results);
+  results_ = results;
   done_ = true;
 }
 
-void TestRequestClient::Alert(const mojo::String& message) {
-}
+void TestRequestClient::Alert(const std::string& message) {}
 
 void TestRequestClient::OnError(int32_t line_number,
-                                const mojo::String& message) {
-}
+                                const std::string& message) {}
 
 void TestRequestClient::ResolveDns(
-    interfaces::HostResolverRequestInfoPtr request_info,
-    interfaces::HostResolverRequestClientPtr client) {
-}
+    std::unique_ptr<HostResolver::RequestInfo> request_info,
+    interfaces::HostResolverRequestClientPtr client) {}
 
 void TestRequestClient::OnConnectionError() {
   event_waiter_.NotifyEvent(CONNECTION_ERROR);
@@ -107,68 +100,88 @@ void TestRequestClient::OnConnectionError() {
 
 class MockProxyResolverV8Tracing : public ProxyResolverV8Tracing {
  public:
-  struct Request {
+  struct Job {
     GURL url;
     ProxyInfo* results;
-    CompletionCallback callback;
     bool cancelled = false;
+    void Complete(int result) {
+      DCHECK(!callback_.is_null());
+      callback_.Run(result);
+      callback_.Reset();
+    }
+
+    bool WasCompleted() { return callback_.is_null(); }
+
+    void SetCallback(CompletionCallback callback) { callback_ = callback; }
+
+   private:
+    CompletionCallback callback_;
   };
+
+  class RequestImpl : public ProxyResolver::Request {
+   public:
+    RequestImpl(Job* job, MockProxyResolverV8Tracing* resolver)
+        : job_(job), resolver_(resolver) {}
+
+    ~RequestImpl() override {
+      if (job_->WasCompleted())
+        return;
+      job_->cancelled = true;
+      if (!resolver_->cancel_callback_.is_null()) {
+        resolver_->cancel_callback_.Run();
+        resolver_->cancel_callback_.Reset();
+      }
+    }
+
+    LoadState GetLoadState() override {
+      return LOAD_STATE_RESOLVING_PROXY_FOR_URL;
+    }
+
+   private:
+    Job* job_;
+    MockProxyResolverV8Tracing* resolver_;
+  };
+
   MockProxyResolverV8Tracing() {}
 
   // ProxyResolverV8Tracing overrides.
   void GetProxyForURL(const GURL& url,
                       ProxyInfo* results,
                       const CompletionCallback& callback,
-                      ProxyResolver::RequestHandle* request,
+                      std::unique_ptr<ProxyResolver::Request>* request,
                       std::unique_ptr<Bindings> bindings) override;
-  void CancelRequest(ProxyResolver::RequestHandle request_handle) override;
-  LoadState GetLoadState(ProxyResolver::RequestHandle request) const override;
 
-  // Wait until the mock resolver has received a CancelRequest call.
   void WaitForCancel();
 
-  const std::vector<Request>& pending_requests() { return pending_requests_; }
+  const std::vector<std::unique_ptr<Job>>& pending_jobs() {
+    return pending_jobs_;
+  }
 
  private:
   base::Closure cancel_callback_;
-  std::vector<Request> pending_requests_;
+  std::vector<std::unique_ptr<Job>> pending_jobs_;
 };
 
 void MockProxyResolverV8Tracing::GetProxyForURL(
     const GURL& url,
     ProxyInfo* results,
     const CompletionCallback& callback,
-    ProxyResolver::RequestHandle* request,
+    std::unique_ptr<ProxyResolver::Request>* request,
     std::unique_ptr<Bindings> bindings) {
-  pending_requests_.push_back(Request());
-  auto& pending_request = pending_requests_.back();
-  pending_request.url = url;
-  pending_request.results = results;
-  pending_request.callback = callback;
-  *request =
-      reinterpret_cast<ProxyResolver::RequestHandle>(pending_requests_.size());
+  pending_jobs_.push_back(base::WrapUnique(new Job()));
+  auto pending_job = pending_jobs_.back().get();
+  pending_job->url = url;
+  pending_job->results = results;
+  pending_job->SetCallback(callback);
+  request->reset(new RequestImpl(pending_job, this));
 }
 
-void MockProxyResolverV8Tracing::CancelRequest(
-    ProxyResolver::RequestHandle request_handle) {
-  size_t id = reinterpret_cast<size_t>(request_handle) - 1;
-  pending_requests_[id].cancelled = true;
-  if (!cancel_callback_.is_null()) {
-    cancel_callback_.Run();
-    cancel_callback_.Reset();
-  }
-}
-
-LoadState MockProxyResolverV8Tracing::GetLoadState(
-    ProxyResolver::RequestHandle request) const {
-  return LOAD_STATE_RESOLVING_PROXY_FOR_URL;
-}
 
 void MockProxyResolverV8Tracing::WaitForCancel() {
-  while (std::find_if(pending_requests_.begin(), pending_requests_.end(),
-                      [](const Request& request) {
-                        return request.cancelled;
-                      }) != pending_requests_.end()) {
+  while (std::find_if(pending_jobs_.begin(), pending_jobs_.end(),
+                      [](const std::unique_ptr<Job>& job) {
+                        return job->cancelled;
+                      }) != pending_jobs_.end()) {
     base::RunLoop run_loop;
     cancel_callback_ = run_loop.QuitClosure();
     run_loop.Run();
@@ -197,25 +210,25 @@ TEST_F(MojoProxyResolverImplTest, GetProxyForUrl) {
   interfaces::ProxyResolverRequestClientPtr client_ptr;
   TestRequestClient client(mojo::GetProxy(&client_ptr));
 
-  resolver_->GetProxyForUrl(GURL("http://example.com"), std::move(client_ptr));
-  ASSERT_EQ(1u, mock_proxy_resolver_->pending_requests().size());
-  const MockProxyResolverV8Tracing::Request& request =
-      mock_proxy_resolver_->pending_requests()[0];
-  EXPECT_EQ(GURL("http://example.com"), request.url);
+  resolver_->GetProxyForUrl(GURL(GURL("http://example.com")),
+                            std::move(client_ptr));
+  ASSERT_EQ(1u, mock_proxy_resolver_->pending_jobs().size());
+  MockProxyResolverV8Tracing::Job* job =
+      mock_proxy_resolver_->pending_jobs()[0].get();
+  EXPECT_EQ(GURL(GURL("http://example.com")), job->url);
 
-  request.results->UsePacString(
+  job->results->UsePacString(
       "PROXY proxy.example.com:1; "
       "SOCKS4 socks4.example.com:2; "
       "SOCKS5 socks5.example.com:3; "
       "HTTPS https.example.com:4; "
       "QUIC quic.example.com:65000; "
       "DIRECT");
-  request.callback.Run(OK);
+  job->Complete(OK);
   client.WaitForResult();
 
   EXPECT_THAT(client.error(), IsOk());
-  std::vector<ProxyServer> servers =
-      client.results().To<std::vector<ProxyServer>>();
+  std::vector<ProxyServer> servers = client.results().proxy_list().GetAll();
   ASSERT_EQ(6u, servers.size());
   EXPECT_EQ(ProxyServer::SCHEME_HTTP, servers[0].scheme());
   EXPECT_EQ("proxy.example.com", servers[0].host_port_pair().host());
@@ -245,16 +258,16 @@ TEST_F(MojoProxyResolverImplTest, GetProxyForUrlFailure) {
   TestRequestClient client(mojo::GetProxy(&client_ptr));
 
   resolver_->GetProxyForUrl(GURL("http://example.com"), std::move(client_ptr));
-  ASSERT_EQ(1u, mock_proxy_resolver_->pending_requests().size());
-  const MockProxyResolverV8Tracing::Request& request =
-      mock_proxy_resolver_->pending_requests()[0];
-  EXPECT_EQ(GURL("http://example.com"), request.url);
-  request.callback.Run(ERR_FAILED);
+  ASSERT_EQ(1u, mock_proxy_resolver_->pending_jobs().size());
+  MockProxyResolverV8Tracing::Job* job =
+      mock_proxy_resolver_->pending_jobs()[0].get();
+  EXPECT_EQ(GURL(GURL("http://example.com")), job->url);
+  job->Complete(ERR_FAILED);
   client.WaitForResult();
 
   EXPECT_THAT(client.error(), IsError(ERR_FAILED));
   std::vector<ProxyServer> proxy_servers =
-      client.results().To<std::vector<ProxyServer>>();
+      client.results().proxy_list().GetAll();
   EXPECT_TRUE(proxy_servers.empty());
 }
 
@@ -267,23 +280,23 @@ TEST_F(MojoProxyResolverImplTest, GetProxyForUrlMultiple) {
   resolver_->GetProxyForUrl(GURL("http://example.com"), std::move(client_ptr1));
   resolver_->GetProxyForUrl(GURL("https://example.com"),
                             std::move(client_ptr2));
-  ASSERT_EQ(2u, mock_proxy_resolver_->pending_requests().size());
-  const MockProxyResolverV8Tracing::Request& request1 =
-      mock_proxy_resolver_->pending_requests()[0];
-  EXPECT_EQ(GURL("http://example.com"), request1.url);
-  const MockProxyResolverV8Tracing::Request& request2 =
-      mock_proxy_resolver_->pending_requests()[1];
-  EXPECT_EQ(GURL("https://example.com"), request2.url);
-  request1.results->UsePacString("HTTPS proxy.example.com:12345");
-  request1.callback.Run(OK);
-  request2.results->UsePacString("SOCKS5 another-proxy.example.com:6789");
-  request2.callback.Run(OK);
+  ASSERT_EQ(2u, mock_proxy_resolver_->pending_jobs().size());
+  MockProxyResolverV8Tracing::Job* job1 =
+      mock_proxy_resolver_->pending_jobs()[0].get();
+  EXPECT_EQ(GURL(GURL("http://example.com")), job1->url);
+  MockProxyResolverV8Tracing::Job* job2 =
+      mock_proxy_resolver_->pending_jobs()[1].get();
+  EXPECT_EQ(GURL("https://example.com"), job2->url);
+  job1->results->UsePacString("HTTPS proxy.example.com:12345");
+  job1->Complete(OK);
+  job2->results->UsePacString("SOCKS5 another-proxy.example.com:6789");
+  job2->Complete(OK);
   client1.WaitForResult();
   client2.WaitForResult();
 
   EXPECT_THAT(client1.error(), IsOk());
   std::vector<ProxyServer> proxy_servers1 =
-      client1.results().To<std::vector<ProxyServer>>();
+      client1.results().proxy_list().GetAll();
   ASSERT_EQ(1u, proxy_servers1.size());
   ProxyServer& server1 = proxy_servers1[0];
   EXPECT_EQ(ProxyServer::SCHEME_HTTPS, server1.scheme());
@@ -292,7 +305,7 @@ TEST_F(MojoProxyResolverImplTest, GetProxyForUrlMultiple) {
 
   EXPECT_THAT(client2.error(), IsOk());
   std::vector<ProxyServer> proxy_servers2 =
-      client2.results().To<std::vector<ProxyServer>>();
+      client2.results().proxy_list().GetAll();
   ASSERT_EQ(1u, proxy_servers1.size());
   ProxyServer& server2 = proxy_servers2[0];
   EXPECT_EQ(ProxyServer::SCHEME_SOCKS5, server2.scheme());
@@ -306,11 +319,11 @@ TEST_F(MojoProxyResolverImplTest, DestroyClient) {
       new TestRequestClient(mojo::GetProxy(&client_ptr)));
 
   resolver_->GetProxyForUrl(GURL("http://example.com"), std::move(client_ptr));
-  ASSERT_EQ(1u, mock_proxy_resolver_->pending_requests().size());
-  const MockProxyResolverV8Tracing::Request& request =
-      mock_proxy_resolver_->pending_requests()[0];
-  EXPECT_EQ(GURL("http://example.com"), request.url);
-  request.results->UsePacString("PROXY proxy.example.com:8080");
+  ASSERT_EQ(1u, mock_proxy_resolver_->pending_jobs().size());
+  const MockProxyResolverV8Tracing::Job* job =
+      mock_proxy_resolver_->pending_jobs()[0].get();
+  EXPECT_EQ(GURL(GURL("http://example.com")), job->url);
+  job->results->UsePacString("PROXY proxy.example.com:8080");
   client.reset();
   mock_proxy_resolver_->WaitForCancel();
 }
@@ -320,7 +333,7 @@ TEST_F(MojoProxyResolverImplTest, DestroyService) {
   TestRequestClient client(mojo::GetProxy(&client_ptr));
 
   resolver_->GetProxyForUrl(GURL("http://example.com"), std::move(client_ptr));
-  ASSERT_EQ(1u, mock_proxy_resolver_->pending_requests().size());
+  ASSERT_EQ(1u, mock_proxy_resolver_->pending_jobs().size());
   resolver_impl_.reset();
   client.event_waiter().WaitForEvent(TestRequestClient::CONNECTION_ERROR);
 }

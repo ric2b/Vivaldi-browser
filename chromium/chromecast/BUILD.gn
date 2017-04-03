@@ -42,6 +42,7 @@ cast_test_group("cast_tests") {
     "//ppapi:ppapi_unittests",
     "//sandbox/linux:sandbox_linux_unittests",
     "//sql:sql_unittests",
+    "//storage/browser:storage_unittests",
     "//third_party/cacheinvalidation:cacheinvalidation_unittests",
     "//ui/base:ui_base_unittests",
   ]
@@ -60,8 +61,8 @@ cast_test_group("cast_tests") {
 
   if (!is_android) {
     tests += [
-      "//chromecast/app:cast_shell_unittests",
-      "//chromecast/browser:cast_shell_browser_test",
+      ":cast_shell_browsertests",
+      ":cast_shell_unittests",
       "//chromecast/media:cast_media_unittests",
       "//ipc:ipc_tests",
       "//jingle:jingle_unittests",
@@ -76,8 +77,8 @@ cast_test_group("cast_tests") {
     }
     filters += [ cast_media_unittests_filter ]
 
-    cast_shell_browser_test_filter = {
-      test_name = "cast_shell_browser_test"
+    cast_shell_browsertests_filter = {
+      test_name = "cast_shell_browsertests"
 
       # --enable-local-file-accesses => to load sample media files
       # --test-launcher-jobs=1 => so internal code can bind to port
@@ -92,7 +93,7 @@ cast_test_group("cast_tests") {
         args += [ "--use-gpu-in-tests" ]
       }
     }
-    filters += [ cast_shell_browser_test_filter ]
+    filters += [ cast_shell_browsertests_filter ]
 
     ipc_tests_filter = {
       test_name = "ipc_tests"
@@ -196,7 +197,13 @@ cast_test_group("cast_tests") {
 
   net_unittests_filter = {
     test_name = "net_unittests"
-    if (target_os == "linux" && !is_cast_desktop_build) {
+    if (using_sanitizer) {
+      # TODO(mbjorge): net_unittests do not complete when run with sanitizers,
+      # (in particular, TSAN and UBSAN), resulting in build machines getting stuck
+      # for many hours. Disable them for now, since these are getting run on
+      # Chromium bots anyway. (internal b/31279943)
+      gtest_excludes = [ "*" ]
+    } else if (target_os == "linux" && !is_cast_desktop_build) {
       # Run net_unittests first to avoid random failures due to slow python startup
       # KeygenHandlerTest.SmokeTest and KeygenHandlerTest.ConcurrencyTest fail due to
       # readonly certdb (b/8153161)
@@ -229,15 +236,6 @@ cast_test_group("cast_tests") {
     }
   }
   filters += [ net_unittests_filter ]
-
-  # TODO(mbjorge): net_unittests do not complete when run with sanitizers,
-  # (in particular, TSAN and UBSAN), resulting in build machines getting stuck
-  # for many hours. Disable them for now, since these are getting run on
-  # Chromium bots anyway. (internal b/31279943)
-  if (using_sanitizer) {
-    tests -= [ "//net:net_unittests" ]
-    filters -= [ net_unittests_filter ]
-  }
 }
 
 # Creates the build and run lists for all test targets.
@@ -278,24 +276,44 @@ if (is_android) {
   }
 }
 
-source_set("cast_shell_common") {
+test("cast_shell_unittests") {
   deps = [
-    ":cast_shell_pak",
-    ":chromecast_locales_pak",
-    "//chromecast/app",
-    "//chromecast/browser",
-    "//chromecast/common",
-    "//chromecast/common/media",
-    "//chromecast/renderer",
+    ":cast_shell_lib",
+    "//chromecast/app:test_support",
+    "//chromecast/app:unittests",
+    "//chromecast/browser:unittests",
   ]
 }
 
-source_set("cast_shell_media") {
+test("cast_shell_browsertests") {
   deps = [
-    "//chromecast/browser/media",
-    "//chromecast/common/media",
-    "//chromecast/renderer/media",
+    ":cast_shell_lib",
+    "//chromecast/app:test_support",
+    "//chromecast/browser:browsertests",
   ]
+
+  if (chromecast_branding == "public") {
+    # Link default libcast_media_1.0 statically not to link dummy one
+    # dynamically for public unittests.
+    deps += [ "//chromecast/media/base:libcast_media_1.0_default_core" ]
+  }
+}
+
+group("cast_shell_lib") {
+  data_deps = [
+    ":cast_shell_pak",
+  ]
+
+  deps = [
+    "//chromecast/app",
+    "//chromecast/browser",
+    "//chromecast/common",
+    "//chromecast/renderer",
+  ]
+
+  if (chromecast_branding != "public") {
+    deps += [ "//chromecast/internal/shell" ]
+  }
 }
 
 executable("cast_shell") {
@@ -304,16 +322,12 @@ executable("cast_shell") {
   ]
 
   deps = [
-    ":cast_shell_common",
-    ":cast_shell_media",
+    ":cast_shell_lib",
+    ":chromecast_locales_pak",
     "//build/config/sanitizers:deps",
     "//chromecast/app",
     "//content/public/app:both",
   ]
-
-  if (chromecast_branding != "public") {
-    deps += [ "//chromecast/internal:cast_shell_internal" ]
-  }
 }
 
 repack("cast_shell_pak") {

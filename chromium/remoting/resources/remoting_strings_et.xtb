@@ -27,13 +27,15 @@ Lisateavet privaatsuse kohta vaadake Google'i privaatsuseeskirjadest (http://goo
 <translation id="1654128982815600832">Arvuti kaugühenduste lubamine …</translation>
 <translation id="170207782578677537">Arvuti registreerimine ebaõnnestus.</translation>
 <translation id="1704090719919187045">Chromootimise hosti eelistused</translation>
+<translation id="1730409684442507495">• Töölaua täiustatud pildikvaliteet, reageerimisvõime ja akukasutus.
+• Täiustatud reageerimisvõime lohistamiseks klõpsamise toimingute puhul.
+• Täiustatud efektid mitme kasutajaliidese animatsiooni puhul.</translation>
 <translation id="174018511426417793">Ühtki arvutit ei ole registreeritud. Arvutis kaugühenduste lubamiseks installige Chrome Remote Desktop ja klõpsake nupul „<ph name="BUTTON_NAME" />”.</translation>
 <translation id="1742469581923031760">Ühendamine ...</translation>
 <translation id="1770394049404108959">Ma ei saa seda rakendust avada.</translation>
 <translation id="177096447311351977">Kanali IP kliendi jaoks: <ph name="CLIENT_GAIA_IDENTIFIER" /> ip='<ph name="CLIENT_IP_ADDRESS_AND_PORT" />' host_ip='<ph name="HOST_IP_ADDRESS_AND_PORT" />' channel='<ph name="CHANNEL_TYPE" />' connection='<ph name="CONNECTION_TYPE" />'.</translation>
 <translation id="1779766957982586368">Sulgeb akna</translation>
 <translation id="1841799852846221389">Arvuti kaugühenduste keelamine …</translation>
-<translation id="189172778771606813">Sule navigeerimissahtel</translation>
 <translation id="1897488610212723051">Kustuta</translation>
 <translation id="195619862187186579">Klaviatuuri paigutused</translation>
 <translation id="1996161829609978754">Chrome laadib alla rakenduse Chromoting Host installerit. Kui allalaadimine on lõppenud, käitage enne jätkamist installerit.</translation>
@@ -74,7 +76,6 @@ Lisateavet privaatsuse kohta vaadake Google'i privaatsuseeskirjadest (http://goo
 <translation id="2699970397166997657">Chromoting</translation>
 <translation id="2747641796667576127">Tarkvaravärskendused toimuvad tavaliselt automaatselt, kuid mõnel üksikul juhul võivad need ebaõnnestuda. Tarkvara värskendamine ei tohiks võtta üle paari minuti ja saate seda teha, kui olete oma arvutiga ühendatud kaugühenduse abil.</translation>
 <translation id="2841013758207633010">Aeg</translation>
-<translation id="2851674870054673688">Kui ta on koodi sisestanud, algab teie jagamisseanss.</translation>
 <translation id="2851754573186462851">Chromiumi rakenduste voogesitus</translation>
 <translation id="2855866366045322178">võrguühenduseta</translation>
 <translation id="2888969873284818612">Ilmnes võrguviga. Rakendus taaskäivitatakse, kui seadmes on taas võrguühendus.</translation>
@@ -114,6 +115,7 @@ Lisateavet privaatsuse kohta vaadake Google'i privaatsuseeskirjadest (http://goo
 Host</translation>
 <translation id="3870154837782082782">Google Inc.</translation>
 <translation id="3884839335308961732">Chrome Remote Desktopi abil juurdepääsu lubamiseks kinnitage allpool oma konto ja PIN-kood.</translation>
+<translation id="3897092660631435901">Menüü</translation>
 <translation id="3905196214175737742">Sobimatu hosti omaniku domeen.</translation>
 <translation id="3908017899227008678">Vähenda parajaks</translation>
 <translation id="3931191050278863510">Hostimine peatati.</translation>
@@ -126,6 +128,7 @@ Host</translation>
 <translation id="409800995205263688">MÄRKUS: reegli seaded lubavad luua ühenduse ainult teie võrku kuuluvate arvutite vahel.</translation>
 <translation id="4155497795971509630">Mõned vajalikud komponendid on puudu. Veenduge, et installitud oleks tarkvara uusim versioon, ja proovige uuesti.</translation>
 <translation id="4156740505453712750">Arvuti kaitsmiseks valige PIN-kood, mis koosneb <ph name="BOLD_START" />vähemalt kuuest numbrist<ph name="BOLD_END" />. PIN-kood tuleb sisestada muust asukohast ühenduse loomisel.</translation>
+<translation id="4156741816461781891">Sisse logitud kasutajana <ph name="EMAIL_ADDRESS" />.</translation>
 <translation id="4176825807642096119">Pääsukood</translation>
 <translation id="4207623512727273241">Enne jätkamist käitage installerit.</translation>
 <translation id="4227991223508142681">Hosti ettevalmistamise utiliit</translation>
@@ -166,7 +169,6 @@ Desktopi host</translation>
 <translation id="5070121137485264635">Kaughost vajab autentimist kolmanda osapoole veebisaidil. Jätkamiseks peate andma Chrome Remote Desktopile täiendavad load juurdepääsuks sellele aadressile:</translation>
 <translation id="507204348399810022">Kas soovite kindlasti keelata kaugühendused hostiga <ph name="HOSTNAME" />?</translation>
 <translation id="5156271271724754543">Sisestage mõlemale väljale sama PIN-kood.</translation>
-<translation id="5168917394043976756">Ava navigeerimissahtel</translation>
 <translation id="5170982930780719864">Sobimatu hosti ID.</translation>
 <translation id="518094545883702183">Seda teavet kasutatakse ainult teavitatud probleemi diagnoosimiseks, see on saadaval ainult probleemiga tegelejale ja seda ei säilitata üle 30 päeva.</translation>
 <translation id="5222676887888702881">Logi välja</translation>
@@ -209,10 +211,6 @@ Desktopi host</translation>
 <translation id="6304318647555713317">Klient</translation>
 <translation id="6381670701864002291">Midagi muud.</translation>
 <translation id="6398765197997659313">Välju täisekraanilt</translation>
-<translation id="6408143143164565232">• Kuulake heli Windowsi või Linuxi arvutitest.
-• Eemaldage soovimatud ühendused, vajutades pikalt arvuti nimel.
-• Sõrmede kokku-lahku liigutamisega suumimine ja kahe sõrmega kerimine on sujuvam.
-• Uus abi ja tagasiside kuva.</translation>
 <translation id="6441316101718669559">Sellel platvormil ei toetata töölaua integreerimist. Saate rakendust kasutada, kuid kasutuskogemus on kehvem.</translation>
 <translation id="652218476070540101">Selle arvuti PIN-koodi värskendatakse ...</translation>
 <translation id="6527303717912515753">Jaga</translation>
@@ -225,6 +223,7 @@ Desktopi host</translation>
 <translation id="6640610550128933069">viimati oli veebis <ph name="DATE" /></translation>
 <translation id="6668065415969892472">Teie PIN-kood on värskendatud.</translation>
 <translation id="6681800064886881394">Autoriõigus 2013 Google Inc. Kõik õigused kaitstud.</translation>
+<translation id="6705482892455291412">Kui ta sisestab koodi, palutakse teil ühendus vastu võtta ja jagamisseanssi alustada.</translation>
 <translation id="6746493157771801606">Kustuta ajalugu</translation>
 <translation id="6748108480210050150">Kellelt</translation>
 <translation id="677755392401385740">Kasutajale käivitati host: <ph name="HOST_USERNAME" />.</translation>
@@ -301,6 +300,7 @@ Desktopi host</translation>
 <translation id="9188433529406846933">Volita</translation>
 <translation id="9213184081240281106">Sobimatu hosti seadistus.</translation>
 <translation id="951991426597076286">Keeldu</translation>
+<translation id="962733587145768554">Toimingu lõpuleviimiseks tehke ühenduse dialoogiboksis valik „<ph name="SHARE" />”.</translation>
 <translation id="979100198331752041">Chrome Remote Desktop hostis <ph name="HOSTNAME" /> on aegunud ja seda tuleb värskendada.</translation>
 <translation id="985602178874221306">The Chromium Authors</translation>
 <translation id="992215271654996353"><ph name="HOSTNAME" /> (viimati võrgus <ph name="DATE_OR_TIME" />)</translation>

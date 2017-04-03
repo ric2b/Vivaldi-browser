@@ -251,6 +251,18 @@ public class AwContentsClientBridge {
         mClient.handleJsBeforeUnload(url, message, handler);
     }
 
+    @CalledByNative
+    private void newDownload(String url, String userAgent, String contentDisposition,
+            String mimeType, long contentLength) {
+        mClient.getCallbackHelper().postOnDownloadStart(
+                url, userAgent, contentDisposition, mimeType, contentLength);
+    }
+
+    @CalledByNative
+    public void newLoginRequest(String realm, String account, String args) {
+        mClient.getCallbackHelper().postOnReceivedLoginRequest(realm, account, args);
+    }
+
     @CalledByNativeUnchecked
     private boolean shouldOverrideUrlLoading(
             String url, boolean hasUserGesture, boolean isRedirect, boolean isMainFrame) {

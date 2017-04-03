@@ -34,6 +34,7 @@
 <translation id="2148716181193084225">Сегодня</translation>
 <translation id="2226276347425096477">Длина текста не должна превышать <ph name="MAX_CHARACTERS" /> симв. (сейчас <ph name="CURRENT_LENGTH" /> симв.).</translation>
 <translation id="2247351761944213033">Неделя <ph name="WEEKNUMBER" />, <ph name="YEAR" /></translation>
+<translation id="2277199496770840904">Трек <ph name="NUMBER" /></translation>
 <translation id="2291999235780842123">флажок</translation>
 <translation id="2335594187091864976">окно выбора даты и времени</translation>
 <translation id="248395913932153421">День</translation>
@@ -116,7 +117,6 @@
 <translation id="5643186887447432888">кнопка</translation>
 <translation id="5677946354068040947">дополнительные параметры</translation>
 <translation id="57838592816432529">Отключить звук</translation>
-<translation id="583281660410589416">Неизвестно</translation>
 <translation id="5843503607508392247">Другое…</translation>
 <translation id="5860033963881614850">Выкл.</translation>
 <translation id="588258955323874662">Полноэкранный режим</translation>

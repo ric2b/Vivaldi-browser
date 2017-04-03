@@ -98,7 +98,7 @@ class RasterTaskImpl : public TileTask {
         raster_source_(std::move(raster_source)),
         content_rect_(tile->content_rect()),
         invalid_content_rect_(invalidated_rect),
-        contents_scale_(tile->contents_scale()),
+        raster_scales_(tile->raster_scales()),
         playback_settings_(playback_settings),
         tile_resolution_(tile_resolution),
         layer_id_(tile->layer_id()),
@@ -128,7 +128,7 @@ class RasterTaskImpl : public TileTask {
 
     raster_buffer_->Playback(raster_source_.get(), content_rect_,
                              invalid_content_rect_, new_content_id_,
-                             contents_scale_, playback_settings_);
+                             raster_scales_, playback_settings_);
   }
 
   // Overridden from TileTask:
@@ -162,7 +162,7 @@ class RasterTaskImpl : public TileTask {
   scoped_refptr<RasterSource> raster_source_;
   gfx::Rect content_rect_;
   gfx::Rect invalid_content_rect_;
-  float contents_scale_;
+  gfx::SizeF raster_scales_;
   RasterSource::PlaybackSettings playback_settings_;
   TileResolution tile_resolution_;
   int layer_id_;
@@ -404,18 +404,18 @@ void TileManager::FinishTasksAndCleanUp() {
 
 void TileManager::SetResources(ResourcePool* resource_pool,
                                ImageDecodeController* image_decode_controller,
-                               TileTaskManager* tile_task_manager,
+                               TaskGraphRunner* task_graph_runner,
                                RasterBufferProvider* raster_buffer_provider,
                                size_t scheduled_raster_task_limit,
                                bool use_gpu_rasterization) {
   DCHECK(!tile_task_manager_);
-  DCHECK(tile_task_manager);
+  DCHECK(task_graph_runner);
 
   use_gpu_rasterization_ = use_gpu_rasterization;
   scheduled_raster_task_limit_ = scheduled_raster_task_limit;
   resource_pool_ = resource_pool;
   image_manager_.SetImageDecodeController(image_decode_controller);
-  tile_task_manager_ = tile_task_manager;
+  tile_task_manager_ = TileTaskManagerImpl::Create(task_graph_runner);
   raster_buffer_provider_ = raster_buffer_provider;
 }
 
@@ -474,11 +474,8 @@ void TileManager::DidFinishRunningAllTileTasks() {
 
   has_scheduled_tile_tasks_ = false;
 
-  bool memory_usage_above_limit = resource_pool_->memory_usage_bytes() >
-                                  global_state_.soft_memory_limit_in_bytes;
-
   if (all_tiles_that_need_to_be_rasterized_are_scheduled_ &&
-      !memory_usage_above_limit) {
+      !resource_pool_->ResourceUsageTooHigh()) {
     // TODO(ericrk): We should find a better way to safely handle re-entrant
     // notifications than always having to schedule a new task.
     // http://crbug.com/498439
@@ -684,7 +681,7 @@ TileManager::PrioritizedWorkToSchedule TileManager::AssignGpuMemoryToTiles() {
       SkColor color = SK_ColorTRANSPARENT;
       bool is_solid_color =
           prioritized_tile.raster_source()->PerformSolidColorAnalysis(
-              tile->content_rect(), tile->contents_scale(), &color);
+              tile->content_rect(), tile->raster_scales(), &color);
       if (is_solid_color) {
         tile->draw_info().set_solid_color(color);
         tile->draw_info().set_was_ever_ready_to_draw();
@@ -886,7 +883,7 @@ void TileManager::ScheduleTasks(
 
     std::vector<DrawImage> images;
     prioritized_tile.raster_source()->GetDiscardableImagesInRect(
-        tile->enclosing_layer_rect(), tile->contents_scale(), &images);
+        tile->enclosing_layer_rect(), tile->raster_scales(), &images);
     new_locked_images.insert(new_locked_images.end(), images.begin(),
                              images.end());
   }
@@ -1000,7 +997,7 @@ scoped_refptr<TileTask> TileManager::CreateRasterTask(
   images.clear();
   if (!playback_settings.skip_images) {
     prioritized_tile.raster_source()->GetDiscardableImagesInRect(
-        tile->enclosing_layer_rect(), tile->contents_scale(), &images);
+        tile->enclosing_layer_rect(), tile->raster_scales(), &images);
   }
 
   // We can skip the image hijack canvas if we have no images.
@@ -1074,16 +1071,6 @@ ScopedTilePtr TileManager::CreateTile(const Tile::CreateInfo& info,
   return tile;
 }
 
-void TileManager::SetTileTaskManagerForTesting(
-    TileTaskManager* tile_task_manager) {
-  tile_task_manager_ = tile_task_manager;
-}
-
-void TileManager::SetRasterBufferProviderForTesting(
-    RasterBufferProvider* raster_buffer_provider) {
-  raster_buffer_provider_ = raster_buffer_provider;
-}
-
 bool TileManager::AreRequiredTilesReadyToDraw(
     RasterTilePriorityQueue::Type type) const {
   std::unique_ptr<RasterTilePriorityQueue> raster_priority_queue(
@@ -1131,7 +1118,7 @@ void TileManager::CheckAndIssueSignals() {
   if (signals_.ready_to_activate && !signals_.did_notify_ready_to_activate) {
     signals_.ready_to_activate = false;
     if (IsReadyToActivate()) {
-      TRACE_EVENT0("disabled-by-default-cc.debug",
+      TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("cc.debug"),
                    "TileManager::CheckAndIssueSignals - ready to activate");
       signals_.did_notify_ready_to_activate = true;
       client_->NotifyReadyToActivate();
@@ -1142,7 +1129,7 @@ void TileManager::CheckAndIssueSignals() {
   if (signals_.ready_to_draw && !signals_.did_notify_ready_to_draw) {
     signals_.ready_to_draw = false;
     if (IsReadyToDraw()) {
-      TRACE_EVENT0("disabled-by-default-cc.debug",
+      TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("cc.debug"),
                    "TileManager::CheckAndIssueSignals - ready to draw");
       signals_.did_notify_ready_to_draw = true;
       client_->NotifyReadyToDraw();
@@ -1155,7 +1142,7 @@ void TileManager::CheckAndIssueSignals() {
     signals_.all_tile_tasks_completed = false;
     if (!has_scheduled_tile_tasks_) {
       TRACE_EVENT0(
-          "disabled-by-default-cc.debug",
+          TRACE_DISABLED_BY_DEFAULT("cc.debug"),
           "TileManager::CheckAndIssueSignals - all tile tasks completed");
       signals_.did_notify_all_tile_tasks_completed = true;
       client_->NotifyAllTileTasksCompleted();
@@ -1222,30 +1209,28 @@ void TileManager::CheckIfMoreTilesNeedToBePrepared() {
   // even when OOM. Note that we can't reuse the queue we used for
   // AssignGpuMemoryToTiles, since the AssignGpuMemoryToTiles call could have
   // evicted some tiles that would not be picked up by the old raster queue.
-  bool need_to_signal_activate = MarkTilesOutOfMemory(client_->BuildRasterQueue(
+  MarkTilesOutOfMemory(client_->BuildRasterQueue(
       global_state_.tree_priority,
       RasterTilePriorityQueue::Type::REQUIRED_FOR_ACTIVATION));
-  bool need_to_signal_draw = MarkTilesOutOfMemory(client_->BuildRasterQueue(
+  MarkTilesOutOfMemory(client_->BuildRasterQueue(
       global_state_.tree_priority,
       RasterTilePriorityQueue::Type::REQUIRED_FOR_DRAW));
 
   // TODO(vmpstr): Temporary check to debug crbug.com/642927.
   CHECK(tile_task_manager_);
+
   DCHECK(IsReadyToActivate());
   DCHECK(IsReadyToDraw());
-  signals_.ready_to_activate = need_to_signal_activate;
-  signals_.ready_to_draw = need_to_signal_draw;
+  signals_.ready_to_activate = true;
+  signals_.ready_to_draw = true;
   // TODO(ericrk): Investigate why we need to schedule this (not just call it
   // inline). http://crbug.com/498439
   signals_check_notifier_.Schedule();
 }
 
-bool TileManager::MarkTilesOutOfMemory(
+void TileManager::MarkTilesOutOfMemory(
     std::unique_ptr<RasterTilePriorityQueue> queue) const {
   // Mark required tiles as OOM so that we can activate/draw without them.
-  if (queue->IsEmpty())
-    return false;
-
   for (; !queue->IsEmpty(); queue->Pop()) {
     Tile* tile = queue->Top().tile();
     if (tile->draw_info().IsReadyToDraw())
@@ -1253,7 +1238,6 @@ bool TileManager::MarkTilesOutOfMemory(
     tile->draw_info().set_oom();
     client_->NotifyTileStateChanged(tile);
   }
-  return true;
 }
 
 ResourceFormat TileManager::DetermineResourceFormat(const Tile* tile) const {

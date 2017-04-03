@@ -48,8 +48,6 @@
 #include "core/workers/WorkerClients.h"
 #include "core/workers/WorkerThreadStartupData.h"
 #include "modules/EventTargetModules.h"
-#include "modules/cachestorage/CacheStorage.h"
-#include "modules/cachestorage/InspectorCacheStorageAgent.h"
 #include "modules/fetch/GlobalFetch.h"
 #include "modules/serviceworkers/ServiceWorkerClients.h"
 #include "modules/serviceworkers/ServiceWorkerGlobalScopeClient.h"
@@ -77,7 +75,7 @@ ServiceWorkerGlobalScope* ServiceWorkerGlobalScope::create(
       startupData->m_scriptURL, startupData->m_userAgent, thread,
       monotonicallyIncreasingTime(),
       std::move(startupData->m_starterOriginPrivilegeData),
-      startupData->m_workerClients.release());
+      startupData->m_workerClients);
 
   context->setV8CacheOptions(startupData->m_v8CacheOptions);
   context->applyContentSecurityPolicyFromVector(
@@ -257,7 +255,7 @@ void ServiceWorkerGlobalScope::exceptionThrown(ErrorEvent* event) {
   WorkerGlobalScope::exceptionThrown(event);
   if (WorkerThreadDebugger* debugger =
           WorkerThreadDebugger::from(thread()->isolate()))
-    debugger->exceptionThrown(event);
+    debugger->exceptionThrown(thread(), event);
 }
 
 }  // namespace blink

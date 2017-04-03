@@ -10,7 +10,6 @@
 #include "base/memory/ptr_util.h"
 #include "net/base/net_errors.h"
 #include "net/proxy/mojo_proxy_resolver_v8_tracing_bindings.h"
-#include "net/proxy/mojo_proxy_type_converters.h"
 #include "net/proxy/proxy_info.h"
 #include "net/proxy/proxy_resolver_script_data.h"
 #include "net/proxy/proxy_resolver_v8_tracing.h"
@@ -38,7 +37,7 @@ class MojoProxyResolverImpl::Job {
   interfaces::ProxyResolverRequestClientPtr client_;
   ProxyInfo result_;
   GURL url_;
-  net::ProxyResolver::RequestHandle request_handle_;
+  std::unique_ptr<net::ProxyResolver::Request> request_;
   bool done_;
 
   DISALLOW_COPY_AND_ASSIGN(Job);
@@ -75,20 +74,15 @@ MojoProxyResolverImpl::Job::Job(
     : resolver_(resolver),
       client_(std::move(client)),
       url_(url),
-      request_handle_(nullptr),
       done_(false) {}
 
-MojoProxyResolverImpl::Job::~Job() {
-  if (request_handle_ && !done_)
-    resolver_->resolver_->CancelRequest(request_handle_);
-}
+MojoProxyResolverImpl::Job::~Job() {}
 
 void MojoProxyResolverImpl::Job::Start() {
   resolver_->resolver_->GetProxyForURL(
       url_, &result_, base::Bind(&Job::GetProxyDone, base::Unretained(this)),
-      &request_handle_,
-      base::MakeUnique<MojoProxyResolverV8TracingBindings<
-          interfaces::ProxyResolverRequestClient>>(client_.get()));
+      &request_, base::MakeUnique<MojoProxyResolverV8TracingBindings<
+                     interfaces::ProxyResolverRequestClient>>(client_.get()));
   client_.set_connection_error_handler(base::Bind(
       &MojoProxyResolverImpl::Job::OnConnectionError, base::Unretained(this)));
 }
@@ -100,12 +94,11 @@ void MojoProxyResolverImpl::Job::GetProxyDone(int error) {
   for (const auto& proxy : result_.proxy_list().GetAll()) {
     DVLOG(1) << proxy.ToURI();
   }
-  mojo::Array<interfaces::ProxyServerPtr> result;
-  if (error == OK) {
-    result = mojo::Array<interfaces::ProxyServerPtr>::From(
-        result_.proxy_list().GetAll());
-  }
-  client_->ReportResult(error, std::move(result));
+  if (error == OK)
+    client_->ReportResult(error, result_);
+  else
+    client_->ReportResult(error, ProxyInfo());
+
   resolver_->DeleteJob(this);
 }
 

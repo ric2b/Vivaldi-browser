@@ -27,12 +27,12 @@ namespace keyboard {
 class KeyboardUI;
 }
 
-namespace ui {
-class MenuModel;
+namespace service_manager {
+class Connector;
 }
 
-namespace shell {
-class Connector;
+namespace ui {
+class MenuModel;
 }
 
 namespace views {
@@ -44,7 +44,6 @@ namespace ash {
 class AccessibilityDelegate;
 class GPUSupport;
 class MediaDelegate;
-class NewWindowDelegate;
 class PaletteDelegate;
 class SessionStateDelegate;
 class ShelfDelegate;
@@ -62,12 +61,7 @@ class ASH_EXPORT ShellDelegate {
   virtual ~ShellDelegate() {}
 
   // Returns the connector for the mojo service manager. Returns null in tests.
-  virtual ::shell::Connector* GetShellConnector() const = 0;
-
-  // Returns true if this is the first time that the shell has been run after
-  // the system has booted.  false is returned after the shell has been
-  // restarted, typically due to logging in as a guest or logging out.
-  virtual bool IsFirstRunAfterBoot() const = 0;
+  virtual service_manager::Connector* GetShellConnector() const = 0;
 
   // Returns true if multi-profiles feature is enabled.
   virtual bool IsMultiProfilesEnabled() const = 0;
@@ -123,9 +117,6 @@ class ASH_EXPORT ShellDelegate {
 
   // Creates a accessibility delegate. Shell takes ownership of the delegate.
   virtual AccessibilityDelegate* CreateAccessibilityDelegate() = 0;
-
-  // Creates an application delegate. Shell takes ownership of the delegate.
-  virtual NewWindowDelegate* CreateNewWindowDelegate() = 0;
 
   // Creates a media delegate. Shell takes ownership of the delegate.
   virtual MediaDelegate* CreateMediaDelegate() = 0;

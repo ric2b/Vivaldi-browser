@@ -69,24 +69,22 @@ void PlatformEventSource::RemovePlatformEventObserver(
 uint32_t PlatformEventSource::DispatchEvent(PlatformEvent platform_event) {
   uint32_t action = POST_DISPATCH_PERFORM_DEFAULT;
 
-  FOR_EACH_OBSERVER(PlatformEventObserver, observers_,
-                    WillProcessEvent(platform_event));
+  for (PlatformEventObserver& observer : observers_)
+    observer.WillProcessEvent(platform_event);
   // Give the overridden dispatcher a chance to dispatch the event first.
   if (overridden_dispatcher_)
     action = overridden_dispatcher_->DispatchEvent(platform_event);
 
-  if ((action & POST_DISPATCH_PERFORM_DEFAULT) &&
-      dispatchers_.might_have_observers()) {
-    base::ObserverList<PlatformEventDispatcher>::Iterator iter(&dispatchers_);
-    while (PlatformEventDispatcher* dispatcher = iter.GetNext()) {
-      if (dispatcher->CanDispatchEvent(platform_event))
-        action = dispatcher->DispatchEvent(platform_event);
+  if (action & POST_DISPATCH_PERFORM_DEFAULT) {
+    for (PlatformEventDispatcher& dispatcher : dispatchers_) {
+      if (dispatcher.CanDispatchEvent(platform_event))
+        action = dispatcher.DispatchEvent(platform_event);
       if (action & POST_DISPATCH_STOP_PROPAGATION)
         break;
     }
   }
-  FOR_EACH_OBSERVER(PlatformEventObserver, observers_,
-                    DidProcessEvent(platform_event));
+  for (PlatformEventObserver& observer : observers_)
+    observer.DidProcessEvent(platform_event);
 
   // If an overridden dispatcher has been destroyed, then the platform
   // event-source should halt dispatching the current stream of events, and wait

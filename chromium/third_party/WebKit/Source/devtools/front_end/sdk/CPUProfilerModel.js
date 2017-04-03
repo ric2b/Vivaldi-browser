@@ -25,119 +25,115 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-
 /**
- * @constructor
- * @extends {WebInspector.SDKModel}
- * @param {!WebInspector.Target} target
- * @implements {ProfilerAgent.Dispatcher}
+ * @implements {Protocol.ProfilerDispatcher}
+ * @unrestricted
  */
-WebInspector.CPUProfilerModel = function(target)
-{
-    WebInspector.SDKModel.call(this, WebInspector.CPUProfilerModel, target);
+SDK.CPUProfilerModel = class extends SDK.SDKModel {
+  /**
+   * @param {!SDK.Target} target
+   */
+  constructor(target) {
+    super(SDK.CPUProfilerModel, target);
     this._isRecording = false;
     target.registerProfilerDispatcher(this);
     target.profilerAgent().enable();
 
     this._configureCpuProfilerSamplingInterval();
-    WebInspector.moduleSetting("highResolutionCpuProfiling").addChangeListener(this._configureCpuProfilerSamplingInterval, this);
-}
+    Common.moduleSetting('highResolutionCpuProfiling')
+        .addChangeListener(this._configureCpuProfilerSamplingInterval, this);
+  }
 
-/** @enum {symbol} */
-WebInspector.CPUProfilerModel.Events = {
-    ConsoleProfileStarted: Symbol("ConsoleProfileStarted"),
-    ConsoleProfileFinished: Symbol("ConsoleProfileFinished")
+  _configureCpuProfilerSamplingInterval() {
+    var intervalUs = Common.moduleSetting('highResolutionCpuProfiling').get() ? 100 : 1000;
+    this.target().profilerAgent().setSamplingInterval(intervalUs);
+  }
+
+  /**
+   * @override
+   * @param {string} id
+   * @param {!Protocol.Debugger.Location} scriptLocation
+   * @param {string=} title
+   */
+  consoleProfileStarted(id, scriptLocation, title) {
+    this._dispatchProfileEvent(SDK.CPUProfilerModel.Events.ConsoleProfileStarted, id, scriptLocation, title);
+  }
+
+  /**
+   * @override
+   * @param {string} id
+   * @param {!Protocol.Debugger.Location} scriptLocation
+   * @param {!Protocol.Profiler.Profile} cpuProfile
+   * @param {string=} title
+   */
+  consoleProfileFinished(id, scriptLocation, cpuProfile, title) {
+    this._dispatchProfileEvent(
+        SDK.CPUProfilerModel.Events.ConsoleProfileFinished, id, scriptLocation, title, cpuProfile);
+  }
+
+  /**
+   * @param {symbol} eventName
+   * @param {string} id
+   * @param {!Protocol.Debugger.Location} scriptLocation
+   * @param {string=} title
+   * @param {!Protocol.Profiler.Profile=} cpuProfile
+   */
+  _dispatchProfileEvent(eventName, id, scriptLocation, title, cpuProfile) {
+    // Make sure ProfilesPanel is initialized and CPUProfileType is created.
+    self.runtime.loadModulePromise('profiler').then(_ => {
+      var debuggerModel =
+          /** @type {!SDK.DebuggerModel} */ (SDK.DebuggerModel.fromTarget(this.target()));
+      var debuggerLocation = SDK.DebuggerModel.Location.fromPayload(debuggerModel, scriptLocation);
+      var globalId = this.target().id() + '.' + id;
+      var data = /** @type {!SDK.CPUProfilerModel.EventData} */ (
+          {id: globalId, scriptLocation: debuggerLocation, cpuProfile: cpuProfile, title: title});
+      this.dispatchEventToListeners(eventName, data);
+    });
+  }
+
+  /**
+   * @return {boolean}
+   */
+  isRecordingProfile() {
+    return this._isRecording;
+  }
+
+  startRecording() {
+    this._isRecording = true;
+    this.target().profilerAgent().start();
+    Host.userMetrics.actionTaken(Host.UserMetrics.Action.ProfilesCPUProfileTaken);
+  }
+
+  /**
+   * @return {!Promise.<?Protocol.Profiler.Profile>}
+   */
+  stopRecording() {
+    /**
+     * @param {?Protocol.Error} error
+     * @param {?Protocol.Profiler.Profile} profile
+     * @return {?Protocol.Profiler.Profile}
+     */
+    function extractProfile(error, profile) {
+      return !error && profile ? profile : null;
+    }
+    this._isRecording = false;
+    return this.target().profilerAgent().stop(extractProfile);
+  }
+
+  /**
+   * @override
+   */
+  dispose() {
+    Common.moduleSetting('highResolutionCpuProfiling')
+        .removeChangeListener(this._configureCpuProfilerSamplingInterval, this);
+  }
 };
 
-/** @typedef {!{id: string, scriptLocation: !WebInspector.DebuggerModel.Location, title: (string|undefined), cpuProfile: (!ProfilerAgent.Profile|undefined)}} */
-WebInspector.CPUProfilerModel.EventData;
+/** @enum {symbol} */
+SDK.CPUProfilerModel.Events = {
+  ConsoleProfileStarted: Symbol('ConsoleProfileStarted'),
+  ConsoleProfileFinished: Symbol('ConsoleProfileFinished')
+};
 
-WebInspector.CPUProfilerModel.prototype = {
-    _configureCpuProfilerSamplingInterval: function()
-    {
-        var intervalUs = WebInspector.moduleSetting("highResolutionCpuProfiling").get() ? 100 : 1000;
-        this.target().profilerAgent().setSamplingInterval(intervalUs);
-    },
-
-    /**
-     * @override
-     * @param {string} id
-     * @param {!DebuggerAgent.Location} scriptLocation
-     * @param {string=} title
-     */
-    consoleProfileStarted: function(id, scriptLocation, title)
-    {
-        this._dispatchProfileEvent(WebInspector.CPUProfilerModel.Events.ConsoleProfileStarted, id, scriptLocation, title);
-    },
-
-    /**
-     * @override
-     * @param {string} id
-     * @param {!DebuggerAgent.Location} scriptLocation
-     * @param {!ProfilerAgent.Profile} cpuProfile
-     * @param {string=} title
-     */
-    consoleProfileFinished: function(id, scriptLocation, cpuProfile, title)
-    {
-        this._dispatchProfileEvent(WebInspector.CPUProfilerModel.Events.ConsoleProfileFinished, id, scriptLocation, title, cpuProfile);
-    },
-
-    /**
-     * @param {symbol} eventName
-     * @param {string} id
-     * @param {!DebuggerAgent.Location} scriptLocation
-     * @param {string=} title
-     * @param {!ProfilerAgent.Profile=} cpuProfile
-     */
-    _dispatchProfileEvent: function(eventName, id, scriptLocation, title, cpuProfile)
-    {
-        // Make sure ProfilesPanel is initialized and CPUProfileType is created.
-        self.runtime.loadModulePromise("profiler").then(_ => {
-            var debuggerModel = /** @type {!WebInspector.DebuggerModel} */ (WebInspector.DebuggerModel.fromTarget(this.target()));
-            var debuggerLocation = WebInspector.DebuggerModel.Location.fromPayload(debuggerModel, scriptLocation);
-            var globalId = this.target().id() + "." + id;
-            var data = /** @type {!WebInspector.CPUProfilerModel.EventData} */ ({id: globalId, scriptLocation: debuggerLocation, cpuProfile: cpuProfile, title: title});
-            this.dispatchEventToListeners(eventName, data);
-        });
-    },
-
-    /**
-      * @return {boolean}
-      */
-    isRecordingProfile: function()
-    {
-        return this._isRecording;
-    },
-
-    startRecording: function()
-    {
-        this._isRecording = true;
-        this.target().profilerAgent().start();
-        WebInspector.userMetrics.actionTaken(WebInspector.UserMetrics.Action.ProfilesCPUProfileTaken);
-    },
-
-    /**
-     * @return {!Promise.<?ProfilerAgent.Profile>}
-     */
-    stopRecording: function()
-    {
-        /**
-         * @param {?Protocol.Error} error
-         * @param {?ProfilerAgent.Profile} profile
-         * @return {?ProfilerAgent.Profile}
-         */
-        function extractProfile(error, profile)
-        {
-            return !error && profile ? profile : null;
-        }
-        this._isRecording = false;
-        return this.target().profilerAgent().stop(extractProfile);
-    },
-
-    dispose: function()
-    {
-        WebInspector.moduleSetting("highResolutionCpuProfiling").removeChangeListener(this._configureCpuProfilerSamplingInterval, this);
-    },
-
-    __proto__: WebInspector.SDKModel.prototype
-}
+/** @typedef {!{id: string, scriptLocation: !SDK.DebuggerModel.Location, title: (string|undefined), cpuProfile: (!Protocol.Profiler.Profile|undefined)}} */
+SDK.CPUProfilerModel.EventData;

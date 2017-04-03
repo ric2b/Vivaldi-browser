@@ -28,7 +28,7 @@
 #include "base/macros.h"
 #include "base/md5.h"
 #include "base/memory/scoped_vector.h"
-#include "base/metrics/sparse_histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/path_service.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
@@ -716,19 +716,19 @@ bool ElevateAndRegisterChrome(BrowserDistribution* dist,
       exe_path = exe_path.Append(installer::kSetupExe);
     }
   } else {
-    exe_path = chrome_exe.DirName().Append(installer::kSetupExe);
-    if (!base::PathExists(exe_path)) {
-      HKEY reg_root = InstallUtil::IsPerUserInstall(chrome_exe) ?
-          HKEY_CURRENT_USER : HKEY_LOCAL_MACHINE;
-      RegKey key(reg_root,
-                 dist->GetUninstallRegPath().c_str(),
-                 KEY_READ | KEY_WOW64_32KEY);
-      base::string16 uninstall_string;
-      key.ReadValue(installer::kUninstallStringField, &uninstall_string);
-      base::CommandLine command_line =
-          base::CommandLine::FromString(uninstall_string);
-      exe_path = command_line.GetProgram();
-    }
+  exe_path = chrome_exe.DirName().Append(installer::kSetupExe);
+  if (!base::PathExists(exe_path)) {
+    HKEY reg_root = InstallUtil::IsPerUserInstall(chrome_exe) ?
+        HKEY_CURRENT_USER : HKEY_LOCAL_MACHINE;
+    RegKey key(reg_root,
+               dist->GetUninstallRegPath().c_str(),
+               KEY_READ | KEY_WOW64_32KEY);
+    base::string16 uninstall_string;
+    key.ReadValue(installer::kUninstallStringField, &uninstall_string);
+    base::CommandLine command_line =
+        base::CommandLine::FromString(uninstall_string);
+    exe_path = command_line.GetProgram();
+  }
   }
 
   if (base::PathExists(exe_path)) {
@@ -1424,7 +1424,7 @@ const wchar_t* ShellUtil::kAppPathsRegistryPathName = L"Path";
 const wchar_t* ShellUtil::kDefaultFileAssociations[] = {L".htm", L".html",
     L".shtml", L".xht", L".xhtml", NULL};
 const wchar_t* ShellUtil::kPotentialFileAssociations[] = {L".htm", L".html",
-    L".shtml", L".xht", L".xhtml", L".webp", NULL};
+    L".pdf", L".shtml", L".xht", L".xhtml", L".webp", NULL};
 const wchar_t* ShellUtil::kBrowserProtocolAssociations[] = {L"ftp", L"http",
     L"https", NULL};
 const wchar_t* ShellUtil::kPotentialProtocolAssociations[] = {L"ftp", L"http",
@@ -1731,7 +1731,8 @@ base::string16 ShellUtil::GetCurrentInstallationSuffix(
   base::string16 tested_suffix;
   if (command_line.HasSwitch(installer::switches::kVivaldiStandalone)) {
     vivaldi::GetPathSpecificSuffix(chrome_exe, &tested_suffix);
-  } else if (InstallUtil::IsPerUserInstall(chrome_exe) &&
+  } else
+  if (InstallUtil::IsPerUserInstall(chrome_exe) &&
       (!GetUserSpecificRegistrySuffix(&tested_suffix) ||
        !QuickIsChromeRegistered(dist, chrome_exe, tested_suffix,
                                 CONFIRM_PROGID_REGISTRATION)) &&

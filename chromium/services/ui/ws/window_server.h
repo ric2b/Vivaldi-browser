@@ -14,11 +14,11 @@
 
 #include "base/macros.h"
 #include "base/optional.h"
+#include "cc/ipc/display_compositor.mojom.h"
 #include "mojo/public/cpp/bindings/array.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "services/ui/public/interfaces/window_manager_window_tree_factory.mojom.h"
 #include "services/ui/public/interfaces/window_tree.mojom.h"
-#include "services/ui/public/interfaces/window_tree_host.mojom.h"
 #include "services/ui/surfaces/display_compositor.h"
 #include "services/ui/ws/display.h"
 #include "services/ui/ws/gpu_service_proxy_delegate.h"
@@ -50,7 +50,8 @@ class WindowServer : public ServerWindowDelegate,
                      public ServerWindowObserver,
                      public GpuServiceProxyDelegate,
                      public UserDisplayManagerDelegate,
-                     public UserIdTrackerObserver {
+                     public UserIdTrackerObserver,
+                     public cc::mojom::DisplayCompositorClient {
  public:
   explicit WindowServer(WindowServerDelegate* delegate);
   ~WindowServer() override;
@@ -106,9 +107,6 @@ class WindowServer : public ServerWindowDelegate,
   // Returns the Window identified by |id|.
   ServerWindow* GetWindow(const WindowId& id);
 
-  // Schedules a paint for the specified region in the coordinates of |window|.
-  void SchedulePaint(ServerWindow* window, const gfx::Rect& bounds);
-
   OperationType current_operation_type() const {
     return current_operation_ ? current_operation_->type()
                               : OperationType::NONE;
@@ -133,8 +131,6 @@ class WindowServer : public ServerWindowDelegate,
         const_cast<const WindowServer*>(this)->GetTreeWithRoot(window));
   }
   const WindowTree* GetTreeWithRoot(const ServerWindow* window) const;
-
-  void OnFirstWindowManagerWindowTreeFactoryReady();
 
   UserActivityMonitor* GetUserActivityMonitorForUser(const UserId& user_id);
 
@@ -288,9 +284,7 @@ class WindowServer : public ServerWindowDelegate,
   bool IsUserInHighContrastMode(const UserId& user) const;
 
   // Overridden from ServerWindowDelegate:
-  void OnScheduleWindowPaint(ServerWindow* window) override;
-  const ServerWindow* GetRootWindow(const ServerWindow* window) const override;
-  void ScheduleSurfaceDestruction(ServerWindow* window) override;
+  ServerWindow* GetRootWindow(const ServerWindow* window) override;
 
   // Overridden from ServerWindowObserver:
   void OnWindowDestroyed(ServerWindow* window) override;
@@ -334,6 +328,11 @@ class WindowServer : public ServerWindowDelegate,
   void OnGpuChannelEstablished(
       scoped_refptr<gpu::GpuChannelHost> gpu_channel) override;
 
+  // cc::mojom::DisplayCompositorClient:
+  void OnSurfaceCreated(const cc::SurfaceId& surface_id,
+                        const gfx::Size& frame_size,
+                        float device_scale_factor) override;
+
   // UserIdTrackerObserver:
   void OnActiveUserIdChanged(const UserId& previously_active_id,
                              const UserId& active_id) override;
@@ -343,9 +342,6 @@ class WindowServer : public ServerWindowDelegate,
   UserIdTracker user_id_tracker_;
 
   WindowServerDelegate* delegate_;
-
-  // State for rendering into a Surface.
-  scoped_refptr<ui::DisplayCompositor> display_compositor_;
 
   // ID to use for next WindowTree.
   ClientSpecificId next_client_id_;
@@ -373,12 +369,18 @@ class WindowServer : public ServerWindowDelegate,
   uint32_t next_wm_change_id_;
 
   std::unique_ptr<GpuServiceProxy> gpu_proxy_;
+  // TODO(fsamuel): The window server should not have a GPU channel.
   scoped_refptr<gpu::GpuChannelHost> gpu_channel_;
   base::Callback<void(ServerWindow*)> window_paint_callback_;
 
   UserActivityMonitorMap activity_monitor_map_;
 
   WindowManagerWindowTreeFactorySet window_manager_window_tree_factory_set_;
+
+  mojo::Binding<cc::mojom::DisplayCompositorClient>
+      display_compositor_client_binding_;
+  // State for rendering into a Surface.
+  scoped_refptr<ui::DisplayCompositor> display_compositor_;
 
   DISALLOW_COPY_AND_ASSIGN(WindowServer);
 };

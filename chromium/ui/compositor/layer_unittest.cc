@@ -87,10 +87,6 @@ class ColoredLayer : public Layer, public LayerDelegate {
 
   void OnDeviceScaleFactorChanged(float device_scale_factor) override {}
 
-  base::Closure PrepareForLayerBoundsChange() override {
-    return base::Closure();
-  }
-
  private:
   SkColor color_;
 };
@@ -146,10 +142,6 @@ class DrawStringLayerDelegate : public LayerDelegate {
   void OnDelegatedFrameDamage(const gfx::Rect& damage_rect_in_dip) override {}
 
   void OnDeviceScaleFactorChanged(float device_scale_factor) override {}
-
-  base::Closure PrepareForLayerBoundsChange() override {
-    return base::Closure();
-  }
 
  private:
   const SkColor background_color_;
@@ -339,10 +331,6 @@ class TestLayerDelegate : public LayerDelegate {
     device_scale_factor_ = device_scale_factor;
   }
 
-  base::Closure PrepareForLayerBoundsChange() override {
-    return base::Closure();
-  }
-
   void reset() {
     color_index_ = 0;
     device_scale_factor_ = 0.0f;
@@ -379,9 +367,6 @@ class DrawTreeLayerDelegate : public LayerDelegate {
   }
   void OnDelegatedFrameDamage(const gfx::Rect& damage_rect_in_dip) override {}
   void OnDeviceScaleFactorChanged(float device_scale_factor) override {}
-  base::Closure PrepareForLayerBoundsChange() override {
-    return base::Closure();
-  }
 
   bool painted_;
   const gfx::Rect layer_bounds_;
@@ -400,9 +385,6 @@ class NullLayerDelegate : public LayerDelegate {
   void OnPaintLayer(const ui::PaintContext& context) override {}
   void OnDelegatedFrameDamage(const gfx::Rect& damage_rect_in_dip) override {}
   void OnDeviceScaleFactorChanged(float device_scale_factor) override {}
-  base::Closure PrepareForLayerBoundsChange() override {
-    return base::Closure();
-  }
 
   DISALLOW_COPY_AND_ASSIGN(NullLayerDelegate);
 };
@@ -410,18 +392,15 @@ class NullLayerDelegate : public LayerDelegate {
 // Remembers if it has been notified.
 class TestCompositorObserver : public CompositorObserver {
  public:
-  TestCompositorObserver()
-      : committed_(false), started_(false), ended_(false), aborted_(false) {}
+  TestCompositorObserver() = default;
 
   bool committed() const { return committed_; }
   bool notified() const { return started_ && ended_; }
-  bool aborted() const { return aborted_; }
 
   void Reset() {
     committed_ = false;
     started_ = false;
     ended_ = false;
-    aborted_ = false;
   }
 
  private:
@@ -436,18 +415,13 @@ class TestCompositorObserver : public CompositorObserver {
 
   void OnCompositingEnded(Compositor* compositor) override { ended_ = true; }
 
-  void OnCompositingAborted(Compositor* compositor) override {
-    aborted_ = true;
-  }
-
   void OnCompositingLockStateChanged(Compositor* compositor) override {}
 
   void OnCompositingShuttingDown(Compositor* compositor) override {}
 
-  bool committed_;
-  bool started_;
-  bool ended_;
-  bool aborted_;
+  bool committed_ = false;
+  bool started_ = false;
+  bool ended_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(TestCompositorObserver);
 };
@@ -1396,15 +1370,6 @@ TEST_F(LayerWithRealCompositorTest, CompositorObservers) {
   WaitForSwap();
   EXPECT_TRUE(observer.notified());
 
-  // A change resulting in an aborted swap buffer should alert the observer
-  // and also signal an abort.
-  observer.Reset();
-  l2->SetOpacity(0.1f);
-  GetCompositor()->DidAbortSwapBuffers();
-  WaitForSwap();
-  EXPECT_TRUE(observer.notified());
-  EXPECT_TRUE(observer.aborted());
-
   GetCompositor()->RemoveObserver(&observer);
 
   // Opacity changes should no longer alert the removed observer.
@@ -1656,10 +1621,6 @@ class SchedulePaintLayerDelegate : public LayerDelegate {
 
   void OnDeviceScaleFactorChanged(float device_scale_factor) override {}
 
-  base::Closure PrepareForLayerBoundsChange() override {
-    return base::Closure();
-  }
-
   int paint_count_;
   Layer* layer_;
   gfx::Rect schedule_paint_rect_;
@@ -1891,7 +1852,9 @@ TEST_F(LayerWithDelegateTest, ExternalContentMirroring) {
   const auto satisfy_callback = base::Bind(&FakeSatisfyCallback);
   const auto require_callback = base::Bind(&FakeRequireCallback);
 
-  cc::SurfaceId surface_id(cc::FrameSinkId(0, 1), cc::LocalFrameId(2, 3));
+  cc::SurfaceId surface_id(
+      cc::FrameSinkId(0, 1),
+      cc::LocalFrameId(2, base::UnguessableToken::Create()));
   layer->SetShowSurface(surface_id, satisfy_callback, require_callback,
                         gfx::Size(10, 10), 1.0f, gfx::Size(10, 10));
 
@@ -1906,7 +1869,9 @@ TEST_F(LayerWithDelegateTest, ExternalContentMirroring) {
   EXPECT_EQ(gfx::Size(10, 10), surface->surface_size());
   EXPECT_EQ(1.0f, surface->surface_scale());
 
-  surface_id = cc::SurfaceId(cc::FrameSinkId(1, 2), cc::LocalFrameId(3, 4));
+  surface_id =
+      cc::SurfaceId(cc::FrameSinkId(1, 2),
+                    cc::LocalFrameId(3, base::UnguessableToken::Create()));
   layer->SetShowSurface(surface_id, satisfy_callback, require_callback,
                         gfx::Size(20, 20), 2.0f, gfx::Size(20, 20));
 
@@ -2282,6 +2247,17 @@ TEST_F(LayerWithRealCompositorTest, CompositorAnimationObserverTest) {
   EXPECT_FALSE(animation_observer.shutdown());
   ResetCompositor();
   EXPECT_TRUE(animation_observer.shutdown());
+}
+
+TEST(LayerDebugInfoTest, LayerNameDoesNotClobber) {
+  Layer layer(LAYER_NOT_DRAWN);
+  layer.set_name("foo");
+  std::unique_ptr<base::trace_event::ConvertableToTraceFormat> debug_info =
+      layer.TakeDebugInfo(nullptr);
+  std::string trace_format("bar,");
+  debug_info->AppendAsTraceFormat(&trace_format);
+  std::string expected("bar,{\"layer_name\":\"foo\"}");
+  EXPECT_EQ(expected, trace_format);
 }
 
 }  // namespace ui

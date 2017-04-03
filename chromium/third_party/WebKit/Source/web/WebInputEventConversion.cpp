@@ -465,7 +465,6 @@ PlatformTouchEventBuilder::PlatformTouchEventBuilder(
   m_modifiers = event.modifiers;
   m_timestamp = event.timeStampSeconds;
   m_causesScrollingIfUncanceled = event.movedBeyondSlopRegion;
-  m_dispatchedDuringFling = event.dispatchedDuringFling;
   m_touchStartOrFirstTouchMove = event.touchStartOrFirstTouchMove;
 
   for (unsigned i = 0; i < event.touchesLength; ++i)
@@ -476,13 +475,13 @@ PlatformTouchEventBuilder::PlatformTouchEventBuilder(
 }
 
 static FloatPoint convertAbsoluteLocationForLayoutObjectFloat(
-    const LayoutPoint& location,
+    const DoublePoint& location,
     const LayoutItem layoutItem) {
   return layoutItem.absoluteToLocal(FloatPoint(location), UseTransforms);
 }
 
-static IntPoint convertAbsoluteLocationForLayoutObject(
-    const LayoutPoint& location,
+static IntPoint convertAbsoluteLocationForLayoutObjectInt(
+    const DoublePoint& location,
     const LayoutItem layoutItem) {
   return roundedIntPoint(
       convertAbsoluteLocationForLayoutObjectFloat(location, layoutItem));
@@ -501,15 +500,15 @@ static void updateWebMouseEventFromCoreMouseEvent(
   FrameView* view = widget ? toFrameView(widget->parent()) : 0;
   // TODO(bokan): If view == nullptr, pointInRootFrame will really be
   // pointInRootContent.
-  IntPoint pointInRootFrame = IntPoint(event.absoluteLocation().x().toInt(),
-                                       event.absoluteLocation().y().toInt());
+  IntPoint pointInRootFrame(event.absoluteLocation().x(),
+                            event.absoluteLocation().y());
   if (view)
     pointInRootFrame = view->contentsToRootFrame(pointInRootFrame);
   webEvent.globalX = event.screenX();
   webEvent.globalY = event.screenY();
   webEvent.windowX = pointInRootFrame.x();
   webEvent.windowY = pointInRootFrame.y();
-  IntPoint localPoint = convertAbsoluteLocationForLayoutObject(
+  IntPoint localPoint = convertAbsoluteLocationForLayoutObjectInt(
       event.absoluteLocation(), layoutItem);
   webEvent.x = localPoint.x();
   webEvent.y = localPoint.y();
@@ -619,8 +618,8 @@ WebMouseEventBuilder::WebMouseEventBuilder(const Widget* widget,
   modifiers |= WebInputEvent::LeftButtonDown;
   clickCount = (type == MouseDown || type == MouseUp);
 
-  IntPoint localPoint = convertAbsoluteLocationForLayoutObject(
-      touch->absoluteLocation(), layoutItem);
+  IntPoint localPoint = convertAbsoluteLocationForLayoutObjectInt(
+      DoublePoint(touch->absoluteLocation()), layoutItem);
   x = localPoint.x();
   y = localPoint.y();
 
@@ -679,13 +678,14 @@ WebKeyboardEventBuilder::WebKeyboardEventBuilder(const KeyboardEvent& event) {
 
 static WebTouchPoint toWebTouchPoint(const Touch* touch,
                                      const LayoutItem layoutItem,
-                                     WebTouchPoint::State state) {
+                                     WebTouchPoint::State state,
+                                     WebPointerProperties::PointerType type) {
   WebTouchPoint point;
-  point.pointerType = WebPointerProperties::PointerType::Touch;
+  point.pointerType = type;
   point.id = touch->identifier();
   point.screenPosition = touch->screenLocation();
   point.position = convertAbsoluteLocationForLayoutObjectFloat(
-      touch->absoluteLocation(), layoutItem);
+      DoublePoint(touch->absoluteLocation()), layoutItem);
   point.radiusX = touch->radiusX();
   point.radiusY = touch->radiusY();
   point.rotationAngle = touch->rotationAngle();
@@ -704,11 +704,13 @@ static unsigned indexOfTouchPointWithId(const WebTouchPoint* touchPoints,
   return std::numeric_limits<unsigned>::max();
 }
 
-static void addTouchPointsUpdateStateIfNecessary(WebTouchPoint::State state,
-                                                 TouchList* touches,
-                                                 WebTouchPoint* touchPoints,
-                                                 unsigned* touchPointsLength,
-                                                 const LayoutItem layoutItem) {
+static void addTouchPointsUpdateStateIfNecessary(
+    WebTouchPoint::State state,
+    TouchList* touches,
+    WebTouchPoint* touchPoints,
+    unsigned* touchPointsLength,
+    const LayoutItem layoutItem,
+    WebPointerProperties::PointerType pointerType) {
   unsigned initialTouchPointsLength = *touchPointsLength;
   for (unsigned i = 0; i < touches->length(); ++i) {
     const unsigned pointIndex = *touchPointsLength;
@@ -721,7 +723,8 @@ static void addTouchPointsUpdateStateIfNecessary(WebTouchPoint::State state,
     if (existingPointIndex != std::numeric_limits<unsigned>::max()) {
       touchPoints[existingPointIndex].state = state;
     } else {
-      touchPoints[pointIndex] = toWebTouchPoint(touch, layoutItem, state);
+      touchPoints[pointIndex] =
+          toWebTouchPoint(touch, layoutItem, state, pointerType);
       ++(*touchPointsLength);
     }
   }
@@ -754,15 +757,16 @@ WebTouchEventBuilder::WebTouchEventBuilder(const LayoutItem layoutItem,
        i < event.touches()->length() &&
        i < static_cast<unsigned>(WebTouchEvent::kTouchesLengthCap);
        ++i) {
-    touches[i] = toWebTouchPoint(event.touches()->item(i), layoutItem,
-                                 WebTouchPoint::StateStationary);
+    touches[i] =
+        toWebTouchPoint(event.touches()->item(i), layoutItem,
+                        WebTouchPoint::StateStationary, event.pointerType());
     ++touchesLength;
   }
   // If any existing points are also in the change list, we should update
   // their state, otherwise just add the new points.
-  addTouchPointsUpdateStateIfNecessary(toWebTouchPointState(event.type()),
-                                       event.changedTouches(), touches,
-                                       &touchesLength, layoutItem);
+  addTouchPointsUpdateStateIfNecessary(
+      toWebTouchPointState(event.type()), event.changedTouches(), touches,
+      &touchesLength, layoutItem, event.pointerType());
 }
 
 WebGestureEventBuilder::WebGestureEventBuilder(const LayoutItem layoutItem,
@@ -812,7 +816,7 @@ WebGestureEventBuilder::WebGestureEventBuilder(const LayoutItem layoutItem,
 
   globalX = event.screenX();
   globalY = event.screenY();
-  IntPoint localPoint = convertAbsoluteLocationForLayoutObject(
+  IntPoint localPoint = convertAbsoluteLocationForLayoutObjectInt(
       event.absoluteLocation(), layoutItem);
   x = localPoint.x();
   y = localPoint.y();

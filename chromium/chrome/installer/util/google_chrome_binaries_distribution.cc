@@ -14,7 +14,7 @@
 namespace {
 
 const wchar_t kChromeBinariesGuid[] = L"{4DC8B4CA-1BDA-483e-B5FA-D3C12E15B62D}";
-const wchar_t kChromeBinariesName[] = L"Vivaldi binaries";
+const wchar_t kChromeBinariesName[] = L"Google Chrome binaries";
 
 }  // namespace
 

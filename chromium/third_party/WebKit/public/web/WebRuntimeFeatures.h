@@ -81,14 +81,16 @@ class WebRuntimeFeatures {
   BLINK_EXPORT static void enableFeaturePolicy(bool);
   BLINK_EXPORT static void enableFileSystem(bool);
   BLINK_EXPORT static void enableGamepadExtensions(bool);
+  BLINK_EXPORT static void enableGenericSensor(bool);
   BLINK_EXPORT static void enableInputMultipleFieldsUI(bool);
+  BLINK_EXPORT static void enableLazyParseCSS(bool);
   BLINK_EXPORT static void enableMediaCapture(bool);
   BLINK_EXPORT static void enableMediaDocumentDownloadButton(bool);
   BLINK_EXPORT static void enableMiddleClickAutoscroll(bool);
   BLINK_EXPORT static void enableNavigatorContentUtils(bool);
   BLINK_EXPORT static void enableNetworkInformation(bool);
-  BLINK_EXPORT static void enableNewMediaPlaybackUi(bool);
   BLINK_EXPORT static void enableNotificationConstructor(bool);
+  BLINK_EXPORT static void enableNotificationContentImage(bool);
   BLINK_EXPORT static void enableNotifications(bool);
   BLINK_EXPORT static void enableOrientationEvent(bool);
   BLINK_EXPORT static void enableOverlayScrollbars(bool);
@@ -107,14 +109,16 @@ class WebRuntimeFeatures {
   BLINK_EXPORT static void enableReloadwithoutSubResourceCacheRevalidation(
       bool);
   BLINK_EXPORT static void enableRenderingPipelineThrottling(bool);
+  BLINK_EXPORT static void enableRemotePlaybackAPI(bool);
   BLINK_EXPORT static void enableRootLayerScrolling(bool);
   BLINK_EXPORT static void enableScriptedSpeech(bool);
   BLINK_EXPORT static void enableScrollAnchoring(bool);
+  BLINK_EXPORT static void enableServiceWorkerNavigationPreload(bool);
+  BLINK_EXPORT static void enableSharedArrayBuffer(bool);
   BLINK_EXPORT static void enableSharedWorker(bool);
   BLINK_EXPORT static void enableSlimmingPaintV2(bool);
   BLINK_EXPORT static void enableSpeculativeLaunchServiceWorker(bool);
   BLINK_EXPORT static void enableTouch(bool);
-  BLINK_EXPORT static void enableUnsafeES3APIs(bool);
   BLINK_EXPORT static void enableV8IdleTasks(bool);
   BLINK_EXPORT static void enableWebAssemblySerialization(bool);
   BLINK_EXPORT static void enableWebBluetooth(bool);
@@ -131,6 +135,7 @@ class WebRuntimeFeatures {
   BLINK_EXPORT static void enableAutoplayMutedVideos(bool);
   BLINK_EXPORT static void enableTimerThrottlingForBackgroundTabs(bool);
   BLINK_EXPORT static void enableTimerThrottlingForHiddenFrames(bool);
+  BLINK_EXPORT static void enableExpensiveBackgroundTimerThrottling(bool);
   BLINK_EXPORT static void enableCanvas2dDynamicRenderingModeSwitching(bool);
   BLINK_EXPORT static void enableSendBeaconThrowForBlobWithNonSimpleType(bool);
 

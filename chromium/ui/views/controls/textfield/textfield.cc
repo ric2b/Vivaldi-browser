@@ -7,9 +7,11 @@
 #include <string>
 #include <utility>
 
+#include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
-#include "ui/accessibility/ax_view_state.h"
+#include "ui/accessibility/ax_action_data.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/base/cursor/cursor.h"
 #include "ui/base/default_style.h"
@@ -40,7 +42,6 @@
 #include "ui/views/controls/native/native_view_host.h"
 #include "ui/views/controls/textfield/textfield_controller.h"
 #include "ui/views/drag_utils.h"
-#include "ui/views/metrics.h"
 #include "ui/views/native_cursor.h"
 #include "ui/views/painter.h"
 #include "ui/views/style/platform_style.h"
@@ -83,18 +84,6 @@ void ConvertRectToScreen(const View* src, gfx::Rect* r) {
   gfx::Point new_origin = r->origin();
   View::ConvertPointToScreen(src, &new_origin);
   r->set_origin(new_origin);
-}
-
-// Get the drag selection timer delay, respecting animation scaling for testing.
-int GetDragSelectionDelay() {
-  switch (ui::ScopedAnimationDurationScaleMode::duration_scale_mode()) {
-      case ui::ScopedAnimationDurationScaleMode::NORMAL_DURATION: return 100;
-      case ui::ScopedAnimationDurationScaleMode::FAST_DURATION:   return 25;
-      case ui::ScopedAnimationDurationScaleMode::SLOW_DURATION:   return 400;
-      case ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION:   return 1;
-      case ui::ScopedAnimationDurationScaleMode::ZERO_DURATION:   return 0;
-    }
-  return 100;
 }
 
 // Get the default command for a given key |event|.
@@ -252,20 +241,22 @@ Textfield::Textfield()
       selection_text_color_(SK_ColorWHITE),
       selection_background_color_(SK_ColorBLUE),
       placeholder_text_color_(kDefaultPlaceholderTextColor),
+      invalid_(false),
       text_input_type_(ui::TEXT_INPUT_TYPE_TEXT),
       text_input_flags_(0),
       performing_user_action_(false),
       skip_input_method_cancel_composition_(false),
       drop_cursor_visible_(false),
       initiating_drag_(false),
-      aggregated_clicks_(0),
+      selection_controller_(this),
       drag_start_display_offset_(0),
       touch_handles_hidden_due_to_scroll_(false),
+      use_focus_ring_(ui::MaterialDesignController::IsSecondaryUiMaterial()),
       weak_ptr_factory_(this) {
   set_context_menu_controller(this);
   set_drag_controller(this);
   GetRenderText()->SetFontList(GetDefaultFontList());
-  SetBorder(std::unique_ptr<Border>(new FocusableBorder()));
+  View::SetBorder(std::unique_ptr<Border>(new FocusableBorder()));
   SetFocusBehavior(FocusBehavior::ALWAYS);
 
   // These allow BrowserView to pass edit commands from the Chrome menu to us
@@ -333,7 +324,8 @@ base::string16 Textfield::GetSelectedText() const {
 
 void Textfield::SelectAll(bool reversed) {
   model_->SelectAll(reversed);
-  UpdateSelectionClipboard();
+  if (HasSelection() && performing_user_action_)
+    UpdateSelectionClipboard();
   UpdateAfterChange(false, true);
 }
 
@@ -522,16 +514,25 @@ void Textfield::ApplyStyle(gfx::TextStyle style,
   SchedulePaint();
 }
 
+void Textfield::SetInvalid(bool invalid) {
+  if (invalid == invalid_)
+    return;
+  invalid_ = invalid;
+  UpdateBorder();
+
+  if (HasFocus() && use_focus_ring_) {
+    FocusRing::Install(this, invalid_
+                                 ? ui::NativeTheme::kColorId_AlertSeverityHigh
+                                 : ui::NativeTheme::kColorId_NumColors);
+  }
+}
+
 void Textfield::ClearEditHistory() {
   model_->ClearEditHistory();
 }
 
 void Textfield::SetAccessibleName(const base::string16& name) {
   accessible_name_ = name;
-}
-
-bool Textfield::HasTextBeingDragged() {
-  return initiating_drag_;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -557,6 +558,13 @@ const char* Textfield::GetClassName() const {
   return kViewClassName;
 }
 
+void Textfield::SetBorder(std::unique_ptr<Border> b) {
+  if (use_focus_ring_ && HasFocus())
+    FocusRing::Uninstall(this);
+  use_focus_ring_ = false;
+  View::SetBorder(std::move(b));
+}
+
 gfx::NativeCursor Textfield::GetCursor(const ui::MouseEvent& event) {
   bool in_selection = GetRenderText()->IsPointInSelection(event.location());
   bool drag_event = event.type() == ui::ET_MOUSE_DRAGGED;
@@ -565,88 +573,31 @@ gfx::NativeCursor Textfield::GetCursor(const ui::MouseEvent& event) {
 }
 
 bool Textfield::OnMousePressed(const ui::MouseEvent& event) {
-  TrackMouseClicks(event);
-
-  if (!controller_ || !controller_->HandleMouseEvent(this, event)) {
-    if (event.IsOnlyLeftMouseButton() || event.IsOnlyRightMouseButton()) {
-      RequestFocus();
-      ShowImeIfNeeded();
-    }
-
-    if (event.IsOnlyLeftMouseButton()) {
-      OnBeforeUserAction();
-      initiating_drag_ = false;
-      switch (aggregated_clicks_) {
-        case 0:
-          if (GetRenderText()->IsPointInSelection(event.location()))
-            initiating_drag_ = true;
-          else
-            MoveCursorTo(event.location(), event.IsShiftDown());
-          break;
-        case 1:
-          SelectWordAt(event.location());
-          double_click_word_ = GetRenderText()->selection();
-          break;
-        case 2:
-          SelectAll(false);
-          break;
-        default:
-          NOTREACHED();
-      }
-      OnAfterUserAction();
-    }
-
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
-    if (event.IsOnlyMiddleMouseButton()) {
-      if (GetRenderText()->IsPointInSelection(event.location())) {
-        OnBeforeUserAction();
-        ClearSelection();
-        ui::ScopedClipboardWriter(
-            ui::CLIPBOARD_TYPE_SELECTION).WriteText(base::string16());
-        OnAfterUserAction();
-      } else if (!read_only()) {
-        PasteSelectionClipboard(event);
-      }
-    }
-#endif
+  bool handled = controller_ && controller_->HandleMouseEvent(this, event);
+  if (!handled &&
+      (event.IsOnlyLeftMouseButton() || event.IsOnlyRightMouseButton())) {
+    RequestFocus();
+    ShowImeIfNeeded();
   }
 
-  return true;
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+  if (!handled && !HasFocus() && event.IsOnlyMiddleMouseButton())
+    RequestFocus();
+#endif
+
+  return selection_controller_.OnMousePressed(event, handled);
 }
 
 bool Textfield::OnMouseDragged(const ui::MouseEvent& event) {
-  last_drag_location_ = event.location();
-
-  // Don't adjust the cursor on a potential drag and drop.
-  if (initiating_drag_ || !event.IsOnlyLeftMouseButton())
-    return true;
-
-  // A timer is used to continuously scroll while selecting beyond side edges.
-  const int x = event.location().x();
-  if ((x >= 0 && x <= width()) || GetDragSelectionDelay() == 0) {
-    drag_selection_timer_.Stop();
-    SelectThroughLastDragLocation();
-  } else if (!drag_selection_timer_.IsRunning()) {
-    // Select through the edge of the visible text, then start the scroll timer.
-    last_drag_location_.set_x(std::min(std::max(0, x), width()));
-    SelectThroughLastDragLocation();
-    drag_selection_timer_.Start(
-        FROM_HERE, base::TimeDelta::FromMilliseconds(GetDragSelectionDelay()),
-        this, &Textfield::SelectThroughLastDragLocation);
-  }
-
-  return true;
+  return selection_controller_.OnMouseDragged(event);
 }
 
 void Textfield::OnMouseReleased(const ui::MouseEvent& event) {
-  OnBeforeUserAction();
-  drag_selection_timer_.Stop();
-  // Cancel suspected drag initiations, the user was clicking in the selection.
-  if (initiating_drag_)
-    MoveCursorTo(event.location(), false);
-  initiating_drag_ = false;
-  UpdateSelectionClipboard();
-  OnAfterUserAction();
+  selection_controller_.OnMouseReleased(event);
+}
+
+void Textfield::OnMouseCaptureLost() {
+  selection_controller_.OnMouseCaptureLost();
 }
 
 WordLookupClient* Textfield::GetWordLookupClient() {
@@ -688,9 +639,6 @@ bool Textfield::OnKeyPressed(const ui::KeyEvent& event) {
     ExecuteTextEditCommand(edit_command);
     handled = true;
   }
-
-  if (!handled)
-    OnKeypressUnhandled();
   return handled;
 }
 
@@ -921,30 +869,42 @@ void Textfield::OnDragDone() {
   drop_cursor_visible_ = false;
 }
 
-void Textfield::GetAccessibleState(ui::AXViewState* state) {
-  state->role = ui::AX_ROLE_TEXT_FIELD;
-  state->name = accessible_name_;
+void Textfield::GetAccessibleNodeData(ui::AXNodeData* node_data) {
+  node_data->role = ui::AX_ROLE_TEXT_FIELD;
+  node_data->SetName(accessible_name_);
   if (read_only())
-    state->AddStateFlag(ui::AX_STATE_READ_ONLY);
+    node_data->AddStateFlag(ui::AX_STATE_READ_ONLY);
   else
-    state->AddStateFlag(ui::AX_STATE_EDITABLE);
+    node_data->AddStateFlag(ui::AX_STATE_EDITABLE);
   if (text_input_type_ == ui::TEXT_INPUT_TYPE_PASSWORD) {
-    state->AddStateFlag(ui::AX_STATE_PROTECTED);
-    state->value = base::string16(text().size(), '*');
+    node_data->AddStateFlag(ui::AX_STATE_PROTECTED);
+    node_data->SetValue(base::string16(text().size(), '*'));
   } else {
-    state->value = text();
+    node_data->SetValue(text());
   }
-  state->placeholder = GetPlaceholderText();
+  node_data->AddStringAttribute(ui::AX_ATTR_PLACEHOLDER,
+                                base::UTF16ToUTF8(GetPlaceholderText()));
 
   const gfx::Range range = GetSelectedRange();
-  state->selection_start = range.start();
-  state->selection_end = range.end();
+  node_data->AddIntAttribute(ui::AX_ATTR_TEXT_SEL_START, range.start());
+  node_data->AddIntAttribute(ui::AX_ATTR_TEXT_SEL_END, range.end());
+}
 
-  if (!read_only()) {
-    state->set_value_callback =
-        base::Bind(&Textfield::AccessibilitySetValue,
-                   weak_ptr_factory_.GetWeakPtr());
+bool Textfield::HandleAccessibleAction(const ui::AXActionData& action_data) {
+  if (read_only())
+    return View::HandleAccessibleAction(action_data);
+
+  if (action_data.action == ui::AX_ACTION_SET_VALUE) {
+    SetText(action_data.value);
+    ClearSelection();
+    return true;
+  } else if (action_data.action == ui::AX_ACTION_REPLACE_SELECTED_TEXT) {
+    InsertOrReplaceText(action_data.value);
+    ClearSelection();
+    return true;
   }
+
+  return View::HandleAccessibleAction(action_data);
 }
 
 void Textfield::OnBoundsChanged(const gfx::Rect& previous_bounds) {
@@ -986,16 +946,18 @@ void Textfield::OnFocus() {
   GetRenderText()->set_focused(true);
   if (ShouldShowCursor())
     GetRenderText()->set_cursor_visible(true);
-  SchedulePaint();
   if (GetInputMethod())
     GetInputMethod()->SetFocusedTextInputClient(this);
   OnCaretBoundsChanged();
   if (ShouldBlinkCursor())
     StartBlinkingCursor();
-  View::OnFocus();
+  if (use_focus_ring_) {
+    FocusRing::Install(this, invalid_
+                                 ? ui::NativeTheme::kColorId_AlertSeverityHigh
+                                 : ui::NativeTheme::kColorId_NumColors);
+  }
   SchedulePaint();
-  if (ui::MaterialDesignController::IsSecondaryUiMaterial())
-    FocusRing::Install(this);
+  View::OnFocus();
 }
 
 void Textfield::OnBlur() {
@@ -1011,10 +973,10 @@ void Textfield::OnBlur() {
 
   DestroyTouchSelection();
 
-  // Border typically draws focus indicator.
-  SchedulePaint();
-  if (ui::MaterialDesignController::IsSecondaryUiMaterial())
+  if (use_focus_ring_)
     FocusRing::Uninstall(this);
+  SchedulePaint();
+  View::OnBlur();
 }
 
 gfx::Point Textfield::GetKeyboardContextMenuLocation() {
@@ -1112,6 +1074,13 @@ bool Textfield::GetDecoratedWordAtPoint(const gfx::Point& point,
                                         gfx::Point* baseline_point) {
   return GetRenderText()->GetDecoratedWordAtPoint(point, decorated_word,
                                                   baseline_point);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Textfield, SelectionControllerDelegate overrides:
+
+bool Textfield::HasTextBeingDragged() const {
+  return initiating_drag_;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1296,7 +1265,7 @@ void Textfield::InsertText(const base::string16& new_text) {
 
 void Textfield::InsertChar(const ui::KeyEvent& event) {
   if (read_only()) {
-    OnKeypressUnhandled();
+    OnEditFailed();
     return;
   }
 
@@ -1580,6 +1549,10 @@ gfx::RenderText* Textfield::GetRenderText() const {
   return model_->render_text();
 }
 
+gfx::Point Textfield::GetLastClickLocation() const {
+  return selection_controller_.last_click_location();
+}
+
 base::string16 Textfield::GetSelectionClipboardText() const {
   base::string16 selection_clipboard_text;
   ui::Clipboard::GetForCurrentThread()->ReadText(
@@ -1778,7 +1751,7 @@ void Textfield::ExecuteTextEditCommand(ui::TextEditCommand command) {
   }
 
   cursor_changed |= GetSelectionModel() != selection_model;
-  if (cursor_changed)
+  if (cursor_changed && HasSelection())
     UpdateSelectionClipboard();
   UpdateAfterChange(text_changed, cursor_changed);
   OnAfterUserAction();
@@ -1787,11 +1760,81 @@ void Textfield::ExecuteTextEditCommand(ui::TextEditCommand command) {
 ////////////////////////////////////////////////////////////////////////////////
 // Textfield, private:
 
-void Textfield::AccessibilitySetValue(const base::string16& new_value) {
-  if (!read_only()) {
-    SetText(new_value);
-    ClearSelection();
+////////////////////////////////////////////////////////////////////////////////
+// Textfield, SelectionControllerDelegate overrides:
+
+gfx::RenderText* Textfield::GetRenderTextForSelectionController() {
+  return GetRenderText();
+}
+
+bool Textfield::IsReadOnly() const {
+  return read_only();
+}
+
+bool Textfield::SupportsDrag() const {
+  return true;
+}
+
+void Textfield::SetTextBeingDragged(bool value) {
+  initiating_drag_ = value;
+}
+
+int Textfield::GetViewHeight() const {
+  return height();
+}
+
+int Textfield::GetViewWidth() const {
+  return width();
+}
+
+int Textfield::GetDragSelectionDelay() const {
+  switch (ui::ScopedAnimationDurationScaleMode::duration_scale_mode()) {
+    case ui::ScopedAnimationDurationScaleMode::NORMAL_DURATION:
+      return 100;
+    case ui::ScopedAnimationDurationScaleMode::FAST_DURATION:
+      return 25;
+    case ui::ScopedAnimationDurationScaleMode::SLOW_DURATION:
+      return 400;
+    case ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION:
+      return 1;
+    case ui::ScopedAnimationDurationScaleMode::ZERO_DURATION:
+      return 0;
   }
+  return 100;
+}
+
+void Textfield::OnBeforePointerAction() {
+  OnBeforeUserAction();
+  if (model_->HasCompositionText())
+    model_->ConfirmCompositionText();
+}
+
+void Textfield::OnAfterPointerAction(bool text_changed,
+                                     bool selection_changed) {
+  OnAfterUserAction();
+  UpdateAfterChange(text_changed, selection_changed);
+}
+
+bool Textfield::PasteSelectionClipboard() {
+  DCHECK(performing_user_action_);
+  DCHECK(!read_only());
+  const base::string16 selection_clipboard_text = GetSelectionClipboardText();
+  if (selection_clipboard_text.empty())
+    return false;
+
+  model_->InsertText(selection_clipboard_text);
+  return true;
+}
+
+void Textfield::UpdateSelectionClipboard() {
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+  if (text_input_type_ != ui::TEXT_INPUT_TYPE_PASSWORD) {
+    ui::ScopedClipboardWriter(ui::CLIPBOARD_TYPE_SELECTION)
+        .WriteText(GetSelectedText());
+    if (controller_)
+      controller_->OnAfterCutOrCopy(ui::CLIPBOARD_TYPE_SELECTION);
+  }
+#endif
 }
 
 void Textfield::UpdateBackgroundColor() {
@@ -1809,6 +1852,13 @@ void Textfield::UpdateBackgroundColor() {
   GetRenderText()->set_subpixel_rendering_suppressed(
       SkColorGetA(color) != SK_AlphaOPAQUE);
   SchedulePaint();
+}
+
+void Textfield::UpdateBorder() {
+  auto border = base::MakeUnique<views::FocusableBorder>();
+  if (invalid_)
+    border->SetColorId(ui::NativeTheme::kColorId_AlertSeverityHigh);
+  View::SetBorder(std::move(border));
 }
 
 void Textfield::UpdateAfterChange(bool text_changed, bool cursor_changed) {
@@ -1868,39 +1918,6 @@ void Textfield::PaintTextAndCursor(gfx::Canvas* canvas) {
 void Textfield::MoveCursorTo(const gfx::Point& point, bool select) {
   if (model_->MoveCursorTo(point, select))
     UpdateAfterChange(false, true);
-}
-
-void Textfield::SelectThroughLastDragLocation() {
-  OnBeforeUserAction();
-
-  const bool drags_to_end = PlatformStyle::kTextfieldDragVerticallyDragsToEnd;
-  if (drags_to_end && last_drag_location_.y() < 0) {
-    model_->MoveCursor(gfx::BreakType::LINE_BREAK,
-                       gfx::VisualCursorDirection::CURSOR_LEFT,
-                       gfx::SELECTION_RETAIN);
-  } else if (drags_to_end && last_drag_location_.y() > height()) {
-    model_->MoveCursor(gfx::BreakType::LINE_BREAK,
-                       gfx::VisualCursorDirection::CURSOR_RIGHT,
-                       gfx::SELECTION_RETAIN);
-  } else {
-    model_->MoveCursorTo(last_drag_location_, true);
-  }
-
-  if (aggregated_clicks_ == 1) {
-    model_->SelectWord();
-    // Expand the selection so the initially selected word remains selected.
-    gfx::Range selection = GetRenderText()->selection();
-    const size_t min = std::min(selection.GetMin(),
-                                double_click_word_.GetMin());
-    const size_t max = std::max(selection.GetMax(),
-                                double_click_word_.GetMax());
-    const bool reversed = selection.is_reversed();
-    selection.set_start(reversed ? max : min);
-    selection.set_end(reversed ? min : max);
-    model_->SelectRange(selection);
-  }
-  UpdateAfterChange(false, true);
-  OnAfterUserAction();
 }
 
 void Textfield::OnCaretBoundsChanged() {
@@ -1976,24 +1993,6 @@ void Textfield::UpdateContextMenu() {
                                                 MenuRunner::ASYNC));
 }
 
-void Textfield::TrackMouseClicks(const ui::MouseEvent& event) {
-  if (event.IsOnlyLeftMouseButton()) {
-    base::TimeDelta time_delta = event.time_stamp() - last_click_time_;
-    if (!last_click_time_.is_null() &&
-        time_delta.InMilliseconds() <= GetDoubleClickInterval() &&
-        !ExceededDragThreshold(event.location() - last_click_location_)) {
-      // Upon clicking after a triple click, the count should go back to double
-      // click and alternate between double and triple. This assignment maps
-      // 0 to 1, 1 to 2, 2 to 1.
-      aggregated_clicks_ = (aggregated_clicks_ % 2) + 1;
-    } else {
-      aggregated_clicks_ = 0;
-    }
-    last_click_time_ = event.time_stamp();
-    last_click_location_ = event.location();
-  }
-}
-
 bool Textfield::ImeEditingAllowed() const {
   // Disallow input method editing of password fields.
   ui::TextInputType t = GetTextInputType();
@@ -2023,37 +2022,8 @@ void Textfield::CreateTouchSelectionControllerAndNotifyIt() {
     touch_selection_controller_->SelectionChanged();
 }
 
-void Textfield::UpdateSelectionClipboard() const {
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
-  if (performing_user_action_ && HasSelection() &&
-      text_input_type_ != ui::TEXT_INPUT_TYPE_PASSWORD) {
-    ui::ScopedClipboardWriter(
-        ui::CLIPBOARD_TYPE_SELECTION).WriteText(GetSelectedText());
-    if (controller_)
-      controller_->OnAfterCutOrCopy(ui::CLIPBOARD_TYPE_SELECTION);
-  }
-#endif
-}
-
-void Textfield::PasteSelectionClipboard(const ui::MouseEvent& event) {
-  DCHECK(event.IsOnlyMiddleMouseButton());
-  DCHECK(!read_only());
-  base::string16 selection_clipboard_text = GetSelectionClipboardText();
-  OnBeforeUserAction();
-  const gfx::SelectionModel mouse =
-      GetRenderText()->FindCursorPosition(event.location());
-  if (!HasFocus())
-    RequestFocus();
-  model_->MoveCursorTo(mouse);
-  if (!selection_clipboard_text.empty()) {
-    model_->InsertText(selection_clipboard_text);
-    UpdateAfterChange(true, true);
-  }
-  OnAfterUserAction();
-}
-
-void Textfield::OnKeypressUnhandled() {
-  PlatformStyle::OnTextfieldKeypressUnhandled();
+void Textfield::OnEditFailed() {
+  PlatformStyle::OnTextfieldEditFailed();
 }
 
 bool Textfield::ShouldShowCursor() const {

@@ -32,11 +32,15 @@ class MediaRouterBase : public MediaRouter {
   // This will terminate all incognito media routes.
   void OnIncognitoProfileShutdown() override;
 
+  std::vector<MediaRoute> GetCurrentRoutes() const override;
+
  protected:
   FRIEND_TEST_ALL_PREFIXES(MediaRouterMojoImplTest,
                            PresentationConnectionStateChangedCallback);
   FRIEND_TEST_ALL_PREFIXES(MediaRouterMojoImplTest,
                            PresentationConnectionStateChangedCallbackRemoved);
+  FRIEND_TEST_ALL_PREFIXES(MediaRouterBaseTest, CreatePresentationIds);
+  FRIEND_TEST_ALL_PREFIXES(MediaRouterBaseTest, NotifyCallbacks);
 
   MediaRouterBase();
 
@@ -64,6 +68,7 @@ class MediaRouterBase : public MediaRouter {
       presentation_connection_state_callbacks_;
 
  private:
+  friend class MediaRouterBaseTest;
   friend class MediaRouterFactory;
   friend class MediaRouterMojoTest;
 

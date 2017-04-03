@@ -54,16 +54,13 @@ void CreateLinkCommand::doApply(EditingState* editingState) {
     appendNode(textNode, anchorElement, editingState);
     if (editingState->isAborted())
       return;
-    document().updateStyleAndLayoutIgnorePendingStylesheets();
-    setEndingSelection(createVisibleSelection(
-        Position::inParentBeforeNode(*anchorElement),
-        Position::inParentAfterNode(*anchorElement), TextAffinity::Downstream,
-        endingSelection().isDirectional()));
+    setEndingSelection(
+        SelectionInDOMTree::Builder()
+            .collapse(Position::inParentBeforeNode(*anchorElement))
+            .extend(Position::inParentAfterNode(*anchorElement))
+            .setIsDirectional(endingSelection().isDirectional())
+            .build());
   }
-}
-
-InputEvent::InputType CreateLinkCommand::inputType() const {
-  return InputEvent::InputType::CreateLink;
 }
 
 }  // namespace blink

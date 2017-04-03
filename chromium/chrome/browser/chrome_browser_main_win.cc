@@ -12,7 +12,6 @@
 #include <memory>
 
 #include "base/base_switches.h"
-#include "base/base64.h"
 #include "base/command_line.h"
 #include "base/environment.h"
 #include "base/files/file_enumerator.h"
@@ -58,7 +57,6 @@
 #include "content/public/browser/utility_process_host_client.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/main_function_params.h"
-#include "third_party/zlib/zlib.h"
 #include "ui/base/cursor/cursor_loader_win.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/l10n/l10n_util_win.h"
@@ -411,51 +409,14 @@ void ChromeBrowserMainPartsWin::RegisterApplicationRestart(
   if (!command_line.HasSwitch(switches::kRestoreLastSession))
     command_line.AppendSwitch(switches::kRestoreLastSession);
 
-  base::CommandLine::StringType cstring= command_line.GetCommandLineString();
-  if (cstring.length() > 900) {
-    base::CommandLine compressed_command_line(base::CommandLine::NO_PROGRAM);
-
-    std::string cstring8= base::UTF16ToASCII(cstring);
-    std::string zstring;
-
-    zstring.resize(cstring.length()+200);
-
-    z_stream stream = {0};
-    int result = deflateInit2(&stream, Z_DEFAULT_COMPRESSION, Z_DEFLATED,
-                            // windowBits = 15 is default, 16 is added to
-                            // produce a gzip header + trailer.
-                            15 + 16,
-                            8,  // memLevel = 8 is default.
-                            Z_DEFAULT_STRATEGY);
-    DCHECK_EQ(Z_OK, result);
-    stream.next_in = reinterpret_cast<unsigned char*>(&cstring8[0]);
-    stream.avail_in = cstring8.length();
-    stream.next_out = reinterpret_cast<unsigned char*>(&zstring[0]);
-    stream.avail_out = zstring.size();
-    result = deflate(&stream, Z_SYNC_FLUSH);
-    DCHECK_EQ(Z_OK, result);
-    result = deflate(&stream, Z_FINISH);
-    DCHECK_EQ(Z_STREAM_END, result);
-    result = deflateEnd(&stream);
-    DCHECK_EQ(Z_OK, result);
-    zstring.resize(zstring.size()-stream.avail_out);
-
-    std::string bstring;
-
-    base::Base64Encode(zstring, &bstring);
-
-    cstring= base::UTF8ToUTF16(std::string("compressed-args=")+bstring);
-  }
-
   // Restart Chrome if the computer is restarted as the result of an update.
   // This could be extended to handle crashes, hangs, and patches.
   HRESULT hr = register_application_restart(
-      cstring.c_str(),
+      command_line.GetCommandLineString().c_str(),
       RESTART_NO_CRASH | RESTART_NO_HANG | RESTART_NO_PATCH);
   if (FAILED(hr)) {
     if (hr == E_INVALIDARG) {
-      LOG(WARNING) << "Command line too long for RegisterApplicationRestart" <<
-                      ", command_line: " << command_line.GetCommandLineString();
+      LOG(WARNING) << "Command line too long for RegisterApplicationRestart";
     } else {
       NOTREACHED() << "RegisterApplicationRestart failed. hr: " << hr <<
                       ", command_line: " << command_line.GetCommandLineString();

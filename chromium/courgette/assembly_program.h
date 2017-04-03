@@ -13,6 +13,7 @@
 #include <set>
 #include <vector>
 
+#include "base/bind.h"
 #include "base/macros.h"
 #include "base/memory/free_deleter.h"
 #include "courgette/courgette.h"
@@ -56,7 +57,48 @@ class Instruction {
   DISALLOW_COPY_AND_ASSIGN(Instruction);
 };
 
-typedef NoThrowBuffer<Instruction*> InstructionVector;
+// An interface to receive emitted instructions parsed from an executable.
+class InstructionReceptor {
+ public:
+  InstructionReceptor() = default;
+  virtual ~InstructionReceptor() = default;
+
+  // Generates an entire base relocation table.
+  virtual CheckBool EmitPeRelocs() = 0;
+
+  // Generates an ELF style relocation table for X86.
+  virtual CheckBool EmitElfRelocation() = 0;
+
+  // Generates an ELF style relocation table for ARM.
+  virtual CheckBool EmitElfARMRelocation() = 0;
+
+  // Following instruction will be assembled at address 'rva'.
+  virtual CheckBool EmitOrigin(RVA rva) = 0;
+
+  // Generates a single byte of data or machine instruction.
+  virtual CheckBool EmitSingleByte(uint8_t byte) = 0;
+
+  // Generates multiple bytes of data or machine instructions.
+  virtual CheckBool EmitMultipleBytes(const uint8_t* bytes, size_t len) = 0;
+
+  // Generates a 4-byte relative reference to address of 'label'.
+  virtual CheckBool EmitRel32(Label* label) = 0;
+
+  // Generates a 4-byte relative reference to address of 'label' for ARM.
+  virtual CheckBool EmitRel32ARM(uint16_t op,
+                                 Label* label,
+                                 const uint8_t* arm_op,
+                                 uint16_t op_size) = 0;
+
+  // Generates a 4-byte absolute reference to address of 'label'.
+  virtual CheckBool EmitAbs32(Label* label) = 0;
+
+  // Generates an 8-byte absolute reference to address of 'label'.
+  virtual CheckBool EmitAbs64(Label* label) = 0;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(InstructionReceptor);
+};
 
 // An AssemblyProgram is the result of disassembling an executable file.
 //
@@ -76,52 +118,26 @@ typedef NoThrowBuffer<Instruction*> InstructionVector;
 // AssemblyProgram.  The modification process should call UnassignIndexes, do
 // its own assignment, and then call AssignRemainingIndexes to ensure all
 // indexes are assigned.
-//
+
 class AssemblyProgram {
  public:
+  using LabelHandler = base::Callback<void(Label*)>;
+  using LabelHandlerMap = std::map<OP, LabelHandler>;
+
+  // A callback for GenerateInstructions() to emit instructions. The first
+  // argument (AssemblyProgram*) is provided for Label-related feature access.
+  // The second argument (InstructionReceptor*) is a receptor for instructions.
+  // The callback (which gets called in 2 passes) should return true on success,
+  // and false otherwise.
+  using InstructionGenerator =
+      base::Callback<CheckBool(AssemblyProgram*, InstructionReceptor*)>;
+
   explicit AssemblyProgram(ExecutableType kind);
   ~AssemblyProgram();
 
   ExecutableType kind() const { return kind_; }
 
   void set_image_base(uint64_t image_base) { image_base_ = image_base; }
-
-  // Instructions will be assembled in the order they are emitted.
-
-  // Generates an entire base relocation table.
-  CheckBool EmitPeRelocsInstruction() WARN_UNUSED_RESULT;
-
-  // Generates an ELF style relocation table for X86.
-  CheckBool EmitElfRelocationInstruction() WARN_UNUSED_RESULT;
-
-  // Generates an ELF style relocation table for ARM.
-  CheckBool EmitElfARMRelocationInstruction() WARN_UNUSED_RESULT;
-
-  // Following instruction will be assembled at address 'rva'.
-  CheckBool EmitOriginInstruction(RVA rva) WARN_UNUSED_RESULT;
-
-  // Generates a single byte of data or machine instruction.
-  CheckBool EmitByteInstruction(uint8_t byte) WARN_UNUSED_RESULT;
-
-  // Generates multiple bytes of data or machine instructions.
-  CheckBool EmitBytesInstruction(const uint8_t* value,
-                                 size_t len) WARN_UNUSED_RESULT;
-
-  // Generates 4-byte relative reference to address of 'label'.
-  CheckBool EmitRel32(Label* label) WARN_UNUSED_RESULT;
-
-  // Generates 4-byte relative reference to address of 'label' for
-  // ARM.
-  CheckBool EmitRel32ARM(uint16_t op,
-                         Label* label,
-                         const uint8_t* arm_op,
-                         uint16_t op_size) WARN_UNUSED_RESULT;
-
-  // Generates 4-byte absolute reference to address of 'label'.
-  CheckBool EmitAbs32(Label* label) WARN_UNUSED_RESULT;
-
-  // Generates 8-byte absolute reference to address of 'label'.
-  CheckBool EmitAbs64(Label* label) WARN_UNUSED_RESULT;
 
   // Traverses RVAs in |abs32_visitor| and |rel32_visitor| to precompute Labels.
   void PrecomputeLabels(RvaVisitor* abs32_visitor, RvaVisitor* rel32_visitor);
@@ -142,24 +158,57 @@ class AssemblyProgram {
 
   std::unique_ptr<EncodedProgram> Encode() const;
 
-  // Accessor for instruction list.
-  const InstructionVector& instructions() const {
-    return instructions_;
-  }
+  // For each |instruction| in |instructions_|, looks up its opcode from
+  // |handler_map| for a handler. If a handler exists, invoke it by passing the
+  // |instruction|'s label. We assume that |handler_map| has correct keys, i.e.,
+  // opcodes for an instruction that have label.
+  void HandleInstructionLabels(const LabelHandlerMap& handler_map) const;
 
-  // Returns the label if the instruction contains an absolute 32-bit address,
-  // otherwise returns NULL.
-  Label* InstructionAbs32Label(const Instruction* instruction) const;
+  // Calls |gen| in 2 passes to emit instructions. In pass 1 we provide a
+  // receptor to count space requirement. In pass 2 we provide a receptor to
+  // store instructions.
+  CheckBool GenerateInstructions(const InstructionGenerator& gen);
 
-  // Returns the label if the instruction contains an absolute 64-bit address,
-  // otherwise returns NULL.
-  Label* InstructionAbs64Label(const Instruction* instruction) const;
+  // TODO(huangs): Implement these in InstructionStoreReceptor.
+  // Instructions will be assembled in the order they are emitted.
 
-  // Returns the label if the instruction contains a rel32 offset,
-  // otherwise returns NULL.
-  Label* InstructionRel32Label(const Instruction* instruction) const;
+  // Generates an entire base relocation table.
+  CheckBool EmitPeRelocs() WARN_UNUSED_RESULT;
+
+  // Generates an ELF style relocation table for X86.
+  CheckBool EmitElfRelocation() WARN_UNUSED_RESULT;
+
+  // Generates an ELF style relocation table for ARM.
+  CheckBool EmitElfARMRelocation() WARN_UNUSED_RESULT;
+
+  // Following instruction will be assembled at address 'rva'.
+  CheckBool EmitOrigin(RVA rva) WARN_UNUSED_RESULT;
+
+  // Generates a single byte of data or machine instruction.
+  CheckBool EmitSingleByte(uint8_t byte) WARN_UNUSED_RESULT;
+
+  // Generates multiple bytes of data or machine instructions.
+  CheckBool EmitMultipleBytes(const uint8_t* bytes,
+                              size_t len) WARN_UNUSED_RESULT;
+
+  // Generates a 4-byte relative reference to address of 'label'.
+  CheckBool EmitRel32(Label* label) WARN_UNUSED_RESULT;
+
+  // Generates a 4-byte relative reference to address of 'label' for ARM.
+  CheckBool EmitRel32ARM(uint16_t op,
+                         Label* label,
+                         const uint8_t* arm_op,
+                         uint16_t op_size) WARN_UNUSED_RESULT;
+
+  // Generates a 4-byte absolute reference to address of 'label'.
+  CheckBool EmitAbs32(Label* label) WARN_UNUSED_RESULT;
+
+  // Generates an 8-byte absolute reference to address of 'label'.
+  CheckBool EmitAbs64(Label* label) WARN_UNUSED_RESULT;
 
  private:
+  using InstructionVector = NoThrowBuffer<Instruction*>;
+
   using ScopedInstruction =
       std::unique_ptr<Instruction, UncheckedDeleter<Instruction>>;
 

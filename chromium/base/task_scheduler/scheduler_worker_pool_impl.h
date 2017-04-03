@@ -20,7 +20,6 @@
 #include "base/strings/string_piece.h"
 #include "base/synchronization/atomic_flag.h"
 #include "base/synchronization/condition_variable.h"
-#include "base/task_runner.h"
 #include "base/task_scheduler/priority_queue.h"
 #include "base/task_scheduler/scheduler_lock.h"
 #include "base/task_scheduler/scheduler_worker.h"
@@ -66,6 +65,32 @@ class BASE_EXPORT SchedulerWorkerPoolImpl : public SchedulerWorkerPool {
       TaskTracker* task_tracker,
       DelayedTaskManager* delayed_task_manager);
 
+  // SchedulerWorkerPool:
+  scoped_refptr<TaskRunner> CreateTaskRunnerWithTraits(
+      const TaskTraits& traits) override;
+  scoped_refptr<SequencedTaskRunner> CreateSequencedTaskRunnerWithTraits(
+      const TaskTraits& traits) override;
+  scoped_refptr<SingleThreadTaskRunner> CreateSingleThreadTaskRunnerWithTraits(
+      const TaskTraits& traits) override;
+  void ReEnqueueSequence(scoped_refptr<Sequence> sequence,
+                         const SequenceSortKey& sequence_sort_key) override;
+  bool PostTaskWithSequence(std::unique_ptr<Task> task,
+                            scoped_refptr<Sequence> sequence,
+                            SchedulerWorker* worker) override;
+  void PostTaskWithSequenceNow(std::unique_ptr<Task> task,
+                               scoped_refptr<Sequence> sequence,
+                               SchedulerWorker* worker) override;
+
+  const HistogramBase* num_tasks_before_detach_histogram() const {
+    return num_tasks_before_detach_histogram_;
+  }
+
+  const HistogramBase* num_tasks_between_waits_histogram() const {
+    return num_tasks_between_waits_histogram_;
+  }
+
+  void GetHistograms(std::vector<const HistogramBase*>* histograms) const;
+
   // Waits until all workers are idle.
   void WaitForAllWorkersIdleForTesting();
 
@@ -81,22 +106,9 @@ class BASE_EXPORT SchedulerWorkerPoolImpl : public SchedulerWorkerPool {
   // reclaimed).
   void DisallowWorkerDetachmentForTesting();
 
-  // SchedulerWorkerPool:
-  scoped_refptr<TaskRunner> CreateTaskRunnerWithTraits(
-      const TaskTraits& traits,
-      ExecutionMode execution_mode) override;
-  void ReEnqueueSequence(scoped_refptr<Sequence> sequence,
-                         const SequenceSortKey& sequence_sort_key) override;
-  bool PostTaskWithSequence(std::unique_ptr<Task> task,
-                            scoped_refptr<Sequence> sequence,
-                            SchedulerWorker* worker) override;
-  void PostTaskWithSequenceNow(std::unique_ptr<Task> task,
-                               scoped_refptr<Sequence> sequence,
-                               SchedulerWorker* worker) override;
-
-  const HistogramBase* num_tasks_between_waits_histogram_for_testing() const {
-    return num_tasks_between_waits_histogram_;
-  }
+  // Returns the number of workers alive in this worker pool. The value may
+  // change if workers are woken up or detached during this call.
+  size_t NumberOfAliveWorkersForTesting();
 
  private:
   class SchedulerSingleThreadTaskRunner;
@@ -111,8 +123,12 @@ class BASE_EXPORT SchedulerWorkerPoolImpl : public SchedulerWorkerPool {
 
   bool Initialize(
       ThreadPriority priority_hint,
+      SchedulerWorkerPoolParams::StandbyThreadPolicy standby_thread_policy,
       size_t max_threads,
       const ReEnqueueSequenceCallback& re_enqueue_sequence_callback);
+
+  // Wakes up |worker|.
+  void WakeUpWorker(SchedulerWorker* worker);
 
   // Wakes up the last worker from this worker pool to go idle, if any.
   void WakeUpOneWorker();
@@ -159,7 +175,11 @@ class BASE_EXPORT SchedulerWorkerPoolImpl : public SchedulerWorkerPool {
   // details in GetWork()).
   mutable SchedulerLock idle_workers_stack_lock_;
 
-  // Stack of idle workers.
+  // Stack of idle workers. Initially, all workers are on this stack. A worker
+  // is removed from the stack before its WakeUp() function is called and when
+  // it receives work from GetWork() (a worker calls GetWork() when its sleep
+  // timeout expires, even if its WakeUp() method hasn't been called). A worker
+  // is pushed on this stack when it receives nullptr from GetWork().
   SchedulerWorkerStack idle_workers_stack_;
 
   // Signaled when all workers become idle.
@@ -180,6 +200,10 @@ class BASE_EXPORT SchedulerWorkerPoolImpl : public SchedulerWorkerPool {
   // TaskScheduler.DetachDuration.[worker pool name] histogram. Intentionally
   // leaked.
   HistogramBase* const detach_duration_histogram_;
+
+  // TaskScheduler.NumTasksBeforeDetach.[worker pool name] histogram.
+  // Intentionally leaked.
+  HistogramBase* const num_tasks_before_detach_histogram_;
 
   // TaskScheduler.NumTasksBetweenWaits.[worker pool name] histogram.
   // Intentionally leaked.

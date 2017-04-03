@@ -7,7 +7,7 @@
 #include "ash/aura/wm_window_aura.h"
 #include "ash/common/shelf/shelf_widget.h"
 #include "ash/common/shelf/wm_shelf.h"
-#include "ash/common/shell_window_ids.h"
+#include "ash/common/test/test_shelf_delegate.h"
 #include "ash/common/wm/dock/docked_window_layout_manager.h"
 #include "ash/common/wm/panels/panel_layout_manager.h"
 #include "ash/common/wm/window_state.h"
@@ -15,18 +15,18 @@
 #include "ash/common/wm_shell.h"
 #include "ash/display/window_tree_host_manager.h"
 #include "ash/public/cpp/shelf_types.h"
+#include "ash/public/cpp/shell_window_ids.h"
 #include "ash/root_window_controller.h"
 #include "ash/screen_util.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/cursor_manager_test_api.h"
-#include "ash/test/test_shelf_delegate.h"
 #include "ash/wm/drag_window_resizer.h"
 #include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
 #include "base/command_line.h"
 #include "ui/aura/client/aura_constants.h"
-#include "ui/aura/client/window_tree_client.h"
+#include "ui/aura/client/window_parenting_client.h"
 #include "ui/aura/test/test_window_delegate.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/base/hit_test.h"
@@ -72,12 +72,9 @@ class DockedWindowResizerTest
     aura::Window* window = CreateTestWindowInShellWithDelegateAndType(
         &delegate_, window_type_, 0, bounds);
     if (window_type_ == ui::wm::WINDOW_TYPE_PANEL) {
-      test::TestShelfDelegate* shelf_delegate =
-          test::TestShelfDelegate::instance();
-      shelf_delegate->AddShelfItem(window);
-      PanelLayoutManager* manager =
-          PanelLayoutManager::Get(WmWindowAura::Get(window));
-      manager->Relayout();
+      WmWindow* wm_window = WmWindowAura::Get(window);
+      test::TestShelfDelegate::instance()->AddShelfItem(wm_window);
+      PanelLayoutManager::Get(wm_window)->Relayout();
     }
     return window;
   }

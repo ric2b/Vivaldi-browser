@@ -1,6 +1,0 @@
-{
-  "manifest_version":  1,
-  "name": "exe:connect_test_exe",
-  "display_name": "Connect Test Exe",
-  "capabilities": { }
-}

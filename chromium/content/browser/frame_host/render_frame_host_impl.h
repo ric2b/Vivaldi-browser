@@ -36,10 +36,10 @@
 #include "content/common/navigation_params.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/common/javascript_message_type.h"
-#include "media/mojo/interfaces/service_factory.mojom.h"
+#include "media/mojo/interfaces/interface_factory.mojom.h"
 #include "net/http/http_response_headers.h"
-#include "services/shell/public/cpp/interface_factory.h"
-#include "services/shell/public/cpp/interface_registry.h"
+#include "services/service_manager/public/cpp/interface_factory.h"
+#include "services/service_manager/public/cpp/interface_registry.h"
 #include "third_party/WebKit/public/platform/WebInsecureRequestPolicy.h"
 #include "third_party/WebKit/public/web/WebTextDirection.h"
 #include "third_party/WebKit/public/web/WebTreeScopeType.h"
@@ -50,6 +50,7 @@ class GURL;
 struct AccessibilityHostMsg_EventParams;
 struct AccessibilityHostMsg_FindInPageResultParams;
 struct AccessibilityHostMsg_LocationChangeParams;
+struct FrameHostMsg_DidCommitProvisionalLoad_Params;
 struct FrameHostMsg_DidFailProvisionalLoadWithError_Params;
 struct FrameHostMsg_OpenURL_Params;
 struct FrameMsg_TextTrackSettings_Params;
@@ -60,7 +61,6 @@ struct FrameHostMsg_ShowPopup_Params;
 struct FrameMsg_ExtendedLoadingProgress_Params;
 
 namespace base {
-class FilePath;
 class ListValue;
 }
 
@@ -70,11 +70,14 @@ class WebBluetoothService;
 }
 }
 
-namespace content {
+namespace gfx {
+class Range;
+}
 
+namespace content {
+class AppWebMessagePortMessageFilter;
 class AssociatedInterfaceProviderImpl;
 class CrossProcessFrameConnector;
-class CrossSiteTransferringRequest;
 class FrameTree;
 class FrameTreeNode;
 class NavigationHandleImpl;
@@ -95,9 +98,7 @@ struct ContentSecurityPolicyHeader;
 struct ContextMenuParams;
 struct FileChooserParams;
 struct FrameOwnerProperties;
-struct GlobalRequestID;
 struct FileChooserParams;
-struct Referrer;
 struct ResourceResponse;
 
 class CONTENT_EXPORT RenderFrameHostImpl
@@ -106,7 +107,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
       public BrowserAccessibilityDelegate,
       public SiteInstanceImpl::Observer,
       public NON_EXPORTED_BASE(
-          shell::InterfaceFactory<media::mojom::ServiceFactory>) {
+          service_manager::InterfaceFactory<media::mojom::InterfaceFactory>) {
  public:
   using AXTreeSnapshotCallback =
       base::Callback<void(
@@ -156,21 +157,22 @@ class CONTENT_EXPORT RenderFrameHostImpl
   void CopyImageAt(int x, int y) override;
   void SaveImageAt(int x, int y) override;
   RenderViewHost* GetRenderViewHost() override;
-  shell::InterfaceRegistry* GetInterfaceRegistry() override;
-  shell::InterfaceProvider* GetRemoteInterfaces() override;
+  service_manager::InterfaceRegistry* GetInterfaceRegistry() override;
+  service_manager::InterfaceProvider* GetRemoteInterfaces() override;
   AssociatedInterfaceProvider* GetRemoteAssociatedInterfaces() override;
   blink::WebPageVisibilityState GetVisibilityState() override;
   bool IsRenderFrameLive() override;
   int GetProxyCount() override;
   void FilesSelectedInChooser(const std::vector<FileChooserFileInfo>& files,
                               FileChooserParams::Mode permissions) override;
+  bool HasSelection() override;
   void RequestTextSurroundingSelection(
       const TextSurroundingSelectionCallback& callback,
       int max_length) override;
 
   // mojom::FrameHost
   void GetInterfaceProvider(
-      shell::mojom::InterfaceProviderRequest interfaces) override;
+      service_manager::mojom::InterfaceProviderRequest interfaces) override;
 
   // IPC::Sender
   bool Send(IPC::Message* msg) override;
@@ -182,27 +184,11 @@ class CONTENT_EXPORT RenderFrameHostImpl
       mojo::ScopedInterfaceEndpointHandle handle) override;
 
   // BrowserAccessibilityDelegate
-  void AccessibilitySetFocus(int acc_obj_id) override;
-  void AccessibilityDoDefaultAction(int acc_obj_id) override;
-  void AccessibilityShowContextMenu(int acc_obj_id) override;
-  void AccessibilityScrollToMakeVisible(int acc_obj_id,
-                                        const gfx::Rect& subfocus) override;
-  void AccessibilityScrollToPoint(int acc_obj_id,
-                                  const gfx::Point& point) override;
-  void AccessibilitySetScrollOffset(int acc_obj_id,
-                                    const gfx::Point& offset) override;
-  void AccessibilitySetSelection(int anchor_object_id,
-                                 int anchor_offset,
-                                 int focus_object_id,
-                                 int focus_offset) override;
-  void AccessibilitySetValue(int acc_obj_id, const base::string16& value)
-      override;
+  void AccessibilityPerformAction(const ui::AXActionData& data) override;
   bool AccessibilityViewHasFocus() const override;
   gfx::Rect AccessibilityGetViewBounds() const override;
   gfx::Point AccessibilityOriginInScreen(
       const gfx::Rect& bounds) const override;
-  void AccessibilityHitTest(const gfx::Point& point) override;
-  void AccessibilitySetAccessibilityFocus(int acc_obj_id) override;
   void AccessibilityFatalError() override;
   gfx::AcceleratedWidget AccessibilityGetAcceleratedWidget() override;
   gfx::NativeViewAccessible AccessibilityGetNativeViewAccessible() override;
@@ -210,9 +196,9 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // SiteInstanceImpl::Observer
   void RenderProcessGone(SiteInstanceImpl* site_instance) override;
 
-  // shell::InterfaceFactory<media::mojom::ServiceFactory>
-  void Create(const shell::Identity& remote_identity,
-              media::mojom::ServiceFactoryRequest request) override;
+  // service_manager::InterfaceFactory<media::mojom::InterfaceFactory>
+  void Create(const service_manager::Identity& remote_identity,
+              media::mojom::InterfaceFactoryRequest request) override;
 
   // Creates a RenderFrame in the renderer process.
   bool CreateRenderFrame(int proxy_routing_id,
@@ -281,7 +267,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // distinguished by owning a RenderWidgetHost, which manages input events
   // and painting for this frame and its contiguous local subtree in the
   // renderer process.
-  bool is_local_root() { return !!render_widget_host_; }
+  bool is_local_root() const { return !!render_widget_host_; }
 
   // Returns the RenderWidgetHostImpl attached to this frame or the nearest
   // ancestor frame, which could potentially be the root. For most input
@@ -296,6 +282,11 @@ class CONTENT_EXPORT RenderFrameHostImpl
   RenderWidgetHostImpl* GetRenderWidgetHost();
 
   GlobalFrameRoutingId GetGlobalFrameRoutingId();
+
+#if defined(OS_ANDROID)
+  scoped_refptr<AppWebMessagePortMessageFilter>
+  GetAppWebMessagePortMessageFilter(int routing_id);
+#endif
 
   // This function is called when this is a swapped out RenderFrameHost that
   // lives in the same process as the parent frame. The
@@ -343,18 +334,6 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // RenderFrameHost that will issue the transferring request.
   std::unique_ptr<NavigationHandleImpl> PassNavigationHandleOwnership();
 
-  // Called on the pending RenderFrameHost when the network response is ready to
-  // commit.  We should ensure that the old RenderFrameHost runs its unload
-  // handler and determine whether a transfer to a different RenderFrameHost is
-  // needed.
-  void OnCrossSiteResponse(const GlobalRequestID& global_request_id,
-                           std::unique_ptr<CrossSiteTransferringRequest>
-                               cross_site_transferring_request,
-                           const std::vector<GURL>& transfer_url_chain,
-                           const Referrer& referrer,
-                           ui::PageTransition page_transition,
-                           bool should_replace_current_entry);
-
   // Tells the renderer that this RenderFrame is being swapped out for one in a
   // different renderer process.  It should run its unload handler and move to
   // a blank document.  If |proxy| is not null, it should also create a
@@ -396,15 +375,6 @@ class CONTENT_EXPORT RenderFrameHostImpl
 
   // Navigates to an interstitial page represented by the provided data URL.
   void NavigateToInterstitialURL(const GURL& data_url);
-
-  // Treat this prospective navigation as though it originated from the frame.
-  // Used, e.g., for a navigation request that originated from a RemoteFrame.
-  // |source_site_instance| is the SiteInstance of the frame that initiated the
-  // navigation.
-  // TODO(creis): Remove this method and have RenderFrameProxyHost call
-  // RequestOpenURL with its FrameTreeNode.
-  void OpenURL(const FrameHostMsg_OpenURL_Params& params,
-               SiteInstance* source_site_instance);
 
   // Stop the load in progress.
   void Stop();
@@ -458,13 +428,13 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // cross-process window.focus() calls.
   void SetFocusedFrame();
 
-  // This is used to clear focus inside an inner WebContents when focus shifts
-  // to a frame in the outer WebContents or a sibling WebContents.
-  void ClearFocusedFrame();
-
   // Deletes the current selection plus the specified number of characters
   // before and after the selection or caret.
   void ExtendSelectionAndDelete(size_t before, size_t after);
+
+  // Deletes text before and after the current cursor position, excluding the
+  // selection.
+  void DeleteSurroundingText(size_t before, size_t after);
 
   // Notifies the RenderFrame that the JavaScript message that was shown was
   // closed by the user.
@@ -597,10 +567,18 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // no longer on the stack when we attempt to swap it out.
   void SuppressFurtherDialogs();
 
+  void SetHasReceivedUserGesture();
+
+  void ClearFocusedElement();
+
   // PlzNavigate: returns the LoFi state of the last successful navigation that
   // made a network request.
   LoFiState last_navigation_lofi_state() const {
     return last_navigation_lofi_state_;
+  }
+
+  bool has_focused_editable_element() const {
+    return has_focused_editable_element_;
   }
 
  protected:
@@ -618,7 +596,8 @@ class CONTENT_EXPORT RenderFrameHostImpl
                       FrameTreeNode* frame_tree_node,
                       int32_t routing_id,
                       int32_t widget_routing_id,
-                      bool hidden);
+                      bool hidden,
+                      bool renderer_initiated_creation);
 
  private:
   friend class TestRenderFrameHost;
@@ -643,10 +622,10 @@ class CONTENT_EXPORT RenderFrameHostImpl
                            LoadEventForwardingWhilePendingDeletion);
 
   // IPC Message handlers.
-  void OnAddMessageToConsole(int32_t level,
-                             const base::string16& message,
-                             int32_t line_no,
-                             const base::string16& source_id);
+  void OnDidAddMessageToConsole(int32_t level,
+                                const base::string16& message,
+                                int32_t line_no,
+                                const base::string16& source_id);
   void OnDetach();
   void OnFrameFocused();
   void OnOpenURL(const FrameHostMsg_OpenURL_Params& params);
@@ -693,7 +672,6 @@ class CONTENT_EXPORT RenderFrameHostImpl
   void OnDidAddContentSecurityPolicy(const ContentSecurityPolicyHeader& header);
   void OnEnforceInsecureRequestPolicy(blink::WebInsecureRequestPolicy policy);
   void OnUpdateToUniqueOrigin(bool is_potentially_trustworthy_unique_origin);
-  void OnDidAssignPageId(int32_t page_id);
   void OnDidChangeSandboxFlags(int32_t frame_routing_id,
                                blink::WebSandboxFlags flags);
   void OnDidChangeFrameOwnerProperties(int32_t frame_routing_id,
@@ -726,6 +704,11 @@ class CONTENT_EXPORT RenderFrameHostImpl
       bool success,
       const std::set<std::string>& digests_of_uris_of_serialized_resources,
       base::TimeDelta renderer_main_thread_time);
+  void OnSelectionChanged(const base::string16& text,
+                          uint32_t offset,
+                          const gfx::Range& range);
+  void OnFocusedNodeChanged(bool is_editable_element,
+                            const gfx::Rect& bounds_in_frame_widget);
   void OnDidChangeLoadProgressExtended(
       const FrameMsg_ExtendedLoadingProgress_Params& params);
 
@@ -810,10 +793,9 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // Sends a navigate message to the RenderFrame and notifies DevTools about
   // navigation happening. Should be used instead of sending the message
   // directly.
-  void SendNavigateMessage(
-      const content::CommonNavigationParams& common_params,
-      const content::StartNavigationParams& start_params,
-      const content::RequestNavigationParams& request_params);
+  void SendNavigateMessage(const CommonNavigationParams& common_params,
+                           const StartNavigationParams& start_params,
+                           const RequestNavigationParams& request_params);
 
   // Returns the child FrameTreeNode if |child_frame_routing_id| is an
   // immediate child of this FrameTreeNode.  |child_frame_routing_id| is
@@ -833,6 +815,14 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // Allows tests to disable the swapout event timer to simulate bugs that
   // happen before it fires (to avoid flakiness).
   void DisableSwapOutTimerForTesting();
+
+  void OnRendererConnect(const service_manager::ServiceInfo& local_info,
+                         const service_manager::ServiceInfo& remote_info);
+
+  // Returns ownership of the NavigationHandle associated with a navigation that
+  // just committed.
+  std::unique_ptr<NavigationHandleImpl> TakeNavigationHandleForCommit(
+      const FrameHostMsg_DidCommitProvisionalLoad_Params& params);
 
   // For now, RenderFrameHosts indirectly keep RenderViewHosts alive via a
   // refcount that calls Shutdown when it reaches zero.  This allows each
@@ -974,8 +964,19 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // SiteInstance.  May be null in tests.
   std::unique_ptr<TimeoutMonitor> swapout_event_monitor_timeout_;
 
-  std::unique_ptr<shell::InterfaceRegistry> interface_registry_;
-  std::unique_ptr<shell::InterfaceProvider> remote_interfaces_;
+  std::unique_ptr<service_manager::InterfaceRegistry> interface_registry_;
+  std::unique_ptr<service_manager::InterfaceProvider> remote_interfaces_;
+
+  service_manager::ServiceInfo browser_info_;
+  service_manager::ServiceInfo renderer_info_;
+
+  int on_connect_handler_id_ = 0;
+
+#if defined(OS_ANDROID)
+  // The filter for MessagePort messages between an Android apps and web.
+  scoped_refptr<AppWebMessagePortMessageFilter>
+      app_web_message_port_message_filter_;
+#endif
 
   std::unique_ptr<WebBluetoothServiceImpl> web_bluetooth_service_;
 
@@ -1044,6 +1045,9 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // called (no pending instance should be set).
   bool should_reuse_web_ui_;
 
+  // If true, then the RenderFrame has selected text.
+  bool has_selection_;
+
   // PlzNavigate: The LoFi state of the last navigation. This is used during
   // history navigation of subframes to ensure that subframes navigate with the
   // same LoFi status as the top-level frame.
@@ -1052,15 +1056,27 @@ class CONTENT_EXPORT RenderFrameHostImpl
   mojo::Binding<mojom::FrameHost> frame_host_binding_;
   mojom::FramePtr frame_;
 
+  // If this is true then this object was created in response to a renderer
+  // initiated request. Init() will be called, and until then navigation
+  // requests should be queued.
+  bool waiting_for_init_;
+
+  // If true then this frame's document has a focused element which is editable.
+  bool has_focused_editable_element_;
+
+  typedef std::pair<CommonNavigationParams, BeginNavigationParams>
+      PendingNavigation;
+  std::unique_ptr<PendingNavigation> pendinging_navigate_;
+
   // Callback for responding when
   // |FrameHostMsg_TextSurroundingSelectionResponse| message comes.
   TextSurroundingSelectionCallback text_surrounding_selection_callback_;
 
-  std::vector<std::unique_ptr<shell::InterfaceRegistry>> media_registries_;
+  std::vector<std::unique_ptr<service_manager::InterfaceRegistry>>
+      media_registries_;
 
   std::unique_ptr<AssociatedInterfaceProviderImpl>
       remote_associated_interfaces_;
-
   // NOTE: This must be the last member.
   base::WeakPtrFactory<RenderFrameHostImpl> weak_ptr_factory_;
 

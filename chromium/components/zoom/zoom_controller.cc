@@ -130,8 +130,8 @@ bool ZoomController::SetZoomLevelByClient(
     ZoomChangedEventData zoom_change_data(web_contents(), old_zoom_level,
                                           zoom_level_, zoom_mode_,
                                           can_show_bubble);
-    FOR_EACH_OBSERVER(ZoomObserver, observers_,
-                      OnZoomChanged(zoom_change_data));
+    for (auto& observer : observers_)
+      observer.OnZoomChanged(zoom_change_data);
 
     last_client_ = NULL;
     return true;
@@ -236,8 +236,8 @@ void ZoomController::SetZoomMode(ZoomMode new_mode) {
       } else {
         // When we don't call any HostZoomMap set functions, we send the event
         // manually.
-        FOR_EACH_OBSERVER(ZoomObserver, observers_,
-                          OnZoomChanged(*event_data_));
+        for (auto& observer : observers_)
+          observer.OnZoomChanged(*event_data_);
         event_data_.reset();
       }
       break;
@@ -253,8 +253,8 @@ void ZoomController::SetZoomMode(ZoomMode new_mode) {
       } else {
         // When we don't call any HostZoomMap set functions, we send the event
         // manually.
-        FOR_EACH_OBSERVER(ZoomObserver, observers_,
-                          OnZoomChanged(*event_data_));
+        for (auto& observer : observers_)
+          observer.OnZoomChanged(*event_data_);
         event_data_.reset();
       }
       break;
@@ -361,8 +361,8 @@ void ZoomController::UpdateState(const std::string& host) {
     // The zoom bubble should not be shown for zoom changes where the host
     // is empty.
     zoom_change_data.can_show_bubble = can_show_bubble_ && !host.empty();
-    FOR_EACH_OBSERVER(ZoomObserver, observers_,
-                      OnZoomChanged(zoom_change_data));
+    for (auto& observer : observers_)
+      observer.OnZoomChanged(zoom_change_data);
   } else {
     // TODO(wjmaclean) Should we consider having HostZoomMap send both old and
     // new zoom levels here?
@@ -371,8 +371,8 @@ void ZoomController::UpdateState(const std::string& host) {
     ZoomChangedEventData zoom_change_data(web_contents(), zoom_level,
                                           zoom_level, zoom_mode_,
                                           false /* can_show_bubble */);
-    FOR_EACH_OBSERVER(ZoomObserver, observers_,
-                      OnZoomChanged(zoom_change_data));
+    for (auto& observer : observers_)
+      observer.OnZoomChanged(zoom_change_data);
   }
 }
 

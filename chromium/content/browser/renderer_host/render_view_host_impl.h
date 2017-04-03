@@ -23,7 +23,6 @@
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_owner_delegate.h"
 #include "content/browser/site_instance_impl.h"
-#include "content/common/drag_event_source_info.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/render_process_host_observer.h"
 #include "content/public/browser/render_view_host.h"
@@ -40,10 +39,7 @@ class SkBitmap;
 namespace content {
 
 class PageState;
-class RenderWidgetHostDelegate;
 class SessionStorageNamespace;
-struct FileChooserFileInfo;
-struct FileChooserParams;
 struct FrameReplicationState;
 
 namespace mojom {
@@ -108,37 +104,6 @@ class CONTENT_EXPORT RenderViewHostImpl : public RenderViewHost,
       int request_id,
       const std::vector<base::FilePath>& files) override;
   void DisableScrollbarsForThreshold(const gfx::Size& size) override;
-  void DragSourceEndedAt(int client_x,
-                         int client_y,
-                         int screen_x,
-                         int screen_y,
-                         blink::WebDragOperation operation) override;
-  void DragSourceSystemDragEnded() override;
-  // |drop_data| must have been filtered. The embedder should call
-  // FilterDropData before passing the drop data to RVHI.
-  void DragTargetDragEnter(const DropData& drop_data,
-                           const gfx::Point& client_pt,
-                           const gfx::Point& screen_pt,
-                           blink::WebDragOperationsMask operations_allowed,
-                           int key_modifiers) override;
-  void DragTargetDragEnterWithMetaData(
-      const std::vector<DropData::Metadata>& metadata,
-      const gfx::Point& client_pt,
-      const gfx::Point& screen_pt,
-      blink::WebDragOperationsMask operations_allowed,
-      int key_modifiers) override;
-  void DragTargetDragOver(const gfx::Point& client_pt,
-                          const gfx::Point& screen_pt,
-                          blink::WebDragOperationsMask operations_allowed,
-                          int key_modifiers) override;
-  void DragTargetDragLeave() override;
-  // |drop_data| must have been filtered. The embedder should call
-  // FilterDropData before passing the drop data to RVHI.
-  void DragTargetDrop(const DropData& drop_data,
-                      const gfx::Point& client_pt,
-                      const gfx::Point& screen_pt,
-                      int key_modifiers) override;
-  void FilterDropData(DropData* drop_data) override;
   void EnableAutoResize(const gfx::Size& min_size,
                         const gfx::Size& max_size) override;
   void DisableAutoResize(const gfx::Size& new_size) override;
@@ -177,17 +142,16 @@ class CONTENT_EXPORT RenderViewHostImpl : public RenderViewHost,
   // Set up the RenderView child process. Virtual because it is overridden by
   // TestRenderViewHost.
   // The |opener_route_id| parameter indicates which RenderView created this
-  // (MSG_ROUTING_NONE if none). If |max_page_id| is larger than -1, the
-  // RenderView is told to start issuing page IDs at |max_page_id| + 1.
+  // (MSG_ROUTING_NONE if none).
   // |window_was_created_with_opener| is true if this top-level frame was
   // created with an opener. (The opener may have been closed since.)
   // The |proxy_route_id| is only used when creating a RenderView in swapped out
-  // state.  |replicated_frame_state| contains replicated data for the
-  // top-level frame, such as its name and sandbox flags.
+  // state.
+  // |replicated_frame_state| contains replicated data for the top-level frame,
+  // such as its name and sandbox flags.
   virtual bool CreateRenderView(
       int opener_frame_route_id,
       int proxy_route_id,
-      int32_t max_page_id,
       const FrameReplicationState& replicated_frame_state,
       bool window_was_created_with_opener);
 
@@ -296,7 +260,7 @@ class CONTENT_EXPORT RenderViewHostImpl : public RenderViewHost,
   void OnShowWidget(int route_id, const gfx::Rect& initial_rect);
   void OnShowFullscreenWidget(int route_id);
   void OnRenderProcessGone(int status, int error_code);
-  void OnUpdateState(int32_t page_id, const PageState& state);
+  void OnUpdateState(const PageState& state);
   void OnUpdateTargetURL(const GURL& url);
   void OnClose();
   void OnRequestMove(const gfx::Rect& pos);
@@ -304,18 +268,9 @@ class CONTENT_EXPORT RenderViewHostImpl : public RenderViewHost,
   void OnDidContentsPreferredSizeChange(const gfx::Size& new_size);
   void OnPasteFromSelectionClipboard();
   void OnRouteCloseEvent();
-  void OnStartDragging(const DropData& drop_data,
-                       blink::WebDragOperationsMask operations_allowed,
-                       const SkBitmap& bitmap,
-                       const gfx::Vector2d& bitmap_offset_in_dip,
-                       const DragEventSourceInfo& event_info);
-  void OnUpdateDragCursor(blink::WebDragOperation drag_operation);
   void OnTakeFocus(bool reverse);
-  void OnFocusedNodeChanged(bool is_editable_node,
-                            const gfx::Rect& node_bounds_in_viewport);
   void OnClosePageACK();
   void OnDidZoomURL(double zoom_level, const GURL& url);
-  void OnFocusedNodeTouched(bool editable);
   void OnFocus();
 
  private:
@@ -344,12 +299,6 @@ class CONTENT_EXPORT RenderViewHostImpl : public RenderViewHost,
   // See https://crbug.com/304341.
   WebPreferences ComputeWebkitPrefs();
 
-  // 1. Grants permissions to URL (if any)
-  // 2. Grants permissions to filenames
-  // 3. Grants permissions to file system files.
-  // 4. Register the files with the IsolatedContext.
-  void GrantFileAccessFromDropData(DropData* drop_data);
-
   // The RenderWidgetHost.
   std::unique_ptr<RenderWidgetHostImpl> render_widget_host_;
 
@@ -367,11 +316,6 @@ class CONTENT_EXPORT RenderViewHostImpl : public RenderViewHost,
   // A bitwise OR of bindings types that have been enabled for this RenderView.
   // See BindingsPolicy for details.
   int enabled_bindings_;
-
-  // The most recent page ID we've heard from the renderer process.  This is
-  // used as context when other session history related IPCs arrive.
-  // TODO(creis): Allocate this in WebContents/NavigationController instead.
-  int32_t page_id_;
 
   // Tracks whether this RenderViewHost is in an active state.  False if the
   // main frame is pending swap out, pending deletion, or swapped out, because
@@ -397,9 +341,6 @@ class CONTENT_EXPORT RenderViewHostImpl : public RenderViewHost,
 
   // The termination status of the last render view that terminated.
   base::TerminationStatus render_view_termination_status_;
-
-  // True if the current focused element is editable.
-  bool is_focused_element_editable_;
 
   // This is updated every time UpdateWebkitPreferences is called. That method
   // is in turn called when any of the settings change that the WebPreferences

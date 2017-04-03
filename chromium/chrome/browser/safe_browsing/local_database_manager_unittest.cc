@@ -15,6 +15,7 @@
 #include "base/run_loop.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "components/safe_browsing_db/v4_get_hash_protocol_manager.h"
+#include "components/safe_browsing_db/v4_test_util.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "content/public/test/test_utils.h"
 #include "net/url_request/url_request_context_getter.h"
@@ -42,7 +43,8 @@ class LocalDatabaseManagerTest : public PlatformTest {
       const std::vector<HostListPair>& host_list_results);
 
  private:
-  bool RunTest(LocalSafeBrowsingDatabaseManager::SafeBrowsingCheck* check,
+  bool RunTest(std::unique_ptr<
+                   LocalSafeBrowsingDatabaseManager::SafeBrowsingCheck> check,
                const std::vector<SBFullHashResult>& hash_results);
 
   TestBrowserThreadBundle thread_bundle_;
@@ -64,7 +66,7 @@ bool LocalDatabaseManagerTest::RunSBHashTest(
                                                GetListId(result_list)};
     fake_results.push_back(full_hash_result);
   }
-  return RunTest(check.get(), fake_results);
+  return RunTest(std::move(check), fake_results);
 }
 
 bool LocalDatabaseManagerTest::RunUrlTest(
@@ -81,20 +83,21 @@ bool LocalDatabaseManagerTest::RunUrlTest(
         {SBFullHashForString(host_list.host), GetListId(host_list.list_type)};
     full_hash_results.push_back(hash_result);
   }
-  return RunTest(check.get(), full_hash_results);
+  return RunTest(std::move(check), full_hash_results);
 }
 
 bool LocalDatabaseManagerTest::RunTest(
-    LocalSafeBrowsingDatabaseManager::SafeBrowsingCheck* check,
+    std::unique_ptr<LocalSafeBrowsingDatabaseManager::SafeBrowsingCheck> check,
     const std::vector<SBFullHashResult>& hash_results) {
   scoped_refptr<SafeBrowsingService> sb_service_(
       SafeBrowsingService::CreateSafeBrowsingService());
   scoped_refptr<LocalSafeBrowsingDatabaseManager> db_manager_(
       new LocalSafeBrowsingDatabaseManager(sb_service_));
-  db_manager_->checks_.insert(check);
+  LocalSafeBrowsingDatabaseManager::SafeBrowsingCheck* check_ptr = check.get();
+  db_manager_->checks_[check_ptr] = std::move(check);
 
-  bool result = db_manager_->HandleOneCheck(check, hash_results);
-  db_manager_->checks_.erase(check);
+  bool result = db_manager_->HandleOneCheck(check_ptr, hash_results);
+  db_manager_->checks_.erase(check_ptr);
   return result;
 }
 
@@ -316,7 +319,7 @@ TEST_F(LocalDatabaseManagerTest, ServiceStopWithPendingChecks) {
   SafeBrowsingDatabaseManager::Client client;
 
   // Start the service and flush tasks to ensure database is made available.
-  db_manager->StartOnIOThread(NULL, V4ProtocolConfig());
+  db_manager->StartOnIOThread(NULL, GetTestV4ProtocolConfig());
   content::RunAllBlockingPoolTasksUntilIdle();
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(db_manager->DatabaseAvailable());

@@ -6,23 +6,23 @@
 #define SERVICES_UI_PUBLIC_CPP_TESTS_WINDOW_SERVER_SHELLTEST_BASE_H_
 
 #include "base/macros.h"
-#include "services/shell/public/cpp/connection.h"
-#include "services/shell/public/cpp/service_test.h"
+#include "services/service_manager/public/cpp/connection.h"
+#include "services/service_manager/public/cpp/service_test.h"
 
 namespace ui {
 
 // Base class for all window manager ServiceTests to perform some common setup.
-class WindowServerServiceTestBase : public shell::test::ServiceTest {
+class WindowServerServiceTestBase : public service_manager::test::ServiceTest {
  public:
   WindowServerServiceTestBase();
   ~WindowServerServiceTestBase() override;
 
-  virtual bool OnConnect(const shell::Identity& remote_identity,
-                         shell::InterfaceRegistry* registry) = 0;
+  virtual bool OnConnect(const service_manager::Identity& remote_identity,
+                         service_manager::InterfaceRegistry* registry) = 0;
 
  private:
-  // shell::test::ServiceTest:
-  std::unique_ptr<shell::Service> CreateService() override;
+  // service_manager::test::ServiceTest:
+  std::unique_ptr<service_manager::Service> CreateService() override;
 
   DISALLOW_COPY_AND_ASSIGN(WindowServerServiceTestBase);
 };

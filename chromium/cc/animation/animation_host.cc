@@ -55,18 +55,19 @@ AnimationHost::AnimationHost(ThreadInstance thread_instance)
 AnimationHost::~AnimationHost() {
   scroll_offset_animations_impl_ = nullptr;
 
-  ClearTimelines();
+  ClearMutators();
   DCHECK(!mutator_host_client());
   DCHECK(element_to_animations_map_.empty());
 }
 
-std::unique_ptr<AnimationHost> AnimationHost::CreateImplInstance(
+std::unique_ptr<MutatorHost> AnimationHost::CreateImplInstance(
     bool supports_impl_scrolling) const {
   DCHECK_EQ(thread_instance_, ThreadInstance::MAIN);
-  auto animation_host_impl =
-      base::WrapUnique(new AnimationHost(ThreadInstance::IMPL));
-  animation_host_impl->SetSupportsScrollAnimations(supports_impl_scrolling);
-  return animation_host_impl;
+
+  auto mutator_host_impl =
+      base::WrapUnique<MutatorHost>(new AnimationHost(ThreadInstance::IMPL));
+  mutator_host_impl->SetSupportsScrollAnimations(supports_impl_scrolling);
+  return mutator_host_impl;
 }
 
 AnimationTimeline* AnimationHost::GetTimelineById(int timeline_id) const {
@@ -74,7 +75,7 @@ AnimationTimeline* AnimationHost::GetTimelineById(int timeline_id) const {
   return f == id_to_timeline_map_.end() ? nullptr : f->second.get();
 }
 
-void AnimationHost::ClearTimelines() {
+void AnimationHost::ClearMutators() {
   for (auto& kv : id_to_timeline_map_)
     EraseTimeline(kv.second);
   id_to_timeline_map_.clear();
@@ -179,7 +180,9 @@ void AnimationHost::SetNeedsPushProperties() {
   needs_push_properties_ = true;
 }
 
-void AnimationHost::PushPropertiesTo(AnimationHost* host_impl) {
+void AnimationHost::PushPropertiesTo(MutatorHost* mutator_host_impl) {
+  auto host_impl = static_cast<AnimationHost*>(mutator_host_impl);
+
   if (needs_push_properties_) {
     needs_push_properties_ = false;
     PushTimelinesToImplThread(host_impl);
@@ -297,25 +300,30 @@ bool AnimationHost::AnimateLayers(base::TimeTicks monotonic_time) {
 }
 
 bool AnimationHost::UpdateAnimationState(bool start_ready_animations,
-                                         AnimationEvents* events) {
+                                         MutatorEvents* mutator_events) {
   if (!NeedsAnimateLayers())
     return false;
+
+  auto animation_events = static_cast<AnimationEvents*>(mutator_events);
 
   TRACE_EVENT0("cc", "AnimationHost::UpdateAnimationState");
   ElementToAnimationsMap active_element_animations_map_copy =
       active_element_to_animations_map_;
   for (auto& it : active_element_animations_map_copy)
-    it.second->UpdateState(start_ready_animations, events);
+    it.second->UpdateState(start_ready_animations, animation_events);
 
   return true;
 }
 
-std::unique_ptr<AnimationEvents> AnimationHost::CreateEvents() {
+std::unique_ptr<MutatorEvents> AnimationHost::CreateEvents() {
   return base::MakeUnique<AnimationEvents>();
 }
 
 void AnimationHost::SetAnimationEvents(
-    std::unique_ptr<AnimationEvents> events) {
+    std::unique_ptr<MutatorEvents> mutator_events) {
+  auto events =
+      base::WrapUnique(static_cast<AnimationEvents*>(mutator_events.release()));
+
   for (size_t event_index = 0; event_index < events->events_.size();
        ++event_index) {
     ElementId element_id = events->events_[event_index].element_id;

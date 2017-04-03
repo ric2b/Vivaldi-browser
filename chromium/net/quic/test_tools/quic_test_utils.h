@@ -495,7 +495,7 @@ class PacketSavingConnection : public MockQuicConnection {
 
   void SendOrQueuePacket(SerializedPacket* packet) override;
 
-  std::vector<QuicEncryptedPacket*> encrypted_packets_;
+  std::vector<std::unique_ptr<QuicEncryptedPacket>> encrypted_packets_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(PacketSavingConnection);
@@ -513,14 +513,12 @@ class MockQuicSession : public QuicSession {
                void(QuicErrorCode error,
                     const std::string& error_details,
                     ConnectionCloseSource source));
-  MOCK_METHOD1(CreateIncomingDynamicStream,
-               ReliableQuicStream*(QuicStreamId id));
-  MOCK_METHOD1(CreateOutgoingDynamicStream,
-               ReliableQuicStream*(SpdyPriority priority));
+  MOCK_METHOD1(CreateIncomingDynamicStream, QuicStream*(QuicStreamId id));
+  MOCK_METHOD1(CreateOutgoingDynamicStream, QuicStream*(SpdyPriority priority));
   MOCK_METHOD1(ShouldCreateIncomingDynamicStream, bool(QuicStreamId id));
   MOCK_METHOD0(ShouldCreateOutgoingDynamicStream, bool());
   MOCK_METHOD6(WritevData,
-               QuicConsumedData(ReliableQuicStream* stream,
+               QuicConsumedData(QuicStream* stream,
                                 QuicStreamId id,
                                 QuicIOVector data,
                                 QuicStreamOffset offset,
@@ -545,7 +543,7 @@ class MockQuicSession : public QuicSession {
   // Returns a QuicConsumedData that indicates all of |data| (and |fin| if set)
   // has been consumed.
   static QuicConsumedData ConsumeAllData(
-      ReliableQuicStream* stream,
+      QuicStream* stream,
       QuicStreamId id,
       const QuicIOVector& data,
       QuicStreamOffset offset,
@@ -578,7 +576,7 @@ class MockQuicSpdySession : public QuicSpdySession {
   MOCK_METHOD1(ShouldCreateIncomingDynamicStream, bool(QuicStreamId id));
   MOCK_METHOD0(ShouldCreateOutgoingDynamicStream, bool());
   MOCK_METHOD6(WritevData,
-               QuicConsumedData(ReliableQuicStream* stream,
+               QuicConsumedData(QuicStream* stream,
                                 QuicStreamId id,
                                 QuicIOVector data,
                                 QuicStreamOffset offset,
@@ -666,10 +664,29 @@ class TestQuicSpdyServerSession : public QuicServerSessionBase {
   MockQuicCryptoServerStreamHelper* helper() { return &helper_; }
 
  private:
-  MockQuicServerSessionVisitor visitor_;
+  MockQuicSessionVisitor visitor_;
   MockQuicCryptoServerStreamHelper helper_;
 
   DISALLOW_COPY_AND_ASSIGN(TestQuicSpdyServerSession);
+};
+
+class TestPushPromiseDelegate : public QuicClientPushPromiseIndex::Delegate {
+ public:
+  explicit TestPushPromiseDelegate(bool match);
+
+  bool CheckVary(const SpdyHeaderBlock& client_request,
+                 const SpdyHeaderBlock& promise_request,
+                 const SpdyHeaderBlock& promise_response) override;
+
+  void OnRendezvousResult(QuicSpdyStream* stream) override;
+
+  QuicSpdyStream* rendezvous_stream() { return rendezvous_stream_; }
+  bool rendezvous_fired() { return rendezvous_fired_; }
+
+ private:
+  bool match_;
+  bool rendezvous_fired_;
+  QuicSpdyStream* rendezvous_stream_;
 };
 
 class TestQuicSpdyClientSession : public QuicClientSessionBase {
@@ -735,9 +752,10 @@ class MockSendAlgorithm : public SendAlgorithmInterface {
   MOCK_METHOD1(SetNumEmulatedConnections, void(int num_connections));
   MOCK_METHOD1(SetMaxCongestionWindow,
                void(QuicByteCount max_congestion_window));
-  MOCK_METHOD4(OnCongestionEvent,
+  MOCK_METHOD5(OnCongestionEvent,
                void(bool rtt_updated,
                     QuicByteCount bytes_in_flight,
+                    QuicTime event_time,
                     const CongestionVector& acked_packets,
                     const CongestionVector& lost_packets));
   MOCK_METHOD5(OnPacketSent,
@@ -1044,6 +1062,19 @@ void ExpectApproxEq(T expected, T actual, float relative_margin) {
 
   EXPECT_GE(expected + absolute_margin, actual);
   EXPECT_LE(expected - absolute_margin, actual);
+}
+
+template <typename T>
+QuicHeaderList AsHeaderList(const T& container) {
+  QuicHeaderList l;
+  l.OnHeaderBlockStart();
+  size_t total_size = 0;
+  for (auto p : container) {
+    total_size += p.first.size() + p.second.size();
+    l.OnHeader(p.first, p.second);
+  }
+  l.OnHeaderBlockEnd(total_size);
+  return l;
 }
 
 }  // namespace test

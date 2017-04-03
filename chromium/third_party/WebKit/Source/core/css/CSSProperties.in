@@ -117,6 +117,20 @@
 
 // Properties with StyleBuilder handling
 
+// Animation Priority properties
+animation-delay custom_all
+animation-direction custom_all
+animation-duration custom_all
+animation-fill-mode custom_all
+animation-iteration-count keywords=[infinite], supports_multiple, custom_all
+animation-name custom_all
+animation-play-state custom_all
+animation-timing-function custom_all
+transition-delay custom_all
+transition-duration custom_all
+transition-property custom_all
+transition-timing-function custom_all
+
 // High Priority and all other font properties.
 // Other properties can depend upon high priority properties (e.g. font-size / ems)
 color interpolable, inherited, custom_all
@@ -145,14 +159,6 @@ align-content initial=initialContentAlignment, converter=convertContentAlignment
 align-items initial=initialDefaultAlignment, converter=convertSelfOrDefaultAlignmentData
 alignment-baseline svg
 align-self initial=initialSelfAlignment, converter=convertSelfOrDefaultAlignmentData
-animation-delay custom_all
-animation-direction custom_all
-animation-duration custom_all
-animation-fill-mode custom_all
-animation-iteration-count keywords=[infinite], supports_multiple, custom_all
-animation-name custom_all
-animation-play-state custom_all
-animation-timing-function custom_all
 backdrop-filter interpolable, converter=convertFilterOperations, runtime_flag=CSSBackdropFilter
 backface-visibility
 background-attachment custom_all
@@ -215,7 +221,7 @@ cy interpolable, svg, converter=convertLength
 d interpolable, svg, converter=convertPathOrNone
 display
 dominant-baseline inherited, svg
-empty-cells inherited, type_name=EEmptyCells
+empty-cells inherited, type_name=EEmptyCells, keyword_only, keywords=[show|hide]
 fill interpolable, inherited, svg, setter=setFillPaint, custom_all
 fill-opacity interpolable, inherited, svg, converter=convertNumberOrPercentage
 fill-rule inherited, svg, type_name=WindRule
@@ -279,7 +285,8 @@ offset-anchor runtime_flag=CSSOffsetPositionAnchor, interpolable, converter=conv
 offset-distance interpolable, converter=convertLength
 offset-path converter=convertPathOrNone
 offset-position runtime_flag=CSSOffsetPositionAnchor, interpolable, converter=convertPositionOrAuto
-offset-rotation interpolable, converter=convertOffsetRotation
+offset-rotate runtime_flag=CSSOffsetRotate, interpolable, converter=convertOffsetRotation
+offset-rotation runtime_flag=CSSOffsetRotation, interpolable, converter=convertOffsetRotation
 opacity interpolable, type_name=float
 order type_name=int
 orphans interpolable, inherited, type_name=short
@@ -339,6 +346,7 @@ text-combine-upright inherited, type_name=TextCombine, name_for_methods=TextComb
 text-decoration use_handlers_for=CSSPropertyTextDecorationLine, longhands=text-decoration-line;text-decoration-style;text-decoration-color
 text-decoration-color runtime_flag=CSS3TextDecorations, interpolable, custom_all
 text-decoration-line runtime_flag=CSS3TextDecorations, name_for_methods=TextDecoration, type_name=TextDecoration, converter=convertFlags<TextDecoration>
+text-decoration-skip runtime_flag=CSS3TextDecorations, inherited, type_name=TextDecorationSkip, converter=convertFlags<TextDecorationSkip>
 text-decoration-style runtime_flag=CSS3TextDecorations, type_name=TextDecorationStyle
 text-indent interpolable, inherited, custom_all
 text-justify runtime_flag=CSS3Text, inherited, type_name=TextJustify
@@ -349,16 +357,12 @@ text-transform inherited
 text-underline-position runtime_flag=CSS3TextDecorations, inherited, type_name=TextUnderlinePosition
 top typedom_types=[Length], keywords=[auto], supports_percentage, interpolable, initial=initialOffset, converter=convertLengthOrAuto
 touch-action converter=convertFlags<TouchAction>, type_name=TouchAction
-transform typedom_types=[Transform], keywords=[none], interpolable, custom_value
+transform typedom_types=[Transform], keywords=[none], interpolable, converter=convertTransformOperations
 transform-origin interpolable, converter=convertTransformOrigin
 transform-style name_for_methods=TransformStyle3D
 translate runtime_flag=CSSIndependentTransformProperties, converter=convertTranslate, interpolable
 rotate runtime_flag=CSSIndependentTransformProperties, converter=convertRotate, interpolable
 scale runtime_flag=CSSIndependentTransformProperties, converter=convertScale, interpolable
-transition-delay custom_all
-transition-duration custom_all
-transition-property custom_all
-transition-timing-function custom_all
 unicode-bidi
 vector-effect svg
 vertical-align interpolable, custom_inherit, custom_value

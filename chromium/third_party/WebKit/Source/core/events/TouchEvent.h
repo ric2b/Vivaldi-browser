@@ -32,6 +32,7 @@
 #include "core/events/EventDispatchMediator.h"
 #include "core/events/MouseRelatedEvent.h"
 #include "core/events/TouchEventInit.h"
+#include "public/platform/WebPointerProperties.h"
 
 namespace blink {
 
@@ -53,10 +54,13 @@ class CORE_EXPORT TouchEvent final : public UIEventWithKeyState {
                             bool cancelable,
                             bool causesScrollingIfUncanceled,
                             bool firstTouchMoveOrStart,
-                            double platformTimeStamp) {
+                            double platformTimeStamp,
+                            TouchAction currentTouchAction,
+                            WebPointerProperties::PointerType pointerType) {
     return new TouchEvent(touches, targetTouches, changedTouches, type, view,
                           modifiers, cancelable, causesScrollingIfUncanceled,
-                          firstTouchMoveOrStart, platformTimeStamp);
+                          firstTouchMoveOrStart, platformTimeStamp,
+                          currentTouchAction, pointerType);
   }
 
   static TouchEvent* create(const AtomicString& type,
@@ -90,6 +94,12 @@ class CORE_EXPORT TouchEvent final : public UIEventWithKeyState {
 
   EventDispatchMediator* createMediator() override;
 
+  // Transient property to inform PPAPI of touch pointer types. Will be replaced
+  // when blink transitions to handling end-to-end pointer events.
+  WebPointerProperties::PointerType pointerType() const {
+    return m_pointerType;
+  }
+
   DECLARE_VIRTUAL_TRACE();
 
  private:
@@ -103,7 +113,9 @@ class CORE_EXPORT TouchEvent final : public UIEventWithKeyState {
              bool cancelable,
              bool causesScrollingIfUncanceled,
              bool firstTouchMoveOrStart,
-             double platformTimeStamp);
+             double platformTimeStamp,
+             TouchAction currentTouchAction,
+             WebPointerProperties::PointerType);
   TouchEvent(const AtomicString&, const TouchEventInit&);
 
   Member<TouchList> m_touches;
@@ -112,6 +124,12 @@ class CORE_EXPORT TouchEvent final : public UIEventWithKeyState {
   bool m_causesScrollingIfUncanceled;
   bool m_firstTouchMoveOrStart;
   bool m_defaultPreventedBeforeCurrentTarget;
+
+  // The current effective touch action computed before each
+  // touchstart event is generated. It is used for UMA histograms.
+  TouchAction m_currentTouchAction;
+
+  WebPointerProperties::PointerType m_pointerType;
 };
 
 class TouchEventDispatchMediator final : public EventDispatchMediator {

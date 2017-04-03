@@ -112,7 +112,7 @@ class URLRow {
     }
 
    private:
-    const GURL url_;
+    const GURL& url_;
   };
 
  protected:

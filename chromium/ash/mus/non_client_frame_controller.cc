@@ -13,6 +13,7 @@
 #include "ash/common/ash_constants.h"
 #include "ash/common/ash_layout_constants.h"
 #include "ash/common/frame/custom_frame_view_ash.h"
+#include "ash/common/wm/panels/panel_frame_view.h"
 #include "ash/mus/bridge/wm_window_mus.h"
 #include "ash/mus/frame/custom_frame_view_mus.h"
 #include "ash/mus/frame/detached_title_area_renderer.h"
@@ -221,7 +222,9 @@ class WmNativeWidgetMus : public views::NativeWidgetMus {
   WmNativeWidgetMus(views::internal::NativeWidgetDelegate* delegate,
                     ui::Window* window,
                     ui::WindowManagerClient* window_manager_client)
-      : NativeWidgetMus(delegate, window, ui::mojom::SurfaceType::UNDERLAY),
+      : NativeWidgetMus(delegate,
+                        window,
+                        ui::mojom::CompositorFrameSinkType::UNDERLAY),
         window_manager_client_(window_manager_client) {}
   ~WmNativeWidgetMus() override {}
 
@@ -231,6 +234,8 @@ class WmNativeWidgetMus : public views::NativeWidgetMus {
         window(), window_manager_client_, GetNativeView()));
     if (ShouldRemoveStandardFrame(window()))
       return new EmptyDraggableNonClientFrameView();
+    if (GetWindowType(window()) == ui::mojom::WindowType::PANEL)
+      return new PanelFrameView(GetWidget(), PanelFrameView::FRAME_ASH);
     immersive_delegate_.reset(
         new ImmersiveFullscreenControllerDelegateMus(GetWidget(), window()));
     const bool enable_immersive =

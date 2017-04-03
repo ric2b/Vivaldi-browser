@@ -11,7 +11,7 @@
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
-#include "ui/accessibility/ax_view_state.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/app_list/app_list_constants.h"
 #include "ui/app_list/app_list_item.h"
 #include "ui/app_list/app_list_model.h"
@@ -95,9 +95,9 @@ class CustomLauncherPageBackgroundView : public views::View {
   bool selected() { return selected_; }
 
   // Overridden from views::View:
-  void GetAccessibleState(ui::AXViewState* state) override {
-    state->role = ui::AX_ROLE_BUTTON;
-    state->name = base::UTF8ToUTF16(custom_launcher_page_name_);
+  void GetAccessibleNodeData(ui::AXNodeData* node_data) override {
+    node_data->role = ui::AX_ROLE_BUTTON;
+    node_data->SetName(custom_launcher_page_name_);
   }
 
  private:
@@ -190,7 +190,7 @@ int StartPageView::StartPageTilesContainer::Update() {
       delete search_result_tile_views_[i];
     search_result_tile_views_.clear();
     RemoveChildView(all_apps_button_);
-    CreateAppsGrid(std::min(kNumStartPageTiles, display_results.size()));
+    CreateAppsGrid(display_results.size());
   }
 
   // Update the tile item results.
@@ -211,10 +211,10 @@ int StartPageView::StartPageTilesContainer::Update() {
 void StartPageView::StartPageTilesContainer::UpdateSelectedIndex(
     int old_selected,
     int new_selected) {
-  if (old_selected >= 0)
+  if (old_selected >= 0 && old_selected < num_results())
     GetTileItemView(old_selected)->SetSelected(false);
 
-  if (new_selected >= 0)
+  if (new_selected >= 0 && new_selected < num_results())
     GetTileItemView(new_selected)->SetSelected(true);
 }
 
@@ -360,8 +360,8 @@ void StartPageView::OnShown() {
     custom_page_view->SetVisible(
         app_list_main_view_->ShouldShowCustomLauncherPage());
   }
-  tiles_container_->Update();
   tiles_container_->ClearSelectedIndex();
+  tiles_container_->set_num_results(tiles_container_->Update());
   custom_launcher_page_background_->SetSelected(false);
 }
 

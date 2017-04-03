@@ -4,6 +4,7 @@
 
 package org.chromium.chrome.browser.payments;
 
+import android.content.Context;
 import android.os.Handler;
 import android.view.View;
 import android.view.ViewGroup;
@@ -12,6 +13,7 @@ import android.widget.EditText;
 import android.widget.Spinner;
 
 import org.chromium.base.ThreadUtils;
+import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.base.test.util.UrlUtils;
 import org.chromium.chrome.R;
@@ -27,17 +29,17 @@ import org.chromium.chrome.browser.payments.ui.PaymentRequestUI;
 import org.chromium.chrome.browser.payments.ui.PaymentRequestUI.PaymentRequestObserverForTest;
 import org.chromium.chrome.test.ChromeActivityTestCaseBase;
 import org.chromium.content.browser.ContentViewCore;
-import org.chromium.content.browser.test.util.CallbackHelper;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
 import org.chromium.content.browser.test.util.DOMUtils;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.payments.mojom.PaymentItem;
-import org.json.JSONObject;
+import org.chromium.payments.mojom.PaymentMethodData;
 
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
@@ -76,6 +78,7 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeT
     protected final CallbackHelper mUnableToAbort;
     protected final CallbackHelper mBillingAddressChangeProcessed;
     protected final CallbackHelper mShowFailed;
+    protected final CallbackHelper mCanMakePaymentQueryResponded;
     protected final CallbackHelper mExpirationMonthChange;
     protected PaymentRequestUI mUI;
 
@@ -100,6 +103,7 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeT
         mBillingAddressChangeProcessed = new CallbackHelper();
         mExpirationMonthChange = new CallbackHelper();
         mShowFailed = new CallbackHelper();
+        mCanMakePaymentQueryResponded = new CallbackHelper();
         mViewCoreRef = new AtomicReference<>();
         mWebContentsRef = new AtomicReference<>();
         mTestFilePath = UrlUtils.getIsolatedTestFilePath(
@@ -403,6 +407,33 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeT
         });
     }
 
+    /** Returns the spinner value at the specified position in the editor UI for credit cards. */
+    protected String getSpinnerTextAtPositionInCardEditor(
+            final int dropdownIndex, final int itemPosition) throws ExecutionException {
+        return ThreadUtils.runOnUiThreadBlocking(new Callable<String>() {
+            @Override
+            public String call() {
+                return mUI.getCardEditorView()
+                        .getDropdownFieldsForTest()
+                        .get(dropdownIndex)
+                        .getItemAtPosition(itemPosition)
+                        .toString();
+            }
+        });
+    }
+
+    /** Returns the number of items offered by the spinner in the editor UI for credit cards. */
+    protected int getSpinnerItemCountInCardEditor(final int dropdownIndex)
+            throws ExecutionException {
+        return ThreadUtils.runOnUiThreadBlocking(new Callable<Integer>() {
+            @Override
+            public Integer call() {
+                return mUI.getCardEditorView().getDropdownFieldsForTest().get(dropdownIndex)
+                        .getCount();
+            }
+        });
+    }
+
     /** Selects the spinner value in the editor UI for credit cards. */
     protected void setSpinnerSelectionsInCardEditorAndWait(final int[] selections,
             CallbackHelper helper) throws InterruptedException, TimeoutException {
@@ -491,6 +522,24 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeT
             public void run() {
                 ((EditText) mCardUnmaskPrompt.getDialogForTest().findViewById(resourceId))
                         .setText(input);
+            }
+        });
+        helper.waitForCallback(callCount);
+    }
+
+    /** Directly sets the text in the expired card unmask UI. */
+    protected void setTextInExpiredCardUnmaskDialogAndWait(
+            final int[] resourceIds, final String[] values, CallbackHelper helper)
+            throws InterruptedException, TimeoutException {
+        assert resourceIds.length == values.length;
+        int callCount = helper.getCallCount();
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                for (int i = 0; i < resourceIds.length; ++i) {
+                    ((EditText) mCardUnmaskPrompt.getDialogForTest().findViewById(resourceIds[i]))
+                            .setText(values[i]);
+                }
             }
         });
         helper.waitForCallback(callCount);
@@ -599,6 +648,12 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeT
     }
 
     @Override
+    public void onPaymentRequestServiceCanMakePaymentQueryResponded() {
+        ThreadUtils.assertOnUiThread();
+        mCanMakePaymentQueryResponded.notifyCalled();
+    }
+
+    @Override
     public void onCardUnmaskPromptReadyForInput(CardUnmaskPrompt prompt) {
         ThreadUtils.assertOnUiThread();
         mReadyForUnmaskInput.notifyCalled(prompt);
@@ -666,7 +721,7 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeT
         final TestPay app = new TestPay(methodName, instrumentPresence, responseSpeed);
         PaymentAppFactory.setAdditionalFactory(new PaymentAppFactoryAddition() {
             @Override
-            public List<PaymentApp> create(WebContents webContents) {
+            public List<PaymentApp> create(Context context, WebContents webContents) {
                 List<PaymentApp> additionalApps = new ArrayList<>();
                 additionalApps.add(app);
                 return additionalApps;
@@ -689,8 +744,8 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeT
         }
 
         @Override
-        public void getInstruments(
-                JSONObject details, final InstrumentsCallback instrumentsCallback) {
+        public void getInstruments(Map<String, PaymentMethodData> methodData,
+                InstrumentsCallback instrumentsCallback) {
             mCallback = instrumentsCallback;
             respond();
         }
@@ -715,14 +770,14 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeT
         }
 
         @Override
-        public Set<String> getSupportedMethodNames() {
+        public Set<String> getAppMethodNames() {
             Set<String> methodNames = new HashSet<>();
             methodNames.add(mMethodName);
             return methodNames;
         }
 
         @Override
-        public String getIdentifier() {
+        public String getAppIdentifier() {
             return mMethodName;
         }
     }
@@ -732,23 +787,24 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeT
         private final String mMethodName;
 
         TestPayInstrument(String methodName) {
-            super(methodName, "Test Pay", null, NO_ICON);
+            super(methodName, "Test Pay", null, null);
             mMethodName = methodName;
         }
 
         @Override
-        public String getMethodName() {
+        public String getInstrumentMethodName() {
             return mMethodName;
         }
 
         @Override
-        public void getDetails(String merchantName, String origin, PaymentItem total,
-                List<PaymentItem> cart, JSONObject details, DetailsCallback detailsCallback) {
+        public void getInstrumentDetails(String merchantName, String origin, PaymentItem total,
+                List<PaymentItem> cart, PaymentMethodData details,
+                InstrumentDetailsCallback detailsCallback) {
             detailsCallback.onInstrumentDetailsReady(
                     mMethodName, "{\"transaction\": 1337}");
         }
 
         @Override
-        public void dismiss() {}
+        public void dismissInstrument() {}
     }
 }

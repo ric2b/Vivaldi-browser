@@ -8,6 +8,7 @@
 #include "components/guest_view/browser/guest_view_manager.h"
 #include "components/guest_view/browser/guest_view_manager_factory.h"
 #include "components/guest_view/browser/test_guest_view_manager.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
@@ -120,8 +121,6 @@ class AppViewTest : public AppShellTest,
   void RunTest(const std::string& test_name,
                const std::string& app_location,
                const std::string& app_to_embed) {
-    extension_system_->Init();
-
     const Extension* app_embedder = LoadApp(app_location);
     ASSERT_TRUE(app_embedder);
     const Extension* app_embedded = LoadApp(app_to_embed);
@@ -149,8 +148,15 @@ class AppViewTest : public AppShellTest,
     AppShellTest::SetUpCommandLine(command_line);
 
     bool use_cross_process_frames_for_guests = GetParam();
-    if (use_cross_process_frames_for_guests)
-      command_line->AppendSwitch(switches::kUseCrossProcessFramesForGuests);
+    if (use_cross_process_frames_for_guests) {
+      command_line->AppendSwitchASCII(
+          switches::kEnableFeatures,
+          ::features::kGuestViewCrossProcessFrames.name);
+    } else {
+      command_line->AppendSwitchASCII(
+          switches::kDisableFeatures,
+          ::features::kGuestViewCrossProcessFrames.name);
+    }
   }
 
   content::WebContents* embedder_web_contents_;
@@ -159,8 +165,14 @@ class AppViewTest : public AppShellTest,
 
 INSTANTIATE_TEST_CASE_P(AppViewTests, AppViewTest, testing::Bool());
 
+#if defined(OS_WIN)
+#define MAYBE_TestAppViewGoodDataShouldSucceed \
+  DISABLED_TestAppViewGoodDataShouldSucceed
+#else
+#define MAYBE_TestAppViewGoodDataShouldSucceed TestAppViewGoodDataShouldSucceed
+#endif
 // Tests that <appview> correctly processes parameters passed on connect.
-IN_PROC_BROWSER_TEST_P(AppViewTest, TestAppViewGoodDataShouldSucceed) {
+IN_PROC_BROWSER_TEST_P(AppViewTest, MAYBE_TestAppViewGoodDataShouldSucceed) {
   RunTest("testAppViewGoodDataShouldSucceed",
           "app_view/apitest",
           "app_view/apitest/skeleton");
@@ -188,8 +200,16 @@ IN_PROC_BROWSER_TEST_P(AppViewTest, TestAppViewRefusedDataShouldFail) {
           "app_view/apitest/skeleton");
 }
 
+#if defined(OS_WIN) || defined(OS_CHROMEOS)
+#define MAYBE_TestAppViewWithUndefinedDataShouldSucceed \
+  DISABLED_TestAppViewWithUndefinedDataShouldSucceed
+#else
+#define MAYBE_TestAppViewWithUndefinedDataShouldSucceed \
+  TestAppViewWithUndefinedDataShouldSucceed
+#endif
 // Tests that <appview> is able to navigate to another installed app.
-IN_PROC_BROWSER_TEST_P(AppViewTest, TestAppViewWithUndefinedDataShouldSucceed) {
+IN_PROC_BROWSER_TEST_P(AppViewTest,
+                       MAYBE_TestAppViewWithUndefinedDataShouldSucceed) {
   RunTest("testAppViewWithUndefinedDataShouldSucceed",
           "app_view/apitest",
           "app_view/apitest/skeleton");

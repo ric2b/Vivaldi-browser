@@ -82,6 +82,11 @@ inline bool compareEqual(const T& t, const U& u) {
   return t == static_cast<T>(u);
 }
 
+template <typename T>
+inline bool compareEqual(const T& a, const T& b) {
+  return a == b;
+}
+
 #define SET_VAR(group, variable, value)      \
   if (!compareEqual(group->variable, value)) \
   group.access()->variable = value
@@ -111,7 +116,6 @@ class CSSAnimationData;
 class CSSTransitionData;
 class CSSVariableData;
 class Font;
-class FontMetrics;
 class Hyphenation;
 class RotateTransformOperation;
 class ScaleTransformOperation;
@@ -210,8 +214,7 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
     }
 
     inline bool compareEqualNonIndependent(const InheritedData& other) const {
-      return (m_emptyCells == other.m_emptyCells) &&
-             (m_captionSide == other.m_captionSide) &&
+      return (m_captionSide == other.m_captionSide) &&
              (m_listStyleType == other.m_listStyleType) &&
              (m_listStylePosition == other.m_listStylePosition) &&
              (m_textAlign == other.m_textAlign) &&
@@ -228,7 +231,6 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
              (m_writingMode == other.m_writingMode);
     }
 
-    unsigned m_emptyCells : 1;         // EEmptyCells
     unsigned m_captionSide : 2;        // ECaptionSide
     unsigned m_listStyleType : 7;      // EListStyleType
     unsigned m_listStylePosition : 1;  // EListStylePosition
@@ -360,15 +362,15 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
 
   void setBitDefaults() {
     ComputedStyleBase::setBitDefaults();
-    m_inheritedData.m_emptyCells = static_cast<unsigned>(initialEmptyCells());
     m_inheritedData.m_captionSide = static_cast<unsigned>(initialCaptionSide());
-    m_inheritedData.m_listStyleType = initialListStyleType();
+    m_inheritedData.m_listStyleType =
+        static_cast<unsigned>(initialListStyleType());
     m_inheritedData.m_listStylePosition =
         static_cast<unsigned>(initialListStylePosition());
-    m_inheritedData.m_textAlign = initialTextAlign();
+    m_inheritedData.m_textAlign = static_cast<unsigned>(initialTextAlign());
     m_inheritedData.m_textTransform = initialTextTransform();
     m_inheritedData.m_textUnderline = false;
-    m_inheritedData.m_cursorStyle = initialCursor();
+    m_inheritedData.m_cursorStyle = static_cast<unsigned>(initialCursor());
     m_inheritedData.m_direction = initialDirection();
     m_inheritedData.m_whiteSpace = initialWhiteSpace();
     m_inheritedData.m_borderCollapse = initialBorderCollapse();
@@ -1469,6 +1471,15 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
                    offsetPosition);
   }
 
+  // offset-rotate
+  static StyleOffsetRotation initialOffsetRotate() {
+    return initialOffsetRotation();
+  }
+  const StyleOffsetRotation& offsetRotate() const { return offsetRotation(); }
+  void setOffsetRotate(const StyleOffsetRotation& offsetRotate) {
+    setOffsetRotation(offsetRotate);
+  }
+
   // offset-rotation
   static StyleOffsetRotation initialOffsetRotation() {
     return StyleOffsetRotation(0, OffsetRotationAuto);
@@ -1502,41 +1513,46 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
   // Outline properties.
   // outline-color
   void setOutlineColor(const StyleColor& v) {
-    SET_BORDERVALUE_COLOR(m_background, m_outline, v);
+    SET_BORDERVALUE_COLOR(m_rareNonInheritedData, m_outline, v);
   }
 
   // outline-style
-  EBorderStyle outlineStyle() const { return m_background->outline().style(); }
+  EBorderStyle outlineStyle() const {
+    return m_rareNonInheritedData->m_outline.style();
+  }
   void setOutlineStyle(EBorderStyle v) {
-    SET_VAR(m_background, m_outline.m_style, v);
+    SET_VAR(m_rareNonInheritedData, m_outline.m_style, v);
   }
   static OutlineIsAuto initialOutlineStyleIsAuto() { return OutlineIsAutoOff; }
   OutlineIsAuto outlineStyleIsAuto() const {
-    return static_cast<OutlineIsAuto>(m_background->outline().isAuto());
+    return static_cast<OutlineIsAuto>(
+        m_rareNonInheritedData->m_outline.isAuto());
   }
   void setOutlineStyleIsAuto(OutlineIsAuto isAuto) {
-    SET_VAR(m_background, m_outline.m_isAuto, isAuto);
+    SET_VAR(m_rareNonInheritedData, m_outline.m_isAuto, isAuto);
   }
 
   // outline-width
   static unsigned short initialOutlineWidth() { return 3; }
   int outlineWidth() const {
-    if (m_background->outline().style() == BorderStyleNone)
+    if (m_rareNonInheritedData->m_outline.style() == BorderStyleNone)
       return 0;
-    return m_background->outline().width();
+    return m_rareNonInheritedData->m_outline.width();
   }
   void setOutlineWidth(unsigned short v) {
-    SET_VAR(m_background, m_outline.m_width, v);
+    SET_VAR(m_rareNonInheritedData, m_outline.m_width, v);
   }
 
   // outline-offset
   static int initialOutlineOffset() { return 0; }
   int outlineOffset() const {
-    if (m_background->outline().style() == BorderStyleNone)
+    if (m_rareNonInheritedData->m_outline.style() == BorderStyleNone)
       return 0;
-    return m_background->outline().offset();
+    return m_rareNonInheritedData->m_outline.offset();
   }
-  void setOutlineOffset(int v) { SET_VAR(m_background, m_outline.m_offset, v); }
+  void setOutlineOffset(int v) {
+    SET_VAR(m_rareNonInheritedData, m_outline.m_offset, v);
+  }
 
   // Overflow properties.
   // overflow-anchor
@@ -1695,8 +1711,7 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
   // Independent transform properties.
   // translate
   static PassRefPtr<TranslateTransformOperation> initialTranslate() {
-    return TranslateTransformOperation::create(
-        Length(0, Fixed), Length(0, Fixed), 0, TransformOperation::Translate3D);
+    return nullptr;
   }
   TranslateTransformOperation* translate() const {
     return m_rareNonInheritedData->m_transform->m_translate.get();
@@ -1707,8 +1722,7 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
 
   // rotate
   static PassRefPtr<RotateTransformOperation> initialRotate() {
-    return RotateTransformOperation::create(0, 0, 1, 0,
-                                            TransformOperation::Rotate3D);
+    return nullptr;
   }
   RotateTransformOperation* rotate() const {
     return m_rareNonInheritedData->m_transform->m_rotate.get();
@@ -1718,10 +1732,7 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
   }
 
   // scale
-  static PassRefPtr<ScaleTransformOperation> initialScale() {
-    return ScaleTransformOperation::create(1, 1, 1,
-                                           TransformOperation::Scale3D);
-  }
+  static PassRefPtr<ScaleTransformOperation> initialScale() { return nullptr; }
   ScaleTransformOperation* scale() const {
     return m_rareNonInheritedData->m_transform->m_scale.get();
   }
@@ -1883,6 +1894,18 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
   }
   void setTextUnderlinePosition(TextUnderlinePosition v) {
     SET_VAR(m_rareInheritedData, m_textUnderlinePosition, v);
+  }
+
+  // text-decoration-skip
+  static TextDecorationSkip initialTextDecorationSkip() {
+    return TextDecorationSkipObjects;
+  }
+  TextDecorationSkip getTextDecorationSkip() const {
+    return static_cast<TextDecorationSkip>(
+        m_rareInheritedData->m_textDecorationSkip);
+  }
+  void setTextDecorationSkip(TextDecorationSkip v) {
+    SET_VAR(m_rareInheritedData, m_textDecorationSkip, v);
   }
 
   // text-overflow
@@ -2073,11 +2096,13 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
   }
 
   // cursor
-  static ECursor initialCursor() { return CURSOR_AUTO; }
+  static ECursor initialCursor() { return ECursor::Auto; }
   ECursor cursor() const {
     return static_cast<ECursor>(m_inheritedData.m_cursorStyle);
   }
-  void setCursor(ECursor c) { m_inheritedData.m_cursorStyle = c; }
+  void setCursor(ECursor c) {
+    m_inheritedData.m_cursorStyle = static_cast<unsigned>(c);
+  }
 
   // direction
   static TextDirection initialDirection() { return LTR; }
@@ -2085,15 +2110,6 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
     return static_cast<TextDirection>(m_inheritedData.m_direction);
   }
   void setDirection(TextDirection v) { m_inheritedData.m_direction = v; }
-
-  // empty-cells
-  static EEmptyCells initialEmptyCells() { return EEmptyCells::Show; }
-  EEmptyCells emptyCells() const {
-    return static_cast<EEmptyCells>(m_inheritedData.m_emptyCells);
-  }
-  void setEmptyCells(EEmptyCells v) {
-    m_inheritedData.m_emptyCells = static_cast<unsigned>(v);
-  }
 
   // color
   static Color initialColor() { return Color::black; }
@@ -2122,12 +2138,12 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
 
   // List style properties.
   // list-style-type
-  static EListStyleType initialListStyleType() { return Disc; }
+  static EListStyleType initialListStyleType() { return EListStyleType::Disc; }
   EListStyleType listStyleType() const {
     return static_cast<EListStyleType>(m_inheritedData.m_listStyleType);
   }
   void setListStyleType(EListStyleType v) {
-    m_inheritedData.m_listStyleType = v;
+    m_inheritedData.m_listStyleType = static_cast<unsigned>(v);
   }
 
   // list-style-position
@@ -2211,11 +2227,13 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
   }
 
   // text-align
-  static ETextAlign initialTextAlign() { return TASTART; }
+  static ETextAlign initialTextAlign() { return ETextAlign::Start; }
   ETextAlign textAlign() const {
     return static_cast<ETextAlign>(m_inheritedData.m_textAlign);
   }
-  void setTextAlign(ETextAlign v) { m_inheritedData.m_textAlign = v; }
+  void setTextAlign(ETextAlign v) {
+    m_inheritedData.m_textAlign = static_cast<unsigned>(v);
+  }
 
   // text-align-last
   static TextAlignLast initialTextAlignLast() { return TextAlignLastAuto; }
@@ -2502,9 +2520,9 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
   // Font properties.
   const Font& font() const;
   void setFont(const Font&);
-  const FontMetrics& getFontMetrics() const;
   const FontDescription& getFontDescription() const;
   bool setFontDescription(const FontDescription&);
+  bool hasIdenticalAscentDescentAndLineGap(const ComputedStyle& other) const;
 
   // font-size
   int fontSize() const;
@@ -2691,6 +2709,9 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
 
   void removeInheritedVariable(const AtomicString&);
   void removeNonInheritedVariable(const AtomicString&);
+
+  // Handles both inherited and non-inherited variables
+  CSSVariableData* getVariable(const AtomicString&) const;
 
   void setHasVariableReferenceFromNonInheritedProperty() {
     m_nonInheritedData.m_variableReference = true;
@@ -3455,18 +3476,7 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
     return outlineWidth() > 0 && outlineStyle() > BorderStyleHidden;
   }
   int outlineOutsetExtent() const;
-  bool isOutlineEquivalent(const ComputedStyle* otherStyle) const {
-    // No other style, so we don't have an outline then we consider them to be
-    // the same.
-    if (!otherStyle)
-      return !hasOutline();
-    return m_background->outline().visuallyEqual(
-        otherStyle->m_background->outline());
-  }
-  void setOutlineFromStyle(const ComputedStyle& o) {
-    DCHECK(!isOutlineEquivalent(&o));
-    m_background.access()->m_outline = o.m_background->m_outline;
-  }
+  float getOutlineStrokeWidthForFocusRing() const;
 
   // Position utility functions.
   bool hasOutOfFlowPosition() const {
@@ -3587,6 +3597,11 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
   }
   bool isOverflowPaged() const {
     return overflowY() == OverflowPagedX || overflowY() == OverflowPagedY;
+  }
+
+  // Visibility utility functions.
+  bool visibleToHitTesting() const {
+    return visibility() == EVisibility::Visible && pointerEvents() != PE_NONE;
   }
 
   // Animation utility functions.
@@ -3933,7 +3948,9 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
   StyleColor columnRuleColor() const {
     return m_rareNonInheritedData->m_multiCol->m_rule.color();
   }
-  StyleColor outlineColor() const { return m_background->outline().color(); }
+  StyleColor outlineColor() const {
+    return m_rareNonInheritedData->m_outline.color();
+  }
   StyleColor textEmphasisColor() const {
     return m_rareInheritedData->textEmphasisColor();
   }
@@ -3991,8 +4008,11 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
   void addAppliedTextDecoration(const AppliedTextDecoration&);
   void applyMotionPathTransform(float originX,
                                 float originY,
+                                const FloatRect& boundingBox,
                                 TransformationMatrix&) const;
 
+  bool scrollAnchorDisablingPropertyChanged(const ComputedStyle& other,
+                                            StyleDifference&) const;
   bool diffNeedsFullLayoutAndPaintInvalidation(
       const ComputedStyle& other) const;
   bool diffNeedsFullLayout(const ComputedStyle& other) const;
@@ -4038,13 +4058,12 @@ inline LayoutUnit adjustLayoutUnitForAbsoluteZoom(LayoutUnit value,
   return LayoutUnit(value / style.effectiveZoom());
 }
 
-inline double adjustScrollForAbsoluteZoom(double scrollOffset,
-                                          float zoomFactor) {
+inline float adjustScrollForAbsoluteZoom(float scrollOffset, float zoomFactor) {
   return scrollOffset / zoomFactor;
 }
 
-inline double adjustScrollForAbsoluteZoom(double scrollOffset,
-                                          const ComputedStyle& style) {
+inline float adjustScrollForAbsoluteZoom(float scrollOffset,
+                                         const ComputedStyle& style) {
   return adjustScrollForAbsoluteZoom(scrollOffset, style.effectiveZoom());
 }
 

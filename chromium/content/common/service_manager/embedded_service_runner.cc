@@ -4,113 +4,120 @@
 
 #include "content/common/service_manager/embedded_service_runner.h"
 
+#include <map>
+#include <memory>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_checker.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "services/shell/public/cpp/service_context.h"
+#include "services/service_manager/public/cpp/service_context.h"
 
 namespace content {
 
-class EmbeddedServiceRunner::Instance
-    : public base::RefCountedThreadSafe<Instance> {
+class EmbeddedServiceRunner::InstanceManager
+    : public base::RefCountedThreadSafe<InstanceManager> {
  public:
-  Instance(const base::StringPiece& name,
-           const ServiceInfo& info,
-           const base::Closure& quit_closure)
+  InstanceManager(const base::StringPiece& name,
+                  const ServiceInfo& info,
+                  const base::Closure& quit_closure)
       : name_(name.as_string()),
         factory_callback_(info.factory),
         use_own_thread_(!info.task_runner && info.use_own_thread),
         quit_closure_(quit_closure),
         quit_task_runner_(base::ThreadTaskRunnerHandle::Get()),
-        task_runner_(info.task_runner) {
-    if (!use_own_thread_ && !task_runner_)
-      task_runner_ = base::ThreadTaskRunnerHandle::Get();
+        service_task_runner_(info.task_runner) {
+    if (!use_own_thread_ && !service_task_runner_)
+      service_task_runner_ = base::ThreadTaskRunnerHandle::Get();
   }
 
-  void BindServiceRequest(shell::mojom::ServiceRequest request) {
+  void BindServiceRequest(service_manager::mojom::ServiceRequest request) {
     DCHECK(runner_thread_checker_.CalledOnValidThread());
 
     if (use_own_thread_ && !thread_) {
       // Start a new thread if necessary.
       thread_.reset(new base::Thread(name_));
       thread_->Start();
-      task_runner_ = thread_->task_runner();
+      service_task_runner_ = thread_->task_runner();
     }
 
-    DCHECK(task_runner_);
-    task_runner_->PostTask(
+    DCHECK(service_task_runner_);
+    service_task_runner_->PostTask(
         FROM_HERE,
-        base::Bind(&Instance::BindServiceRequestOnApplicationThread, this,
-                   base::Passed(&request)));
+        base::Bind(&InstanceManager::BindServiceRequestOnServiceThread,
+                   this, base::Passed(&request)));
   }
 
   void ShutDown() {
     DCHECK(runner_thread_checker_.CalledOnValidThread());
-    if (!task_runner_)
+    if (!service_task_runner_)
       return;
     // Any extant ServiceContexts must be destroyed on the application thread.
-    if (task_runner_->BelongsToCurrentThread()) {
-      Quit();
+    if (service_task_runner_->BelongsToCurrentThread()) {
+      QuitOnServiceThread();
     } else {
-      task_runner_->PostTask(FROM_HERE,
-                                         base::Bind(&Instance::Quit, this));
+      service_task_runner_->PostTask(
+          FROM_HERE, base::Bind(&InstanceManager::QuitOnServiceThread, this));
     }
   }
 
  private:
-  friend class base::RefCountedThreadSafe<Instance>;
+  friend class base::RefCountedThreadSafe<InstanceManager>;
 
-  ~Instance() {
+  ~InstanceManager() {
     // If this instance had its own thread, it MUST be explicitly destroyed by
     // QuitOnRunnerThread() by the time this destructor is run.
     DCHECK(!thread_);
   }
 
-  void BindServiceRequestOnApplicationThread(
-      shell::mojom::ServiceRequest request) {
-    DCHECK(task_runner_->BelongsToCurrentThread());
+  void BindServiceRequestOnServiceThread(
+      service_manager::mojom::ServiceRequest request) {
+    DCHECK(service_task_runner_->BelongsToCurrentThread());
 
-    if (!service_) {
-      service_ = factory_callback_.Run(
-          base::Bind(&Instance::Quit, base::Unretained(this)));
-    }
+    int instance_id = next_instance_id_++;
 
-    shell::ServiceContext* new_connection =
-        new shell::ServiceContext(service_.get(), std::move(request));
-    shell_connections_.push_back(base::WrapUnique(new_connection));
-    new_connection->SetConnectionLostClosure(
-        base::Bind(&Instance::OnStop, base::Unretained(this),
-                   new_connection));
+    std::unique_ptr<service_manager::ServiceContext> context =
+        base::MakeUnique<service_manager::ServiceContext>(
+            factory_callback_.Run(), std::move(request));
+
+    service_manager::ServiceContext* raw_context = context.get();
+    context->SetConnectionLostClosure(
+        base::Bind(&InstanceManager::OnInstanceLost, this, instance_id));
+    contexts_.insert(std::make_pair(raw_context, std::move(context)));
+    id_to_context_map_.insert(std::make_pair(instance_id, raw_context));
   }
 
-  void OnStop(shell::ServiceContext* connection) {
-    DCHECK(task_runner_->BelongsToCurrentThread());
+  void OnInstanceLost(int instance_id) {
+    DCHECK(service_task_runner_->BelongsToCurrentThread());
 
-    for (auto it = shell_connections_.begin(); it != shell_connections_.end();
-         ++it) {
-      if (it->get() == connection) {
-        shell_connections_.erase(it);
-        break;
-      }
-    }
+    auto id_iter = id_to_context_map_.find(instance_id);
+    CHECK(id_iter != id_to_context_map_.end());
+
+    auto context_iter = contexts_.find(id_iter->second);
+    CHECK(context_iter != contexts_.end());
+    contexts_.erase(context_iter);
+    id_to_context_map_.erase(id_iter);
+
+    // If we've lost the last instance, run the quit closure.
+    if (contexts_.empty())
+      QuitOnServiceThread();
   }
 
-  void Quit() {
-    DCHECK(task_runner_->BelongsToCurrentThread());
+  void QuitOnServiceThread() {
+    DCHECK(service_task_runner_->BelongsToCurrentThread());
 
-    shell_connections_.clear();
-    service_.reset();
+    contexts_.clear();
     if (quit_task_runner_->BelongsToCurrentThread()) {
       QuitOnRunnerThread();
     } else {
       quit_task_runner_->PostTask(
-          FROM_HERE, base::Bind(&Instance::QuitOnRunnerThread, this));
+          FROM_HERE, base::Bind(&InstanceManager::QuitOnRunnerThread, this));
     }
   }
 
@@ -118,7 +125,7 @@ class EmbeddedServiceRunner::Instance
     DCHECK(runner_thread_checker_.CalledOnValidThread());
     if (thread_) {
       thread_.reset();
-      task_runner_ = nullptr;
+      service_task_runner_ = nullptr;
     }
     quit_closure_.Run();
   }
@@ -135,32 +142,44 @@ class EmbeddedServiceRunner::Instance
 
   // These fields must only be accessed from the runner's thread.
   std::unique_ptr<base::Thread> thread_;
-  scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
+  scoped_refptr<base::SingleThreadTaskRunner> service_task_runner_;
 
-  // These fields must only be accessed from the application thread, except in
-  // the destructor which may run on either the runner thread or the application
+  // These fields must only be accessed from the service thread, except in
+  // the destructor which may run on either the runner thread or the service
   // thread.
-  std::unique_ptr<shell::Service> service_;
-  std::vector<std::unique_ptr<shell::ServiceContext>> shell_connections_;
 
-  DISALLOW_COPY_AND_ASSIGN(Instance);
+  // A map which owns all existing Service instances for this service.
+  using ServiceContextMap =
+      std::map<service_manager::ServiceContext*,
+               std::unique_ptr<service_manager::ServiceContext>>;
+  ServiceContextMap contexts_;
+
+  int next_instance_id_ = 0;
+
+  // A mapping from instance ID to (not owned) ServiceContext.
+  //
+  // TODO(rockot): Remove this once we get rid of the quit closure argument to
+  // service factory functions.
+  std::map<int, service_manager::ServiceContext*> id_to_context_map_;
+
+  DISALLOW_COPY_AND_ASSIGN(InstanceManager);
 };
 
 EmbeddedServiceRunner::EmbeddedServiceRunner(const base::StringPiece& name,
                                              const ServiceInfo& info)
     : weak_factory_(this) {
-  instance_ = new Instance(name, info,
-                           base::Bind(&EmbeddedServiceRunner::OnQuit,
-                                      weak_factory_.GetWeakPtr()));
+  instance_manager_ = new InstanceManager(
+      name, info, base::Bind(&EmbeddedServiceRunner::OnQuit,
+                             weak_factory_.GetWeakPtr()));
 }
 
 EmbeddedServiceRunner::~EmbeddedServiceRunner() {
-  instance_->ShutDown();
+  instance_manager_->ShutDown();
 }
 
 void EmbeddedServiceRunner::BindServiceRequest(
-    shell::mojom::ServiceRequest request) {
-  instance_->BindServiceRequest(std::move(request));
+    service_manager::mojom::ServiceRequest request) {
+  instance_manager_->BindServiceRequest(std::move(request));
 }
 
 void EmbeddedServiceRunner::SetQuitClosure(

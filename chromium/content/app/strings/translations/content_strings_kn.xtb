@@ -34,6 +34,7 @@
 <translation id="2148716181193084225">ಇಂದು</translation>
 <translation id="2226276347425096477">ದಯವಿಟ್ಟು ಈ ಪಠ್ಯವನ್ನು <ph name="MAX_CHARACTERS" /> ಅಕ್ಷರಗಳಿಗೆ ಅಥವಾ ಅದಕ್ಕಿಂತಲೂ ಕಡಿಮೆಗೆ ಸೀಮಿತಗೊಳಿಸಿ (ನೀವು ಪ್ರಸ್ತುತ <ph name="CURRENT_LENGTH" /> ಅಕ್ಷರಗಳನ್ನು ಬಳಸುತ್ತಿರುವಿರಿ).</translation>
 <translation id="2247351761944213033">ವಾರ <ph name="WEEKNUMBER" />, <ph name="YEAR" /></translation>
+<translation id="2277199496770840904">ಟ್ರ್ಯಾಕ್ <ph name="NUMBER" /></translation>
 <translation id="2291999235780842123">ಚೆಕ್‌ಬಾಕ್ಸ್</translation>
 <translation id="2335594187091864976">ದಿನಾಂಕ ಮತ್ತು ಸಮಯ ಪಿಕರ್</translation>
 <translation id="248395913932153421">ದಿನ</translation>
@@ -116,7 +117,6 @@
 <translation id="5643186887447432888">ಬಟನ್</translation>
 <translation id="5677946354068040947">ಇನ್ನಷ್ಟು ಆಯ್ಕೆಗಳು</translation>
 <translation id="57838592816432529">ಮ್ಯೂಟ್</translation>
-<translation id="583281660410589416">ಅಪರಿಚಿತ</translation>
 <translation id="5843503607508392247">ಇತರೆ...</translation>
 <translation id="5860033963881614850">ಆಫ್</translation>
 <translation id="588258955323874662">ಪೂರ್ಣಪರದೆ</translation>
@@ -177,7 +177,7 @@
 <translation id="8244226242650769279">ಇಮೇಜ್ ನಕ್ಷೆ</translation>
 <translation id="8284326494547611709">ಶೀರ್ಷಿಕೆಗಳು</translation>
 <translation id="835897206747267392">ಅಮಾನ್ಯ ಮೌಲ್ಯ.</translation>
-<translation id="838869780401515933">ಪರಿಶೀಲಿಸು</translation>
+<translation id="838869780401515933">ಪರಿಶೀಲಿಸಿ</translation>
 <translation id="8433900881053900389">ಟೂಲ್‌ಬಾರ್</translation>
 <translation id="8444882422881193423"><ph name="NUMBER_OF_FILES" /> ಫೈಲ್‌ಗಳು</translation>
 <translation id="8451268428117625855">ದಯವಿಟ್ಟು ಫೈಲ್ ಆಯ್ಕೆಮಾಡಿ.</translation>

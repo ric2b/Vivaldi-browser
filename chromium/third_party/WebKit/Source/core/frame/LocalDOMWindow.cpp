@@ -36,6 +36,7 @@
 #include "core/css/StyleMedia.h"
 #include "core/css/resolver/StyleResolver.h"
 #include "core/dom/DOMImplementation.h"
+#include "core/dom/DocumentUserGestureToken.h"
 #include "core/dom/ExecutionContextTask.h"
 #include "core/dom/FrameRequestCallback.h"
 #include "core/dom/SandboxFlags.h"
@@ -65,6 +66,7 @@
 #include "core/input/EventHandler.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/inspector/InspectorInstrumentation.h"
+#include "core/inspector/InspectorTraceEvents.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/FrameLoaderClient.h"
 #include "core/loader/SinkDocument.h"
@@ -98,7 +100,7 @@ class PostMessageTimer final
                    PassRefPtr<SecurityOrigin> targetOrigin,
                    std::unique_ptr<SourceLocation> location,
                    UserGestureToken* userGestureToken)
-      : SuspendableTimer(window.document()),
+      : SuspendableTimer(window.document(), TaskType::Timer),
         m_event(event),
         m_window(&window),
         m_targetOrigin(targetOrigin),
@@ -492,7 +494,9 @@ void LocalDOMWindow::registerEventListenerObserver(
 
 void LocalDOMWindow::reset() {
   DCHECK(document());
-  document()->notifyContextDestroyed();
+  // Since |Document| class has multiple |LifecycleNotifier| as base class,
+  // we need to have |static_cast<ExecutionContext>| here.
+  static_cast<ExecutionContext*>(document())->notifyContextDestroyed();
   frameDestroyed();
 
   m_screen = nullptr;
@@ -633,7 +637,8 @@ void LocalDOMWindow::postMessageTimerFired(PostMessageTimer* timer) {
 
   MessageEvent* event = timer->event();
 
-  UserGestureIndicator gestureIndicator(timer->userGestureToken());
+  UserGestureIndicator gestureIndicator(
+      DocumentUserGestureToken::adopt(document(), timer->userGestureToken()));
 
   event->entangleMessagePorts(document());
 
@@ -700,15 +705,6 @@ void LocalDOMWindow::print(ScriptState* scriptState) {
   FrameHost* host = frame()->host();
   if (!host)
     return;
-
-  if (document()->isSandboxed(SandboxModals)) {
-    UseCounter::count(document(), UseCounter::DialogInSandboxedContext);
-    frameConsole()->addMessage(ConsoleMessage::create(
-        SecurityMessageSource, ErrorMessageLevel,
-        "Ignored call to 'print()'. The document is sandboxed, and the "
-        "'allow-modals' keyword is not set."));
-    return;
-  }
 
   if (scriptState &&
       v8::MicrotasksScope::IsRunningMicrotasks(scriptState->isolate())) {
@@ -979,7 +975,7 @@ double LocalDOMWindow::scrollX() const {
   document()->updateStyleAndLayoutIgnorePendingStylesheets();
 
   double viewportX =
-      view->layoutViewportScrollableArea()->scrollPositionDouble().x();
+      view->layoutViewportScrollableArea()->scrollOffset().width();
   return adjustScrollForAbsoluteZoom(viewportX, frame()->pageZoomFactor());
 }
 
@@ -997,7 +993,7 @@ double LocalDOMWindow::scrollY() const {
   document()->updateStyleAndLayoutIgnorePendingStylesheets();
 
   double viewportY =
-      view->layoutViewportScrollableArea()->scrollPositionDouble().y();
+      view->layoutViewportScrollableArea()->scrollOffset().height();
   return adjustScrollForAbsoluteZoom(viewportY, frame()->pageZoomFactor());
 }
 
@@ -1123,12 +1119,12 @@ void LocalDOMWindow::scrollBy(double x,
                                  ? view->layoutViewportScrollableArea()
                                  : view->getScrollableArea();
 
-  DoublePoint currentOffset = viewport->scrollPositionDouble();
-  DoubleSize scaledDelta(x * frame()->pageZoomFactor(),
-                         y * frame()->pageZoomFactor());
+  ScrollOffset currentOffset = viewport->scrollOffset();
+  ScrollOffset scaledDelta(x * frame()->pageZoomFactor(),
+                           y * frame()->pageZoomFactor());
 
-  viewport->setScrollPosition(currentOffset + scaledDelta, ProgrammaticScroll,
-                              scrollBehavior);
+  viewport->setScrollOffset(currentOffset + scaledDelta, ProgrammaticScroll,
+                            scrollBehavior);
 }
 
 void LocalDOMWindow::scrollBy(const ScrollToOptions& scrollToOptions) const {
@@ -1164,13 +1160,13 @@ void LocalDOMWindow::scrollTo(double x, double y) const {
   if (x || y)
     document()->updateStyleAndLayoutIgnorePendingStylesheets();
 
-  DoublePoint layoutPos(x * frame()->pageZoomFactor(),
-                        y * frame()->pageZoomFactor());
+  ScrollOffset layoutOffset(x * frame()->pageZoomFactor(),
+                            y * frame()->pageZoomFactor());
   ScrollableArea* viewport = host->settings().inertVisualViewport()
                                  ? view->layoutViewportScrollableArea()
                                  : view->getScrollableArea();
-  viewport->setScrollPosition(layoutPos, ProgrammaticScroll,
-                              ScrollBehaviorAuto);
+  viewport->setScrollOffset(layoutOffset, ProgrammaticScroll,
+                            ScrollBehaviorAuto);
 }
 
 void LocalDOMWindow::scrollTo(const ScrollToOptions& scrollToOptions) const {
@@ -1199,9 +1195,9 @@ void LocalDOMWindow::scrollTo(const ScrollToOptions& scrollToOptions) const {
                                  ? view->layoutViewportScrollableArea()
                                  : view->getScrollableArea();
 
-  DoublePoint currentOffset = viewport->scrollPositionDouble();
-  scaledX = currentOffset.x();
-  scaledY = currentOffset.y();
+  ScrollOffset currentOffset = viewport->scrollOffset();
+  scaledX = currentOffset.width();
+  scaledY = currentOffset.height();
 
   if (scrollToOptions.hasLeft())
     scaledX = ScrollableArea::normalizeNonFiniteScroll(scrollToOptions.left()) *
@@ -1215,8 +1211,8 @@ void LocalDOMWindow::scrollTo(const ScrollToOptions& scrollToOptions) const {
   ScrollableArea::scrollBehaviorFromString(scrollToOptions.behavior(),
                                            scrollBehavior);
 
-  viewport->setScrollPosition(DoublePoint(scaledX, scaledY), ProgrammaticScroll,
-                              scrollBehavior);
+  viewport->setScrollOffset(ScrollOffset(scaledX, scaledY), ProgrammaticScroll,
+                            scrollBehavior);
 }
 
 void LocalDOMWindow::moveBy(int x, int y) const {

@@ -36,8 +36,6 @@ class TracedValue;
 }
 
 namespace cc {
-class PictureLayerImpl;
-class ResourceProvider;
 class ImageDecodeController;
 
 class CC_EXPORT TileManagerClient {
@@ -122,7 +120,7 @@ class CC_EXPORT TileManager {
   // SetResources.
   void SetResources(ResourcePool* resource_pool,
                     ImageDecodeController* image_decode_controller,
-                    TileTaskManager* tile_task_manager,
+                    TaskGraphRunner* task_graph_runner,
                     RasterBufferProvider* raster_buffer_provider,
                     size_t scheduled_raster_task_limit,
                     bool use_gpu_rasterization);
@@ -169,10 +167,15 @@ class CC_EXPORT TileManager {
     global_state_ = state;
   }
 
-  void SetTileTaskManagerForTesting(TileTaskManager* tile_task_manager);
+  void SetTileTaskManagerForTesting(
+      std::unique_ptr<TileTaskManager> tile_task_manager) {
+    tile_task_manager_ = std::move(tile_task_manager);
+  }
 
   void SetRasterBufferProviderForTesting(
-      RasterBufferProvider* raster_buffer_provider);
+      RasterBufferProvider* raster_buffer_provider) {
+    raster_buffer_provider_ = raster_buffer_provider;
+  }
 
   void FreeResourcesAndCleanUpReleasedTilesForTesting() {
     FreeResourcesForReleasedTiles();
@@ -197,6 +200,8 @@ class CC_EXPORT TileManager {
   void SetMoreTilesNeedToBeRasterizedForTesting() {
     all_tiles_that_need_to_be_rasterized_are_scheduled_ = false;
   }
+
+  void ResetSignalsForTesting() { signals_.reset(); }
 
   bool HasScheduledTileTasksForTesting() const {
     return has_scheduled_tile_tasks_;
@@ -280,7 +285,7 @@ class CC_EXPORT TileManager {
   bool AreRequiredTilesReadyToDraw(RasterTilePriorityQueue::Type type) const;
   void CheckIfMoreTilesNeedToBePrepared();
   void CheckAndIssueSignals();
-  bool MarkTilesOutOfMemory(
+  void MarkTilesOutOfMemory(
       std::unique_ptr<RasterTilePriorityQueue> queue) const;
 
   ResourceFormat DetermineResourceFormat(const Tile* tile) const;
@@ -303,7 +308,7 @@ class CC_EXPORT TileManager {
   TileManagerClient* client_;
   base::SequencedTaskRunner* task_runner_;
   ResourcePool* resource_pool_;
-  TileTaskManager* tile_task_manager_;
+  std::unique_ptr<TileTaskManager> tile_task_manager_;
   RasterBufferProvider* raster_buffer_provider_;
   GlobalStateThatImpactsTilePriority global_state_;
   size_t scheduled_raster_task_limit_;

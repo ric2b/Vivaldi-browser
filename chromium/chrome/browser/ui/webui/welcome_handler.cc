@@ -51,8 +51,6 @@ void WelcomeHandler::HandleActivateSignIn(const base::ListValue* args) {
     // them away to the NTP instead.
     GoToNewTabPage();
   } else {
-    base::RecordAction(
-        base::UserMetricsAction("Signin_Impression_FromStartPage"));
     GetBrowser()->ShowModalSigninWindow(
         profiles::BubbleViewMode::BUBBLE_VIEW_MODE_GAIA_SIGNIN,
         signin_metrics::AccessPoint::ACCESS_POINT_START_PAGE);

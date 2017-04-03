@@ -17,10 +17,6 @@ class TracedValue;
 
 namespace cc {
 
-namespace proto {
-class TreeNode;
-}  // namespace proto
-
 struct CC_EXPORT ScrollNode {
   ScrollNode();
   ScrollNode(const ScrollNode& other);
@@ -61,13 +57,8 @@ struct CC_EXPORT ScrollNode {
   bool user_scrollable_vertical;
   ElementId element_id;
   int transform_id;
-  // Number of drawn layers pointing to this node or any of its descendants.
-  int num_drawn_descendants;
 
   bool operator==(const ScrollNode& other) const;
-
-  void ToProtobuf(proto::TreeNode* proto) const;
-  void FromProtobuf(const proto::TreeNode& proto);
   void AsValueInto(base::trace_event::TracedValue* value) const;
 };
 

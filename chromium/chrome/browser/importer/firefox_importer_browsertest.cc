@@ -159,9 +159,6 @@ class FirefoxObserver : public ProfileWriter,
     // |kFirefoxKeywords| by 1.
     EXPECT_EQ(arraysize(kFirefoxKeywords) - 1, keyword_count_);
   }
-  void ImportItemFailed(importer::ImportItem item,
-                        const std::string& error) override {
-  }
 
   bool BookmarkModelIsLoaded() const override {
     // Profile is ready for writing.

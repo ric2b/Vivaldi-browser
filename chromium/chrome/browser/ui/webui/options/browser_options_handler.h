@@ -19,6 +19,7 @@
 #include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/ui/webui/options/options_ui.h"
 #include "chrome/browser/ui/zoom/chrome_zoom_level_prefs.h"
+#include "chrome/common/features.h"
 #include "components/policy/core/common/policy_service.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_member.h"
@@ -29,6 +30,7 @@
 #include "content/public/browser/notification_observer.h"
 #include "extensions/browser/extension_registry_observer.h"
 #include "google_apis/gaia/google_service_auth_error.h"
+#include "printing/features/features.h"
 #include "ui/base/models/table_model_observer.h"
 #include "ui/shell_dialogs/select_file_dialog.h"
 
@@ -120,7 +122,7 @@ class BrowserOptionsHandler
                             const base::string16& old_profile_name) override;
   void OnProfileAvatarChanged(const base::FilePath& profile_path) override;
 
-#if defined(ENABLE_PRINT_PREVIEW) && !defined(OS_CHROMEOS)
+#if BUILDFLAG(ENABLE_PRINT_PREVIEW) && !defined(OS_CHROMEOS)
   void OnCloudPrintPrefsChanged();
 #endif
 
@@ -279,11 +281,15 @@ class BrowserOptionsHandler
   void ShowManageSSLCertificates(const base::ListValue* args);
 #endif
 
-#if defined(ENABLE_SERVICE_DISCOVERY)
+#if defined(OS_CHROMEOS)
+  void ShowCupsPrintDevicesPage(const base::ListValue* args);
+#endif  // defined(OS_CHROMEOS)
+
+#if BUILDFLAG(ENABLE_SERVICE_DISCOVERY)
   void ShowCloudPrintDevicesPage(const base::ListValue* args);
 #endif
 
-#if defined(ENABLE_PRINT_PREVIEW)
+#if BUILDFLAG(ENABLE_PRINT_PREVIEW)
   // Register localized values used by Cloud Print
   void RegisterCloudPrintValues(base::DictionaryValue* values);
 #endif
@@ -384,6 +390,15 @@ class BrowserOptionsHandler
   // Setup the accessibility features for ChromeOS.
   void SetupAccessibilityFeatures();
 #endif
+
+  // Update the Extended Reporting Enabled checkbox based on the current state
+  // of the opt-in.
+  void SetupSafeBrowsingExtendedReporting();
+
+  // Callback for "safeBrowsingExtentedReportingAction" message. This is called
+  // if the user checks or unchecks the Extended Reporting checkbox. |args| is
+  // an array that contains one item, the checked state of the checkbox.
+  void HandleSafeBrowsingExtendedReporting(const base::ListValue* args);
 
   // Returns a newly created dictionary with a number of properties that
   // correspond to the status of sync.

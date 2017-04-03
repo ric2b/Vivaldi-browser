@@ -4,18 +4,19 @@
 
 component("user_manager") {
   sources = [
-    "empty_user_info.cc",
-    "empty_user_info.h",
     "user_info.cc",
     "user_info.h",
     "user_info_impl.cc",
     "user_info_impl.h",
     "user_manager_export.h",
+    "user_names.cc",
+    "user_names.h",
   ]
 
   deps = [
     "//base",
     "//components/signin/core/account_id",
+    "//google_apis",
     "//skia",
     "//ui/gfx",
   ]
@@ -39,8 +40,6 @@ component("user_manager") {
     ]
     deps += [
       "//components/prefs",
-      "//components/session_manager/core",
-      "//google_apis",
       "//url",
     ]
   }

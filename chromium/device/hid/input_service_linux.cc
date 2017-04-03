@@ -7,14 +7,13 @@
 #include <memory>
 
 #include "base/bind.h"
-#include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/scoped_observer.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/threading/thread_restrictions.h"
-#include "device/core/device_monitor_linux.h"
+#include "device/base/device_monitor_linux.h"
 #include "device/udev_linux/udev.h"
 
 namespace device {
@@ -36,9 +35,7 @@ const char kIdInputTablet[] = "ID_INPUT_TABLET";
 const char kIdInputTouchpad[] = "ID_INPUT_TOUCHPAD";
 const char kIdInputTouchscreen[] = "ID_INPUT_TOUCHSCREEN";
 
-// The instance will be reset when message loop destroys.
-base::LazyInstance<std::unique_ptr<InputServiceLinux>>::Leaky
-    g_input_service_linux_ptr = LAZY_INSTANCE_INITIALIZER;
+InputServiceLinux* g_input_service_linux = nullptr;
 
 bool GetBoolProperty(udev_device* device, const char* key) {
   CHECK(device);
@@ -91,7 +88,6 @@ class InputServiceLinuxImpl : public InputServiceLinux,
   // Implements DeviceMonitorLinux::Observer:
   void OnDeviceAdded(udev_device* device) override;
   void OnDeviceRemoved(udev_device* device) override;
-  void WillDestroyMonitorMessageLoop() override;
 
  private:
   friend class InputServiceLinux;
@@ -114,6 +110,8 @@ InputServiceLinuxImpl::InputServiceLinuxImpl() : observer_(this) {
 }
 
 InputServiceLinuxImpl::~InputServiceLinuxImpl() {
+  // Never destroyed.
+  NOTREACHED();
 }
 
 void InputServiceLinuxImpl::OnDeviceAdded(udev_device* device) {
@@ -163,11 +161,6 @@ void InputServiceLinuxImpl::OnDeviceRemoved(udev_device* device) {
     RemoveDevice(devnode);
 }
 
-void InputServiceLinuxImpl::WillDestroyMonitorMessageLoop() {
-  DCHECK(CalledOnValidThread());
-  g_input_service_linux_ptr.Get().reset(nullptr);
-}
-
 }  // namespace
 
 InputServiceLinux::InputDeviceInfo::InputDeviceInfo()
@@ -195,18 +188,22 @@ InputServiceLinux::~InputServiceLinux() {
 // static
 InputServiceLinux* InputServiceLinux::GetInstance() {
   if (!HasInstance())
-    g_input_service_linux_ptr.Get().reset(new InputServiceLinuxImpl());
-  return g_input_service_linux_ptr.Get().get();
+    g_input_service_linux = new InputServiceLinuxImpl();
+  return g_input_service_linux;
 }
 
 // static
 bool InputServiceLinux::HasInstance() {
-  return g_input_service_linux_ptr.Get().get();
+  return !!g_input_service_linux;
 }
 
 // static
-void InputServiceLinux::SetForTesting(InputServiceLinux* service) {
-  g_input_service_linux_ptr.Get().reset(service);
+void InputServiceLinux::SetForTesting(
+    std::unique_ptr<InputServiceLinux> service) {
+  DCHECK(!HasInstance());
+  DCHECK(service);
+  // |service| will never be destroyed.
+  g_input_service_linux = service.release();
 }
 
 void InputServiceLinux::AddObserver(Observer* observer) {
@@ -241,12 +238,14 @@ bool InputServiceLinux::GetDeviceInfo(const std::string& id,
 
 void InputServiceLinux::AddDevice(const InputDeviceInfo& info) {
   devices_[info.id] = info;
-  FOR_EACH_OBSERVER(Observer, observers_, OnInputDeviceAdded(info));
+  for (auto& observer : observers_)
+    observer.OnInputDeviceAdded(info);
 }
 
 void InputServiceLinux::RemoveDevice(const std::string& id) {
   devices_.erase(id);
-  FOR_EACH_OBSERVER(Observer, observers_, OnInputDeviceRemoved(id));
+  for (auto& observer : observers_)
+    observer.OnInputDeviceRemoved(id);
 }
 
 bool InputServiceLinux::CalledOnValidThread() const {

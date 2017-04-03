@@ -11,18 +11,14 @@
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/single_thread_task_runner.h"
 #include "content/public/browser/browser_context.h"
 #include "net/proxy/proxy_config_service.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "net/url_request/url_request_job_factory.h"
 
-namespace base {
-class MessageLoop;
-}
-
 namespace net {
 class HostResolver;
-class MappedHostResolver;
 class NetworkDelegate;
 class NetLog;
 class ProxyConfigService;
@@ -58,10 +54,6 @@ class ShellURLRequestContextGetter : public net::URLRequestContextGetter {
   virtual std::unique_ptr<net::NetworkDelegate> CreateNetworkDelegate();
   virtual std::unique_ptr<net::ProxyConfigService> GetProxyConfigService();
   virtual std::unique_ptr<net::ProxyService> GetProxyService();
-
-  // TODO(estark): Remove this once the Referrer-Policy header is no
-  // longer an experimental feature. https://crbug.com/619228
-  virtual bool ShouldEnableReferrerPolicyHeader();
 
  private:
   bool ignore_certificate_errors_;

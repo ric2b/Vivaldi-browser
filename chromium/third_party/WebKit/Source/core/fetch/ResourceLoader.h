@@ -46,6 +46,8 @@ class ResourceFetcher;
 class CORE_EXPORT ResourceLoader final
     : public GarbageCollectedFinalized<ResourceLoader>,
       protected WebURLLoaderClient {
+  USING_PRE_FINALIZER(ResourceLoader, dispose);
+
  public:
   static ResourceLoader* create(ResourceFetcher*, Resource*);
   ~ResourceLoader() override;
@@ -54,12 +56,27 @@ class CORE_EXPORT ResourceLoader final
   void start(const ResourceRequest&,
              WebTaskRunner* loadingTaskRunner,
              bool defersLoading);
-  void restartForServiceWorkerFallback(const ResourceRequest&);
+
+  // This method is currently only used for service worker fallback request and
+  // cache-aware loading, other users should be careful not to break
+  // ResourceLoader state.
+  void restart(const ResourceRequest&,
+               WebTaskRunner* loadingTaskRunner,
+               bool defersLoading);
+
   void cancel();
 
   void setDefersLoading(bool);
 
   void didChangePriority(ResourceLoadPriority, int intraPriorityValue);
+
+  // Called before start() to activate cache-aware loading if enabled in
+  // |m_resource->options()| and applicable.
+  void activateCacheAwareLoadingIfNeeded(const ResourceRequest&);
+
+  bool isCacheAwareLoadingActivated() const {
+    return m_isCacheAwareLoadingActivated;
+  }
 
   // WebURLLoaderClient
   //
@@ -98,6 +115,7 @@ class CORE_EXPORT ResourceLoader final
   void didFail(WebURLLoader*, const WebURLError&) override;
 
   void didFinishLoadingFirstPartInMultipart();
+  void didFail(const ResourceError&);
 
  private:
   // Assumes ResourceFetcher and Resource are non-null.
@@ -105,10 +123,12 @@ class CORE_EXPORT ResourceLoader final
 
   void cancelForRedirectAccessCheckError(const KURL&);
   void requestSynchronously(const ResourceRequest&);
+  void dispose();
 
   std::unique_ptr<WebURLLoader> m_loader;
   Member<ResourceFetcher> m_fetcher;
   Member<Resource> m_resource;
+  bool m_isCacheAwareLoadingActivated;
 };
 
 }  // namespace blink

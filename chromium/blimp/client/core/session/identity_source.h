@@ -23,15 +23,21 @@ class IdentitySource : public OAuth2TokenService::Consumer,
                        public OAuth2TokenService::Observer,
                        public IdentityProvider::Observer {
  public:
-  typedef base::Callback<void(const std::string&)> TokenCallback;
+  using TokenCallback = base::Callback<void(const std::string&)>;
+  using TokenErrorCallback =
+      base::Callback<void(const GoogleServiceAuthError&)>;
 
-  explicit IdentitySource(BlimpClientContextDelegate* delegate,
+  explicit IdentitySource(std::unique_ptr<IdentityProvider> identity_provider,
+                          const TokenErrorCallback& error_callback,
                           const TokenCallback& callback);
   ~IdentitySource() override;
 
   // Start Blimp authentication by requesting OAuth2 token from Google.
   // Duplicate connect calls during token fetching will be ignored.
   void Connect();
+
+  // Returns the account name for the current user.
+  std::string GetActiveUsername();
 
   // Add sign in state observer.
   void AddObserver(IdentityProvider::Observer* observer);
@@ -63,6 +69,8 @@ class IdentitySource : public OAuth2TokenService::Consumer,
   // OAuth2TokenService::Consumer callback get called.
   std::unique_ptr<OAuth2TokenService::Request> token_request_;
 
+  TokenErrorCallback error_callback_;
+
   // Callback after OAuth2 token is fetched.
   TokenCallback token_callback_;
 
@@ -75,8 +83,6 @@ class IdentitySource : public OAuth2TokenService::Consumer,
 
   // Current retry count due to request cancellation.
   int retry_times_;
-
-  BlimpClientContextDelegate* delegate_;
 
   DISALLOW_COPY_AND_ASSIGN(IdentitySource);
 };

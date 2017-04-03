@@ -22,6 +22,7 @@
 #include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/metrics/histogram.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -30,12 +31,12 @@
 #include "base/version.h"
 #include "base/win/registry.h"
 #include "base/win/windows_version.h"
+#include "chrome/installer/setup/installer_state.h"
 #include "chrome/installer/setup/setup_constants.h"
 #include "chrome/installer/setup/user_hive_visitor.h"
 #include "chrome/installer/util/app_registration_data.h"
 #include "chrome/installer/util/google_update_constants.h"
 #include "chrome/installer/util/installation_state.h"
-#include "chrome/installer/util/installer_state.h"
 #include "chrome/installer/util/master_preferences.h"
 #include "chrome/installer/util/master_preferences_constants.h"
 #include "chrome/installer/util/util_constants.h"
@@ -115,6 +116,9 @@ bool OnUserHive(const base::string16& client_state_path,
 }
 
 }  // namespace
+
+const char kUnPackStatusMetricsName[] = "Setup.Install.LzmaUnPackStatus";
+const char kUnPackNTSTATUSMetricsName[] = "Setup.Install.LzmaUnPackNTSTATUS";
 
 int CourgettePatchFiles(const base::FilePath& src,
                         const base::FilePath& patch,
@@ -625,6 +629,38 @@ bool IsChromeActivelyUsed(const InstallerState& installer_state) {
   VisitUserHives(base::Bind(&OnUserHive, chrome_dist->GetStateKey(),
                             base::Unretained(&is_used)));
   return is_used;
+}
+
+void RecordUnPackMetrics(UnPackStatus unpack_status,
+                         int32_t status,
+                         UnPackConsumer consumer) {
+  std::string consumer_name = "";
+
+  switch (consumer) {
+    case UnPackConsumer::CHROME_ARCHIVE_PATCH:
+      consumer_name = "ChromeArchivePatch";
+      break;
+    case UnPackConsumer::COMPRESSED_CHROME_ARCHIVE:
+      consumer_name = "CompressedChromeArchive";
+      break;
+    case UnPackConsumer::SETUP_EXE_PATCH:
+      consumer_name = "SetupExePatch";
+      break;
+    case UnPackConsumer::UNCOMPRESSED_CHROME_ARCHIVE:
+      consumer_name = "UncompressedChromeArchive";
+      break;
+  }
+
+  base::LinearHistogram::FactoryGet(
+      std::string(kUnPackStatusMetricsName) + "_" + consumer_name, 1,
+      UNPACK_STATUS_COUNT, UNPACK_STATUS_COUNT + 1,
+      base::HistogramBase::kUmaTargetedHistogramFlag)
+      ->Add(unpack_status);
+
+  base::SparseHistogram::FactoryGet(
+      std::string(kUnPackNTSTATUSMetricsName) + "_" + consumer_name,
+      base::HistogramBase::kUmaTargetedHistogramFlag)
+      ->Add(status);
 }
 
 ScopedTokenPrivilege::ScopedTokenPrivilege(const wchar_t* privilege_name)

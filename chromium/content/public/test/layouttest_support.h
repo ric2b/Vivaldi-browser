@@ -21,18 +21,12 @@ namespace blink {
 class WebDeviceMotionData;
 class WebDeviceOrientationData;
 class WebGamepad;
-class WebGamepads;
 class WebInputEvent;
-class WebLayer;
 class WebLocalFrame;
 struct WebSize;
 class WebView;
 class WebWidget;
 class WebURLResponse;
-}
-
-namespace device {
-class BluetoothAdapter;
 }
 
 namespace gfx {
@@ -178,6 +172,10 @@ std::string DumpBackForwardList(std::vector<PageState>& page_state,
 
 // Run all pending idle tasks immediately, and then invoke callback.
 void SchedulerRunIdleTasks(const base::Closure& callback);
+
+// Causes the RenderWidget corresponding to |render_frame| to update its
+// TextInputState.
+void ForceTextInputStateUpdateForRenderFrame(RenderFrame* render_frame);
 
 }  // namespace content
 

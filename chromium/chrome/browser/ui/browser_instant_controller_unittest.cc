@@ -109,7 +109,7 @@ class FakeWebContentsObserver : public content::WebContentsObserver {
 
  private:
   content::WebContents* contents_;
-  GURL url_;
+  const GURL& url_;
   GURL current_url_;
   int num_reloads_;
 };

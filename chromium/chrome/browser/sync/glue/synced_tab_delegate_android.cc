@@ -109,8 +109,4 @@ bool SyncedTabDelegateAndroid::ShouldSync(
   return tab_contents_delegate_->ShouldSync(sessions_client);
 }
 
-std::string SyncedTabDelegateAndroid::GetExtData() const {
-  return web_contents_->GetExtData();
-}
-
 }  // namespace browser_sync

@@ -5,10 +5,12 @@
 #include "content/browser/webui/web_ui_data_source_impl.h"
 
 #include <stddef.h>
+#include <stdint.h>
 
 #include <string>
 
 #include "base/bind.h"
+#include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/strings/string_util.h"
@@ -73,9 +75,8 @@ class WebUIDataSourceImpl::InternalDataSource : public URLDataSource {
     return parent_->deny_xframe_options_;
   }
   bool IsGzipped(const std::string& path) const override {
-    if (!parent_->json_path_.empty() && path == parent_->json_path_)
-      return false;
-    return parent_->use_gzip_for_all_paths_;
+    return parent_->use_gzip_for_all_paths_ &&
+        parent_->excluded_paths_.find(path) == parent_->excluded_paths_.end();
   }
 
  private:
@@ -141,8 +142,16 @@ void WebUIDataSourceImpl::AddBoolean(const std::string& name, bool value) {
   // replacements.
 }
 
+void WebUIDataSourceImpl::AddInteger(const std::string& name, int32_t value) {
+  localized_strings_.SetInteger(name, value);
+}
+
 void WebUIDataSourceImpl::SetJsonPath(const std::string& path) {
+  DCHECK(json_path_.empty());
+  DCHECK(!path.empty());
+
   json_path_ = path;
+  ExcludePathFromGzip(json_path_);
 }
 
 void WebUIDataSourceImpl::AddResourcePath(const std::string &path,
@@ -161,6 +170,10 @@ void WebUIDataSourceImpl::SetRequestFilter(
 
 void WebUIDataSourceImpl::DisableReplaceExistingSource() {
   replace_existing_source_ = false;
+}
+
+void WebUIDataSourceImpl::ExcludePathFromGzip(const std::string& path) {
+  excluded_paths_.insert(path);
 }
 
 void WebUIDataSourceImpl::DisableContentSecurityPolicy() {

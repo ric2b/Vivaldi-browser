@@ -75,7 +75,7 @@
 #include "extensions/common/host_id.h"
 #include "mash/public/interfaces/launchable.mojom.h"
 #include "media/audio/sounds/sounds_manager.h"
-#include "services/shell/public/cpp/connector.h"
+#include "services/service_manager/public/cpp/connector.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/keyboard/keyboard_controller.h"
@@ -453,8 +453,11 @@ void AccessibilityManager::UpdateSpokenFeedbackFromPref() {
   const bool enabled = profile_->GetPrefs()->GetBoolean(
       prefs::kAccessibilitySpokenFeedbackEnabled);
 
-  if (enabled)
-    chromevox_loader_->SetProfile(profile_);
+  if (enabled) {
+    chromevox_loader_->SetProfile(
+        profile_, base::Bind(&AccessibilityManager::PostSwitchChromeVoxProfile,
+                             weak_ptr_factory_.GetWeakPtr()));
+  }
 
   if (spoken_feedback_enabled_ == enabled)
     return;
@@ -600,11 +603,10 @@ void AccessibilityManager::UpdateAutoclickFromPref() {
   autoclick_enabled_ = enabled;
 
   if (chrome::IsRunningInMash()) {
-    shell::Connector* connector =
+    service_manager::Connector* connector =
         content::ServiceManagerConnection::GetForProcess()->GetConnector();
     mash::mojom::LaunchablePtr launchable;
-    connector->ConnectToInterface("service:accessibility_autoclick",
-                                  &launchable);
+    connector->ConnectToInterface("accessibility_autoclick", &launchable);
     launchable->Launch(mash::mojom::kWindow, mash::mojom::LaunchMode::DEFAULT);
     return;
   }
@@ -638,10 +640,10 @@ void AccessibilityManager::UpdateAutoclickDelayFromPref() {
   autoclick_delay_ms_ = autoclick_delay_ms;
 
   if (chrome::IsRunningInMash()) {
-    shell::Connector* connector =
+    service_manager::Connector* connector =
         content::ServiceManagerConnection::GetForProcess()->GetConnector();
     ash::autoclick::mojom::AutoclickControllerPtr autoclick_controller;
-    connector->ConnectToInterface("service:accessibility_autoclick",
+    connector->ConnectToInterface("accessibility_autoclick",
                                   &autoclick_controller);
     autoclick_controller->SetAutoclickDelay(
         autoclick_delay_ms_.InMilliseconds());
@@ -1036,7 +1038,9 @@ void AccessibilityManager::SetProfile(Profile* profile) {
             &AccessibilityManager::UpdateChromeOSAccessibilityHistograms,
             base::Unretained(this)));
 
-    chromevox_loader_->SetProfile(profile);
+    chromevox_loader_->SetProfile(
+        profile, base::Bind(&AccessibilityManager::PostSwitchChromeVoxProfile,
+                            weak_ptr_factory_.GetWeakPtr()));
 
     extensions::ExtensionRegistry* registry =
         extensions::ExtensionRegistry::Get(profile);
@@ -1316,6 +1320,16 @@ void AccessibilityManager::PostUnloadChromeVox() {
     chromevox_panel_->Close();
     chromevox_panel_ = nullptr;
   }
+}
+
+void AccessibilityManager::PostSwitchChromeVoxProfile() {
+  if (chromevox_panel_) {
+    chromevox_panel_->Close();
+    chromevox_panel_ = nullptr;
+  }
+  chromevox_panel_ = new ChromeVoxPanel(profile_);
+  chromevox_panel_widget_observer_.reset(
+      new ChromeVoxPanelWidgetObserver(chromevox_panel_->GetWidget(), this));
 }
 
 void AccessibilityManager::OnChromeVoxPanelClosing() {

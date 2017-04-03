@@ -30,10 +30,10 @@
 #include "content/public/browser/session_storage_usage_info.h"
 #include "content/public/common/content_features.h"
 #include "mojo/common/common_type_converters.h"
-#include "services/file/public/cpp/constants.h"
+#include "services/file/public/interfaces/constants.mojom.h"
 #include "services/file/public/interfaces/file_system.mojom.h"
-#include "services/shell/public/cpp/connection.h"
-#include "services/shell/public/cpp/connector.h"
+#include "services/service_manager/public/cpp/connection.h"
+#include "services/service_manager/public/cpp/connector.h"
 
 namespace content {
 namespace {
@@ -83,7 +83,8 @@ void GetSessionStorageUsageHelper(
 // for now).
 class DOMStorageContextWrapper::MojoState {
  public:
-  MojoState(shell::Connector* connector, const base::FilePath& subdirectory)
+  MojoState(service_manager::Connector* connector,
+            const base::FilePath& subdirectory)
       : connector_(connector),
         // TODO(michaeln): Enable writing to disk when db is versioned,
         // for now using an empty subdirectory to use an in-memory db.
@@ -102,7 +103,7 @@ class DOMStorageContextWrapper::MojoState {
   }
 
   void OnUserServiceConnectionComplete() {
-    CHECK_EQ(shell::mojom::ConnectResult::SUCCEEDED,
+    CHECK_EQ(service_manager::mojom::ConnectResult::SUCCEEDED,
              file_service_connection_->GetResult());
   }
 
@@ -123,7 +124,7 @@ class DOMStorageContextWrapper::MojoState {
   // Maps between an origin and its prefixed LevelDB view.
   std::map<url::Origin, std::unique_ptr<LevelDBWrapperImpl>> level_db_wrappers_;
 
-  shell::Connector* const connector_;
+  service_manager::Connector* const connector_;
   const base::FilePath subdirectory_;
 
   enum ConnectionState {
@@ -132,7 +133,7 @@ class DOMStorageContextWrapper::MojoState {
     CONNECTION_FINISHED
   } connection_state_;
 
-  std::unique_ptr<shell::Connection> file_service_connection_;
+  std::unique_ptr<service_manager::Connection> file_service_connection_;
 
   file::mojom::FileSystemPtr file_system_;
   filesystem::mojom::DirectoryPtr directory_;
@@ -153,7 +154,7 @@ void DOMStorageContextWrapper::MojoState::OpenLocalStorage(
   if (connection_state_ == NO_CONNECTION) {
     CHECK(connector_);
     file_service_connection_ =
-        connector_->Connect(file::kFileServiceName);
+        connector_->Connect(file::mojom::kServiceName);
     connection_state_ = CONNECTION_IN_PROGRESS;
     file_service_connection_->AddConnectionCompletedClosure(
         base::Bind(&MojoState::OnUserServiceConnectionComplete,
@@ -166,11 +167,10 @@ void DOMStorageContextWrapper::MojoState::OpenLocalStorage(
       // We were given a subdirectory to write to. Get it and use a disk backed
       // database.
       file_service_connection_->GetInterface(&file_system_);
-      file_system_->GetSubDirectory(
-          mojo::String::From(subdirectory_.AsUTF8Unsafe()),
-          GetProxy(&directory_),
-          base::Bind(&MojoState::OnDirectoryOpened,
-                     weak_ptr_factory_.GetWeakPtr()));
+      file_system_->GetSubDirectory(subdirectory_.AsUTF8Unsafe(),
+                                    GetProxy(&directory_),
+                                    base::Bind(&MojoState::OnDirectoryOpened,
+                                               weak_ptr_factory_.GetWeakPtr()));
     } else {
       // We were not given a subdirectory. Use a memory backed database.
       file_service_connection_->GetInterface(&leveldb_service_);
@@ -262,7 +262,7 @@ void DOMStorageContextWrapper::MojoState::BindLocalStorage(
 }
 
 DOMStorageContextWrapper::DOMStorageContextWrapper(
-    shell::Connector* connector,
+    service_manager::Connector* connector,
     const base::FilePath& profile_path,
     const base::FilePath& local_partition_path,
     storage::SpecialStoragePolicy* special_storage_policy) {
@@ -315,6 +315,15 @@ void DOMStorageContextWrapper::GetSessionStorageUsage(
       base::Bind(&GetSessionStorageUsageHelper,
                  base::RetainedRef(base::ThreadTaskRunnerHandle::Get()),
                  base::RetainedRef(context_), callback));
+}
+
+void DOMStorageContextWrapper::DeleteLocalStorageForPhysicalOrigin(
+    const GURL& origin) {
+  DCHECK(context_.get());
+  context_->task_runner()->PostShutdownBlockingTask(
+      FROM_HERE, DOMStorageTaskRunner::PRIMARY_SEQUENCE,
+      base::Bind(&DOMStorageContextImpl::DeleteLocalStorageForPhysicalOrigin,
+                 context_, origin));
 }
 
 void DOMStorageContextWrapper::DeleteLocalStorage(const GURL& origin) {

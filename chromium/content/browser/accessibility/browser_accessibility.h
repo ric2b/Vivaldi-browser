@@ -48,11 +48,6 @@
 
 namespace content {
 class BrowserAccessibilityManager;
-#if defined(OS_WIN)
-class BrowserAccessibilityWin;
-#elif defined(OS_LINUX) && !defined(OS_CHROMEOS) && defined(USE_X11)
-class BrowserAccessibilityAuraLinux;
-#endif
 
 ////////////////////////////////////////////////////////////////////////////////
 //
@@ -162,6 +157,12 @@ class CONTENT_EXPORT BrowserAccessibility {
   // the role is WebAXRoleStaticText.
   gfx::Rect GetScreenBoundsForRange(int start, int len) const;
 
+  // Convert a bounding rectangle from this node's coordinate system
+  // (which is relative to its nearest scrollable ancestor) to
+  // absolute bounds, either in page coordinates (when |frameOnly| is
+  // false), or in frame coordinates (when |frameOnly| is true).
+  gfx::Rect RelativeToAbsoluteBounds(gfx::RectF bounds, bool frame_only) const;
+
   // This is to handle the cases such as ARIA textbox, where the value should
   // be calculated from the object's inner text.
   virtual base::string16 GetValue() const;
@@ -185,9 +186,13 @@ class CONTENT_EXPORT BrowserAccessibility {
   int GetWordStartBoundary(int start,
                            ui::TextBoundaryDirection direction) const;
 
-  // Returns the deepest descendant that contains the specified point
-  // (in global screen coordinates).
-  BrowserAccessibility* BrowserAccessibilityForPoint(const gfx::Point& point);
+  // This is an approximate hit test that only uses the information in
+  // the browser process to compute the correct result. It will not return
+  // correct results in many cases of z-index, overflow, and absolute
+  // positioning, so BrowserAccessibilityManager::CachingAsyncHitTest
+  // should be used instead, which falls back on calling ApproximateHitTest
+  // automatically.
+  BrowserAccessibility* ApproximateHitTest(const gfx::Point& screen_point);
 
   // Marks this object for deletion, releases our reference to it, and
   // nulls out the pointer to the underlying AXNode.  May not delete
@@ -371,12 +376,6 @@ class CONTENT_EXPORT BrowserAccessibility {
   // bounds, but "virtual" elements in the accessibility tree that don't
   // correspond to a layed-out element sometimes don't have bounds.
   void FixEmptyBounds(gfx::RectF* bounds) const;
-
-  // Convert the bounding rectangle of an element (which is relative to
-  // its nearest scrollable ancestor) to absolute bounds, either in
-  // page coordinates (when |frameOnly| is false), or in frame coordinates
-  // (when |frameOnly| is true).
-  gfx::Rect RelativeToAbsoluteBounds(gfx::RectF bounds, bool frame_only) const;
 
   DISALLOW_COPY_AND_ASSIGN(BrowserAccessibility);
 };

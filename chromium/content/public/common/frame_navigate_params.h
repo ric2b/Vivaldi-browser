@@ -28,12 +28,6 @@ struct CONTENT_EXPORT FrameNavigateParams : public IPC::NoParams {
   FrameNavigateParams(const FrameNavigateParams& other);
   ~FrameNavigateParams();
 
-  // Page ID of this navigation. The renderer creates a new unique page ID
-  // anytime a new session history entry is created. This means you'll get new
-  // page IDs for user actions, and the old page IDs will be reloaded when
-  // iframes are loaded automatically.
-  int32_t page_id;
-
   // The unique ID of the NavigationEntry for browser-initiated navigations.
   // This value was given to the render process in the HistoryNavigationParams
   // and is being returned by the renderer without it having any idea what it
@@ -80,10 +74,6 @@ struct CONTENT_EXPORT FrameNavigateParams : public IPC::NoParams {
   // Set to false if we want to update the session history but not update
   // the browser history.  E.g., on unreachable urls.
   bool should_update_history;
-
-  // See SearchableFormData for a description of these.
-  GURL searchable_form_url;
-  std::string searchable_form_encoding;
 
   // Contents MIME type of main frame.
   std::string contents_mime_type;

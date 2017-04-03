@@ -13,7 +13,6 @@
 #include "chrome/browser/ui/tabs/tab_utils.h"
 #include "chrome/common/features.h"
 #include "components/bookmarks/browser/bookmark_model.h"
-#include "components/security_state/security_state_model.h"
 #include "ui/base/ui_base_types.h"
 
 class Browser;
@@ -28,6 +27,10 @@ class ActiveTabPermissionGranter;
 class Command;
 class Extension;
 }
+
+namespace security_state {
+struct SecurityInfo;
+}  // namespace security_state
 
 // An implementation of BrowserWindow for Cocoa. Bridges between C++ and
 // the Cocoa NSWindow. Cross-platform code will interact with this object when
@@ -99,7 +102,6 @@ class BrowserWindowCocoa
   bool IsBookmarkBarAnimating() const override;
   bool IsTabStripEditable() const override;
   bool IsToolbarVisible() const override;
-  gfx::Rect GetRootWindowResizerRect() const override;
   void ShowUpdateChromeDialog() override;
   void ShowBookmarkBubble(const GURL& url, bool already_bookmarked) override;
   void ShowBookmarkAppBubble(
@@ -109,10 +111,11 @@ class BrowserWindowCocoa
       content::WebContents* contents,
       autofill::SaveCardBubbleController* controller,
       bool user_gesture) override;
-  void ShowTranslateBubble(content::WebContents* contents,
-                           translate::TranslateStep step,
-                           translate::TranslateErrors::Type error_type,
-                           bool is_user_gesture) override;
+  ShowTranslateBubbleResult ShowTranslateBubble(
+      content::WebContents* contents,
+      translate::TranslateStep step,
+      translate::TranslateErrors::Type error_type,
+      bool is_user_gesture) override;
 #if BUILDFLAG(ENABLE_ONE_CLICK_SIGNIN)
   void ShowOneClickSigninConfirmation(
       const base::string16& email,
@@ -130,8 +133,7 @@ class BrowserWindowCocoa
       Profile* profile,
       content::WebContents* web_contents,
       const GURL& virtual_url,
-      const security_state::SecurityStateModel::SecurityInfo& security_info)
-      override;
+      const security_state::SecurityInfo& security_info) override;
   void ShowAppMenu() override;
   bool PreHandleKeyboardEvent(const content::NativeWebKeyboardEvent& event,
                               bool* is_keyboard_shortcut) override;

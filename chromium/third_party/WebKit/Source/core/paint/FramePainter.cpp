@@ -36,6 +36,8 @@ void FramePainter::paint(GraphicsContext& context,
   IntRect visibleAreaWithoutScrollbars(frameView().location(),
                                        frameView().visibleContentRect().size());
   documentDirtyRect.intersect(visibleAreaWithoutScrollbars);
+  documentDirtyRect.moveBy(-frameView().location() +
+                           frameView().scrollOffsetInt());
 
   bool shouldPaintContents = !documentDirtyRect.isEmpty();
   bool shouldPaintScrollbars =
@@ -49,7 +51,8 @@ void FramePainter::paint(GraphicsContext& context,
     // settings()->rootLayerScrolls() is enabled.
     // TODO(pdr): Make this conditional on the rootLayerScrolls setting.
     Optional<ScopedPaintChunkProperties> scopedPaintChunkProperties;
-    if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
+    if (RuntimeEnabledFeatures::slimmingPaintV2Enabled() &&
+        !RuntimeEnabledFeatures::rootLayerScrollingEnabled()) {
       if (const PropertyTreeState* contentsState =
               m_frameView->totalPropertyTreeStateForContents()) {
         PaintChunkProperties properties(
@@ -69,16 +72,19 @@ void FramePainter::paint(GraphicsContext& context,
         AffineTransform::translation(frameView().x() - frameView().scrollX(),
                                      frameView().y() - frameView().scrollY()));
 
-    ClipRecorder recorder(context, *frameView().layoutView(),
-                          DisplayItem::kClipFrameToVisibleContentRect,
-                          frameView().visibleContentRect());
+    if (RuntimeEnabledFeatures::rootLayerScrollingEnabled()) {
+      paintContents(context, globalPaintFlags, documentDirtyRect);
+    } else {
+      ClipRecorder clipRecorder(context, *frameView().layoutView(),
+                                DisplayItem::kClipFrameToVisibleContentRect,
+                                frameView().visibleContentRect());
 
-    documentDirtyRect.moveBy(-frameView().location() +
-                             frameView().scrollPosition());
-    paintContents(context, globalPaintFlags, documentDirtyRect);
+      paintContents(context, globalPaintFlags, documentDirtyRect);
+    }
   }
 
   if (shouldPaintScrollbars) {
+    DCHECK(!RuntimeEnabledFeatures::rootLayerScrollingEnabled());
     IntRect scrollViewDirtyRect = rect.m_rect;
     IntRect visibleAreaWithScrollbars(
         frameView().location(),
@@ -88,11 +94,20 @@ void FramePainter::paint(GraphicsContext& context,
 
     Optional<ScopedPaintChunkProperties> scopedPaintChunkProperties;
     if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
-      if (TransformPaintPropertyNode* transform =
-              m_frameView->preTranslation()) {
+      if (const PropertyTreeState* contentsState =
+              m_frameView->totalPropertyTreeStateForContents()) {
+        // The scrollbar's property nodes are similar to the frame view's
+        // contents state but we want to exclude the content-specific
+        // properties. This prevents the scrollbars from scrolling, for example.
         PaintChunkProperties properties(
             context.getPaintController().currentPaintChunkProperties());
-        properties.transform = transform;
+        properties.transform = m_frameView->preTranslation();
+        properties.clip = m_frameView->contentClip()->parent();
+        properties.effect = contentsState->effect();
+        auto* scrollBarScroll = contentsState->scroll();
+        if (m_frameView->scroll())
+          scrollBarScroll = m_frameView->scroll()->parent();
+        properties.scroll = scrollBarScroll;
         scopedPaintChunkProperties.emplace(context.getPaintController(),
                                            *frameView().layoutView(),
                                            properties);
@@ -238,7 +253,7 @@ void FramePainter::paintScrollbar(GraphicsContext& context,
 }
 
 const FrameView& FramePainter::frameView() {
-  ASSERT(m_frameView);
+  DCHECK(m_frameView);
   return *m_frameView;
 }
 

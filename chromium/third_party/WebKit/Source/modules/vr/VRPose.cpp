@@ -8,18 +8,19 @@ namespace blink {
 
 namespace {
 
-DOMFloat32Array* mojoArrayToFloat32Array(const mojo::WTFArray<float>& vec) {
-  if (vec.is_null())
+DOMFloat32Array* mojoArrayToFloat32Array(
+    const WTF::Optional<WTF::Vector<float>>& vec) {
+  if (!vec)
     return nullptr;
 
-  return DOMFloat32Array::create(&(vec.front()), vec.size());
+  return DOMFloat32Array::create(&(vec.value().first()), vec.value().size());
 }
 
 }  // namespace
 
 VRPose::VRPose() {}
 
-void VRPose::setPose(const device::blink::VRPosePtr& state) {
+void VRPose::setPose(const device::mojom::blink::VRPosePtr& state) {
   if (state.is_null())
     return;
 

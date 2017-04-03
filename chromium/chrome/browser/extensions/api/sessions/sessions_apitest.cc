@@ -27,12 +27,12 @@
 #include "chrome/test/base/testing_browser_process.h"
 #include "components/browser_sync/profile_sync_service.h"
 #include "components/browser_sync/profile_sync_service_mock.h"
-#include "components/sync/api/attachments/attachment_id.h"
-#include "components/sync/api/fake_sync_change_processor.h"
-#include "components/sync/api/sync_error_factory_mock.h"
-#include "components/sync/core/attachments/attachment_service_proxy_for_test.h"
 #include "components/sync/device_info/local_device_info_provider_mock.h"
 #include "components/sync/driver/sync_api_component_factory_mock.h"
+#include "components/sync/model/attachments/attachment_id.h"
+#include "components/sync/model/attachments/attachment_service_proxy_for_test.h"
+#include "components/sync/model/fake_sync_change_processor.h"
+#include "components/sync/model/sync_error_factory_mock.h"
 #include "components/sync_sessions/sessions_sync_manager.h"
 #include "extensions/browser/api_test_utils.h"
 
@@ -217,10 +217,11 @@ void ExtensionSessionsTest::CreateTestProfileSyncService() {
           ProfileSyncServiceFactory::GetInstance()->SetTestingFactoryAndUse(
               profile, &ExtensionSessionsTest::BuildProfileSyncService));
 
-  syncer::ModelTypeSet preferred_types;
-  preferred_types.Put(syncer::SESSIONS);
+  syncer::ModelTypeSet preferred_types(syncer::SESSIONS, syncer::PROXY_TABS);
   GoogleServiceAuthError no_error(GoogleServiceAuthError::NONE);
   ON_CALL(*service, IsDataTypeControllerRunning(syncer::SESSIONS))
+      .WillByDefault(testing::Return(true));
+  ON_CALL(*service, IsDataTypeControllerRunning(syncer::PROXY_TABS))
       .WillByDefault(testing::Return(true));
   ON_CALL(*service, GetRegisteredDataTypes())
       .WillByDefault(testing::Return(syncer::UserTypes()));

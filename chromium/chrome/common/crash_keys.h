@@ -85,7 +85,21 @@ extern const char kGPURenderer[];
 
 #if defined(OS_WIN)
 extern const char kHungAudioThreadDetails[];
+
+// Hung renderer crash reports are only sent on Windows.
+extern const char kHungRendererOutstandingAckCount[];
+extern const char kHungRendererOutstandingEventType[];
+extern const char kHungRendererLastEventType[];
+extern const char kHungRendererReason[];
+
+// Third-party module crash keys are sent only on Windows.
+extern const char kThirdPartyModulesLoaded[];
+extern const char kThirdPartyModulesNotLoaded[];
 #endif
+
+// Number of input event send IPC failures. Added to debug
+// crbug.com/615090.
+extern const char kInputEventFilterSendFailure[];
 
 // The user's printers, up to kPrinterInfoCount. Should be set with
 // ScopedPrinterInfo.

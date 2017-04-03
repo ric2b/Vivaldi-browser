@@ -1,12 +1,15 @@
 // Copyright (c) 2015-2016 Vivaldi Technologies. All Rights Reserved.
 
-#ifndef VIVALDI_PREF_NAMES_H_
-#define VIVALDI_PREF_NAMES_H_
+#ifndef PREFS_VIVALDI_PREF_NAMES_H_
+#define PREFS_VIVALDI_PREF_NAMES_H_
 
 #include "chromium/build/build_config.h"
 
 namespace vivaldiprefs {
 
+// Profile prefs go here.
+
+extern const char kAlwaysLoadPinnedTabAfterRestore[];
 extern const char kDeferredTabLoadingAfterRestore[];
 extern const char kMousegesturesEnabled[];
 extern const char kRockerGesturesEnabled[];
@@ -20,7 +23,7 @@ extern const char kVivaldiExperiments[];
 
 #if defined(USE_AURA)
 extern const char kHideMouseCursorInFullscreen[];
-#endif // USE_AURA
+#endif  // USE_AURA
 
 #if defined(OS_MACOSX)
 extern const char kAppleKeyboardUIMode[];
@@ -32,6 +35,10 @@ extern const char kAppleActionOnDoubleClick[];
 extern const char kSwipeScrollDirection[];
 #endif
 
+// Local state prefs go here.
+
+extern const char kVivaldiUniqueUserId[];
+
 }  // namespace vivaldiprefs
 
-#endif  // VIVALDI_PREF_NAMES_H_
+#endif  // PREFS_VIVALDI_PREF_NAMES_H_

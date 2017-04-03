@@ -15,10 +15,6 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 
-namespace base {
-class SequencedTaskRunner;
-}
-
 namespace cc {
 class Resource;
 
@@ -41,7 +37,7 @@ class CC_EXPORT RasterBufferProvider {
       const RasterSource* raster_source,
       const gfx::Rect& canvas_bitmap_rect,
       const gfx::Rect& canvas_playback_rect,
-      float scale,
+      const gfx::SizeF& scales,
       sk_sp<SkColorSpace> color_space,
       const RasterSource::PlaybackSettings& playback_settings);
 

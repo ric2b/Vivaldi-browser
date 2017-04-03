@@ -4,13 +4,11 @@
 
 #include "chrome/browser/chromeos/file_manager/arc_file_tasks.h"
 
-#include <map>
 #include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 
-#include "base/base64.h"
 #include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
@@ -24,12 +22,9 @@
 #include "components/arc/common/intent_helper.mojom.h"
 #include "components/arc/intent_helper/activity_icon_loader.h"
 #include "components/arc/intent_helper/arc_intent_helper_bridge.h"
-#include "components/user_manager/user_manager.h"
+#include "components/arc/intent_helper/intent_constants.h"
 #include "content/public/browser/browser_thread.h"
 #include "extensions/browser/entry_info.h"
-#include "mojo/public/cpp/bindings/binding.h"
-#include "net/base/escape.h"
-#include "net/base/filename_util.h"
 #include "storage/browser/fileapi/file_system_url.h"
 #include "url/gurl.h"
 
@@ -41,14 +36,7 @@ namespace {
 constexpr int kArcIntentHelperVersionWithUrlListSupport = 4;
 constexpr int kArcIntentHelperVersionWithFullActivityName = 5;
 
-constexpr base::FilePath::CharType kArcDownloadPath[] =
-    FILE_PATH_LITERAL("/sdcard/Download");
-constexpr base::FilePath::CharType kRemovableMediaPath[] =
-    FILE_PATH_LITERAL("/media/removable");
-constexpr char kArcRemovableMediaProviderUrl[] =
-    "content://org.chromium.arc.removablemediaprovider/";
 constexpr char kAppIdSeparator = '/';
-constexpr char kPngDataUrlPrefix[] = "data:image/png;base64,";
 
 // Returns the Mojo interface for ARC Intent Helper, with version |minVersion|
 // or above. If the ARC bridge is not established, returns null.
@@ -75,27 +63,31 @@ scoped_refptr<arc::ActivityIconLoader> GetArcActivityIconLoader() {
   return arc_service_manager->icon_loader();
 }
 
-std::string ArcActionTypeToString(arc::mojom::ActionType action_type) {
-  switch (action_type) {
-    case arc::mojom::ActionType::VIEW:
-      return "view";
-    case arc::mojom::ActionType::SEND:
-      return "send";
-    case arc::mojom::ActionType::SEND_MULTIPLE:
-      return "send_multiple";
-  }
-  NOTREACHED();
+// Converts an Android intent action (see kIntentAction* in
+// components/arc/intent_helper/intent_constants.h) to a file task action ID
+// (see chrome/browser/chromeos/file_manager/file_tasks.h).
+std::string ArcActionToFileTaskActionId(const std::string& action) {
+  if (action == arc::kIntentActionView)
+    return "view";
+  else if (action == arc::kIntentActionSend)
+    return "send";
+  else if (action == arc::kIntentActionSendMultiple)
+    return "send_multiple";
+  NOTREACHED() << "Unhandled ARC action \"" << action << "\"";
   return "";
 }
 
-arc::mojom::ActionType StringToArcActionType(const std::string& str) {
-  if (str == "view")
+// TODO(derat): Replace this with a FileTaskActionIdToArcAction method once
+// HandleUrlList has been updated to take a string action rather than an
+// ArcActionType.
+arc::mojom::ActionType FileTaskActionIdToArcActionType(const std::string& id) {
+  if (id == "view")
     return arc::mojom::ActionType::VIEW;
-  if (str == "send")
+  if (id == "send")
     return arc::mojom::ActionType::SEND;
-  if (str == "send_multiple")
+  if (id == "send_multiple")
     return arc::mojom::ActionType::SEND_MULTIPLE;
-  NOTREACHED();
+  NOTREACHED() << "Unhandled file task action ID \"" << id << "\"";
   return arc::mojom::ActionType::VIEW;
 }
 
@@ -110,7 +102,7 @@ arc::mojom::ActivityNamePtr AppIdToActivityName(const std::string& id) {
   const size_t separator = id.find(kAppIdSeparator);
   if (separator == std::string::npos) {
     name->package_name = id;
-    name->activity_name = mojo::String();
+    name->activity_name = std::string();
   } else {
     name->package_name = id.substr(0, separator);
     name->activity_name = id.substr(separator + 1);
@@ -118,73 +110,23 @@ arc::mojom::ActivityNamePtr AppIdToActivityName(const std::string& id) {
   return name;
 }
 
-// Converts the Chrome OS file path to ARC file URL.
-bool ConvertToArcUrl(const base::FilePath& path, GURL* arc_url) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-
-  // Obtain the primary profile. This information is required because currently
-  // only the file systems for the primary profile is exposed to ARC.
-  if (!user_manager::UserManager::IsInitialized())
-    return false;
-  const user_manager::User* primary_user =
-      user_manager::UserManager::Get()->GetPrimaryUser();
-  if (!primary_user)
-    return false;
-  Profile* primary_profile =
-      chromeos::ProfileHelper::Get()->GetProfileByUser(primary_user);
-  if (!primary_profile)
-    return false;
-
-  // Convert paths under primary profile's Downloads directory.
-  base::FilePath primary_downloads =
-      util::GetDownloadsFolderForProfile(primary_profile);
-  base::FilePath result_path(kArcDownloadPath);
-  if (primary_downloads.AppendRelativePath(path, &result_path)) {
-    *arc_url = net::FilePathToFileURL(result_path);
-    return true;
-  }
-
-  // Convert paths under /media/removable.
-  base::FilePath relative_path;
-  if (base::FilePath(kRemovableMediaPath)
-          .AppendRelativePath(path, &relative_path)) {
-    *arc_url = GURL(kArcRemovableMediaProviderUrl)
-                   .Resolve(net::EscapePath(relative_path.AsUTF8Unsafe()));
-    return true;
-  }
-
-  // TODO(kinaba): Add conversion logic once other file systems are supported.
-  return false;
-}
-
 // Below is the sequence of thread-hopping for loading ARC file tasks.
 void OnArcHandlerList(
     std::unique_ptr<std::vector<FullTaskDescriptor>> result_list,
     const FindTasksCallback& callback,
-    mojo::Array<arc::mojom::IntentHandlerInfoPtr> handlers);
+    std::vector<arc::mojom::IntentHandlerInfoPtr> handlers);
 
 void OnArcIconLoaded(
     std::unique_ptr<std::vector<FullTaskDescriptor>> result_list,
     const FindTasksCallback& callback,
-    mojo::Array<arc::mojom::IntentHandlerInfoPtr> handlers,
+    std::vector<arc::mojom::IntentHandlerInfoPtr> handlers,
     std::unique_ptr<arc::ActivityIconLoader::ActivityToIconsMap> icons);
-
-typedef std::map<arc::ActivityIconLoader::ActivityName, GURL> IconUrlMap;
-
-std::unique_ptr<IconUrlMap> EncodeIconsToDataURLs(
-    std::unique_ptr<arc::ActivityIconLoader::ActivityToIconsMap> icons);
-
-void OnArcIconEncoded(
-    std::unique_ptr<std::vector<FullTaskDescriptor>> result_list,
-    const FindTasksCallback& callback,
-    mojo::Array<arc::mojom::IntentHandlerInfoPtr> handlers,
-    std::unique_ptr<IconUrlMap> icons);
 
 // Called after the handlers from ARC is obtained. Proceeds to OnArcIconLoaded.
 void OnArcHandlerList(
     std::unique_ptr<std::vector<FullTaskDescriptor>> result_list,
     const FindTasksCallback& callback,
-    mojo::Array<arc::mojom::IntentHandlerInfoPtr> handlers) {
+    std::vector<arc::mojom::IntentHandlerInfoPtr> handlers) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   scoped_refptr<arc::ActivityIconLoader> icon_loader =
@@ -194,7 +136,7 @@ void OnArcHandlerList(
     return;
   }
 
-  mojo::Array<arc::mojom::IntentHandlerInfoPtr> handlers_filtered =
+  std::vector<arc::mojom::IntentHandlerInfoPtr> handlers_filtered =
       arc::ArcIntentHelperBridge::FilterOutIntentHelper(std::move(handlers));
   std::vector<arc::ActivityIconLoader::ActivityName> activity_names;
   for (const arc::mojom::IntentHandlerInfoPtr& handler : handlers_filtered)
@@ -209,62 +151,32 @@ void OnArcHandlerList(
 void OnArcIconLoaded(
     std::unique_ptr<std::vector<FullTaskDescriptor>> result_list,
     const FindTasksCallback& callback,
-    mojo::Array<arc::mojom::IntentHandlerInfoPtr> handlers,
+    std::vector<arc::mojom::IntentHandlerInfoPtr> handlers,
     std::unique_ptr<arc::ActivityIconLoader::ActivityToIconsMap> icons) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-
-  base::PostTaskAndReplyWithResult(
-      content::BrowserThread::GetBlockingPool(), FROM_HERE,
-      base::Bind(&EncodeIconsToDataURLs, base::Passed(&icons)),
-      base::Bind(&OnArcIconEncoded, base::Passed(&result_list), callback,
-                 base::Passed(&handlers)));
-}
-
-// Encode the set of icon images to data URLs.
-std::unique_ptr<IconUrlMap> EncodeIconsToDataURLs(
-    std::unique_ptr<arc::ActivityIconLoader::ActivityToIconsMap> icons) {
-  base::ThreadRestrictions::AssertIOAllowed();
-
-  std::unique_ptr<IconUrlMap> result(new IconUrlMap);
-  for (const auto& entry : *icons) {
-    scoped_refptr<base::RefCountedMemory> img =
-        entry.second.icon16.As1xPNGBytes();
-    if (!img)
-      continue;
-
-    std::string encoded;
-    base::Base64Encode(base::StringPiece(img->front_as<char>(), img->size()),
-                       &encoded);
-    result->insert(
-        std::make_pair(entry.first, GURL(kPngDataUrlPrefix + encoded)));
-  }
-  return result;
-}
-
-// Called after icon data is encoded on the blocking pool.
-void OnArcIconEncoded(
-    std::unique_ptr<std::vector<FullTaskDescriptor>> result_list,
-    const FindTasksCallback& callback,
-    mojo::Array<arc::mojom::IntentHandlerInfoPtr> handlers,
-    std::unique_ptr<IconUrlMap> icons) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   using extensions::api::file_manager_private::Verb;
   for (const arc::mojom::IntentHandlerInfoPtr& handler : handlers) {
+    std::string action(arc::kIntentActionView);
+    if (handler->action.has_value())
+      action = *handler->action;
     std::string name(handler->name);
     Verb handler_verb = Verb::VERB_NONE;
-    if (handler->action_type == arc::mojom::ActionType::SEND ||
-        handler->action_type == arc::mojom::ActionType::SEND_MULTIPLE) {
+    if (action == arc::kIntentActionSend ||
+        action == arc::kIntentActionSendMultiple) {
       handler_verb = Verb::VERB_SHARE_WITH;
     }
-    const GURL& icon_url = (*icons)[arc::ActivityIconLoader::ActivityName(
-        handler->package_name, handler->activity_name)];
+    auto it = icons->find(arc::ActivityIconLoader::ActivityName(
+        handler->package_name, handler->activity_name));
+    const GURL& icon_url =
+        (it == icons->end() ? GURL::EmptyGURL()
+                            : it->second.icon16_dataurl->data);
     result_list->push_back(FullTaskDescriptor(
         TaskDescriptor(
             ActivityNameToAppId(handler->package_name, handler->activity_name),
-            TASK_TYPE_ARC_APP, ArcActionTypeToString(handler->action_type)),
+            TASK_TYPE_ARC_APP, ArcActionToFileTaskActionId(action)),
         name, handler_verb, icon_url, false /* is_default */,
-        handler->action_type != arc::mojom::ActionType::VIEW /* is_generic */));
+        action != arc::kIntentActionView /* is_generic */));
   }
   callback.Run(std::move(result_list));
 }
@@ -285,7 +197,7 @@ void FindArcTasks(Profile* profile,
     return;
   }
 
-  mojo::Array<arc::mojom::UrlWithMimeTypePtr> urls;
+  std::vector<arc::mojom::UrlWithMimeTypePtr> urls;
   for (const extensions::EntryInfo& entry : entries) {
     if (entry.is_directory) {  // ARC apps don't support directories.
       callback.Run(std::move(result_list));
@@ -293,7 +205,7 @@ void FindArcTasks(Profile* profile,
     }
 
     GURL url;
-    if (!ConvertToArcUrl(entry.path, &url)) {
+    if (!util::ConvertPathToArcUrl(entry.path, &url)) {
       callback.Run(std::move(result_list));
       return;
     }
@@ -322,10 +234,10 @@ bool ExecuteArcTask(Profile* profile,
   if (!arc_intent_helper)
     return false;
 
-  mojo::Array<arc::mojom::UrlWithMimeTypePtr> urls;
+  std::vector<arc::mojom::UrlWithMimeTypePtr> urls;
   for (size_t i = 0; i < file_urls.size(); ++i) {
     GURL url;
-    if (!ConvertToArcUrl(file_urls[i].path(), &url)) {
+    if (!util::ConvertPathToArcUrl(file_urls[i].path(), &url)) {
       LOG(ERROR) << "File on unsuppored path";
       return false;
     }
@@ -337,9 +249,9 @@ bool ExecuteArcTask(Profile* profile,
     urls.push_back(std::move(url_with_type));
   }
 
-  arc_intent_helper->HandleUrlList(std::move(urls),
-                                   AppIdToActivityName(task.app_id),
-                                   StringToArcActionType(task.action_id));
+  arc_intent_helper->HandleUrlList(
+      std::move(urls), AppIdToActivityName(task.app_id),
+      FileTaskActionIdToArcActionType(task.action_id));
   return true;
 }
 

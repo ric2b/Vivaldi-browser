@@ -29,10 +29,9 @@ class TimeDelta;
 
 namespace media {
 class AudioOutputController;
-class MediaKeys;
 }
 
-namespace shell {
+namespace service_manager {
 class Connection;
 class InterfaceProvider;
 }
@@ -41,9 +40,12 @@ namespace content {
 class BrowserContext;
 class BrowserMessageFilter;
 class RenderProcessHostObserver;
-class RenderWidgetHost;
 class StoragePartition;
 struct GlobalRequestID;
+
+namespace mojom {
+class Renderer;
+}
 
 // Interface that represents the browser side of the browser <-> renderer
 // communication channel. There will generally be one RenderProcessHost per
@@ -80,6 +82,12 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
   // that with no effect. Therefore, if the caller isn't sure about whether
   // the process has been created, it should just call Init().
   virtual bool Init() = 0;
+
+  // Ensures that a Channel exists and is at least queueing outgoing messages
+  // if there isn't a render process connected to it yet. This may be used to
+  // ensure that in the event of a renderer crash and restart, subsequent
+  // messages sent via Send() will eventually reach the new process.
+  virtual void EnableSendQueue() = 0;
 
   // Gets the next available routing id.
   virtual int GetNextRoutingID() = 0;
@@ -181,10 +189,6 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
   // checking if there is connection or not. Virtual for mocking out for tests.
   virtual bool HasConnection() const = 0;
 
-  // Call this to allow queueing of IPC messages that are sent before the
-  // process is launched.
-  virtual void EnableSendQueue() = 0;
-
   // Returns the renderer channel.
   virtual IPC::ChannelProxy* GetChannel() = 0;
 
@@ -267,9 +271,10 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
   // transferring it to a new renderer process.
   virtual void ResumeDeferredNavigation(const GlobalRequestID& request_id) = 0;
 
-  // Returns the shell::InterfaceProvider the browser process can use to bind
+  // Returns the service_manager::InterfaceProvider the browser process can use
+  // to bind
   // interfaces exposed to it from the renderer.
-  virtual shell::InterfaceProvider* GetRemoteInterfaces() = 0;
+  virtual service_manager::InterfaceProvider* GetRemoteInterfaces() = 0;
 
   // Extracts any persistent-memory-allocator used for renderer metrics.
   // Ownership is passed to the caller. To support sharing of histogram data
@@ -318,6 +323,14 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
 
   // Purges and suspends the renderer process.
   virtual void PurgeAndSuspend() = 0;
+
+  // Resumes the renderer process.
+  virtual void Resume() = 0;
+
+  // Acquires the |mojom::Renderer| interface to the render process. This is for
+  // internal use only, and is only exposed here to support
+  // MockRenderProcessHost usage in tests.
+  virtual mojom::Renderer* GetRendererInterface() = 0;
 
   // Returns the current number of active views in this process.  Excludes
   // any RenderViewHosts that are swapped out.

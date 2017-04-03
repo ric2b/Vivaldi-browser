@@ -121,10 +121,6 @@ base::string16 FileVersionInfoWin::product_version() {
   return GetStringValue(L"ProductVersion");
 }
 
-base::string16 FileVersionInfoWin::source_version() {
-  return GetStringValue(L"SourceVersion");
-}
-
 base::string16 FileVersionInfoWin::file_description() {
   return GetStringValue(L"FileDescription");
 }

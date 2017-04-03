@@ -34,6 +34,7 @@
 <translation id="2148716181193084225">Dnes</translation>
 <translation id="2226276347425096477">Zkraťte prosím tento text na <ph name="MAX_CHARACTERS" /> znaků nebo méně. (Aktuálně má <ph name="CURRENT_LENGTH" /> znaků.)</translation>
 <translation id="2247351761944213033"><ph name="WEEKNUMBER" />. týden, <ph name="YEAR" /></translation>
+<translation id="2277199496770840904">Stopa <ph name="NUMBER" /></translation>
 <translation id="2291999235780842123">zaškrtávací políčko</translation>
 <translation id="2335594187091864976">výběr data a času</translation>
 <translation id="248395913932153421">Den</translation>
@@ -47,7 +48,7 @@
 <translation id="2674318244760992338">zápatí</translation>
 <translation id="2723001399770238859">zvuk</translation>
 <translation id="2746543609216772311">Datum musí být <ph name="MINIMUM_DATE_OR_TIME" /> nebo později.</translation>
-<translation id="2759744352195237655">vyskakovací tlačítko</translation>
+<translation id="2759744352195237655">tlačítko s vyskakovacím oknem</translation>
 <translation id="2761667185364618470">Chcete-li pokračovat, zaškrtněte toto políčko.</translation>
 <translation id="2846343701378493991">1024 (Střední kvalita)</translation>
 <translation id="2896972712917208084">skupina přepínačů</translation>
@@ -116,7 +117,6 @@
 <translation id="5643186887447432888">tlačítko</translation>
 <translation id="5677946354068040947">další možnosti</translation>
 <translation id="57838592816432529">Ztlumit</translation>
-<translation id="583281660410589416">Neznámé</translation>
 <translation id="5843503607508392247">Jiné…</translation>
 <translation id="5860033963881614850">Vypnuto</translation>
 <translation id="588258955323874662">Celá obrazovka</translation>

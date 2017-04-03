@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/command_line.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/single_thread_task_runner.h"
@@ -23,6 +24,8 @@
 #include "chrome/browser/chromeos/settings/device_oauth2_token_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chromeos/attestation/attestation_flow.h"
+#include "chromeos/chromeos_switches.h"
+#include "google_apis/gaia/gaia_auth_util.h"
 #include "google_apis/gaia/gaia_urls.h"
 #include "net/http/http_status_code.h"
 
@@ -38,27 +41,27 @@ const int kLockRetryIntervalMs = 500;
 const int kLockRetryTimeoutMs = 10 * 60 * 1000;  // 10 minutes.
 
 em::DeviceRegisterRequest::Flavor EnrollmentModeToRegistrationFlavor(
-    policy::EnrollmentConfig::Mode mode) {
+    EnrollmentConfig::Mode mode) {
   switch (mode) {
-    case policy::EnrollmentConfig::MODE_NONE:
+    case EnrollmentConfig::MODE_NONE:
       break;
-    case policy::EnrollmentConfig::MODE_MANUAL:
+    case EnrollmentConfig::MODE_MANUAL:
       return em::DeviceRegisterRequest::FLAVOR_ENROLLMENT_MANUAL;
-    case policy::EnrollmentConfig::MODE_MANUAL_REENROLLMENT:
+    case EnrollmentConfig::MODE_MANUAL_REENROLLMENT:
       return em::DeviceRegisterRequest::FLAVOR_ENROLLMENT_MANUAL_RENEW;
-    case policy::EnrollmentConfig::MODE_LOCAL_FORCED:
+    case EnrollmentConfig::MODE_LOCAL_FORCED:
       return em::DeviceRegisterRequest::FLAVOR_ENROLLMENT_LOCAL_FORCED;
-    case policy::EnrollmentConfig::MODE_LOCAL_ADVERTISED:
+    case EnrollmentConfig::MODE_LOCAL_ADVERTISED:
       return em::DeviceRegisterRequest::FLAVOR_ENROLLMENT_LOCAL_ADVERTISED;
-    case policy::EnrollmentConfig::MODE_SERVER_FORCED:
+    case EnrollmentConfig::MODE_SERVER_FORCED:
       return em::DeviceRegisterRequest::FLAVOR_ENROLLMENT_SERVER_FORCED;
-    case policy::EnrollmentConfig::MODE_SERVER_ADVERTISED:
+    case EnrollmentConfig::MODE_SERVER_ADVERTISED:
       return em::DeviceRegisterRequest::FLAVOR_ENROLLMENT_SERVER_ADVERTISED;
-    case policy::EnrollmentConfig::MODE_RECOVERY:
+    case EnrollmentConfig::MODE_RECOVERY:
       return em::DeviceRegisterRequest::FLAVOR_ENROLLMENT_RECOVERY;
-    case policy::EnrollmentConfig::MODE_ATTESTATION:
+    case EnrollmentConfig::MODE_ATTESTATION:
       return em::DeviceRegisterRequest::FLAVOR_ENROLLMENT_ATTESTATION;
-    case policy::EnrollmentConfig::MODE_ATTESTATION_FORCED:
+    case EnrollmentConfig::MODE_ATTESTATION_FORCED:
       return em::DeviceRegisterRequest::FLAVOR_ENROLLMENT_ATTESTATION_FORCED;
   }
 
@@ -117,7 +120,7 @@ EnrollmentHandlerChromeOS::~EnrollmentHandlerChromeOS() {
 
 void EnrollmentHandlerChromeOS::StartEnrollment() {
   CHECK_EQ(STEP_PENDING, enrollment_step_);
-  enrollment_step_ = STEP_STATE_KEYS;
+  SetStep(STEP_STATE_KEYS);
 
   if (client_->machine_id().empty()) {
     LOG(ERROR) << "Machine id empty.";
@@ -145,8 +148,7 @@ std::unique_ptr<CloudPolicyClient> EnrollmentHandlerChromeOS::ReleaseClient() {
 void EnrollmentHandlerChromeOS::OnPolicyFetched(CloudPolicyClient* client) {
   DCHECK_EQ(client_.get(), client);
   CHECK_EQ(STEP_POLICY_FETCH, enrollment_step_);
-
-  enrollment_step_ = STEP_VALIDATION;
+  SetStep(STEP_VALIDATION);
 
   // Validate the policy.
   const em::PolicyFetchResponse* policy = client_->GetPolicyFor(
@@ -194,9 +196,15 @@ void EnrollmentHandlerChromeOS::OnRegistrationStateChanged(
   DCHECK_EQ(client_.get(), client);
 
   if (enrollment_step_ == STEP_REGISTRATION && client_->is_registered()) {
-    enrollment_step_ = STEP_POLICY_FETCH,
+    SetStep(STEP_POLICY_FETCH);
     device_mode_ = client_->device_mode();
-    if (device_mode_ != policy::DEVICE_MODE_ENTERPRISE) {
+    // TODO(rsorokin): remove after have proper test server.
+    if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+            chromeos::switches::kEnableAd)) {
+      device_mode_ = DEVICE_MODE_ENTERPRISE_AD;
+    }
+    if (device_mode_ != DEVICE_MODE_ENTERPRISE &&
+        device_mode_ != DEVICE_MODE_ENTERPRISE_AD) {
       LOG(ERROR) << "Bad device mode " << device_mode_;
       ReportResult(EnrollmentStatus::ForStatus(
           EnrollmentStatus::STATUS_REGISTRATION_BAD_MODE));
@@ -266,7 +274,7 @@ void EnrollmentHandlerChromeOS::HandleStateKeysResult(
     }
   }
 
-  enrollment_step_ = STEP_LOADING_STORE;
+  SetStep(STEP_LOADING_STORE);
   StartRegistration();
 }
 
@@ -277,7 +285,7 @@ void EnrollmentHandlerChromeOS::StartRegistration() {
     // after the CloudPolicyStore has initialized.
     return;
   }
-  enrollment_step_ = STEP_REGISTRATION;
+  SetStep(STEP_REGISTRATION);
   if (enrollment_config_.is_mode_attestation()) {
     StartAttestationBasedEnrollmentFlow();
   } else {
@@ -316,11 +324,14 @@ void EnrollmentHandlerChromeOS::HandlePolicyValidationResult(
     DeviceCloudPolicyValidator* validator) {
   CHECK_EQ(STEP_VALIDATION, enrollment_step_);
   if (validator->success()) {
-    policy_ = std::move(validator->policy());
-    username_ = validator->policy_data()->username();
+    std::string username = validator->policy_data()->username();
+    // TODO(rsorokin): remove device_mode_ check when device is locked
+    // with both realm and domain.
+    if (device_mode_ != DEVICE_MODE_ENTERPRISE_AD)
+      domain_ = gaia::ExtractDomainName(gaia::CanonicalizeEmail(username));
     device_id_ = validator->policy_data()->device_id();
-    request_token_ = validator->policy_data()->request_token();
-    enrollment_step_ = STEP_ROBOT_AUTH_FETCH;
+    policy_ = std::move(validator->policy());
+    SetStep(STEP_ROBOT_AUTH_FETCH);
     client_->FetchRobotAuthCodes(auth_token_);
   } else {
     ReportResult(EnrollmentStatus::ForValidationError(validator->status()));
@@ -337,13 +348,12 @@ void EnrollmentHandlerChromeOS::OnRobotAuthCodesFetched(
     // This allows clients running against the test server to transparently skip
     // robot auth.
     skip_robot_auth_ = true;
-    enrollment_step_ = STEP_LOCK_DEVICE;
+    SetStep(STEP_LOCK_DEVICE);
     StartLockDevice();
     return;
   }
 
-  enrollment_step_ = STEP_ROBOT_AUTH_REFRESH;
-
+  SetStep(STEP_ROBOT_AUTH_REFRESH);
   gaia::OAuthClientInfo client_info;
   client_info.client_id = GaiaUrls::GetInstance()->oauth2_chrome_client_id();
   client_info.client_secret =
@@ -368,7 +378,7 @@ void EnrollmentHandlerChromeOS::OnGetTokensResponse(
 
   robot_refresh_token_ = refresh_token;
 
-  enrollment_step_ = STEP_LOCK_DEVICE;
+  SetStep(STEP_LOCK_DEVICE);
   StartLockDevice();
 }
 
@@ -405,7 +415,7 @@ void EnrollmentHandlerChromeOS::StartLockDevice() {
   weak_ptr_factory_.InvalidateWeakPtrs();
 
   install_attributes_->LockDevice(
-      username_, device_mode_, device_id_,
+      device_mode_, domain_, enrollment_config_.management_realm, device_id_,
       base::Bind(&EnrollmentHandlerChromeOS::HandleLockDeviceResult,
                  weak_ptr_factory_.GetWeakPtr()));
 }
@@ -458,7 +468,7 @@ void EnrollmentHandlerChromeOS::HandleLockDeviceResult(
 }
 
 void EnrollmentHandlerChromeOS::StartStoreRobotAuth() {
-  enrollment_step_ = STEP_STORE_ROBOT_AUTH;
+  SetStep(STEP_STORE_ROBOT_AUTH);
 
   // Don't store the token if robot auth was skipped.
   if (skip_robot_auth_) {
@@ -482,14 +492,18 @@ void EnrollmentHandlerChromeOS::HandleStoreRobotAuthTokenResult(bool result) {
     return;
   }
 
-  enrollment_step_ = STEP_STORE_POLICY;
-  store_->InstallInitialPolicy(*policy_);
+  if (device_mode_ == policy::DEVICE_MODE_ENTERPRISE_AD) {
+    ReportResult(EnrollmentStatus::ForStatus(EnrollmentStatus::STATUS_SUCCESS));
+  } else {
+    SetStep(STEP_STORE_POLICY);
+    store_->InstallInitialPolicy(*policy_);
+  }
 }
 
 void EnrollmentHandlerChromeOS::Stop() {
   if (client_.get())
     client_->RemoveObserver(this);
-  enrollment_step_ = STEP_FINISHED;
+  SetStep(STEP_FINISHED);
   weak_ptr_factory_.InvalidateWeakPtrs();
   completion_callback_.Reset();
 }
@@ -508,6 +522,12 @@ void EnrollmentHandlerChromeOS::ReportResult(EnrollmentStatus status) {
 
   if (!callback.is_null())
     callback.Run(status);
+}
+
+void EnrollmentHandlerChromeOS::SetStep(EnrollmentStep step) {
+  DCHECK_LE(enrollment_step_, step);
+  VLOG(1) << "Step: " << step;
+  enrollment_step_ = step;
 }
 
 }  // namespace policy

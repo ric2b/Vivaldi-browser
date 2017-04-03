@@ -66,8 +66,7 @@ WebURLRequest WebURLLoaderMock::ServeRedirect(
   KURL redirectURL(
       ParsedURLString, redirectResponse.httpHeaderField("Location"));
 
-  WebURLRequest newRequest;
-  newRequest.setURL(redirectURL);
+  WebURLRequest newRequest(redirectURL);
   newRequest.setFirstPartyForCookies(redirectURL);
   newRequest.setDownloadToFile(request.downloadToFile());
   newRequest.setUseStreamOnResponse(request.useStreamOnResponse());
@@ -153,7 +152,8 @@ void WebURLLoaderMock::setDefersLoading(bool deferred) {
   NOTIMPLEMENTED();
 }
 
-void WebURLLoaderMock::setLoadingTaskRunner(WebTaskRunner* runner) {
+void WebURLLoaderMock::setLoadingTaskRunner(
+    base::SingleThreadTaskRunner* runner) {
   // In principle this is NOTIMPLEMENTED(), but if we put that here it floods
   // the console during webkit unit tests, so we leave the function empty.
   DCHECK(runner);

@@ -125,12 +125,10 @@ class NET_EXPORT_PRIVATE QuicCryptoServerStream
       CachedNetworkParameters cached_network_params) override;
 
  protected:
-  virtual QuicErrorCode ProcessClientHello(
+  virtual void ProcessClientHello(
       scoped_refptr<ValidateClientHelloResultCallback::Result> result,
       std::unique_ptr<ProofSource::Details> proof_source_details,
-      CryptoHandshakeMessage* reply,
-      DiversificationNonce* out_diversification_nonce,
-      std::string* error_details);
+      std::unique_ptr<ProcessClientHelloResultCallback> done_cb);
 
   // Hook that allows the server to set QuicConfig defaults just
   // before going through the parameter negotiation step.
@@ -191,7 +189,8 @@ class NET_EXPORT_PRIVATE QuicCryptoServerStream
       QuicErrorCode error,
       const std::string& error_details,
       std::unique_ptr<CryptoHandshakeMessage> reply,
-      std::unique_ptr<DiversificationNonce> diversification_nonce);
+      std::unique_ptr<DiversificationNonce> diversification_nonce,
+      std::unique_ptr<ProofSource::Details> proof_source_details);
 
   // Invoked by SendServerConfigUpdateCallback::RunImpl once the proof has been
   // received.  |ok| indicates whether or not the proof was successfully
@@ -213,7 +212,7 @@ class NET_EXPORT_PRIVATE QuicCryptoServerStream
 
   // Server's certificate chain and signature of the server config, as provided
   // by ProofSource::GetProof.
-  QuicCryptoProof crypto_proof_;
+  scoped_refptr<QuicCryptoProof> crypto_proof_;
 
   // Hash of the last received CHLO message which can be used for generating
   // server config update messages.
@@ -266,6 +265,11 @@ class NET_EXPORT_PRIVATE QuicCryptoServerStream
 
   // Size of the packet containing the most recently received CHLO.
   QuicByteCount chlo_packet_size_;
+
+  // Pointer to the active callback which will receive the results of
+  // ProcessClientHello and forward it to
+  // FinishProcessingHandshakeMessageAfterProcessClientHello.
+  ProcessClientHelloCallback* process_client_hello_cb_;
 
   DISALLOW_COPY_AND_ASSIGN(QuicCryptoServerStream);
 };

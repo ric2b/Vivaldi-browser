@@ -7,7 +7,6 @@
 #include "ash/mus/bridge/wm_shelf_mus.h"
 #include "ash/mus/bridge/wm_shell_mus.h"
 #include "ash/mus/bridge/wm_window_mus.h"
-#include "ash/mus/container_ids.h"
 #include "ash/mus/root_window_controller.h"
 #include "ash/mus/window_manager.h"
 #include "services/ui/public/cpp/window.h"
@@ -109,7 +108,7 @@ void WmRootWindowControllerMus::ConfigureWidgetInitParamsForContainer(
   WmWindowMus::Get(new_window)
       ->set_widget(widget, WmWindowMus::WidgetCreationType::INTERNAL);
   init_params->native_widget = new views::NativeWidgetMus(
-      widget, new_window, ui::mojom::SurfaceType::DEFAULT);
+      widget, new_window, ui::mojom::CompositorFrameSinkType::DEFAULT);
 }
 
 WmWindow* WmRootWindowControllerMus::FindEventTarget(

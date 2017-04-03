@@ -27,16 +27,17 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-from modular_build import read_file, write_file
 import os
 import os.path as path
-import generate_protocol_externs
-import modular_build
 import re
 import shutil
 import subprocess
 import sys
 import tempfile
+
+from build import modular_build
+from build import generate_protocol_externs
+
 try:
     import simplejson as json
 except ImportError:
@@ -122,13 +123,13 @@ def error_excepthook(exctype, value, traceback):
     sys.__excepthook__(exctype, value, traceback)
 sys.excepthook = error_excepthook
 
-application_descriptors = ['inspector.json', 'toolbox.json', 'formatter_worker.json', 'heap_snapshot_worker.json', 'temp_storage_shared_worker.json']
+application_descriptors = ['inspector.json', 'toolbox.json', 'formatter_worker.json', 'heap_snapshot_worker.json', 'utility_shared_worker.json']
 loader = modular_build.DescriptorLoader(devtools_frontend_path)
 descriptors = loader.load_applications(application_descriptors)
 modules_by_name = descriptors.modules
 
 
-def hasErrors(output):
+def has_errors(output):
     return re.search(error_warning_regex, output) != None
 
 
@@ -148,21 +149,21 @@ def verify_jsdoc():
 
     errors_found = False
     for full_file_name in file_list():
-        lineIndex = 0
+        line_index = 0
         with open(full_file_name, 'r') as sourceFile:
             for line in sourceFile:
                 line = line.rstrip()
-                lineIndex += 1
+                line_index += 1
                 if not line:
                     continue
-                if verify_jsdoc_line(full_file_name, lineIndex, line):
+                if verify_jsdoc_line(full_file_name, line_index, line):
                     errors_found = True
     return errors_found
 
 
-def verify_jsdoc_line(fileName, lineIndex, line):
-    def print_error(message, errorPosition):
-        print '%s:%s: ERROR - %s%s%s%s%s%s' % (fileName, lineIndex, message, os.linesep, line, os.linesep, ' ' * errorPosition + '^', os.linesep)
+def verify_jsdoc_line(file_name, line_index, line):
+    def print_error(message, error_position):
+        print '%s:%s: ERROR - %s%s%s%s%s%s' % (file_name, line_index, message, os.linesep, line, os.linesep, ' ' * error_position + '^', os.linesep)
 
     known_css = {}
     errors_found = False
@@ -233,8 +234,8 @@ def find_java():
 java_exec = find_java()
 
 closure_compiler_jar = to_platform_path(path.join(scripts_path, 'closure', 'compiler.jar'))
-closure_runner_jar = to_platform_path(path.join(scripts_path, 'compiler-runner', 'closure-runner.jar'))
-jsdoc_validator_jar = to_platform_path(path.join(scripts_path, 'jsdoc-validator', 'jsdoc-validator.jar'))
+closure_runner_jar = to_platform_path(path.join(scripts_path, 'closure', 'closure_runner', 'closure_runner.jar'))
+jsdoc_validator_jar = to_platform_path(path.join(scripts_path, 'jsdoc_validator', 'jsdoc_validator.jar'))
 
 modules_dir = tempfile.mkdtemp()
 common_closure_args = [
@@ -265,24 +266,28 @@ for module_name in descriptors.application:
 
 
 def check_conditional_dependencies():
+    errors_found = False
     for name in modules_by_name:
         for dep_name in modules_by_name[name].get('dependencies', []):
             dependency = modules_by_name[dep_name]
             if dependency.get('experiment') or dependency.get('condition'):
                 log_error('Module "%s" may not depend on the conditional module "%s"' % (name, dep_name))
                 errors_found = True
+    return errors_found
 
-check_conditional_dependencies()
+errors_found |= check_conditional_dependencies()
 
 
 def verify_worker_modules():
+    errors_found = False
     for name in modules_by_name:
         for dependency in modules_by_name[name].get('dependencies', []):
             if dependency in worker_modules_by_name:
                 log_error('Module "%s" may not depend on the worker module "%s"' % (name, dependency))
                 errors_found = True
+    return errors_found
 
-verify_worker_modules()
+errors_found |= verify_worker_modules()
 
 
 def check_duplicate_files():
@@ -322,7 +327,6 @@ def dump_module(name, recursively, processed_modules):
         return ''
     processed_modules[name] = True
     module = modules_by_name[name]
-    skipped_scripts = set(module.get('skip_compilation', []))
 
     command = ''
     dependencies = module.get('dependencies', [])
@@ -331,30 +335,32 @@ def dump_module(name, recursively, processed_modules):
             command += dump_module(dependency, recursively, processed_modules)
     command += module_arg(name) + ':'
     filtered_scripts = descriptors.module_compiled_files(name)
+    filtered_scripts = [path.join(devtools_frontend_path, name, script) for script in filtered_scripts]
+    # TODO(dgozman): move to separate module
+    if name == 'sdk':
+        filtered_scripts.append(protocol_externs_file)
     command += str(len(filtered_scripts))
-    firstDependency = True
+    first_dependency = True
     for dependency in dependencies + [runtime_module_name]:
-        if firstDependency:
+        if first_dependency:
             command += ':'
         else:
             command += ','
-        firstDependency = False
+        first_dependency = False
         command += jsmodule_name_prefix + dependency
     for script in filtered_scripts:
-        command += ' --js ' + to_platform_path(path.join(devtools_frontend_path, name, script))
+        command += ' --js ' + to_platform_path(script)
     return command
 
 print 'Compiling frontend...'
 
 compiler_args_file = tempfile.NamedTemporaryFile(mode='wt', delete=False)
 try:
-    platform_protocol_externs_file = to_platform_path(protocol_externs_file)
     runtime_js_path = to_platform_path(path.join(devtools_frontend_path, 'Runtime.js'))
     checked_modules = modules_to_check()
     for name in checked_modules:
         closure_args = ' '.join(common_closure_args)
         closure_args += ' --externs ' + to_platform_path(global_externs_file)
-        closure_args += ' --externs ' + platform_protocol_externs_file
         runtime_module = module_arg(runtime_module_name) + ':1 --js ' + runtime_js_path
         closure_args += runtime_module + dump_module(name, True, {})
         compiler_args_file.write('%s %s%s' % (name, closure_args, os.linesep))
@@ -368,31 +374,31 @@ spawned_compiler_command = java_exec + [
     closure_compiler_jar
 ] + common_closure_args
 
-print 'Compiling devtools.js...'
+print 'Compiling devtools_compatibility.js...'
 
 command = spawned_compiler_command + [
     '--externs', to_platform_path(global_externs_file),
     '--externs', to_platform_path(path.join(devtools_frontend_path, 'host', 'InspectorFrontendHostAPI.js')),
     '--jscomp_off=externsValidation',
-    '--module', jsmodule_name_prefix + 'devtools_js' + ':1',
-    '--js', to_platform_path(path.join(devtools_frontend_path, 'devtools.js'))
+    '--module', jsmodule_name_prefix + 'devtools__compatibility_js' + ':1',
+    '--js', to_platform_path(path.join(devtools_frontend_path, 'devtools_compatibility.js'))
 ]
-devtoolsJSCompileProc = popen(command)
+devtools_js_compile_proc = popen(command)
 
 print 'Verifying JSDoc comments...'
 errors_found |= verify_jsdoc()
-(jsdocValidatorProc, jsdocValidatorFileList) = verify_jsdoc_extra()
+(jsdoc_validator_proc, jsdoc_validator_file_list) = verify_jsdoc_extra()
 
 print
 
-(jsdocValidatorOut, _) = jsdocValidatorProc.communicate()
-if jsdocValidatorOut:
-    print ('JSDoc validator output:%s%s' % (os.linesep, jsdocValidatorOut))
+(jsdoc_validator_out, _) = jsdoc_validator_proc.communicate()
+if jsdoc_validator_out:
+    print ('JSDoc validator output:%s%s' % (os.linesep, jsdoc_validator_out))
     errors_found = True
 
-os.remove(jsdocValidatorFileList.name)
+os.remove(jsdoc_validator_file_list.name)
 
-(moduleCompileOut, _) = modular_compiler_proc.communicate()
+(module_compile_out, _) = modular_compiler_proc.communicate()
 print 'Modular compilation output:'
 
 start_module_regex = re.compile(r'^@@ START_MODULE:(.+) @@$')
@@ -409,7 +415,7 @@ def skip_dependents(module_name):
 has_module_output = False
 
 # pylint: disable=E1103
-for line in moduleCompileOut.splitlines():
+for line in module_compile_out.splitlines():
     if not in_module:
         match = re.search(start_module_regex, line)
         if not match:
@@ -427,7 +433,7 @@ for line in moduleCompileOut.splitlines():
         if not match:
             if not skip_module:
                 module_output.append(line)
-                if hasErrors(line):
+                if has_errors(line):
                     error_count += 1
                     module_error_count += 1
                     skip_dependents(module_name)
@@ -443,19 +449,20 @@ for line in moduleCompileOut.splitlines():
             print os.linesep.join(module_output)
 
 if not has_module_output:
-    print moduleCompileOut
+    print module_compile_out
 
 if error_count:
     print 'Total Closure errors: %d%s' % (error_count, os.linesep)
     errors_found = True
 
-(devtoolsJSCompileOut, _) = devtoolsJSCompileProc.communicate()
-print 'devtools.js compilation output:%s' % os.linesep, devtoolsJSCompileOut
-errors_found |= hasErrors(devtoolsJSCompileOut)
-
-if errors_found:
-    print 'ERRORS DETECTED'
+(devtools_js_compile_out, _) = devtools_js_compile_proc.communicate()
+print 'devtools_compatibility.js compilation output:%s' % os.linesep, devtools_js_compile_out
+errors_found |= has_errors(devtools_js_compile_out)
 
 os.remove(compiler_args_file.name)
 os.remove(protocol_externs_file)
 shutil.rmtree(modules_dir, True)
+
+if errors_found:
+    print 'ERRORS DETECTED'
+    sys.exit(1)

@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/toolchain/toolchain.gni")
 import("//third_party/WebKit/Source/config.gni")
 
 # All paths in this file should be absolute so targets in any directory can use
@@ -53,6 +54,7 @@ make_element_factory_files =
 make_element_type_helpers_files =
     make_qualified_names_files + [
       "$_scripts_dir/make_element_type_helpers.py",
+      "$_scripts_dir/templates/ElementTypeHelpers.cpp.tmpl",
       "$_scripts_dir/templates/ElementTypeHelpers.h.tmpl",
     ]
 
@@ -109,6 +111,12 @@ template("process_in_files") {
              "--output_dir",
              rebase_path(output_dir, root_build_dir),
            ]
+    if (is_mac && !use_system_xcode) {
+      args += [
+        "--developer_dir",
+        hermetic_xcode_path,
+      ]
+    }
     if (defined(invoker.other_args)) {
       args += invoker.other_args
     }

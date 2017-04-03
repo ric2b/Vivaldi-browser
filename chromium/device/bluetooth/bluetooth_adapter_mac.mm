@@ -61,6 +61,7 @@ base::WeakPtr<BluetoothAdapterMac> BluetoothAdapterMac::CreateAdapterForTest(
   BluetoothAdapterMac* adapter = new BluetoothAdapterMac();
   adapter->InitForTest(ui_task_runner);
   adapter->name_ = name;
+  adapter->should_update_name_ = false;
   adapter->address_ = address;
   return adapter->weak_ptr_factory_.GetWeakPtr();
 }
@@ -77,6 +78,7 @@ BluetoothAdapterMac::BluetoothAdapterMac()
     : BluetoothAdapter(),
       classic_powered_(false),
       num_discovery_sessions_(0),
+      should_update_name_(true),
       classic_discovery_manager_(
           BluetoothDiscoveryManagerMac::CreateClassic(this)),
       weak_ptr_factory_(this) {
@@ -112,6 +114,20 @@ std::string BluetoothAdapterMac::GetAddress() const {
 }
 
 std::string BluetoothAdapterMac::GetName() const {
+  if (!should_update_name_) {
+    return name_;
+  }
+
+  IOBluetoothHostController* controller =
+      [IOBluetoothHostController defaultController];
+  if (controller == nil) {
+    name_ = std::string();
+  } else {
+    name_ = base::SysNSStringToUTF8([controller nameAsString]);
+    if (!name_.empty()) {
+      should_update_name_ = false;
+    }
+  }
   return name_;
 }
 
@@ -170,6 +186,29 @@ bool BluetoothAdapterMac::IsDiscovering() const {
   return is_discovering;
 }
 
+std::unordered_map<BluetoothDevice*, BluetoothDevice::UUIDSet>
+BluetoothAdapterMac::RetrieveGattConnectedDevicesWithDiscoveryFilter(
+    const BluetoothDiscoveryFilter& discovery_filter) {
+  std::unordered_map<BluetoothDevice*, BluetoothDevice::UUIDSet>
+      connected_devices;
+  std::set<device::BluetoothUUID> uuids;
+  discovery_filter.GetUUIDs(uuids);
+  if (uuids.empty()) {
+    for (BluetoothDevice* device :
+         RetrieveGattConnectedDevicesWithService(nullptr)) {
+      connected_devices[device] = BluetoothDevice::UUIDSet();
+    }
+    return connected_devices;
+  }
+  for (const BluetoothUUID& uuid : uuids) {
+    for (BluetoothDevice* device :
+         RetrieveGattConnectedDevicesWithService(&uuid)) {
+      connected_devices[device].insert(uuid);
+    }
+  }
+  return connected_devices;
+}
+
 BluetoothAdapter::UUIDList BluetoothAdapterMac::GetUUIDs() const {
   NOTIMPLEMENTED();
   return UUIDList();
@@ -218,9 +257,8 @@ void BluetoothAdapterMac::ClassicDiscoveryStopped(bool unexpected) {
     num_discovery_sessions_ = 0;
     MarkDiscoverySessionsAsInactive();
   }
-  FOR_EACH_OBSERVER(BluetoothAdapter::Observer,
-                    observers_,
-                    AdapterDiscoveringChanged(this, false));
+  for (auto& observer : observers_)
+    observer.AdapterDiscoveringChanged(this, false);
 }
 
 void BluetoothAdapterMac::DeviceConnected(IOBluetoothDevice* device) {
@@ -282,9 +320,8 @@ void BluetoothAdapterMac::AddDiscoverySession(
 
   DVLOG(1) << "Added a discovery session";
   num_discovery_sessions_++;
-  FOR_EACH_OBSERVER(BluetoothAdapter::Observer,
-                    observers_,
-                    AdapterDiscoveringChanged(this, true));
+  for (auto& observer : observers_)
+    observer.AdapterDiscoveringChanged(this, true);
   callback.Run();
 }
 
@@ -402,14 +439,8 @@ void BluetoothAdapterMac::PollAdapter() {
         base::SysNSStringToUTF8([controller addressAsString]));
     classic_powered = ([controller powerState] == kBluetoothHCIPowerStateON);
 
-    // For performance reasons, cache the adapter's name. It's not uncommon for
-    // a call to [controller nameAsString] to take tens of milliseconds. Note
-    // that this caching strategy might result in clients receiving a stale
-    // name. If this is a significant issue, then some more sophisticated
-    // workaround for the performance bottleneck will be needed. For additional
-    // context, see http://crbug.com/461181 and http://crbug.com/467316
-    if (address != address_ || (!address.empty() && name_.empty()))
-      name_ = base::SysNSStringToUTF8([controller nameAsString]);
+    if (address != address_)
+      should_update_name_ = true;
   }
 
   bool is_present = !address.empty();
@@ -421,8 +452,8 @@ void BluetoothAdapterMac::PollAdapter() {
       FROM_HERE_WITH_EXPLICIT_FUNCTION(
           "461181 BluetoothAdapterMac::PollAdapter::AdapterPresentChanged"));
   if (was_present != is_present) {
-    FOR_EACH_OBSERVER(BluetoothAdapter::Observer, observers_,
-                      AdapterPresentChanged(this, is_present));
+    for (auto& observer : observers_)
+      observer.AdapterPresentChanged(this, is_present);
   }
 
   // TODO(erikchen): Remove ScopedTracker below once http://crbug.com/461181
@@ -432,8 +463,8 @@ void BluetoothAdapterMac::PollAdapter() {
           "461181 BluetoothAdapterMac::PollAdapter::AdapterPowerChanged"));
   if (classic_powered_ != classic_powered) {
     classic_powered_ = classic_powered;
-    FOR_EACH_OBSERVER(BluetoothAdapter::Observer, observers_,
-                      AdapterPoweredChanged(this, classic_powered_));
+    for (auto& observer : observers_)
+      observer.AdapterPoweredChanged(this, classic_powered_);
   }
 
   // TODO(erikchen): Remove ScopedTracker below once http://crbug.com/461181
@@ -474,8 +505,8 @@ void BluetoothAdapterMac::ClassicDeviceAdded(IOBluetoothDevice* device) {
   devices_.set(device_address, base::WrapUnique(device_classic));
   VLOG(1) << "Adding new classic device: " << device_classic->GetAddress();
 
-  FOR_EACH_OBSERVER(BluetoothAdapter::Observer, observers_,
-                    DeviceAdded(this, device_classic));
+  for (auto& observer : observers_)
+    observer.DeviceAdded(this, device_classic);
 }
 
 void BluetoothAdapterMac::LowEnergyDeviceUpdated(
@@ -491,24 +522,8 @@ void BluetoothAdapterMac::LowEnergyDeviceUpdated(
     VLOG(1) << "LowEnergyDeviceUpdated new device";
     // A new device has been found.
     device_mac = new BluetoothLowEnergyDeviceMac(this, peripheral);
-  } else {
-    // Check that there are no collisions.
-    std::string stored_device_id = device_mac->GetIdentifier();
-    std::string updated_device_id =
-        BluetoothLowEnergyDeviceMac::GetPeripheralIdentifier(peripheral);
-    if (stored_device_id != updated_device_id) {
-      VLOG(1)
-          << "LowEnergyDeviceUpdated stored_device_id != updated_device_id: "
-          << std::endl
-          << "  " << stored_device_id << std::endl
-          << "  " << updated_device_id;
-      // Collision, two identifiers map to the same hash address.  With a 48 bit
-      // hash the probability of this occuring with 10,000 devices
-      // simultaneously present is 1e-6 (see
-      // https://en.wikipedia.org/wiki/Birthday_problem#Probability_table).  We
-      // ignore the second device by returning.
-      return;
-    }
+  } else if (DoesCollideWithKnownDevice(peripheral, device_mac)) {
+    return;
   }
 
   DCHECK(device_mac);
@@ -552,11 +567,11 @@ void BluetoothAdapterMac::LowEnergyDeviceUpdated(
     std::string device_address =
         BluetoothLowEnergyDeviceMac::GetPeripheralHashAddress(peripheral);
     devices_.add(device_address, std::unique_ptr<BluetoothDevice>(device_mac));
-    FOR_EACH_OBSERVER(BluetoothAdapter::Observer, observers_,
-                      DeviceAdded(this, device_mac));
+    for (auto& observer : observers_)
+      observer.DeviceAdded(this, device_mac);
   } else {
-    FOR_EACH_OBSERVER(BluetoothAdapter::Observer, observers_,
-                      DeviceChanged(this, device_mac));
+    for (auto& observer : observers_)
+      observer.DeviceChanged(this, device_mac);
   }
 }
 
@@ -572,6 +587,48 @@ void BluetoothAdapterMac::AddPairedDevices() {
       ClassicDeviceAdded(device);
     }
   }
+}
+
+std::vector<BluetoothDevice*>
+BluetoothAdapterMac::RetrieveGattConnectedDevicesWithService(
+    const BluetoothUUID* uuid) {
+  NSArray* cbUUIDs = nil;
+  if (!uuid) {
+    // It is not possible to ask for all connected peripherals with
+    // -[CBCentralManager retrieveConnectedPeripheralsWithServices:] by passing
+    // nil. To try to get most of the peripherals, the search is done with
+    // Generic Access service.
+    CBUUID* genericAccessServiceUUID = [CBUUID UUIDWithString:@"1800"];
+    cbUUIDs = @[ genericAccessServiceUUID ];
+  } else {
+    NSString* uuidString =
+        base::SysUTF8ToNSString(uuid->canonical_value().c_str());
+    cbUUIDs = @[ [CBUUID UUIDWithString:uuidString] ];
+  }
+  NSArray* peripherals = [low_energy_central_manager_
+      retrieveConnectedPeripheralsWithServices:cbUUIDs];
+  std::vector<BluetoothDevice*> connected_devices;
+  for (CBPeripheral* peripheral in peripherals) {
+    BluetoothLowEnergyDeviceMac* device_mac =
+        GetBluetoothLowEnergyDeviceMac(peripheral);
+    const bool is_new_device = device_mac == nullptr;
+
+    if (!is_new_device && DoesCollideWithKnownDevice(peripheral, device_mac)) {
+      continue;
+    }
+    if (is_new_device) {
+      device_mac = new BluetoothLowEnergyDeviceMac(this, peripheral);
+      std::string device_address =
+          BluetoothLowEnergyDeviceMac::GetPeripheralHashAddress(peripheral);
+      devices_.add(device_address,
+                   std::unique_ptr<BluetoothDevice>(device_mac));
+      for (auto& observer : observers_) {
+        observer.DeviceAdded(this, device_mac);
+      }
+    }
+    connected_devices.push_back(device_mac);
+  }
+  return connected_devices;
 }
 
 void BluetoothAdapterMac::CreateGattConnection(
@@ -642,6 +699,28 @@ BluetoothAdapterMac::GetBluetoothLowEnergyDeviceMac(CBPeripheral* peripheral) {
     return nil;
   }
   return static_cast<BluetoothLowEnergyDeviceMac*>(iter->second);
+}
+
+bool BluetoothAdapterMac::DoesCollideWithKnownDevice(
+    CBPeripheral* peripheral,
+    BluetoothLowEnergyDeviceMac* device_mac) {
+  // Check that there are no collisions.
+  std::string stored_device_id = device_mac->GetIdentifier();
+  std::string updated_device_id =
+      BluetoothLowEnergyDeviceMac::GetPeripheralIdentifier(peripheral);
+  if (stored_device_id != updated_device_id) {
+    VLOG(1) << "LowEnergyDeviceUpdated stored_device_id != updated_device_id: "
+            << std::endl
+            << "  " << stored_device_id << std::endl
+            << "  " << updated_device_id;
+    // Collision, two identifiers map to the same hash address.  With a 48 bit
+    // hash the probability of this occuring with 10,000 devices
+    // simultaneously present is 1e-6 (see
+    // https://en.wikipedia.org/wiki/Birthday_problem#Probability_table).  We
+    // ignore the second device by returning.
+    return true;
+  }
+  return false;
 }
 
 }  // namespace device

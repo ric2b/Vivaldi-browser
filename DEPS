@@ -224,8 +224,9 @@ hooks = [
     'action': ['python',
       'vivaldi/chromium/build/get_syzygy_binaries.py',
       '--output-dir', 'vivaldi/chromium/third_party/syzygy/binaries',
-      '--revision=734ae20be0862a6e1667f45d4fd4ceb2c430b2f6',
-      '--overwrite'
+      '--revision=55b5f3979e226101b1d4764ca024925ed42970bc',
+      '--overwrite',
+      '--copy-dia-binaries',
     ],
   },
   # TODO(pmonette): Move include files out of binaries folder.

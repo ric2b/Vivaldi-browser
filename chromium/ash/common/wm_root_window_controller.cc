@@ -5,9 +5,11 @@
 #include "ash/common/wm_root_window_controller.h"
 
 #include "ash/common/session/session_state_delegate.h"
+#include "ash/common/shelf/shelf_layout_manager.h"
+#include "ash/common/shelf/shelf_widget.h"
 #include "ash/common/shelf/wm_shelf.h"
 #include "ash/common/shell_delegate.h"
-#include "ash/common/shell_window_ids.h"
+#include "ash/common/system/status_area_widget.h"
 #include "ash/common/wallpaper/wallpaper_delegate.h"
 #include "ash/common/wallpaper/wallpaper_widget_controller.h"
 #include "ash/common/wm/always_on_top_controller.h"
@@ -23,6 +25,7 @@
 #include "ash/common/wm/workspace_controller.h"
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
+#include "ash/public/cpp/shell_window_ids.h"
 #include "base/memory/ptr_util.h"
 #include "ui/base/models/menu_model.h"
 #include "ui/views/controls/menu/menu_model_adapter.h"
@@ -190,6 +193,44 @@ WmRootWindowController::GetSystemModalLayoutManager(WmWindow* window) {
                          : nullptr;
 }
 
+void WmRootWindowController::CreateShelf() {
+  WmShelf* shelf = GetShelf();
+  if (shelf->IsShelfInitialized())
+    return;
+  shelf->InitializeShelf();
+
+  if (panel_layout_manager_)
+    panel_layout_manager_->SetShelf(shelf);
+  if (docked_window_layout_manager_) {
+    docked_window_layout_manager_->SetShelf(shelf);
+    if (shelf->shelf_layout_manager())
+      docked_window_layout_manager_->AddObserver(shelf->shelf_layout_manager());
+  }
+
+  // Notify shell observers that the shelf has been created.
+  // TODO(jamescook): Move this into WmShelf::InitializeShelf(). This will
+  // require changing AttachedPanelWidgetTargeter's access to WmShelf.
+  WmShell::Get()->NotifyShelfCreatedForRootWindow(GetWindow());
+
+  shelf->shelf_widget()->PostCreateShelf();
+}
+
+void WmRootWindowController::ShowShelf() {
+  WmShelf* shelf = GetShelf();
+  if (!shelf->IsShelfInitialized())
+    return;
+  // TODO(jamescook): Move this into WmShelf.
+  shelf->shelf_widget()->SetShelfVisibility(true);
+  shelf->shelf_widget()->status_area_widget()->Show();
+}
+
+SystemTray* WmRootWindowController::GetSystemTray() {
+  ShelfWidget* shelf_widget = GetShelf()->shelf_widget();
+  if (!shelf_widget || !shelf_widget->status_area_widget())
+    return nullptr;
+  return shelf_widget->status_area_widget()->system_tray();
+}
+
 WmWindow* WmRootWindowController::GetContainer(int container_id) {
   return root_->GetChildByShellWindowId(container_id);
 }
@@ -240,6 +281,13 @@ void WmRootWindowController::OnWallpaperAnimationFinished(
     // Release the old controller and close its wallpaper widget.
     SetWallpaperWidgetController(controller);
   }
+}
+
+void WmRootWindowController::UpdateAfterLoginStatusChange(LoginStatus status) {
+  StatusAreaWidget* status_area_widget =
+      GetShelf()->shelf_widget()->status_area_widget();
+  if (status_area_widget)
+    status_area_widget->UpdateAfterLoginStatusChange(status);
 }
 
 void WmRootWindowController::MoveWindowsTo(WmWindow* dest) {
@@ -427,6 +475,8 @@ void WmRootWindowController::CreateContainers() {
 }
 
 void WmRootWindowController::CreateLayoutManagers() {
+  GetShelf()->CreateShelfWidget(GetWindow());
+
   root_window_layout_manager_ = new wm::RootWindowLayoutManager(root_);
   root_->SetLayoutManager(base::WrapUnique(root_window_layout_manager_));
 

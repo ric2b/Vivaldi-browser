@@ -54,12 +54,33 @@ class BLINK_PLATFORM_EXPORT TaskQueue : public base::SingleThreadTaskRunner {
     FIRST_QUEUE_PRIORITY = CONTROL_PRIORITY,
   };
 
+  enum class QueueType {
+    // Keep TaskQueue::NameForQueueType in sync.
+    // This enum is used for a histogram and it should not be re-numbered.
+    CONTROL = 0,
+    DEFAULT = 1,
+    DEFAULT_LOADING = 2,
+    DEFAULT_TIMER = 3,
+    UNTHROTTLED = 4,
+    FRAME_LOADING = 5,
+    FRAME_TIMER = 6,
+    FRAME_UNTHROTTLED = 7,
+    COMPOSITOR = 8,
+    IDLE = 9,
+    TEST = 10,
+
+    COUNT = 11
+  };
+
+  // Returns name of the given queue type. Returned string has application
+  // lifetime.
+  static const char* NameForQueueType(QueueType queue_type);
+
   // Options for constructing a TaskQueue. Once set the |name| and
   // |should_monitor_quiescence| are immutable.
   struct Spec {
-    // Note |name| must have application lifetime.
-    explicit Spec(const char* name)
-        : name(name),
+    explicit Spec(QueueType type)
+        : type(type),
           should_monitor_quiescence(false),
           time_domain(nullptr),
           should_notify_observers(true),
@@ -86,7 +107,7 @@ class BLINK_PLATFORM_EXPORT TaskQueue : public base::SingleThreadTaskRunner {
       return *this;
     }
 
-    const char* name;
+    QueueType type;
     bool should_monitor_quiescence;
     TimeDomain* time_domain;
     bool should_notify_observers;
@@ -103,6 +124,9 @@ class BLINK_PLATFORM_EXPORT TaskQueue : public base::SingleThreadTaskRunner {
   // Returns true if the queue is completely empty.
   virtual bool IsEmpty() const = 0;
 
+  // Returns the number of pending tasks in the queue.
+  virtual size_t GetNumberOfPendingTasks() const = 0;
+
   // Returns true if the queue has work that's ready to execute now.
   // NOTE: this must be called on the thread this TaskQueue was created by.
   virtual bool HasPendingImmediateWork() const = 0;
@@ -111,6 +135,9 @@ class BLINK_PLATFORM_EXPORT TaskQueue : public base::SingleThreadTaskRunner {
   // to run. If there are no such tasks, returns base::nullopt.
   // NOTE: this must be called on the thread this TaskQueue was created by.
   virtual base::Optional<base::TimeTicks> GetNextScheduledWakeUp() = 0;
+
+  // Can be called on any thread.
+  virtual QueueType GetQueueType() const = 0;
 
   // Can be called on any thread.
   virtual const char* GetName() const = 0;
@@ -142,12 +169,18 @@ class BLINK_PLATFORM_EXPORT TaskQueue : public base::SingleThreadTaskRunner {
   // Returns the queue's current TimeDomain.  Can be called from any thread.
   virtual TimeDomain* GetTimeDomain() const = 0;
 
-  // Inserts a barrier into the task queue which inhibits non-delayed tasks
-  // posted after this point, or delayed tasks which are not yet ready to run,
-  // from being executed until the fence is cleared.  If a fence already existed
-  // the one supersedes it and previously blocked tasks will now run up until
-  // the new fence is hit.
-  virtual void InsertFence() = 0;
+  enum class InsertFencePosition {
+    NOW,  // Tasks posted on the queue up till this point further may run.
+          // All further tasks are blocked.
+    BEGINNING_OF_TIME,  // No tasks posted on this queue may run.
+  };
+
+  // Inserts a barrier into the task queue which prevents tasks with an enqueue
+  // order greater than the fence from running until either the fence has been
+  // removed or a subsequent fence has unblocked some tasks within the queue.
+  // Note: delayed tasks get their enqueue order set once their delay has
+  // expired, and non-delayed tasks get their enqueue order set when posted.
+  virtual void InsertFence(InsertFencePosition position) = 0;
 
   // Removes any previously added fence and unblocks execution of any tasks
   // blocked by it.

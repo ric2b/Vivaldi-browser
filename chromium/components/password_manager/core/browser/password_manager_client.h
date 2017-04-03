@@ -9,7 +9,6 @@
 
 #include "base/callback.h"
 #include "base/macros.h"
-#include "base/memory/scoped_vector.h"
 #include "components/autofill/core/common/password_form.h"
 #include "components/password_manager/core/browser/credentials_filter.h"
 #include "components/password_manager/core/browser/password_store.h"
@@ -65,6 +64,14 @@ class PasswordManagerClient {
   // password manager is disabled, or in the presence of SSL errors on a page.
   virtual bool IsFillingEnabledForCurrentPage() const;
 
+  // Checks if the Credential Manager API is allowed to run on the page. It's
+  // not allowed while prerendering and the pre-rendered WebContents will be
+  // destroyed in this case.
+  // Even if the method returns true the API may still be disabled or limited
+  // depending on the method called because IsFillingEnabledForCurrentPage() and
+  // IsSavingAndFillingEnabledForCurrentPage are respected.
+  virtual bool OnCredentialManagerUsed();
+
   // Informs the embedder of a password form that can be saved or updated in
   // password store if the user allows it. The embedder is not required to
   // prompt the user if it decides that this form doesn't need to be saved or
@@ -93,8 +100,7 @@ class PasswordManagerClient {
   // displayed, returns false and does not call |callback|.
   // |callback| should be invoked with the chosen form.
   virtual bool PromptUserToChooseCredentials(
-      ScopedVector<autofill::PasswordForm> local_forms,
-      ScopedVector<autofill::PasswordForm> federated_forms,
+      std::vector<std::unique_ptr<autofill::PasswordForm>> local_forms,
       const GURL& origin,
       const CredentialsCallback& callback) = 0;
 
@@ -111,7 +117,7 @@ class PasswordManagerClient {
   // local credentials for the site. |origin| is a URL of the site the user was
   // auto signed in to.
   virtual void NotifyUserAutoSignin(
-      ScopedVector<autofill::PasswordForm> local_forms,
+      std::vector<std::unique_ptr<autofill::PasswordForm>> local_forms,
       const GURL& origin) = 0;
 
   // Inform the embedder that automatic signin would have happened if the user
@@ -178,9 +184,6 @@ class PasswordManagerClient {
 
   // Returns the main frame URL.
   virtual const GURL& GetMainFrameURL() const;
-
-  // Returns true if the UI for confirmation of update password is enabled.
-  virtual bool IsUpdatePasswordUIEnabled() const;
 
   virtual const GURL& GetLastCommittedEntryURL() const = 0;
 

@@ -37,10 +37,10 @@ namespace blink {
 
 SVGPaintContext::~SVGPaintContext() {
   if (m_filter) {
-    ASSERT(SVGResourcesCache::cachedResourcesForLayoutObject(&m_object));
-    ASSERT(SVGResourcesCache::cachedResourcesForLayoutObject(&m_object)
+    DCHECK(SVGResourcesCache::cachedResourcesForLayoutObject(&m_object));
+    DCHECK(SVGResourcesCache::cachedResourcesForLayoutObject(&m_object)
                ->filter() == m_filter);
-    ASSERT(m_filterRecordingContext);
+    DCHECK(m_filterRecordingContext);
     SVGFilterPainter(*m_filter).finishEffect(m_object,
                                              *m_filterRecordingContext);
 
@@ -49,8 +49,8 @@ SVGPaintContext::~SVGPaintContext() {
   }
 
   if (m_masker) {
-    ASSERT(SVGResourcesCache::cachedResourcesForLayoutObject(&m_object));
-    ASSERT(SVGResourcesCache::cachedResourcesForLayoutObject(&m_object)
+    DCHECK(SVGResourcesCache::cachedResourcesForLayoutObject(&m_object));
+    DCHECK(SVGResourcesCache::cachedResourcesForLayoutObject(&m_object)
                ->masker() == m_masker);
     SVGMaskPainter(*m_masker).finishEffect(m_object, paintInfo().context);
   }
@@ -58,7 +58,7 @@ SVGPaintContext::~SVGPaintContext() {
 
 bool SVGPaintContext::applyClipMaskAndFilterIfNecessary() {
 #if ENABLE(ASSERT)
-  ASSERT(!m_applyClipMaskAndFilterIfNecessaryCalled);
+  DCHECK(!m_applyClipMaskAndFilterIfNecessaryCalled);
   m_applyClipMaskAndFilterIfNecessaryCalled = true;
 #endif
 
@@ -100,15 +100,16 @@ bool SVGPaintContext::applyClipMaskAndFilterIfNecessary() {
   }
 
   if (!isIsolationInstalled() &&
-      SVGLayoutSupport::isIsolationRequired(&m_object))
+      SVGLayoutSupport::isIsolationRequired(&m_object)) {
     m_compositingRecorder = wrapUnique(new CompositingRecorder(
-        paintInfo().context, m_object, SkXfermode::kSrcOver_Mode, 1));
+        paintInfo().context, m_object, SkBlendMode::kSrcOver, 1));
+  }
 
   return true;
 }
 
 void SVGPaintContext::applyCompositingIfNecessary() {
-  ASSERT(!paintInfo().isRenderingClipPathAsMaskImage());
+  DCHECK(!paintInfo().isRenderingClipPathAsMaskImage());
 
   const ComputedStyle& style = m_object.styleRef();
   float opacity = style.opacity();
@@ -117,7 +118,7 @@ void SVGPaintContext::applyCompositingIfNecessary() {
                                : WebBlendModeNormal;
   if (opacity < 1 || blendMode != WebBlendModeNormal) {
     const FloatRect compositingBounds =
-        m_object.paintInvalidationRectInLocalSVGCoordinates();
+        m_object.visualRectInLocalSVGCoordinates();
     m_compositingRecorder = wrapUnique(new CompositingRecorder(
         paintInfo().context, m_object,
         WebCoreCompositeToSkiaComposite(CompositeSourceOver, blendMode),
@@ -190,8 +191,8 @@ bool SVGPaintContext::isIsolationInstalled() const {
 
 void SVGPaintContext::paintSubtree(GraphicsContext& context,
                                    const LayoutObject* item) {
-  ASSERT(item);
-  ASSERT(!item->needsLayout());
+  DCHECK(item);
+  DCHECK(!item->needsLayout());
 
   PaintInfo info(context, LayoutRect::infiniteIntRect(), PaintPhaseForeground,
                  GlobalPaintNormalPhase, PaintLayerNoFlag);

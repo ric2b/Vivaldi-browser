@@ -34,6 +34,7 @@
 <translation id="2148716181193084225">Danes</translation>
 <translation id="2226276347425096477">Skrajšajte to besedilo na <ph name="MAX_CHARACTERS" /> znakov ali manj (trenutno uporabljate <ph name="CURRENT_LENGTH" /> znakov).</translation>
 <translation id="2247351761944213033"><ph name="WEEKNUMBER" />. teden, <ph name="YEAR" /></translation>
+<translation id="2277199496770840904">Besedilni posnetek <ph name="NUMBER" /></translation>
 <translation id="2291999235780842123">potrditveno polje</translation>
 <translation id="2335594187091864976">izbirnik datuma in ure</translation>
 <translation id="248395913932153421">Dan</translation>
@@ -116,7 +117,6 @@
 <translation id="5643186887447432888">gumb</translation>
 <translation id="5677946354068040947">več možnosti</translation>
 <translation id="57838592816432529">Izklopi zvok</translation>
-<translation id="583281660410589416">Neznano</translation>
 <translation id="5843503607508392247">Drugo ...</translation>
 <translation id="5860033963881614850">Izklopljeno</translation>
 <translation id="588258955323874662">Celozaslonsko</translation>

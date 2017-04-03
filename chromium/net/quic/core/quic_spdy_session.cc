@@ -15,19 +15,20 @@ using std::string;
 namespace net {
 
 QuicSpdySession::QuicSpdySession(QuicConnection* connection,
+                                 QuicSession::Visitor* visitor,
                                  const QuicConfig& config)
-    : QuicSession(connection, config),
+    : QuicSession(connection, visitor, config),
       force_hol_blocking_(false),
       server_push_enabled_(false) {}
 
 QuicSpdySession::~QuicSpdySession() {
   // Set the streams' session pointers in closed and dynamic stream lists
   // to null to avoid subsequent use of this session.
-  for (auto* stream : *closed_streams()) {
-    static_cast<QuicSpdyStream*>(stream)->ClearSession();
+  for (auto& stream : *closed_streams()) {
+    static_cast<QuicSpdyStream*>(stream.get())->ClearSession();
   }
   for (auto const& kv : dynamic_streams()) {
-    static_cast<QuicSpdyStream*>(kv.second)->ClearSession();
+    static_cast<QuicSpdyStream*>(kv.second.get())->ClearSession();
   }
 }
 
@@ -46,16 +47,6 @@ void QuicSpdySession::Initialize() {
   static_streams()[kHeadersStreamId] = headers_stream_.get();
 }
 
-void QuicSpdySession::OnStreamHeaders(QuicStreamId stream_id,
-                                      StringPiece headers_data) {
-  QuicSpdyStream* stream = GetSpdyDataStream(stream_id);
-  if (!stream) {
-    // It's quite possible to receive headers after a stream has been reset.
-    return;
-  }
-  stream->OnStreamHeaders(headers_data);
-}
-
 void QuicSpdySession::OnStreamHeadersPriority(QuicStreamId stream_id,
                                               SpdyPriority priority) {
   QuicSpdyStream* stream = GetSpdyDataStream(stream_id);
@@ -64,17 +55,6 @@ void QuicSpdySession::OnStreamHeadersPriority(QuicStreamId stream_id,
     return;
   }
   stream->OnStreamHeadersPriority(priority);
-}
-
-void QuicSpdySession::OnStreamHeadersComplete(QuicStreamId stream_id,
-                                              bool fin,
-                                              size_t frame_len) {
-  QuicSpdyStream* stream = GetSpdyDataStream(stream_id);
-  if (!stream) {
-    // It's quite possible to receive headers after a stream has been reset.
-    return;
-  }
-  stream->OnStreamHeadersComplete(fin, frame_len);
 }
 
 void QuicSpdySession::OnStreamHeaderList(QuicStreamId stream_id,
@@ -122,23 +102,6 @@ QuicSpdyStream* QuicSpdySession::GetSpdyDataStream(
   return static_cast<QuicSpdyStream*>(GetOrCreateDynamicStream(stream_id));
 }
 
-void QuicSpdySession::OnPromiseHeaders(QuicStreamId stream_id,
-                                       StringPiece headers_data) {
-  string error = "OnPromiseHeaders should be overriden in client code.";
-  QUIC_BUG << error;
-  connection()->CloseConnection(QUIC_INTERNAL_ERROR, error,
-                                ConnectionCloseBehavior::SILENT_CLOSE);
-}
-
-void QuicSpdySession::OnPromiseHeadersComplete(QuicStreamId stream_id,
-                                               QuicStreamId promised_stream_id,
-                                               size_t frame_len) {
-  string error = "OnPromiseHeadersComplete should be overriden in client code.";
-  QUIC_BUG << error;
-  connection()->CloseConnection(QUIC_INTERNAL_ERROR, error,
-                                ConnectionCloseBehavior::SILENT_CLOSE);
-}
-
 void QuicSpdySession::OnPromiseHeaderList(QuicStreamId stream_id,
                                           QuicStreamId promised_stream_id,
                                           size_t frame_len,
@@ -155,14 +118,27 @@ void QuicSpdySession::OnConfigNegotiated() {
     headers_stream_->DisableHpackDynamicTable();
   }
   const QuicVersion version = connection()->version();
-  if (version > QUIC_VERSION_35 && config()->ForceHolBlocking(perspective())) {
+  if (FLAGS_quic_enable_force_hol_blocking && version > QUIC_VERSION_35 &&
+      config()->ForceHolBlocking(perspective())) {
     force_hol_blocking_ = true;
-    // Autotuning makes sure that the headers stream flow control does
-    // not get in the way, and normal stream and connection level flow
-    // control are active anyway. This is really only for the client
-    // side (and mainly there just in tests and toys), where
-    // autotuning and/or large buffers are not enabled by default.
-    headers_stream_->flow_controller()->set_auto_tune_receive_window(true);
+    if (!FLAGS_quic_bugfix_fhol_writev_fin_only_v2) {
+      // Autotuning makes sure that the headers stream flow control does
+      // not get in the way, and normal stream and connection level flow
+      // control are active anyway. This is really only for the client
+      // side (and mainly there just in tests and toys), where
+      // autotuning and/or large buffers are not enabled by default.
+      headers_stream_->flow_controller()->set_auto_tune_receive_window(true);
+    } else {
+      // Since all streams are tunneled through the headers stream, it
+      // is important that headers stream never flow control blocks.
+      // Otherwise, busy-loop behaviour can ensue where data streams
+      // data try repeatedly to write data not realizing that the
+      // tunnel through the headers stream is blocked.
+      headers_stream_->flow_controller()->UpdateReceiveWindowSize(
+          kStreamReceiveWindowLimit);
+      headers_stream_->flow_controller()->UpdateSendWindowOffset(
+          kStreamReceiveWindowLimit);
+    }
   }
 
   if (version > QUIC_VERSION_34) {
@@ -184,6 +160,10 @@ void QuicSpdySession::OnStreamFrameData(QuicStreamId stream_id,
   DVLOG(1) << "De-encapsulating DATA frame for stream " << stream_id
            << " offset " << offset << " len " << len << " fin " << fin;
   OnStreamFrame(frame);
+}
+
+bool QuicSpdySession::ShouldReleaseHeadersStreamSequencerBuffer() {
+  return false;
 }
 
 }  // namespace net

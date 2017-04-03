@@ -9,8 +9,8 @@
 
 #include "ash/common/accelerators/accelerator_controller.h"
 #include "ash/common/accessibility_delegate.h"
+#include "ash/common/material_design/material_design_controller.h"
 #include "ash/common/shelf/wm_shelf.h"
-#include "ash/common/shell_window_ids.h"
 #include "ash/common/system/status_area_widget.h"
 #include "ash/common/system/tray/system_tray_bubble.h"
 #include "ash/common/system/tray/system_tray_item.h"
@@ -20,6 +20,7 @@
 #include "ash/common/wm_root_window_controller.h"
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
+#include "ash/public/cpp/shell_window_ids.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/status_area_widget_test_helper.h"
 #include "ash/test/test_system_tray_item.h"
@@ -120,9 +121,15 @@ TEST_F(SystemTrayTest, NotRecordedtemsAreNotRecorded) {
   RunAllPendingInMessageLoop();
 }
 
+// TODO(bruthig): Re-enable.  See https://crbug.com/665960.
+#if defined(OS_WIN)
+#define MAYBE_NullDefaultViewIsNotRecorded DISABLED_NullDefaultViewIsNotRecorded
+#else
+#define MAYBE_NullDefaultViewIsNotRecorded NullDefaultViewIsNotRecorded
+#endif
 // Verifies null default views are not recorded in the
 // "Ash.SystemMenu.DefaultView.VisibleItems" histogram.
-TEST_F(SystemTrayTest, NullDefaultViewIsNotRecorded) {
+TEST_F(SystemTrayTest, MAYBE_NullDefaultViewIsNotRecorded) {
   SystemTray* tray = GetPrimarySystemTray();
   ASSERT_TRUE(tray->GetWidget());
 
@@ -235,16 +242,16 @@ TEST_F(SystemTrayTest, SystemTrayColoring) {
   SystemTray* tray = GetPrimarySystemTray();
   ASSERT_TRUE(tray->GetWidget());
   // At the beginning the tray coloring is not active.
-  ASSERT_FALSE(tray->draw_background_as_active());
+  ASSERT_FALSE(tray->is_active());
 
   // Showing the system bubble should show the background as active.
   tray->ShowDefaultView(BUBBLE_CREATE_NEW);
-  ASSERT_TRUE(tray->draw_background_as_active());
+  ASSERT_TRUE(tray->is_active());
 
   // Closing the system menu should change the coloring back to normal.
   ASSERT_TRUE(tray->CloseSystemBubble());
   RunAllPendingInMessageLoop();
-  ASSERT_FALSE(tray->draw_background_as_active());
+  ASSERT_FALSE(tray->is_active());
 }
 
 // Closing the system bubble through an alignment change should change the
@@ -255,16 +262,16 @@ TEST_F(SystemTrayTest, SystemTrayColoringAfterAlignmentChange) {
   WmShelf* shelf = GetPrimaryShelf();
   shelf->SetAlignment(SHELF_ALIGNMENT_BOTTOM);
   // At the beginning the tray coloring is not active.
-  ASSERT_FALSE(tray->draw_background_as_active());
+  ASSERT_FALSE(tray->is_active());
 
   // Showing the system bubble should show the background as active.
   tray->ShowDefaultView(BUBBLE_CREATE_NEW);
-  ASSERT_TRUE(tray->draw_background_as_active());
+  ASSERT_TRUE(tray->is_active());
 
   // Changing the alignment should close the system bubble and change the
   // background color.
   shelf->SetAlignment(SHELF_ALIGNMENT_LEFT);
-  ASSERT_FALSE(tray->draw_background_as_active());
+  ASSERT_FALSE(tray->is_active());
   RunAllPendingInMessageLoop();
   // The bubble should already be closed by now.
   ASSERT_FALSE(tray->CloseSystemBubble());
@@ -451,13 +458,15 @@ TEST_F(SystemTrayTest, TrayBoundsInWidget) {
   shelf->SetAlignment(SHELF_ALIGNMENT_LEFT);
   window_bounds = widget->GetWindowBoundsInScreen();
   tray_bounds = tray->GetBoundsInScreen();
-  EXPECT_TRUE(window_bounds.Contains(tray_bounds));
+  // TODO(estade): Re-enable this check. See crbug.com/660928.
+  // EXPECT_TRUE(window_bounds.Contains(tray_bounds));
 
   // Test in the right alignment.
   shelf->SetAlignment(SHELF_ALIGNMENT_LEFT);
   window_bounds = widget->GetWindowBoundsInScreen();
   tray_bounds = tray->GetBoundsInScreen();
-  EXPECT_TRUE(window_bounds.Contains(tray_bounds));
+  // TODO(estade): Re-enable this check. See crbug.com/660928.
+  // EXPECT_TRUE(window_bounds.Contains(tray_bounds));
 }
 
 TEST_F(SystemTrayTest, PersistentBubble) {
@@ -550,11 +559,14 @@ TEST_F(SystemTrayTest, MAYBE_WithSystemModal) {
   ASSERT_TRUE(accessibility);
   EXPECT_TRUE(accessibility->visible());
 
-  const views::View* settings =
-      tray->GetSystemBubble()->bubble_view()->GetViewByID(
-          test::kSettingsTrayItemViewId);
-  ASSERT_TRUE(settings);
-  EXPECT_TRUE(settings->visible());
+  // Settings row is not present in material design.
+  if (!MaterialDesignController::IsSystemTrayMenuMaterial()) {
+    const views::View* settings =
+        tray->GetSystemBubble()->bubble_view()->GetViewByID(
+            test::kSettingsTrayItemViewId);
+    ASSERT_TRUE(settings);
+    EXPECT_TRUE(settings->visible());
+  }
 }
 
 // Tests that if SetVisible(true) is called while animating to hidden that the
@@ -581,6 +593,11 @@ TEST_F(SystemTrayTest, SetVisibleDuringHideAnimation) {
 // Tests that touch on an item in the system bubble triggers it to become
 // active.
 TEST_F(SystemTrayTest, TrayPopupItemContainerTouchFeedback) {
+  // Material design will use the ink drop ripple framework to show
+  // active states.
+  if (MaterialDesignController::IsSystemTrayMenuMaterial())
+    return;
+
   SystemTray* tray = GetPrimarySystemTray();
   tray->ShowDefaultView(BUBBLE_CREATE_NEW);
 
@@ -600,6 +617,11 @@ TEST_F(SystemTrayTest, TrayPopupItemContainerTouchFeedback) {
 // Tests that touch events on an item in the system bubble cause it to stop
 // being active.
 TEST_F(SystemTrayTest, TrayPopupItemContainerTouchFeedbackCancellation) {
+  // Material design will use the ink drop ripple framework to show
+  // active states.
+  if (MaterialDesignController::IsSystemTrayMenuMaterial())
+    return;
+
   SystemTray* tray = GetPrimarySystemTray();
   tray->ShowDefaultView(BUBBLE_CREATE_NEW);
 

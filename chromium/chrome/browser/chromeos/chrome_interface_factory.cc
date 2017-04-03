@@ -5,27 +5,32 @@
 #include "chrome/browser/chromeos/chrome_interface_factory.h"
 
 #include <memory>
+#include <utility>
 
 #include "ash/common/mojo_interface_factory.h"
-#include "ash/public/interfaces/wallpaper.mojom.h"
+#include "ash/public/interfaces/new_window.mojom.h"
+#include "ash/public/interfaces/shutdown.mojom.h"
 #include "base/lazy_instance.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "chrome/browser/chromeos/login/users/wallpaper/wallpaper_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/ash/app_list/app_list_presenter_service.h"
 #include "chrome/browser/ui/ash/ash_util.h"
-#include "chrome/browser/ui/ash/chrome_wallpaper_manager.h"
+#include "chrome/browser/ui/ash/chrome_new_window_client.h"
 #include "chrome/browser/ui/ash/keyboard_ui_service.h"
 #include "chrome/browser/ui/ash/system_tray_client.h"
+#include "chrome/browser/ui/ash/volume_controller_chromeos.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "content/public/common/service_manager_connection.h"
 #include "mash/public/interfaces/launchable.mojom.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
-#include "services/shell/public/cpp/connection.h"
-#include "services/shell/public/cpp/interface_registry.h"
+#include "services/service_manager/public/cpp/connection.h"
+#include "services/service_manager/public/cpp/interface_registry.h"
 #include "ui/app_list/presenter/app_list_presenter.mojom.h"
 #include "ui/keyboard/keyboard.mojom.h"
 
@@ -58,9 +63,6 @@ class ChromeLaunchable : public mash::mojom::Launchable {
       return;
     }
     switch (what) {
-      case mash::mojom::kDocument:
-        CreateNewTab();
-        break;
       case mash::mojom::kWindow:
         CreateNewWindowImpl(false /* is_incognito */);
         break;
@@ -84,7 +86,7 @@ class FactoryImpl {
 
   template <typename Interface>
   static void AddFactory(
-      shell::InterfaceRegistry* registry,
+      service_manager::InterfaceRegistry* registry,
       scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
     registry->AddInterface<Interface>(
         base::Bind(&FactoryImpl::CallMainThreadFactory<Interface>),
@@ -94,7 +96,7 @@ class FactoryImpl {
  private:
   static FactoryImpl* Get() {
     if (!factory_.Get())
-      factory_.Get().reset(new FactoryImpl);
+      factory_.Get() = base::MakeUnique<FactoryImpl>();
     return factory_.Get().get();
   }
 
@@ -105,15 +107,22 @@ class FactoryImpl {
 
   void BindRequest(keyboard::mojom::KeyboardRequest request) {
     if (!keyboard_ui_service_)
-      keyboard_ui_service_.reset(new KeyboardUIService);
+      keyboard_ui_service_ = base::MakeUnique<KeyboardUIService>();
     keyboard_bindings_.AddBinding(keyboard_ui_service_.get(),
                                   std::move(request));
   }
 
   void BindRequest(mash::mojom::LaunchableRequest request) {
     if (!launchable_)
-      launchable_.reset(new ChromeLaunchable);
+      launchable_ = base::MakeUnique<ChromeLaunchable>();
     launchable_->ProcessRequest(std::move(request));
+  }
+
+  void BindRequest(ash::mojom::NewWindowClientRequest request) {
+    if (!new_window_client_)
+      new_window_client_.reset(new ChromeNewWindowClient);
+    new_window_client_bindings_.AddBinding(new_window_client_.get(),
+                                           std::move(request));
   }
 
   void BindRequest(ash::mojom::SystemTrayClientRequest request) {
@@ -122,14 +131,18 @@ class FactoryImpl {
   }
 
   void BindRequest(ash::mojom::WallpaperManagerRequest request) {
-    if (!wallpaper_manager_)
-      wallpaper_manager_.reset(new ChromeWallpaperManager);
-    wallpaper_manager_->ProcessRequest(std::move(request));
+    WallpaperManager::Get()->BindRequest(std::move(request));
+  }
+
+  void BindRequest(ash::mojom::VolumeControllerRequest request) {
+    if (!volume_controller_)
+      volume_controller_ = base::MakeUnique<VolumeController>();
+    volume_controller_->BindRequest(std::move(request));
   }
 
   void BindRequest(app_list::mojom::AppListPresenterRequest request) {
     if (!app_list_presenter_service_)
-      app_list_presenter_service_.reset(new AppListPresenterService);
+      app_list_presenter_service_ = base::MakeUnique<AppListPresenterService>();
     app_list_presenter_bindings_.AddBinding(app_list_presenter_service_.get(),
                                             std::move(request));
   }
@@ -139,8 +152,10 @@ class FactoryImpl {
   std::unique_ptr<KeyboardUIService> keyboard_ui_service_;
   mojo::BindingSet<keyboard::mojom::Keyboard> keyboard_bindings_;
   std::unique_ptr<ChromeLaunchable> launchable_;
+  std::unique_ptr<ChromeNewWindowClient> new_window_client_;
+  mojo::BindingSet<ash::mojom::NewWindowClient> new_window_client_bindings_;
   mojo::BindingSet<ash::mojom::SystemTrayClient> system_tray_client_bindings_;
-  std::unique_ptr<ChromeWallpaperManager> wallpaper_manager_;
+  std::unique_ptr<VolumeController> volume_controller_;
   std::unique_ptr<AppListPresenterService> app_list_presenter_service_;
   mojo::BindingSet<app_list::mojom::AppListPresenter>
       app_list_presenter_bindings_;
@@ -158,14 +173,22 @@ ChromeInterfaceFactory::ChromeInterfaceFactory()
 
 ChromeInterfaceFactory::~ChromeInterfaceFactory() {}
 
-bool ChromeInterfaceFactory::OnConnect(const shell::Identity& remote_identity,
-                                       shell::InterfaceRegistry* registry,
-                                       shell::Connector* connector) {
+bool ChromeInterfaceFactory::OnConnect(
+    const service_manager::Identity& remote_identity,
+    service_manager::InterfaceRegistry* registry,
+    service_manager::Connector* connector) {
+  // TODO(jamescook): Only register the interfaces needed for a particular
+  // |remote_identity|. For example, a connection from service:ash needs these,
+  // but a connection from service:content_gpu does not.
   FactoryImpl::AddFactory<keyboard::mojom::Keyboard>(registry,
                                                      main_thread_task_runner_);
   FactoryImpl::AddFactory<mash::mojom::Launchable>(registry,
                                                    main_thread_task_runner_);
+  FactoryImpl::AddFactory<ash::mojom::NewWindowClient>(
+      registry, main_thread_task_runner_);
   FactoryImpl::AddFactory<ash::mojom::SystemTrayClient>(
+      registry, main_thread_task_runner_);
+  FactoryImpl::AddFactory<ash::mojom::VolumeController>(
       registry, main_thread_task_runner_);
   FactoryImpl::AddFactory<ash::mojom::WallpaperManager>(
       registry, main_thread_task_runner_);

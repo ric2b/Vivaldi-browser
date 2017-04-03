@@ -22,6 +22,7 @@
 #include "chrome/browser/profiles/profile_avatar_downloader.h"
 #include "chrome/browser/profiles/profile_avatar_icon_util.h"
 #include "chrome/browser/profiles/profiles_state.h"
+#include "chrome/common/features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/prefs/pref_registry_simple.h"
@@ -34,7 +35,7 @@
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/image/image_util.h"
 
-#if defined(ENABLE_SUPERVISED_USERS)
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
 #include "chrome/browser/supervised_user/supervised_user_constants.h"
 #endif
 
@@ -209,9 +210,8 @@ void ProfileInfoCache::AddProfileToCache(
   if (!disable_avatar_download_for_testing_)
     DownloadHighResAvatarIfNeeded(icon_index, profile_path);
 
-  FOR_EACH_OBSERVER(ProfileInfoCacheObserver,
-                    observer_list_,
-                    OnProfileAdded(profile_path));
+  for (auto& observer : observer_list_)
+    observer.OnProfileAdded(profile_path);
 }
 
 void ProfileInfoCache::AddObserver(ProfileInfoCacheObserver* obs) {
@@ -231,9 +231,8 @@ void ProfileInfoCache::DeleteProfileFromCache(
   }
   base::string16 name = GetNameOfProfileAtIndex(profile_index);
 
-  FOR_EACH_OBSERVER(ProfileInfoCacheObserver,
-                    observer_list_,
-                    OnProfileWillBeRemoved(profile_path));
+  for (auto& observer : observer_list_)
+    observer.OnProfileWillBeRemoved(profile_path);
 
   DictionaryPrefUpdate update(prefs_, prefs::kProfileInfoCache);
   base::DictionaryValue* cache = update.Get();
@@ -242,9 +241,8 @@ void ProfileInfoCache::DeleteProfileFromCache(
   sorted_keys_.erase(std::find(sorted_keys_.begin(), sorted_keys_.end(), key));
   profile_attributes_entries_.erase(profile_path.value());
 
-  FOR_EACH_OBSERVER(ProfileInfoCacheObserver,
-                    observer_list_,
-                    OnProfileWasRemoved(profile_path, name));
+  for (auto& observer : observer_list_)
+    observer.OnProfileWasRemoved(profile_path, name);
 }
 
 size_t ProfileInfoCache::GetNumberOfProfiles() const {
@@ -403,7 +401,7 @@ bool ProfileInfoCache::ProfileIsSupervisedAtIndex(size_t index) const {
 }
 
 bool ProfileInfoCache::ProfileIsChildAtIndex(size_t index) const {
-#if defined(ENABLE_SUPERVISED_USERS)
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
   return GetSupervisedUserIdOfProfileAtIndex(index) ==
       supervised_users::kChildAccountSUID;
 #else
@@ -562,9 +560,8 @@ void ProfileInfoCache::SetNameOfProfileAtIndex(size_t index,
   UpdateSortForProfileIndex(index);
 
   if (old_display_name != new_display_name) {
-    FOR_EACH_OBSERVER(ProfileInfoCacheObserver,
-                      observer_list_,
-                      OnProfileNameChanged(profile_path, old_display_name));
+    for (auto& observer : observer_list_)
+      observer.OnProfileNameChanged(profile_path, old_display_name);
   }
 }
 
@@ -600,9 +597,8 @@ void ProfileInfoCache::SetAuthInfoOfProfileAtIndex(
   SetInfoForProfileAtIndex(index, info.release());
 
   base::FilePath profile_path = GetPathOfProfileAtIndex(index);
-  FOR_EACH_OBSERVER(ProfileInfoCacheObserver,
-                    observer_list_,
-                    OnProfileAuthInfoChanged(profile_path));
+  for (auto& observer : observer_list_)
+    observer.OnProfileAuthInfoChanged(profile_path);
 }
 
 void ProfileInfoCache::SetAvatarIconOfProfileAtIndex(size_t index,
@@ -619,9 +615,8 @@ void ProfileInfoCache::SetAvatarIconOfProfileAtIndex(size_t index,
   if (!disable_avatar_download_for_testing_)
     DownloadHighResAvatarIfNeeded(icon_index, profile_path);
 
-  FOR_EACH_OBSERVER(ProfileInfoCacheObserver,
-                    observer_list_,
-                    OnProfileAvatarChanged(profile_path));
+  for (auto& observer : observer_list_)
+    observer.OnProfileAvatarChanged(profile_path);
 }
 
 void ProfileInfoCache::SetIsOmittedProfileAtIndex(size_t index,
@@ -635,9 +630,8 @@ void ProfileInfoCache::SetIsOmittedProfileAtIndex(size_t index,
   SetInfoForProfileAtIndex(index, info.release());
 
   base::FilePath profile_path = GetPathOfProfileAtIndex(index);
-  FOR_EACH_OBSERVER(ProfileInfoCacheObserver,
-                    observer_list_,
-                    OnProfileIsOmittedChanged(profile_path));
+  for (auto& observer : observer_list_)
+    observer.OnProfileIsOmittedChanged(profile_path);
 }
 
 void ProfileInfoCache::SetSupervisedUserIdOfProfileAtIndex(
@@ -652,9 +646,8 @@ void ProfileInfoCache::SetSupervisedUserIdOfProfileAtIndex(
   SetInfoForProfileAtIndex(index, info.release());
 
   base::FilePath profile_path = GetPathOfProfileAtIndex(index);
-  FOR_EACH_OBSERVER(ProfileInfoCacheObserver,
-                    observer_list_,
-                    OnProfileSupervisedUserIdChanged(profile_path));
+  for (auto& observer : observer_list_)
+    observer.OnProfileSupervisedUserIdChanged(profile_path);
 }
 
 void ProfileInfoCache::SetLocalAuthCredentialsOfProfileAtIndex(
@@ -705,9 +698,8 @@ void ProfileInfoCache::SetGAIANameOfProfileAtIndex(size_t index,
   UpdateSortForProfileIndex(index);
 
   if (old_display_name != new_display_name) {
-    FOR_EACH_OBSERVER(ProfileInfoCacheObserver,
-                      observer_list_,
-                      OnProfileNameChanged(profile_path, old_display_name));
+    for (auto& observer : observer_list_)
+      observer.OnProfileNameChanged(profile_path, old_display_name);
   }
 }
 
@@ -728,9 +720,8 @@ void ProfileInfoCache::SetGAIAGivenNameOfProfileAtIndex(
   UpdateSortForProfileIndex(index);
 
   if (old_display_name != new_display_name) {
-    FOR_EACH_OBSERVER(ProfileInfoCacheObserver,
-                      observer_list_,
-                      OnProfileNameChanged(profile_path, old_display_name));
+    for (auto& observer : observer_list_)
+      observer.OnProfileNameChanged(profile_path, old_display_name);
   }
 }
 
@@ -769,9 +760,8 @@ void ProfileInfoCache::SetGAIAPictureOfProfileAtIndex(size_t index,
   // This takes ownership of |info|.
   SetInfoForProfileAtIndex(index, info.release());
 
-  FOR_EACH_OBSERVER(ProfileInfoCacheObserver,
-                    observer_list_,
-                    OnProfileAvatarChanged(path));
+  for (auto& observer : observer_list_)
+    observer.OnProfileAvatarChanged(path);
 }
 
 void ProfileInfoCache::SetIsUsingGAIAPictureOfProfileAtIndex(size_t index,
@@ -783,9 +773,8 @@ void ProfileInfoCache::SetIsUsingGAIAPictureOfProfileAtIndex(size_t index,
   SetInfoForProfileAtIndex(index, info.release());
 
   base::FilePath profile_path = GetPathOfProfileAtIndex(index);
-  FOR_EACH_OBSERVER(ProfileInfoCacheObserver,
-                    observer_list_,
-                    OnProfileAvatarChanged(profile_path));
+  for (auto& observer : observer_list_)
+    observer.OnProfileAvatarChanged(profile_path);
 }
 
 void ProfileInfoCache::SetProfileSigninRequiredAtIndex(size_t index,
@@ -800,9 +789,8 @@ void ProfileInfoCache::SetProfileSigninRequiredAtIndex(size_t index,
   SetInfoForProfileAtIndex(index, info.release());
 
   base::FilePath profile_path = GetPathOfProfileAtIndex(index);
-  FOR_EACH_OBSERVER(ProfileInfoCacheObserver,
-                    observer_list_,
-                    OnProfileSigninRequiredChanged(profile_path));
+  for (auto& observer : observer_list_)
+    observer.OnProfileSigninRequiredChanged(profile_path);
 }
 
 void ProfileInfoCache::SetProfileIsEphemeralAtIndex(size_t index, bool value) {
@@ -833,9 +821,8 @@ void ProfileInfoCache::SetProfileIsUsingDefaultNameAtIndex(
   const base::FilePath profile_path = GetPathOfProfileAtIndex(index);
 
   if (old_display_name != new_display_name) {
-    FOR_EACH_OBSERVER(ProfileInfoCacheObserver,
-                      observer_list_,
-                      OnProfileNameChanged(profile_path, old_display_name));
+    for (auto& observer : observer_list_)
+      observer.OnProfileNameChanged(profile_path, old_display_name);
   }
 }
 
@@ -1146,9 +1133,8 @@ void ProfileInfoCache::OnAvatarPictureLoaded(const base::FilePath& profile_path,
           "461175 ProfileInfoCache::OnAvatarPictureLoaded::DeleteImage"));
   delete image;
 
-  FOR_EACH_OBSERVER(ProfileInfoCacheObserver,
-                    observer_list_,
-                    OnProfileHighResAvatarLoaded(profile_path));
+  for (auto& observer : observer_list_)
+    observer.OnProfileHighResAvatarLoaded(profile_path);
 }
 
 void ProfileInfoCache::OnAvatarPictureSaved(
@@ -1156,9 +1142,8 @@ void ProfileInfoCache::OnAvatarPictureSaved(
       const base::FilePath& profile_path) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  FOR_EACH_OBSERVER(ProfileInfoCacheObserver,
-      observer_list_,
-      OnProfileHighResAvatarLoaded(profile_path));
+  for (auto& observer : observer_list_)
+    observer.OnProfileHighResAvatarLoaded(profile_path);
 }
 
 void ProfileInfoCache::MigrateLegacyProfileNamesAndDownloadAvatars() {

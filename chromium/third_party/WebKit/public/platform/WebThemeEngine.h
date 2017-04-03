@@ -33,6 +33,7 @@
 
 #include "WebCanvas.h"
 #include "WebColor.h"
+#include "WebScrollbarOverlayColorTheme.h"
 #include "WebSize.h"
 
 namespace blink {
@@ -137,6 +138,11 @@ class WebThemeEngine {
     int valueRectHeight;
   };
 
+  // Extra parameters for scrollbar thumb. Used only for overlay scrollbars.
+  struct ScrollbarThumbExtraParams {
+    WebScrollbarOverlayColorTheme scrollbarTheme;
+  };
+
   union ExtraParams {
     ScrollbarTrackExtraParams scrollbarTrack;
     ButtonExtraParams button;
@@ -145,6 +151,7 @@ class WebThemeEngine {
     SliderExtraParams slider;
     InnerSpinButtonExtraParams innerSpin;
     ProgressBarExtraParams progressBar;
+    ScrollbarThumbExtraParams scrollbarThumb;
   };
 
   // Gets the size of the given theme part. For variable sized items
@@ -156,10 +163,21 @@ class WebThemeEngine {
     int thumbThickness;
     int scrollbarMargin;
     WebColor color;
+    double fadeOutDelaySeconds;
+    double fadeOutDurationSeconds;
   };
 
-  // Gets the overlay scrollbar style. Used for mobile theme.
-  virtual void getOverlayScrollbarStyle(ScrollbarStyle*) {}
+  // Gets the overlay scrollbar style. Not used on Mac.
+  virtual void getOverlayScrollbarStyle(ScrollbarStyle* style) {
+    // Disable overlay scrollbar fade out (for non-composited scrollers) unless
+    // explicitly enabled by the implementing child class. NOTE: these values
+    // aren't used to control Mac fade out - that happens in ScrollAnimatorMac.
+    style->fadeOutDelaySeconds = 0.0;
+    style->fadeOutDurationSeconds = 0.0;
+    // The other fields in this struct are used only on Android to draw solid
+    // color scrollbars. On other platforms the scrollbars are painted in
+    // NativeTheme so these fields are unused in non-Android WebThemeEngines.
+  }
 
   // Paint the given the given theme part.
   virtual void paint(WebCanvas*,

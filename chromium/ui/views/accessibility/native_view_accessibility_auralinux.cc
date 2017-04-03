@@ -109,11 +109,14 @@ class AuraLinuxApplication
   void DoDefaultAction() override {
   }
 
-  bool SetStringValue(const base::string16& new_value) override {
+  bool SetStringValue(const base::string16& new_value,
+                      bool clear_first) override {
     return false;
   }
 
   bool CanSetStringValue() override { return false; }
+
+  bool SetFocused(bool focused) override { return false; }
 
  private:
   friend struct base::DefaultSingletonTraits<AuraLinuxApplication>;

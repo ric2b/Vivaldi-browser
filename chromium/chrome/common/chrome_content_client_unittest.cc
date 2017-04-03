@@ -6,6 +6,7 @@
 
 #include <string>
 
+#include "base/memory/ptr_util.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/test/scoped_command_line.h"
@@ -107,14 +108,14 @@ TEST(ChromeContentClientTest, Basic) {
 
 #if defined(ENABLE_PLUGINS)
 TEST(ChromeContentClientTest, FindMostRecent) {
-  std::vector<content::PepperPluginInfo*> version_vector;
+  std::vector<std::unique_ptr<content::PepperPluginInfo>> version_vector;
   // Test an empty vector.
-  EXPECT_FALSE(ChromeContentClient::FindMostRecentPlugin(version_vector));
+  EXPECT_EQ(nullptr, ChromeContentClient::FindMostRecentPlugin(version_vector));
 
   // Now test the vector with one element.
-  content::PepperPluginInfo info1;
-  info1.version = "1.0.0.0";
-  version_vector.push_back(&info1);
+  content::PepperPluginInfo info;
+  info.version = "1.0.0.0";
+  version_vector.push_back(base::MakeUnique<content::PepperPluginInfo>(info));
 
   content::PepperPluginInfo* most_recent =
       ChromeContentClient::FindMostRecentPlugin(version_vector);
@@ -129,18 +130,22 @@ TEST(ChromeContentClientTest, FindMostRecent) {
 
   // Test highest version is picked.
   version_vector.clear();
-  version_vector.push_back(&info5);
-  version_vector.push_back(&info6_12);
-  version_vector.push_back(&info6_13);
+  version_vector.push_back(base::MakeUnique<content::PepperPluginInfo>(info5));
+  version_vector.push_back(
+      base::MakeUnique<content::PepperPluginInfo>(info6_12));
+  version_vector.push_back(
+      base::MakeUnique<content::PepperPluginInfo>(info6_13));
 
   most_recent = ChromeContentClient::FindMostRecentPlugin(version_vector);
   EXPECT_EQ("6.0.0.13", most_recent->version);
 
   // Test that order does not matter, validates tests below.
   version_vector.clear();
-  version_vector.push_back(&info6_13);
-  version_vector.push_back(&info6_12);
-  version_vector.push_back(&info5);
+  version_vector.push_back(
+      base::MakeUnique<content::PepperPluginInfo>(info6_13));
+  version_vector.push_back(
+      base::MakeUnique<content::PepperPluginInfo>(info6_12));
+  version_vector.push_back(base::MakeUnique<content::PepperPluginInfo>(info5));
 
   most_recent = ChromeContentClient::FindMostRecentPlugin(version_vector);
   EXPECT_EQ("6.0.0.13", most_recent->version);
@@ -160,8 +165,10 @@ TEST(ChromeContentClientTest, FindMostRecent) {
   // 1. System Flash.
   // 2. Component update.
   version_vector.clear();
-  version_vector.push_back(&system_flash);
-  version_vector.push_back(&component_flash);
+  version_vector.push_back(
+      base::MakeUnique<content::PepperPluginInfo>(system_flash));
+  version_vector.push_back(
+      base::MakeUnique<content::PepperPluginInfo>(component_flash));
   most_recent = ChromeContentClient::FindMostRecentPlugin(version_vector);
   EXPECT_STREQ("system_flash", most_recent->name.c_str());
 }

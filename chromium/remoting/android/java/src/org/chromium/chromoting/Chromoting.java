@@ -12,6 +12,7 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.graphics.drawable.Drawable;
+import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.support.v4.content.ContextCompat;
@@ -243,8 +244,7 @@ public class Chromoting extends AppCompatActivity implements ConnectionListener,
         findViewById(R.id.host_setup_link_android).setOnClickListener(this);
 
         mDrawerLayout = (DrawerLayout) findViewById(R.id.drawer_layout);
-        mDrawerToggle = new ActionBarDrawerToggle(this, mDrawerLayout, toolbar,
-                R.string.open_navigation_drawer, R.string.close_navigation_drawer) {
+        mDrawerToggle = new ActionBarDrawerToggle(this, mDrawerLayout, toolbar, 0, 0) {
             @Override
             public void onDrawerClosed(View drawerView) {
                 super.onDrawerClosed(drawerView);
@@ -286,6 +286,7 @@ public class Chromoting extends AppCompatActivity implements ConnectionListener,
         DrawableCompat.setTint(menuIcon.mutate(),
                 ChromotingUtil.getColorAttribute(this, R.attr.colorControlNormal));
         getSupportActionBar().setHomeAsUpIndicator(menuIcon);
+        getSupportActionBar().setHomeActionContentDescription(R.string.actionbar_menu);
 
         mAccountSwitcher = AccountSwitcherFactory.getInstance().createAccountSwitcher(this, this);
         mAccountSwitcher.setNavigation(NavigationMenuAdapter.createNavigationMenu(this));
@@ -604,6 +605,10 @@ public class Chromoting extends AppCompatActivity implements ConnectionListener,
 
     @Override
     public void onAccountSelected(String accountName) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN) {
+            String logInAnnouncement = getString(R.string.log_in_account_description, accountName);
+            mAccountSwitcher.getView().announceForAccessibility(logInAnnouncement);
+        }
         mAccount = accountName;
         JniInterface.setAccountForLogging(accountName);
 

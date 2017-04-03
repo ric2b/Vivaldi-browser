@@ -112,8 +112,6 @@ class ImportEndedObserver : public importer::ImporterProgressObserver {
     if (!callback_for_import_end_.is_null())
       callback_for_import_end_.Run();
   }
-  void ImportItemFailed(importer::ImportItem item,
-                        const std::string& error) override {}
 
   void set_callback_for_import_end(const base::Closure& callback) {
     callback_for_import_end_ = callback;

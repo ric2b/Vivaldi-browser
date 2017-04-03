@@ -23,7 +23,6 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/webrtc/modules/desktop_capture/desktop_frame.h"
-#include "third_party/webrtc/modules/desktop_capture/screen_capturer_mock_objects.h"
 
 using ::testing::_;
 using ::testing::AtLeast;
@@ -110,7 +109,7 @@ class ThreadCheckDesktopCapturer : public webrtc::DesktopCapturer {
     callback_ = callback;
   }
 
-  void Capture(const webrtc::DesktopRegion& rect) override {
+  void CaptureFrame() override {
     EXPECT_TRUE(task_runner_->BelongsToCurrentThread());
 
     std::unique_ptr<webrtc::DesktopFrame> frame(
@@ -119,6 +118,16 @@ class ThreadCheckDesktopCapturer : public webrtc::DesktopCapturer {
         webrtc::DesktopRect::MakeXYWH(0, 0, 10, 10));
     callback_->OnCaptureResult(webrtc::DesktopCapturer::Result::SUCCESS,
                                std::move(frame));
+  }
+
+  bool GetSourceList(SourceList* sources) override {
+    EXPECT_TRUE(task_runner_->BelongsToCurrentThread());
+    return false;
+  }
+
+  bool SelectSource(SourceId id) override {
+    EXPECT_TRUE(task_runner_->BelongsToCurrentThread());
+    return true;
   }
 
  private:

@@ -5,9 +5,16 @@
 #ifndef ASH_COMMON_SYSTEM_USER_BUTTON_FROM_VIEW_H_
 #define ASH_COMMON_SYSTEM_USER_BUTTON_FROM_VIEW_H_
 
+#include <memory>
+
+#include "ash/common/system/tray/tray_popup_ink_drop_style.h"
 #include "base/macros.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/views/controls/button/custom_button.h"
+
+namespace views {
+class InkDropContainerView;
+}  // namespace views
 
 namespace ash {
 namespace tray {
@@ -24,6 +31,7 @@ class ButtonFromView : public views::CustomButton {
   // An accessible label gets computed based upon descendant views of this view.
   ButtonFromView(views::View* content,
                  views::ButtonListener* listener,
+                 TrayPopupInkDropStyle ink_drop_style,
                  bool highlight_on_hover,
                  const gfx::Insets& tab_frame_inset);
   ~ButtonFromView() override;
@@ -31,16 +39,27 @@ class ButtonFromView : public views::CustomButton {
   // Called when the border should remain even in the non highlighted state.
   void ForceBorderVisible(bool show);
 
-  // Overridden from views::View
+  // views::View:
   void OnMouseEntered(const ui::MouseEvent& event) override;
   void OnMouseExited(const ui::MouseEvent& event) override;
   void OnPaint(gfx::Canvas* canvas) override;
   void OnFocus() override;
   void OnBlur() override;
-  void GetAccessibleState(ui::AXViewState* state) override;
+  void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
+  void Layout() override;
 
   // Check if the item is hovered.
   bool is_hovered_for_test() { return button_hovered_; }
+
+ protected:
+  // views::CustomButton:
+  void AddInkDropLayer(ui::Layer* ink_drop_layer) override;
+  void RemoveInkDropLayer(ui::Layer* ink_drop_layer) override;
+  std::unique_ptr<views::InkDrop> CreateInkDrop() override;
+  std::unique_ptr<views::InkDropRipple> CreateInkDropRipple() const override;
+  std::unique_ptr<views::InkDropHighlight> CreateInkDropHighlight()
+      const override;
+  std::unique_ptr<views::InkDropMask> CreateInkDropMask() const override;
 
  private:
   // Change the hover/active state of the "button" when the status changes.
@@ -48,6 +67,9 @@ class ButtonFromView : public views::CustomButton {
 
   // Content of button.
   views::View* content_;
+
+  // Defines the flavor of ink drop ripple/highlight that should be constructed.
+  TrayPopupInkDropStyle ink_drop_style_;
 
   // Whether button should be highligthed on hover.
   bool highlight_on_hover_;
@@ -60,6 +82,13 @@ class ButtonFromView : public views::CustomButton {
 
   // The insets which get used for the drawn accessibility (tab) frame.
   gfx::Insets tab_frame_inset_;
+
+  // A separate view is necessary to hold the ink drop layer so that |this| can
+  // host labels with subpixel anti-aliasing enabled. Only used for material
+  // design.
+  views::InkDropContainerView* ink_drop_container_;
+
+  std::unique_ptr<views::InkDropMask> ink_drop_mask_;
 
   DISALLOW_COPY_AND_ASSIGN(ButtonFromView);
 };

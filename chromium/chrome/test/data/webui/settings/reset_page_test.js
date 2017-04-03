@@ -11,6 +11,10 @@ cr.define('settings_reset_page', function() {
     ResetBannerReset: 'ResetBannerReset',
     ResetProfileDialogAction: 'ResetProfileDialogAction',
     ResetProfileDialogOpenClose: 'ResetProfileDialogOpenClose',
+    ResetProfileDialogOriginUnknown: 'ResetProfileDialogOriginUnknown',
+    ResetProfileDialogOriginUserClick: 'ResetProfileDialogOriginUserClick',
+    ResetProfileDialogOriginTriggeredReset:
+        'ResetProfileDialogOriginTriggeredReset',
   };
 
   /**
@@ -25,6 +29,7 @@ cr.define('settings_reset_page', function() {
       'onHideResetProfileBanner',
       'onShowResetProfileDialog',
       'showReportedSettings',
+      'getTriggeredResetToolName',
       'onPowerwashDialogShow',
     ]);
   };
@@ -33,8 +38,8 @@ cr.define('settings_reset_page', function() {
     __proto__: settings.TestBrowserProxy.prototype,
 
     /** @override */
-    performResetProfileSettings: function(sendSettings) {
-      this.methodCalled('performResetProfileSettings');
+    performResetProfileSettings: function(sendSettings, requestOrigin) {
+      this.methodCalled('performResetProfileSettings', requestOrigin);
       return Promise.resolve();
     },
 
@@ -56,6 +61,12 @@ cr.define('settings_reset_page', function() {
     /** @override */
     showReportedSettings: function() {
       this.methodCalled('showReportedSettings');
+    },
+
+    /** @override */
+    getTriggeredResetToolName: function() {
+      this.methodCalled('getTriggeredResetToolName');
+      return Promise.resolve('WonderfulAV');
     },
 
     /** @override */
@@ -86,26 +97,33 @@ cr.define('settings_reset_page', function() {
 
       // Tests that the reset profile banner
       //  - opens the reset profile dialog when the reset button is clicked.
+      //  - reset happens when clicking on the dialog's reset button.
       //  - the reset profile dialog is closed after reset is done.
       test(TestNames.ResetBannerReset, function() {
         var dialog = resetBanner.$$('settings-reset-profile-dialog');
         assertFalse(!!dialog);
-        MockInteractions.tap(resetBanner.$['reset']);
+        MockInteractions.tap(resetBanner.$.reset);
         Polymer.dom.flush();
+        assertTrue(resetBanner.showResetProfileDialog_)
         dialog = resetBanner.$$('settings-reset-profile-dialog');
         assertTrue(!!dialog);
 
-        dialog.fire('reset-done');
-        Polymer.dom.flush();
-        assertEquals('none', dialog.style.display);
-        return Promise.resolve();
+        MockInteractions.tap(dialog.$.reset);
+
+        return browserProxy.whenCalled('performResetProfileSettings')
+            .then(PolymerTest.flushTasks)
+            .then(function() {
+              assertFalse(resetBanner.showResetProfileDialog_);
+              dialog = resetBanner.$$('settings-reset-profile-dialog');
+              assertFalse(!!dialog);
+            });
       });
 
       // Tests that the reset profile banner removes itself from the DOM when
       // the close button is clicked and that |onHideResetProfileBanner| is
       // called.
       test(TestNames.ResetBannerClose, function() {
-        MockInteractions.tap(resetBanner.$['close']);
+        MockInteractions.tap(resetBanner.$.close);
         assertFalse(!!resetBanner.parentNode);
         return browserProxy.whenCalled('onHideResetProfileBanner');
       });
@@ -160,14 +178,16 @@ cr.define('settings_reset_page', function() {
               });
             });
 
-        return resetPageBrowserProxy.whenCalled(
-              'onShowResetProfileDialog').then(function() {
-          assertTrue(dialog.$.dialog.open);
-          closeDialogFn(dialog);
-          return Promise.all([
-            onDialogClosed,
-            resetPageBrowserProxy.whenCalled('onHideResetProfileDialog'),
-          ]);
+        return PolymerTest.flushTasks().then(function() {
+          resetPageBrowserProxy.whenCalled('onShowResetProfileDialog')
+              .then(function() {
+                assertTrue(dialog.$.dialog.open);
+                closeDialogFn(dialog);
+                return Promise.all([
+                  onDialogClosed,
+                  resetPageBrowserProxy.whenCalled('onHideResetProfileDialog'),
+                ]);
+              });
         });
       }
 
@@ -177,7 +197,7 @@ cr.define('settings_reset_page', function() {
         return testOpenCloseResetProfileDialog(function(dialog) {
           // Test case where the 'cancel' button is clicked.
           MockInteractions.tap(dialog.$.cancel);
-        }).then(function() {
+        }).then(PolymerTest.flushTasks).then(function() {
           return testOpenCloseResetProfileDialog(function(dialog) {
             // Test case where the 'close' button is clicked.
             MockInteractions.tap(dialog.$.dialog.getCloseButton());
@@ -208,6 +228,36 @@ cr.define('settings_reset_page', function() {
               assertTrue(dialog.$.resetSpinner.active);
               return resetPageBrowserProxy.whenCalled(
                   'performResetProfileSettings');
+            });
+      });
+
+      function testResetRequestOrigin(expectedOrigin) {
+        var dialog = resetPage.$$('settings-reset-profile-dialog');
+        assertTrue(!!dialog);
+        MockInteractions.tap(dialog.$.reset);
+        return resetPageBrowserProxy.whenCalled(
+            'performResetProfileSettings').then(function(resetRequest) {
+              assertEquals(expectedOrigin, resetRequest);
+            });
+      }
+
+      test(TestNames.ResetProfileDialogOriginUnknown, function() {
+        settings.navigateTo(settings.Route.RESET_DIALOG);
+        return resetPageBrowserProxy.whenCalled('onShowResetProfileDialog')
+            .then(function() { return testResetRequestOrigin(''); });
+      });
+
+      test(TestNames.ResetProfileDialogOriginUserClick, function() {
+        MockInteractions.tap(resetPage.$.resetProfile);
+        return resetPageBrowserProxy.whenCalled('onShowResetProfileDialog')
+            .then(function() { return testResetRequestOrigin('userclick'); });
+      });
+
+      test(TestNames.ResetProfileDialogOriginTriggeredReset, function() {
+        settings.navigateTo(settings.Route.TRIGGERED_RESET_DIALOG);
+        return resetPageBrowserProxy.whenCalled('onShowResetProfileDialog')
+            .then(function() {
+              return testResetRequestOrigin('triggeredreset');
             });
       });
 

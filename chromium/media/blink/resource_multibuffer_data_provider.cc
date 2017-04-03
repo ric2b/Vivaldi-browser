@@ -11,7 +11,7 @@
 #include "base/bits.h"
 #include "base/callback_helpers.h"
 #include "base/location.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -24,12 +24,13 @@
 #include "net/http/http_request_headers.h"
 #include "third_party/WebKit/public/platform/WebURLError.h"
 #include "third_party/WebKit/public/platform/WebURLResponse.h"
+#include "third_party/WebKit/public/web/WebAssociatedURLLoader.h"
 
+using blink::WebAssociatedURLLoader;
+using blink::WebAssociatedURLLoaderOptions;
 using blink::WebFrame;
 using blink::WebString;
 using blink::WebURLError;
-using blink::WebURLLoader;
-using blink::WebURLLoaderOptions;
 using blink::WebURLRequest;
 using blink::WebURLResponse;
 
@@ -96,22 +97,22 @@ void ResourceMultiBufferDataProvider::Start() {
       WebString::fromUTF8(net::HttpRequestHeaders::kAcceptEncoding),
       WebString::fromUTF8("identity;q=1, *;q=0"));
 
-  // Check for our test WebURLLoader.
-  std::unique_ptr<WebURLLoader> loader;
+  // Check for our test WebAssociatedURLLoader.
+  std::unique_ptr<WebAssociatedURLLoader> loader;
   if (test_loader_) {
     loader = std::move(test_loader_);
   } else {
-    WebURLLoaderOptions options;
+    WebAssociatedURLLoaderOptions options;
     if (url_data_->cors_mode() == UrlData::CORS_UNSPECIFIED) {
       options.allowCredentials = true;
       options.crossOriginRequestPolicy =
-          WebURLLoaderOptions::CrossOriginRequestPolicyAllow;
+          WebAssociatedURLLoaderOptions::CrossOriginRequestPolicyAllow;
     } else {
       options.exposeAllResponseHeaders = true;
       // The author header set is empty, no preflight should go ahead.
-      options.preflightPolicy = WebURLLoaderOptions::PreventPreflight;
-      options.crossOriginRequestPolicy =
-          WebURLLoaderOptions::CrossOriginRequestPolicyUseAccessControl;
+      options.preflightPolicy = WebAssociatedURLLoaderOptions::PreventPreflight;
+      options.crossOriginRequestPolicy = WebAssociatedURLLoaderOptions::
+          CrossOriginRequestPolicyUseAccessControl;
       if (url_data_->cors_mode() == UrlData::CORS_USE_CREDENTIALS)
         options.allowCredentials = true;
     }
@@ -166,12 +167,12 @@ void ResourceMultiBufferDataProvider::SetDeferred(bool deferred) {
 }
 
 /////////////////////////////////////////////////////////////////////////////
-// WebURLLoaderClient implementation.
+// WebAssociatedURLLoaderClient implementation.
 
 bool ResourceMultiBufferDataProvider::willFollowRedirect(
-    WebURLLoader* loader,
-    WebURLRequest& newRequest,
+    const WebURLRequest& newRequest,
     const WebURLResponse& redirectResponse) {
+  DVLOG(1) << "willFollowRedirect";
   redirects_to_ = newRequest.url();
   url_data_->set_valid_until(base::Time::Now() +
                              GetCacheValidUntil(redirectResponse));
@@ -194,17 +195,15 @@ bool ResourceMultiBufferDataProvider::willFollowRedirect(
 }
 
 void ResourceMultiBufferDataProvider::didSendData(
-    WebURLLoader* loader,
     unsigned long long bytes_sent,
     unsigned long long total_bytes_to_be_sent) {
   NOTIMPLEMENTED();
 }
 
 void ResourceMultiBufferDataProvider::didReceiveResponse(
-    WebURLLoader* loader,
     const WebURLResponse& response) {
-#if ENABLE_DLOG
-  string version;
+#if DCHECK_IS_ON()
+  std::string version;
   switch (response.httpVersion()) {
     case WebURLResponse::HTTPVersion_0_9:
       version = "0.9";
@@ -217,6 +216,9 @@ void ResourceMultiBufferDataProvider::didReceiveResponse(
       break;
     case WebURLResponse::HTTPVersion_2_0:
       version = "2.1";
+      break;
+    case WebURLResponse::HTTPVersionUnknown:
+      version = "unknown";
       break;
   }
   DVLOG(1) << "didReceiveResponse: HTTP/" << version << " "
@@ -272,6 +274,7 @@ void ResourceMultiBufferDataProvider::didReceiveResponse(
   // |content_length_| is not specified and this is a streaming response.
   int64_t content_length = response.expectedContentLength();
   bool end_of_file = false;
+  bool do_fail = false;
 
   // We make a strong assumption that when we reach here we have either
   // received a response from HTTP/HTTPS protocol or the request was
@@ -307,8 +310,9 @@ void ResourceMultiBufferDataProvider::didReceiveResponse(
       end_of_file = true;
     } else {
       active_loader_ = nullptr;
-      destination_url_data->Fail();
-      return;  // "this" may be deleted now.
+      // Can't call fail until readers have been migrated to the new
+      // url data below.
+      do_fail = true;
     }
   } else {
     destination_url_data->set_range_supported();
@@ -317,7 +321,7 @@ void ResourceMultiBufferDataProvider::didReceiveResponse(
     }
   }
 
-  if (url_index) {
+  if (url_index && !do_fail) {
     destination_url_data = url_index->TryInsert(destination_url_data);
   }
 
@@ -342,6 +346,11 @@ void ResourceMultiBufferDataProvider::didReceiveResponse(
     old_url_data->RedirectTo(destination_url_data);
   }
 
+  if (do_fail) {
+    destination_url_data->Fail();
+    return;  // "this" may be deleted now.
+  }
+
   // This test is vital for security!
   const GURL& original_url = response.wasFetchedViaServiceWorker()
                                  ? response.originalURLViaServiceWorker()
@@ -358,11 +367,8 @@ void ResourceMultiBufferDataProvider::didReceiveResponse(
   }
 }
 
-void ResourceMultiBufferDataProvider::didReceiveData(WebURLLoader* loader,
-                                                     const char* data,
-                                                     int data_length,
-                                                     int encoded_data_length,
-                                                     int encoded_body_length) {
+void ResourceMultiBufferDataProvider::didReceiveData(const char* data,
+                                                     int data_length) {
   DVLOG(1) << "didReceiveData: " << data_length << " bytes";
   DCHECK(!Available());
   DCHECK(active_loader_);
@@ -390,23 +396,17 @@ void ResourceMultiBufferDataProvider::didReceiveData(WebURLLoader* loader,
   // Beware, this object might be deleted here.
 }
 
-void ResourceMultiBufferDataProvider::didDownloadData(WebURLLoader* loader,
-                                                      int dataLength,
-                                                      int encoded_data_length) {
+void ResourceMultiBufferDataProvider::didDownloadData(int dataLength) {
   NOTIMPLEMENTED();
 }
 
 void ResourceMultiBufferDataProvider::didReceiveCachedMetadata(
-    WebURLLoader* loader,
     const char* data,
     int data_length) {
   NOTIMPLEMENTED();
 }
 
-void ResourceMultiBufferDataProvider::didFinishLoading(
-    WebURLLoader* loader,
-    double finishTime,
-    int64_t total_encoded_data_length) {
+void ResourceMultiBufferDataProvider::didFinishLoading(double finishTime) {
   DVLOG(1) << "didFinishLoading";
   DCHECK(active_loader_.get());
   DCHECK(!Available());
@@ -445,8 +445,7 @@ void ResourceMultiBufferDataProvider::didFinishLoading(
   // Beware, this object might be deleted here.
 }
 
-void ResourceMultiBufferDataProvider::didFail(WebURLLoader* loader,
-                                              const WebURLError& error) {
+void ResourceMultiBufferDataProvider::didFail(const WebURLError& error) {
   DVLOG(1) << "didFail: reason=" << error.reason
            << ", isCancellation=" << error.isCancellation
            << ", domain=" << error.domain.utf8().data()

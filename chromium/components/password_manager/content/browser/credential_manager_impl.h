@@ -10,7 +10,7 @@
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "components/password_manager/content/public/interfaces/credential_manager.mojom.h"
+#include "components/password_manager/content/common/credential_manager.mojom.h"
 #include "components/password_manager/core/browser/credential_manager_password_form_manager.h"
 #include "components/password_manager/core/browser/credential_manager_pending_request_task.h"
 #include "components/password_manager/core/browser/credential_manager_pending_require_user_mediation_task.h"
@@ -96,9 +96,6 @@ class CredentialManagerImpl
   void ScheduleRequireMediationTask(
       const RequireUserMediationCallback& callback,
       const std::vector<std::string>& android_realms);
-
-  // Returns true iff it's OK to update credentials in the password store.
-  bool IsUpdatingCredentialAllowed() const;
 
   PasswordManagerClient* client_;
   std::unique_ptr<CredentialManagerPasswordFormManager> form_manager_;

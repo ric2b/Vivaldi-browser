@@ -260,9 +260,25 @@
               {
                 "type": "boolean",
                 "name": "editable",
-                "description": "True is element is editable."
+                "description": "True if element is editable."
+              },
+              {
+                "type": "string",
+                "name": "role",
+                "description": "Element role"
               }
             ]
+          }
+        ]
+      },
+      {
+        "name": "resetGestureState",
+        "type": "function",
+        "description": "Resets the context menu blocking mechanism in case a mousegesture was fired.",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "instanceId"
           }
         ]
       }

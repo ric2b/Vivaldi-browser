@@ -7,6 +7,7 @@
 #include <limits>
 #include <utility>
 
+#include "base/debug/alias.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/string_piece.h"
 #include "mojo/edk/embedder/named_platform_handle.h"
@@ -63,6 +64,11 @@ Channel::MessagePtr WaitForBrokerMessage(PlatformHandle platform_handle,
       Channel::Message::Deserialize(buffer, static_cast<size_t>(bytes_read));
   if (!message || message->payload_size() < sizeof(BrokerMessageHeader)) {
     LOG(ERROR) << "Invalid broker message";
+
+    base::debug::Alias(&buffer[0]);
+    base::debug::Alias(&bytes_read);
+    base::debug::Alias(message.get());
+    CHECK(false);
     return nullptr;
   }
 
@@ -70,6 +76,11 @@ Channel::MessagePtr WaitForBrokerMessage(PlatformHandle platform_handle,
       reinterpret_cast<const BrokerMessageHeader*>(message->payload());
   if (header->type != expected_type) {
     LOG(ERROR) << "Unexpected broker message type";
+
+    base::debug::Alias(&buffer[0]);
+    base::debug::Alias(&bytes_read);
+    base::debug::Alias(message.get());
+    CHECK(false);
     return nullptr;
   }
 

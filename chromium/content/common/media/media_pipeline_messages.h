@@ -25,8 +25,6 @@ IPC_ENUM_TRAITS_MAX_VALUE(
     media::PlatformMediaDecodingMode,
     static_cast<int>(media::PlatformMediaDecodingMode::COUNT) - 1)
 
-IPC_ENUM_TRAITS_MAX_VALUE(media::SampleFormat, media::kSampleFormatMax)
-
 IPC_ENUM_TRAITS_MAX_VALUE(media::VideoRotation, media::VIDEO_ROTATION_MAX)
 
 IPC_STRUCT_TRAITS_BEGIN(media::PlatformMediaTimeInfo)

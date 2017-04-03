@@ -582,15 +582,6 @@ void DesktopSessionWin::OnChannelConnected(int32_t peer_pid) {
 
   ReportElapsedTime("channel connected");
 
-  // Obtain the handle of the desktop process. It will be passed to the network
-  // process to use to duplicate handles of shared memory objects from
-  // the desktop process.
-  desktop_process_.Set(OpenProcess(PROCESS_DUP_HANDLE, false, peer_pid));
-  if (!desktop_process_.IsValid()) {
-    CrashDesktopProcess(FROM_HERE);
-    return;
-  }
-
   VLOG(1) << "IPC: daemon <- desktop (" << peer_pid << ")";
 }
 
@@ -627,11 +618,11 @@ void DesktopSessionWin::OnSessionAttached(uint32_t session_id) {
 
   ReportElapsedTime("attached");
 
-  // Launch elevated on Win8 to be able to inject Alt+Tab.
+  // Launch elevated on Win8+ to enable injection of Alt+Tab and Ctrl+Alt+Del.
   bool launch_elevated = base::win::GetVersion() >= base::win::VERSION_WIN8;
 
   // Get the name of the executable to run. |kDesktopBinaryName| specifies
-  // uiAccess="true" in it's manifest.
+  // uiAccess="true" in its manifest.
   base::FilePath desktop_binary;
   bool result;
   if (launch_elevated) {
@@ -667,12 +658,14 @@ void DesktopSessionWin::OnSessionAttached(uint32_t session_id) {
 
   // Create a launcher for the desktop process, using the per-session delegate.
   launcher_.reset(new WorkerProcessLauncher(std::move(delegate), this));
+  session_id_ = session_id;
 }
 
 void DesktopSessionWin::OnSessionDetached() {
   DCHECK(caller_task_runner_->BelongsToCurrentThread());
 
   launcher_.reset();
+  session_id_ = UINT32_MAX;
 
   if (monitoring_notifications_) {
     ReportElapsedTime("detached");
@@ -684,9 +677,8 @@ void DesktopSessionWin::OnSessionDetached() {
 }
 
 void DesktopSessionWin::OnDesktopSessionAgentAttached(
-      IPC::PlatformFileForTransit desktop_pipe) {
-  if (!daemon_process()->OnDesktopSessionAgentAttached(id(),
-                                                       desktop_process_.Get(),
+      const IPC::ChannelHandle& desktop_pipe) {
+  if (!daemon_process()->OnDesktopSessionAgentAttached(id(), session_id_,
                                                        desktop_pipe)) {
     CrashDesktopProcess(FROM_HERE);
   }

@@ -10,23 +10,24 @@
 #include <utility>
 
 #include "base/location.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "components/sync/api/local_change_observer.h"
-#include "components/sync/api/sync_change.h"
-#include "components/sync/api/sync_error.h"
-#include "components/sync/api/syncable_service.h"
 #include "components/sync/base/unrecoverable_error_handler.h"
-#include "components/sync/core/base_node.h"
-#include "components/sync/core/change_record.h"
-#include "components/sync/core/read_node.h"
-#include "components/sync/core/read_transaction.h"
-#include "components/sync/core/write_node.h"
-#include "components/sync/core/write_transaction.h"
 #include "components/sync/driver/sync_api_component_factory.h"
 #include "components/sync/driver/sync_client.h"
+#include "components/sync/model/local_change_observer.h"
+#include "components/sync/model/sync_change.h"
+#include "components/sync/model/sync_error.h"
+#include "components/sync/model/syncable_service.h"
+#include "components/sync/syncable/base_node.h"
+#include "components/sync/syncable/change_record.h"
 #include "components/sync/syncable/entry.h"  // TODO(tim): Bug 123674.
+#include "components/sync/syncable/read_node.h"
+#include "components/sync/syncable/read_transaction.h"
+#include "components/sync/syncable/write_node.h"
+#include "components/sync/syncable/write_transaction.h"
 
 namespace syncer {
 
@@ -130,8 +131,9 @@ GenericChangeProcessor::GenericChangeProcessor(
         sync_client->GetSyncApiComponentFactory()->CreateAttachmentService(
             std::move(attachment_store), *user_share, store_birthday, type,
             this);
-    attachment_service_weak_ptr_factory_.reset(
-        new base::WeakPtrFactory<AttachmentService>(attachment_service_.get()));
+    attachment_service_weak_ptr_factory_ =
+        base::MakeUnique<base::WeakPtrFactory<AttachmentService>>(
+            attachment_service_.get());
     attachment_service_proxy_ = AttachmentServiceProxy(
         base::ThreadTaskRunnerHandle::Get(),
         attachment_service_weak_ptr_factory_->GetWeakPtr());
@@ -159,7 +161,7 @@ void GenericChangeProcessor::ApplyChangesFromSyncModel(
       std::unique_ptr<sync_pb::EntitySpecifics> specifics;
       if (it->specifics.has_password()) {
         DCHECK(it->extra.get());
-        specifics.reset(new sync_pb::EntitySpecifics(it->specifics));
+        specifics = base::MakeUnique<sync_pb::EntitySpecifics>(it->specifics);
         specifics->mutable_password()
             ->mutable_client_only_encrypted_data()
             ->CopyFrom(it->extra->unencrypted());
@@ -693,8 +695,8 @@ void GenericChangeProcessor::UploadAllAttachmentsNotOnServer() {
 void GenericChangeProcessor::NotifyLocalChangeObservers(
     const syncable::Entry* current_entry,
     const SyncChange& change) {
-  FOR_EACH_OBSERVER(LocalChangeObserver, local_change_observers_,
-                    OnLocalChange(current_entry, change));
+  for (auto& observer : local_change_observers_)
+    observer.OnLocalChange(current_entry, change);
 }
 
 std::unique_ptr<AttachmentService>

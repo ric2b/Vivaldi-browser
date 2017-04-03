@@ -6,7 +6,6 @@
 
 #include <utility>
 
-#include "base/ios/ios_util.h"
 #import "base/ios/weak_nsobject.h"
 #include "base/mac/bind_objc_block.h"
 #include "base/memory/scoped_vector.h"
@@ -100,8 +99,7 @@ void CredentialManager::PageLoaded(
   web::URLVerificationTrustLevel trust_level =
       web::URLVerificationTrustLevel::kNone;
   const GURL page_url(web_state()->GetCurrentURL(&trust_level));
-  if (!base::ios::IsRunningOnIOS8OrLater() ||
-      trust_level != web::URLVerificationTrustLevel::kAbsolute ||
+  if (trust_level != web::URLVerificationTrustLevel::kAbsolute ||
       !web::UrlHasWebScheme(page_url) || !web_state()->ContentIsHTML()) {
     return;
   }

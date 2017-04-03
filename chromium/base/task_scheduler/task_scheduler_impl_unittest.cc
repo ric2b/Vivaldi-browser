@@ -34,11 +34,11 @@ namespace {
 
 struct TraitsExecutionModePair {
   TraitsExecutionModePair(const TaskTraits& traits,
-                          ExecutionMode execution_mode)
+                          test::ExecutionMode execution_mode)
       : traits(traits), execution_mode(execution_mode) {}
 
   TaskTraits traits;
-  ExecutionMode execution_mode;
+  test::ExecutionMode execution_mode;
 };
 
 #if DCHECK_IS_ON()
@@ -88,16 +88,34 @@ void VerifyTaskEnvironementAndSignalEvent(const TaskTraits& traits,
   event->Signal();
 }
 
+scoped_refptr<TaskRunner> CreateTaskRunnerWithTraitsAndExecutionMode(
+    TaskScheduler* scheduler,
+    const TaskTraits& traits,
+    test::ExecutionMode execution_mode) {
+  switch (execution_mode) {
+    case test::ExecutionMode::PARALLEL:
+      return scheduler->CreateTaskRunnerWithTraits(traits);
+    case test::ExecutionMode::SEQUENCED:
+      return scheduler->CreateSequencedTaskRunnerWithTraits(traits);
+    case test::ExecutionMode::SINGLE_THREADED:
+      return scheduler->CreateSingleThreadTaskRunnerWithTraits(traits);
+  }
+  ADD_FAILURE() << "Unknown ExecutionMode";
+  return nullptr;
+}
+
 class ThreadPostingTasks : public SimpleThread {
  public:
   // Creates a thread that posts Tasks to |scheduler| with |traits| and
   // |execution_mode|.
   ThreadPostingTasks(TaskSchedulerImpl* scheduler,
                      const TaskTraits& traits,
-                     ExecutionMode execution_mode)
+                     test::ExecutionMode execution_mode)
       : SimpleThread("ThreadPostingTasks"),
         traits_(traits),
-        factory_(scheduler->CreateTaskRunnerWithTraits(traits, execution_mode),
+        factory_(CreateTaskRunnerWithTraitsAndExecutionMode(scheduler,
+                                                            traits,
+                                                            execution_mode),
                  execution_mode) {}
 
   void WaitForAllTasksToRun() { factory_.WaitForAllTasksToRun(); }
@@ -124,11 +142,11 @@ class ThreadPostingTasks : public SimpleThread {
 std::vector<TraitsExecutionModePair> GetTraitsExecutionModePairs() {
   std::vector<TraitsExecutionModePair> params;
 
-  const ExecutionMode execution_modes[] = {ExecutionMode::PARALLEL,
-                                           ExecutionMode::SEQUENCED,
-                                           ExecutionMode::SINGLE_THREADED};
+  const test::ExecutionMode execution_modes[] = {
+      test::ExecutionMode::PARALLEL, test::ExecutionMode::SEQUENCED,
+      test::ExecutionMode::SINGLE_THREADED};
 
-  for (ExecutionMode execution_mode : execution_modes) {
+  for (test::ExecutionMode execution_mode : execution_modes) {
     for (size_t priority_index = static_cast<size_t>(TaskPriority::LOWEST);
          priority_index <= static_cast<size_t>(TaskPriority::HIGHEST);
          ++priority_index) {
@@ -167,24 +185,29 @@ class TaskSchedulerImplTest
 
   void SetUp() override {
     using IORestriction = SchedulerWorkerPoolParams::IORestriction;
+    using StandbyThreadPolicy = SchedulerWorkerPoolParams::StandbyThreadPolicy;
 
     std::vector<SchedulerWorkerPoolParams> params_vector;
 
     ASSERT_EQ(BACKGROUND_WORKER_POOL, params_vector.size());
     params_vector.emplace_back("Background", ThreadPriority::BACKGROUND,
-                               IORestriction::DISALLOWED, 1U, TimeDelta::Max());
+                               IORestriction::DISALLOWED,
+                               StandbyThreadPolicy::LAZY, 1U, TimeDelta::Max());
 
     ASSERT_EQ(BACKGROUND_FILE_IO_WORKER_POOL, params_vector.size());
     params_vector.emplace_back("BackgroundFileIO", ThreadPriority::BACKGROUND,
-                               IORestriction::ALLOWED, 3U, TimeDelta::Max());
+                               IORestriction::ALLOWED,
+                               StandbyThreadPolicy::LAZY, 3U, TimeDelta::Max());
 
     ASSERT_EQ(FOREGROUND_WORKER_POOL, params_vector.size());
     params_vector.emplace_back("Foreground", ThreadPriority::NORMAL,
-                               IORestriction::DISALLOWED, 4U, TimeDelta::Max());
+                               IORestriction::DISALLOWED,
+                               StandbyThreadPolicy::LAZY, 4U, TimeDelta::Max());
 
     ASSERT_EQ(FOREGROUND_FILE_IO_WORKER_POOL, params_vector.size());
-    params_vector.emplace_back("ForegroundFileIO", ThreadPriority::NORMAL,
-                               IORestriction::ALLOWED, 12U, TimeDelta::Max());
+    params_vector.emplace_back(
+        "ForegroundFileIO", ThreadPriority::NORMAL, IORestriction::ALLOWED,
+        StandbyThreadPolicy::LAZY, 12U, TimeDelta::Max());
 
     scheduler_ = TaskSchedulerImpl::Create(params_vector,
                                            Bind(&GetThreadPoolIndexForTraits));
@@ -219,8 +242,8 @@ TEST_P(TaskSchedulerImplTest, PostTaskWithTraits) {
 // and respect the characteristics of their ExecutionMode.
 TEST_P(TaskSchedulerImplTest, PostTasksViaTaskRunner) {
   test::TestTaskFactory factory(
-      scheduler_->CreateTaskRunnerWithTraits(GetParam().traits,
-                                             GetParam().execution_mode),
+      CreateTaskRunnerWithTraitsAndExecutionMode(
+          scheduler_.get(), GetParam().traits, GetParam().execution_mode),
       GetParam().execution_mode);
   EXPECT_FALSE(factory.task_runner()->RunsTasksOnCurrentThread());
 

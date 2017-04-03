@@ -220,7 +220,7 @@ static bool pointWithScrollAndZoomIfPossible(const Document& document,
 
   FloatPoint pointInDocument(point);
   pointInDocument.scale(frame->pageZoomFactor(), frame->pageZoomFactor());
-  pointInDocument.moveBy(frameView->scrollPosition());
+  pointInDocument.move(frameView->scrollOffset());
   IntPoint roundedPointInDocument = roundedIntPoint(pointInDocument);
 
   if (!frameView->visibleContentRect().contains(roundedPointInDocument))
@@ -484,8 +484,8 @@ const TreeScope* TreeScope::commonAncestorTreeScope(
   while (!thisChain.isEmpty() && !otherChain.isEmpty() &&
          thisChain.last() == otherChain.last()) {
     lastAncestor = thisChain.last();
-    thisChain.removeLast();
-    otherChain.removeLast();
+    thisChain.pop_back();
+    otherChain.pop_back();
   }
   return lastAncestor;
 }

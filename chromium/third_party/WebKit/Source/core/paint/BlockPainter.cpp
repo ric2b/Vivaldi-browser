@@ -29,6 +29,7 @@ namespace blink {
 
 void BlockPainter::paint(const PaintInfo& paintInfo,
                          const LayoutPoint& paintOffset) {
+  ObjectPainter(m_layoutBlock).checkPaintOffset(paintInfo, paintOffset);
   LayoutPoint adjustedPaintOffset = paintOffset + m_layoutBlock.location();
   if (!intersectsPaintRect(paintInfo, adjustedPaintOffset))
     return;
@@ -140,7 +141,7 @@ void BlockPainter::paintInlineBox(const InlineBox& inlineBox,
 
   // Text clips are painted only for the direct inline children of the object
   // that has a text clip style on it, not block children.
-  ASSERT(paintInfo.phase != PaintPhaseTextClip);
+  DCHECK(paintInfo.phase != PaintPhaseTextClip);
 
   LayoutPoint childPoint = paintOffset;
   if (inlineBox.parent()
@@ -198,7 +199,7 @@ void BlockPainter::paintObject(const PaintInfo& paintInfo,
     Optional<ScrollRecorder> scrollRecorder;
     Optional<PaintInfo> scrolledPaintInfo;
     if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
-      const auto* objectProperties = m_layoutBlock.objectPaintProperties();
+      const auto* objectProperties = m_layoutBlock.paintProperties();
       if (auto* scroll =
               objectProperties ? objectProperties->scroll() : nullptr) {
         PaintChunkProperties properties(paintInfo.context.getPaintController()

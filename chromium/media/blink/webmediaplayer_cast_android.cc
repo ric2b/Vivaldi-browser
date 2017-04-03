@@ -193,6 +193,10 @@ void WebMediaPlayerCast::requestRemotePlaybackControl() {
   player_manager_->RequestRemotePlaybackControl(player_id_);
 }
 
+void WebMediaPlayerCast::requestRemotePlaybackStop() {
+  player_manager_->RequestRemotePlaybackStop(player_id_);
+}
+
 void WebMediaPlayerCast::OnMediaMetadataChanged(base::TimeDelta duration,
                                                 int width,
                                                 int height,
@@ -298,6 +302,10 @@ void WebMediaPlayerCast::OnCancelledRemotePlaybackRequest() {
   client_->cancelledRemotePlaybackRequest();
 }
 
+void WebMediaPlayerCast::OnRemotePlaybackStarted() {
+  client_->remotePlaybackStarted();
+}
+
 void WebMediaPlayerCast::OnDidExitFullscreen() {
   DVLOG(1) << __FUNCTION__;
 }
@@ -324,9 +332,9 @@ void WebMediaPlayerCast::OnMediaPlayerPause() {
 }
 
 void WebMediaPlayerCast::OnRemoteRouteAvailabilityChanged(
-    bool routes_available) {
+    blink::WebRemotePlaybackAvailability availability) {
   DVLOG(1) << __FUNCTION__;
-  client_->remoteRouteAvailabilityChanged(routes_available);
+  client_->remoteRouteAvailabilityChanged(availability);
 }
 
 void WebMediaPlayerCast::SuspendAndReleaseResources() {}

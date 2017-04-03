@@ -9,10 +9,6 @@
 
 #include <utility>
 
-#include <openssl/bio.h>
-#include <openssl/evp.h>
-#include <openssl/pem.h>
-
 #include "base/callback_helpers.h"
 #include "base/files/file_util.h"
 #include "base/location.h"
@@ -22,7 +18,6 @@
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
-#include "crypto/scoped_openssl_types.h"
 #include "net/base/address_list.h"
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
@@ -32,6 +27,7 @@
 #include "net/cert/ct_policy_status.h"
 #include "net/cert/ct_verifier.h"
 #include "net/cert/mock_cert_verifier.h"
+#include "net/cert/signed_certificate_timestamp_and_status.h"
 #include "net/cert/test_root_certs.h"
 #include "net/der/input.h"
 #include "net/der/parser.h"
@@ -61,6 +57,9 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/platform_test.h"
+#include "third_party/boringssl/src/include/openssl/bio.h"
+#include "third_party/boringssl/src/include/openssl/evp.h"
+#include "third_party/boringssl/src/include/openssl/pem.h"
 
 using net::test::IsError;
 using net::test::IsOk;
@@ -706,7 +705,7 @@ class MockCTVerifier : public CTVerifier {
                int(X509Certificate*,
                    const std::string&,
                    const std::string&,
-                   ct::CTVerifyResult*,
+                   SignedCertificateTimestampAndStatusList*,
                    const NetLogWithSource&));
   MOCK_METHOD1(SetObserver, void(CTVerifier::Observer*));
 };
@@ -1255,7 +1254,7 @@ TEST_F(SSLClientSocketTest, Read) {
 }
 
 // Tests that SSLClientSocket properly handles when the underlying transport
-// synchronously fails a transport read in during the handshake.
+// synchronously fails a transport write in during the handshake.
 TEST_F(SSLClientSocketTest, Connect_WithSynchronousError) {
   ASSERT_TRUE(StartTestServer(SpawnedTestServer::SSLOptions()));
 
@@ -1643,32 +1642,29 @@ TEST_F(SSLClientSocketTest, Read_WithWriteError) {
 
   raw_error_socket->SetNextWriteError(ERR_CONNECTION_RESET);
 
-  // Write as much data as possible until hitting an error. This is necessary
-  // for NSS. PR_Write will only consume as much data as it can encode into
-  // application data records before the internal memio buffer is full, which
-  // should only fill if writing a large amount of data and the underlying
-  // transport is blocked. Once this happens, NSS will return (total size of all
-  // application data records it wrote) - 1, with the caller expected to resume
-  // with the remaining unsent data.
+  // Write as much data as possible until hitting an error.
   do {
     rv = callback.GetResult(sock->Write(long_request_buffer.get(),
                                         long_request_buffer->BytesRemaining(),
                                         callback.callback()));
     if (rv > 0) {
       long_request_buffer->DidConsume(rv);
-      // Abort if the entire buffer is ever consumed.
+      // Abort if the entire input is ever consumed. The input is larger than
+      // the SSLClientSocket's write buffers.
       ASSERT_LT(0, long_request_buffer->BytesRemaining());
     }
   } while (rv > 0);
 
   EXPECT_THAT(rv, IsError(ERR_CONNECTION_RESET));
 
-  // Release the read.
-  raw_transport->UnblockReadResult();
+  // At this point the Read result is available. Transport write errors are
+  // surfaced through Writes. See https://crbug.com/249848.
   rv = read_callback.WaitForResult();
+  EXPECT_THAT(rv, IsError(ERR_CONNECTION_RESET));
 
-  // Should still read bytes despite the write error.
-  EXPECT_LT(0, rv);
+  // Release the read. This does not cause a crash.
+  raw_transport->UnblockReadResult();
+  base::RunLoop().RunUntilIdle();
 }
 
 // Tests that SSLClientSocket fails the handshake if the underlying
@@ -3140,13 +3136,13 @@ scoped_refptr<SSLPrivateKey> LoadPrivateKeyOpenSSL(
     LOG(ERROR) << "Could not read private key file: " << filepath.value();
     return nullptr;
   }
-  crypto::ScopedBIO bio(BIO_new_mem_buf(const_cast<char*>(data.data()),
-                                        static_cast<int>(data.size())));
+  bssl::UniquePtr<BIO> bio(BIO_new_mem_buf(const_cast<char*>(data.data()),
+                                           static_cast<int>(data.size())));
   if (!bio) {
     LOG(ERROR) << "Could not allocate BIO for buffer?";
     return nullptr;
   }
-  crypto::ScopedEVP_PKEY result(
+  bssl::UniquePtr<EVP_PKEY> result(
       PEM_read_bio_PrivateKey(bio.get(), nullptr, nullptr, nullptr));
   if (!result) {
     LOG(ERROR) << "Could not decode private key file: " << filepath.value();

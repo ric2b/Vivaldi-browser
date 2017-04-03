@@ -40,8 +40,8 @@ class SVGPathElement final : public SVGGeometryElement {
   Path asPath() const override;
   Path attributePath() const;
 
-  float getTotalLength();
-  SVGPointTearOff* getPointAtLength(float distance);
+  float getTotalLength() override;
+  SVGPointTearOff* getPointAtLength(float distance) override;
   unsigned getPathSegAtLength(float distance);
 
   SVGAnimatedPath* path() const { return m_path.get(); }
@@ -50,9 +50,6 @@ class SVGPathElement final : public SVGGeometryElement {
   const SVGPathByteStream& pathByteStream() const {
     return stylePath()->byteStream();
   }
-
-  bool isPresentationAttribute(const QualifiedName&) const override;
-  bool isPresentationAttributeWithSVGDOM(const QualifiedName&) const override;
 
   FloatRect getBBox() override;
 

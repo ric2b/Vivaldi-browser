@@ -24,7 +24,7 @@
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram.h"
-#include "base/metrics/sparse_histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/sha1.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -37,6 +37,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/resource_request_info.h"
 #include "content/public/common/browser_side_navigation_policy.h"
+#include "content/public/common/resource_type.h"
 #include "crypto/secure_hash.h"
 #include "crypto/sha2.h"
 #include "extensions/browser/content_verifier.h"
@@ -371,7 +372,7 @@ bool AllowExtensionResourceLoad(net::URLRequest* request,
   // PlzNavigate: frame navigations to extensions have already been checked in
   // the ExtensionNavigationThrottle.
   if (info->GetChildID() == -1 &&
-      info->GetResourceType() == content::RESOURCE_TYPE_MAIN_FRAME &&
+      content::IsResourceTypeFrame(info->GetResourceType()) &&
       content::IsBrowserSideNavigationEnabled()) {
     return true;
   }

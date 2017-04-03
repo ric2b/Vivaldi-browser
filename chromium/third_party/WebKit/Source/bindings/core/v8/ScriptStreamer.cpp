@@ -10,9 +10,9 @@
 #include "core/dom/Element.h"
 #include "core/dom/PendingScript.h"
 #include "core/fetch/CachedMetadata.h"
-#include "core/fetch/ScriptResource.h"
 #include "core/frame/Settings.h"
 #include "core/html/parser/TextResourceDecoder.h"
+#include "core/loader/resource/ScriptResource.h"
 #include "platform/CrossThreadFunctional.h"
 #include "platform/Histogram.h"
 #include "platform/SharedBuffer.h"
@@ -400,7 +400,7 @@ void ScriptStreamer::suppressStreaming() {
 
 void ScriptStreamer::notifyAppendData(ScriptResource* resource) {
   DCHECK(isMainThread());
-  DCHECK_EQ(m_resource, resource);
+  CHECK_EQ(m_resource, resource);
   {
     MutexLocker locker(m_mutex);
     if (m_streamingSuppressed)
@@ -495,7 +495,7 @@ void ScriptStreamer::notifyAppendData(ScriptResource* resource) {
 
 void ScriptStreamer::notifyFinished(Resource* resource) {
   DCHECK(isMainThread());
-  DCHECK_EQ(m_resource, resource);
+  CHECK_EQ(m_resource, resource);
   // A special case: empty and small scripts. We didn't receive enough data to
   // start the streaming before this notification. In that case, there won't
   // be a "parsing complete" notification either, and we should not wait for

@@ -47,22 +47,20 @@ class RenderThreadManager : public CompositorFrameConsumer {
   void SetCompositorFrameProducer(
       CompositorFrameProducer* compositor_frame_producer) override;
   void SetScrollOffsetOnUI(gfx::Vector2d scroll_offset) override;
-  void SetFrameOnUI(
-      std::unique_ptr<ChildFrame> frame,
-      const scoped_refptr<content::SynchronousCompositor::FrameFuture>&
-          frame_future) override;
+  std::unique_ptr<ChildFrame> SetFrameOnUI(
+      std::unique_ptr<ChildFrame> frame) override;
   void InitializeHardwareDrawIfNeededOnUI() override;
   ParentCompositorDrawConstraints GetParentDrawConstraintsOnUI() const override;
   void SwapReturnedResourcesOnUI(
       ReturnedResourcesMap* returned_resource_map) override;
   bool ReturnedResourcesEmptyOnUI() const override;
-  std::unique_ptr<ChildFrame> PassUncommittedFrameOnUI() override;
+  ChildFrameQueue PassUncommittedFrameOnUI() override;
   bool HasFrameOnUI() const override;
   void DeleteHardwareRendererOnUI() override;
 
-  // RT thread methods.
+  // Render thread methods.
   gfx::Vector2d GetScrollOffsetOnRT();
-  std::unique_ptr<ChildFrame> PassFrameOnRT();
+  ChildFrameQueue PassFramesOnRT();
   void DrawGL(AwDrawGLInfo* draw_info);
   void PostExternalDrawConstraintsToChildCompositorOnRT(
       const ParentCompositorDrawConstraints& parent_draw_constraints);
@@ -102,6 +100,9 @@ class RenderThreadManager : public CompositorFrameConsumer {
   CompositorFrameProducer* compositor_frame_producer_;
   base::WeakPtr<RenderThreadManager> ui_thread_weak_ptr_;
   base::CancelableClosure request_draw_gl_cancelable_closure_;
+  // Whether any frame has been received on the UI thread by
+  // RenderThreadManager.
+  bool has_received_frame_;
 
   // Accessed by RT thread.
   std::unique_ptr<HardwareRenderer> hardware_renderer_;
@@ -111,11 +112,9 @@ class RenderThreadManager : public CompositorFrameConsumer {
 
   // Accessed by both UI and RT thread.
   mutable base::Lock lock_;
-  bool hardware_renderer_has_frame_;
   gfx::Vector2d scroll_offset_;
-  std::unique_ptr<ChildFrame> child_frame_;
-  const bool async_on_draw_hardware_;
-  scoped_refptr<content::SynchronousCompositor::FrameFuture> frame_future_;
+  ChildFrameQueue child_frames_;
+  const bool sync_on_draw_hardware_;
   bool inside_hardware_release_;
   ParentCompositorDrawConstraints parent_draw_constraints_;
   ReturnedResourcesMap returned_resources_map_;

@@ -10,7 +10,6 @@
 #include "base/macros.h"
 #include "base/strings/sys_string_conversions.h"
 #include "ui/accessibility/ax_node_data.h"
-#include "ui/accessibility/ax_view_state.h"
 #include "ui/accessibility/platform/ax_platform_node_delegate.h"
 #import "ui/gfx/mac/coordinate_conversion.h"
 
@@ -378,16 +377,13 @@ void NotifyMacEvent(AXPlatformNodeCocoa* target, ui::AXEvent event_type) {
     return NO;
   }
 
-  if ([attributeName isEqualToString:NSAccessibilityValueAttribute])
+  if ([attributeName isEqualToString:NSAccessibilityValueAttribute] ||
+      [attributeName isEqualToString:NSAccessibilitySelectedTextAttribute])
     return node_->GetDelegate()->CanSetStringValue();
-  // TODO(patricialor): Implement and merge with conditional for value above.
-  if ([attributeName isEqualToString:NSAccessibilitySelectedTextAttribute])
-    return NO;
 
   if ([attributeName isEqualToString:NSAccessibilityFocusedAttribute]) {
-    if (ui::AXViewState::IsFlagSet(node_->GetData().state,
-                                   ui::AX_STATE_FOCUSABLE))
-      return NO;
+    return ui::AXNodeData::IsFlagSet(node_->GetData().state,
+                                     ui::AX_STATE_FOCUSABLE);
   }
 
   // TODO(patricialor): Add callbacks for updating the above attributes except
@@ -396,9 +392,20 @@ void NotifyMacEvent(AXPlatformNodeCocoa* target, ui::AXEvent event_type) {
 }
 
 - (void)accessibilitySetValue:(id)value forAttribute:(NSString*)attribute {
-  if ([attribute isEqualToString:NSAccessibilityValueAttribute] &&
-      [value isKindOfClass:[NSString class]])
-    node_->GetDelegate()->SetStringValue(base::SysNSStringToUTF16(value));
+  if ([value isKindOfClass:[NSString class]]) {
+    if ([attribute isEqualToString:NSAccessibilityValueAttribute]) {
+      node_->GetDelegate()->SetStringValue(base::SysNSStringToUTF16(value),
+                                           true);
+    } else if ([attribute
+                   isEqualToString:NSAccessibilitySelectedTextAttribute]) {
+      node_->GetDelegate()->SetStringValue(base::SysNSStringToUTF16(value),
+                                           false);
+    }
+  } else if ([value isKindOfClass:[NSNumber class]]) {
+    if ([attribute isEqualToString:NSAccessibilityFocusedAttribute]) {
+      node_->GetDelegate()->SetFocused([value boolValue]);
+    }
+  }
 
   // TODO(patricialor): Plumb through all the other writable attributes as
   // specified in accessibilityIsAttributeSettable.
@@ -443,8 +450,8 @@ void NotifyMacEvent(AXPlatformNodeCocoa* target, ui::AXEvent event_type) {
   ui::AXRole role = node_->GetData().role;
   switch (role) {
     case ui::AX_ROLE_TEXT_FIELD:
-      if (ui::AXViewState::IsFlagSet(node_->GetData().state,
-                                     ui::AX_STATE_PROTECTED))
+      if (ui::AXNodeData::IsFlagSet(node_->GetData().state,
+                                    ui::AX_STATE_PROTECTED))
         return NSAccessibilitySecureTextFieldSubrole;
       break;
     default:
@@ -471,13 +478,13 @@ void NotifyMacEvent(AXPlatformNodeCocoa* target, ui::AXEvent event_type) {
 
 - (NSValue*)AXEnabled {
   return [NSNumber
-      numberWithBool:!ui::AXViewState::IsFlagSet(node_->GetData().state,
-                                                 ui::AX_STATE_DISABLED)];
+      numberWithBool:!ui::AXNodeData::IsFlagSet(node_->GetData().state,
+                                                ui::AX_STATE_DISABLED)];
 }
 
 - (NSValue*)AXFocused {
-  if (ui::AXViewState::IsFlagSet(node_->GetData().state,
-                                 ui::AX_STATE_FOCUSABLE))
+  if (ui::AXNodeData::IsFlagSet(node_->GetData().state,
+                                ui::AX_STATE_FOCUSABLE))
     return [NSNumber numberWithBool:(node_->GetDelegate()->GetFocus() ==
                                      node_->GetNativeViewAccessible())];
   return [NSNumber numberWithBool:NO];

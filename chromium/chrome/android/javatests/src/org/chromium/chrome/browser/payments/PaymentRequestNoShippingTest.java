@@ -25,7 +25,7 @@ import java.util.concurrent.TimeoutException;
 public class PaymentRequestNoShippingTest extends PaymentRequestTestBase {
     private static final int DECEMBER = 11;
     private static final int NEXT_YEAR = 1;
-    private static final int FIRST_BILLING_ADDRESS = 1;
+    private static final int FIRST_BILLING_ADDRESS = 0;
 
     public PaymentRequestNoShippingTest() {
         super("payment_request_no_shipping_test.html");
@@ -186,7 +186,7 @@ public class PaymentRequestNoShippingTest extends PaymentRequestTestBase {
         // dropdown.
         int december = 11;
         int nextYear = 1;
-        int addBillingAddress = 2;
+        int addBillingAddress = 1;
         setSpinnerSelectionsInCardEditorAndWait(new int[] {december, nextYear, addBillingAddress},
                 mReadyToEdit);
 
@@ -388,15 +388,5 @@ public class PaymentRequestNoShippingTest extends PaymentRequestTestBase {
                     RecordHistogram.getHistogramValueCountForTesting(
                             "PaymentRequest.RequestedInformation", i));
         }
-    }
-
-    /** Verifies the format of the billing address suggestions when adding a new credit card. */
-    @MediumTest
-    @Feature({"Payments"})
-    public void testNewCardBillingAddressFormat()
-            throws InterruptedException, ExecutionException, TimeoutException {
-        fillNewCardForm("5454-5454-5454-5454", "Bob", DECEMBER, NEXT_YEAR, FIRST_BILLING_ADDRESS);
-        assertTrue(getSpinnerSelectionTextInCardEditor(2).equals(
-                "Jon Doe, Google, 340 Main St, Los Angeles, CA 90291, United States"));
     }
 }

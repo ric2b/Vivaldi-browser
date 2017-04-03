@@ -17,6 +17,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -26,6 +27,7 @@
 #include "chrome/browser/devtools/devtools_file_watcher.h"
 #include "chrome/browser/devtools/devtools_protocol.h"
 #include "chrome/browser/devtools/global_confirm_info_bar.h"
+#include "chrome/browser/devtools/url_constants.h"
 #include "chrome/browser/extensions/chrome_extension_web_contents_observer.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/profiles/profile.h"
@@ -41,13 +43,14 @@
 #include "components/infobars/core/confirm_infobar_delegate.h"
 #include "components/infobars/core/infobar.h"
 #include "components/prefs/scoped_user_pref_update.h"
-#include "components/syncable_prefs/pref_service_syncable.h"
+#include "components/sync_preferences/pref_service_syncable.h"
 #include "components/zoom/page_zoom.h"
 #include "content/public/browser/child_process_security_policy.h"
 #include "content/public/browser/devtools_external_agent_proxy.h"
 #include "content/public/browser/devtools_external_agent_proxy_delegate.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
+#include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/notification_source.h"
 #include "content/public/browser/reload_type.h"
 #include "content/public/browser/render_frame_host.h"
@@ -62,12 +65,15 @@
 #include "extensions/common/constants.h"
 #include "extensions/common/permissions/permissions_data.h"
 #include "ipc/ipc_channel.h"
+#include "net/base/escape.h"
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
+#include "net/base/url_util.h"
 #include "net/cert/x509_certificate.h"
 #include "net/http/http_response_headers.h"
 #include "net/url_request/url_fetcher.h"
 #include "net/url_request/url_fetcher_response_writer.h"
+#include "third_party/WebKit/public/public_features.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/page_transition_types.h"
 
@@ -298,6 +304,132 @@ int ResponseWriter::Finish(int net_error,
   return net::OK;
 }
 
+GURL SanitizeFrontendURL(
+    const GURL& url,
+    const std::string& scheme,
+    const std::string& host,
+    const std::string& path,
+    bool allow_query);
+
+std::string SanitizeRevision(const std::string& revision) {
+  for (size_t i = 0; i < revision.length(); i++) {
+    if (!(revision[i] == '@' && i == 0)
+        && !(revision[i] >= '0' && revision[i] <= '9')
+        && !(revision[i] >= 'a' && revision[i] <= 'z')
+        && !(revision[i] >= 'A' && revision[i] <= 'Z')) {
+      return std::string();
+    }
+  }
+  return revision;
+}
+
+std::string SanitizeFrontendPath(const std::string& path) {
+  for (size_t i = 0; i < path.length(); i++) {
+    if (path[i] != '/' && path[i] != '-' && path[i] != '_'
+        && path[i] != '.' && path[i] != '@'
+        && !(path[i] >= '0' && path[i] <= '9')
+        && !(path[i] >= 'a' && path[i] <= 'z')
+        && !(path[i] >= 'A' && path[i] <= 'Z')) {
+      return std::string();
+    }
+  }
+  return path;
+}
+
+std::string SanitizeEndpoint(const std::string& value) {
+  if (value.find('&') != std::string::npos
+      || value.find('?') != std::string::npos)
+    return std::string();
+  return value;
+}
+
+std::string SanitizeRemoteBase(const std::string& value) {
+  GURL url(value);
+  std::string path = url.path();
+  std::vector<std::string> parts = base::SplitString(
+      path, "/", base::KEEP_WHITESPACE, base::SPLIT_WANT_ALL);
+  std::string revision = parts.size() > 2 ? parts[2] : "";
+  revision = SanitizeRevision(revision);
+  path = base::StringPrintf("/%s/%s/", kRemoteFrontendPath, revision.c_str());
+  return SanitizeFrontendURL(url, url::kHttpsScheme,
+                             kRemoteFrontendDomain, path, false).spec();
+}
+
+std::string SanitizeRemoteFrontendURL(const std::string& value) {
+  GURL url(net::UnescapeURLComponent(value,
+      net::UnescapeRule::SPACES | net::UnescapeRule::PATH_SEPARATORS |
+      net::UnescapeRule::URL_SPECIAL_CHARS_EXCEPT_PATH_SEPARATORS |
+      net::UnescapeRule::REPLACE_PLUS_WITH_SPACE));
+  std::string path = url.path();
+  std::vector<std::string> parts = base::SplitString(
+      path, "/", base::KEEP_WHITESPACE, base::SPLIT_WANT_ALL);
+  std::string revision = parts.size() > 2 ? parts[2] : "";
+  revision = SanitizeRevision(revision);
+  std::string filename = parts.size() ? parts[parts.size() - 1] : "";
+  if (filename != "devtools.html")
+    filename = "inspector.html";
+  path = base::StringPrintf("/serve_rev/%s/%s",
+                            revision.c_str(), filename.c_str());
+  std::string sanitized = SanitizeFrontendURL(url, url::kHttpsScheme,
+      kRemoteFrontendDomain, path, true).spec();
+  return net::EscapeQueryParamValue(sanitized, false);
+}
+
+std::string SanitizeFrontendQueryParam(
+    const std::string& key,
+    const std::string& value) {
+  // Convert boolean flags to true.
+  if (key == "can_dock" || key == "debugFrontend" || key == "experiments" ||
+      key == "isSharedWorker" || key == "v8only" || key == "remoteFrontend")
+    return "true";
+
+  // Pass connection endpoints as is.
+  if (key == "ws" || key == "service-backend")
+    return SanitizeEndpoint(value);
+
+  // Only support undocked for old frontends.
+  if (key == "dockSide" && value == "undocked")
+    return value;
+
+  if (key == "panel" && (value == "elements" || value == "console"))
+    return value;
+
+  if (key == "remoteBase")
+    return SanitizeRemoteBase(value);
+
+  if (key == "remoteFrontendUrl")
+    return SanitizeRemoteFrontendURL(value);
+
+  return std::string();
+}
+
+GURL SanitizeFrontendURL(
+    const GURL& url,
+    const std::string& scheme,
+    const std::string& host,
+    const std::string& path,
+    bool allow_query) {
+  std::vector<std::string> query_parts;
+  if (allow_query) {
+    for (net::QueryIterator it(url); !it.IsAtEnd(); it.Advance()) {
+      std::string value = SanitizeFrontendQueryParam(it.GetKey(),
+          it.GetValue());
+      if (!value.empty()) {
+        query_parts.push_back(
+            base::StringPrintf("%s=%s", it.GetKey().c_str(), value.c_str()));
+      }
+    }
+  }
+  std::string query =
+      query_parts.empty() ? "" : "?" + base::JoinString(query_parts, "&");
+  std::string constructed = base::StringPrintf("%s://%s%s%s",
+      scheme.c_str(), host.c_str(), path.c_str(), query.c_str());
+  GURL result = GURL(constructed);
+  if (!result.is_valid())
+    return GURL();
+  return result;
+}
+
 }  // namespace
 
 // DevToolsUIBindings::FrontendWebContentsObserver ----------------------------
@@ -311,9 +443,8 @@ class DevToolsUIBindings::FrontendWebContentsObserver
  private:
   // contents::WebContentsObserver:
   void RenderProcessGone(base::TerminationStatus status) override;
-  void DidStartNavigationToPendingEntry(
-      const GURL& url,
-      content::ReloadType reload_type) override;
+  void ReadyToCommitNavigation(
+      content::NavigationHandle* navigation_handle) override;
   void DocumentAvailableInMainFrame() override;
   void DocumentOnLoadCompletedInMainFrame() override;
   void DidNavigateMainFrame(
@@ -332,6 +463,16 @@ DevToolsUIBindings::FrontendWebContentsObserver::FrontendWebContentsObserver(
 
 DevToolsUIBindings::FrontendWebContentsObserver::
     ~FrontendWebContentsObserver() {
+}
+
+// static
+GURL DevToolsUIBindings::SanitizeFrontendURL(const GURL& url) {
+  return ::SanitizeFrontendURL(url, content::kChromeDevToolsScheme,
+      chrome::kChromeUIDevToolsHost, SanitizeFrontendPath(url.path()), true);
+}
+
+bool DevToolsUIBindings::IsValidFrontendURL(const GURL& url) {
+  return SanitizeFrontendURL(url).spec() == url.spec();
 }
 
 void DevToolsUIBindings::FrontendWebContentsObserver::RenderProcessGone(
@@ -355,14 +496,11 @@ void DevToolsUIBindings::FrontendWebContentsObserver::RenderProcessGone(
   devtools_bindings_->delegate_->RenderProcessGone(crashed);
 }
 
-void DevToolsUIBindings::FrontendWebContentsObserver::
-    DidStartNavigationToPendingEntry(const GURL& url,
-                                     content::ReloadType reload_type) {
-  devtools_bindings_->frontend_host_.reset(
-      content::DevToolsFrontendHost::Create(
-          web_contents()->GetMainFrame(),
-          base::Bind(&DevToolsUIBindings::HandleMessageFromDevToolsFrontend,
-                     base::Unretained(devtools_bindings_))));
+void DevToolsUIBindings::FrontendWebContentsObserver::ReadyToCommitNavigation(
+    content::NavigationHandle* navigation_handle) {
+  if (!navigation_handle->IsInMainFrame())
+    return;
+  devtools_bindings_->UpdateFrontendHost(navigation_handle);
 }
 
 void DevToolsUIBindings::FrontendWebContentsObserver::
@@ -403,7 +541,7 @@ DevToolsUIBindings::DevToolsUIBindings(content::WebContents* web_contents)
       delegate_(new DefaultBindingsDelegate(web_contents_)),
       devices_updates_enabled_(false),
       frontend_loaded_(false),
-      reattaching_(false),
+      reloading_(false),
       weak_factory_(this) {
   g_instances.Get().push_back(this);
   frontend_contents_observer_.reset(new FrontendWebContentsObserver(this));
@@ -417,11 +555,6 @@ DevToolsUIBindings::DevToolsUIBindings(content::WebContents* web_contents)
   // Register on-load actions.
   embedder_message_dispatcher_.reset(
       DevToolsEmbedderMessageDispatcher::CreateForDevToolsFrontend(this));
-
-  frontend_host_.reset(content::DevToolsFrontendHost::Create(
-      web_contents_->GetMainFrame(),
-      base::Bind(&DevToolsUIBindings::HandleMessageFromDevToolsFrontend,
-                 base::Unretained(this))));
 }
 
 DevToolsUIBindings::~DevToolsUIBindings() {
@@ -857,6 +990,14 @@ void DevToolsUIBindings::ClearPreferences() {
   update.Get()->Clear();
 }
 
+void DevToolsUIBindings::Reattach(const DispatchCallback& callback) {
+  if (agent_host_.get()) {
+    agent_host_->DetachClient(this);
+    agent_host_->AttachClient(this);
+  }
+  callback.Run(nullptr);
+}
+
 void DevToolsUIBindings::ReadyForTest() {
   delegate_->ReadyForTest();
 }
@@ -870,6 +1011,8 @@ void DevToolsUIBindings::DispatchProtocolMessageFromDevToolsFrontend(
 void DevToolsUIBindings::RecordEnumeratedHistogram(const std::string& name,
                                                    int sample,
                                                    int boundary_value) {
+  if (!frontend_host_)
+    return;
   if (!(boundary_value >= 0 && boundary_value <= 100 && sample >= 0 &&
         sample < boundary_value)) {
     // TODO(nick): Replace with chrome::bad_message::ReceivedBadMessage().
@@ -1055,6 +1198,20 @@ void DevToolsUIBindings::ShowDevToolsConfirmInfoBar(
   GlobalConfirmInfoBar::Show(std::move(delegate));
 }
 
+void DevToolsUIBindings::UpdateFrontendHost(
+    content::NavigationHandle* navigation_handle) {
+  if (!IsValidFrontendURL(navigation_handle->GetURL())) {
+    LOG(ERROR) << "Attempt to navigate to an invalid DevTools front-end URL: "
+        << navigation_handle->GetURL().spec();
+    frontend_host_.reset();
+    return;
+  }
+  frontend_host_.reset(content::DevToolsFrontendHost::Create(
+      navigation_handle->GetRenderFrameHost(),
+      base::Bind(&DevToolsUIBindings::HandleMessageFromDevToolsFrontend,
+                 base::Unretained(this))));
+}
+
 void DevToolsUIBindings::AddDevToolsExtensionsToClient() {
   const extensions::ExtensionRegistry* registry =
       extensions::ExtensionRegistry::Get(profile_->GetOriginalProfile());
@@ -1107,9 +1264,9 @@ void DevToolsUIBindings::AttachTo(
   agent_host_->ForceAttachClient(this);
 }
 
-void DevToolsUIBindings::Reattach() {
-  DCHECK(agent_host_.get());
-  reattaching_ = true;
+void DevToolsUIBindings::Reload() {
+  reloading_ = true;
+  web_contents_->GetController().Reload(false);
 }
 
 void DevToolsUIBindings::Detach() {
@@ -1126,6 +1283,11 @@ void DevToolsUIBindings::CallClientFunction(const std::string& function_name,
                                             const base::Value* arg1,
                                             const base::Value* arg2,
                                             const base::Value* arg3) {
+  if (!web_contents_->GetURL().SchemeIs(content::kChromeDevToolsScheme))
+    return;
+  // If we're not exposing bindings, we shouldn't call functions either.
+  if (!frontend_host_)
+    return;
   std::string javascript = function_name + "(";
   if (arg1) {
     std::string json;
@@ -1146,18 +1308,20 @@ void DevToolsUIBindings::CallClientFunction(const std::string& function_name,
 }
 
 void DevToolsUIBindings::DocumentAvailableInMainFrame() {
-  if (!reattaching_)
+  if (!reloading_)
     return;
-  reattaching_ = false;
-  agent_host_->DetachClient(this);
-  agent_host_->AttachClient(this);
+  reloading_ = false;
+  if (agent_host_.get()) {
+    agent_host_->DetachClient(this);
+    agent_host_->AttachClient(this);
+  }
 }
 
 void DevToolsUIBindings::DocumentOnLoadCompletedInMainFrame() {
   // In the DEBUG_DEVTOOLS mode, the DocumentOnLoadCompletedInMainFrame event
   // arrives before the LoadCompleted event, thus it should not trigger the
   // frontend load handling.
-#if !defined(DEBUG_DEVTOOLS)
+#if !BUILDFLAG(DEBUG_DEVTOOLS)
   FrontendLoaded();
 #endif
 }

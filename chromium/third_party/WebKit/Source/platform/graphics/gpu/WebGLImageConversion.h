@@ -135,7 +135,7 @@ class PLATFORM_EXPORT WebGLImageConversion final {
     ImageExtractor(Image*,
                    ImageHtmlDomSource,
                    bool premultiplyAlpha,
-                   bool ignoreGammaAndColorProfile);
+                   bool ignoreColorSpace);
 
     const void* imagePixelData() {
       return m_imagePixelLocker ? m_imagePixelLocker->pixels() : nullptr;
@@ -152,7 +152,7 @@ class PLATFORM_EXPORT WebGLImageConversion final {
     // Extracts the image and keeps track of its status, such as width, height,
     // Source Alignment, format, AlphaOp, etc. This needs to lock the resources
     // or relevant data if needed.
-    void extractImage(bool premultiplyAlpha, bool ignoreGammaAndColorProfile);
+    void extractImage(bool premultiplyAlpha, bool ignoreColorSpace);
 
     Image* m_image;
     Optional<ImagePixelLocker> m_imagePixelLocker;
@@ -216,18 +216,24 @@ class PLATFORM_EXPORT WebGLImageConversion final {
                             bool flipY,
                             AlphaOp,
                             DataFormat sourceFormat,
-                            unsigned width,
-                            unsigned height,
+                            unsigned sourceImageWidth,
+                            unsigned sourceImageHeight,
+                            const IntRect& sourceImageSubRectangle,
+                            int depth,
                             unsigned sourceUnpackAlignment,
+                            int unpackImageHeight,
                             Vector<uint8_t>& data);
 
   // Extracts the contents of the given ImageData into the passed Vector,
   // packing the pixel data according to the given format and type,
   // and obeying the flipY and premultiplyAlpha flags. Returns true
   // upon success.
-  static bool extractImageData(const uint8_t*,
+  static bool extractImageData(const uint8_t* imageData,
                                DataFormat sourceDataFormat,
-                               const IntSize&,
+                               const IntSize& imageDataSize,
+                               const IntRect& sourceImageSubRectangle,
+                               int depth,
+                               int unpackImageHeight,
                                GLenum format,
                                GLenum type,
                                bool flipY,
@@ -261,9 +267,12 @@ class PLATFORM_EXPORT WebGLImageConversion final {
   // GraphicsContext3DImagePacking.cpp.
   static bool packPixels(const uint8_t* sourceData,
                          DataFormat sourceDataFormat,
-                         unsigned width,
-                         unsigned height,
+                         unsigned sourceDataWidth,
+                         unsigned sourceDataHeight,
+                         const IntRect& sourceDataSubRectangle,
+                         int depth,
                          unsigned sourceUnpackAlignment,
+                         int unpackImageHeight,
                          unsigned destinationFormat,
                          unsigned destinationType,
                          AlphaOp,

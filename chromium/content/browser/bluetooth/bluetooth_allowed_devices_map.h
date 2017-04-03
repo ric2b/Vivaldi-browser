@@ -23,8 +23,6 @@ class BluetoothUUID;
 
 namespace content {
 
-struct BluetoothScanFilter;
-
 // Keeps track of which origins are allowed to access which devices and
 // their services.
 //
@@ -58,6 +56,12 @@ class CONTENT_EXPORT BluetoothAllowedDevicesMap final {
   // there is no such |device_id| in |origin|, returns an empty string.
   const std::string& GetDeviceAddress(const url::Origin& origin,
                                       const WebBluetoothDeviceId& device_id);
+
+  // Returns true if the origin has previously been granted access to at least
+  // one service.
+  bool IsOriginAllowedToAccessAtLeastOneService(
+      const url::Origin& origin,
+      const WebBluetoothDeviceId& device_id) const;
 
   // Returns true if the origin has previously been granted access to
   // the service.

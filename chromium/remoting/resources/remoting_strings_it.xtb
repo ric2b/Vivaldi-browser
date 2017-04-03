@@ -27,13 +27,15 @@ Per informazioni sulla privacy, leggi le Norme sulla privacy di Google (http://g
 <translation id="1654128982815600832">Attivazione connessioni remote per questo computer in corso…</translation>
 <translation id="170207782578677537">Impossibile registrare il computer.</translation>
 <translation id="1704090719919187045">Preferenze host Chromoting</translation>
+<translation id="1730409684442507495">• Qualità dell'immagine desktop, reattività e consumo della batteria migliorati.
+• Reattività delle operazioni di clic e trascinamento migliorata.
+• Numerosi effetti dell'animazione dell'interfaccia utente migliorati.</translation>
 <translation id="174018511426417793">Non sono presenti computer registrati. Per attivare le connessioni remote su un computer, installa Chrome Remote Desktop sul computer e fai clic su "<ph name="BUTTON_NAME" />".</translation>
 <translation id="1742469581923031760">Connessione in corso...</translation>
 <translation id="1770394049404108959">Non riesco ad aprire l'applicazione.</translation>
 <translation id="177096447311351977">IP canale per client: <ph name="CLIENT_GAIA_IDENTIFIER" /> ip="<ph name="CLIENT_IP_ADDRESS_AND_PORT" />" ip_host="<ph name="HOST_IP_ADDRESS_AND_PORT" />" canale="<ph name="CHANNEL_TYPE" />" connessione="<ph name="CONNECTION_TYPE" />".</translation>
 <translation id="1779766957982586368">Chiudi finestra</translation>
 <translation id="1841799852846221389">Disattivazione connessioni remote per questo computer in corso…</translation>
-<translation id="189172778771606813">Chiudi riquadro di navigazione a scomparsa</translation>
 <translation id="1897488610212723051">Elimina</translation>
 <translation id="195619862187186579">Layout tastiera</translation>
 <translation id="1996161829609978754">Chrome sta scaricando il programma di installazione di Chromoting Host. Al termine del download esegui il programma di installazione prima di continuare.</translation>
@@ -74,7 +76,6 @@ Per informazioni sulla privacy, leggi le Norme sulla privacy di Google (http://g
 <translation id="2699970397166997657">Chromoting</translation>
 <translation id="2747641796667576127">In genere gli aggiornamenti software vengono eseguiti automaticamente, ma in rari casi potrebbero non riuscire. L'aggiornamento del software non dovrebbe richiedere più di alcuni minuti e può essere eseguito collegandosi al computer da remoto.</translation>
 <translation id="2841013758207633010">Ora</translation>
-<translation id="2851674870054673688">Una volta inserito il codice, la sessione di condivisione avrà inizio.</translation>
 <translation id="2851754573186462851">Chromium App Stream</translation>
 <translation id="2855866366045322178">non in linea</translation>
 <translation id="2888969873284818612">Si è verificato un errore di rete. L'app sarà riavviata quando il dispositivo tornerà online.</translation>
@@ -114,6 +115,7 @@ Per informazioni sulla privacy, leggi le Norme sulla privacy di Google (http://g
 Chromoting</translation>
 <translation id="3870154837782082782">Google Inc.</translation>
 <translation id="3884839335308961732">Conferma il tuo account e il PIN per consentire l'accesso tramite Chrome Remote Desktop.</translation>
+<translation id="3897092660631435901">Menu</translation>
 <translation id="3905196214175737742">Dominio proprietario host non valido.</translation>
 <translation id="3908017899227008678">Riduci e adatta</translation>
 <translation id="3931191050278863510">Host interrotto.</translation>
@@ -126,6 +128,7 @@ Chromoting</translation>
 <translation id="409800995205263688">NOTA. Le impostazioni dei criteri consentono connessioni solo tra computer all'interno della tua rete.</translation>
 <translation id="4155497795971509630">Mancano alcuni componenti obbligatori. Verifica che sia installata la versione più recente del software e riprova.</translation>
 <translation id="4156740505453712750">Per proteggere l'accesso a questo computer, scegli un PIN di <ph name="BOLD_START" />almeno sei cifre<ph name="BOLD_END" />. Questo PIN sarà richiesto quando ti connetti da un'altra posizione.</translation>
+<translation id="4156741816461781891">Accesso eseguito come <ph name="EMAIL_ADDRESS" />.</translation>
 <translation id="4176825807642096119">Codice di accesso</translation>
 <translation id="4207623512727273241">Esegui il programma di installazione prima di continuare.</translation>
 <translation id="4227991223508142681">Utilità di provisioning degli host</translation>
@@ -166,7 +169,6 @@ Remote Desktop</translation>
 <translation id="5070121137485264635">L'host remoto richiede l'autenticazione su un sito web di terze parti. Per continuare, devi concedere a Chrome Remote Desktop ulteriori autorizzazioni per accedere a questo indirizzo:</translation>
 <translation id="507204348399810022">Vuoi disattivare le connessioni remote a <ph name="HOSTNAME" />?</translation>
 <translation id="5156271271724754543">Inserisci lo stesso PIN in entrambe le caselle.</translation>
-<translation id="5168917394043976756">Apri riquadro di navigazione a scomparsa</translation>
 <translation id="5170982930780719864">ID host non valido.</translation>
 <translation id="518094545883702183">Queste informazioni vengono utilizzate soltanto per identificare il problema segnalato, sono disponibili soltanto a chi effettua accertamenti in merito alla tua segnalazione e vengono conservate per massimo 30 giorni.</translation>
 <translation id="5222676887888702881">Esci</translation>
@@ -209,10 +211,6 @@ Remote Desktop</translation>
 <translation id="6304318647555713317">Client</translation>
 <translation id="6381670701864002291">Qualcos'altro.</translation>
 <translation id="6398765197997659313">Esci da schermo intero</translation>
-<translation id="6408143143164565232">• Ascolta contenuti audio da computer Windows o Linux.
-• Rimuovi le connessioni indesiderate premendo a lungo il nome di un computer.
-• Pizzico per eseguire lo zoom e scorrimento con due dita semplificati.
-• Nuova schermata Guida e feedback.</translation>
 <translation id="6441316101718669559">L'integrazione desktop non è supportata su questa piattaforma. Puoi comunque utilizzare l'applicazione, ma l'esperienza utente sarà peggiore.</translation>
 <translation id="652218476070540101">Aggiornamento PIN del computer in corso…</translation>
 <translation id="6527303717912515753">Condividi</translation>
@@ -225,6 +223,7 @@ Remote Desktop</translation>
 <translation id="6640610550128933069">ultimo colleg. online: <ph name="DATE" /></translation>
 <translation id="6668065415969892472">Il PIN è stato aggiornato.</translation>
 <translation id="6681800064886881394">Copyright 2013 Google Inc. Tutti i diritti riservati.</translation>
+<translation id="6705482892455291412">Dopo l'inserimento del codice, ti verrà chiesto di accettare la connessione e di avviare la sessione di condivisione.</translation>
 <translation id="6746493157771801606">Cancella cronologia</translation>
 <translation id="6748108480210050150">Da</translation>
 <translation id="677755392401385740">Host avviato per utente: <ph name="HOST_USERNAME" />.</translation>
@@ -301,6 +300,7 @@ Remote Desktop</translation>
 <translation id="9188433529406846933">Autorizza</translation>
 <translation id="9213184081240281106">Configurazione host non valida.</translation>
 <translation id="951991426597076286">Rifiuta</translation>
+<translation id="962733587145768554">Seleziona "<ph name="SHARE" />" nella finestra di dialogo di connessione per completare la procedura.</translation>
 <translation id="979100198331752041">Chrome Remote Desktop su <ph name="HOSTNAME" /> è obsoleto e deve essere aggiornato.</translation>
 <translation id="985602178874221306">The Chromium Authors</translation>
 <translation id="992215271654996353"><ph name="HOSTNAME" /> (ultima connessione: <ph name="DATE_OR_TIME" />)</translation>

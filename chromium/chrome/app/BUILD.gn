@@ -3,7 +3,9 @@
 # found in the LICENSE file.
 
 import("//build/config/ui.gni")
-import("//services/shell/public/service_manifest.gni")
+import("//chrome/common/features.gni")
+import("//printing/features/features.gni")
+import("//services/service_manager/public/service_manifest.gni")
 import("//tools/grit/grit_rule.gni")
 
 # This target is for dependency tracking for the command ID header.
@@ -23,6 +25,15 @@ source_set("chrome_dll_resources") {
   ]
   if (is_win) {
     sources += [ "chrome_dll.rc" ]
+    if (enable_basic_printing) {
+      # The resource compiler can only handle macro functions up to 31 chars
+      # which the buildflag system produces for this. Make a define so we can
+      # toggle off of the enable-basic-printing flag in the .rc file.
+      defines = [ "ENABLE_BASIC_PRINTING_FOR_RC" ]
+    }
+    deps = [
+      "//printing/features",
+    ]
   }
 }
 
@@ -79,6 +90,7 @@ if (is_android) {
 grit("generated_resources") {
   source = "generated_resources.grd"
   use_qualified_include = true
+  defines = chrome_grit_defines
   output_dir = "$root_gen_dir/chrome"
   outputs = [
     "grit/generated_resources.h",
@@ -157,6 +169,7 @@ if (is_android) {
 grit("google_chrome_strings") {
   source = "google_chrome_strings.grd"
   use_qualified_include = true
+  defines = chrome_grit_defines
   output_dir = "$root_gen_dir/chrome"
   outputs = [
     "grit/google_chrome_strings.h",
@@ -220,6 +233,7 @@ grit("google_chrome_strings") {
 grit("chromium_strings") {
   source = "chromium_strings.grd"
   use_qualified_include = true
+  defines = chrome_grit_defines
   output_dir = "$root_gen_dir/chrome"
   outputs = [
     "grit/chromium_strings.h",
@@ -303,6 +317,7 @@ static_library("test_support") {
     "//components/startup_metric_utils/browser:lib",
     "//content/public/app:both",
     "//content/public/common",
+    "//printing/features",
     "//ui/base",
   ]
 
@@ -338,27 +353,83 @@ static_library("test_support") {
   }
 }
 
+service_manifest_overlay("chrome_content_browser_manifest_overlay") {
+  source = "//chrome/browser/chrome_content_browser_manifest_overlay.json"
+  packaged_services = [ "image_decoder" ]
+  deps = [
+    "//services/image_decoder:manifest",
+  ]
+}
+
 if (use_aura) {
-  service_manifest("chrome_manifest") {
-    type = "exe"
-    name = "chrome"
-    source = "mojo/chrome_manifest.json"
-    base_manifest = "${root_out_dir}/Packages/content_browser/manifest.json"
-    base_deps = [ "//content/public/app:browser_manifest" ]
+  # NOTE: These rules generate compiled versions of the content service
+  # manifests with Chrome's overlays applied. These are only used at run-time,
+  # and only when running Chrome inside the Mash environment. In production
+  # Chrome, the content manifests and Chrome's overlays are baked into browser
+  # resources and merged at runtime.
+
+  service_manifest("chrome_content_browser_manifest") {
+    name = "content_browser"
+    output_name = "chrome_content_browser"
+    source = "${root_out_dir}/Packages/content_browser/manifest.json"
+    overlays =
+        [ "${root_gen_dir}/chrome_content_browser_manifest_overlay.json" ]
+    deps = [
+      ":chrome_content_browser_manifest_overlay",
+      "//content/public/app:browser_manifest",
+    ]
   }
 
-  service_manifest("chrome_renderer_manifest") {
-    type = "exe"
-    name = "chrome_renderer"
-    source = "mojo/chrome_renderer_manifest.json"
-    base_manifest = "${root_out_dir}/Packages/content_renderer/manifest.json"
-    base_deps = [ "//content/public/app:renderer_manifest" ]
+  service_manifest("chrome_content_gpu_manifest") {
+    name = "content_gpu"
+    output_name = "chrome_content_gpu"
+    source = "${root_out_dir}/Packages/content_gpu/manifest.json"
+    overlays = [ "//chrome/browser/chrome_content_gpu_manifest_overlay.json" ]
+    deps = [
+      "//content/public/app:gpu_manifest",
+    ]
   }
 
-  group("mojo_manifests") {
+  service_manifest("chrome_content_plugin_manifest") {
+    name = "content_plugin"
+    output_name = "chrome_content_plugin"
+    source = "${root_out_dir}/Packages/content_plugin/manifest.json"
+    overlays =
+        [ "//chrome/browser/chrome_content_plugin_manifest_overlay.json" ]
+    deps = [
+      "//content/public/app:plugin_manifest",
+    ]
+  }
+
+  service_manifest("chrome_content_renderer_manifest") {
+    name = "content_renderer"
+    output_name = "chrome_content_renderer"
+    source = "${root_out_dir}/Packages/content_renderer/manifest.json"
+    overlays =
+        [ "//chrome/browser/chrome_content_renderer_manifest_overlay.json" ]
+    deps = [
+      "//content/public/app:renderer_manifest",
+    ]
+  }
+
+  service_manifest("chrome_content_utility_manifest") {
+    name = "content_utility"
+    output_name = "chrome_content_utility"
+    source = "${root_out_dir}/Packages/content_utility/manifest.json"
+    overlays =
+        [ "//chrome/browser/chrome_content_utility_manifest_overlay.json" ]
+    deps = [
+      "//content/public/app:utility_manifest",
+    ]
+  }
+
+  group("service_manifests") {
     data_deps = [
-      ":chrome_manifest",
-      ":chrome_renderer_manifest",
+      ":chrome_content_browser_manifest",
+      ":chrome_content_gpu_manifest",
+      ":chrome_content_plugin_manifest",
+      ":chrome_content_renderer_manifest",
+      ":chrome_content_utility_manifest",
     ]
   }
 }

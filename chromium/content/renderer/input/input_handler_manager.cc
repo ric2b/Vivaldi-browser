@@ -35,6 +35,8 @@ InputEventAckState InputEventDispositionToAck(
       return INPUT_EVENT_ACK_STATE_CONSUMED;
     case InputHandlerProxy::DID_NOT_HANDLE:
       return INPUT_EVENT_ACK_STATE_NOT_CONSUMED;
+    case InputHandlerProxy::DID_NOT_HANDLE_NON_BLOCKING_DUE_TO_FLING:
+      return INPUT_EVENT_ACK_STATE_SET_NON_BLOCKING_DUE_TO_FLING;
     case InputHandlerProxy::DROP_EVENT:
       return INPUT_EVENT_ACK_STATE_NO_CONSUMER_EXISTS;
     case InputHandlerProxy::DID_HANDLE_NON_BLOCKING:
@@ -240,6 +242,7 @@ void InputHandlerManager::DidHandleInputEventAndOverscroll(
           RendererScheduler::InputEventState::EVENT_CONSUMED_BY_COMPOSITOR);
       break;
     case INPUT_EVENT_ACK_STATE_NOT_CONSUMED:
+    case INPUT_EVENT_ACK_STATE_SET_NON_BLOCKING_DUE_TO_FLING:
       renderer_scheduler_->DidHandleInputEventOnCompositorThread(
           *input_event,
           RendererScheduler::InputEventState::EVENT_FORWARDED_TO_MAIN_THREAD);
@@ -254,10 +257,6 @@ void InputHandlerManager::DidHandleInputEventAndOverscroll(
 void InputHandlerManager::DidOverscroll(int routing_id,
                                         const ui::DidOverscrollParams& params) {
   client_->DidOverscroll(routing_id, params);
-}
-
-void InputHandlerManager::DidStartFlinging(int routing_id) {
-  client_->DidStartFlinging(routing_id);
 }
 
 void InputHandlerManager::DidStopFlinging(int routing_id) {

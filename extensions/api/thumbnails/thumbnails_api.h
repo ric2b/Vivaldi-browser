@@ -62,22 +62,28 @@ class ThumbnailsCaptureUIFunction : public ChromeAsyncExtensionFunction {
   void OnCaptureFailure(FailureReason reason);
   void CopyFromBackingStoreComplete(const SkBitmap& bitmap,
                                     content::ReadbackResponse response);
-  bool EncodeBitmap(const SkBitmap& bitmap, std::string* base64_result);
-
   // ExtensionFunction:
   bool RunAsync() override;
 
-private:
+ private:
+  ImageFormat image_format_ = ImageFormat::IMAGE_FORMAT_PNG;
+  int encode_quality_ = 90;
+  bool show_file_in_path_ = false;
+  bool encode_to_data_url_ = false;
+  bool copy_to_clipboard_ = false;
+  base::FilePath file_path_;
+  std::string base_path_;
+
   DISALLOW_COPY_AND_ASSIGN(ThumbnailsCaptureUIFunction);
 };
 
 class ThumbnailsCaptureTabFunction : public ChromeAsyncExtensionFunction {
-public:
+ public:
   DECLARE_EXTENSION_FUNCTION("thumbnails.captureTab", THUMBNAILS_CAPTURETAB)
 
   ThumbnailsCaptureTabFunction();
 
-protected:
+ protected:
   ~ThumbnailsCaptureTabFunction() override;
 
   void OnThumbnailsCaptureCompleted(base::SharedMemoryHandle handle,
@@ -89,7 +95,8 @@ protected:
                             const gfx::Size image_size,
                             int callback_id);
 
-  void ScaleAndConvertImageDoneOnUIThread(const std::string image_data,
+  void ScaleAndConvertImageDoneOnUIThread(const SkBitmap bitmap,
+                                          const std::string image_data,
                                           int callback_id);
 
   void DispatchErrorOnUIThread(const std::string& error_msg);
@@ -98,10 +105,13 @@ protected:
   // ExtensionFunction:
   bool RunAsync() override;
 
-private:
+ private:
   ImageFormat image_format_ = ImageFormat::IMAGE_FORMAT_PNG;
   int encode_quality_ = 90;
   bool capture_full_page_ = false;
+  bool show_file_in_path_ = false;
+  bool copy_to_clipboard_ = false;
+  base::FilePath file_path_;
   int width_ = 0;
   int height_ = 0;
   std::string base_path_;

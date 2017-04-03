@@ -34,6 +34,7 @@
 <translation id="2148716181193084225">இன்று</translation>
 <translation id="2226276347425096477">இந்த உரையை <ph name="MAX_CHARACTERS" /> எழுத்துக்குறிகள் அல்லது அதற்கும் குறைவாக சுருக்கிடுங்கள் (நீங்கள் தற்போது <ph name="CURRENT_LENGTH" /> எழுத்துக்குறிகளைப் பயன்படுத்துகிறீர்கள்).</translation>
 <translation id="2247351761944213033">வாரம் <ph name="WEEKNUMBER" />, <ph name="YEAR" /></translation>
+<translation id="2277199496770840904">ட்ராக் <ph name="NUMBER" /></translation>
 <translation id="2291999235780842123">செக்பாக்ஸ்</translation>
 <translation id="2335594187091864976">தேதி மற்றும் நேரம் தேர்ந்தெடுப்பான்</translation>
 <translation id="248395913932153421">நாள்</translation>
@@ -116,7 +117,6 @@
 <translation id="5643186887447432888">பொத்தான்</translation>
 <translation id="5677946354068040947">கூடுதல் விருப்பங்கள் பொத்தான்</translation>
 <translation id="57838592816432529">ஒலியடக்கு</translation>
-<translation id="583281660410589416">தெரியாதது</translation>
 <translation id="5843503607508392247">மற்றவை…</translation>
 <translation id="5860033963881614850">ஆஃப்</translation>
 <translation id="588258955323874662">முழுத்திரை</translation>

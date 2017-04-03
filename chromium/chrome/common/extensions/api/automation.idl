@@ -313,6 +313,9 @@
     // The source of this event.
     DOMString eventFrom;
 
+    long mouseX;
+    long mouseY;
+
     // Stops this event from further processing except for any remaining
     // listeners on $(ref:AutomationEvent.target).
     static void stopPropagation();
@@ -577,6 +580,10 @@
 
     // Sets selection within a text field.
     static void setSelection(long startIndex, long endIndex);
+
+    // Clears focus and sets this node as the starting point for the next
+    // time the user presses Tab or Shift+Tab.
+    static void setSequentialFocusNavigationStartingPoint();
 
     // Adds a listener for the given event type and event phase.
     static void addEventListener(

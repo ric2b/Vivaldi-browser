@@ -82,10 +82,8 @@ class FrameLoaderClientImpl final : public FrameLoaderClient {
   void setOpener(Frame*) override;
   Frame* parent() const override;
   Frame* top() const override;
-  Frame* previousSibling() const override;
   Frame* nextSibling() const override;
   Frame* firstChild() const override;
-  Frame* lastChild() const override;
   void willBeDetached() override;
   void detached(FrameDetachType) override;
   void dispatchWillSendRequest(ResourceRequest&) override;
@@ -98,7 +96,7 @@ class FrameLoaderClientImpl final : public FrameLoaderClient {
                                      HistoryCommitType,
                                      bool contentInitiated) override;
   void dispatchWillCommitProvisionalLoad() override;
-  void dispatchDidStartProvisionalLoad(double triggeringEventTime) override;
+  void dispatchDidStartProvisionalLoad() override;
   void dispatchDidReceiveTitle(const String&) override;
   void dispatchDidChangeIcons(IconType) override;
   void dispatchDidCommitLoad(HistoryItem*, HistoryCommitType) override;
@@ -114,7 +112,8 @@ class FrameLoaderClientImpl final : public FrameLoaderClient {
                                              NavigationType,
                                              NavigationPolicy,
                                              bool shouldReplaceCurrentEntry,
-                                             bool isClientRedirect) override;
+                                             bool isClientRedirect,
+                                             HTMLFormElement*) override;
   void dispatchWillSendSubmitEvent(HTMLFormElement*) override;
   void dispatchWillSubmitForm(HTMLFormElement*) override;
   void didStartLoading(LoadStartType) override;
@@ -138,7 +137,8 @@ class FrameLoaderClientImpl final : public FrameLoaderClient {
                             const Vector<String>& removedSelectors) override;
   DocumentLoader* createDocumentLoader(LocalFrame*,
                                        const ResourceRequest&,
-                                       const SubstituteData&) override;
+                                       const SubstituteData&,
+                                       ClientRedirectPolicy) override;
   WTF::String userAgent() override;
   WTF::String doNotTrackValue() override;
   void transitionToCommittedForNewPage() override;
@@ -157,6 +157,8 @@ class FrameLoaderClientImpl final : public FrameLoaderClient {
       HTMLMediaElement&,
       const WebMediaPlayerSource&,
       WebMediaPlayerClient*) override;
+  WebRemotePlaybackClient* createWebRemotePlaybackClient(
+      HTMLMediaElement&) override;
   ObjectContentType getObjectContentType(
       const KURL&,
       const WTF::String& mimeType,

@@ -63,46 +63,14 @@ declare_args() {
 config("feature_flags") {
   # Don't use deprecated V8 APIs anywhere.
   defines = [ "V8_DEPRECATION_WARNINGS" ]
-  if (enable_mdns) {
-    defines += [ "ENABLE_MDNS=1" ]
-  }
   if (enable_notifications) {
     defines += [ "ENABLE_NOTIFICATIONS" ]
-  }
-  if (enable_pepper_cdms) {
-    # TODO(brettw) should probably be "=1"
-    defines += [ "ENABLE_PEPPER_CDMS" ]
   }
   if (enable_plugins) {
     defines += [ "ENABLE_PLUGINS=1" ]
   }
   if (enable_pdf) {
     defines += [ "ENABLE_PDF=1" ]
-  }
-  if (enable_basic_printing || enable_print_preview) {
-    # Convenience define for ENABLE_BASIC_PRINTING || ENABLE_PRINT_PREVIEW.
-    defines += [ "ENABLE_PRINTING=1" ]
-    if (enable_basic_printing) {
-      # Enable basic printing support and UI.
-      defines += [ "ENABLE_BASIC_PRINTING=1" ]
-    }
-    if (enable_print_preview) {
-      # Enable printing with print preview.
-      # Can be defined without ENABLE_BASIC_PRINTING.
-      defines += [ "ENABLE_PRINT_PREVIEW=1" ]
-    }
-    if ((enable_basic_printing && is_win) || enable_print_preview) {
-      # Windows basic printing or print preview requires pdf enabled.
-      assert(enable_pdf,
-             "Windows basic printing or print preview needs pdf: " +
-                 "set enable_pdf=true.")
-    }
-  }
-  if (enable_spellcheck) {
-    defines += [ "ENABLE_SPELLCHECK=1" ]
-  }
-  if (use_browser_spellchecker) {
-    defines += [ "USE_BROWSER_SPELLCHECKER=1" ]
   }
   if (dcheck_always_on) {
     defines += [ "DCHECK_ALWAYS_ON=1" ]
@@ -126,12 +94,6 @@ config("feature_flags") {
   }
   if (use_cairo) {
     defines += [ "USE_CAIRO=1" ]
-  }
-  if (use_clipboard_aurax11) {
-    defines += [ "USE_CLIPBOARD_AURAX11=1" ]
-  }
-  if (use_default_render_theme) {
-    defines += [ "USE_DEFAULT_RENDER_THEME=1" ]
   }
   if (use_glib) {
     defines += [ "USE_GLIB=1" ]
@@ -188,38 +150,14 @@ config("feature_flags") {
   if (!enable_nacl) {
     defines += [ "DISABLE_NACL" ]
   }
-  if (enable_extensions) {
-    defines += [ "ENABLE_EXTENSIONS=1" ]
-  }
   if (enable_task_manager) {
     defines += [ "ENABLE_TASK_MANAGER=1" ]
   }
   if (enable_themes) {
     defines += [ "ENABLE_THEMES=1" ]
   }
-  if (enable_captive_portal_detection) {
-    defines += [ "ENABLE_CAPTIVE_PORTAL_DETECTION=1" ]
-  }
-  if (enable_session_service) {
-    defines += [ "ENABLE_SESSION_SERVICE=1" ]
-  }
   if (enable_rlz) {
     defines += [ "ENABLE_RLZ" ]
-  }
-  if (enable_plugin_installation) {
-    defines += [ "ENABLE_PLUGIN_INSTALLATION=1" ]
-  }
-  if (enable_app_list) {
-    defines += [ "ENABLE_APP_LIST=1" ]
-  }
-  if (enable_supervised_users) {
-    defines += [ "ENABLE_SUPERVISED_USERS=1" ]
-  }
-  if (enable_service_discovery) {
-    defines += [ "ENABLE_SERVICE_DISCOVERY=1" ]
-  }
-  if (enable_image_loader_extension) {
-    defines += [ "IMAGE_LOADER_EXTENSION=1" ]
   }
   if (enable_wayland_server) {
     defines += [ "ENABLE_WAYLAND_SERVER=1" ]
@@ -232,9 +170,6 @@ config("feature_flags") {
   }
   if (system_proprietary_codecs) {
     defines += [ "USE_SYSTEM_PROPRIETARY_CODECS" ]
-  }
-  if (enable_hangout_services_extension) {
-    defines += [ "ENABLE_HANGOUT_SERVICES_EXTENSION=1" ]
   }
   if (safe_browsing_mode == 1) {
     defines += [ "FULL_SAFE_BROWSING" ]

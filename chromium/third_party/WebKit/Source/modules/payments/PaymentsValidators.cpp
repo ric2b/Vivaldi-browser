@@ -5,6 +5,7 @@
 #include "modules/payments/PaymentsValidators.h"
 
 #include "bindings/core/v8/ScriptRegexp.h"
+#include "platform/weborigin/KURL.h"
 #include "wtf/text/StringImpl.h"
 
 namespace blink {
@@ -14,7 +15,27 @@ static const int maxiumStringLength = 2048;
 
 bool PaymentsValidators::isValidCurrencyCodeFormat(
     const String& code,
+    const String& system,
     String* optionalErrorMessage) {
+  if (system == "urn:iso:std:iso:4217") {
+    if (ScriptRegexp("^[A-Z]{3}$", TextCaseSensitive).match(code) == 0)
+      return true;
+
+    if (optionalErrorMessage)
+      *optionalErrorMessage = "'" + code +
+                              "' is not a valid ISO 4217 currency code, should "
+                              "be 3 upper case letters [A-Z]";
+
+    return false;
+  }
+
+  if (!KURL(KURL(), system).isValid()) {
+    if (optionalErrorMessage)
+      *optionalErrorMessage = "The currency system is not a valid URL";
+
+    return false;
+  }
+
   if (code.length() <= maxiumStringLength)
     return true;
 
@@ -80,7 +101,7 @@ bool PaymentsValidators::isValidScriptCodeFormat(const String& code,
 }
 
 bool PaymentsValidators::isValidShippingAddress(
-    const mojom::blink::PaymentAddressPtr& address,
+    const payments::mojom::blink::PaymentAddressPtr& address,
     String* optionalErrorMessage) {
   if (!isValidCountryCodeFormat(address->country, optionalErrorMessage))
     return false;

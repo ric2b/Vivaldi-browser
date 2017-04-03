@@ -43,6 +43,22 @@ FontCache::FontCache() : m_purgePreventCount(0) {
   }
 }
 
+static AtomicString& mutableSystemFontFamily() {
+  DEFINE_STATIC_LOCAL(AtomicString, systemFontFamily, ());
+  return systemFontFamily;
+}
+
+// static
+const AtomicString& FontCache::systemFontFamily() {
+  return mutableSystemFontFamily();
+}
+
+// static
+void FontCache::setSystemFontFamily(const AtomicString& familyName) {
+  DCHECK(!familyName.isEmpty());
+  mutableSystemFontFamily() = familyName;
+}
+
 void FontCache::getFontForCharacter(
     UChar32 c,
     const char* preferredLocale,

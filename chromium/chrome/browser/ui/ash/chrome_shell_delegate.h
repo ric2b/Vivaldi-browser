@@ -31,8 +31,7 @@ class ChromeShellDelegate : public ash::ShellDelegate,
   ~ChromeShellDelegate() override;
 
   // ash::ShellDelegate overrides;
-  shell::Connector* GetShellConnector() const override;
-  bool IsFirstRunAfterBoot() const override;
+  service_manager::Connector* GetShellConnector() const override;
   bool IsMultiProfilesEnabled() const override;
   bool IsIncognitoAllowed() const override;
   bool IsRunningInForcedAppMode() const override;
@@ -49,7 +48,6 @@ class ChromeShellDelegate : public ash::ShellDelegate,
   std::unique_ptr<ash::WallpaperDelegate> CreateWallpaperDelegate() override;
   ash::SessionStateDelegate* CreateSessionStateDelegate() override;
   ash::AccessibilityDelegate* CreateAccessibilityDelegate() override;
-  ash::NewWindowDelegate* CreateNewWindowDelegate() override;
   ash::MediaDelegate* CreateMediaDelegate() override;
   std::unique_ptr<ash::PaletteDelegate> CreatePaletteDelegate() override;
   ui::MenuModel* CreateContextMenu(ash::WmShelf* wm_shelf,

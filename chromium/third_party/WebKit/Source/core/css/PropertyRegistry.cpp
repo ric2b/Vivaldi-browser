@@ -13,13 +13,8 @@ void PropertyRegistry::registerProperty(
     const CSSValue* initial,
     PassRefPtr<CSSVariableData> initialVariableData) {
   DCHECK(!registration(name));
-  m_registrations.set(
-      name, new Registration(syntax, inherits, initial, initialVariableData));
-}
-
-void PropertyRegistry::unregisterProperty(const AtomicString& name) {
-  DCHECK(registration(name));
-  m_registrations.remove(name);
+  m_registrations.set(name, new Registration(syntax, inherits, initial,
+                                             std::move(initialVariableData)));
 }
 
 const PropertyRegistry::Registration* PropertyRegistry::registration(

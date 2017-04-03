@@ -12,10 +12,6 @@
 #include "content/renderer/pepper/content_renderer_pepper_host_factory.h"
 #include "ppapi/host/ppapi_host.h"
 
-namespace IPC {
-class Sender;
-}
-
 namespace ppapi {
 
 namespace proxy {
@@ -49,7 +45,7 @@ class RendererPpapiHostImpl : public RendererPpapiHost {
       PluginModule* module,
       ppapi::proxy::HostDispatcher* dispatcher,
       const ppapi::PpapiPermissions& permissions);
-  static RendererPpapiHostImpl* CreateOnModuleForInProcess(
+  CONTENT_EXPORT static RendererPpapiHostImpl* CreateOnModuleForInProcess(
       PluginModule* module,
       const ppapi::PpapiPermissions& permissions);
 

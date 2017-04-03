@@ -7,8 +7,8 @@
 
 #include <memory>
 
-#include "base/cancelable_callback.h"
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
 #include "build/build_config.h"
 #include "content/browser/compositor/browser_compositor_output_surface.h"
 #include "ui/gfx/swap_result.h"
@@ -19,13 +19,16 @@ class CompositorOverlayCandidateValidator;
 
 namespace gpu {
 class CommandBufferProxyImpl;
+struct GpuProcessHostedCALayerTreeParamsMac;
 }
 
 namespace ui {
 class CompositorVSyncManager;
+class LatencyInfo;
 }
 
 namespace content {
+class ContextProviderCommandBuffer;
 class ReflectorTexture;
 
 // Adapts a WebGraphicsContext3DCommandBufferImpl into a
@@ -43,40 +46,43 @@ class GpuBrowserCompositorOutputSurface
 
   ~GpuBrowserCompositorOutputSurface() override;
 
- protected:
-  // BrowserCompositorOutputSurface:
-  void OnReflectorChanged() override;
-  void OnGpuSwapBuffersCompleted(
+  // Called when a swap completion is sent from the GPU process.
+  // The argument |params_mac| is used to communicate parameters needed on Mac
+  // to display the CALayer for the swap in the browser process.
+  // TODO(ccameron): Remove |params_mac| when the CALayer tree is hosted in the
+  // browser process.
+  virtual void OnGpuSwapBuffersCompleted(
       const std::vector<ui::LatencyInfo>& latency_info,
       gfx::SwapResult result,
-      const gpu::GpuProcessHostedCALayerTreeParamsMac* params_mac) override;
+      const gpu::GpuProcessHostedCALayerTreeParamsMac* params_mac);
+
+  // BrowserCompositorOutputSurface implementation.
+  void OnReflectorChanged() override;
 #if defined(OS_MACOSX)
   void SetSurfaceSuspendedForRecycle(bool suspended) override;
 #endif
 
   // cc::OutputSurface implementation.
-  bool BindToClient(cc::OutputSurfaceClient* client) override;
+  void BindToClient(cc::OutputSurfaceClient* client) override;
   void EnsureBackbuffer() override;
   void DiscardBackbuffer() override;
   void BindFramebuffer() override;
+  void Reshape(const gfx::Size& size,
+               float device_scale_factor,
+               const gfx::ColorSpace& color_space,
+               bool has_alpha) override;
   void SwapBuffers(cc::OutputSurfaceFrame frame) override;
   uint32_t GetFramebufferCopyTextureFormat() override;
   bool IsDisplayedAsOverlayPlane() const override;
   unsigned GetOverlayTextureId() const override;
   bool SurfaceIsSuspendForRecycle() const override;
 
+ protected:
   gpu::CommandBufferProxyImpl* GetCommandBufferProxy();
 
-  base::CancelableCallback<void(
-      const std::vector<ui::LatencyInfo>&,
-      gfx::SwapResult,
-      const gpu::GpuProcessHostedCALayerTreeParamsMac* params_mac)>
-      swap_buffers_completion_callback_;
-  base::CancelableCallback<void(base::TimeTicks timebase,
-                                base::TimeDelta interval)>
-      update_vsync_parameters_callback_;
-
+  cc::OutputSurfaceClient* client_ = nullptr;
   std::unique_ptr<ReflectorTexture> reflector_texture_;
+  base::WeakPtrFactory<GpuBrowserCompositorOutputSurface> weak_ptr_factory_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(GpuBrowserCompositorOutputSurface);

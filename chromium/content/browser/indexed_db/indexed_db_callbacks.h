@@ -15,8 +15,10 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/strings/string16.h"
+#include "base/threading/thread_checker.h"
 #include "content/browser/indexed_db/indexed_db_database_error.h"
 #include "content/browser/indexed_db/indexed_db_dispatcher_host.h"
+#include "content/common/indexed_db/indexed_db.mojom.h"
 #include "content/common/indexed_db/indexed_db_key.h"
 #include "content/common/indexed_db/indexed_db_key_path.h"
 #include "url/origin.h"
@@ -26,7 +28,6 @@ class IndexedDBBlobInfo;
 class IndexedDBConnection;
 class IndexedDBCursor;
 class IndexedDBDatabase;
-class IndexedDBDatabaseCallbacks;
 struct IndexedDBDataLossInfo;
 struct IndexedDBDatabaseMetadata;
 struct IndexedDBReturnValue;
@@ -46,13 +47,11 @@ class CONTENT_EXPORT IndexedDBCallbacks
                      int32_t ipc_callbacks_id,
                      int32_t ipc_cursor_id);
 
-  // IndexedDBDatabase responses
-  IndexedDBCallbacks(IndexedDBDispatcherHost* dispatcher_host,
-                     int32_t ipc_thread_id,
-                     int32_t ipc_callbacks_id,
-                     int32_t ipc_database_callbacks_id,
-                     int64_t host_transaction_id,
-                     const url::Origin& origin);
+  // Mojo-based responses
+  IndexedDBCallbacks(
+      IndexedDBDispatcherHost* dispatcher_host,
+      const url::Origin& origin,
+      ::indexed_db::mojom::CallbacksAssociatedPtrInfo callbacks_info);
 
   virtual void OnError(const IndexedDBDatabaseError& error);
 
@@ -93,8 +92,7 @@ class CONTENT_EXPORT IndexedDBCallbacks
   virtual void OnSuccess(IndexedDBReturnValue* value);
 
   // IndexedDBDatabase::GetAll
-  virtual void OnSuccessArray(std::vector<IndexedDBReturnValue>* values,
-                              const IndexedDBKeyPath& key_path);
+  virtual void OnSuccessArray(std::vector<IndexedDBReturnValue>* values);
 
   // IndexedDBDatabase::Put / IndexedDBCursor::Update
   virtual void OnSuccess(const IndexedDBKey& key);
@@ -113,6 +111,10 @@ class CONTENT_EXPORT IndexedDBCallbacks
 
   void SetConnectionOpenStartTime(const base::TimeTicks& start_time);
 
+  void set_host_transaction_id(int64_t host_transaction_id) {
+    host_transaction_id_ = host_transaction_id;
+  }
+
  protected:
   virtual ~IndexedDBCallbacks();
 
@@ -121,6 +123,8 @@ class CONTENT_EXPORT IndexedDBCallbacks
                             const base::Closure& callback);
 
   friend class base::RefCounted<IndexedDBCallbacks>;
+
+  class IOThreadHelper;
 
   // Originally from IndexedDBCallbacks:
   scoped_refptr<IndexedDBDispatcherHost> dispatcher_host_;
@@ -133,8 +137,7 @@ class CONTENT_EXPORT IndexedDBCallbacks
   // IndexedDBDatabase callbacks ------------------------
   int64_t host_transaction_id_;
   url::Origin origin_;
-  int32_t ipc_database_id_;
-  int32_t ipc_database_callbacks_id_;
+  bool database_sent_ = false;
 
   // Used to assert that OnSuccess is only called if there was no data loss.
   blink::WebIDBDataLoss data_loss_;
@@ -142,6 +145,10 @@ class CONTENT_EXPORT IndexedDBCallbacks
   // The "blocked" event should be sent at most once per request.
   bool sent_blocked_;
   base::TimeTicks connection_open_start_time_;
+
+  std::unique_ptr<IOThreadHelper, BrowserThread::DeleteOnIOThread> io_helper_;
+  base::ThreadChecker thread_checker_;
+
   DISALLOW_COPY_AND_ASSIGN(IndexedDBCallbacks);
 };
 

@@ -32,7 +32,6 @@
 
 namespace blink {
 
-class LocalDOMWindow;
 class ExceptionState;
 class Frame;
 class LayoutPart;
@@ -81,11 +80,13 @@ class CORE_EXPORT HTMLFrameOwnerElement : public HTMLElement,
   void clearContentFrame() override;
   void dispatchLoad() override;
   SandboxFlags getSandboxFlags() const override { return m_sandboxFlags; }
+  bool canRenderFallbackContent() const override { return false; }
   void renderFallbackContent() override {}
   ScrollbarMode scrollingMode() const override { return ScrollbarAuto; }
   int marginWidth() const override { return -1; }
   int marginHeight() const override { return -1; }
   bool allowFullscreen() const override { return false; }
+  bool allowPaymentRequest() const override { return false; }
   AtomicString csp() const override { return nullAtom; }
   const WebVector<WebPermissionType>& delegatedPermissions() const override;
 

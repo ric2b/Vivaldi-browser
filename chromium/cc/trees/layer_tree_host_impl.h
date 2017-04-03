@@ -17,13 +17,12 @@
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/time/time.h"
-#include "cc/animation/layer_tree_mutator.h"
 #include "cc/base/cc_export.h"
 #include "cc/base/synced_property.h"
 #include "cc/debug/micro_benchmark_controller_impl.h"
+#include "cc/input/browser_controls_offset_manager_client.h"
 #include "cc/input/input_handler.h"
 #include "cc/input/scrollbar_animation_controller.h"
-#include "cc/input/top_controls_manager_client.h"
 #include "cc/layers/layer_collections.h"
 #include "cc/layers/render_pass_sink.h"
 #include "cc/output/begin_frame_args.h"
@@ -39,6 +38,7 @@
 #include "cc/scheduler/video_frame_controller.h"
 #include "cc/tiles/image_decode_controller.h"
 #include "cc/tiles/tile_manager.h"
+#include "cc/trees/layer_tree_mutator.h"
 #include "cc/trees/layer_tree_settings.h"
 #include "cc/trees/mutator_host_client.h"
 #include "cc/trees/task_runner_provider.h"
@@ -50,9 +50,7 @@ class ScrollOffset;
 
 namespace cc {
 
-class AnimationEvents;
-class AnimationHost;
-class CompletionEvent;
+class BrowserControlsOffsetManager;
 class CompositorFrameMetadata;
 class CompositorFrameSink;
 class DebugRectHistory;
@@ -61,25 +59,20 @@ class FrameRateCounter;
 class LayerImpl;
 class LayerTreeImpl;
 class MemoryHistory;
+class MutatorEvents;
+class MutatorHost;
 class PageScaleAnimation;
 class PendingTreeDurationHistogramTimer;
-class PictureLayerImpl;
 class RasterTilePriorityQueue;
-class TileTaskManager;
 class RasterBufferProvider;
-class RenderPassDrawQuad;
 class RenderingStatsInstrumentation;
 class ResourcePool;
 class ScrollElasticityHelper;
-class ScrollbarLayerImplBase;
 class SwapPromise;
 class SwapPromiseMonitor;
 class SynchronousTaskGraphRunner;
 class TaskGraphRunner;
-class TextureMailboxDeleter;
-class TopControlsManager;
 class UIResourceBitmap;
-class UIResourceRequest;
 struct ScrollAndScaleSet;
 class Viewport;
 
@@ -99,7 +92,7 @@ class LayerTreeHostImplClient {
  public:
   virtual void DidLoseCompositorFrameSinkOnImplThread() = 0;
   virtual void SetBeginFrameSource(BeginFrameSource* source) = 0;
-  virtual void DidSwapBuffersCompleteOnImplThread() = 0;
+  virtual void DidReceiveCompositorFrameAckOnImplThread() = 0;
   virtual void OnCanDrawStateChanged(bool can_draw) = 0;
   virtual void NotifyReadyToActivate() = 0;
   virtual void NotifyReadyToDraw() = 0;
@@ -111,7 +104,7 @@ class LayerTreeHostImplClient {
   virtual void SetNeedsPrepareTilesOnImplThread() = 0;
   virtual void SetVideoNeedsBeginFrames(bool needs_begin_frames) = 0;
   virtual void PostAnimationEventsToMainThreadOnImplThread(
-      std::unique_ptr<AnimationEvents> events) = 0;
+      std::unique_ptr<MutatorEvents> events) = 0;
   virtual bool IsInsideDraw() = 0;
   virtual void RenewTreePriority() = 0;
   virtual void PostDelayedAnimationTaskOnImplThread(const base::Closure& task,
@@ -137,7 +130,7 @@ class CC_EXPORT LayerTreeHostImpl
     : public InputHandler,
       public TileManagerClient,
       public CompositorFrameSinkClient,
-      public TopControlsManagerClient,
+      public BrowserControlsOffsetManagerClient,
       public ScrollbarAnimationControllerClient,
       public VideoFrameControllerClient,
       public LayerTreeMutatorClient,
@@ -149,10 +142,8 @@ class CC_EXPORT LayerTreeHostImpl
       LayerTreeHostImplClient* client,
       TaskRunnerProvider* task_runner_provider,
       RenderingStatsInstrumentation* rendering_stats_instrumentation,
-      SharedBitmapManager* shared_bitmap_manager,
-      gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
       TaskGraphRunner* task_graph_runner,
-      std::unique_ptr<AnimationHost> animation_host,
+      std::unique_ptr<MutatorHost> mutator_host,
       int id);
   ~LayerTreeHostImpl() override;
 
@@ -180,6 +171,7 @@ class CC_EXPORT LayerTreeHostImpl
   void MouseDown() override;
   void MouseUp() override;
   void MouseMoveAt(const gfx::Point& viewport_point) override;
+  void MouseLeave() override;
 
   void PinchGestureBegin() override;
   void PinchGestureUpdate(float magnify_delta,
@@ -204,12 +196,12 @@ class CC_EXPORT LayerTreeHostImpl
                                gfx::ScrollOffset* offset) override;
   bool ScrollLayerTo(int layer_id, const gfx::ScrollOffset& offset) override;
 
-  // TopControlsManagerClient implementation.
+  // BrowserControlsOffsetManagerClient implementation.
   float TopControlsHeight() const override;
   float BottomControlsHeight() const override;
-  void SetCurrentTopControlsShownRatio(float offset) override;
-  float CurrentTopControlsShownRatio() const override;
-  void DidChangeTopControlsPosition() override;
+  void SetCurrentBrowserControlsShownRatio(float offset) override;
+  float CurrentBrowserControlsShownRatio() const override;
+  void DidChangeBrowserControlsPosition() override;
   bool HaveRootScrollLayer() const override;
 
   void UpdateViewportContainerSizes();
@@ -267,6 +259,7 @@ class CC_EXPORT LayerTreeHostImpl
                                        LayerTreeImpl* tree,
                                        const gfx::ScrollOffset& scroll_offset);
   bool AnimationsPreserveAxisAlignment(const LayerImpl* layer) const;
+  void SetNeedUpdateGpuRasterizationStatus();
 
   // MutatorHostClient implementation.
   bool IsElementInList(ElementId element_id,
@@ -354,6 +347,7 @@ class CC_EXPORT LayerTreeHostImpl
   void SetNeedsAnimateForScrollbarAnimation() override;
   void SetNeedsRedrawForScrollbarAnimation() override;
   ScrollbarSet ScrollbarsFor(int scroll_layer_id) const override;
+  void DidChangeScrollbarVisibility() override;
 
   // VideoBeginFrameSource implementation.
   void AddVideoFrameController(VideoFrameController* controller) override;
@@ -365,7 +359,7 @@ class CC_EXPORT LayerTreeHostImpl
       const gfx::Rect& viewport_rect,
       const gfx::Transform& transform) override;
   void DidLoseCompositorFrameSink() override;
-  void DidSwapBuffersComplete() override;
+  void DidReceiveCompositorFrameAck() override;
   void ReclaimResources(const ReturnedResourceArray& resources) override;
   void SetMemoryPolicy(const ManagedMemoryPolicy& policy) override;
   void SetTreeActivationCallback(const base::Closure& callback) override;
@@ -437,9 +431,6 @@ class CC_EXPORT LayerTreeHostImpl
   LayerImpl* OuterViewportScrollLayer() const;
   LayerImpl* CurrentlyScrollingLayer() const;
 
-  int scroll_layer_id_when_mouse_over_scrollbar() const {
-    return scroll_layer_id_when_mouse_over_scrollbar_;
-  }
   bool scroll_affects_scroll_handler() const {
     return scroll_affects_scroll_handler_;
   }
@@ -474,8 +465,8 @@ class CC_EXPORT LayerTreeHostImpl
   MemoryHistory* memory_history() { return memory_history_.get(); }
   DebugRectHistory* debug_rect_history() { return debug_rect_history_.get(); }
   ResourceProvider* resource_provider() { return resource_provider_.get(); }
-  TopControlsManager* top_controls_manager() {
-    return top_controls_manager_.get();
+  BrowserControlsOffsetManager* browser_controls_manager() {
+    return browser_controls_offset_manager_.get();
   }
   const GlobalStateThatImpactsTilePriority& global_tile_state() {
     return global_tile_state_;
@@ -485,7 +476,7 @@ class CC_EXPORT LayerTreeHostImpl
     return task_runner_provider_;
   }
 
-  AnimationHost* animation_host() const { return animation_host_.get(); }
+  MutatorHost* mutator_host() const { return mutator_host_.get(); }
 
   void SetDebugState(const LayerTreeDebugState& new_debug_state);
   const LayerTreeDebugState& debug_state() const { return debug_state_; }
@@ -594,16 +585,16 @@ class CC_EXPORT LayerTreeHostImpl
   void SetLayerTreeMutator(std::unique_ptr<LayerTreeMutator> mutator);
   LayerTreeMutator* mutator() { return mutator_.get(); }
 
+  LayerImpl* ViewportMainScrollLayer();
+
  protected:
   LayerTreeHostImpl(
       const LayerTreeSettings& settings,
       LayerTreeHostImplClient* client,
       TaskRunnerProvider* task_runner_provider,
       RenderingStatsInstrumentation* rendering_stats_instrumentation,
-      SharedBitmapManager* shared_bitmap_manager,
-      gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
       TaskGraphRunner* task_graph_runner,
-      std::unique_ptr<AnimationHost> animation_host,
+      std::unique_ptr<MutatorHost> mutator_host,
       int id);
 
   // Virtual for testing.
@@ -650,7 +641,7 @@ class CC_EXPORT LayerTreeHostImpl
 
   bool AnimatePageScale(base::TimeTicks monotonic_time);
   bool AnimateScrollbars(base::TimeTicks monotonic_time);
-  bool AnimateTopControls(base::TimeTicks monotonic_time);
+  bool AnimateBrowserControls(base::TimeTicks monotonic_time);
 
   void TrackDamageForAllSurfaces(
       const LayerImplList& render_surface_layer_list);
@@ -663,8 +654,6 @@ class CC_EXPORT LayerTreeHostImpl
   DrawResult CalculateRenderPasses(FrameData* frame);
 
   void ClearCurrentlyScrollingLayer();
-
-  void HandleMouseOverScrollbar(LayerImpl* layer_impl);
 
   LayerImpl* FindScrollLayerForDeviceViewportPoint(
       const gfx::PointF& device_viewport_point,
@@ -691,8 +680,7 @@ class CC_EXPORT LayerTreeHostImpl
                                    const gfx::Vector2dF& scroll_delta,
                                    base::TimeDelta delayed_by);
 
-  void SetCompositorContextVisibility(bool is_visible);
-  void SetWorkerContextVisibility(bool is_visible);
+  void SetContextVisibility(bool is_visible);
 
   using UIResourceMap = std::unordered_map<UIResourceId, UIResourceData>;
   UIResourceMap ui_resource_map_;
@@ -721,7 +709,6 @@ class CC_EXPORT LayerTreeHostImpl
   bool use_msaa_;
   GpuRasterizationStatus gpu_rasterization_status_;
   std::unique_ptr<RasterBufferProvider> raster_buffer_provider_;
-  std::unique_ptr<TileTaskManager> tile_task_manager_;
   std::unique_ptr<ResourcePool> resource_pool_;
   std::unique_ptr<ImageDecodeController> image_decode_controller_;
 
@@ -742,8 +729,7 @@ class CC_EXPORT LayerTreeHostImpl
   bool did_lock_scrolling_layer_;
   bool wheel_scrolling_;
   bool scroll_affects_scroll_handler_;
-  int scroll_layer_id_when_mouse_over_scrollbar_;
-  int captured_scrollbar_layer_id_;
+  int scroll_layer_id_mouse_currently_over_;
 
   std::vector<std::unique_ptr<SwapPromise>>
       swap_promises_for_main_thread_scroll_update_;
@@ -767,7 +753,8 @@ class CC_EXPORT LayerTreeHostImpl
   bool pinch_gesture_active_;
   bool pinch_gesture_end_should_clear_scrolling_layer_;
 
-  std::unique_ptr<TopControlsManager> top_controls_manager_;
+  std::unique_ptr<BrowserControlsOffsetManager>
+      browser_controls_offset_manager_;
 
   std::unique_ptr<PageScaleAnimation> page_scale_animation_;
 
@@ -798,7 +785,7 @@ class CC_EXPORT LayerTreeHostImpl
 
   gfx::Rect viewport_damage_rect_;
 
-  std::unique_ptr<AnimationHost> animation_host_;
+  std::unique_ptr<MutatorHost> mutator_host_;
   std::set<VideoFrameController*> video_frame_controllers_;
 
   // Map from scroll layer ID to scrollbar animation controller.
@@ -814,8 +801,6 @@ class CC_EXPORT LayerTreeHostImpl
   // Optional callback to notify of new tree activations.
   base::Closure tree_activation_callback_;
 
-  SharedBitmapManager* shared_bitmap_manager_;
-  gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager_;
   TaskGraphRunner* task_graph_runner_;
   int id_;
 

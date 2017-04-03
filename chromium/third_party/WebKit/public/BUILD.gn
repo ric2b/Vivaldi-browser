@@ -2,8 +2,11 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/buildflag_header.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
+import("//third_party/WebKit/public/public_features.gni")
 import("//third_party/WebKit/Source/config.gni")
+import("//third_party/WebKit/Source/core/core.gni")
 import("//tools/grit/grit_rule.gni")
 
 if (is_android) {
@@ -65,10 +68,14 @@ config("blink_headers_config") {
   configs = [ "//v8:external_config" ]
 }
 
-config("debug_devtools") {
-  if (debug_devtools) {
-    defines = [ "DEBUG_DEVTOOLS=1" ]
-  }
+# Public feature flags used outside of Blink.
+buildflag_header("features") {
+  header = "public_features.h"
+  flags = [
+    "DEBUG_DEVTOOLS=$debug_devtools",
+    "USE_DEFAULT_RENDER_THEME=$use_default_render_theme",
+    "USE_MINIKIN_HYPHENATION=$use_minikin_hyphenation",
+  ]
 }
 
 if (is_android) {
@@ -76,7 +83,8 @@ if (is_android) {
     sources = [
       "./platform/WebDisplayMode.h",
       "./platform/WebInputEvent.h",
-      "./web/WebTextInputType.h",
+      "./platform/WebTextInputType.h",
+      "./platform/modules/remoteplayback/WebRemotePlaybackAvailability.h",
     ]
   }
 
@@ -183,6 +191,7 @@ source_set("blink_headers") {
     "platform/WebGestureCurve.h",
     "platform/WebGestureCurveTarget.h",
     "platform/WebGestureDevice.h",
+    "platform/WebGestureEvent.h",
     "platform/WebGraphicsContext3DProvider.h",
     "platform/WebHTTPBody.h",
     "platform/WebHTTPHeaderVisitor.h",
@@ -222,9 +231,9 @@ source_set("blink_headers") {
     "platform/WebMediaStreamTrackSourcesRequest.h",
     "platform/WebMemoryCoordinator.h",
     "platform/WebMemoryPressureLevel.h",
+    "platform/WebMemoryState.h",
     "platform/WebMessagePortChannel.h",
     "platform/WebMessagePortChannelClient.h",
-    "platform/WebMimeRegistry.h",
     "platform/WebMixedContent.h",
     "platform/WebMockClipboard.h",
     "platform/WebNativeScrollBehavior.h",
@@ -272,15 +281,16 @@ source_set("blink_headers") {
     "platform/WebScrollbarBehavior.h",
     "platform/WebScrollbarButtonsPlacement.h",
     "platform/WebScrollbarLayer.h",
+    "platform/WebScrollbarOverlayColorTheme.h",
     "platform/WebScrollbarThemeGeometry.h",
     "platform/WebScrollbarThemePainter.h",
     "platform/WebSecurityOrigin.h",
+    "platform/WebSecurityStyle.h",
     "platform/WebSelectionBound.h",
     "platform/WebSetSinkIdCallbacks.h",
     "platform/WebSize.h",
     "platform/WebSourceBuffer.h",
     "platform/WebSourceBufferClient.h",
-    "platform/WebSourceInfo.h",
     "platform/WebSpeechSynthesisUtterance.h",
     "platform/WebSpeechSynthesisVoice.h",
     "platform/WebSpeechSynthesizer.h",
@@ -292,7 +302,9 @@ source_set("blink_headers") {
     "platform/WebStorageQuotaType.h",
     "platform/WebString.h",
     "platform/WebSuspendableTask.h",
-    "platform/WebTaskRunner.h",
+    "platform/WebTextInputInfo.h",
+    "platform/WebTextInputMode.h",
+    "platform/WebTextInputType.h",
     "platform/WebTextRun.h",
     "platform/WebThemeEngine.h",
     "platform/WebThread.h",
@@ -315,9 +327,6 @@ source_set("blink_headers") {
     "platform/linux/WebFontRenderStyle.h",
     "platform/linux/WebSandboxSupport.h",
     "platform/mac/WebSandboxSupport.h",
-    "platform/modules/app_banner/WebAppBannerClient.h",
-    "platform/modules/app_banner/WebAppBannerPromptReply.h",
-    "platform/modules/app_banner/WebAppBannerPromptResult.h",
     "platform/modules/background_sync/WebSyncClient.h",
     "platform/modules/background_sync/WebSyncError.h",
     "platform/modules/background_sync/WebSyncProvider.h",
@@ -364,6 +373,7 @@ source_set("blink_headers") {
     "platform/modules/push_messaging/WebPushProvider.h",
     "platform/modules/push_messaging/WebPushSubscription.h",
     "platform/modules/push_messaging/WebPushSubscriptionOptions.h",
+    "platform/modules/remoteplayback/WebRemotePlaybackAvailability.h",
     "platform/modules/remoteplayback/WebRemotePlaybackClient.h",
     "platform/modules/remoteplayback/WebRemotePlaybackState.h",
     "platform/modules/screen_orientation/WebLockOrientationCallback.h",
@@ -371,6 +381,7 @@ source_set("blink_headers") {
     "platform/modules/screen_orientation/WebScreenOrientationClient.h",
     "platform/modules/screen_orientation/WebScreenOrientationLockType.h",
     "platform/modules/screen_orientation/WebScreenOrientationType.h",
+    "platform/modules/serviceworker/WebNavigationPreloadState.h",
     "platform/modules/serviceworker/WebServiceWorker.h",
     "platform/modules/serviceworker/WebServiceWorkerCache.h",
     "platform/modules/serviceworker/WebServiceWorkerCacheError.h",
@@ -417,6 +428,7 @@ source_set("blink_headers") {
     "web/WebArrayBuffer.h",
     "web/WebArrayBufferConverter.h",
     "web/WebArrayBufferView.h",
+    "web/WebAssociatedURLLoaderOptions.h",
     "web/WebAutofillClient.h",
     "web/WebBlob.h",
     "web/WebCSSParser.h",
@@ -479,7 +491,7 @@ source_set("blink_headers") {
     "web/WebImageCache.h",
     "web/WebImageDecoder.h",
     "web/WebInputElement.h",
-    "web/WebInputEvent.h",
+    "web/WebInputMethodController.h",
     "web/WebKit.h",
     "web/WebLabelElement.h",
     "web/WebLeakDetector.h",
@@ -489,6 +501,7 @@ source_set("blink_headers") {
     "web/WebMediaDevicesRequest.h",
     "web/WebMediaPlayerAction.h",
     "web/WebMediaStreamRegistry.h",
+    "web/WebMemoryStatistics.h",
     "web/WebMenuItemInfo.h",
     "web/WebMetaElement.h",
     "web/WebNavigationPolicy.h",
@@ -551,11 +564,8 @@ source_set("blink_headers") {
     "web/WebTextCheckingResult.h",
     "web/WebTextDecorationType.h",
     "web/WebTextDirection.h",
-    "web/WebTextInputInfo.h",
-    "web/WebTextInputType.h",
     "web/WebTouchAction.h",
     "web/WebTreeScopeType.h",
-    "web/WebURLLoaderOptions.h",
     "web/WebUserGestureIndicator.h",
     "web/WebUserGestureToken.h",
     "web/WebUserMediaClient.h",
@@ -613,6 +623,14 @@ grit("resources") {
       "use_concatenated_impulse_responses",
     ]
   }
+  html_min_css = "$blink_core_output_dir/html.css"
+  grit_flags += [
+    "-E",
+    "html_min_css=" + rebase_path(html_min_css),
+  ]
+  deps = [
+    "//third_party/WebKit/Source/core:make_minimized_css",
+  ]
 }
 
 grit("image_resources") {
@@ -630,24 +648,53 @@ mojom("mojo_bindings") {
   sources = [
     "platform/mime_registry.mojom",
     "platform/modules/background_sync/background_sync.mojom",
-    "platform/modules/bluetooth/web_bluetooth.mojom",
     "platform/modules/broadcastchannel/broadcast_channel.mojom",
     "platform/modules/budget_service/budget_service.mojom",
     "platform/modules/hyphenation/hyphenation.mojom",
     "platform/modules/notifications/notification.mojom",
     "platform/modules/notifications/notification_service.mojom",
+    "platform/modules/sensitive_input_visibility/sensitive_input_visibility_service.mojom",
     "platform/modules/serviceworker/service_worker_event_status.mojom",
-    "platform/modules/wake_lock/wake_lock_service.mojom",
   ]
   public_deps = [
-    ":android_mojo_bindings",
     ":new_wrapper_types_mojo_bindings",
-    "//device/bluetooth/public/interfaces",
     "//mojo/common:common_custom_types",
     "//url/mojo:url_mojom_origin",
   ]
 
   use_new_wrapper_types = false
+
+  # See comments above.
+  export_class_attribute = "CONTENT_EXPORT"
+  export_define = "CONTENT_IMPLEMENTATION=1"
+  export_header = "content/common/content_export.h"
+  export_class_attribute_blink = "BLINK_PLATFORM_EXPORT"
+  export_define_blink = "BLINK_PLATFORM_IMPLEMENTATION=1"
+  export_header_blink = "third_party/WebKit/public/platform/WebCommon.h"
+}
+
+mojom("new_wrapper_types_mojo_bindings") {
+  sources = [
+    "platform/modules/app_banner/app_banner.mojom",
+    "platform/modules/bluetooth/web_bluetooth.mojom",
+    "platform/modules/mediasession/media_session.mojom",
+    "platform/modules/permissions/permission.mojom",
+    "platform/modules/permissions/permission_status.mojom",
+    "platform/modules/presentation/presentation.mojom",
+    "platform/modules/shapedetection/shapedetection.mojom",
+    "platform/modules/websockets/websocket.mojom",
+    "platform/referrer.mojom",
+    "web/window_features.mojom",
+  ]
+  public_deps = [
+    ":android_mojo_bindings",
+    "//device/bluetooth/public/interfaces",
+    "//mojo/common:common_custom_types",
+    "//ui/gfx/geometry/mojo",
+    "//ui/gfx/geometry/mojo:mojo",
+    "//url/mojo:url_mojom_gurl",
+    "//url/mojo:url_mojom_origin",
+  ]
 
   # The chromium variant must be linked with content and use the same export
   # settings in component build because of the WebBluetoothDeviceId typemap
@@ -663,40 +710,12 @@ mojom("mojo_bindings") {
   export_header_blink = "third_party/WebKit/public/platform/WebCommon.h"
 }
 
-mojom("new_wrapper_types_mojo_bindings") {
-  sources = [
-    "platform/modules/mediasession/media_session.mojom",
-    "platform/modules/permissions/permission.mojom",
-    "platform/modules/permissions/permission_status.mojom",
-    "platform/modules/presentation/presentation.mojom",
-    "platform/modules/shapedetection/shapedetection.mojom",
-    "platform/modules/websockets/websocket.mojom",
-    "platform/referrer.mojom",
-    "web/window_features.mojom",
-  ]
-  public_deps = [
-    "//mojo/common:common_custom_types",
-    "//ui/gfx/geometry/mojo",
-    "//ui/gfx/geometry/mojo:mojo",
-    "//url/mojo:url_mojom_gurl",
-    "//url/mojo:url_mojom_origin",
-  ]
-
-  # See comment above.
-  export_class_attribute = "CONTENT_EXPORT"
-  export_define = "CONTENT_IMPLEMENTATION=1"
-  export_header = "content/common/content_export.h"
-  export_class_attribute_blink = "BLINK_PLATFORM_EXPORT"
-  export_define_blink = "BLINK_PLATFORM_IMPLEMENTATION=1"
-  export_header_blink = "third_party/WebKit/public/platform/WebCommon.h"
-}
-
 mojom("android_mojo_bindings") {
   sources = [
-    "platform/modules/payments/payment_request.mojom",
     "platform/modules/webshare/webshare.mojom",
   ]
   public_deps = [
+    "//components/payments:payment_request",
     "//url/mojo:url_mojom_gurl",
   ]
 

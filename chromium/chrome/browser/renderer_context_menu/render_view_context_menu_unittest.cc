@@ -112,15 +112,16 @@ class RenderViewContextMenuTest : public testing::Test {
   }
 
   // Returns a test item.
-  MenuItem* CreateTestItem(const Extension* extension, int uid) {
+  std::unique_ptr<MenuItem> CreateTestItem(const Extension* extension,
+                                           int uid) {
     MenuItem::Type type = MenuItem::NORMAL;
     MenuItem::ContextList contexts(MenuItem::ALL);
     const MenuItem::ExtensionKey key(extension->id());
     bool incognito = false;
     MenuItem::Id id(incognito, key);
     id.uid = uid;
-    return new MenuItem(id, "Added by an extension", false, true, type,
-                        contexts);
+    return base::MakeUnique<MenuItem>(id, "Added by an extension", false, true,
+                                      type, contexts);
   }
 
  private:
@@ -340,10 +341,10 @@ TEST_F(RenderViewContextMenuExtensionsTest,
       base::DictionaryValue(), "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
 
   // Create two items in two extensions with same title.
-  MenuItem* item1 = CreateTestItem(extension1, 1);
-  ASSERT_TRUE(menu_manager->AddContextItem(extension1, item1));
-  MenuItem* item2 = CreateTestItem(extension2, 2);
-  ASSERT_TRUE(menu_manager->AddContextItem(extension2, item2));
+  ASSERT_TRUE(
+      menu_manager->AddContextItem(extension1, CreateTestItem(extension1, 1)));
+  ASSERT_TRUE(
+      menu_manager->AddContextItem(extension2, CreateTestItem(extension2, 2)));
 
   std::unique_ptr<content::WebContents> web_contents = environment().MakeTab();
   std::unique_ptr<TestRenderViewContextMenu> menu(
@@ -482,7 +483,8 @@ TEST_F(RenderViewContextMenuPrefsTest, DataSaverEnabledSaveImageAs) {
 
   const std::string& headers =
       content::WebContentsTester::For(web_contents())->GetSaveFrameHeaders();
-  EXPECT_TRUE(headers.find("Chrome-Proxy: pass-through") != std::string::npos);
+  EXPECT_TRUE(headers.find(
+      "Chrome-Proxy-Accept-Transform: identity") != std::string::npos);
   EXPECT_TRUE(headers.find("Cache-Control: no-cache") != std::string::npos);
 
   DestroyDataReductionProxySettings();
@@ -503,7 +505,8 @@ TEST_F(RenderViewContextMenuPrefsTest, DataSaverDisabledSaveImageAs) {
 
   const std::string& headers =
       content::WebContentsTester::For(web_contents())->GetSaveFrameHeaders();
-  EXPECT_TRUE(headers.find("Chrome-Proxy: pass-through") == std::string::npos);
+  EXPECT_TRUE(headers.find(
+      "Chrome-Proxy-Accept-Transform: identity") == std::string::npos);
   EXPECT_TRUE(headers.find("Cache-Control: no-cache") == std::string::npos);
 
   DestroyDataReductionProxySettings();
@@ -514,8 +517,9 @@ TEST_F(RenderViewContextMenuPrefsTest, DataSaverDisabledSaveImageAs) {
 TEST_F(RenderViewContextMenuPrefsTest, DataSaverLoadImage) {
   SetupDataReductionProxy(true);
   content::ContextMenuParams params = CreateParams(MenuItem::IMAGE);
-  params.properties[data_reduction_proxy::chrome_proxy_header()] =
-      data_reduction_proxy::chrome_proxy_lo_fi_directive();
+  params.properties[
+      data_reduction_proxy::chrome_proxy_content_transform_header()] =
+          data_reduction_proxy::empty_image_directive();
   params.unfiltered_link_url = params.link_url;
   content::WebContents* wc = web_contents();
   std::unique_ptr<TestRenderViewContextMenu> menu(

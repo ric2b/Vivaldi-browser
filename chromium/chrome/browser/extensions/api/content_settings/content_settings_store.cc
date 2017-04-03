@@ -116,10 +116,9 @@ void ContentSettingsStore::SetExtensionContentSetting(
     }
   }
 
-  // Send notification that content settings changed.
-  // TODO(markusheintz): Notifications should only be sent if the set content
-  // setting is effective and not hidden by another setting of another
-  // extension installed more recently.
+  // Send notification that content settings changed. (Note: This is responsible
+  // for updating the pref store, so cannot be skipped even if the setting would
+  // be masked by another extension.)
   NotifyOfContentSettingChanged(ext_id,
                                 scope != kExtensionPrefsScopeRegular);
 }
@@ -320,7 +319,18 @@ void ContentSettingsStore::SetExtensionContentSettingFromList(
     dict->GetString(keys::kContentSettingsTypeKey, &content_settings_type_str);
     ContentSettingsType content_settings_type =
         helpers::StringToContentSettingsType(content_settings_type_str);
-    DCHECK_NE(CONTENT_SETTINGS_TYPE_DEFAULT, content_settings_type);
+    if (content_settings_type == CONTENT_SETTINGS_TYPE_DEFAULT) {
+      // We'll end up with DEFAULT here if the type string isn't recognised.
+      // This could be if it's a string from an old settings type that has been
+      // deleted. DCHECK to make sure this is the case (not some random string).
+      DCHECK(content_settings_type_str == "fullscreen" ||
+             content_settings_type_str == "mouselock");
+
+      // In this case, we just skip over that setting, effectively deleting it
+      // from the in-memory model. This will implicitly delete these old
+      // settings from the pref store when it is written back.
+      continue;
+    }
 
     std::string resource_identifier;
     dict->GetString(keys::kResourceIdentifierKey, &resource_identifier);
@@ -355,10 +365,8 @@ void ContentSettingsStore::RemoveObserver(Observer* observer) {
 void ContentSettingsStore::NotifyOfContentSettingChanged(
     const std::string& extension_id,
     bool incognito) {
-  FOR_EACH_OBSERVER(
-      ContentSettingsStore::Observer,
-      observers_,
-      OnContentSettingChanged(extension_id, incognito));
+  for (auto& observer : observers_)
+    observer.OnContentSettingChanged(extension_id, incognito);
 }
 
 bool ContentSettingsStore::OnCorrectThread() {

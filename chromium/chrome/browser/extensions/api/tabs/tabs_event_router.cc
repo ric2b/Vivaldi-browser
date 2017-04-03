@@ -28,6 +28,7 @@
 #include "content/public/browser/web_contents.h"
 
 #include "app/vivaldi_apptools.h"
+#include "app/vivaldi_constants.h"
 
 using base::DictionaryValue;
 using base::ListValue;
@@ -442,7 +443,7 @@ void TabsEventRouter::FaviconUrlUpdated(WebContents* contents) {
 
 void TabsEventRouter::ExtDataUpdated(WebContents* contents) {
   std::set<std::string> changed_property_names;
-  changed_property_names.insert(tabs_constants::kExtDataKey);
+  changed_property_names.insert(vivaldi::kExtDataKey);
   DispatchTabUpdatedEvent(contents, std::move(changed_property_names));
 }
 

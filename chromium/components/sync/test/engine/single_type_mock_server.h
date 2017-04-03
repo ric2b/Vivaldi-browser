@@ -14,7 +14,7 @@
 
 #include "base/macros.h"
 #include "components/sync/base/model_type.h"
-#include "components/sync/core/non_blocking_sync_common.h"
+#include "components/sync/engine/non_blocking_sync_common.h"
 
 namespace syncer {
 
@@ -74,6 +74,9 @@ class SingleTypeMockServer {
   sync_pb::DataTypeProgressMarker GetProgress() const;
   sync_pb::DataTypeContext GetContext() const;
 
+  // Sets the token that will be returned as part of GetProgress().
+  void SetProgressMarkerToken(const std::string& token);
+
  private:
   static std::string GenerateId(const std::string& tag_hash);
 
@@ -92,6 +95,9 @@ class SingleTypeMockServer {
 
   // Map of most recent commits by tag_hash.
   std::map<const std::string, sync_pb::SyncEntity> committed_items_;
+
+  // The token that is used to generate the current progress marker.
+  std::string progress_marker_token_;
 
   DISALLOW_COPY_AND_ASSIGN(SingleTypeMockServer);
 };

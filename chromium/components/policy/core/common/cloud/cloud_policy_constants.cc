@@ -22,11 +22,14 @@ namespace dm_protocol {
 // Name constants for URL query parameters.
 const char kParamAgent[] = "agent";
 const char kParamAppType[] = "apptype";
+const char kParamCritical[] = "critical";
 const char kParamDeviceID[] = "deviceid";
 const char kParamDeviceType[] = "devicetype";
+const char kParamLastError[] = "lasterror";
 const char kParamOAuthToken[] = "oauth_token";
 const char kParamPlatform[] = "platform";
 const char kParamRequest[] = "request";
+const char kParamRetry[] = "retry";
 
 // String constants for the device and app type we report to the server.
 const char kValueAppType[] = "Chrome";
@@ -59,6 +62,8 @@ const char kChromeUserPolicyType[] = "google/chrome/user";
 #endif
 const char kChromePublicAccountPolicyType[] = "google/chromeos/publicaccount";
 const char kChromeExtensionPolicyType[] = "google/chrome/extension";
+const char kChromeSigninExtensionPolicyType[] =
+    "google/chromeos/signinextension";
 
 }  // namespace dm_protocol
 

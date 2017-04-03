@@ -154,12 +154,14 @@ bool BrowserAccessibilityAndroid::IsChecked() const {
 }
 
 bool BrowserAccessibilityAndroid::IsClickable() const {
-  if (!PlatformIsLeaf())
-    return false;
+  // If it has a default action, it's definitely clickable.
+  if (HasStringAttribute(ui::AX_ATTR_ACTION))
+    return true;
 
-  // We are very aggressive about returning true with IsClickable on Android
-  // because there is no way to know for sure what might have a click handler.
-  return IsFocusable() || !GetText().empty();
+  // Otherwise return true if it's focusable, but skip web areas and iframes.
+  if (IsIframe() || (GetRole() == ui::AX_ROLE_ROOT_WEB_AREA))
+    return false;
+  return IsFocusable();
 }
 
 bool BrowserAccessibilityAndroid::IsCollapsed() const {
@@ -207,12 +209,14 @@ bool BrowserAccessibilityAndroid::IsExpanded() const {
 }
 
 bool BrowserAccessibilityAndroid::IsFocusable() const {
-  bool focusable = HasState(ui::AX_STATE_FOCUSABLE);
-  if (IsIframe() ||
-      GetRole() == ui::AX_ROLE_WEB_AREA) {
-    focusable = false;
-  }
-  return focusable;
+  // If it's an iframe element, or the root element of a child frame,
+  // only mark it as focusable if the element has an explicit name.
+  // Otherwise mark it as not focusable to avoid the user landing on
+  // empty container elements in the tree.
+  if (IsIframe() || (GetRole() == ui::AX_ROLE_ROOT_WEB_AREA && GetParent()))
+    return HasStringAttribute(ui::AX_ATTR_NAME);
+
+  return HasState(ui::AX_STATE_FOCUSABLE);
 }
 
 bool BrowserAccessibilityAndroid::IsFocused() const {
@@ -271,6 +275,48 @@ bool BrowserAccessibilityAndroid::IsSlider() const {
 
 bool BrowserAccessibilityAndroid::IsVisibleToUser() const {
   return !HasState(ui::AX_STATE_INVISIBLE);
+}
+
+bool BrowserAccessibilityAndroid::IsInterestingOnAndroid() const {
+  // The root is not interesting if it doesn't have a title, even
+  // though it's focusable.
+  if (GetRole() == ui::AX_ROLE_ROOT_WEB_AREA && GetText().empty())
+    return false;
+
+  // Focusable nodes are always interesting. Note that IsFocusable()
+  // already skips over things like iframes and child frames that are
+  // technically focusable but shouldn't be exposed as focusable on Android.
+  if (IsFocusable())
+    return true;
+
+  // If it's not focusable but has a control role, then it's interesting.
+  if (IsControl())
+    return true;
+
+  // Otherwise, the interesting nodes are leaf nodes with non-whitespace text.
+  return PlatformIsLeaf() &&
+      !base::ContainsOnlyChars(GetText(), base::kWhitespaceUTF16);
+}
+
+const BrowserAccessibilityAndroid*
+    BrowserAccessibilityAndroid::GetSoleInterestingNodeFromSubtree() const {
+  if (IsInterestingOnAndroid())
+    return this;
+
+  const BrowserAccessibilityAndroid* sole_interesting_node = nullptr;
+  for (uint32_t i = 0; i < PlatformChildCount(); ++i) {
+    const BrowserAccessibilityAndroid* interesting_node =
+        static_cast<const BrowserAccessibilityAndroid*>(PlatformGetChild(i))->
+            GetSoleInterestingNodeFromSubtree();
+    if (interesting_node && sole_interesting_node) {
+      // If there are two interesting nodes, return nullptr.
+      return nullptr;
+    } else if (interesting_node) {
+      sole_interesting_node = interesting_node;
+    }
+  }
+
+  return sole_interesting_node;
 }
 
 bool BrowserAccessibilityAndroid::CanOpenPopup() const {
@@ -411,6 +457,13 @@ base::string16 BrowserAccessibilityAndroid::GetText() const {
 
   if (text.empty())
     text = value;
+
+  // If this is the root element, give up now, allow it to have no
+  // accessible text. For almost all other focusable nodes we try to
+  // get text from contents, but for the root element that's redundant
+  // and often way too verbose.
+  if (GetRole() == ui::AX_ROLE_ROOT_WEB_AREA)
+    return text;
 
   // This is called from PlatformIsLeaf, so don't call PlatformChildCount
   // from within this!
@@ -1341,6 +1394,10 @@ bool BrowserAccessibilityAndroid::HasFocusableChild() const {
       return true;
   }
   return false;
+}
+
+bool BrowserAccessibilityAndroid::HasNonEmptyValue() const {
+  return IsEditableText() && !GetValue().empty();
 }
 
 bool BrowserAccessibilityAndroid::HasOnlyTextChildren() const {

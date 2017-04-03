@@ -35,12 +35,12 @@
 #include "platform/geometry/IntSize.h"
 #include "platform/graphics/GraphicsTypes.h"
 #include "third_party/khronos/GLES2/gl2.h"
+#include "third_party/skia/include/core/SkImageInfo.h"
 #include "third_party/skia/include/core/SkPaint.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
 #include "wtf/Allocator.h"
 #include "wtf/Noncopyable.h"
 
-class SkBitmap;
 class SkCanvas;
 class SkColorSpace;
 class SkImage;
@@ -79,7 +79,7 @@ class PLATFORM_EXPORT ImageBufferSurface {
   virtual void draw(GraphicsContext&,
                     const FloatRect& destRect,
                     const FloatRect& srcRect,
-                    SkXfermode::Mode);
+                    SkBlendMode);
   virtual void setHasExpensiveOp() {}
   virtual GLuint getBackingTextureHandleForOverwrite() { return 0; }
 
@@ -104,16 +104,21 @@ class PLATFORM_EXPORT ImageBufferSurface {
   OpacityMode getOpacityMode() const { return m_opacityMode; }
   const IntSize& size() const { return m_size; }
   const sk_sp<SkColorSpace> colorSpace() const { return m_colorSpace; }
+  SkColorType colorType() const { return m_colorType; }
   void notifyIsValidChanged(bool isValid) const;
 
  protected:
-  ImageBufferSurface(const IntSize&, OpacityMode, sk_sp<SkColorSpace>);
+  ImageBufferSurface(const IntSize&,
+                     OpacityMode,
+                     sk_sp<SkColorSpace>,
+                     SkColorType);
   void clear();
 
  private:
   OpacityMode m_opacityMode;
   IntSize m_size;
   sk_sp<SkColorSpace> m_colorSpace;
+  SkColorType m_colorType;
 };
 
 }  // namespace blink

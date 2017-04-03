@@ -29,7 +29,6 @@
 
 namespace blink {
 
-class HitTestRequest;
 class HitTestResult;
 class InlineTextBox;
 class LineBoxList;
@@ -171,6 +170,9 @@ class InlineFlowBox : public InlineBox {
       return LayoutUnit();
     return isHorizontal() ? boxModelObject().marginRight()
                           : boxModelObject().marginBottom();
+  }
+  LayoutUnit marginLogicalWidth() const {
+    return marginLogicalLeft() + marginLogicalRight();
   }
   int borderLogicalLeft() const {
     if (!includeLogicalLeftEdge())

@@ -63,7 +63,7 @@ namespace blink {
 VisualViewport::VisualViewport(FrameHost& owner)
     : m_frameHost(&owner),
       m_scale(1),
-      m_topControlsAdjustment(0),
+      m_browserControlsAdjustment(0),
       m_maxPageScale(-1),
       m_trackPinchZoomStatsForPage(false) {
   reset();
@@ -151,21 +151,21 @@ void VisualViewport::mainFrameDidChangeSize() {
 
 FloatSize VisualViewport::visibleSize() const {
   FloatSize scaledSize(m_size);
-  scaledSize.expand(0, m_topControlsAdjustment);
+  scaledSize.expand(0, m_browserControlsAdjustment);
   scaledSize.scale(1 / m_scale);
   return scaledSize;
 }
 
 FloatRect VisualViewport::visibleRect() const {
-  return FloatRect(location(), visibleSize());
+  return FloatRect(FloatPoint(scrollOffset()), visibleSize());
 }
 
 FloatRect VisualViewport::visibleRectInDocument() const {
   if (!mainFrame() || !mainFrame()->view())
     return FloatRect();
 
-  FloatPoint viewLocation = FloatPoint(
-      mainFrame()->view()->getScrollableArea()->scrollPositionDouble());
+  FloatPoint viewLocation =
+      FloatPoint(mainFrame()->view()->getScrollableArea()->scrollOffset());
   return FloatRect(viewLocation, visibleSize());
 }
 
@@ -173,7 +173,7 @@ FloatRect VisualViewport::mainViewToViewportCSSPixels(
     const FloatRect& rect) const {
   // Note, this is in CSS Pixels so we don't apply scale.
   FloatRect rectInViewport = rect;
-  rectInViewport.moveBy(-location());
+  rectInViewport.move(-scrollOffset());
   return rectInViewport;
 }
 
@@ -181,7 +181,7 @@ FloatPoint VisualViewport::viewportCSSPixelsToRootFrame(
     const FloatPoint& point) const {
   // Note, this is in CSS Pixels so we don't apply scale.
   FloatPoint pointInRootFrame = point;
-  pointInRootFrame.moveBy(location());
+  pointInRootFrame.move(scrollOffset());
   return pointInRootFrame;
 }
 
@@ -189,16 +189,12 @@ void VisualViewport::setLocation(const FloatPoint& newLocation) {
   setScaleAndLocation(m_scale, newLocation);
 }
 
-void VisualViewport::move(const FloatPoint& delta) {
-  setLocation(m_offset + delta);
-}
-
-void VisualViewport::move(const FloatSize& delta) {
-  setLocation(m_offset + delta);
+void VisualViewport::move(const ScrollOffset& delta) {
+  setLocation(FloatPoint(m_offset + delta));
 }
 
 void VisualViewport::setScale(float scale) {
-  setScaleAndLocation(scale, m_offset);
+  setScaleAndLocation(scale, FloatPoint(m_offset));
 }
 
 double VisualViewport::scrollLeft() {
@@ -227,8 +223,8 @@ double VisualViewport::clientWidth() {
 
   updateStyleAndLayoutIgnorePendingStylesheets();
 
-  double width = adjustScrollForAbsoluteZoom(visibleSize().width(),
-                                             mainFrame()->pageZoomFactor());
+  float width = adjustScrollForAbsoluteZoom(visibleSize().width(),
+                                            mainFrame()->pageZoomFactor());
   return width - mainFrame()->view()->verticalScrollbarWidth() / m_scale;
 }
 
@@ -238,8 +234,8 @@ double VisualViewport::clientHeight() {
 
   updateStyleAndLayoutIgnorePendingStylesheets();
 
-  double height = adjustScrollForAbsoluteZoom(visibleSize().height(),
-                                              mainFrame()->pageZoomFactor());
+  float height = adjustScrollForAbsoluteZoom(visibleSize().height(),
+                                             mainFrame()->pageZoomFactor());
   return height - mainFrame()->view()->horizontalScrollbarHeight() / m_scale;
 }
 
@@ -269,11 +265,11 @@ bool VisualViewport::didSetScaleOrLocation(float scale,
     enqueueResizeEvent();
   }
 
-  FloatPoint clampedOffset(clampOffsetToBoundaries(location));
+  ScrollOffset clampedOffset = clampScrollOffset(toScrollOffset(location));
 
   if (clampedOffset != m_offset) {
     m_offset = clampedOffset;
-    scrollAnimator().setCurrentPosition(m_offset);
+    scrollAnimator().setCurrentOffset(m_offset);
 
     // SVG runs with accelerated compositing disabled so no
     // ScrollingCoordinator.
@@ -324,7 +320,8 @@ bool VisualViewport::magnifyScaleAroundAnchor(float magnifyDelta,
   FloatSize anchorDeltaUnusedByScroll = anchorDelta;
 
   // Manually bubble any remaining anchor delta up to the visual viewport.
-  FloatPoint newLocation(location() + anchorDeltaUnusedByScroll);
+  FloatPoint newLocation(FloatPoint(scrollOffset()) +
+                         anchorDeltaUnusedByScroll);
   setScaleAndLocation(newPageScale, newLocation);
   return true;
 }
@@ -394,9 +391,10 @@ void VisualViewport::attachToLayerTree(GraphicsLayer* currentLayerTreeRoot) {
         m_innerViewportContainerLayer->platformLayer());
     m_innerViewportScrollLayer->platformLayer()->setUserScrollable(true, true);
     if (mainFrame()) {
-      if (Document* document = mainFrame()->document())
+      if (Document* document = mainFrame()->document()) {
         m_innerViewportScrollLayer->setElementId(createCompositorElementId(
-            DOMNodeIds::idForNode(document), CompositorSubElementId::Scroll));
+            DOMNodeIds::idForNode(document), CompositorSubElementId::Viewport));
+      }
     }
 
     m_rootTransformLayer->addChild(m_innerViewportContainerLayer.get());
@@ -507,16 +505,6 @@ HostWindow* VisualViewport::getHostWindow() const {
   return &frameHost().chromeClient();
 }
 
-DoubleRect VisualViewport::visibleContentRectDouble(
-    IncludeScrollbarsInRect) const {
-  return visibleRect();
-}
-
-IntRect VisualViewport::visibleContentRect(
-    IncludeScrollbarsInRect scrollbarInclusion) const {
-  return enclosingIntRect(visibleContentRectDouble(scrollbarInclusion));
-}
-
 bool VisualViewport::shouldUseIntegerScrollOffset() const {
   LocalFrame* frame = mainFrame();
   if (frame && frame->settings() &&
@@ -526,59 +514,59 @@ bool VisualViewport::shouldUseIntegerScrollOffset() const {
   return ScrollableArea::shouldUseIntegerScrollOffset();
 }
 
-void VisualViewport::setScrollPosition(const DoublePoint& scrollPoint,
-                                       ScrollType scrollType,
-                                       ScrollBehavior scrollBehavior) {
-  // We clamp the position here, because the ScrollAnimator may otherwise be
-  // set to a non-clamped position by ScrollableArea::setScrollPosition,
+void VisualViewport::setScrollOffset(const ScrollOffset& offset,
+                                     ScrollType scrollType,
+                                     ScrollBehavior scrollBehavior) {
+  // We clamp the offset here, because the ScrollAnimator may otherwise be
+  // set to a non-clamped offset by ScrollableArea::setScrollOffset,
   // which may lead to incorrect scrolling behavior in RootFrameViewport down
   // the line.
   // TODO(eseckler): Solve this instead by ensuring that ScrollableArea and
   // ScrollAnimator are kept in sync. This requires that ScrollableArea always
   // stores fractional offsets and that truncation happens elsewhere, see
   // crbug.com/626315.
-  DoublePoint newScrollPosition = clampScrollPosition(scrollPoint);
-  ScrollableArea::setScrollPosition(newScrollPosition, scrollType,
-                                    scrollBehavior);
+  ScrollOffset newScrollOffset = clampScrollOffset(offset);
+  ScrollableArea::setScrollOffset(newScrollOffset, scrollType, scrollBehavior);
 }
 
 int VisualViewport::scrollSize(ScrollbarOrientation orientation) const {
-  IntSize scrollDimensions = maximumScrollPosition() - minimumScrollPosition();
+  IntSize scrollDimensions =
+      maximumScrollOffsetInt() - minimumScrollOffsetInt();
   return (orientation == HorizontalScrollbar) ? scrollDimensions.width()
                                               : scrollDimensions.height();
 }
 
-IntPoint VisualViewport::minimumScrollPosition() const {
-  return IntPoint();
+IntSize VisualViewport::minimumScrollOffsetInt() const {
+  return IntSize();
 }
 
-IntPoint VisualViewport::maximumScrollPosition() const {
-  return flooredIntPoint(maximumScrollPositionDouble());
+IntSize VisualViewport::maximumScrollOffsetInt() const {
+  return flooredIntSize(maximumScrollOffset());
 }
 
-DoublePoint VisualViewport::maximumScrollPositionDouble() const {
+ScrollOffset VisualViewport::maximumScrollOffset() const {
   if (!mainFrame())
-    return IntPoint();
+    return ScrollOffset();
 
   // TODO(bokan): We probably shouldn't be storing the bounds in a float.
   // crbug.com/470718.
   FloatSize frameViewSize(contentsSize());
 
-  if (m_topControlsAdjustment) {
+  if (m_browserControlsAdjustment) {
     float minScale =
         frameHost().pageScaleConstraintsSet().finalConstraints().minimumScale;
-    frameViewSize.expand(0, m_topControlsAdjustment / minScale);
+    frameViewSize.expand(0, m_browserControlsAdjustment / minScale);
   }
 
   frameViewSize.scale(m_scale);
   frameViewSize = FloatSize(flooredIntSize(frameViewSize));
 
   FloatSize viewportSize(m_size);
-  viewportSize.expand(0, ceilf(m_topControlsAdjustment));
+  viewportSize.expand(0, ceilf(m_browserControlsAdjustment));
 
   FloatSize maxPosition = frameViewSize - viewportSize;
   maxPosition.scale(1 / m_scale);
-  return DoublePoint(maxPosition);
+  return ScrollOffset(maxPosition);
 }
 
 IntPoint VisualViewport::clampDocumentOffsetAtScale(const IntPoint& offset,
@@ -591,20 +579,20 @@ IntPoint VisualViewport::clampDocumentOffsetAtScale(const IntPoint& offset,
   FloatSize scaledSize(m_size);
   scaledSize.scale(1 / scale);
 
-  IntPoint visualViewportMax =
-      flooredIntPoint(FloatSize(contentsSize()) - scaledSize);
-  IntPoint max = view->maximumScrollPosition() + visualViewportMax;
-  IntPoint min =
-      view->minimumScrollPosition();  // VisualViewportMin should be (0, 0)
+  IntSize visualViewportMax =
+      flooredIntSize(FloatSize(contentsSize()) - scaledSize);
+  IntSize max = view->maximumScrollOffsetInt() + visualViewportMax;
+  IntSize min =
+      view->minimumScrollOffsetInt();  // VisualViewportMin should be (0, 0)
 
-  IntPoint clamped = offset;
+  IntSize clamped = toIntSize(offset);
   clamped = clamped.shrunkTo(max);
   clamped = clamped.expandedTo(min);
-  return clamped;
+  return IntPoint(clamped);
 }
 
-void VisualViewport::setTopControlsAdjustment(float adjustment) {
-  m_topControlsAdjustment = adjustment;
+void VisualViewport::setBrowserControlsAdjustment(float adjustment) {
+  m_browserControlsAdjustment = adjustment;
 }
 
 IntRect VisualViewport::scrollableAreaBoundingBox() const {
@@ -629,9 +617,24 @@ IntSize VisualViewport::contentsSize() const {
   return frame->view()->visibleContentRect(IncludeScrollbars).size();
 }
 
-void VisualViewport::setScrollOffset(const DoublePoint& offset,
-                                     ScrollType scrollType) {
-  if (didSetScaleOrLocation(m_scale, toFloatPoint(offset)) &&
+IntRect VisualViewport::visibleContentRect(
+    IncludeScrollbarsInRect scrollbarInclusion) const {
+  // TODO(ymalik): We're losing precision here and below. visibleRect should
+  // be replaced with visibleContentRect.
+  IntRect rect = IntRect(visibleRect());
+  if (scrollbarInclusion == ExcludeScrollbars) {
+    RootFrameViewport* rootFrameViewport =
+        mainFrame()->view()->getRootFrameViewport();
+    DCHECK(rootFrameViewport);
+    rect.contract(rootFrameViewport->verticalScrollbarWidth() / m_scale,
+                  rootFrameViewport->horizontalScrollbarHeight() / m_scale);
+  }
+  return rect;
+}
+
+void VisualViewport::updateScrollOffset(const ScrollOffset& position,
+                                        ScrollType scrollType) {
+  if (didSetScaleOrLocation(m_scale, FloatPoint(position)) &&
       scrollType != AnchoringScroll)
     notifyRootFrameViewport();
 }
@@ -673,24 +676,15 @@ Widget* VisualViewport::getWidget() {
   return mainFrame()->view();
 }
 
-FloatPoint VisualViewport::clampOffsetToBoundaries(const FloatPoint& offset) {
-  FloatPoint clampedOffset(offset);
-  clampedOffset =
-      clampedOffset.shrunkTo(FloatPoint(maximumScrollPositionDouble()));
-  clampedOffset =
-      clampedOffset.expandedTo(FloatPoint(minimumScrollPositionDouble()));
-  return clampedOffset;
-}
-
 void VisualViewport::clampToBoundaries() {
-  setLocation(m_offset);
+  setLocation(FloatPoint(m_offset));
 }
 
 FloatRect VisualViewport::viewportToRootFrame(
     const FloatRect& rectInViewport) const {
   FloatRect rectInRootFrame = rectInViewport;
   rectInRootFrame.scale(1 / scale());
-  rectInRootFrame.moveBy(location());
+  rectInRootFrame.move(scrollOffset());
   return rectInRootFrame;
 }
 
@@ -703,7 +697,7 @@ IntRect VisualViewport::viewportToRootFrame(
 FloatRect VisualViewport::rootFrameToViewport(
     const FloatRect& rectInRootFrame) const {
   FloatRect rectInViewport = rectInRootFrame;
-  rectInViewport.moveBy(-location());
+  rectInViewport.move(-scrollOffset());
   rectInViewport.scale(scale());
   return rectInViewport;
 }
@@ -718,14 +712,14 @@ FloatPoint VisualViewport::viewportToRootFrame(
     const FloatPoint& pointInViewport) const {
   FloatPoint pointInRootFrame = pointInViewport;
   pointInRootFrame.scale(1 / scale(), 1 / scale());
-  pointInRootFrame.moveBy(location());
+  pointInRootFrame.move(scrollOffset());
   return pointInRootFrame;
 }
 
 FloatPoint VisualViewport::rootFrameToViewport(
     const FloatPoint& pointInRootFrame) const {
   FloatPoint pointInViewport = pointInRootFrame;
-  pointInViewport.moveBy(-location());
+  pointInViewport.move(-scrollOffset());
   pointInViewport.scale(scale(), scale());
   return pointInViewport;
 }

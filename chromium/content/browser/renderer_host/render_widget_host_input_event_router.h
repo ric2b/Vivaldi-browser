@@ -57,9 +57,11 @@ class CONTENT_EXPORT RenderWidgetHostInputEventRouter
       RenderWidgetHostViewBase* view) override;
 
   void RouteMouseEvent(RenderWidgetHostViewBase* root_view,
-                       blink::WebMouseEvent* event);
+                       blink::WebMouseEvent* event,
+                       const ui::LatencyInfo& latency);
   void RouteMouseWheelEvent(RenderWidgetHostViewBase* root_view,
-                            blink::WebMouseWheelEvent* event);
+                            blink::WebMouseWheelEvent* event,
+                            const ui::LatencyInfo& latency);
   void RouteGestureEvent(RenderWidgetHostViewBase* root_view,
                          blink::WebGestureEvent* event,
                          const ui::LatencyInfo& latency);
@@ -84,7 +86,8 @@ class CONTENT_EXPORT RenderWidgetHostInputEventRouter
   // Returns the RenderWidgetHostImpl inside the |root_view| at |point| where
   // |point| is with respect to |root_view|'s coordinates. If a RWHI is found,
   // the value of |transformed_point| is the coordinate of the point with
-  // respect to the RWHI's coordinates.
+  // respect to the RWHI's coordinates. If |root_view| is nullptr, this method
+  // will return nullptr and will not modify |transformed_point|.
   RenderWidgetHostImpl* GetRenderWidgetHostAtPoint(
       RenderWidgetHostViewBase* root_view,
       const gfx::Point& point,

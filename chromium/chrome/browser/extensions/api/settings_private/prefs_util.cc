@@ -7,14 +7,29 @@
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/chrome_extension_function.h"
+#include "chrome/browser/extensions/settings_api_helpers.h"
+#include "chrome/browser/prefs/session_startup_pref.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/pref_names.h"
+#include "components/autofill/core/common/autofill_pref_names.h"
+#include "components/bookmarks/common/bookmark_pref_names.h"
+#include "components/browsing_data/core/pref_names.h"
+#include "components/content_settings/core/common/pref_names.h"
+#include "components/drive/drive_pref_names.h"
+#include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "components/proxy_config/proxy_config_pref_names.h"
+#include "components/safe_browsing_db/safe_browsing_prefs.h"
+#include "components/search_engines/search_engines_pref_names.h"
+#include "components/spellcheck/browser/pref_names.h"
+#include "components/translate/core/browser/translate_prefs.h"
+#include "components/translate/core/common/translate_pref_names.h"
 #include "components/url_formatter/url_fixer.h"
 #include "extensions/browser/extension_pref_value_map.h"
 #include "extensions/browser/extension_pref_value_map_factory.h"
 #include "extensions/browser/extension_registry.h"
+#include "extensions/browser/extension_system.h"
+#include "extensions/browser/management_policy.h"
 #include "extensions/common/extension.h"
 
 #if defined(OS_CHROMEOS)
@@ -59,260 +74,267 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
   static PrefsUtil::TypedPrefMap* s_whitelist = nullptr;
   if (s_whitelist)
     return *s_whitelist;
-  // TODO(dbeam): why aren't we using kPrefName from pref_names.h?
   s_whitelist = new PrefsUtil::TypedPrefMap();
-  (*s_whitelist)["alternate_error_pages.enabled"] =
+
+  // Miscellaneous
+  (*s_whitelist)[::prefs::kAlternateErrorPagesEnabled] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)["autofill.enabled"] =
+  (*s_whitelist)[autofill::prefs::kAutofillEnabled] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)["bookmark_bar.show_on_all_tabs"] =
+  (*s_whitelist)[bookmarks::prefs::kShowBookmarkBar] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)["browser.custom_chrome_frame"] =
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+  (*s_whitelist)[::prefs::kUseCustomChromeFrame] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)["browser.show_home_button"] =
+#endif
+  (*s_whitelist)[::prefs::kShowHomeButton] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
 
   // Appearance settings.
-  (*s_whitelist)["extensions.theme.id"] =
+  (*s_whitelist)[::prefs::kCurrentThemeID] =
       settings_private::PrefType::PREF_TYPE_STRING;
-  (*s_whitelist)["webkit.webprefs.default_fixed_font_size"] =
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+  (*s_whitelist)[::prefs::kUsesSystemTheme] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
+#endif
+  (*s_whitelist)[::prefs::kHomePage] =
+      settings_private::PrefType::PREF_TYPE_URL;
+  (*s_whitelist)[::prefs::kHomePageIsNewTabPage] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)[::prefs::kWebKitDefaultFixedFontSize] =
       settings_private::PrefType::PREF_TYPE_NUMBER;
-  (*s_whitelist)["webkit.webprefs.default_font_size"] =
+  (*s_whitelist)[::prefs::kWebKitDefaultFontSize] =
       settings_private::PrefType::PREF_TYPE_NUMBER;
-  (*s_whitelist)["webkit.webprefs.minimum_font_size"] =
+  (*s_whitelist)[::prefs::kWebKitMinimumFontSize] =
       settings_private::PrefType::PREF_TYPE_NUMBER;
-  (*s_whitelist)["webkit.webprefs.fonts.fixed.Zyyy"] =
+  (*s_whitelist)[::prefs::kWebKitFixedFontFamily] =
       settings_private::PrefType::PREF_TYPE_STRING;
-  (*s_whitelist)["webkit.webprefs.fonts.sansserif.Zyyy"] =
+  (*s_whitelist)[::prefs::kWebKitSansSerifFontFamily] =
       settings_private::PrefType::PREF_TYPE_STRING;
-  (*s_whitelist)["webkit.webprefs.fonts.serif.Zyyy"] =
+  (*s_whitelist)[::prefs::kWebKitSerifFontFamily] =
       settings_private::PrefType::PREF_TYPE_STRING;
-  (*s_whitelist)["webkit.webprefs.fonts.standard.Zyyy"] =
+  (*s_whitelist)[::prefs::kWebKitStandardFontFamily] =
       settings_private::PrefType::PREF_TYPE_STRING;
-  (*s_whitelist)["intl.charset_default"] =
+  (*s_whitelist)[::prefs::kDefaultCharset] =
       settings_private::PrefType::PREF_TYPE_STRING;
 
+  // On startup.
+  (*s_whitelist)[::prefs::kRestoreOnStartup] =
+      settings_private::PrefType::PREF_TYPE_NUMBER;
+  (*s_whitelist)[::prefs::kURLsToRestoreOnStartup] =
+      settings_private::PrefType::PREF_TYPE_LIST;
+
   // Downloads settings.
-  (*s_whitelist)["download.default_directory"] =
+  (*s_whitelist)[::prefs::kDownloadDefaultDirectory] =
       settings_private::PrefType::PREF_TYPE_STRING;
-  (*s_whitelist)["download.prompt_for_download"] =
+  (*s_whitelist)[::prefs::kPromptForDownload] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)["gdata.disabled"] =
+  (*s_whitelist)[drive::prefs::kDisableDrive] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
 
   // Printing settings.
-  (*s_whitelist)["local_discovery.notifications_enabled"] =
+  (*s_whitelist)[::prefs::kLocalDiscoveryNotificationsEnabled] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
 
-  (*s_whitelist)["enable_do_not_track"] =
+  // Miscellaneous. TODO(stevenjb): categorize.
+  (*s_whitelist)[::prefs::kEnableDoNotTrack] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)["homepage"] = settings_private::PrefType::PREF_TYPE_URL;
-  (*s_whitelist)["homepage_is_newtabpage"] =
-      settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)["intl.app_locale"] =
+  (*s_whitelist)[::prefs::kApplicationLocale] =
       settings_private::PrefType::PREF_TYPE_STRING;
-  (*s_whitelist)["net.network_prediction_options"] =
+  (*s_whitelist)[::prefs::kNetworkPredictionOptions] =
       settings_private::PrefType::PREF_TYPE_NUMBER;
-  (*s_whitelist)["profile.password_manager_enabled"] =
+  (*s_whitelist)[password_manager::prefs::kPasswordManagerSavingEnabled] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)["credentials_enable_autosignin"] =
+  (*s_whitelist)[password_manager::prefs::kCredentialsEnableAutosignin] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)["safebrowsing.enabled"] =
+  (*s_whitelist)[::prefs::kSafeBrowsingEnabled] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)["safebrowsing.extended_reporting_enabled"] =
+  (*s_whitelist)[::prefs::kSafeBrowsingExtendedReportingEnabled] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)["search.suggest_enabled"] =
+  (*s_whitelist)[::prefs::kSearchSuggestEnabled] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)["session.restore_on_startup"] =
-      settings_private::PrefType::PREF_TYPE_NUMBER;
-  (*s_whitelist)["session.startup_urls"] =
+  (*s_whitelist)[spellcheck::prefs::kSpellCheckDictionaries] =
       settings_private::PrefType::PREF_TYPE_LIST;
-  (*s_whitelist)["spellcheck.dictionaries"] =
-      settings_private::PrefType::PREF_TYPE_LIST;
-  (*s_whitelist)["spellcheck.use_spelling_service"] =
+  (*s_whitelist)[spellcheck::prefs::kSpellCheckUseSpellingService] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)["translate.enabled"] =
+  (*s_whitelist)[::prefs::kEnableTranslate] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)["translate_blocked_languages"] =
+  (*s_whitelist)[translate::TranslatePrefs::kPrefTranslateBlockedLanguages] =
       settings_private::PrefType::PREF_TYPE_LIST;
 
   // Site Settings prefs.
-  (*s_whitelist)["profile.block_third_party_cookies"] =
+  (*s_whitelist)[::prefs::kBlockThirdPartyCookies] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)[::prefs::kPluginsAlwaysOpenPdfExternally] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
 
   // Clear browsing data settings.
-  (*s_whitelist)["browser.clear_data.browsing_history"] =
+  (*s_whitelist)[browsing_data::prefs::kDeleteBrowsingHistory] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)["browser.clear_data.download_history"] =
+  (*s_whitelist)[browsing_data::prefs::kDeleteDownloadHistory] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)["browser.clear_data.cache"] =
+  (*s_whitelist)[browsing_data::prefs::kDeleteCache] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)["browser.clear_data.cookies"] =
+  (*s_whitelist)[browsing_data::prefs::kDeleteCookies] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)["browser.clear_data.passwords"] =
+  (*s_whitelist)[browsing_data::prefs::kDeletePasswords] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)["browser.clear_data.form_data"] =
+  (*s_whitelist)[browsing_data::prefs::kDeleteFormData] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)["browser.clear_data.hosted_apps_data"] =
+  (*s_whitelist)[browsing_data::prefs::kDeleteHostedAppsData] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)["browser.clear_data.media_licenses"] =
+  (*s_whitelist)[browsing_data::prefs::kDeleteMediaLicenses] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)["browser.clear_data.time_period"] =
+  (*s_whitelist)[browsing_data::prefs::kDeleteTimePeriod] =
       settings_private::PrefType::PREF_TYPE_NUMBER;
-  (*s_whitelist)["profile.default_content_setting_values.cookies"] =
-      settings_private::PrefType::PREF_TYPE_NUMBER;
-  (*s_whitelist)["profile.default_content_setting_values.fullscreen"] =
-      settings_private::PrefType::PREF_TYPE_NUMBER;
-  (*s_whitelist)["profile.default_content_setting_values.geolocation"] =
-      settings_private::PrefType::PREF_TYPE_NUMBER;
-  (*s_whitelist)["profile.default_content_setting_values.images"] =
-      settings_private::PrefType::PREF_TYPE_NUMBER;
-  (*s_whitelist)["profile.default_content_setting_values.javascript"] =
-      settings_private::PrefType::PREF_TYPE_NUMBER;
-  (*s_whitelist)["profile.default_content_setting_values.media_stream_camera"] =
-      settings_private::PrefType::PREF_TYPE_NUMBER;
-  (*s_whitelist)["profile.default_content_setting_values.media_stream_mic"] =
-      settings_private::PrefType::PREF_TYPE_NUMBER;
-  (*s_whitelist)["profile.default_content_setting_values.notifications"] =
-      settings_private::PrefType::PREF_TYPE_NUMBER;
-  (*s_whitelist)["profile.default_content_setting_values.popups"] =
-      settings_private::PrefType::PREF_TYPE_NUMBER;
-  (*s_whitelist)["profile.content_settings.exceptions.cookies"] =
-      settings_private::PrefType::PREF_TYPE_DICTIONARY;
-  (*s_whitelist)["profile.content_settings.exceptions.fullscreen"] =
-      settings_private::PrefType::PREF_TYPE_DICTIONARY;
-  (*s_whitelist)["profile.content_settings.exceptions.geolocation"] =
-      settings_private::PrefType::PREF_TYPE_DICTIONARY;
-  (*s_whitelist)["profile.content_settings.exceptions.images"] =
-      settings_private::PrefType::PREF_TYPE_DICTIONARY;
-  (*s_whitelist)["profile.content_settings.exceptions.javascript"] =
-      settings_private::PrefType::PREF_TYPE_DICTIONARY;
-  (*s_whitelist)["profile.content_settings.exceptions.media_stream_camera"] =
-      settings_private::PrefType::PREF_TYPE_DICTIONARY;
-  (*s_whitelist)["profile.content_settings.exceptions.media_stream_mic"] =
-      settings_private::PrefType::PREF_TYPE_DICTIONARY;
-  (*s_whitelist)["profile.content_settings.exceptions.notifications"] =
-      settings_private::PrefType::PREF_TYPE_DICTIONARY;
-  (*s_whitelist)["profile.content_settings.exceptions.popups"] =
-      settings_private::PrefType::PREF_TYPE_DICTIONARY;
 
 #if defined(OS_CHROMEOS)
-  (*s_whitelist)["cros.accounts.allowBWSI"] =
+  // Accounts / Users / People.
+  (*s_whitelist)[chromeos::kAccountsPrefAllowGuest] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)["cros.accounts.supervisedUsersEnabled"] =
+  (*s_whitelist)[chromeos::kAccountsPrefSupervisedUsersEnabled] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)["cros.accounts.showUserNamesOnSignIn"] =
+  (*s_whitelist)[chromeos::kAccountsPrefShowUserNamesOnSignIn] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)["cros.accounts.allowGuest"] =
+  (*s_whitelist)[chromeos::kAccountsPrefAllowNewUser] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)["cros.accounts.users"] =
+  (*s_whitelist)[chromeos::kAccountsPrefUsers] =
       settings_private::PrefType::PREF_TYPE_LIST;
-  (*s_whitelist)["settings.accessibility"] =
-      settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)["settings.a11y.autoclick"] =
-      settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)["settings.a11y.autoclick_delay_ms"] =
-      settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)["settings.a11y.caret_highlight"] =
-      settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)["settings.a11y.cursor_highlight"] =
-      settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)["settings.a11y.enable_menu"] =
-      settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)["settings.a11y.focus_highlight"] =
-      settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)["settings.a11y.high_contrast_enabled"] =
-      settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)["settings.a11y.large_cursor_enabled"] =
-      settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)["settings.a11y.screen_magnifier"] =
-      settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)["settings.a11y.select_to_speak"] =
-      settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)["settings.a11y.sticky_keys_enabled"] =
-      settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)["settings.a11y.switch_access"] =
-      settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)["settings.a11y.virtual_keyboard"] =
-      settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)["settings.a11y.mono_audio"] =
-      settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)["settings.clock.use_24hour_clock"] =
-      settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)["settings.language.preferred_languages"] =
-      settings_private::PrefType::PREF_TYPE_STRING;
-  (*s_whitelist)["settings.touchpad.enable_tap_dragging"] =
-      settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)["cros.metrics.reportingEnabled"] =
-      settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)["cros.device.allow_bluetooth"] =
-      settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)["cros.device.attestation_for_content_protection_enabled"] =
-      settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)["settings.internet.wake_on_wifi_darkconnect"] =
-      settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)["settings.enable_screen_lock"] =
+  (*s_whitelist)[::prefs::kEnableAutoScreenLock] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
 
-  // Time zone settings.
-  (*s_whitelist)["settings.resolve_timezone_by_geolocation"] =
+  // Accessibility.
+  (*s_whitelist)[::prefs::kAccessibilitySpokenFeedbackEnabled] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)[::prefs::kAccessibilityAutoclickEnabled] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)[::prefs::kAccessibilityAutoclickDelayMs] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)[::prefs::kAccessibilityCaretHighlightEnabled] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)[::prefs::kAccessibilityCursorHighlightEnabled] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)[::prefs::kShouldAlwaysShowAccessibilityMenu] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)[::prefs::kAccessibilityFocusHighlightEnabled] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)[::prefs::kAccessibilityHighContrastEnabled] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)[::prefs::kAccessibilityLargeCursorEnabled] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)[::prefs::kAccessibilityScreenMagnifierEnabled] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)[::prefs::kAccessibilitySelectToSpeakEnabled] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)[::prefs::kAccessibilityStickyKeysEnabled] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)[::prefs::kAccessibilitySwitchAccessEnabled] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)[::prefs::kAccessibilityVirtualKeyboardEnabled] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)[::prefs::kAccessibilityMonoAudioEnabled] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
+
+  // Misc.
+  (*s_whitelist)[::prefs::kUse24HourClock] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)[::prefs::kLanguagePreferredLanguages] =
+      settings_private::PrefType::PREF_TYPE_STRING;
+  (*s_whitelist)[::prefs::kTapDraggingEnabled] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)[chromeos::kStatsReportingPref] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)[chromeos::kAttestationForContentProtectionEnabled] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
+
+  // Bluetooth & Internet settings.
+  (*s_whitelist)[chromeos::kAllowBluetooth] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)[proxy_config::prefs::kUseSharedProxies] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)[::prefs::kWakeOnWifiDarkConnect] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
+
+  // Timezone settings.
+  (*s_whitelist)[chromeos::kSystemTimezone] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)[::prefs::kResolveTimezoneByGeolocation] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
 
   // Ash settings.
-  (*s_whitelist)["settings.enable_stylus_tools"] =
+  (*s_whitelist)[::prefs::kEnableStylusTools] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)["settings.launch_palette_on_eject_event"] =
+  (*s_whitelist)[::prefs::kLaunchPaletteOnEjectEvent] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
 
   // Input method settings.
-  (*s_whitelist)["settings.language.preload_engines"] =
+  (*s_whitelist)[::prefs::kLanguagePreloadEngines] =
       settings_private::PrefType::PREF_TYPE_STRING;
-  (*s_whitelist)["settings.language.enabled_extension_imes"] =
+  (*s_whitelist)[::prefs::kLanguageEnabledExtensionImes] =
       settings_private::PrefType::PREF_TYPE_STRING;
 
   // Device settings.
-  (*s_whitelist)["settings.touchpad.enable_tap_to_click"] =
+  (*s_whitelist)[::prefs::kTapToClickEnabled] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)["settings.touchpad.natural_scroll"] =
+  (*s_whitelist)[::prefs::kNaturalScroll] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)["settings.touchpad.sensitivity2"] =
+  (*s_whitelist)[::prefs::kTouchpadSensitivity] =
       settings_private::PrefType::PREF_TYPE_NUMBER;
-  (*s_whitelist)["settings.mouse.primary_right"] =
+  (*s_whitelist)[::prefs::kPrimaryMouseButtonRight] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)["settings.mouse.sensitivity2"] =
+  (*s_whitelist)[::prefs::kMouseSensitivity] =
       settings_private::PrefType::PREF_TYPE_NUMBER;
-  (*s_whitelist)["settings.language.xkb_remap_search_key_to"] =
+  (*s_whitelist)[::prefs::kLanguageRemapSearchKeyTo] =
       settings_private::PrefType::PREF_TYPE_NUMBER;
-  (*s_whitelist)["settings.language.xkb_remap_control_key_to"] =
+  (*s_whitelist)[::prefs::kLanguageRemapControlKeyTo] =
       settings_private::PrefType::PREF_TYPE_NUMBER;
-  (*s_whitelist)["settings.language.xkb_remap_alt_key_to"] =
+  (*s_whitelist)[::prefs::kLanguageRemapAltKeyTo] =
       settings_private::PrefType::PREF_TYPE_NUMBER;
-  (*s_whitelist)["settings.language.remap_caps_lock_key_to"] =
+  (*s_whitelist)[::prefs::kLanguageRemapCapsLockKeyTo] =
       settings_private::PrefType::PREF_TYPE_NUMBER;
-  (*s_whitelist)["settings.language.remap_diamond_key_to"] =
+  (*s_whitelist)[::prefs::kLanguageRemapBackspaceKeyTo] =
       settings_private::PrefType::PREF_TYPE_NUMBER;
-  (*s_whitelist)["settings.language.send_function_keys"] =
+  (*s_whitelist)[::prefs::kLanguageRemapEscapeKeyTo] =
+      settings_private::PrefType::PREF_TYPE_NUMBER;
+  (*s_whitelist)[::prefs::kLanguageRemapDiamondKeyTo] =
+      settings_private::PrefType::PREF_TYPE_NUMBER;
+  (*s_whitelist)[::prefs::kLanguageSendFunctionKeys] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)["settings.language.xkb_auto_repeat_enabled_r2"] =
+  (*s_whitelist)[::prefs::kLanguageXkbAutoRepeatEnabled] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)["settings.language.xkb_auto_repeat_delay_r2"] =
+  (*s_whitelist)[::prefs::kLanguageXkbAutoRepeatDelay] =
       settings_private::PrefType::PREF_TYPE_NUMBER;
-  (*s_whitelist)["settings.language.xkb_auto_repeat_interval_r2"] =
+  (*s_whitelist)[::prefs::kLanguageXkbAutoRepeatInterval] =
       settings_private::PrefType::PREF_TYPE_NUMBER;
 #else
-  (*s_whitelist)["intl.accept_languages"] =
+  (*s_whitelist)[::prefs::kAcceptLanguages] =
       settings_private::PrefType::PREF_TYPE_STRING;
 
   // System settings.
-  (*s_whitelist)["background_mode.enabled"] =
+  (*s_whitelist)[::prefs::kBackgroundModeEnabled] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)["hardware_acceleration_mode.enabled"] =
+  (*s_whitelist)[::prefs::kHardwareAccelerationModeEnabled] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)["proxy"] = settings_private::PrefType::PREF_TYPE_DICTIONARY;
+
+  // Import data
+  (*s_whitelist)[::prefs::kImportAutofillFormData] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)[::prefs::kImportBookmarks] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)[::prefs::kImportHistory] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)[::prefs::kImportSavedPasswords] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)[::prefs::kImportSearchEngine] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
 #endif
 
+  // Proxy settings.
+  (*s_whitelist)[proxy_config::prefs::kProxy] =
+      settings_private::PrefType::PREF_TYPE_DICTIONARY;
+
 #if defined(GOOGLE_CHROME_BUILD)
-  (*s_whitelist)["media_router.cloudservices.enabled"] =
+  (*s_whitelist)[::prefs::kMediaRouterEnableCloudServices] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
 #endif  // defined(GOOGLE_CHROME_BUILD)
 
@@ -374,37 +396,42 @@ std::unique_ptr<settings_private::PrefObject> PrefsUtil::GetPref(
 
 #if defined(OS_CHROMEOS)
   if (IsPrefPrimaryUserControlled(name)) {
-    pref_object->policy_source =
-        settings_private::PolicySource::POLICY_SOURCE_PRIMARY_USER;
-    pref_object->policy_enforcement =
-        settings_private::PolicyEnforcement::POLICY_ENFORCEMENT_ENFORCED;
-    pref_object->policy_source_name.reset(new std::string(
-        user_manager::UserManager::Get()->GetPrimaryUser()->email()));
+    pref_object->controlled_by =
+        settings_private::ControlledBy::CONTROLLED_BY_PRIMARY_USER;
+    pref_object->enforcement =
+        settings_private::Enforcement::ENFORCEMENT_ENFORCED;
+    pref_object->controlled_by_name.reset(
+        new std::string(user_manager::UserManager::Get()
+                            ->GetPrimaryUser()
+                            ->GetAccountId()
+                            .GetUserEmail()));
     return pref_object;
   }
+
   if (IsPrefEnterpriseManaged(name)) {
     // Enterprise managed prefs are treated the same as device policy restricted
     // prefs in the UI.
-    pref_object->policy_source =
-        settings_private::PolicySource::POLICY_SOURCE_DEVICE_POLICY;
-    pref_object->policy_enforcement =
-        settings_private::PolicyEnforcement::POLICY_ENFORCEMENT_ENFORCED;
+    pref_object->controlled_by =
+        settings_private::ControlledBy::CONTROLLED_BY_DEVICE_POLICY;
+    pref_object->enforcement =
+        settings_private::Enforcement::ENFORCEMENT_ENFORCED;
     return pref_object;
   }
 #endif
 
   if (pref && pref->IsManaged()) {
-    pref_object->policy_source =
-        settings_private::PolicySource::POLICY_SOURCE_USER_POLICY;
-    pref_object->policy_enforcement =
-        settings_private::PolicyEnforcement::POLICY_ENFORCEMENT_ENFORCED;
+    pref_object->controlled_by =
+        settings_private::ControlledBy::CONTROLLED_BY_USER_POLICY;
+    pref_object->enforcement =
+        settings_private::Enforcement::ENFORCEMENT_ENFORCED;
     return pref_object;
   }
+
   if (pref && pref->IsRecommended()) {
-    pref_object->policy_source =
-        settings_private::PolicySource::POLICY_SOURCE_USER_POLICY;
-    pref_object->policy_enforcement =
-        settings_private::PolicyEnforcement::POLICY_ENFORCEMENT_RECOMMENDED;
+    pref_object->controlled_by =
+        settings_private::ControlledBy::CONTROLLED_BY_USER_POLICY;
+    pref_object->enforcement =
+        settings_private::Enforcement::ENFORCEMENT_RECOMMENDED;
     pref_object->recommended_value.reset(
         pref->GetRecommendedValue()->DeepCopy());
     return pref_object;
@@ -416,37 +443,31 @@ std::unique_ptr<settings_private::PrefObject> PrefsUtil::GetPref(
     // device policy there is no "owner". (In the unlikely case that both
     // situations apply, either badge is potentially relevant, so the order
     // is somewhat arbitrary).
-    pref_object->policy_source =
-        settings_private::PolicySource::POLICY_SOURCE_OWNER;
-    pref_object->policy_enforcement =
-        settings_private::PolicyEnforcement::POLICY_ENFORCEMENT_ENFORCED;
-    pref_object->policy_source_name.reset(new std::string(
+    pref_object->controlled_by =
+        settings_private::ControlledBy::CONTROLLED_BY_OWNER;
+    pref_object->enforcement =
+        settings_private::Enforcement::ENFORCEMENT_ENFORCED;
+    pref_object->controlled_by_name.reset(new std::string(
         user_manager::UserManager::Get()->GetOwnerAccountId().GetUserEmail()));
     return pref_object;
   }
 #endif
 
-  if (pref && pref->IsExtensionControlled()) {
-    std::string extension_id =
-        ExtensionPrefValueMapFactory::GetForBrowserContext(profile_)
-            ->GetExtensionControllingPref(pref->name());
-    const Extension* extension = ExtensionRegistry::Get(profile_)->
-        GetExtensionById(extension_id, ExtensionRegistry::ENABLED);
-    if (extension) {
-      pref_object->policy_source =
-          settings_private::PolicySource::POLICY_SOURCE_EXTENSION;
-      pref_object->policy_enforcement =
-          settings_private::PolicyEnforcement::POLICY_ENFORCEMENT_ENFORCED;
-      pref_object->extension_id.reset(new std::string(extension_id));
-      pref_object->policy_source_name.reset(new std::string(extension->name()));
-      return pref_object;
-    }
-  }
-  if (pref && (!pref->IsUserModifiable() || IsPrefSupervisorControlled(name))) {
-    // TODO(stevenjb): Investigate whether either of these should be badged.
-    pref_object->read_only.reset(new bool(true));
+  const Extension* extension = GetExtensionControllingPref(*pref_object);
+  if (extension) {
+    pref_object->controlled_by =
+        settings_private::ControlledBy::CONTROLLED_BY_EXTENSION;
+    pref_object->enforcement =
+        settings_private::Enforcement::ENFORCEMENT_ENFORCED;
+    pref_object->extension_id.reset(new std::string(extension->id()));
+    pref_object->controlled_by_name.reset(new std::string(extension->name()));
+    bool can_be_disabled = !ExtensionSystem::Get(profile_)->management_policy()
+        ->MustRemainEnabled(extension, nullptr);
+    pref_object->extension_can_be_disabled.reset(new bool(can_be_disabled));
     return pref_object;
   }
+
+  // TODO(dbeam): surface !IsUserModifiable or IsPrefSupervisorControlled?
 
   return pref_object;
 }
@@ -603,7 +624,8 @@ bool PrefsUtil::IsPrefPrimaryUserControlled(const std::string& pref_name) {
     user_manager::UserManager* user_manager = user_manager::UserManager::Get();
     const user_manager::User* user =
         chromeos::ProfileHelper::Get()->GetUserByProfile(profile_);
-    if (user && user->email() != user_manager->GetPrimaryUser()->email())
+    if (user &&
+        user->GetAccountId() != user_manager->GetPrimaryUser()->GetAccountId())
       return true;
   }
   return false;
@@ -666,6 +688,21 @@ bool PrefsUtil::IsCrosSetting(const std::string& pref_name) {
 #else
   return false;
 #endif
+}
+
+const Extension* PrefsUtil::GetExtensionControllingPref(
+    const settings_private::PrefObject& pref_object) {
+  // Look for specific prefs that might be extension controlled. This generally
+  // corresponds with some indiciator that should be shown in the settings UI.
+  if (pref_object.key == ::prefs::kHomePage)
+    return GetExtensionOverridingHomepage(profile_);
+  if (pref_object.key == ::prefs::kURLsToRestoreOnStartup)
+    return GetExtensionOverridingStartupPages(profile_);
+  if (pref_object.key == ::prefs::kDefaultSearchProviderEnabled)
+    return GetExtensionOverridingSearchEngine(profile_);
+  if (pref_object.key == proxy_config::prefs::kProxy)
+    return GetExtensionOverridingProxy(profile_);
+  return nullptr;
 }
 
 }  // namespace extensions

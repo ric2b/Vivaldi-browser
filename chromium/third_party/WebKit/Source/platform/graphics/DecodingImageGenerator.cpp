@@ -142,16 +142,16 @@ SkImageGenerator* DecodingImageGenerator::create(SkData* data) {
   // don't really matter.
   std::unique_ptr<ImageDecoder> decoder = ImageDecoder::create(
       segmentReader, true, ImageDecoder::AlphaPremultiplied,
-      ImageDecoder::GammaAndColorProfileApplied);
+      ImageDecoder::ColorSpaceApplied);
   if (!decoder || !decoder->isSizeAvailable())
     return nullptr;
 
   const IntSize size = decoder->size();
-  const SkImageInfo info =
-      SkImageInfo::MakeN32Premul(size.width(), size.height());
+  const SkImageInfo info = SkImageInfo::MakeN32(
+      size.width(), size.height(), kPremul_SkAlphaType, decoder->colorSpace());
 
   RefPtr<ImageFrameGenerator> frame = ImageFrameGenerator::create(
-      SkISize::Make(size.width(), size.height()), false);
+      SkISize::Make(size.width(), size.height()), decoder->colorSpace(), false);
   if (!frame)
     return nullptr;
 

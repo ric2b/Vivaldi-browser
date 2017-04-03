@@ -28,6 +28,9 @@
 #include "wtf/StdLibExtras.h"
 #include "wtf/text/CharacterNames.h"
 
+#include <unicode/uchar.h>
+#include <unicode/uvernum.h>
+
 namespace blink {
 
 unsigned numGraphemeClusters(const String& string) {
@@ -102,7 +105,7 @@ static const unsigned char asciiLineBreakTable[][(asciiLineBreakTableLastChar - 
     { B(0, 0, 0, 0, 0, 0, 0, 1), B(0, 0, 0, 0, 0, 0, 0, 0), 0, B(0, 0, 0, 1, 0, 0, 0, 0), 0, 0, 0, B(0, 0, 1, 0, 0, 0, 0, 0), 0, 0, 0, B(0, 0, 1, 0, 0, 0, 0, 0) }, // *
     { B(0, 0, 0, 0, 0, 0, 0, 1), B(0, 0, 0, 0, 0, 0, 0, 0), 0, B(0, 0, 0, 1, 0, 0, 0, 0), 0, 0, 0, B(0, 0, 1, 0, 0, 0, 0, 0), 0, 0, 0, B(0, 0, 1, 0, 0, 0, 0, 0) }, // +
     { B(0, 0, 0, 0, 0, 0, 0, 1), B(0, 0, 0, 0, 0, 0, 0, 0), 0, B(0, 0, 0, 1, 0, 0, 0, 0), 0, 0, 0, B(0, 0, 1, 0, 0, 0, 0, 0), 0, 0, 0, B(0, 0, 1, 0, 0, 0, 0, 0) }, // ,
-    { B(0, 1, 1, 1, 1, 1, 1, 1), B(0, 1, 1, 0, 1, 0, 0, 0), 0, B(0, 0, 0, 1, 1, 1, 0, 1), F, F, F, B(1, 1, 1, 1, 0, 1, 1, 1), F, F, F, B(1, 1, 1, 1, 0, 1, 1, 1) }, // - Note: breaking before '0'-'9' is handled hard-coded in shouldBreakAfter().
+    { B(0, 1, 1, 0, 1, 1, 1, 1), B(0, 1, 1, 0, 1, 0, 0, 0), 0, B(0, 0, 0, 1, 1, 1, 0, 1), F, F, F, B(1, 1, 1, 1, 0, 1, 1, 1), F, F, F, B(1, 1, 1, 1, 0, 1, 1, 1) }, // - Note: breaking before '0'-'9' is handled hard-coded in shouldBreakAfter().
     { B(0, 0, 0, 0, 0, 0, 0, 1), B(0, 0, 0, 0, 0, 0, 0, 0), 0, B(0, 0, 0, 1, 0, 0, 0, 0), 0, 0, 0, B(0, 0, 1, 0, 0, 0, 0, 0), 0, 0, 0, B(0, 0, 1, 0, 0, 0, 0, 0) }, // .
     { B(0, 0, 0, 0, 0, 0, 0, 0), B(0, 0, 0, 0, 0, 0, 0, 0), 0, B(0, 0, 0, 0, 0, 0, 0, 0), 0, 0, 0, B(0, 0, 0, 0, 0, 0, 0, 0), 0, 0, 0, B(0, 0, 0, 0, 0, 0, 0, 0) }, // /
     DI,  DI,  DI,  DI,  DI,  DI,  DI,  DI,  DI,  DI, // 0-9
@@ -129,6 +132,11 @@ static const unsigned char asciiLineBreakTable[][(asciiLineBreakTableLastChar - 
 };
 // clang-format on
 
+#if U_ICU_VERSION_MAJOR_NUM >= 58
+#define BA_LB_COUNT (U_LB_COUNT - 3)
+#else
+#define BA_LB_COUNT U_LB_COUNT
+#endif
 // Line breaking table for CSS word-break: break-all. This table differs from
 // asciiLineBreakTable in:
 // - Indices are Line Breaking Classes defined in UAX#14 Unicode Line Breaking
@@ -136,7 +144,7 @@ static const unsigned char asciiLineBreakTable[][(asciiLineBreakTableLastChar - 
 // - 1 indicates additional break opportunities. 0 indicates to fallback to
 //   normal line break, not "prohibit break."
 // clang-format off
-static const unsigned char breakAllLineBreakClassTable[][U_LB_COUNT / 8 + 1] = {
+static const unsigned char breakAllLineBreakClassTable[][BA_LB_COUNT / 8 + 1] = {
     // XX AI AL B2 BA BB BK CB    CL CM CR EX GL HY ID IN    IS LF NS NU OP PO PR QU    SA SG SP SY ZW NL WJ H2    H3 JL JT JV CP CJ HL RI
     { B(0, 0, 0, 0, 0, 0, 0, 0), B(0, 0, 0, 0, 0, 0, 0, 0), B(0, 0, 0, 0, 0, 0, 0, 0), B(0, 0, 0, 0, 0, 0, 0, 0), B(0, 0, 0, 0, 0, 0, 0, 0) }, // XX
     { B(0, 1, 1, 0, 1, 0, 0, 0), B(0, 0, 0, 0, 0, 1, 0, 0), B(0, 0, 0, 1, 1, 0, 1, 0), B(1, 0, 0, 0, 0, 0, 0, 0), B(0, 0, 0, 0, 0, 0, 1, 0) }, // AI
@@ -190,7 +198,7 @@ static_assert(WTF_ARRAY_LENGTH(asciiLineBreakTable) ==
                   asciiLineBreakTableLastChar - asciiLineBreakTableFirstChar +
                       1,
               "asciiLineBreakTable should be consistent");
-static_assert(WTF_ARRAY_LENGTH(breakAllLineBreakClassTable) == U_LB_COUNT,
+static_assert(WTF_ARRAY_LENGTH(breakAllLineBreakClassTable) == BA_LB_COUNT,
               "breakAllLineBreakClassTable should be consistent");
 
 static inline bool shouldBreakAfter(UChar lastCh, UChar ch, UChar nextCh) {
@@ -226,8 +234,8 @@ static inline ULineBreak lineBreakPropertyValue(UChar lastCh, UChar ch) {
 
 static inline bool shouldBreakAfterBreakAll(ULineBreak lastLineBreak,
                                             ULineBreak lineBreak) {
-  if (lineBreak >= 0 && lineBreak < U_LB_COUNT && lastLineBreak >= 0 &&
-      lastLineBreak < U_LB_COUNT) {
+  if (lineBreak >= 0 && lineBreak < BA_LB_COUNT && lastLineBreak >= 0 &&
+      lastLineBreak < BA_LB_COUNT) {
     const unsigned char* tableRow = breakAllLineBreakClassTable[lastLineBreak];
     return tableRow[lineBreak / 8] & (1 << (lineBreak % 8));
   }
@@ -236,55 +244,6 @@ static inline bool shouldBreakAfterBreakAll(ULineBreak lastLineBreak,
 
 inline bool needsLineBreakIterator(UChar ch) {
   return ch > asciiLineBreakTableLastChar && ch != noBreakSpaceCharacter;
-}
-
-// Customization for ICU line breaking behavior. This allows us to reject ICU
-// line break suggestions which would split an emoji sequence.
-// FIXME crbug.com/593260: Remove this customization once ICU implements this
-// natively.
-static bool isBreakValid(const UChar* buf, size_t length, size_t breakPos) {
-  UChar32 codepoint;
-  size_t prevOffset = breakPos;
-  U16_PREV(buf, 0, prevOffset, codepoint);
-  uint32_t nextCodepoint;
-  size_t nextOffset = breakPos;
-  U16_NEXT(buf, nextOffset, length, nextCodepoint);
-
-  // Possible Emoji ZWJ sequence
-  if (codepoint == zeroWidthJoinerCharacter) {
-    if (nextCodepoint == 0x2764       // HEAVY BLACK HEART
-        || nextCodepoint == 0x1F466   // BOY
-        || nextCodepoint == 0x1F467   // GIRL
-        || nextCodepoint == 0x1F468   // MAN
-        || nextCodepoint == 0x1F469   // WOMAN
-        || nextCodepoint == 0x1F48B   // KISS MARK
-        || nextCodepoint == 0x1F5E8)  // LEFT SPEECH BUBBLE
-    {
-      return false;
-    }
-  }
-
-  // Possible emoji modifier sequence
-  // Proposed Rule LB30b from
-  // http://www.unicode.org/L2/L2016/16011r3-break-prop-emoji.pdf
-  // EB x EM
-  if (Character::isModifier(nextCodepoint)) {
-    if (codepoint == variationSelector16Character && prevOffset > 0) {
-      // Skip over emoji variation selector.
-      U16_PREV(buf, 0, prevOffset, codepoint);
-    }
-    if (Character::isEmojiModifierBase(codepoint)) {
-      return false;
-    }
-  }
-  return true;
-}
-
-// Trivial implementation to match possible template paramters in
-// nextBreakablePosition. There are no emoji sequences in 8bit strings, so we
-// accept all break opportunities.
-static bool isBreakValid(const LChar*, size_t, size_t) {
-  return true;
 }
 
 template <typename CharacterType, LineBreakType lineBreakType>
@@ -335,10 +294,8 @@ static inline int nextBreakablePosition(
           }
         }
       }
-      if (i == nextBreak && !isBreakableSpace(lastCh) &&
-          isBreakValid(str, length, i)) {
+      if (i == nextBreak && !isBreakableSpace(lastCh))
         return i;
-      }
     }
 
     lastLastCh = lastCh;
@@ -393,8 +350,7 @@ static inline int nextBreakablePositionKeepAllInternal(
           }
         }
       }
-      if (i == nextBreak && !isBreakableSpace(lastCh) &&
-          isBreakValid(str, length, i))
+      if (i == nextBreak && !isBreakableSpace(lastCh))
         return i;
     }
 

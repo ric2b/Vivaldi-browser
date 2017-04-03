@@ -21,7 +21,7 @@
 #include "net/base/test_completion_callback.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/web/WebInputEvent.h"
+#include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "ui/base/ime/dummy_text_input_client.h"
 
 using testing::_;
@@ -85,8 +85,7 @@ class MockRenderWidgetHost
   int GetRoutingID() const override { return 0; }
   content::RenderWidgetHostView* GetView() const override { return nullptr; }
   bool IsLoading() const override { return false; }
-  void ResizeRectChanged(const gfx::Rect& new_rect) override {}
-  void RestartHangMonitorTimeout() override {}
+  void RestartHangMonitorTimeoutIfNecessary() override {}
   void DisableHangMonitorForTesting() override {}
   void SetIgnoreInputEvents(bool ignore_input_events) override {}
   void WasResized() override {}

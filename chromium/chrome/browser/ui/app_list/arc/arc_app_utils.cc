@@ -12,12 +12,15 @@
 #include "base/json/json_writer.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/values.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
 #include "chrome/browser/ui/ash/launcher/arc_app_deferred_launcher_controller.h"
+#include "chrome/browser/ui/ash/launcher/arc_app_shelf_id.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/session_manager_client.h"
 #include "components/arc/arc_bridge_service.h"
+#include "components/arc/common/intent_helper.mojom.h"
 #include "ui/aura/window.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
@@ -391,6 +394,22 @@ void UninstallPackage(const std::string& package_name) {
   app_instance->UninstallPackage(package_name);
 }
 
+void UninstallArcApp(const std::string& app_id, Profile* profile) {
+  ArcAppListPrefs* arc_prefs = ArcAppListPrefs::Get(profile);
+  DCHECK(arc_prefs);
+  std::unique_ptr<ArcAppListPrefs::AppInfo> app_info =
+      arc_prefs->GetApp(app_id);
+  if (!app_info) {
+    VLOG(2) << "Package being uninstalled does not exist: " << app_id << ".";
+    return;
+  }
+  // For shortcut we just remove the shortcut instead of the package.
+  if (app_info->shortcut)
+    arc_prefs->RemoveApp(app_id);
+  else
+    UninstallPackage(app_info->package_name);
+}
+
 void RemoveCachedIcon(const std::string& icon_resource_id) {
   VLOG(2) << "Removing icon " << icon_resource_id;
 
@@ -429,6 +448,20 @@ bool ShowPackageInfoOnPage(const std::string& package_name,
       package_name, page,
       GetTargetRect(gfx::Size(kNexus7Width, kNexus7Height)));
   return true;
+}
+
+bool IsArcItem(content::BrowserContext* context, const std::string& id) {
+  DCHECK(context);
+
+  // Some unit tests use empty id.
+  if (id.empty())
+    return false;
+
+  const ArcAppListPrefs* const arc_prefs = ArcAppListPrefs::Get(context);
+  if (!arc_prefs)
+    return false;
+
+  return arc_prefs->IsRegistered(ArcAppShelfId::FromString(id).app_id());
 }
 
 }  // namespace arc

@@ -8,6 +8,7 @@
 
 #include <utility>
 
+#include "base/memory/ptr_util.h"
 #include "base/strings/string_util.h"
 #include "build/build_config.h"
 #include "chrome/browser/sessions/session_tab_helper.h"
@@ -19,11 +20,11 @@
 #include "chrome/test/base/browser_with_test_window_test.h"
 #include "components/sessions/content/content_serialized_navigation_builder.h"
 #include "components/sessions/core/serialized_navigation_entry_test_helper.h"
-#include "components/sync/api/attachments/attachment_id.h"
-#include "components/sync/api/sync_error_factory_mock.h"
-#include "components/sync/core/attachments/attachment_service_proxy_for_test.h"
 #include "components/sync/device_info/local_device_info_provider_mock.h"
 #include "components/sync/driver/sync_api_component_factory.h"
+#include "components/sync/model/attachments/attachment_id.h"
+#include "components/sync/model/attachments/attachment_service_proxy_for_test.h"
+#include "components/sync/model/sync_error_factory_mock.h"
 #include "components/sync_sessions/session_sync_test_helper.h"
 #include "components/sync_sessions/sync_sessions_client.h"
 #include "components/sync_sessions/synced_tab_delegate.h"
@@ -186,8 +187,8 @@ class TestSyncProcessorStub : public syncer::SyncChangeProcessor {
 
   void NotifyLocalChangeObservers() {
     const syncer::SyncChange empty_change;
-    FOR_EACH_OBSERVER(syncer::LocalChangeObserver, local_change_observers_,
-                      OnLocalChange(NULL, empty_change));
+    for (syncer::LocalChangeObserver& observer : local_change_observers_)
+      observer.OnLocalChange(nullptr, empty_change);
   }
 
   void FailProcessSyncChangesWith(const syncer::SyncError& error) {
@@ -307,38 +308,33 @@ class SyncSessionsClientShim : public SyncSessionsClient {
 class SessionsSyncManagerTest
     : public BrowserWithTestWindowTest {
  protected:
-  SessionsSyncManagerTest()
-      : test_processor_(NULL) {
-    local_device_.reset(new LocalDeviceInfoProviderMock(
-        "cache_guid",
-        "Wayne Gretzky's Hacking Box",
-        "Chromium 10k",
-        "Chrome 10k",
-        sync_pb::SyncEnums_DeviceType_TYPE_LINUX,
-        "device_id"));
+  SessionsSyncManagerTest() : test_processor_(nullptr) {
+    local_device_ = base::MakeUnique<LocalDeviceInfoProviderMock>(
+        "cache_guid", "Wayne Gretzky's Hacking Box", "Chromium 10k",
+        "Chrome 10k", sync_pb::SyncEnums_DeviceType_TYPE_LINUX, "device_id");
   }
 
   void SetUp() override {
     BrowserWithTestWindowTest::SetUp();
-    sync_client_.reset(new browser_sync::ChromeSyncClient(profile()));
-    sessions_client_shim_.reset(
-        new SyncSessionsClientShim(sync_client_->GetSyncSessionsClient()));
+    sync_client_ = base::MakeUnique<browser_sync::ChromeSyncClient>(profile());
+    sessions_client_shim_ = base::MakeUnique<SyncSessionsClientShim>(
+        sync_client_->GetSyncSessionsClient());
     NotificationServiceSessionsRouter* router(
         new NotificationServiceSessionsRouter(
             profile(), GetSyncSessionsClient(),
             syncer::SyncableService::StartSyncFlare()));
-    sync_prefs_.reset(new syncer::SyncPrefs(profile()->GetPrefs()));
-    manager_.reset(new SessionsSyncManager(
+    sync_prefs_ = base::MakeUnique<syncer::SyncPrefs>(profile()->GetPrefs());
+    manager_ = base::MakeUnique<SessionsSyncManager>(
         GetSyncSessionsClient(), sync_prefs_.get(), local_device_.get(),
         std::unique_ptr<LocalSessionEventRouter>(router),
         base::Bind(&SessionNotificationObserver::NotifyOfUpdate,
                    base::Unretained(&observer_)),
         base::Bind(&SessionNotificationObserver::NotifyOfRefresh,
-                   base::Unretained(&observer_))));
+                   base::Unretained(&observer_)));
   }
 
   void TearDown() override {
-    test_processor_ = NULL;
+    test_processor_ = nullptr;
     helper()->Reset();
     sync_prefs_.reset();
     manager_.reset();
@@ -366,7 +362,7 @@ class SessionsSyncManagerTest
   }
 
   void InitWithNoSyncData() {
-    InitWithSyncDataTakeOutput(syncer::SyncDataList(), NULL);
+    InitWithSyncDataTakeOutput(syncer::SyncDataList(), nullptr);
   }
 
   void TriggerProcessSyncChangesError() {
@@ -821,13 +817,13 @@ TEST_F(SessionsSyncManagerTest, SetVariationIds) {
   const variations::VariationID kVariationId2 = 3300300;
   const variations::VariationID kVariationId3 = 3300400;
 
-  base::FieldTrialList field_trial_list(NULL);
+  base::FieldTrialList field_trial_list(nullptr);
   CreateAndActivateFieldTrial("trial name 1", "group name", kVariationId1,
                               variations::CHROME_SYNC_SERVICE);
   CreateAndActivateFieldTrial("trial name 2", "group name", kVariationId2,
                               variations::CHROME_SYNC_SERVICE);
   CreateAndActivateFieldTrial("trial name 3", "group name", kVariationId3,
-                              variations::GOOGLE_UPDATE_SERVICE);
+                              variations::GOOGLE_WEB_PROPERTIES);
 
   sessions::SessionTab session_tab;
   manager()->SetVariationIds(&session_tab);

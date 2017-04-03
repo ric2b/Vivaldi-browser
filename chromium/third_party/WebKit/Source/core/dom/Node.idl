@@ -24,7 +24,6 @@
     DependentLifetime,
 ] interface Node : EventTarget {
     const unsigned short ELEMENT_NODE = 1;
-    // FIXME: Attr should not inherit from Node. crbug.com/305105
     const unsigned short ATTRIBUTE_NODE = 2;
     const unsigned short TEXT_NODE = 3;
     const unsigned short CDATA_SECTION_NODE = 4;
@@ -55,8 +54,7 @@
 
     [CEReactions, CustomElementCallbacks] attribute DOMString? nodeValue;
 
-    // FIXME: textContent should not have [TreatUndefinedAs=NullString].
-    [TreatUndefinedAs=NullString, CEReactions, CustomElementCallbacks] attribute DOMString? textContent;
+    [CEReactions, CustomElementCallbacks] attribute DOMString? textContent;
     [CEReactions, CustomElementCallbacks] void normalize();
 
     [NewObject, DoNotTestNewObject, CEReactions, CustomElementCallbacks] Node cloneNode(optional boolean deep = false);

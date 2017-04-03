@@ -33,8 +33,8 @@
 
 #include "core/CoreExport.h"
 #include "core/events/Event.h"
-#include "platform/geometry/FloatPoint.h"
 #include "platform/geometry/FloatRect.h"
+#include "platform/geometry/FloatSize.h"
 #include "platform/geometry/IntSize.h"
 #include "platform/graphics/GraphicsLayerClient.h"
 #include "platform/scroll/ScrollableArea.h"
@@ -94,9 +94,7 @@ class CORE_EXPORT VisualViewport final
   // The coordinates are in partial CSS pixels.
   void setLocation(const FloatPoint&);
   // FIXME: This should be called moveBy
-  void move(const FloatPoint&);
-  void move(const FloatSize&);
-  FloatPoint location() const { return m_offset; }
+  void move(const ScrollOffset&);
 
   // Sets the size of the inner viewport when unscaled in CSS pixels.
   void setSize(const IntSize&);
@@ -129,7 +127,6 @@ class CORE_EXPORT VisualViewport final
   FloatRect visibleRect() const;
 
   // The viewport rect relative to the document origin, in partial CSS pixels.
-  // FIXME: This should be a DoubleRect since scroll offsets are now doubles.
   FloatRect visibleRectInDocument() const;
 
   // Convert the given rect in the main FrameView's coordinates into a rect
@@ -143,13 +140,13 @@ class CORE_EXPORT VisualViewport final
   IntPoint clampDocumentOffsetAtScale(const IntPoint& offset, float scale);
 
   // FIXME: This is kind of a hack. Ideally, we would just resize the
-  // viewports to account for top controls. However, FrameView includes much
+  // viewports to account for browser controls. However, FrameView includes much
   // more than just scrolling so we can't simply resize it without incurring
   // all sorts of side-effects. Until we can seperate out the scrollability
   // aspect from FrameView, we use this method to let VisualViewport make the
   // necessary adjustments so that we don't incorrectly clamp scroll offsets
   // coming from the compositor. crbug.com/422328
-  void setTopControlsAdjustment(float);
+  void setBrowserControlsAdjustment(float);
 
   // Adjust the viewport's offset so that it remains bounded by the outer
   // viepwort.
@@ -167,14 +164,10 @@ class CORE_EXPORT VisualViewport final
 
   // ScrollableArea implementation
   HostWindow* getHostWindow() const override;
-  DoubleRect visibleContentRectDouble(
-      IncludeScrollbarsInRect = ExcludeScrollbars) const override;
-  IntRect visibleContentRect(
-      IncludeScrollbarsInRect = ExcludeScrollbars) const override;
   bool shouldUseIntegerScrollOffset() const override;
-  void setScrollPosition(const DoublePoint&,
-                         ScrollType,
-                         ScrollBehavior = ScrollBehaviorInstant) override;
+  void setScrollOffset(const ScrollOffset&,
+                       ScrollType,
+                       ScrollBehavior = ScrollBehaviorInstant) override;
   LayoutRect visualRectForScrollbarParts() const override {
     ASSERT_NOT_REACHED();
     return LayoutRect();
@@ -183,11 +176,11 @@ class CORE_EXPORT VisualViewport final
   int scrollSize(ScrollbarOrientation) const override;
   bool isScrollCornerVisible() const override { return false; }
   IntRect scrollCornerRect() const override { return IntRect(); }
-  IntPoint scrollPosition() const override { return flooredIntPoint(m_offset); }
-  DoublePoint scrollPositionDouble() const override { return m_offset; }
-  IntPoint minimumScrollPosition() const override;
-  IntPoint maximumScrollPosition() const override;
-  DoublePoint maximumScrollPositionDouble() const override;
+  IntSize scrollOffsetInt() const override { return flooredIntSize(m_offset); }
+  ScrollOffset scrollOffset() const override { return m_offset; }
+  IntSize minimumScrollOffsetInt() const override;
+  IntSize maximumScrollOffsetInt() const override;
+  ScrollOffset maximumScrollOffset() const override;
   int visibleHeight() const override { return visibleRect().height(); }
   int visibleWidth() const override { return visibleRect().width(); }
   IntSize contentsSize() const override;
@@ -197,13 +190,15 @@ class CORE_EXPORT VisualViewport final
   bool shouldPlaceVerticalScrollbarOnLeft() const override { return false; }
   bool scrollAnimatorEnabled() const override;
   void scrollControlWasSetNeedsPaintInvalidation() override {}
-  void setScrollOffset(const DoublePoint&, ScrollType) override;
+  void updateScrollOffset(const ScrollOffset&, ScrollType) override;
   GraphicsLayer* layerForContainer() const override;
   GraphicsLayer* layerForScrolling() const override;
   GraphicsLayer* layerForHorizontalScrollbar() const override;
   GraphicsLayer* layerForVerticalScrollbar() const override;
   Widget* getWidget() override;
   CompositorAnimationTimeline* compositorAnimationTimeline() const override;
+  IntRect visibleContentRect(
+      IncludeScrollbarsInRect = ExcludeScrollbars) const override;
 
   // Visual Viewport API implementation.
   double scrollLeft();
@@ -246,7 +241,6 @@ class CORE_EXPORT VisualViewport final
   String debugName(const GraphicsLayer*) const override;
 
   void setupScrollbar(WebScrollbar::Orientation);
-  FloatPoint clampOffsetToBoundaries(const FloatPoint&);
 
   void notifyRootFrameViewport() const;
 
@@ -269,10 +263,10 @@ class CORE_EXPORT VisualViewport final
   std::unique_ptr<WebScrollbarLayer> m_webOverlayScrollbarVertical;
 
   // Offset of the visual viewport from the main frame's origin, in CSS pixels.
-  FloatPoint m_offset;
+  ScrollOffset m_offset;
   float m_scale;
   IntSize m_size;
-  float m_topControlsAdjustment;
+  float m_browserControlsAdjustment;
   float m_maxPageScale;
   bool m_trackPinchZoomStatsForPage;
 };

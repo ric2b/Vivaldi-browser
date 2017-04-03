@@ -25,7 +25,7 @@ class HTMLCanvasElementModuleTest : public ::testing::Test {
         DummyPageHolder::create(IntSize(800, 600), &pageClients);
     Persistent<Document> m_document = &m_dummyPageHolder->document();
     m_document->documentElement()->setInnerHTML(
-        "<body><canvas id='c'></canvas></body>", ASSERT_NO_EXCEPTION);
+        "<body><canvas id='c'></canvas></body>");
     m_document->view()->updateAllLifecyclePhases();
     m_canvasElement = toHTMLCanvasElement(m_document->getElementById("c"));
   }
@@ -49,7 +49,7 @@ OffscreenCanvas* HTMLCanvasElementModuleTest::transferControlToOffscreen(
 TEST_F(HTMLCanvasElementModuleTest, TransferControlToOffscreen) {
   NonThrowableExceptionState exceptionState;
   OffscreenCanvas* offscreenCanvas = transferControlToOffscreen(exceptionState);
-  int canvasId = offscreenCanvas->getAssociatedCanvasId();
+  int canvasId = offscreenCanvas->placeholderCanvasId();
   EXPECT_EQ(canvasId, DOMNodeIds::idForNode(&(canvasElement())));
 }
 

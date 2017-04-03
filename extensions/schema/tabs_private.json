@@ -157,7 +157,8 @@
           {
             "$ref": "DragImage",
             "name": "dragImage",
-            "optional": true
+            "optional": true,
+            "description": "The drag image in png or jpg format, base64 encoded. NOTE: Data URLs are not supported."
           },
           {
             "name": "isFromTouch",

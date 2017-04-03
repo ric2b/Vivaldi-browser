@@ -7,15 +7,15 @@ package org.chromium.device.gamepad;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 
-import org.chromium.base.test.util.Feature;
-import org.chromium.testing.local.LocalRobolectricTestRunner;
-
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.robolectric.annotation.Config;
+
+import org.chromium.base.test.util.Feature;
+import org.chromium.testing.local.LocalRobolectricTestRunner;
 
 import java.util.Arrays;
 import java.util.BitSet;
@@ -275,6 +275,10 @@ public class GamepadMappingsTest {
     public void expectNoShoulderButtons() {
         mUnmappedButtons.set(CanonicalButtonIndex.LEFT_SHOULDER);
         mUnmappedButtons.set(CanonicalButtonIndex.RIGHT_SHOULDER);
+    }
+
+    public void expectNoMetaButton() {
+        mUnmappedButtons.set(CanonicalButtonIndex.META);
     }
 
     public void assertMapping() {

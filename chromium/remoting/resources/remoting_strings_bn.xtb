@@ -27,13 +27,15 @@
 <translation id="1654128982815600832">এই কম্পিউটারটিতে দূরবর্তী সংযোগ সক্ষম করা হচ্ছে...</translation>
 <translation id="170207782578677537">এই কম্পিউটারটিতে নথিভুক্ত করতে ব্যর্থ হয়েছে৷</translation>
 <translation id="1704090719919187045">Chromoting হোস্ট পছন্দগুলি</translation>
+<translation id="1730409684442507495">• ডেস্কটপ চিত্রের উন্নত গুণমান, উন্নত রেসপন্সিভ বৈশিষ্ট্য এবং ব্যাটারি খরচ।
+• ক্লিক করা ও টেনে আনার ক্রিয়াকলাপের উন্নত রেসপন্সিভ বৈশিষ্ট্য।
+• কিছু UI অ্যানিমেশান প্রভাবের উন্নতি হয়েছে।</translation>
 <translation id="174018511426417793">আপনার কাছ নথিভুক্ত করা কোনো কম্পিউটার নেই৷ একটি কম্পিউটারে দূরবর্তী সংযোগগুলি সক্ষম করতে সেখানে Chrome দূরবর্তী ডেস্কটপ ইনস্টল করুন এবং “<ph name="BUTTON_NAME" />” এ ক্লিক করুন৷</translation>
 <translation id="1742469581923031760">সংযুক্ত হচ্ছে...</translation>
 <translation id="1770394049404108959">আমি অ্যাপ্লিকেশানটি খুলতে পারছি না।</translation>
 <translation id="177096447311351977">এই ক্লায়েন্টের জন্য চ্যানেল IP: <ph name="CLIENT_GAIA_IDENTIFIER" /> ip='<ph name="CLIENT_IP_ADDRESS_AND_PORT" />' host_ip='<ph name="HOST_IP_ADDRESS_AND_PORT" />' channel='<ph name="CHANNEL_TYPE" />' connection='<ph name="CONNECTION_TYPE" />'.</translation>
 <translation id="1779766957982586368">উইন্ডো বন্ধ করুন</translation>
 <translation id="1841799852846221389">এই কম্পিউটারটিতে দূরবর্তী সংযোগ অক্ষম করা হচ্ছে...</translation>
-<translation id="189172778771606813">নেভিগেশান ড্রয়ার বন্ধ করুন</translation>
 <translation id="1897488610212723051">মুছুন</translation>
 <translation id="195619862187186579">কীবোর্ড লেআউট</translation>
 <translation id="1996161829609978754">Chrome, Chromoting হোস্ট ইনস্টলার ডাউনলোড করছে৷ একবার ডাউনলোড সম্পন্ন হয়ে গেলে, অব্যাহত রাখার আগে দয়া করে ইনস্টলার চালনা করুন৷</translation>
@@ -74,7 +76,6 @@
 <translation id="2699970397166997657">Chromoting</translation>
 <translation id="2747641796667576127">সফ্টওয়্যার আপডেটগুলি সাধারণত স্বয়ংক্রিয়ভাবে হয়ে থাকে, কিন্তু কিছু বিরল ক্ষেত্রে ব্যর্থ হতে পারে৷ সফ্টওয়্যারটি আপডেট হতে কয়েক মিনিটের বেশি লাগার কথা নয় এবং আপনার কম্পিউটারের সাথে দূরবর্তী সংযোগে থাকাকালীনও করা যেতে পারে৷</translation>
 <translation id="2841013758207633010">সময়</translation>
-<translation id="2851674870054673688">তাদের দ্বারা কোডটি লেখা হয়ে যাবার পর আপনার শেয়ার করার অধিবেশনটি শুরু হবে৷</translation>
 <translation id="2851754573186462851">Chromium অ্যাপ্লিকেশান স্ট্রীমিং</translation>
 <translation id="2855866366045322178">অফলাইন</translation>
 <translation id="2888969873284818612">নেটওয়ার্ক সংক্রান্ত ত্রুটি ঘটেছে। আপনার ডিভাইস আবার অন-লাইনে এলে আমরা অ্যাপ্লিকেশানটি আবার চালু করব।</translation>
@@ -114,6 +115,7 @@
 Host</translation>
 <translation id="3870154837782082782">Google Inc.</translation>
 <translation id="3884839335308961732">Chrome দূরবর্তী ডেস্কটপের মাধ্যমে অ্যাক্সেসের মঞ্জুরি দিতে দয়া করে নিচে আপনার অ্যাকাউন্ট এবং পিন নিশ্চিত করুন৷</translation>
+<translation id="3897092660631435901">মেনু</translation>
 <translation id="3905196214175737742">অবৈধ হোস্ট মালিক ডোমেইন।</translation>
 <translation id="3908017899227008678">মানানসই করতে সঙ্কুচিত করুন</translation>
 <translation id="3931191050278863510">হোস্ট থেমে গেছে।</translation>
@@ -126,6 +128,7 @@ Host</translation>
 <translation id="409800995205263688">দ্রষ্টব্য: নীতি সেটিং কেবলমাত্র আপনার নেটওয়ার্কে থাকা কম্পিউটারের মধ্যে সংযোগের অনুমতি দেয়৷</translation>
 <translation id="4155497795971509630">প্রয়োজনীয় কিছু উপাদান অনুপস্থিত আছে৷ আপনি অতিসাম্প্রতিক সংস্করণটি ইনস্টল করেছেন কিনা দয়া করে তা নিশ্চিত করুন এবং আবার চেষ্টা করুন৷</translation>
 <translation id="4156740505453712750">এই কম্পিউটারে অ্যাক্সেস রক্ষা করতে, দয়া করে <ph name="BOLD_START" />অন্তত ছয় সংখ্যার<ph name="BOLD_END" /> একটি পিন বেছে নিন৷ অন্য কোনো অবস্থান থেকে সংযুক্ত হতে এই পিন এর প্রয়োজন হবে৷</translation>
+<translation id="4156741816461781891"><ph name="EMAIL_ADDRESS" /> হিসেবে প্রবেশ করেছেন।</translation>
 <translation id="4176825807642096119">অ্যাক্সেস কোড</translation>
 <translation id="4207623512727273241">অব্যাহত রাখার আগে ইনস্টলার চালনা করুন৷</translation>
 <translation id="4227991223508142681">হোস্ট প্রভিশনিং ইউটিলিটি</translation>
@@ -166,7 +169,6 @@ Host</translation>
 <translation id="5070121137485264635">একটি তৃতীয়-পক্ষ ওয়েবসাইট প্রমাণীকরণ করতে রিমোট হোস্টটির আপনাকে প্রয়োজন। অবিরত রাখতে, এই ওয়েবসাইট অ্যাক্সেস করতে আপনাকে অবশ্যই Chrome দূরবর্তী ডেস্কটপ অতিরিক্ত অনুমতির মঞ্জুরি দিতে হবে:</translation>
 <translation id="507204348399810022">আপনি কি নিশ্চিত যে আপনি <ph name="HOSTNAME" /> এর সাথে দূরবর্তী সংযোগ অক্ষম করতে চান?</translation>
 <translation id="5156271271724754543">উভয় বক্সে দয়া করে একই পিন লিখুন৷</translation>
-<translation id="5168917394043976756">নেভিগেশান ড্রয়ার খুলুন</translation>
 <translation id="5170982930780719864">অবৈধ হোস্ট আইডি।</translation>
 <translation id="518094545883702183">আপনার রিপোর্ট করা সমস্যার নির্ণয়ের জন্য এই তথ্য ব্যবহার করা হয়, যা কেবল আপনার রিপোর্ট অনুসন্ধান চালান এমন একজনের কাছে উপলব্ধ, এবং 30 দিনের বেশী রাখা হয় না।</translation>
 <translation id="5222676887888702881">প্রস্থান করুন</translation>
@@ -209,10 +211,6 @@ Host</translation>
 <translation id="6304318647555713317">ক্লায়েন্ট</translation>
 <translation id="6381670701864002291">অন্য কোনো সমস্যা।</translation>
 <translation id="6398765197997659313">পূর্ণ স্ক্রীণ বন্ধ করুন</translation>
-<translation id="6408143143164565232">• Windows বা Linux  কম্পিউটারে অডিও শুনুন।
-• কম্পিউটার নামের উপর দীর্ঘক্ষণ টিপে অবাঞ্ছিত সংযোগগুলি সরান।
-• আরো স্বচ্ছন্দে পিঞ্চ-করে-জুম এবং দুই-আঙুল দিয়ে স্ক্রোল করার সুবিধা।
-• সহায়তা ও প্রতিক্রিয়ার নতুন স্ক্রীন।</translation>
 <translation id="6441316101718669559">এই প্ল্যাটফর্মে ডেস্কটপ ইন্টিগ্রেশন সমর্থিত নয়। আপনি তাও এই অ্যাপ্লিকেশান ব্যবহার করতে পারেন, কিন্তু ব্যবহারকারী অভিজ্ঞতার মান নেমে যাবে।</translation>
 <translation id="652218476070540101">এই কম্পিউটারের পিন আপডেট হচ্ছে...</translation>
 <translation id="6527303717912515753">শেয়ার করুন</translation>
@@ -225,6 +223,7 @@ Host</translation>
 <translation id="6640610550128933069"><ph name="DATE" /> এ শেষ অনলাইন</translation>
 <translation id="6668065415969892472">আপনার পিন আপডেট হয়েছে৷</translation>
 <translation id="6681800064886881394">কপিরাইট 2013 Google Inc. সর্বস্বত্ব সংরক্ষিত৷</translation>
+<translation id="6705482892455291412">কোডটি লেখা হলে, সংযোগটি গ্রহণের জন্য আপনাকে জিজ্ঞেস করা হবে এবং সেশনটি শেয়ার করা শুরু করবে।</translation>
 <translation id="6746493157771801606">ইতিহাস সাফ করুন</translation>
 <translation id="6748108480210050150">থেকে</translation>
 <translation id="677755392401385740">এই ব্যবহারকারীর জন্য হোস্ট শুরু হয়েছে: <ph name="HOST_USERNAME" />৷</translation>
@@ -301,6 +300,7 @@ Host</translation>
 <translation id="9188433529406846933">অনুমতি দিন</translation>
 <translation id="9213184081240281106">অবৈধ হোস্ট কনফিগারেশন।</translation>
 <translation id="951991426597076286">প্রত্যাখ্যান</translation>
+<translation id="962733587145768554">প্রক্রিয়াটি সম্পূর্ণ করার জন্য দয়া করে সংযোগ ডায়ালগ বাক্সে '<ph name="SHARE" />' নির্বাচন করুন।</translation>
 <translation id="979100198331752041"><ph name="HOSTNAME" />এ Chrome দূরবর্তী ডেস্কটপ পুরানো এবং আপডেটের প্রয়োজন৷</translation>
 <translation id="985602178874221306">Chromium রচয়িতা</translation>
 <translation id="992215271654996353"><ph name="HOSTNAME" /> (শেষ অনলাইনে ছিলেন <ph name="DATE_OR_TIME" />)</translation>

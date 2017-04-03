@@ -280,7 +280,7 @@ bool PepperGraphics2DHost::ReadImageData(PP_Resource image,
 
     // We want to replace the contents of the bitmap rather than blend.
     SkPaint paint;
-    paint.setXfermodeMode(SkXfermode::kSrc_Mode);
+    paint.setBlendMode(SkBlendMode::kSrc);
     dest_canvas->drawBitmapRect(
         image_data_->GetMappedBitmap(), src_irect, dest_rect, &paint);
   }
@@ -349,7 +349,7 @@ void PepperGraphics2DHost::Paint(blink::WebCanvas* canvas,
     canvas->clipRect(image_data_rect, SkRegion::kDifference_Op);
 
     SkPaint paint;
-    paint.setXfermodeMode(SkXfermode::kSrc_Mode);
+    paint.setBlendMode(SkBlendMode::kSrc);
     paint.setColor(SK_ColorWHITE);
     canvas->drawRect(sk_invalidate_rect, paint);
   }
@@ -358,7 +358,7 @@ void PepperGraphics2DHost::Paint(blink::WebCanvas* canvas,
   if (is_always_opaque_) {
     // When we know the device is opaque, we can disable blending for slightly
     // more optimized painting.
-    paint.setXfermodeMode(SkXfermode::kSrc_Mode);
+    paint.setBlendMode(SkBlendMode::kSrc);
   }
 
   SkPoint pixel_origin(PointToSkPoint(plugin_rect.origin()));
@@ -610,8 +610,7 @@ int32_t PepperGraphics2DHost::Flush(PP_Resource* old_image_data) {
     gfx::Rect op_rect;
     switch (operation.type) {
       case QueuedOperation::TRANSFORM:
-        ExecuteTransform(operation.scale, operation.translation);
-        no_update_visible = false;
+        ExecuteTransform(operation.scale, operation.translation, &op_rect);
         break;
       case QueuedOperation::PAINT:
         ExecutePaintImageData(operation.paint_image.get(),
@@ -703,8 +702,10 @@ int32_t PepperGraphics2DHost::Flush(PP_Resource* old_image_data) {
 }
 
 void PepperGraphics2DHost::ExecuteTransform(const float& scale,
-                                            const gfx::PointF& translate) {
+                                            const gfx::PointF& translate,
+                                            gfx::Rect* invalidated_rect) {
   bound_instance_->SetGraphics2DTransform(scale, translate);
+  *invalidated_rect = PP_ToGfxRect(bound_instance_->view_data().clip_rect);
 }
 
 void PepperGraphics2DHost::ExecutePaintImageData(PPB_ImageData_Impl* image,
@@ -738,7 +739,7 @@ void PepperGraphics2DHost::ExecutePaintImageData(PPB_ImageData_Impl* image,
 
     // We want to replace the contents of the bitmap rather than blend.
     SkPaint paint;
-    paint.setXfermodeMode(SkXfermode::kSrc_Mode);
+    paint.setBlendMode(SkBlendMode::kSrc);
     backing_canvas->drawBitmapRect(
         image->GetMappedBitmap(), src_irect, dest_rect, &paint);
   }

@@ -7,6 +7,7 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "chrome/browser/android/vr_shell/ui_interface.h"
 #include "content/public/browser/web_ui_message_handler.h"
 
 namespace base {
@@ -17,14 +18,18 @@ namespace vr_shell {
 class VrShell;
 }
 
-class VrShellUIMessageHandler : public content::WebUIMessageHandler {
+class VrShellUIMessageHandler : public content::WebUIMessageHandler,
+                                public vr_shell::UiCommandHandler {
  public:
   VrShellUIMessageHandler();
   ~VrShellUIMessageHandler() override;
 
+  void SendCommandToUi(const base::Value& value) override;
+
  private:
   // content::WebUIMessageHandler:
   void RegisterMessages() override;
+  void OnJavascriptAllowed() override;
 
   void HandleDomLoaded(const base::ListValue* args);
   void HandleUpdateScene(const base::ListValue* args);

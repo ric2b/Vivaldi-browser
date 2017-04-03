@@ -11,6 +11,7 @@
 #include "components/subresource_filter/content/renderer/document_subresource_filter.h"
 #include "components/subresource_filter/content/renderer/ruleset_dealer.h"
 #include "components/subresource_filter/core/common/memory_mapped_ruleset.h"
+#include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/renderer/render_frame.h"
 #include "ipc/ipc_message.h"
 #include "third_party/WebKit/public/web/WebDataSource.h"
@@ -57,9 +58,11 @@ void SubresourceFilterAgent::
       render_frame()->GetRoutingID()));
 }
 
-void SubresourceFilterAgent::ActivateForProvisionalLoad(
-    ActivationState activation_state) {
+void SubresourceFilterAgent::OnActivateForProvisionalLoad(
+    ActivationState activation_state,
+    const GURL& url) {
   activation_state_for_provisional_load_ = activation_state;
+  url_for_provisional_load_ = url;
 }
 
 void SubresourceFilterAgent::RecordHistogramsOnLoadCommitted() {
@@ -70,7 +73,7 @@ void SubresourceFilterAgent::RecordHistogramsOnLoadCommitted() {
 
   if (activation_state_for_provisional_load_ != ActivationState::DISABLED) {
     UMA_HISTOGRAM_BOOLEAN("SubresourceFilter.DocumentLoad.RulesetIsAvailable",
-                          !!ruleset_dealer_->ruleset());
+                          ruleset_dealer_->IsRulesetAvailable());
   }
 }
 
@@ -95,7 +98,21 @@ void SubresourceFilterAgent::OnDestruct() {
 }
 
 void SubresourceFilterAgent::DidStartProvisionalLoad() {
-  activation_state_for_provisional_load_ = ActivationState::DISABLED;
+  // With PlzNavigate, DidStartProvisionalLoad and DidCommitProvisionalLoad will
+  // both be called in response to the one commit IPC from the browser. That
+  // means that they will come after OnActivateForProvisionalLoad. So we have to
+  // have extra logic to check that the response to OnActivateForProvisionalLoad
+  // isn't removed in that case.
+  blink::WebDataSource* ds =
+      render_frame() ? render_frame()->GetWebFrame()->provisionalDataSource()
+                     : nullptr;
+  if (!content::IsBrowserSideNavigationEnabled() ||
+      (!ds ||
+       static_cast<GURL>(ds->request().url()) != url_for_provisional_load_)) {
+    activation_state_for_provisional_load_ = ActivationState::DISABLED;
+  } else {
+    url_for_provisional_load_ = GURL();
+  }
   filter_for_last_committed_load_.reset();
 }
 
@@ -104,16 +121,17 @@ void SubresourceFilterAgent::DidCommitProvisionalLoad(
     bool is_same_page_navigation) {
   RecordHistogramsOnLoadCommitted();
   if (activation_state_for_provisional_load_ != ActivationState::DISABLED &&
-      ruleset_dealer_->ruleset()) {
+      ruleset_dealer_->IsRulesetAvailable()) {
     std::vector<GURL> ancestor_document_urls = GetAncestorDocumentURLs();
     base::Closure first_disallowed_load_callback(
         base::Bind(&SubresourceFilterAgent::
                        SignalFirstSubresourceDisallowedForCommittedLoad,
                    AsWeakPtr()));
     std::unique_ptr<DocumentSubresourceFilter> filter(
-        new DocumentSubresourceFilter(
-            activation_state_for_provisional_load_, ruleset_dealer_->ruleset(),
-            ancestor_document_urls, first_disallowed_load_callback));
+        new DocumentSubresourceFilter(activation_state_for_provisional_load_,
+                                      ruleset_dealer_->GetRuleset(),
+                                      ancestor_document_urls,
+                                      first_disallowed_load_callback));
     filter_for_last_committed_load_ = filter->AsWeakPtr();
     SetSubresourceFilterForCommittedLoad(std::move(filter));
   }
@@ -131,7 +149,7 @@ bool SubresourceFilterAgent::OnMessageReceived(const IPC::Message& message) {
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP(SubresourceFilterAgent, message)
     IPC_MESSAGE_HANDLER(SubresourceFilterMsg_ActivateForProvisionalLoad,
-                        ActivateForProvisionalLoad)
+                        OnActivateForProvisionalLoad)
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
   return handled;

@@ -8,6 +8,7 @@
 #include "base/guid.h"
 #include "build/build_config.h"
 #include "content/public/browser/client_certificate_delegate.h"
+#include "content/public/browser/memory_coordinator_delegate.h"
 #include "content/public/browser/navigation_ui_data.h"
 #include "content/public/browser/vpn_service_proxy.h"
 #include "content/public/common/sandbox_type.h"
@@ -78,6 +79,13 @@ bool ContentBrowserClient::ShouldAllowOpenURL(SiteInstance* site_instance,
   return true;
 }
 
+bool ContentBrowserClient::
+    ShouldFrameShareParentSiteInstanceDespiteTopDocumentIsolation(
+        const GURL& url,
+        SiteInstance* parent_site_instance) {
+  return false;
+}
+
 bool ContentBrowserClient::IsSuitableHost(RenderProcessHost* process_host,
                                           const GURL& site_url) {
   return true;
@@ -109,7 +117,8 @@ std::unique_ptr<media::CdmFactory> ContentBrowserClient::CreateCdmFactory() {
 }
 
 bool ContentBrowserClient::ShouldSwapProcessesForRedirect(
-    ResourceContext* resource_context, const GURL& current_url,
+    BrowserContext* browser_context,
+    const GURL& current_url,
     const GURL& new_url) {
   return false;
 }
@@ -214,7 +223,7 @@ ContentBrowserClient::AllowWebBluetooth(
   return AllowWebBluetoothResult::ALLOW;
 }
 
-std::string ContentBrowserClient::GetWebBluetoothBlacklist() {
+std::string ContentBrowserClient::GetWebBluetoothBlocklist() {
   return std::string();
 }
 
@@ -399,10 +408,6 @@ std::unique_ptr<NavigationUIData> ContentBrowserClient::GetNavigationUIData(
 }
 
 #if defined(OS_WIN)
-const wchar_t* ContentBrowserClient::GetResourceDllName() {
-  return nullptr;
-}
-
 bool ContentBrowserClient::PreSpawnRenderer(sandbox::TargetPolicy* policy) {
   return true;
 }
@@ -416,18 +421,16 @@ base::string16 ContentBrowserClient::GetAppContainerSidForSandboxType(
       L"S-1-15-2-3251537155-1984446955-2931258699-841473695-1938553385-"
       L"924012148-129201922");
 }
-
-bool ContentBrowserClient::IsWin32kLockdownEnabledForMimeType(
-    const std::string& mime_type) const {
-  // TODO(wfh): Enable this by default once Win32k lockdown for PPAPI processes
-  // is enabled by default in Chrome. See crbug.com/523278.
-  return false;
-}
 #endif  // defined(OS_WIN)
 
 std::unique_ptr<base::Value> ContentBrowserClient::GetServiceManifestOverlay(
     const std::string& name) {
   return nullptr;
+}
+
+std::unique_ptr<MemoryCoordinatorDelegate>
+ContentBrowserClient::GetMemoryCoordinatorDelegate() {
+  return std::unique_ptr<MemoryCoordinatorDelegate>();
 }
 
 }  // namespace content

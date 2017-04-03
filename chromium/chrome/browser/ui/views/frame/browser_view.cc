@@ -61,7 +61,6 @@
 #include "chrome/browser/ui/view_ids.h"
 #include "chrome/browser/ui/views/accelerator_table.h"
 #include "chrome/browser/ui/views/accessibility/invert_bubble_view.h"
-#include "chrome/browser/ui/views/autofill/save_card_bubble_views.h"
 #include "chrome/browser/ui/views/bookmarks/bookmark_bar_view.h"
 #include "chrome/browser/ui/views/bookmarks/bookmark_bubble_view.h"
 #include "chrome/browser/ui/views/download/download_in_progress_dialog_view.h"
@@ -125,7 +124,7 @@
 #include "content/public/browser/user_metrics.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_switches.h"
-#include "ui/accessibility/ax_view_state.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/hit_test.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -139,6 +138,7 @@
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/scoped_canvas.h"
+#include "ui/native_theme/native_theme_dark_aura.h"
 #include "ui/strings/grit/ui_strings.h"
 #include "ui/views/controls/button/menu_button.h"
 #include "ui/views/controls/textfield/textfield.h"
@@ -160,7 +160,7 @@
 #endif
 
 #if defined(USE_AURA)
-#include "ui/aura/client/window_tree_client.h"
+#include "ui/aura/client/window_parenting_client.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
 #endif
@@ -170,7 +170,7 @@
 #include "chrome/browser/win/jumplist.h"
 #include "chrome/browser/win/jumplist_factory.h"
 #include "ui/gfx/color_palette.h"
-#include "ui/native_theme/native_theme_dark_win.h"
+#include "ui/native_theme/native_theme_win.h"
 #include "ui/views/win/scoped_fullscreen_visibility.h"
 #endif
 
@@ -180,7 +180,6 @@
 #endif
 
 #if defined(OS_LINUX)
-#include "ui/native_theme/native_theme_dark_aura.h"
 #endif
 
 using base::TimeDelta;
@@ -202,25 +201,15 @@ const int kLoadingAnimationFrameTimeMs = 30;
 
 // Paints the horizontal border separating the Bookmarks Bar from the Toolbar
 // or page content according to |at_top| with |color|.
-void PaintHorizontalBorder(gfx::Canvas* canvas,
-                           BookmarkBarView* view,
-                           bool at_top,
-                           SkColor color) {
-  int thickness = views::NonClientFrameView::kClientEdgeThickness;
-  int y = at_top ? 0 : (view->height() - thickness);
-  canvas->FillRect(gfx::Rect(0, y, view->width(), thickness), color);
-}
-
 void PaintDetachedBookmarkBar(gfx::Canvas* canvas,
                               BookmarkBarView* view) {
   // Paint background for detached state; if animating, this is fade in/out.
   const ui::ThemeProvider* tp = view->GetThemeProvider();
   gfx::Rect fill_rect = view->GetLocalBounds();
-  // In MD, we have to not color the top 1dp, because that should be painted by
-  // the toolbar. We will, however, paint the 1px separator at the bottom of the
+  // We have to not color the top 1dp, because that should be painted by the
+  // toolbar. We will, however, paint the 1px separator at the bottom of the
   // first dp. See crbug.com/610359
-  if (ui::MaterialDesignController::IsModeMaterial())
-    fill_rect.Inset(0, 1, 0, 0);
+  fill_rect.Inset(0, 1, 0, 0);
 
   // In detached mode, the bar is meant to overlap with |contents_container_|.
   // The detached background color may be partially transparent, but the layer
@@ -236,10 +225,6 @@ void PaintDetachedBookmarkBar(gfx::Canvas* canvas,
   // if animating, these are fading in/out.
   SkColor separator_color =
       tp->GetColor(ThemeProperties::COLOR_DETACHED_BOOKMARK_BAR_SEPARATOR);
-
-  // In material mode the toolbar bottom stroke serves as our top stroke.
-  if (!ui::MaterialDesignController::IsModeMaterial())
-    PaintHorizontalBorder(canvas, view, true, separator_color);
 
   // For the bottom separator, increase the luminance. Either double it or halve
   // the distance to 1.0, whichever is less of a difference.
@@ -260,11 +245,8 @@ void PaintBackgroundAttachedMode(gfx::Canvas* canvas,
                                  const gfx::Point& background_origin) {
   canvas->DrawColor(theme_provider->GetColor(ThemeProperties::COLOR_TOOLBAR));
 
-  // Always tile the background image in pre-MD. In MD, only tile if there's a
-  // non-default image.
-  // TODO(estade): remove IDR_THEME_TOOLBAR when MD is default.
-  if (theme_provider->HasCustomImage(IDR_THEME_TOOLBAR) ||
-      !ui::MaterialDesignController::IsModeMaterial()) {
+  // If there's a non-default background image, tile it.
+  if (theme_provider->HasCustomImage(IDR_THEME_TOOLBAR)) {
     canvas->TileImageInt(*theme_provider->GetImageSkiaNamed(IDR_THEME_TOOLBAR),
                          background_origin.x(),
                          background_origin.y(),
@@ -273,52 +255,23 @@ void PaintBackgroundAttachedMode(gfx::Canvas* canvas,
                          bounds.width(),
                          bounds.height());
   }
-
-#if defined(USE_ASH)
-  if (!ui::MaterialDesignController::IsModeMaterial()) {
-    // The pre-material design version of Ash provides additional lightening
-    // at the edges of the toolbar.
-    gfx::ImageSkia* toolbar_left =
-        theme_provider->GetImageSkiaNamed(IDR_TOOLBAR_SHADE_LEFT);
-    canvas->TileImageInt(*toolbar_left,
-                         bounds.x(),
-                         bounds.y(),
-                         toolbar_left->width(),
-                         bounds.height());
-    gfx::ImageSkia* toolbar_right =
-        theme_provider->GetImageSkiaNamed(IDR_TOOLBAR_SHADE_RIGHT);
-    canvas->TileImageInt(*toolbar_right,
-                         bounds.right() - toolbar_right->width(),
-                         bounds.y(),
-                         toolbar_right->width(),
-                         bounds.height());
-  }
-#endif  // USE_ASH
 }
 
 void PaintAttachedBookmarkBar(gfx::Canvas* canvas,
                               BookmarkBarView* view,
                               BrowserView* browser_view,
                               int toolbar_overlap) {
-  // Paint background for attached state, this is fade in/out.
+  // Paint background for attached state.
   gfx::Point background_image_offset =
       browser_view->OffsetPointForToolbarBackgroundImage(
           gfx::Point(view->GetMirroredX(), view->y()));
   PaintBackgroundAttachedMode(canvas, view->GetThemeProvider(),
                               view->GetLocalBounds(), background_image_offset);
   if (view->height() >= toolbar_overlap) {
-    // Draw the separator below the Bookmarks Bar; this is fading in/out.
-    if (ui::MaterialDesignController::IsModeMaterial()) {
-      BrowserView::Paint1pxHorizontalLine(
-          canvas, view->GetThemeProvider()->GetColor(
-                      ThemeProperties::COLOR_TOOLBAR_BOTTOM_SEPARATOR),
-          view->GetLocalBounds(), true);
-    } else {
-      PaintHorizontalBorder(
-          canvas, view, false,
-          view->GetThemeProvider()->GetColor(
-              ThemeProperties::COLOR_TOOLBAR_BOTTOM_SEPARATOR));
-    }
+    BrowserView::Paint1pxHorizontalLine(
+        canvas, view->GetThemeProvider()->GetColor(
+                    ThemeProperties::COLOR_TOOLBAR_BOTTOM_SEPARATOR),
+        view->GetLocalBounds(), true);
   }
 }
 
@@ -1231,12 +1184,6 @@ bool BrowserView::IsToolbarVisible() const {
          toolbar_;
 }
 
-gfx::Rect BrowserView::GetRootWindowResizerRect() const {
-  // Views does not support resizer rects because they caused page cycler
-  // performance regressions when they were added. See crrev.com/9654
-  return gfx::Rect();
-}
-
 void BrowserView::ShowUpdateChromeDialog() {
   UpdateRecommendedMessageBox::Show(GetNativeWindow());
 }
@@ -1257,16 +1204,11 @@ autofill::SaveCardBubbleView* BrowserView::ShowSaveCreditCardBubble(
     content::WebContents* web_contents,
     autofill::SaveCardBubbleController* controller,
     bool is_user_gesture) {
-  views::View* anchor_view = toolbar_->GetSaveCreditCardBubbleAnchor();
-  autofill::SaveCardBubbleViews* view = new autofill::SaveCardBubbleViews(
-      anchor_view, web_contents, controller);
-  toolbar_->OnBubbleCreatedForAnchor(anchor_view, view->GetWidget());
-  view->Show(is_user_gesture ? autofill::SaveCardBubbleViews::USER_GESTURE
-                             : autofill::SaveCardBubbleViews::AUTOMATIC);
-  return view;
+  return toolbar_->ShowSaveCreditCardBubble(web_contents, controller,
+                                            is_user_gesture);
 }
 
-void BrowserView::ShowTranslateBubble(
+ShowTranslateBubbleResult BrowserView::ShowTranslateBubble(
     content::WebContents* web_contents,
     translate::TranslateStep step,
     translate::TranslateErrors::Type error_type,
@@ -1275,24 +1217,19 @@ void BrowserView::ShowTranslateBubble(
       !GetLocationBarView()->IsMouseHovered()) {
     content::RenderViewHost* rvh = web_contents->GetRenderViewHost();
     if (rvh->IsFocusedElementEditable())
-      return;
+      return ShowTranslateBubbleResult::EDITABLE_FIELD_IS_ACTIVE;
   }
 
-  ChromeTranslateClient* chrome_translate_client =
-      ChromeTranslateClient::FromWebContents(web_contents);
   translate::LanguageState& language_state =
-      chrome_translate_client->GetLanguageState();
+      ChromeTranslateClient::FromWebContents(web_contents)->GetLanguageState();
   language_state.SetTranslateEnabled(true);
 
   if (IsMinimized())
-    return;
+    return ShowTranslateBubbleResult::BROWSER_WINDOW_MINIMIZED;
 
-  views::View* anchor_view = toolbar_->GetTranslateBubbleAnchor();
-  views::Widget* bubble_widget = TranslateBubbleView::ShowBubble(
-      anchor_view, web_contents, step,
-      error_type, is_user_gesture ? TranslateBubbleView::USER_GESTURE
-                                  : TranslateBubbleView::AUTOMATIC);
-  toolbar_->OnBubbleCreatedForAnchor(anchor_view, bubble_widget);
+  toolbar_->ShowTranslateBubble(web_contents, step, error_type,
+                                is_user_gesture);
+  return ShowTranslateBubbleResult::SUCCESS;
 }
 
 #if BUILDFLAG(ENABLE_ONE_CLICK_SIGNIN)
@@ -1347,7 +1284,7 @@ void BrowserView::ShowWebsiteSettings(
     Profile* profile,
     content::WebContents* web_contents,
     const GURL& virtual_url,
-    const security_state::SecurityStateModel::SecurityInfo& security_info) {
+    const security_state::SecurityInfo& security_info) {
   // Some browser windows have a location icon embedded in the frame. Try to
   // use that if it exists. If it doesn't exist, use the location icon from
   // the location bar.
@@ -1963,22 +1900,22 @@ void BrowserView::ChildPreferredSizeChanged(View* child) {
   Layout();
 }
 
-void BrowserView::GetAccessibleState(ui::AXViewState* state) {
-  state->role = ui::AX_ROLE_CLIENT;
+void BrowserView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
+  node_data->role = ui::AX_ROLE_CLIENT;
 }
 
 void BrowserView::OnThemeChanged() {
-  if (!IsRegularOrGuestSession() &&
-      ui::MaterialDesignController::IsModeMaterial()) {
+  if (!IsRegularOrGuestSession()) {
     // When the theme changes, the native theme may also change (in incognito,
     // the usage of dark or normal hinges on the browser theme), so we have to
     // propagate both kinds of change.
     base::AutoReset<bool> reset(&handling_theme_changed_, true);
+#if defined(USE_AURA)
+    ui::NativeThemeDarkAura::instance()->NotifyObservers();
+#endif
 #if defined(OS_WIN)
-    ui::NativeThemeDarkWin::instance()->NotifyObservers();
     ui::NativeThemeWin::instance()->NotifyObservers();
 #elif defined(OS_LINUX)
-    ui::NativeThemeDarkAura::instance()->NotifyObservers();
     ui::NativeThemeAura::instance()->NotifyObservers();
 #endif
   }

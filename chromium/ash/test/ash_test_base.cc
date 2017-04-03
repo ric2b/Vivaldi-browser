@@ -7,6 +7,8 @@
 #include <string>
 #include <vector>
 
+#include "ash/common/test/test_session_state_delegate.h"
+#include "ash/common/test/test_system_tray_delegate.h"
 #include "ash/common/wm/window_positioner.h"
 #include "ash/common/wm_root_window_controller.h"
 #include "ash/common/wm_shell.h"
@@ -20,14 +22,11 @@
 #include "ash/shell/toplevel_window.h"
 #include "ash/test/ash_test_environment.h"
 #include "ash/test/ash_test_helper.h"
-#include "ash/test/display_manager_test_api.h"
-#include "ash/test/test_session_state_delegate.h"
 #include "ash/test/test_shell_delegate.h"
-#include "ash/test/test_system_tray_delegate.h"
 #include "base/command_line.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/screen_position_client.h"
-#include "ui/aura/client/window_tree_client.h"
+#include "ui/aura/client/window_parenting_client.h"
 #include "ui/aura/env.h"
 #include "ui/aura/test/event_generator_delegate_aura.h"
 #include "ui/aura/test/test_window_delegate.h"
@@ -38,6 +37,7 @@
 #include "ui/display/display.h"
 #include "ui/display/display_switches.h"
 #include "ui/display/screen.h"
+#include "ui/display/test/display_manager_test_api.h"
 #include "ui/events/gesture_detection/gesture_configuration.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/wm/core/coordinate_conversion.h"
@@ -213,7 +213,7 @@ bool AshTestBase::SupportsMultipleDisplays() {
 
 // static
 void AshTestBase::UpdateDisplay(const std::string& display_specs) {
-  DisplayManagerTestApi(Shell::GetInstance()->display_manager())
+  display::test::DisplayManagerTestApi(Shell::GetInstance()->display_manager())
       .UpdateDisplay(display_specs);
 }
 
@@ -319,7 +319,7 @@ void AshTestBase::SetSessionStarted(bool session_started) {
 
 void AshTestBase::SetSessionStarting() {
   AshTestHelper::GetTestSessionStateDelegate()->set_session_state(
-      SessionStateDelegate::SESSION_STATE_ACTIVE);
+      session_manager::SessionState::ACTIVE);
 }
 
 void AshTestBase::SetUserLoggedIn(bool user_logged_in) {
@@ -327,9 +327,9 @@ void AshTestBase::SetUserLoggedIn(bool user_logged_in) {
       user_logged_in);
 }
 
-void AshTestBase::SetShouldLockScreenBeforeSuspending(bool should_lock) {
+void AshTestBase::SetShouldLockScreenAutomatically(bool should_lock) {
   AshTestHelper::GetTestSessionStateDelegate()
-      ->SetShouldLockScreenBeforeSuspending(should_lock);
+      ->SetShouldLockScreenAutomatically(should_lock);
 }
 
 void AshTestBase::SetUserAddingScreenRunning(bool user_adding_screen_running) {
@@ -372,7 +372,7 @@ void AshTestBase::DisableIME() {
           ->input_method_event_handler());
 }
 
-DisplayManager* AshTestBase::display_manager() {
+display::DisplayManager* AshTestBase::display_manager() {
   return Shell::GetInstance()->display_manager();
 }
 

@@ -6,6 +6,7 @@ include_rules = [
   "+components/dom_distiller/core/android/java/src/org/chromium/components/dom_distiller/core",
   "+components/gcm_driver/android/java/src/org/chromium/components/gcm_driver",
   "+components/location/android/java",
+  "+components/minidump_uploader",
   "+components/navigation_interception",
   "+components/precache/android/java",
   "+components/safe_json/android/java",
@@ -13,5 +14,5 @@ include_rules = [
   "+components/web_contents_delegate_android",
   "+components/web_restrictions",
   "+content/public/android/java",
-  "+services/shell/public/java",
+  "+services/service_manager/public/java",
 ]

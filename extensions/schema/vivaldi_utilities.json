@@ -41,6 +41,60 @@
     ],
     "functions": [
       {
+        "name": "basicPrint",
+        "type": "function",
+        "description": "Open basic print dialog",
+        "parameters": [
+        ]
+      },
+      {
+        "name": "clearAllRecentlyClosedSessions",
+        "type": "function",
+        "description": "Clears the list of recently closed tabs and/or windows.",
+        "parameters": [
+          {
+            "type": "function",
+            "name": "callback",
+            "optional": true,
+            "parameters": [
+              {
+                "type": "boolean",
+                "name": "result",
+                "description": "A boolean variable stating if removing recently closed tabs and/or windows call was successfull or not"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "getUniqueUserId",
+        "type": "function",
+        "description": "Obtains a unique identifier for the current user of the computer",
+        "parameters": [
+          {
+            "name": "legacyUserId",
+            "type": "string",
+            "description": "User Id obtained from the old implementation relying on local storage. It will be used if no other user id value is found."
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "uniqueUserId",
+                "type": "string",
+                "description": "The user id as a 16-char hex string."
+              },
+              {
+                "name": "isNewUser",
+                "type": "boolean",
+                "description": "Whether a new user id was created or a previous one was found."
+              }
+            ]
+          }
+        ]
+      },
+      {
         "name": "isTabInLastSession",
         "type": "function",
         "description": "Checks whether a given tab is part of the last loaded session",
@@ -86,19 +140,22 @@
         ]
       },
       {
-        "name": "clearAllRecentlyClosedSessions",
+        "name": "getSelectedText",
         "type": "function",
-        "description": "Clears the list of recently closed tabs and/or windows.",
+        "description": "Returns selected text in page with given id",
         "parameters": [
+          {
+            "name": "tabId",
+            "type": "string",
+            "description": "The page to examine"
+          },
           {
             "type": "function",
             "name": "callback",
-            "optional": true,
             "parameters": [
               {
-                "type": "boolean",
-                "name": "result",
-                "description": "A boolean variable stating if removing recently closed tabs and/or windows call was successfull or not"
+                "name": "text",
+                "type": "string"
               }
             ]
           }
@@ -119,13 +176,6 @@
             "description": "The ID of the window id.",
             "name": "windowId"
           }
-        ]
-      },
-      {
-        "name": "basicPrint",
-        "type": "function",
-        "description": "Open basic print dialog",
-        "parameters": [
         ]
       }
     ],

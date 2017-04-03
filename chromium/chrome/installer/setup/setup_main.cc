@@ -39,7 +39,6 @@
 #include "base/win/process_startup_helper.h"
 #include "base/win/registry.h"
 #include "base/win/scoped_com_initializer.h"
-#include "base/win/scoped_comptr.h"
 #include "base/win/scoped_handle.h"
 #include "base/win/win_util.h"
 #include "base/win/windows_version.h"
@@ -50,6 +49,7 @@
 #include "chrome/installer/setup/install.h"
 #include "chrome/installer/setup/install_worker.h"
 #include "chrome/installer/setup/installer_crash_reporting.h"
+#include "chrome/installer/setup/installer_state.h"
 #include "chrome/installer/setup/persistent_histogram_storage.h"
 #include "chrome/installer/setup/setup_constants.h"
 #include "chrome/installer/setup/setup_singleton.h"
@@ -66,8 +66,6 @@
 #include "chrome/installer/util/html_dialog.h"
 #include "chrome/installer/util/install_util.h"
 #include "chrome/installer/util/installation_state.h"
-#include "chrome/installer/util/installation_validator.h"
-#include "chrome/installer/util/installer_state.h"
 #include "chrome/installer/util/installer_util_strings.h"
 #include "chrome/installer/util/l10n_string_util.h"
 #include "chrome/installer/util/logging_installer.h"
@@ -90,13 +88,8 @@
 
 #pragma comment(lib, "ComCtl32.lib")
 
-#if defined(GOOGLE_CHROME_BUILD)
-#include "chrome/installer/util/updating_app_registration_data.h"
-#endif
-
 using installer::InstallerState;
 using installer::InstallationState;
-using installer::InstallationValidator;
 using installer::MasterPreferences;
 using installer::Product;
 using installer::ProductState;
@@ -193,7 +186,8 @@ std::unique_ptr<installer::ArchivePatchHelper> CreateChromeArchiveHelper(
     const base::FilePath& setup_exe,
     const base::CommandLine& command_line,
     const installer::InstallerState& installer_state,
-    const base::FilePath& working_directory) {
+    const base::FilePath& working_directory,
+    installer::UnPackConsumer consumer) {
   // A compressed archive is ordinarily given on the command line by the mini
   // installer. If one was not given, look for chrome.packed.7z next to the
   // running program.
@@ -224,7 +218,7 @@ std::unique_ptr<installer::ArchivePatchHelper> CreateChromeArchiveHelper(
   // is.
   return std::unique_ptr<installer::ArchivePatchHelper>(
       new installer::ArchivePatchHelper(working_directory, compressed_archive,
-                                        base::FilePath(), target));
+                                        base::FilePath(), target, consumer));
 }
 
 // Returns the MSI product ID from the ClientState key that is populated for MSI
@@ -277,6 +271,7 @@ bool UncompressAndPatchChromeArchive(
     const base::Version& previous_version) {
   installer_state.SetStage(installer::UNCOMPRESSING);
   base::TimeTicks start_time = base::TimeTicks::Now();
+
   if (!archive_helper->Uncompress(NULL)) {
     *install_status = installer::UNCOMPRESSION_FAILED;
     installer_state.WriteInstallerResult(*install_status,
@@ -882,116 +877,6 @@ void UninstallBinariesIfUnused(
   }
 }
 
-// This function is a short-term repair for the damage documented in
-// http://crbug.com/456602. Briefly: canaries from 42.0.2293.0 through
-// 42.0.2302.0 (inclusive) contained a bug that broke normal Chrome installed at
-// user-level. This function detects the broken state during a canary update and
-// repairs it by calling on the existing Chrome's installer to fix itself.
-// TODO(grt): Remove this once the majority of impacted canary clients have
-// picked it up.
-void RepairChromeIfBroken(const InstallationState& original_state,
-                          const InstallerState& installer_state) {
-#if !defined(GOOGLE_CHROME_BUILD)
-  // Chromium does not support SxS installation, so there is no work to be done.
-  return;
-#else  // GOOGLE_CHROME_BUILD
-  // Nothing to do if not a per-user SxS install/update.
-  if (!InstallUtil::IsChromeSxSProcess() ||
-      installer_state.system_install() ||
-      installer_state.is_multi_install()) {
-    return;
-  }
-
-  // When running a side-by-side install, BrowserDistribution provides no way
-  // to create or access a GoogleChromeDistribution (by design).
-  static const base::char16 kChromeGuid[] =
-      L"{8A69D345-D564-463c-AFF1-A69D9E530F96}";
-  static const base::char16 kChromeBinariesGuid[] =
-      L"{4DC8B4CA-1BDA-483e-B5FA-D3C12E15B62D}";
-
-  UpdatingAppRegistrationData chrome_reg_data(kChromeGuid);
-  UpdatingAppRegistrationData binaries_reg_data(kChromeBinariesGuid);
-
-  // Nothing to do if the binaries are installed.
-  base::win::RegKey key;
-  base::string16 version_str;
-  if (key.Open(HKEY_CURRENT_USER,
-               binaries_reg_data.GetVersionKey().c_str(),
-               KEY_QUERY_VALUE | KEY_WOW64_32KEY) == ERROR_SUCCESS &&
-      key.ReadValue(google_update::kRegVersionField,
-                    &version_str) == ERROR_SUCCESS) {
-    return;
-  }
-
-  // Nothing to do if Chrome is not installed.
-  if (key.Open(HKEY_CURRENT_USER,
-               chrome_reg_data.GetVersionKey().c_str(),
-               KEY_QUERY_VALUE | KEY_WOW64_32KEY) != ERROR_SUCCESS ||
-      key.ReadValue(google_update::kRegVersionField,
-                    &version_str) != ERROR_SUCCESS) {
-    return;
-  }
-
-  // Nothing to do if Chrome is not multi-install.
-  base::string16 setup_args;
-  if (key.Open(HKEY_CURRENT_USER,
-               chrome_reg_data.GetStateKey().c_str(),
-               KEY_QUERY_VALUE | KEY_WOW64_32KEY) != ERROR_SUCCESS) {
-    LOG(ERROR) << "RepairChrome: Failed to open Chrome's ClientState key.";
-    return;
-  }
-  if (key.ReadValue(installer::kUninstallArgumentsField,
-                    &setup_args) != ERROR_SUCCESS) {
-    LOG(ERROR) << "RepairChrome: Failed to read Chrome's UninstallArguments.";
-    return;
-  }
-  if (setup_args.find(base::UTF8ToUTF16(installer::switches::kMultiInstall)) ==
-      base::string16::npos) {
-    LOG(INFO) << "RepairChrome: Not repairing single-install Chrome.";
-    return;
-  }
-
-  // Generate a command line to run Chrome's installer.
-  base::string16 setup_path;
-  if (key.ReadValue(installer::kUninstallStringField,
-                    &setup_path) != ERROR_SUCCESS) {
-    LOG(ERROR) << "RepairChrome: Failed to read Chrome's UninstallString.";
-    return;
-  }
-
-  // Replace --uninstall with --do-not-launch-chrome to cause chrome to
-  // self-repair.
-  base::ReplaceFirstSubstringAfterOffset(
-      &setup_args, 0, base::UTF8ToUTF16(installer::switches::kUninstall),
-      base::UTF8ToUTF16(installer::switches::kDoNotLaunchChrome));
-  base::CommandLine setup_command(base::CommandLine::NO_PROGRAM);
-  InstallUtil::ComposeCommandLine(setup_path, setup_args, &setup_command);
-
-  // Run Chrome's installer so that it repairs itself. Break away from any job
-  // in which this operation is running so that Google Update doesn't wait
-  // around for the repair. Retry once without the attempt to break away in case
-  // this process doesn't have JOB_OBJECT_LIMIT_BREAKAWAY_OK.
-  base::LaunchOptions launch_options;
-  launch_options.force_breakaway_from_job_ = true;
-  while (true) {
-    if (base::LaunchProcess(setup_command, launch_options).IsValid()) {
-      LOG(INFO) << "RepairChrome: Launched repair command \""
-                << setup_command.GetCommandLineString() << "\"";
-      break;
-    } else {
-      PLOG(ERROR) << "RepairChrome: Failed launching repair command \""
-                  << setup_command.GetCommandLineString() << "\"";
-      if (launch_options.force_breakaway_from_job_) {
-        LOG(ERROR) << "RepairChrome: Will retry without breakaway.";
-        launch_options.force_breakaway_from_job_ = false;
-      } else {
-        break;
-      }
-    }
-  }
-#endif  // GOOGLE_CHROME_BUILD
-}
-
 installer::InstallStatus InstallProducts(
     const InstallationState& original_state,
     const base::FilePath& setup_exe,
@@ -1052,8 +937,6 @@ installer::InstallStatus InstallProducts(
   // Handle installer::UNUSED_BINARIES returned by CheckPreInstallConditions.
   UninstallBinariesIfUnused(original_state, *installer_state, &install_status);
 
-  RepairChromeIfBroken(original_state, *installer_state);
-
   return install_status;
 }
 
@@ -1089,28 +972,6 @@ bool CreateEULASentinel(BrowserDistribution* dist) {
 
   return (base::CreateDirectory(eula_sentinel.DirName()) &&
           base::WriteFile(eula_sentinel, "", 0) != -1);
-}
-
-void ActivateMetroChrome() {
-  // Check to see if we're per-user or not. Need to do this since we may
-  // not have been invoked with --system-level even for a machine install.
-  base::FilePath exe_path;
-  PathService::Get(base::FILE_EXE, &exe_path);
-  bool is_per_user_install = InstallUtil::IsPerUserInstall(exe_path);
-
-  base::string16 app_model_id = ShellUtil::GetBrowserModelId(
-      BrowserDistribution::GetDistribution(), is_per_user_install);
-
-  base::win::ScopedComPtr<IApplicationActivationManager> activator;
-  HRESULT hr = activator.CreateInstance(CLSID_ApplicationActivationManager);
-  if (SUCCEEDED(hr)) {
-    DWORD pid = 0;
-    hr = activator->ActivateApplication(
-        app_model_id.c_str(), L"open", AO_NONE, &pid);
-  }
-
-  LOG_IF(ERROR, FAILED(hr)) << "Tried and failed to launch Metro Chrome. "
-                            << "hr=" << std::hex << hr;
 }
 
 installer::InstallStatus RegisterDevChrome(
@@ -1224,7 +1085,8 @@ bool HandleNonInstallCmdLineOptions(const base::FilePath& setup_exe,
       VLOG(1) << "Opening archive " << compressed_archive.value();
       if (installer::ArchivePatchHelper::UncompressAndPatch(
               temp_path.GetPath(), compressed_archive, setup_exe,
-              cmd_line.GetSwitchValuePath(installer::switches::kNewSetupExe))) {
+              cmd_line.GetSwitchValuePath(installer::switches::kNewSetupExe),
+              installer::UnPackConsumer::SETUP_EXE_PATCH)) {
         status = installer::NEW_VERSION_UPDATED;
       }
       if (!temp_path.Delete()) {
@@ -1255,9 +1117,6 @@ bool HandleNonInstallCmdLineOptions(const base::FilePath& setup_exe,
               *original_state, BrowserDistribution::GetDistribution(), true)) {
         CreateEULASentinel(BrowserDistribution::GetDistribution());
       }
-      // For a metro-originated launch, we now need to launch back into metro.
-      if (cmd_line.HasSwitch(installer::switches::kShowEulaForMetro))
-        ActivateMetroChrome();
     }
   } else if (cmd_line.HasSwitch(installer::switches::kConfigureUserSettings)) {
     // NOTE: Should the work done here, on kConfigureUserSettings, change:
@@ -1576,8 +1435,11 @@ InstallStatus InstallProductsHelper(const InstallationState& original_state,
     }
 
     std::unique_ptr<ArchivePatchHelper> archive_helper(
-        CreateChromeArchiveHelper(setup_exe, cmd_line, installer_state,
-                                  unpack_path));
+        CreateChromeArchiveHelper(
+            setup_exe, cmd_line, installer_state, unpack_path,
+            (previous_version.IsValid()
+                 ? UnPackConsumer::CHROME_ARCHIVE_PATCH
+                 : UnPackConsumer::COMPRESSED_CHROME_ARCHIVE)));
     if (archive_helper) {
       VLOG(1) << "Installing Chrome from compressed archive "
               << archive_helper->compressed_archive().value();
@@ -1592,6 +1454,15 @@ InstallStatus InstallProductsHelper(const InstallationState& original_state,
       }
       uncompressed_archive = archive_helper->target();
       DCHECK(!uncompressed_archive.empty());
+    } else {
+      if (previous_version.IsValid()) { // If true, this is a patch install.
+        // The delta patch archive is invalid or missing, so bail out here.
+        LOG(ERROR) << "Cannot patch Vivaldi without a valid (delta) archive.";
+        installer_state.WriteInstallerResult(
+            INVALID_ARCHIVE, IDS_INSTALL_INVALID_ARCHIVE_BASE, NULL);
+        VivaldiUpdateDeltaPatchStatus(false);
+        return INVALID_ARCHIVE;
+      }
     }
   }
   // Check for an uncompressed archive alongside the current executable if one
@@ -1603,7 +1474,7 @@ InstallStatus InstallProductsHelper(const InstallationState& original_state,
     // An archive was not uncompressed or patched above.
     if (uncompressed_archive.empty() ||
         !base::PathExists(uncompressed_archive)) {
-      LOG(ERROR) << "Cannot install Chrome without an uncompressed archive.";
+      LOG(ERROR) << "Cannot install Vivaldi without an uncompressed archive.";
       installer_state.WriteInstallerResult(
           INVALID_ARCHIVE, IDS_INSTALL_INVALID_ARCHIVE_BASE, NULL);
       return INVALID_ARCHIVE;
@@ -1614,9 +1485,13 @@ InstallStatus InstallProductsHelper(const InstallationState& original_state,
   // Unpack the uncompressed archive.
   installer_state.SetStage(UNPACKING);
   base::TimeTicks start_time = base::TimeTicks::Now();
-  if (LzmaUtil::UnPackArchive(uncompressed_archive.value(),
-                              unpack_path.value(),
-                              NULL)) {
+  UnPackStatus unpack_status = UNPACK_NO_ERROR;
+  int32_t ntstatus = 0;
+  DWORD lzma_result = UnPackArchive(uncompressed_archive, unpack_path, NULL,
+                                    &unpack_status, &ntstatus);
+  RecordUnPackMetrics(unpack_status, ntstatus,
+                      UnPackConsumer::UNCOMPRESSED_CHROME_ARCHIVE);
+  if (lzma_result) {
     installer_state.WriteInstallerResult(
         UNPACKING_FAILED,
         IDS_INSTALL_UNCOMPRESSION_FAILED_BASE,
@@ -1995,6 +1870,9 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
 
   base::FilePath vivaldi_target_path(cmd_line.GetSwitchValuePath(
       installer::switches::kVivaldiInstallDir));
+  
+  // if true, the vivaldi target path was provided on the cmd line
+  const bool is_vivaldi_target_path_provided = !vivaldi_target_path.empty();
 
   const bool is_vivaldi = cmd_line.HasSwitch(installer::switches::kVivaldi);
   const bool is_uninstall = cmd_line.HasSwitch(installer::switches::kUninstall);
@@ -2022,7 +1900,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
     install_type = installer::VivaldiInstallDialog::INSTALL_FOR_CURRENT_USER;
 
   // for silent installs, make sure we have an install path
-  if (is_silent && vivaldi_target_path.empty()) {
+  if (is_silent && !is_vivaldi_target_path_provided) {
     int csidl = 0;
 
     if (install_type == installer::VivaldiInstallDialog::INSTALL_FOR_ALL_USERS)
@@ -2034,8 +1912,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
     wchar_t szPath[MAX_PATH];
     if (csidl && SUCCEEDED(::SHGetFolderPath(NULL, csidl, NULL, 0, szPath))) {
       vivaldi_target_path = base::FilePath(szPath).Append(L"Vivaldi");
-      vivaldi_target_path =
-          vivaldi_target_path.Append(installer::kInstallBinaryDir);
+      cmd_line.AppendSwitchPath(installer::switches::kVivaldiInstallDir, vivaldi_target_path);
     } else {
       LOG(ERROR) << "Vivaldi silent install failed: Install path empty.";
       return installer::INSTALL_FAILED;
@@ -2164,10 +2041,6 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
   InstallerState installer_state;
   installer_state.Initialize(cmd_line, prefs, original_state);
 
-  // make sure we use the correct installpath if running silently
-  if (is_silent && !vivaldi_target_path.empty())
-    installer_state.set_target_path_for_testing(vivaldi_target_path);
-
   persistent_histogram_storage.set_storage_dir(
       installer::PersistentHistogramStorage::GetReportedStorageDir(
           installer_state.target_path()));
@@ -2282,10 +2155,6 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
         IDS_INSTALL_SINGLETON_ACQUISITION_FAILED_BASE, nullptr);
     return installer::SETUP_SINGLETON_ACQUISITION_FAILED;
   }
-  // Make sure we use the correct installpath if running silently (again).
-  // installer_state.target_path_ is reset by SetupSingleton::Acquire
-  if (is_silent && !vivaldi_target_path.empty())
-    installer_state.set_target_path_for_testing(vivaldi_target_path);
 
   if (is_vivaldi && !is_uninstall && !is_silent)
     progress_dlg.ShowModeless();
@@ -2305,15 +2174,6 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
         InstallProducts(original_state, setup_exe, cmd_line, prefs,
                         &installer_state, &installer_directory);
   }
-
-  // Validate that the machine is now in a good state following the operation.
-  // TODO(grt): change this to log at DFATAL once we're convinced that the
-  // validator handles all cases properly.
-  InstallationValidator::InstallationType installation_type =
-      InstallationValidator::NO_PRODUCTS;
-  LOG_IF(ERROR,
-         !InstallationValidator::ValidateInstallationType(system_install,
-                                                          &installation_type));
 
   UMA_HISTOGRAM_ENUMERATION("Setup.Install.Result", install_status,
                             installer::MAX_INSTALL_STATUS);

@@ -14,8 +14,10 @@
 #include "chrome/browser/printing/cloud_print/privet_http.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/prefs/pref_member.h"
+#include "net/net_features.h"
 
 class NotificationUIManager;
+class Profile;
 
 namespace content {
 class BrowserContext;
@@ -30,9 +32,10 @@ namespace cloud_print {
 class PrivetDeviceLister;
 class PrivetHTTPAsynchronousFactory;
 class PrivetHTTPResolution;
+class PrivetNotificationDelegate;
 struct DeviceDescription;
 
-#if defined(ENABLE_MDNS)
+#if BUILDFLAG(ENABLE_MDNS)
 class PrivetTrafficDetector;
 #endif  // ENABLE_MDNS
 
@@ -119,6 +122,10 @@ class PrivetNotificationService
   void OnNotificationsEnabledChanged();
   void StartLister();
 
+  // Virtual for testing. The returned delegate is refcounted.
+  virtual PrivetNotificationDelegate* CreateNotificationDelegate(
+      Profile* profile);
+
   content::BrowserContext* const profile_;
   std::unique_ptr<PrivetDeviceLister> device_lister_;
   scoped_refptr<local_discovery::ServiceDiscoverySharedClient>
@@ -126,27 +133,31 @@ class PrivetNotificationService
   std::unique_ptr<PrivetNotificationsListener> privet_notifications_listener_;
   BooleanPrefMember enable_privet_notification_member_;
 
-#if defined(ENABLE_MDNS)
+#if BUILDFLAG(ENABLE_MDNS)
   scoped_refptr<PrivetTrafficDetector> traffic_detector_;
 #endif  // ENABLE_MDNS
 };
 
 class PrivetNotificationDelegate : public NotificationDelegate {
  public:
-  explicit PrivetNotificationDelegate(content::BrowserContext* profile);
+  explicit PrivetNotificationDelegate(Profile* profile);
 
   // NotificationDelegate implementation.
   std::string id() const override;
   void ButtonClick(int button_index) override;
 
- private:
+ protected:
   // Refcounted.
   ~PrivetNotificationDelegate() override;
 
-  void OpenTab(const GURL& url);
-  void DisableNotifications();
+ private:
+  // ButtonClick() response handlers. Virtual for testing.
+  virtual void OpenTab(const GURL& url);
+  virtual void DisableNotifications();
 
-  content::BrowserContext* const profile_;
+  void CloseNotification();
+
+  Profile* const profile_;
 };
 
 }  // namespace cloud_print

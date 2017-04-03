@@ -46,7 +46,6 @@
 #include "core/fetch/FetchInitiatorTypeNames.h"
 #include "core/fetch/RawResource.h"
 #include "core/fetch/ResourceFetcher.h"
-#include "core/fetch/ScriptResource.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/UseCounter.h"
 #include "core/html/HTMLHtmlElement.h"
@@ -309,7 +308,7 @@ void XMLDocumentParser::popCurrentNode() {
     return;
   DCHECK(m_currentNodeStack.size());
   m_currentNode = m_currentNodeStack.last();
-  m_currentNodeStack.removeLast();
+  m_currentNodeStack.pop_back();
 }
 
 void XMLDocumentParser::clearCurrentNodeStack() {
@@ -817,7 +816,7 @@ XMLDocumentParser::XMLDocumentParser(DocumentFragment* fragment,
   if (elemStack.isEmpty())
     return;
 
-  for (; !elemStack.isEmpty(); elemStack.removeLast()) {
+  for (; !elemStack.isEmpty(); elemStack.pop_back()) {
     Element* element = elemStack.last();
     AttributeCollection attributes = element->attributes();
     for (auto& attribute : attributes) {
@@ -1065,7 +1064,7 @@ void XMLDocumentParser::endElementNs() {
 
   if (m_parserPaused) {
     m_pendingCallbacks.append(
-        wrapUnique(new PendingEndElementNSCallback(m_scriptStartPosition)));
+        makeUnique<PendingEndElementNSCallback>(m_scriptStartPosition));
     return;
   }
 
@@ -1153,7 +1152,7 @@ void XMLDocumentParser::characters(const xmlChar* chars, int length) {
 
   if (m_parserPaused) {
     m_pendingCallbacks.append(
-        wrapUnique(new PendingCharactersCallback(chars, length)));
+        makeUnique<PendingCharactersCallback>(chars, length));
     return;
   }
 
@@ -1187,7 +1186,7 @@ void XMLDocumentParser::processingInstruction(const String& target,
 
   if (m_parserPaused) {
     m_pendingCallbacks.append(
-        wrapUnique(new PendingProcessingInstructionCallback(target, data)));
+        makeUnique<PendingProcessingInstructionCallback>(target, data));
     return;
   }
 
@@ -1228,7 +1227,7 @@ void XMLDocumentParser::cdataBlock(const String& text) {
     return;
 
   if (m_parserPaused) {
-    m_pendingCallbacks.append(wrapUnique(new PendingCDATABlockCallback(text)));
+    m_pendingCallbacks.append(makeUnique<PendingCDATABlockCallback>(text));
     return;
   }
 
@@ -1244,7 +1243,7 @@ void XMLDocumentParser::comment(const String& text) {
     return;
 
   if (m_parserPaused) {
-    m_pendingCallbacks.append(wrapUnique(new PendingCommentCallback(text)));
+    m_pendingCallbacks.append(makeUnique<PendingCommentCallback>(text));
     return;
   }
 
@@ -1550,7 +1549,7 @@ void XMLDocumentParser::doEnd() {
     xmlDocPtr doc =
         xmlDocPtrForString(document(), m_originalSourceForTransform.toString(),
                            document()->url().getString());
-    document()->setTransformSource(wrapUnique(new TransformSource(doc)));
+    document()->setTransformSource(makeUnique<TransformSource>(doc));
     DocumentParser::stopParsing();
   }
 }

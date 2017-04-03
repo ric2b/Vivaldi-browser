@@ -51,18 +51,11 @@ void TcpCubicSenderBytes::SetCongestionWindowFromBandwidthAndRtt(
     QuicBandwidth bandwidth,
     QuicTime::Delta rtt) {
   QuicByteCount new_congestion_window = bandwidth.ToBytesPerPeriod(rtt);
-  if (FLAGS_quic_no_lower_bw_resumption_limit) {
-    // Limit new CWND if needed.
-    congestion_window_ =
-        max(min_congestion_window_,
-            min(new_congestion_window,
-                kMaxResumptionCongestionWindow * kDefaultTCPMSS));
-  } else {
-    congestion_window_ =
-        max(min(new_congestion_window,
-                kMaxResumptionCongestionWindow * kDefaultTCPMSS),
-            kMinCongestionWindowForBandwidthResumption * kDefaultTCPMSS);
-  }
+  // Limit new CWND if needed.
+  congestion_window_ =
+      max(min_congestion_window_,
+          min(new_congestion_window,
+              kMaxResumptionCongestionWindow * kDefaultTCPMSS));
 }
 
 void TcpCubicSenderBytes::SetCongestionWindowInPackets(
@@ -86,7 +79,7 @@ void TcpCubicSenderBytes::ExitSlowstart() {
 
 void TcpCubicSenderBytes::OnPacketLost(QuicPacketNumber packet_number,
                                        QuicByteCount lost_bytes,
-                                       QuicByteCount bytes_in_flight) {
+                                       QuicByteCount prior_in_flight) {
   // TCP NewReno (RFC6582) says that once a loss occurs, any losses in packets
   // already sent should be treated as a single loss event, since it's expected.
   if (packet_number <= largest_sent_at_last_cutback_) {
@@ -111,7 +104,7 @@ void TcpCubicSenderBytes::OnPacketLost(QuicPacketNumber packet_number,
   }
 
   if (!no_prr_) {
-    prr_.OnPacketLost(bytes_in_flight);
+    prr_.OnPacketLost(prior_in_flight);
   }
 
   // TODO(jri): Separate out all of slow start into a separate class.
@@ -152,11 +145,11 @@ QuicByteCount TcpCubicSenderBytes::GetSlowStartThreshold() const {
 void TcpCubicSenderBytes::MaybeIncreaseCwnd(
     QuicPacketNumber acked_packet_number,
     QuicByteCount acked_bytes,
-    QuicByteCount bytes_in_flight) {
+    QuicByteCount prior_in_flight) {
   QUIC_BUG_IF(InRecovery()) << "Never increase the CWND during recovery.";
   // Do not increase the congestion window unless the sender is close to using
   // the current window.
-  if (!IsCwndLimited(bytes_in_flight)) {
+  if (!IsCwndLimited(prior_in_flight)) {
     cubic_.OnApplicationLimited();
     return;
   }

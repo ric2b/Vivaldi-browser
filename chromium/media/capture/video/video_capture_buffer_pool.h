@@ -6,8 +6,9 @@
 #define MEDIA_VIDEO_CAPTURE_VIDEO_CAPTURE_BUFFER_POOL_H_
 
 #include "base/memory/ref_counted.h"
-#include "media/base/video_capture_types.h"
 #include "media/capture/capture_export.h"
+#include "media/capture/video_capture_types.h"
+#include "mojo/public/cpp/system/buffer.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/gpu_memory_buffer.h"
 
@@ -40,15 +41,8 @@ class CAPTURE_EXPORT VideoCaptureBufferPool
  public:
   static constexpr int kInvalidId = -1;
 
-  // One-time (per client/per-buffer) initialization to share a particular
-  // buffer to a process. The shared handle is returned as |new_handle|.
-  virtual bool ShareToProcess(int buffer_id,
-                              base::ProcessHandle process_handle,
-                              base::SharedMemoryHandle* new_handle) = 0;
-  virtual bool ShareToProcess2(int buffer_id,
-                               int plane,
-                               base::ProcessHandle process_handle,
-                               gfx::GpuMemoryBufferHandle* new_handle) = 0;
+  // One-time (per client/per-buffer) call to allow sharing |buffer_id|.
+  virtual mojo::ScopedSharedBufferHandle GetHandleForTransit(int buffer_id) = 0;
 
   // Try and obtain a BufferHandle for |buffer_id|.
   virtual std::unique_ptr<VideoCaptureBufferHandle> GetBufferHandle(

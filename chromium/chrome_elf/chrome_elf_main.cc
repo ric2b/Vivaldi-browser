@@ -7,7 +7,9 @@
 #include <assert.h>
 #include <windows.h>
 
+#include "chrome/install_static/install_details.h"
 #include "chrome/install_static/install_util.h"
+#include "chrome/install_static/product_install_details.h"
 #include "chrome_elf/blacklist/blacklist.h"
 #include "chrome_elf/crash/crash_helper.h"
 
@@ -28,6 +30,8 @@ void SignalChromeElf() {
 
 BOOL APIENTRY DllMain(HMODULE module, DWORD reason, LPVOID reserved) {
   if (reason == DLL_PROCESS_ATTACH) {
+    install_static::InitializeProductDetailsForPrimaryModule();
+
 // CRT on initialization installs an exception filter which calls
 // TerminateProcess. We need to hook CRT's attempt to set an exception.
 // NOTE: Do not hook if ASan is present, or ASan will fail to install

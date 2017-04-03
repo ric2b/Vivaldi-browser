@@ -54,7 +54,9 @@ StatelessRejector::StatelessRejector(
       clock_(clock),
       random_(random),
       crypto_config_(crypto_config),
-      compressed_certs_cache_(compressed_certs_cache) {}
+      compressed_certs_cache_(compressed_certs_cache),
+      proof_(new QuicCryptoProof),
+      params_(new QuicCryptoNegotiatedParameters) {}
 
 StatelessRejector::~StatelessRejector() {}
 
@@ -81,18 +83,14 @@ void StatelessRejector::OnChlo(QuicVersion version,
 
 void StatelessRejector::Process(std::unique_ptr<StatelessRejector> rejector,
                                 std::unique_ptr<ProcessDoneCallback> done_cb) {
-  // If we were able to make a decision about this CHLO based purely on the
-  // information available in OnChlo, just invoke the done callback immediately.
-  if (rejector->state() != UNKNOWN) {
-    done_cb->Run(std::move(rejector));
-    return;
-  }
-
+  QUIC_BUG_IF(rejector->state() != UNKNOWN) << "StatelessRejector::Process "
+                                               "called for a rejector which "
+                                               "has already made a decision";
   StatelessRejector* rejector_ptr = rejector.get();
   rejector_ptr->crypto_config_->ValidateClientHello(
       rejector_ptr->chlo_, rejector_ptr->client_address_.address(),
       rejector_ptr->server_address_.address(), rejector_ptr->version_,
-      rejector_ptr->clock_, &rejector_ptr->proof_,
+      rejector_ptr->clock_, rejector_ptr->proof_,
       std::unique_ptr<ValidateCallback>(
           new ValidateCallback(std::move(rejector), std::move(done_cb))));
 }
@@ -105,11 +103,12 @@ class StatelessRejector::ProcessClientHelloCallback
       std::unique_ptr<StatelessRejector::ProcessDoneCallback> done_cb)
       : rejector_(std::move(rejector)), done_cb_(std::move(done_cb)) {}
 
-  void Run(
-      QuicErrorCode error,
-      const std::string& error_details,
-      std::unique_ptr<CryptoHandshakeMessage> message,
-      std::unique_ptr<DiversificationNonce> diversification_nonce) override {
+  void Run(QuicErrorCode error,
+           const std::string& error_details,
+           std::unique_ptr<CryptoHandshakeMessage> message,
+           std::unique_ptr<DiversificationNonce> diversification_nonce,
+           std::unique_ptr<ProofSource::Details> /* proof_source_details */)
+      override {
     StatelessRejector* rejector_ptr = rejector_.get();
     rejector_ptr->ProcessClientHelloDone(
         error, error_details, std::move(message), std::move(rejector_),
@@ -132,7 +131,7 @@ void StatelessRejector::ProcessClientHello(
       /*reject_only=*/true, connection_id_, server_address_.address(),
       client_address_, version_, versions_,
       /*use_stateless_rejects=*/true, server_designated_connection_id_, clock_,
-      random_, compressed_certs_cache_, &params_, &proof_,
+      random_, compressed_certs_cache_, params_, proof_,
       QuicCryptoStream::CryptoMessageFramingOverhead(version_),
       chlo_packet_size_, std::move(cb));
 }

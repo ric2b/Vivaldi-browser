@@ -80,6 +80,8 @@ class ChangedTouches final {
   using EventTargetSet = HeapHashSet<Member<EventTarget>>;
   // Set of targets involved in m_touches.
   EventTargetSet m_targets;
+
+  WebPointerProperties::PointerType m_pointerType;
 };
 
 }  // namespace
@@ -90,12 +92,11 @@ TouchEventManager::TouchEventManager(LocalFrame* frame) : m_frame(frame) {
 
 void TouchEventManager::clear() {
   m_touchSequenceDocument.clear();
-  m_touchSequenceUserGestureToken.clear();
   m_targetForTouchID.clear();
   m_regionForTouchID.clear();
   m_touchPressed = false;
-  m_touchScrollStarted = false;
   m_currentEvent = PlatformEvent::NoType;
+  m_currentTouchAction = TouchActionAuto;
 }
 
 DEFINE_TRACE(TouchEventManager) {
@@ -124,8 +125,7 @@ WebInputEventResult TouchEventManager::dispatchTouchEvents(
   // Array of touches per state, used to assemble the |changedTouches| list.
   ChangedTouches changedTouches[PlatformTouchPoint::TouchStateEnd];
 
-  for (unsigned i = 0; i < touchInfos.size(); ++i) {
-    const TouchInfo& touchInfo = touchInfos[i];
+  for (auto touchInfo : touchInfos) {
     const PlatformTouchPoint& point = touchInfo.point;
     PlatformTouchPoint::TouchState pointState = point.state();
 
@@ -165,12 +165,14 @@ WebInputEventResult TouchEventManager::dispatchTouchEvents(
         changedTouches[pointState].m_touches = TouchList::create();
       changedTouches[pointState].m_touches->append(touch);
       changedTouches[pointState].m_targets.add(touchInfo.touchNode);
+      changedTouches[pointState].m_pointerType =
+          point.pointerProperties().pointerType;
     }
   }
 
   if (allTouchesReleased) {
     m_touchSequenceDocument.clear();
-    m_touchSequenceUserGestureToken.clear();
+    m_currentTouchAction = TouchActionAuto;
   }
 
   WebInputEventResult eventResult = WebInputEventResult::NotHandled;
@@ -192,7 +194,8 @@ WebInputEventResult TouchEventManager::dispatchTouchEvents(
           touchEventTarget->toNode()->document().domWindow(),
           event.getModifiers(), event.cancelable(),
           event.causesScrollingIfUncanceled(),
-          event.touchStartOrFirstTouchMove(), event.timestamp());
+          event.touchStartOrFirstTouchMove(), event.timestamp(),
+          m_currentTouchAction, changedTouches[state].m_pointerType);
 
       DispatchEventResult domDispatchResult =
           touchEventTarget->dispatchEvent(touchEvent);
@@ -265,9 +268,6 @@ WebInputEventResult TouchEventManager::dispatchTouchEvents(
     }
   }
 
-  if (allTouchesReleased)
-    m_touchScrollStarted = false;
-
   return eventResult;
 }
 
@@ -294,7 +294,7 @@ void TouchEventManager::updateTargetAndRegionMapsForTouchStarts(
           (!touchInfo.touchNode ||
            &touchInfo.touchNode->document() != m_touchSequenceDocument)) {
         if (m_touchSequenceDocument->frame()) {
-          LayoutPoint framePoint = roundedLayoutPoint(
+          LayoutPoint framePoint = LayoutPoint(
               m_touchSequenceDocument->frame()->view()->rootFrameToContents(
                   touchInfo.point.pos()));
           result = EventHandlingUtil::hitTestResultInFrame(
@@ -340,8 +340,14 @@ void TouchEventManager::updateTargetAndRegionMapsForTouchStarts(
 
       TouchAction effectiveTouchAction =
           TouchActionUtil::computeEffectiveTouchAction(*touchInfo.touchNode);
-      if (effectiveTouchAction != TouchActionAuto)
-        m_frame->page()->chromeClient().setTouchAction(effectiveTouchAction);
+      if (effectiveTouchAction != TouchActionAuto) {
+        m_frame->page()->chromeClient().setTouchAction(m_frame,
+                                                       effectiveTouchAction);
+
+        // Combine the current touch action sequence with the touch action
+        // for the current finger press.
+        m_currentTouchAction &= effectiveTouchAction;
+      }
     }
   }
 }
@@ -432,7 +438,6 @@ bool TouchEventManager::reHitTestTouchPointsIfNeeded(
     // there may be cases where the browser doesn't reliably release all
     // touches. http://crbug.com/345372 tracks this.
     m_touchSequenceDocument.clear();
-    m_touchSequenceUserGestureToken.clear();
   }
 
   ASSERT(m_frame->view());
@@ -456,7 +461,6 @@ bool TouchEventManager::reHitTestTouchPointsIfNeeded(
       !m_touchSequenceDocument->frame()) {
     if (allTouchesReleased) {
       m_touchSequenceDocument.clear();
-      m_touchSequenceUserGestureToken.clear();
     }
     return false;
   }
@@ -499,77 +503,11 @@ WebInputEventResult TouchEventManager::handleTouchEvent(
       allTouchesReleased = false;
   }
 
-  // Whether a touch should be considered a "user gesture" or not is a tricky
-  // question.
-  // https://docs.google.com/document/d/1oF1T3O7_E4t1PYHV6gyCwHxOi3ystm0eSL5xZu7nvOg/edit#
-
-  // The touchend corresponding to a tap is always a user gesture.
-  bool isTap =
-      event.touchPoints().size() == 1 &&
-      event.touchPoints()[0].state() == PlatformTouchPoint::TouchReleased &&
-      !event.causesScrollingIfUncanceled();
-
-  // For now, disallow dragging as a user gesture when the events are being sent
-  // to a cross-origin iframe (crbug.com/582140).
-  bool isSameOrigin = false;
-  if (m_touchSequenceDocument && m_touchSequenceDocument->frame()) {
-    SecurityOrigin* securityOrigin = m_touchSequenceDocument->frame()
-                                         ->securityContext()
-                                         ->getSecurityOrigin();
-    Frame* top = m_frame->tree().top();
-    if (top &&
-        securityOrigin->canAccess(top->securityContext()->getSecurityOrigin()))
-      isSameOrigin = true;
-  }
-
-  std::unique_ptr<UserGestureIndicator> gestureIndicator;
-  if (isTap || isSameOrigin) {
-    UserGestureUtilizedCallback* callback = 0;
-    // These are cases we'd like to migrate to not hold a user gesture.
-    if (event.type() == PlatformEvent::TouchStart ||
-        event.type() == PlatformEvent::TouchMove ||
-        (event.type() == PlatformEvent::TouchEnd && m_touchScrollStarted)) {
-      // Collect metrics in userGestureUtilized().
-      callback = this;
-    }
-    if (m_touchSequenceUserGestureToken)
-      gestureIndicator = wrapUnique(new UserGestureIndicator(
-          m_touchSequenceUserGestureToken.release(), callback));
-    else
-      gestureIndicator = wrapUnique(
-          new UserGestureIndicator(DefinitelyProcessingUserGesture, callback));
-    m_touchSequenceUserGestureToken = UserGestureIndicator::currentToken();
-  }
-
   return dispatchTouchEvents(event, touchInfos, allTouchesReleased);
 }
 
 bool TouchEventManager::isAnyTouchActive() const {
   return m_touchPressed;
-}
-
-void TouchEventManager::userGestureUtilized() {
-  // This is invoked for UserGestureIndicators created in
-  // TouchEventManger::handleTouchEvent which perhaps represent touch actions
-  // which shouldn't be considered a user-gesture.  Trigger a UseCounter based
-  // on the touch event that's currently being dispatched.
-  UseCounter::Feature feature;
-
-  switch (m_currentEvent) {
-    case PlatformEvent::TouchStart:
-      feature = UseCounter::TouchStartUserGestureUtilized;
-      break;
-    case PlatformEvent::TouchMove:
-      feature = UseCounter::TouchMoveUserGestureUtilized;
-      break;
-    case PlatformEvent::TouchEnd:
-      feature = UseCounter::TouchEndDuringScrollUserGestureUtilized;
-      break;
-    default:
-      NOTREACHED();
-      return;
-  }
-  Deprecation::countDeprecation(m_frame, feature);
 }
 
 }  // namespace blink

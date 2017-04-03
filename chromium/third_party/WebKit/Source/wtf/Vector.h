@@ -469,6 +469,9 @@ class VectorBuffer<T, 0, Allocator>
   void swapVectorBuffer(VectorBuffer<T, 0, Allocator>& other,
                         OffsetRange thisHole,
                         OffsetRange otherHole) {
+    static_assert(VectorTraits<T>::canSwapUsingCopyOrMove,
+                  "Cannot swap HeapVectors of TraceWrapperMembers.");
+
     std::swap(m_buffer, other.m_buffer);
     std::swap(m_capacity, other.m_capacity);
     std::swap(m_size, other.m_size);
@@ -602,6 +605,9 @@ class VectorBuffer : protected VectorBufferBase<T, true, Allocator> {
                         OffsetRange thisHole,
                         OffsetRange otherHole) {
     using TypeOperations = VectorTypeOperations<T>;
+
+    static_assert(VectorTraits<T>::canSwapUsingCopyOrMove,
+                  "Cannot swap HeapVectors of TraceWrapperMembers.");
 
     if (buffer() != inlineBuffer() && other.buffer() != other.inlineBuffer()) {
       // The easiest case: both buffers are non-inline. We just need to swap the
@@ -940,7 +946,7 @@ class Vector
   template <typename U>
   void append(U&&);
   template <typename... Args>
-  void emplaceAppend(Args&&...);
+  T& emplace_back(Args&&...);
   template <typename U>
   void uncheckedAppend(U&& val);
   template <typename U, size_t otherCapacity, typename V>
@@ -963,7 +969,7 @@ class Vector
   void remove(size_t position);
   void remove(size_t position, size_t length);
 
-  void removeLast() {
+  void pop_back() {
     ASSERT(!isEmpty());
     shrink(size() - 1);
   }
@@ -1390,7 +1396,7 @@ ALWAYS_INLINE void Vector<T, inlineCapacity, Allocator>::append(U&& val) {
 
 template <typename T, size_t inlineCapacity, typename Allocator>
 template <typename... Args>
-ALWAYS_INLINE void Vector<T, inlineCapacity, Allocator>::emplaceAppend(
+ALWAYS_INLINE T& Vector<T, inlineCapacity, Allocator>::emplace_back(
     Args&&... args) {
   static_assert(sizeof...(Args), "grow() must be called instead");
   static_assert(sizeof...(Args) != 1, "append() must be called instead");
@@ -1400,8 +1406,9 @@ ALWAYS_INLINE void Vector<T, inlineCapacity, Allocator>::emplaceAppend(
     expandCapacity(size() + 1);
 
   ANNOTATE_CHANGE_SIZE(begin(), capacity(), m_size, m_size + 1);
-  new (NotNull, end()) T(std::forward<Args>(args)...);
+  T* t = new (NotNull, end()) T(std::forward<Args>(args)...);
   ++m_size;
+  return *t;
 }
 
 template <typename T, size_t inlineCapacity, typename Allocator>
@@ -1525,7 +1532,7 @@ inline void Vector<T, inlineCapacity, Allocator>::remove(size_t position) {
 template <typename T, size_t inlineCapacity, typename Allocator>
 inline void Vector<T, inlineCapacity, Allocator>::remove(size_t position,
                                                          size_t length) {
-  ASSERT_WITH_SECURITY_IMPLICATION(position <= size());
+  SECURITY_DCHECK(position <= size());
   if (!length)
     return;
   RELEASE_ASSERT(position + length <= size());

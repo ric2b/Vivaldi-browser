@@ -504,6 +504,8 @@ TEST_F('PrintPreviewWebUITest', 'PrintToPDFSelectedCapabilities', function() {
 
   checkSectionVisible($('other-options-settings'), false);
   checkSectionVisible($('media-size-settings'), false);
+  if (loadTimeData.getBoolean('scalingEnabled'))
+    checkSectionVisible($('scaling-settings'), false);
 
   testDone();
 });
@@ -518,17 +520,22 @@ TEST_F('PrintPreviewWebUITest', 'SourceIsHTMLCapabilities', function() {
   var otherOptions = $('other-options-settings');
   var fitToPage = otherOptions.querySelector('.fit-to-page-container');
   var mediaSize = $('media-size-settings');
+  var scalingSettings = $('scaling-settings');
 
   // Check that options are collapsed (section is visible, because duplex is
   // available).
   checkSectionVisible(otherOptions, true);
   checkElementDisplayed(fitToPage, false);
   checkSectionVisible(mediaSize, false);
+  if (loadTimeData.getBoolean('scalingEnabled'))
+    checkSectionVisible(scalingSettings, false);
 
   this.expandMoreSettings();
 
   checkElementDisplayed(fitToPage, false);
   checkSectionVisible(mediaSize, true);
+  if (loadTimeData.getBoolean('scalingEnabled'))
+    checkSectionVisible(scalingSettings, true);
 
   this.waitForAnimationToEnd('more-settings');
 });
@@ -542,12 +549,64 @@ TEST_F('PrintPreviewWebUITest', 'SourceIsPDFCapabilities', function() {
   this.setCapabilities(getCddTemplate("FooDevice"));
 
   var otherOptions = $('other-options-settings');
+  var scalingSettings = $('scaling-settings');
+
   checkSectionVisible(otherOptions, true);
   checkElementDisplayed(
       otherOptions.querySelector('.fit-to-page-container'), true);
   expectTrue(
       otherOptions.querySelector('.fit-to-page-checkbox').checked);
+  if (loadTimeData.getBoolean('scalingEnabled'))
+    this.expandMoreSettings();
   checkSectionVisible($('media-size-settings'), true);
+  if (loadTimeData.getBoolean('scalingEnabled'))
+    checkSectionVisible(scalingSettings, true);
+
+  this.waitForAnimationToEnd('other-options-collapsible');
+});
+
+// When the source is "PDF", depending on the selected destination printer, we
+// show/hide the fit to page option and hide media size selection.
+GEN('#if defined(GOOGLE_CHROME_BUILD)');
+GEN('# define MAYBE_ScalingUnchecksFitToPage \\');
+GEN('     DISABLED_ScalingUnchecksFitToPage');
+GEN('#else');
+GEN('# define MAYBE_ScalingUnchecksFitToPage \\');
+GEN('     ScalingUnchecksFitToPage');
+GEN('#endif');
+
+TEST_F('PrintPreviewWebUITest',
+       'MAYBE_ScalingUnchecksFitToPage', function() {
+  this.initialSettings_.isDocumentModifiable_ = false;
+  this.setInitialSettings();
+  this.setLocalDestinations();
+  this.setCapabilities(getCddTemplate("FooDevice"));
+
+  var otherOptions = $('other-options-settings');
+  var scalingSettings = $('scaling-settings');
+
+  checkSectionVisible(otherOptions, true);
+  checkElementDisplayed(
+      otherOptions.querySelector('.fit-to-page-container'), true);
+  expectTrue(
+      otherOptions.querySelector('.fit-to-page-checkbox').checked);
+  this.expandMoreSettings();
+  checkSectionVisible($('media-size-settings'), true);
+  checkSectionVisible(scalingSettings, true);
+
+  //Change scaling input
+  var scalingInput = scalingSettings.querySelector('.user-value');
+  expectEquals(scalingInput.value, '100');
+  scalingInput.stepUp(5);
+  expectEquals(scalingInput.value, '105');
+
+  // Trigger the event
+  var enter = document.createEvent('Event');
+  enter.initEvent('keydown');
+  enter.keyCode = 'Enter';
+  scalingInput.dispatchEvent(enter);
+  expectFalse(
+      otherOptions.querySelector('.fit-to-page-checkbox').checked);
 
   this.waitForAnimationToEnd('other-options-collapsible');
 });
@@ -573,7 +632,7 @@ TEST_F('PrintPreviewWebUITest', 'CheckNumCopiesPrintPreset', function() {
   checkSectionVisible($('copies-settings'), true);
   expectEquals(
       printPresetOptions.copies,
-      parseInt($('copies-settings').querySelector('.copies').value));
+      parseInt($('copies-settings').querySelector('.user-value').value));
 
   this.waitForAnimationToEnd('other-options-collapsible');
 });
@@ -930,7 +989,10 @@ TEST_F('PrintPreviewWebUITest', 'TestPrinterChangeUpdatesPreview', function() {
 
   var previewGenerator = mock(print_preview.PreviewGenerator);
   printPreview.previewArea_.previewGenerator_ = previewGenerator.proxy();
-  previewGenerator.expects(exactly(6)).requestPreview();
+
+  // TODO (rbpotter): Figure out why this is 7 with the addition of scaling,
+  // and if it is a problem.
+  previewGenerator.expects(exactly(7)).requestPreview();
 
   var barDestination;
   var destinations = printPreview.destinationStore_.destinations();

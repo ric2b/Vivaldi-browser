@@ -80,10 +80,11 @@ class MenuBuilder {
     id.uid = ++cur_id_;
     menu_manager_->AddContextItem(
         extension_.get(),
-        new MenuItem(id, kTestExtensionItemLabel,
-                     false,  // check`ed
-                     true,   // enabled
-                     MenuItem::NORMAL, MenuItem::ContextList(context)));
+        base::MakeUnique<MenuItem>(id, kTestExtensionItemLabel,
+                                   false,  // check`ed
+                                   true,   // enabled
+                                   MenuItem::NORMAL,
+                                   MenuItem::ContextList(context)));
   }
 
  private:
@@ -342,8 +343,6 @@ TEST_F(ExtensionContextMenuModelTest, ExtensionItemTest) {
 // context menu without the toolbar redesign.
 TEST_F(ExtensionContextMenuModelTest, ExtensionContextMenuShowAndHideLegacy) {
   // Start with the toolbar redesign disabled.
-  FeatureSwitch::ScopedOverride enable_media_router(
-      extensions::FeatureSwitch::media_router(), false);
   FeatureSwitch::ScopedOverride toolbar_redesign_override(
       FeatureSwitch::extension_action_redesign(), false);
 

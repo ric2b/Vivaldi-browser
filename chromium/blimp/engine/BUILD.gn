@@ -85,6 +85,8 @@ source_set("app") {
     ":common",
     ":crash",
     ":feature",
+    ":font_data_fetcher",
+    ":font_fetcher_mojo_impl",
     ":renderer",
     ":resources",
     ":session",
@@ -98,6 +100,7 @@ source_set("app") {
     "//content/public/app:both",
     "//content/public/browser",
     "//content/public/common",
+    "//content/public/common:service_names",
     "//content/public/renderer",
     "//content/public/utility",
     "//device/geolocation",
@@ -201,8 +204,8 @@ source_set("app_ui") {
     "app/ui/blimp_layout_manager.h",
     "app/ui/blimp_screen.cc",
     "app/ui/blimp_screen.h",
-    "app/ui/blimp_window_tree_client.cc",
-    "app/ui/blimp_window_tree_client.h",
+    "app/ui/blimp_window_parenting_client.cc",
+    "app/ui/blimp_window_parenting_client.h",
     "app/ui/blimp_window_tree_host.cc",
     "app/ui/blimp_window_tree_host.h",
   ]
@@ -217,8 +220,20 @@ source_set("app_ui") {
     "//ui/events",
     "//ui/gfx",
     "//ui/platform_window",
-    "//ui/platform_window",
     "//ui/platform_window/stub/",
+  ]
+}
+
+source_set("font_data_fetcher") {
+  sources = [
+    "browser/font_data_fetcher.h",
+    "browser/font_data_fetcher_impl.cc",
+    "browser/font_data_fetcher_impl.h",
+  ]
+
+  deps = [
+    "//base",
+    "//skia",
   ]
 }
 
@@ -294,6 +309,7 @@ source_set("feature") {
     "//blimp/common/proto",
     "//blimp/engine:app_settings",
     "//blimp/engine:common",
+    "//blimp/helium",
     "//blimp/net",
     "//content/public/browser",
     "//content/public/common",
@@ -312,10 +328,14 @@ source_set("renderer") {
     "renderer/blimp_content_renderer_client.h",
     "renderer/blimp_engine_picture_cache.cc",
     "renderer/blimp_engine_picture_cache.h",
+    "renderer/blimp_remote_compositor_bridge.cc",
+    "renderer/blimp_remote_compositor_bridge.h",
     "renderer/blob_channel_sender_proxy.cc",
     "renderer/blob_channel_sender_proxy.h",
     "renderer/engine_image_serialization_processor.cc",
     "renderer/engine_image_serialization_processor.h",
+    "renderer/frame_scheduler.cc",
+    "renderer/frame_scheduler.h",
   ]
 
   deps = [
@@ -325,10 +345,11 @@ source_set("renderer") {
     "//blimp/common/proto",
     "//blimp/net",
     "//cc",
+    "//cc/proto",
     "//components/web_cache/renderer",
     "//content/public/common",
     "//content/public/renderer",
-    "//services/shell/public/cpp",
+    "//services/service_manager/public/cpp",
     "//skia",
     "//third_party/libwebp",
     "//ui/gfx/geometry",
@@ -360,6 +381,7 @@ source_set("session") {
     "//blimp/common/proto",
     "//blimp/net",
     "//content/public/browser",
+    "//content/public/common",
     "//device/geolocation",
     "//net",
     "//ui/aura",
@@ -386,6 +408,44 @@ source_set("blob_channel_service") {
 mojom("blob_channel_mojo") {
   sources = [
     "mojo/blob_channel.mojom",
+  ]
+}
+
+# Implements the browser portion of the FontAccess.
+source_set("font_fetcher_mojo_impl") {
+  sources = [
+    "mojo/font_fetcher_mojo_impl.cc",
+    "mojo/font_fetcher_mojo_impl.h",
+  ]
+  public_deps = [
+    ":font_fetcher_mojo",
+    "//skia",
+  ]
+  deps = [
+    ":font_data_fetcher",
+  ]
+}
+
+mojom("font_fetcher_mojo") {
+  sources = [
+    "mojo/font_fetcher.mojom",
+  ]
+}
+
+source_set("mojo_unit_tests") {
+  testonly = true
+
+  sources = [
+    "mojo/font_fetcher_mojo_impl_unittest.cc",
+  ]
+
+  deps = [
+    ":font_data_fetcher",
+    ":font_fetcher_mojo",
+    ":font_fetcher_mojo_impl",
+    "//skia",
+    "//testing/gmock",
+    "//testing/gtest:gtest",
   ]
 }
 
@@ -495,12 +555,32 @@ source_set("feature_unit_tests") {
   ]
 }
 
+source_set("font_data_fetcher_unit_tests") {
+  testonly = true
+
+  sources = [
+    "browser/font_data_fetcher_impl_unittest.cc",
+  ]
+
+  deps = [
+    ":font_data_fetcher",
+    "//base",
+    "//base/test:test_support",
+    "//net:test_support",
+    "//skia",
+    "//testing/gmock",
+    "//testing/gtest",
+  ]
+}
+
 source_set("renderer_unit_tests") {
   testonly = true
 
   sources = [
     "renderer/blimp_engine_picture_cache_unittest.cc",
+    "renderer/blimp_remote_compositor_bridge_unittest.cc",
     "renderer/blob_channel_sender_proxy_unittest.cc",
+    "renderer/frame_scheduler_unittest.cc",
   ]
 
   deps = [
@@ -512,6 +592,7 @@ source_set("renderer_unit_tests") {
     "//blimp/engine:blob_channel_service",
     "//blimp/net:test_support",
     "//blimp/test:support",
+    "//cc/proto",
     "//mojo/public",
     "//skia",
     "//testing/gmock",
@@ -526,6 +607,8 @@ source_set("unit_tests") {
     ":app_unit_tests",
     ":common_unit_tests",
     ":feature_unit_tests",
+    ":font_data_fetcher_unit_tests",
+    ":mojo_unit_tests",
     ":renderer_unit_tests",
   ]
 }
@@ -701,8 +784,8 @@ source_set("browser_tests") {
 
   deps = [
     "//base",
-    "//blimp/client:session",
-    "//blimp/client:test_support",
+    "//blimp/client/app:session",
+    "//blimp/client/app:test_support",
     "//blimp/client/core/contents:test_support",
     "//blimp/client/core/context",
     "//blimp/client/core/render_widget:test_support",
@@ -717,6 +800,7 @@ source_set("browser_tests") {
     "//blimp/engine:session",
     "//blimp/engine:test_support",
     "//blimp/net",
+    "//components/prefs:test_support",
     "//content/public/app:both",
     "//content/test:test_support",
     "//testing/gmock",

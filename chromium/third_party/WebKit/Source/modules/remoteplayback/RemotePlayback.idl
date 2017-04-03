@@ -5,18 +5,25 @@
 // https://w3c.github.io/remote-playback/#idl-def-remoteplayback
 
 enum RemotePlaybackState {
+    "connecting",
     "connected",
     "disconnected"
 };
 
+callback RemotePlaybackAvailabilityCallback = void(boolean available);
+
 [
     ActiveScriptWrappable,
+    Custom=VisitDOMWrapper,
     DependentLifetime,
     RuntimeEnabled=RemotePlayback
 ] interface RemotePlayback : EventTarget {
     readonly attribute RemotePlaybackState state;
-    attribute EventHandler onstatechange;
+    attribute EventHandler onconnecting;
+    attribute EventHandler onconnect;
+    attribute EventHandler ondisconnect;
 
-    [CallWith=ScriptState] Promise<RemotePlaybackAvailability> getAvailability();
+    [CallWith=ScriptState] Promise<long> watchAvailability(RemotePlaybackAvailabilityCallback callback);
+    [CallWith=ScriptState] Promise<void> cancelWatchAvailability(optional long id);
     [CallWith=ScriptState] Promise<void> prompt();
 };

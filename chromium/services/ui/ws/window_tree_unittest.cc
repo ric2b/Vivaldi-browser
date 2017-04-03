@@ -12,19 +12,18 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
-#include "services/shell/public/interfaces/connector.mojom.h"
+#include "services/service_manager/public/interfaces/connector.mojom.h"
 #include "services/ui/common/types.h"
 #include "services/ui/common/util.h"
 #include "services/ui/public/interfaces/window_tree.mojom.h"
 #include "services/ui/surfaces/display_compositor.h"
 #include "services/ui/ws/default_access_policy.h"
-#include "services/ui/ws/display_binding.h"
 #include "services/ui/ws/ids.h"
 #include "services/ui/ws/platform_display.h"
 #include "services/ui/ws/platform_display_factory.h"
 #include "services/ui/ws/platform_display_init_params.h"
 #include "services/ui/ws/server_window.h"
-#include "services/ui/ws/server_window_surface_manager_test_api.h"
+#include "services/ui/ws/server_window_compositor_frame_sink_manager_test_api.h"
 #include "services/ui/ws/test_change_tracker.h"
 #include "services/ui/ws/test_server_window_delegate.h"
 #include "services/ui/ws/test_utils.h"
@@ -1358,12 +1357,9 @@ TEST_F(WindowTreeShutdownTest, DontSendMessagesDuringShutdown) {
     WindowServer* window_server = ws_test_helper.window_server();
     window_server->user_id_tracker()->AddUserId(kTestUserId1);
     const int kNumHostsToCreate = 1;
-    ws_test_helper.window_server_delegate()->set_num_displays_to_create(
-        kNumHostsToCreate);
+    ws_test_helper.window_server_delegate()->CreateDisplays(kNumHostsToCreate);
 
-    WindowManagerWindowTreeFactorySetTestApi(
-        window_server->window_manager_window_tree_factory_set())
-        .Add(kTestUserId1);
+    AddWindowManager(window_server, kTestUserId1);
     window_server->user_id_tracker()->SetActiveUserId(kTestUserId1);
     TestWindowTreeBinding* test_binding =
         ws_test_helper.window_server_delegate()->last_binding();

@@ -8,11 +8,12 @@
 #include "ash/common/wm_shell.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
-#include "services/shell/public/cpp/connector.h"
+#include "services/service_manager/public/cpp/connector.h"
 
 namespace ash {
 
-SystemTrayController::SystemTrayController(shell::Connector* connector)
+SystemTrayController::SystemTrayController(
+    service_manager::Connector* connector)
     : connector_(connector), hour_clock_type_(base::GetHourClockType()) {}
 
 SystemTrayController::~SystemTrayController() {}
@@ -25,6 +26,11 @@ void SystemTrayController::ShowSettings() {
 void SystemTrayController::ShowDateSettings() {
   if (ConnectToSystemTrayClient())
     system_tray_client_->ShowDateSettings();
+}
+
+void SystemTrayController::ShowSetTimeDialog() {
+  if (ConnectToSystemTrayClient())
+    system_tray_client_->ShowSetTimeDialog();
 }
 
 void SystemTrayController::ShowDisplaySettings() {
@@ -77,6 +83,16 @@ void SystemTrayController::ShowPublicAccountInfo() {
     system_tray_client_->ShowPublicAccountInfo();
 }
 
+void SystemTrayController::ShowNetworkConfigure(const std::string& network_id) {
+  if (ConnectToSystemTrayClient())
+    system_tray_client_->ShowNetworkConfigure(network_id);
+}
+
+void SystemTrayController::ShowNetworkCreate(const std::string& type) {
+  if (ConnectToSystemTrayClient())
+    system_tray_client_->ShowNetworkCreate(type);
+}
+
 void SystemTrayController::ShowNetworkSettings(const std::string& network_id) {
   if (ConnectToSystemTrayClient())
     system_tray_client_->ShowNetworkSettings(network_id);
@@ -85,6 +101,16 @@ void SystemTrayController::ShowNetworkSettings(const std::string& network_id) {
 void SystemTrayController::ShowProxySettings() {
   if (ConnectToSystemTrayClient())
     system_tray_client_->ShowProxySettings();
+}
+
+void SystemTrayController::SignOut() {
+  if (ConnectToSystemTrayClient())
+    system_tray_client_->SignOut();
+}
+
+void SystemTrayController::RequestRestartForUpdate() {
+  if (ConnectToSystemTrayClient())
+    system_tray_client_->RequestRestartForUpdate();
 }
 
 void SystemTrayController::BindRequest(mojom::SystemTrayRequest request) {
@@ -102,12 +128,7 @@ bool SystemTrayController::ConnectToSystemTrayClient() {
     return true;
 
   // Connect (or reconnect) to the interface.
-  if (WmShell::Get()->IsRunningInMash()) {
-    connector_->ConnectToInterface("exe:chrome", &system_tray_client_);
-  } else {
-    connector_->ConnectToInterface("service:content_browser",
-                                   &system_tray_client_);
-  }
+  connector_->ConnectToInterface("content_browser", &system_tray_client_);
 
   // Handle chrome crashes by forcing a reconnect on the next request.
   system_tray_client_.set_connection_error_handler(base::Bind(

@@ -80,6 +80,21 @@
             "$ref": "ExtensionType",
             "optional": true,
             "description": "The type of the extensionAction, either pageaction or browseraction. Defaults to |extensionAction|."
+          },
+          "name": {
+            "type": "string",
+            "optional": true,
+            "description": "Name of extension."
+          },
+          "homepage": {
+            "type": "string",
+            "optional": true,
+            "description": "Homepage of extension."
+          },
+          "optionspage": {
+            "type": "string",
+            "optional": true,
+            "description": "Address of extension options page."
           }
         }
       }
@@ -141,6 +156,24 @@
             "name": "extensionId",
             "type": "string",
             "description": "The id for the extension we want to toggle visibility on."
+          }
+        ]
+      },
+      {
+        "name": "removeExtension",
+        "type": "function",
+        "description": "Removes a specified extension.",
+        "parameters": [
+          {
+            "name": "extensionId",
+            "type": "string",
+            "description": "The id for the extension we want to remove."
+          },
+          {
+            "type": "integer",
+            "name": "windowId",
+            "description": "Window.id of the application window. Used to find the Browser object.",
+            "optional": true
           }
         ]
       }

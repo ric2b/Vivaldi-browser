@@ -34,6 +34,31 @@ const int kMinFailedRequestsWhenUnavailable = 1;
 const int kMaxSuccessfulRequestsWhenUnavailable = 0;
 const int kMaxFailedRequestsBeforeReset = 3;
 
+// Scheme of the data reduction proxy used.
+enum ProxyScheme {
+  PROXY_SCHEME_UNKNOWN = 0,
+  PROXY_SCHEME_HTTP,
+  PROXY_SCHEME_HTTPS,
+  PROXY_SCHEME_QUIC,
+  PROXY_SCHEME_MAX
+};
+
+// Converts net::ProxyServer::Scheme to type ProxyScheme.
+ProxyScheme ConvertNetProxySchemeToProxyScheme(
+    net::ProxyServer::Scheme scheme) {
+  switch (scheme) {
+    case net::ProxyServer::SCHEME_HTTP:
+      return PROXY_SCHEME_HTTP;
+    case net::ProxyServer::SCHEME_HTTPS:
+      return PROXY_SCHEME_HTTPS;
+    case net::ProxyServer::SCHEME_QUIC:
+      return PROXY_SCHEME_QUIC;
+    default:
+      NOTREACHED() << scheme;
+      return PROXY_SCHEME_UNKNOWN;
+  }
+}
+
 // Records a net error code that resulted in bypassing the data reduction
 // proxy (|is_primary| is true) or the data reduction proxy fallback.
 void RecordDataReductionProxyBypassOnNetworkError(
@@ -125,23 +150,36 @@ void DataReductionProxyBypassStats::OnUrlRequestCompleted(
   // LOAD_BYPASS_PROXY is necessary because the proxy_server() in the |request|
   // might still be set to the data reduction proxy if |request| was retried
   // over direct and a network error occurred while retrying it.
-  if (data_reduction_proxy_config_->WasDataReductionProxyUsed(request,
-                                                              &proxy_info) &&
-      (request->load_flags() & net::LOAD_BYPASS_PROXY) == 0 &&
-      net_error == net::OK) {
-    successful_requests_through_proxy_count_++;
-    NotifyUnavailabilityIfChanged();
-
-    // Report the success counts.
-    UMA_HISTOGRAM_COUNTS_100(
-        "DataReductionProxy.SuccessfulRequestCompletionCounts",
-        proxy_info.proxy_index);
-    if (request->load_flags() & net::LOAD_MAIN_FRAME_DEPRECATED) {
-      UMA_HISTOGRAM_COUNTS_100(
-          "DataReductionProxy.SuccessfulRequestCompletionCounts.MainFrame",
-          proxy_info.proxy_index);
-    }
+  if (!data_reduction_proxy_config_->WasDataReductionProxyUsed(request,
+                                                               &proxy_info) ||
+      (request->load_flags() & net::LOAD_BYPASS_PROXY) != 0 ||
+      net_error != net::OK) {
+    return;
   }
+  successful_requests_through_proxy_count_++;
+  NotifyUnavailabilityIfChanged();
+
+  // Report the success counts.
+  UMA_HISTOGRAM_COUNTS_100(
+      "DataReductionProxy.SuccessfulRequestCompletionCounts",
+      proxy_info.proxy_index);
+
+  DCHECK(request->proxy_server().host_port_pair().Equals(
+      proxy_info.proxy_servers.front().host_port_pair()));
+
+  // It is possible that the scheme of request->proxy_server() is different
+  // from the scheme of proxy_info.proxy_servers.front(). The former may be set
+  // to QUIC by the network stack, while the latter may be set to HTTPS.
+
+  UMA_HISTOGRAM_ENUMERATION(
+      "DataReductionProxy.ProxySchemeUsed",
+      ConvertNetProxySchemeToProxyScheme(request->proxy_server().scheme()),
+      PROXY_SCHEME_MAX);
+  if (request->load_flags() & net::LOAD_MAIN_FRAME_DEPRECATED) {
+    UMA_HISTOGRAM_COUNTS_100(
+        "DataReductionProxy.SuccessfulRequestCompletionCounts.MainFrame",
+        proxy_info.proxy_index);
+    }
 }
 
 void DataReductionProxyBypassStats::SetBypassType(

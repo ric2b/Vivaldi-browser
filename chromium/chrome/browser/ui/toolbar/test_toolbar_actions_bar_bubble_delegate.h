@@ -8,6 +8,7 @@
 #include <memory>
 
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "chrome/browser/ui/toolbar/toolbar_actions_bar_bubble_delegate.h"
 
 // A test delegate for a bubble to hang off the toolbar actions bar.
@@ -24,11 +25,21 @@ class TestToolbarActionsBarBubbleDelegate {
   // it would be deleted once the bubble closes.
   std::unique_ptr<ToolbarActionsBarBubbleDelegate> GetDelegate();
 
+  void set_action_button_text(const base::string16& action) {
+    action_ = action;
+  }
   void set_dismiss_button_text(const base::string16& dismiss) {
     dismiss_ = dismiss;
   }
   void set_learn_more_button_text(const base::string16& learn_more) {
     learn_more_ = learn_more;
+
+    if (!info_) {
+      info_ =
+          base::MakeUnique<ToolbarActionsBarBubbleDelegate::ExtraViewInfo>();
+    }
+    info_->text = learn_more;
+    info_->is_text_linked = true;
   }
   void set_item_list_text(const base::string16& item_list) {
     item_list_ = item_list;
@@ -36,7 +47,10 @@ class TestToolbarActionsBarBubbleDelegate {
   void set_close_on_deactivate(bool close_on_deactivate) {
     close_on_deactivate_ = close_on_deactivate;
   }
-
+  void set_extra_view_info(
+      std::unique_ptr<ToolbarActionsBarBubbleDelegate::ExtraViewInfo> info) {
+    info_ = std::move(info);
+  }
   const ToolbarActionsBarBubbleDelegate::CloseAction* close_action() const {
     return close_action_.get();
   }
@@ -61,6 +75,9 @@ class TestToolbarActionsBarBubbleDelegate {
 
   // Whether to close the bubble on deactivation.
   bool close_on_deactivate_;
+
+  // Information about the extra view to show, if any.
+  std::unique_ptr<ToolbarActionsBarBubbleDelegate::ExtraViewInfo> info_;
 
   DISALLOW_COPY_AND_ASSIGN(TestToolbarActionsBarBubbleDelegate);
 };

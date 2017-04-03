@@ -15,6 +15,8 @@
 #define GPU_DRIVER_BUG_WORKAROUNDS(GPU_OP)                   \
   GPU_OP(ADD_AND_TRUE_TO_LOOP_CONDITION,                     \
          add_and_true_to_loop_condition)                     \
+  GPU_OP(ADJUST_SRC_DST_REGION_FOR_BLITFRAMEBUFFER,          \
+         adjust_src_dst_region_for_blitframebuffer)          \
   GPU_OP(AVDA_DONT_COPY_PICTURES,                            \
          avda_dont_copy_pictures)                            \
   GPU_OP(AVOID_EGL_IMAGE_TARGET_TEXTURE_REUSE,               \
@@ -31,6 +33,8 @@
          count_all_in_varyings_packing)                      \
   GPU_OP(CREATE_DEFAULT_GL_CONTEXT,                          \
          create_default_gl_context)                          \
+  GPU_OP(DECODE_ENCODE_SRGB_FOR_GENERATEMIPMAP,              \
+         decode_encode_srgb_for_generatemipmap)              \
   GPU_OP(DISABLE_ANGLE_INSTANCED_ARRAYS,                     \
          disable_angle_instanced_arrays)                     \
   GPU_OP(DISABLE_ASYNC_READPIXELS,                           \
@@ -81,12 +85,14 @@
          disable_multisampling_color_mask_usage)             \
   GPU_OP(DISABLE_WEBGL_RGB_MULTISAMPLING_USAGE,              \
          disable_webgl_rgb_multisampling_usage)              \
-  GPU_OP(DO_TEXIMAGE_BEFORE_COPYTEXIMAGE_TO_CUBE_MAP,        \
-         do_teximage_before_copyteximage_to_cube_map)        \
+  GPU_OP(DONT_REMOVE_INVARIANT_FOR_FRAGMENT_INPUT,           \
+         dont_remove_invariant_for_fragment_input)           \
   GPU_OP(ETC1_POWER_OF_TWO_ONLY,                             \
          etc1_power_of_two_only)                             \
   GPU_OP(EMULATE_ABS_INT_FUNCTION,                           \
          emulate_abs_int_function)                           \
+  GPU_OP(EMULATE_ISNAN_ON_FLOAT,                             \
+         emulate_isnan_on_float)                             \
   GPU_OP(EXIT_ON_CONTEXT_LOST,                               \
          exit_on_context_lost)                               \
   GPU_OP(FORCE_CUBE_COMPLETE,                                \
@@ -105,8 +111,12 @@
          ignore_egl_sync_failures)                           \
   GPU_OP(INIT_GL_POSITION_IN_VERTEX_SHADER,                  \
          init_gl_position_in_vertex_shader)                  \
+  GPU_OP(INIT_ONE_CUBE_MAP_LEVEL_BEFORE_COPYTEXIMAGE,        \
+         init_one_cube_map_level_before_copyteximage)        \
   GPU_OP(INIT_TEXTURE_MAX_ANISOTROPY,                        \
          init_texture_max_anisotropy)                        \
+  GPU_OP(INIT_TWO_CUBE_MAP_LEVELS_BEFORE_COPYTEXIMAGE,       \
+         init_two_cube_map_levels_before_copyteximage)       \
   GPU_OP(INIT_VERTEX_ATTRIBUTES,                             \
          init_vertex_attributes)                             \
   GPU_OP(MAX_COPY_TEXTURE_CHROMIUM_SIZE_1048576,             \
@@ -131,6 +141,8 @@
          rebind_transform_feedback_before_resume)            \
   GPU_OP(REGENERATE_STRUCT_NAMES,                            \
          regenerate_struct_names)                            \
+  GPU_OP(REMOVE_INVARIANT_AND_CENTROID_FOR_ESSL3,            \
+         remove_invariant_and_centroid_for_essl3)            \
   GPU_OP(REMOVE_POW_WITH_CONSTANT_EXPONENT,                  \
          remove_pow_with_constant_exponent)                  \
   GPU_OP(RESET_BASE_MIPMAP_LEVEL_BEFORE_TEXSTORAGE,          \
@@ -167,6 +179,8 @@
          unfold_short_circuit_as_ternary_operation)          \
   GPU_OP(UNPACK_ALIGNMENT_WORKAROUND_WITH_UNPACK_BUFFER,     \
          unpack_alignment_workaround_with_unpack_buffer)     \
+  GPU_OP(UNPACK_IMAGE_HEIGHT_WORKAROUND_WITH_UNPACK_BUFFER,  \
+         unpack_image_height_workaround_with_unpack_buffer)  \
   GPU_OP(UNPACK_OVERLAPPING_ROWS_SEPARATELY_UNPACK_BUFFER,   \
          unpack_overlapping_rows_separately_unpack_buffer)   \
   GPU_OP(USE_CLIENT_SIDE_ARRAYS_FOR_STREAM_BUFFERS,          \
@@ -177,6 +191,8 @@
          use_non_zero_size_for_client_side_stream_buffers)   \
   GPU_OP(USE_SHADOWED_TEX_LEVEL_PARAMS,                      \
          use_shadowed_tex_level_params)                      \
+  GPU_OP(USE_UNUSED_STANDARD_SHARED_BLOCKS,                  \
+         use_unused_standard_shared_blocks)                  \
   GPU_OP(USE_VIRTUALIZED_GL_CONTEXTS,                        \
          use_virtualized_gl_contexts)                        \
   GPU_OP(VALIDATE_MULTISAMPLE_BUFFER_ALLOCATION,             \

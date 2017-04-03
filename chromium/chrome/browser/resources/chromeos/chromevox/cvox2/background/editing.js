@@ -110,6 +110,8 @@ function AutomationEditableText(node) {
   this.multiline = node.state.multiline || false;
   /** @type {!AutomationNode} @private */
   this.node_ = node;
+  /** @type {Array<number>} @private */
+  this.lineBreaks_ = [];
 }
 
 AutomationEditableText.prototype = {
@@ -120,6 +122,10 @@ AutomationEditableText.prototype = {
    */
   onUpdate: function() {
     var newValue = this.node_.value;
+
+    if (this.value != newValue)
+      this.lineBreaks_ = [];
+
     var textChangeEvent = new cvox.TextChangeEvent(
         newValue,
         this.node_.textSelStart,
@@ -133,7 +139,7 @@ AutomationEditableText.prototype = {
   getLineIndex: function(charIndex) {
     if (!this.multiline)
       return 0;
-    var breaks = this.node_.lineStartOffsets || [];
+    var breaks = this.node_.lineBreaks || [];
     var index = 0;
     while (index < breaks.length && breaks[index] <= charIndex)
       ++index;
@@ -154,11 +160,7 @@ AutomationEditableText.prototype = {
     var value = this.node_.value;
     if (lineIndex >= breaks.length)
       return value.length;
-    var end = breaks[lineIndex];
-    // A hard newline shouldn't be considered part of the line itself.
-    if (0 < end && value[end - 1] == '\n')
-      return end - 1;
-    return end;
+    return breaks[lineIndex] - 1;
   },
 
   /**
@@ -166,9 +168,9 @@ AutomationEditableText.prototype = {
    * @private
    */
   getLineBreaks_: function() {
-    // node.lineStartOffsets is undefined when the multiline field has no line
+    // node.lineBreaks is undefined when the multiline field has no line
     // breaks.
-    return this.node_.lineStartOffsets || [];
+    return this.node_.lineBreaks || [];
   },
 
   /** @private */

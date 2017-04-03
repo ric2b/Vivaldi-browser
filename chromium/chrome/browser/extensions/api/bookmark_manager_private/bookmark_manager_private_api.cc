@@ -21,11 +21,11 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/api/bookmarks/bookmark_api_constants.h"
 #include "chrome/browser/extensions/api/bookmarks/bookmark_api_helpers.h"
-#include "chrome/browser/extensions/extension_web_ui.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/bookmarks/bookmark_drag_drop.h"
 #include "chrome/browser/undo/bookmark_undo_service_factory.h"
 #include "chrome/common/extensions/api/bookmark_manager_private.h"
+#include "chrome/common/extensions/extension_constants.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_node_data.h"
@@ -41,6 +41,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "extensions/browser/extension_function_dispatcher.h"
+#include "extensions/browser/extension_registry.h"
 #include "extensions/browser/view_type_utils.h"
 #include "ui/base/dragdrop/drag_drop_types.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -50,6 +51,9 @@ using bookmarks::BookmarkModel;
 using bookmarks::BookmarkNode;
 using bookmarks::BookmarkNodeData;
 using content::WebContents;
+
+DEFINE_WEB_CONTENTS_USER_DATA_KEY(
+    extensions::BookmarkManagerPrivateDragEventRouter);
 
 namespace extensions {
 
@@ -283,9 +287,12 @@ void BookmarkManagerPrivateAPI::OnListenerAdded(
 }
 
 BookmarkManagerPrivateDragEventRouter::BookmarkManagerPrivateDragEventRouter(
-    Profile* profile,
     content::WebContents* web_contents)
-    : profile_(profile), web_contents_(web_contents) {
+    : web_contents_(web_contents),
+      profile_(
+          Profile::FromBrowserContext(web_contents_->GetBrowserContext())) {
+  // We need to guarantee the BookmarkTabHelper is created.
+  BookmarkTabHelper::CreateForWebContents(web_contents_);
   BookmarkTabHelper* bookmark_tab_helper =
       BookmarkTabHelper::FromWebContents(web_contents_);
   bookmark_tab_helper->set_bookmark_drag_delegate(this);
@@ -293,10 +300,8 @@ BookmarkManagerPrivateDragEventRouter::BookmarkManagerPrivateDragEventRouter(
 
 BookmarkManagerPrivateDragEventRouter::
     ~BookmarkManagerPrivateDragEventRouter() {
-  BookmarkTabHelper* bookmark_tab_helper =
-      BookmarkTabHelper::FromWebContents(web_contents_);
-  if (bookmark_tab_helper->bookmark_drag_delegate() == this)
-    bookmark_tab_helper->set_bookmark_drag_delegate(NULL);
+  // No need to remove ourselves as the BookmarkTabHelper's delegate, since they
+  // are both WebContentsUserData and will be deleted at the same time.
 }
 
 void BookmarkManagerPrivateDragEventRouter::DispatchEvent(
@@ -600,11 +605,8 @@ bool BookmarkManagerPrivateDropFunction::RunOnReady() {
 
   WebContents* web_contents = GetAssociatedWebContents();
   CHECK(web_contents);
-  ExtensionWebUI* web_ui =
-      static_cast<ExtensionWebUI*>(web_contents->GetWebUI()->GetController());
-  CHECK(web_ui);
   BookmarkManagerPrivateDragEventRouter* router =
-      web_ui->bookmark_manager_private_drag_event_router();
+      BookmarkManagerPrivateDragEventRouter::FromWebContents(web_contents);
 
   DCHECK(router);
   const BookmarkNodeData* drag_data = router->GetBookmarkNodeData();

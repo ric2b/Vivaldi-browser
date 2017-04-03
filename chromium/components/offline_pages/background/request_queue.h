@@ -8,12 +8,17 @@
 #include <stdint.h>
 
 #include <memory>
+#include <set>
 #include <string>
 #include <vector>
 
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "components/offline_pages/background/device_conditions.h"
+#include "components/offline_pages/background/pick_request_task.h"
+#include "components/offline_pages/background/pick_request_task_factory.h"
+#include "components/offline_pages/background/request_queue_results.h"
 #include "components/offline_pages/background/save_page_request.h"
 #include "components/offline_pages/core/task_queue.h"
 #include "components/offline_pages/offline_page_item.h"
@@ -22,31 +27,11 @@
 namespace offline_pages {
 
 class RequestQueueStore;
-typedef StoreUpdateResult<SavePageRequest> UpdateRequestsResult;
+class PickRequestTaskFactory;
 
 // Class responsible for managing save page requests.
 class RequestQueue {
  public:
-  enum class GetRequestsResult {
-    SUCCESS,
-    STORE_FAILURE,
-  };
-
-  enum class AddRequestResult {
-    SUCCESS,
-    STORE_FAILURE,
-    ALREADY_EXISTS,
-    REQUEST_QUOTA_HIT,  // Cannot add a request with this namespace, as it has
-                        // reached a quota of active requests.
-  };
-
-  // GENERATED_JAVA_ENUM_PACKAGE:org.chromium.components.offlinepages.background
-  enum class UpdateRequestResult {
-    SUCCESS,
-    STORE_FAILURE,
-    REQUEST_DOES_NOT_EXIST,  // Failed to delete the request because it does not
-                             // exist.
-  };
 
   // Callback used for |GetRequests|.
   typedef base::Callback<void(GetRequestsResult,
@@ -78,11 +63,6 @@ class RequestQueue {
   void AddRequest(const SavePageRequest& request,
                   const AddRequestCallback& callback);
 
-  // Updates a request in the request queue if a request with matching ID
-  // exists. Does nothing otherwise. Result is returned through |callback|.
-  void UpdateRequest(const SavePageRequest& request,
-                     const UpdateRequestCallback& callback);
-
   // Removes the requests matching the |request_ids|. Result is returned through
   // |callback|.  If a request id cannot be removed, this will still remove the
   // others.
@@ -95,11 +75,35 @@ class RequestQueue {
                            const SavePageRequest::RequestState new_state,
                            const UpdateCallback& callback);
 
-  void GetForUpdateDone(
-      const RequestQueue::UpdateRequestCallback& update_callback,
-      const SavePageRequest& update_request,
-      bool success,
-      std::vector<std::unique_ptr<SavePageRequest>> requests);
+  // Marks attempt with |request_id| as started. Results are returned through
+  // |callback|.
+  void MarkAttemptStarted(int64_t request_id, const UpdateCallback& callback);
+
+  // Marks attempt with |request_id| as aborted. Results are returned through
+  // |callback|.
+  void MarkAttemptAborted(int64_t request_id, const UpdateCallback& callback);
+
+  // Marks attempt with |request_id| as completed. The attempt may have
+  // completed with either success or failure (not denoted here). Results
+  // are returned through |callback|.
+  void MarkAttemptCompleted(int64_t request_id, const UpdateCallback& callback);
+
+  // Make a task to pick the next request, and report our choice to the
+  // callbacks.
+  void PickNextRequest(
+      PickRequestTask::RequestPickedCallback picked_callback,
+      PickRequestTask::RequestNotPickedCallback not_picked_callback,
+      PickRequestTask::RequestCountCallback request_count_callback,
+      DeviceConditions& conditions,
+      std::set<int64_t>& disabled_requests);
+
+  // Takes ownership of the factory.  We use a setter to allow users of the
+  // request queue to not need a PickerFactory to create it, since we have lots
+  // of code using the request queue.  The request coordinator will set a
+  // factory before calling PickNextRequest.
+  void SetPickerFactory(std::unique_ptr<PickRequestTaskFactory> factory) {
+    picker_factory_ = std::move(factory);
+  }
 
  private:
   // Callback used by |PurgeRequests|.
@@ -116,6 +120,9 @@ class RequestQueue {
 
   // Task queue to serialize store access.
   TaskQueue task_queue_;
+
+  // Builds PickRequestTask objects.
+  std::unique_ptr<PickRequestTaskFactory> picker_factory_;
 
   // Allows us to pass a weak pointer to callbacks.
   base::WeakPtrFactory<RequestQueue> weak_ptr_factory_;

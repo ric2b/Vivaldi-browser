@@ -7,7 +7,7 @@
 // until the Chromium and Blink trees are merged.
 [camel_case_enum_to_string=true] namespace ui {
 
-  // For new entries to the following three enums, also add to
+  // For new entries to the following four enums, also add to
   // chrome/common/extensions/api/automation.idl. This is enforced
   // by a PRESUBMIT check.
   //
@@ -210,6 +210,7 @@
     expanded,
     focusable,
     haspopup,
+    // Grows horizontally, e.g. most toolbars and separators.
     horizontal,
     hovered,
     invisible,
@@ -224,8 +225,59 @@
     richly_editable,
     selectable,
     selected,
+    // Grows vertically, e.g. menu or combo box.
     vertical,
     visited
+  };
+
+  // An action to be taken on an accessibility node.
+  enum AXAction {
+    // Decrement a slider or range control by one step value.
+    decrement,
+
+    // Do the default action for an object, typically this means "click".
+    do_default,
+
+    // Given a point, find the object it corresponds to and fire a
+    // HOVER event on it in response.
+    hit_test,
+
+    // Increment a slider or range control by one step value.
+    increment,
+
+    // Delete any selected text in the control's text value and
+    // insert |AXActionData::value| in its place, like when typing or pasting.
+    replace_selected_text,
+
+    // Scroll any scrollable containers to make the target object visible
+    // on the screen.  Optionally pass a subfocus rect in
+    // AXActionData.target_rect.
+    scroll_to_make_visible,
+
+    // Scroll the given object to a specified point on the screen in
+    // global screen coordinates. Pass a point in AXActionData.target_point.
+    scroll_to_point,
+
+    set_accessibility_focus,
+    set_focus,
+    set_scroll_offset,
+    set_selection,
+
+    // Don't focus this node, but set it as the sequential focus navigation
+    // starting point, so that pressing Tab moves to the next element
+    // following this one, for example.
+    set_sequential_focus_navigation_starting_point,
+
+    // Replace the value of the control with AXActionData::value and
+    // reset the selection, if applicable.
+    set_value,
+
+    show_context_menu
+  };
+
+  enum AXActionFlags {
+    request_images,
+    request_inline_text_boxes
   };
 
   // A change to the accessibility tree.
@@ -391,6 +443,11 @@
     flowto_ids,
     labelledby_ids,
 
+    // For static text. Character indices where line breaks occur. Note that
+    // this attribute is only available on Chrome OS and will be deprecated
+    // soon.
+    line_breaks,
+
     // For static text. These int lists must be the same size; they represent
     // the start and end character offset of each marker. Examples of markers
     // include spelling and grammar errors, and find-in-page matches.
@@ -414,7 +471,7 @@
     // within the object's bounds, the second offset is the right coordinate
     // of the second character, and so on.
     character_offsets,
-    
+
     // Used for caching. Do not read directly. Use
     // |AXNode::GetOrComputeLineStartOffsets|
     // For all text fields and content editable roots: A list of the start

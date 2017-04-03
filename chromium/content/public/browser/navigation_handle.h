@@ -6,11 +6,13 @@
 #define CONTENT_PUBLIC_BROWSER_NAVIGATION_HANDLE_H_
 
 #include <memory>
+#include <string>
 
 #include "content/common/content_export.h"
 #include "content/public/browser/navigation_throttle.h"
 #include "content/public/common/referrer.h"
 #include "net/base/net_errors.h"
+#include "net/http/http_response_info.h"
 #include "ui/base/page_transition_types.h"
 
 class GURL;
@@ -20,9 +22,11 @@ class HttpResponseHeaders;
 }  // namespace net
 
 namespace content {
+struct GlobalRequestID;
 class NavigationData;
 class NavigationThrottle;
 class RenderFrameHost;
+class SiteInstance;
 class WebContents;
 
 // A NavigationHandle tracks information related to a single navigation.
@@ -48,6 +52,11 @@ class CONTENT_EXPORT NavigationHandle {
   // virtual URL is prefixed with "view-source:".
   virtual const GURL& GetURL() = 0;
 
+  // Returns the SiteInstance that started the request.
+  // If a frame in SiteInstance A navigates a frame in SiteInstance B to a URL
+  // in SiteInstance C, then this returns B.
+  virtual SiteInstance* GetStartingSiteInstance() = 0;
+
   // Whether the navigation is taking place in the main frame or in a subframe.
   // This remains constant over the navigation lifetime.
   virtual bool IsInMainFrame() = 0;
@@ -63,12 +72,6 @@ class CONTENT_EXPORT NavigationHandle {
   //  * redirect via the <meta http-equiv="refresh"> tag
   //  * using window.history.pushState
   virtual bool IsRendererInitiated() = 0;
-
-  // Whether the navigation is synchronous or not. Examples of synchronous
-  // navigations are:
-  // * reference fragment navigations
-  // * pushState/popState
-  virtual bool IsSynchronousNavigation() = 0;
 
   // Whether the navigation is for an iframe with srcdoc attribute.
   virtual bool IsSrcdoc() = 0;
@@ -92,6 +95,11 @@ class CONTENT_EXPORT NavigationHandle {
 
   // Whether or not the navigation was started within a context menu.
   virtual bool WasStartedFromContextMenu() const = 0;
+
+  // Returns the URL and encoding of an INPUT field that corresponds to a
+  // searchable form request.
+  virtual const GURL& GetSearchableFormURL() = 0;
+  virtual const std::string& GetSearchableFormEncoding() = 0;
 
   // Parameters available at network request start time ------------------------
   //
@@ -140,9 +148,10 @@ class CONTENT_EXPORT NavigationHandle {
   // called.
   virtual RenderFrameHost* GetRenderFrameHost() = 0;
 
-  // Whether the navigation happened in the same page. This is only known
-  // after the navigation has committed. It is an error to call this method
-  // before the navigation has committed.
+  // Whether the navigation happened in the same page. Examples of same page
+  // navigations are:
+  // * reference fragment navigations
+  // * pushState/replaceState
   virtual bool IsSamePage() = 0;
 
   // Whether the navigation has encountered a server redirect or not.
@@ -166,14 +175,32 @@ class CONTENT_EXPORT NavigationHandle {
   // will not be reflected in the network stack.
   virtual const net::HttpResponseHeaders* GetResponseHeaders() = 0;
 
+  // Returns the connection info for the request, the default value is
+  // CONNECTION_INFO_UNKNOWN if there hasn't been a response (or redirect)
+  // yet. The connection info may change during the navigation (e.g. after
+  // encountering a server redirect).
+  virtual net::HttpResponseInfo::ConnectionInfo GetConnectionInfo() = 0;
+
   // Resumes a navigation that was previously deferred by a NavigationThrottle.
+  // Note: this may lead to the deletion of the NavigationHandle and its
+  // associated NavigationThrottles.
   virtual void Resume() = 0;
 
   // Cancels a navigation that was previously deferred by a NavigationThrottle.
   // |result| should be equal to NavigationThrottle::CANCEL or
   // NavigationThrottle::CANCEL_AND_IGNORE.
+  // Note: this may lead to the deletion of the NavigationHandle and its
+  // associated NavigationThrottles.
   virtual void CancelDeferredNavigation(
       NavigationThrottle::ThrottleCheckResult result) = 0;
+
+  // Returns the ID of the URLRequest associated with this navigation. Can only
+  // be called from NavigationThrottle::WillProcessResponse and
+  // WebContentsObserver::ReadyToCommitNavigation.
+  // In the case of transfer navigations, this is the ID of the first request
+  // made. The transferred request's ID will not be tracked by the
+  // NavigationHandle.
+  virtual const GlobalRequestID& GetGlobalRequestID() = 0;
 
   // Testing methods ----------------------------------------------------------
   //

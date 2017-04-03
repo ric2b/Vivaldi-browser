@@ -20,9 +20,10 @@
 #include "third_party/WebKit/public/platform/Platform.h"
 #include "third_party/WebKit/public/platform/WebGestureDevice.h"
 #include "third_party/WebKit/public/platform/WebURLError.h"
+#include "third_party/WebKit/public/public_features.h"
 #include "ui/base/layout.h"
 
-#if defined(USE_DEFAULT_RENDER_THEME)
+#if BUILDFLAG(USE_DEFAULT_RENDER_THEME)
 #include "content/child/webthemeengine_impl_default.h"
 #elif defined(OS_WIN)
 #include "content/child/webthemeengine_impl_win.h"
@@ -33,7 +34,6 @@
 #endif
 
 namespace base {
-class MessageLoop;
 class WaitableEvent;
 }
 
@@ -45,11 +45,9 @@ class WebThreadBase;
 
 namespace content {
 class BackgroundSyncProvider;
-class FlingCurveConfiguration;
 class NotificationDispatcher;
 class PushDispatcher;
 class ThreadSafeSender;
-class TraceLogObserverAdapter;
 class WebCryptoImpl;
 
 class CONTENT_EXPORT BlinkPlatformImpl
@@ -86,14 +84,7 @@ class CONTENT_EXPORT BlinkPlatformImpl
   size_t maxDecodedImageBytes() override;
   uint32_t getUniqueIdForProcess() override;
   blink::WebString userAgent() override;
-  blink::WebData parseDataURL(const blink::WebURL& url,
-                              blink::WebString& mimetype,
-                              blink::WebString& charset) override;
   blink::WebURLError cancelledError(const blink::WebURL& url) const override;
-  bool parseMultipartHeadersFromBody(const char* bytes,
-                                     size_t size,
-                                     blink::WebURLResponse* response,
-                                     size_t* end) const override;
   blink::WebThread* createThread(const char* name) override;
   blink::WebThread* currentThread() override;
   void recordAction(const blink::UserMetricsAction&) override;

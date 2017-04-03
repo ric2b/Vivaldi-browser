@@ -37,8 +37,6 @@
 
 namespace blink {
 
-class FormDataList;
-
 // The class represents types of which UI contain text fields.
 // It supports not only the types for BaseTextInputType but also type=number.
 class TextFieldInputType : public InputType,
@@ -69,6 +67,7 @@ class TextFieldInputType : public InputType,
                 bool valueChanged,
                 TextFieldEventBehavior) override;
   void updateView() override;
+  LayoutObject* createLayoutObject(const ComputedStyle&) const override;
 
   virtual bool needsContainer() const { return false; }
   virtual String convertFromVisibleValue(const String&) const;
@@ -81,13 +80,13 @@ class TextFieldInputType : public InputType,
 
  private:
   InputTypeView* createView() override;
+  ValueMode valueMode() const override;
   bool shouldShowFocusRingOnMouseFocus() const final;
   bool isTextField() const final;
   bool valueMissing(const String&) const override;
   void handleBeforeTextInsertedEvent(BeforeTextInsertedEvent*) override;
   void forwardEvent(Event*) final;
   bool shouldSubmitImplicitly(Event*) final;
-  LayoutObject* createLayoutObject(const ComputedStyle&) const override;
   bool shouldRespectListAttribute() override;
   void listAttributeTargetChanged() override;
   void updatePlaceholderText() final;

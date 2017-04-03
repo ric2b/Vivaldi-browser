@@ -21,7 +21,6 @@ class ScopedTooltipDisabler;
 }
 
 namespace views {
-class DesktopCursorClient;
 class DesktopDragDropClientWin;
 class HWNDMessageHandler;
 
@@ -101,8 +100,6 @@ class VIEWS_EXPORT DesktopWindowTreeHostWin
   void InitModalType(ui::ModalType modal_type) override;
   void FlashFrame(bool flash_frame) override;
   void OnRootViewLayout() override;
-  void OnNativeWidgetFocus() override;
-  void OnNativeWidgetBlur() override;
   bool IsAnimatingClosed() const override;
   bool IsTranslucentWindowOpacitySupported() const override;
   void SizeConstraintsChanged() override;

@@ -40,8 +40,9 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/download_item.h"
 #include "content/public/browser/download_manager.h"
+#include "extensions/features/features.h"
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "chrome/browser/extensions/api/downloads/downloads_api.h"
 #endif
 
@@ -117,7 +118,7 @@ const char DownloadHistoryData::kKey[] =
 history::DownloadRow GetDownloadRow(
     content::DownloadItem* item) {
   std::string by_ext_id, by_ext_name;
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   extensions::DownloadedByExtension* by_ext =
       extensions::DownloadedByExtension::Get(item);
   if (by_ext) {
@@ -224,7 +225,8 @@ DownloadHistory::DownloadHistory(content::DownloadManager* manager,
 
 DownloadHistory::~DownloadHistory() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  FOR_EACH_OBSERVER(Observer, observers_, OnDownloadHistoryDestroyed());
+  for (Observer& observer : observers_)
+    observer.OnDownloadHistoryDestroyed();
   observers_.Clear();
 }
 
@@ -274,7 +276,7 @@ void DownloadHistory::QueryCallback(std::unique_ptr<InfoVector> infos) {
         history::ToContentDownloadDangerType(it->danger_type),
         history::ToContentDownloadInterruptReason(it->interrupt_reason),
         it->opened);
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
     if (!it->by_ext_id.empty() && !it->by_ext_name.empty()) {
       new extensions::DownloadedByExtension(
           item, it->by_ext_id, it->by_ext_name);
@@ -288,7 +290,8 @@ void DownloadHistory::QueryCallback(std::unique_ptr<InfoVector> infos) {
   notifier_.GetManager()->CheckForHistoryFilesRemoval();
 
   initial_history_query_complete_ = true;
-  FOR_EACH_OBSERVER(Observer, observers_, OnHistoryQueryComplete());
+  for (Observer& observer : observers_)
+    observer.OnHistoryQueryComplete();
 }
 
 void DownloadHistory::MaybeAddToHistory(content::DownloadItem* item) {
@@ -316,8 +319,8 @@ void DownloadHistory::MaybeAddToHistory(content::DownloadItem* item) {
   history_->CreateDownload(*data->info(), base::Bind(
       &DownloadHistory::ItemAdded, weak_ptr_factory_.GetWeakPtr(),
       download_id));
-  FOR_EACH_OBSERVER(Observer, observers_, OnDownloadStored(
-      item, *data->info()));
+  for (Observer& observer : observers_)
+    observer.OnDownloadStored(item, *data->info());
 }
 
 void DownloadHistory::ItemAdded(uint32_t download_id, bool success) {
@@ -364,8 +367,8 @@ void DownloadHistory::ItemAdded(uint32_t download_id, bool success) {
 
   // Notify the observer about the change in the persistence state.
   if (was_persisted != IsPersisted(item)) {
-    FOR_EACH_OBSERVER(Observer, observers_, OnDownloadStored(
-        item, *data->info()));
+    for (Observer& observer : observers_)
+      observer.OnDownloadStored(item, *data->info());
   }
 
   // In case the item changed or became temporary while it was being added.
@@ -410,8 +413,8 @@ void DownloadHistory::OnDownloadUpdated(
                             should_update, 2);
   if (should_update) {
     history_->UpdateDownload(current_info);
-    FOR_EACH_OBSERVER(Observer, observers_, OnDownloadStored(
-        item, current_info));
+    for (Observer& observer : observers_)
+      observer.OnDownloadStored(item, current_info);
   }
   if (item->GetState() == content::DownloadItem::IN_PROGRESS) {
     data->set_info(current_info);
@@ -465,5 +468,6 @@ void DownloadHistory::RemoveDownloadsBatch() {
   IdSet remove_ids;
   removing_ids_.swap(remove_ids);
   history_->RemoveDownloads(remove_ids);
-  FOR_EACH_OBSERVER(Observer, observers_, OnDownloadsRemoved(remove_ids));
+  for (Observer& observer : observers_)
+    observer.OnDownloadsRemoved(remove_ids);
 }

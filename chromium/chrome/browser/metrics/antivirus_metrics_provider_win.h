@@ -72,11 +72,22 @@ class AntiVirusMetricsProvider : public metrics::MetricsProvider {
   // interface is only available on Windows 8 and above.
   static ResultCode FillAntiVirusProductsFromWSC(
       std::vector<AvProduct>* products);
+
   // Query WMI ROOT\SecurityCenter2 for installed AV products. This interface is
   // only available on Windows Vista and above.
   static ResultCode FillAntiVirusProductsFromWMI(
       std::vector<AvProduct>* products);
+
+  // Query local machine configuration for other products that might not be
+  // registered in WMI or Security Center and add them to the product vector.
+  static void MaybeAddUnregisteredAntiVirusProducts(
+      std::vector<AvProduct>* products);
+
   static std::vector<AvProduct> GetAntiVirusProductsOnFileThread();
+
+  // Removes anything extraneous from the end of the product name such as
+  // versions, years, or anything containing numbers to make it more constant.
+  static std::string TrimVersionOfAvProductName(const std::string& av_product);
 
   // Called when metrics are done being gathered from the FILE thread.
   // |done_callback| is the callback that should be called once all metrics are
@@ -95,6 +106,8 @@ class AntiVirusMetricsProvider : public metrics::MetricsProvider {
   base::WeakPtrFactory<AntiVirusMetricsProvider> weak_ptr_factory_;
 
   FRIEND_TEST_ALL_PREFIXES(AntiVirusMetricsProviderTest, GetMetricsFullName);
+  FRIEND_TEST_ALL_PREFIXES(AntiVirusMetricsProviderSimpleTest,
+                           StripProductVersion);
 
   DISALLOW_COPY_AND_ASSIGN(AntiVirusMetricsProvider);
 };

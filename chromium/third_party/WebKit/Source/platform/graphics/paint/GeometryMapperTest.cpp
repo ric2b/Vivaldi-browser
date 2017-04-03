@@ -47,10 +47,12 @@ class GeometryMapperTest : public ::testing::Test {
     rootClipNode = ClipPaintPropertyNode::create(
         nullptr, rootTransformNode,
         FloatRoundedRect(LayoutRect::infiniteIntRect()));
-    rootEffectNode = EffectPaintPropertyNode::create(nullptr, 1.0);
+    rootEffectNode = EffectPaintPropertyNode::create(
+        nullptr, rootTransformNode, rootClipNode, CompositorFilterOperations(),
+        1.0);
     rootScrollNode = ScrollPaintPropertyNode::create(
         nullptr, rootTransformNode, IntSize(), IntSize(), false, false);
-    geometryMapper = wrapUnique(new GeometryMapper());
+    geometryMapper = makeUnique<GeometryMapper>();
   }
 
   void TearDown() override { geometryMapper.reset(); }

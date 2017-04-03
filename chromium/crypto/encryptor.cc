@@ -4,8 +4,6 @@
 
 #include "crypto/encryptor.h"
 
-#include <openssl/aes.h>
-#include <openssl/evp.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -14,29 +12,19 @@
 #include "base/sys_byteorder.h"
 #include "crypto/openssl_util.h"
 #include "crypto/symmetric_key.h"
-
-#ifndef DES_EDE3_BLOCK_SIZE
-#define DES_EDE3_BLOCK_SIZE 8 /* bytes */
-#endif
+#include "third_party/boringssl/src/include/openssl/aes.h"
+#include "third_party/boringssl/src/include/openssl/evp.h"
 
 namespace crypto {
 
 namespace {
 
 const EVP_CIPHER* GetCipherForKey(SymmetricKey* key) {
-  switch (key->algorithm())
-  {
-  case SymmetricKey::AES:
   switch (key->key().length()) {
     case 16: return EVP_aes_128_cbc();
     case 32: return EVP_aes_256_cbc();
     default:
       return nullptr;
-  }
-  case SymmetricKey::DES_EDE3:
-    return EVP_des_ede3_cbc();
-  default:
-    return NULL;
   }
 }
 
@@ -105,32 +93,19 @@ Encryptor::~Encryptor() {
 bool Encryptor::Init(SymmetricKey* key,
                      Mode mode,
                      const base::StringPiece& iv) {
-  return Init(key, mode,
-	  reinterpret_cast<unsigned char*>(const_cast<char *>(iv.data())),
-      iv.size());
-}
-
-bool Encryptor::Init(SymmetricKey* key,
-                     Mode mode,
-                     const unsigned char *raw_iv, 
-                     unsigned int raw_iv_len) {
   DCHECK(key);
   DCHECK(mode == CBC || mode == CTR);
 
   EnsureOpenSSLInit();
-  size_t block_size = AES_BLOCK_SIZE;
-  if (key->algorithm() == SymmetricKey::DES_EDE3)
-	  block_size = DES_EDE3_BLOCK_SIZE;
-  if (mode == CBC && raw_iv_len != block_size)
+  if (mode == CBC && iv.size() != AES_BLOCK_SIZE)
     return false;
 
   if (GetCipherForKey(key) == nullptr)
     return false;
 
-  DCHECK(raw_iv);
   key_ = key;
   mode_ = mode;
-  iv_.assign((const char *) raw_iv, raw_iv_len);
+  iv.CopyToString(&iv_);
   return true;
 }
 

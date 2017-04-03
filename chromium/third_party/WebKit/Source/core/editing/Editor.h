@@ -45,7 +45,6 @@ namespace blink {
 
 class CompositeEditCommand;
 class DragData;
-class DummyPageHolder;
 class EditCommandComposition;
 class EditorClient;
 class EditorInternalCommand;
@@ -246,7 +245,7 @@ class CORE_EXPORT Editor final : public GarbageCollectedFinalized<Editor> {
   // |firstRectForRange| requires up-to-date layout.
   IntRect firstRectForRange(const EphemeralRange&) const;
 
-  void respondToChangedSelection(const VisibleSelection& oldSelection,
+  void respondToChangedSelection(const Position& oldSelectionStart,
                                  FrameSelection::SetSelectionOptions);
 
   bool markedTextMatchesAreHighlighted() const;
@@ -343,7 +342,6 @@ class CORE_EXPORT Editor final : public GarbageCollectedFinalized<Editor> {
       RevealExtentOption = DoNotRevealExtent);
   void changeSelectionAfterCommand(const VisibleSelection& newSelection,
                                    FrameSelection::SetSelectionOptions);
-  void notifyComponentsOnChangedSelection();
 
   SpellChecker& spellChecker() const;
 

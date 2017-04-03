@@ -77,7 +77,7 @@ function loadShowDetailsFromPrefs(showDetails) {
  *             type: 'BROWSER PLUGIN',
  *             mime_types: [
  *               {
- *                 description: 'New Guy Media',
+ *                 description: 'New Media Type',
  *                 file_extensions: ['mfp'],
  *                 mime_type: 'application/x-my-first'
  *               },
@@ -259,19 +259,6 @@ function isPluginTrusted(plugin) {
  */
 function isPluginPolicyClickToPlay(plugin) {
     return plugin.policy_click_to_play == true;
-}
-
-/**
- * Helper to convert callback-based define() API to a promise-based API.
- * @param {!Array<string>} moduleNames
- * @return {!Promise}
- */
-function importModules(moduleNames) {
-  return new Promise(function(resolve, reject) {
-    define(moduleNames, function(var_args) {
-      resolve(Array.prototype.slice.call(arguments, 0));
-    });
-  });
 }
 
 // NOTE: Need to keep a global reference to the |pageImpl| such that it is not

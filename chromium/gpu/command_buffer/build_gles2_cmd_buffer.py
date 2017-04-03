@@ -501,7 +501,8 @@ _STATES = {
   # GL_ACTIVE_TEXTURE
   'LineWidth': {
     'type': 'Normal',
-    'func': 'LineWidth',
+    'custom_function' : True,
+    'func': 'DoLineWidth',
     'enum': 'GL_LINE_WIDTH',
     'states': [
       {
@@ -2288,7 +2289,7 @@ _NAMED_TYPE_INFO = {
   },
 }
 
-_ES30_COMPRESSED_TEXTURE_FORMATS = [
+_ETC_COMPRESSED_TEXTURE_FORMATS = [
   'GL_COMPRESSED_R11_EAC',
   'GL_COMPRESSED_SIGNED_R11_EAC',
   'GL_COMPRESSED_RG11_EAC',
@@ -2375,10 +2376,9 @@ _PEPPER_INTERFACES = [
 #               the corresponding feature info flag is enabled. Implies
 #               'extension': True.
 # not_shared:   For GENn types, True if objects can't be shared between contexts
-# unsafe:       True = no validation is implemented on the service side and the
-#               command is only available with --enable-unsafe-es3-apis.
+# es3:          ES3 API. True if the function requires an ES3 or WebGL2 context.
 # id_mapping:   A list of resource type names whose client side IDs need to be
-#               mapped to service side IDs.  This is only used for unsafe APIs.
+#               mapped to service side IDs.  This is only used for ES3 APIs.
 
 _FUNCTION_INFO = {
   'ActiveTexture': {
@@ -2410,7 +2410,7 @@ _FUNCTION_INFO = {
     'decoder_func': 'DoBindBufferBase',
     'gen_func': 'GenBuffersARB',
     'unit_test': False,
-    'unsafe': True,
+    'es3': True,
   },
   'BindBufferRange': {
     'type': 'Bind',
@@ -2421,7 +2421,7 @@ _FUNCTION_INFO = {
       '3': '4',
       '4': '4'
     },
-    'unsafe': True,
+    'es3': True,
   },
   'BindFramebuffer': {
     'type': 'Bind',
@@ -2439,7 +2439,7 @@ _FUNCTION_INFO = {
   'BindSampler': {
     'type': 'Bind',
     'decoder_func': 'DoBindSampler',
-    'unsafe': True,
+    'es3': True,
   },
   'BindTexture': {
     'type': 'Bind',
@@ -2453,7 +2453,7 @@ _FUNCTION_INFO = {
   'BindTransformFeedback': {
     'type': 'Bind',
     'decoder_func': 'DoBindTransformFeedback',
-    'unsafe': True,
+    'es3': True,
     'unit_test': False,
   },
   'BlitFramebufferCHROMIUM': {
@@ -2499,7 +2499,7 @@ _FUNCTION_INFO = {
     'count': 4,
     'decoder_func': 'DoClearBufferiv',
     'unit_test': False,
-    'unsafe': True,
+    'es3': True,
     'trace_level': 2,
   },
   'ClearBufferuiv': {
@@ -2507,7 +2507,7 @@ _FUNCTION_INFO = {
     'count': 4,
     'decoder_func': 'DoClearBufferuiv',
     'unit_test': False,
-    'unsafe': True,
+    'es3': True,
     'trace_level': 2,
   },
   'ClearBufferfv': {
@@ -2516,11 +2516,11 @@ _FUNCTION_INFO = {
     'count': 4,
     'decoder_func': 'DoClearBufferfv',
     'unit_test': False,
-    'unsafe': True,
+    'es3': True,
     'trace_level': 2,
   },
   'ClearBufferfi': {
-    'unsafe': True,
+    'es3': True,
     'decoder_func': 'DoClearBufferfi',
     'unit_test': False,
     'trace_level': 2,
@@ -2543,7 +2543,7 @@ _FUNCTION_INFO = {
     'data_transfer_methods': ['shm'],
     'cmd_args': 'GLuint sync, GLbitfieldSyncFlushFlags flags, '
                 'GLuint64 timeout, GLenum* result',
-    'unsafe': True,
+    'es3': True,
     'result': ['GLenum'],
     'trace_level': 2,
   },
@@ -2557,7 +2557,7 @@ _FUNCTION_INFO = {
     'decoder_func': 'DoConsumeTextureCHROMIUM',
     'impl_func': False,
     'type': 'PUT',
-    'count': 64,  # GL_MAILBOX_SIZE_CHROMIUM
+    'count': 16,  # GL_MAILBOX_SIZE_CHROMIUM
     'unit_test': False,
     'client_test': False,
     'extension': "CHROMIUM_texture_mailbox",
@@ -2566,7 +2566,7 @@ _FUNCTION_INFO = {
   'CopyBufferSubData': {
     'decoder_func': 'DoCopyBufferSubData',
     'unit_test': False,
-    'unsafe': True,
+    'es3': True,
   },
   'CoverageModulationCHROMIUM': {
     'type': 'StateSet',
@@ -2584,7 +2584,7 @@ _FUNCTION_INFO = {
     'decoder_func': 'DoCreateAndConsumeTextureINTERNAL',
     'internal': True,
     'type': 'PUT',
-    'count': 64,  # GL_MAILBOX_SIZE_CHROMIUM
+    'count': 16,  # GL_MAILBOX_SIZE_CHROMIUM
     'unit_test': False,
     'trace_level': 2,
   },
@@ -2603,15 +2603,13 @@ _FUNCTION_INFO = {
   },
   'CompileShader': {'decoder_func': 'DoCompileShader', 'unit_test': False},
   'CompressedTexImage2D': {
-    'type': 'Data',
+    'type': 'Custom',
     'data_transfer_methods': ['bucket', 'shm'],
-    'decoder_func': 'DoCompressedTexImage2D',
     'trace_level': 1,
   },
   'CompressedTexSubImage2D': {
-    'type': 'Data',
+    'type': 'Custom',
     'data_transfer_methods': ['bucket', 'shm'],
-    'decoder_func': 'DoCompressedTexSubImage2D',
     'trace_level': 1,
   },
   'CopyTexImage2D': {
@@ -2626,24 +2624,22 @@ _FUNCTION_INFO = {
     'trace_level': 1,
   },
   'CompressedTexImage3D': {
-    'type': 'Data',
+    'type': 'Custom',
     'data_transfer_methods': ['bucket', 'shm'],
-    'decoder_func': 'DoCompressedTexImage3D',
-    'unsafe': True,
+    'es3': True,
     'trace_level': 1,
   },
   'CompressedTexSubImage3D': {
-    'type': 'Data',
+    'type': 'Custom',
     'data_transfer_methods': ['bucket', 'shm'],
-    'decoder_func': 'DoCompressedTexSubImage3D',
-    'unsafe': True,
+    'es3': True,
     'trace_level': 1,
   },
   'CopyTexSubImage3D': {
     'decoder_func': 'DoCopyTexSubImage3D',
     'unit_test': False,
     'defer_reads': True,
-    'unsafe': True,
+    'es3': True,
     'trace_level': 1,
   },
   'CreateImageCHROMIUM': {
@@ -2781,14 +2777,14 @@ _FUNCTION_INFO = {
     'type': 'DELn',
     'resource_type': 'Sampler',
     'resource_types': 'Samplers',
-    'unsafe': True,
+    'es3': True,
   },
   'DeleteShader': { 'type': 'Delete' },
   'DeleteSync': {
     'type': 'Delete',
     'cmd_args': 'GLuint sync',
     'resource_type': 'Sync',
-    'unsafe': True,
+    'es3': True,
   },
   'DeleteTextures': {
     'type': 'DELn',
@@ -2799,7 +2795,7 @@ _FUNCTION_INFO = {
     'type': 'DELn',
     'resource_type': 'TransformFeedback',
     'resource_types': 'TransformFeedbacks',
-    'unsafe': True,
+    'es3': True,
     'unit_test': False,
   },
   'DepthRangef': {
@@ -2840,7 +2836,7 @@ _FUNCTION_INFO = {
   },
   'DrawRangeElements': {
     'type': 'NoCommand',
-    'unsafe': True,
+    'es3': True,
   },
   'Enable': {
     'decoder_func': 'DoEnable',
@@ -2855,7 +2851,7 @@ _FUNCTION_INFO = {
     'type': 'Create',
     'client_test': False,
     'decoder_func': 'DoFenceSync',
-    'unsafe': True,
+    'es3': True,
     'trace_level': 1,
   },
   'Finish': {
@@ -2874,7 +2870,7 @@ _FUNCTION_INFO = {
     'decoder_func': 'DoFlushMappedBufferRange',
     'trace_level': 1,
     'unit_test': False,
-    'unsafe': True,
+    'es3': True,
   },
   'FramebufferRenderbuffer': {
     'decoder_func': 'DoFramebufferRenderbuffer',
@@ -2897,7 +2893,7 @@ _FUNCTION_INFO = {
   },
   'FramebufferTextureLayer': {
     'decoder_func': 'DoFramebufferTextureLayer',
-    'unsafe': True,
+    'es3': True,
     'unit_test': False,
     'trace_level': 1,
   },
@@ -2932,7 +2928,7 @@ _FUNCTION_INFO = {
     'gl_test_func': 'glGenSamplers',
     'resource_type': 'Sampler',
     'resource_types': 'Samplers',
-    'unsafe': True,
+    'es3': True,
   },
   'GenTextures': {
     'type': 'GENn',
@@ -2945,7 +2941,7 @@ _FUNCTION_INFO = {
     'gl_test_func': 'glGenTransformFeedbacks',
     'resource_type': 'TransformFeedback',
     'resource_types': 'TransformFeedbacks',
-    'unsafe': True,
+    'es3': True,
   },
   'GetActiveAttrib': {
     'type': 'Custom',
@@ -2975,7 +2971,7 @@ _FUNCTION_INFO = {
     'type': 'Custom',
     'data_transfer_methods': ['shm'],
     'result': ['SizedResult<GLint>'],
-    'unsafe': True,
+    'es3': True,
   },
   'GetActiveUniformBlockName': {
     'type': 'Custom',
@@ -2984,7 +2980,7 @@ _FUNCTION_INFO = {
         'GLidProgram program, GLuint index, uint32_t name_bucket_id, '
         'void* result',
     'result': ['int32_t'],
-    'unsafe': True,
+    'es3': True,
   },
   'GetActiveUniformsiv': {
     'type': 'Custom',
@@ -2993,7 +2989,7 @@ _FUNCTION_INFO = {
         'GLidProgram program, uint32_t indices_bucket_id, GLenum pname, '
         'GLint* params',
     'result': ['SizedResult<GLint>'],
-    'unsafe': True,
+    'es3': True,
   },
   'GetAttachedShaders': {
     'type': 'Custom',
@@ -3008,6 +3004,17 @@ _FUNCTION_INFO = {
         'GLidProgram program, uint32_t name_bucket_id, GLint* location',
     'result': ['GLint'],
     'error_return': -1,
+  },
+  'GetBufferSubDataAsyncCHROMIUM': {
+    'type': 'Custom',
+    'data_transfer_methods': ['shm'],
+    'cmd_args': 'GLenumBufferTarget target, GLintptrNotNegative offset, '
+                'GLsizeiptr size, '
+                'uint32_t data_shm_id, uint32_t data_shm_offset',
+    'es3': True,
+    'impl_func': False,
+    'client_test': False,
+    'trace_level': 1,
   },
   'GetFragDataIndexEXT': {
     'type': 'Custom',
@@ -3026,13 +3033,13 @@ _FUNCTION_INFO = {
         'GLidProgram program, uint32_t name_bucket_id, GLint* location',
     'result': ['GLint'],
     'error_return': -1,
-    'unsafe': True,
+    'es3': True,
   },
   'GetBooleanv': {
     'type': 'GETn',
     'result': ['SizedResult<GLboolean>'],
     'decoder_func': 'DoGetBooleanv',
-    'gl_test_func': 'glGetBooleanv',
+    'gl_test_func': 'glGetIntegerv',
   },
   'GetBufferParameteri64v': {
     'type': 'GETn',
@@ -3040,7 +3047,7 @@ _FUNCTION_INFO = {
     'decoder_func': 'DoGetBufferParameteri64v',
     'expectation': False,
     'shadowed': True,
-    'unsafe': True,
+    'es3': True,
   },
   'GetBufferParameteriv': {
     'type': 'GETn',
@@ -3060,7 +3067,7 @@ _FUNCTION_INFO = {
     'type': 'GETn',
     'result': ['SizedResult<GLfloat>'],
     'decoder_func': 'DoGetFloatv',
-    'gl_test_func': 'glGetFloatv',
+    'gl_test_func': 'glGetIntegerv',
   },
   'GetFramebufferAttachmentParameteriv': {
     'type': 'GETn',
@@ -3078,7 +3085,8 @@ _FUNCTION_INFO = {
     'result': ['SizedResult<GLint64>'],
     'client_test': False,
     'decoder_func': 'DoGetInteger64v',
-    'unsafe': True
+    'gl_test_func': 'glGetIntegerv',
+    'es3': True
   },
   'GetIntegerv': {
     'type': 'GETn',
@@ -3093,7 +3101,7 @@ _FUNCTION_INFO = {
     'shadowed': True,
     'client_test': False,
     'unit_test': False,
-    'unsafe': True
+    'es3': True
   },
   'GetIntegeri_v': {
     'type': 'GETn',
@@ -3102,7 +3110,7 @@ _FUNCTION_INFO = {
     'shadowed': True,
     'client_test': False,
     'unit_test': False,
-    'unsafe': True
+    'es3': True
   },
   'GetInternalformativ': {
     'type': 'Custom',
@@ -3111,7 +3119,7 @@ _FUNCTION_INFO = {
     'cmd_args':
         'GLenumRenderBufferTarget target, GLenumRenderBufferFormat format, '
         'GLenumInternalFormatParameter pname, GLint* params',
-    'unsafe': True,
+    'es3': True,
   },
   'GetMaxValueInBufferCHROMIUM': {
     'type': 'Is',
@@ -3154,13 +3162,13 @@ _FUNCTION_INFO = {
     'type': 'GETn',
     'decoder_func': 'DoGetSamplerParameterfv',
     'result': ['SizedResult<GLfloat>'],
-    'unsafe': True,
+    'es3': True,
   },
   'GetSamplerParameteriv': {
     'type': 'GETn',
     'decoder_func': 'DoGetSamplerParameteriv',
     'result': ['SizedResult<GLint>'],
-    'unsafe': True,
+    'es3': True,
   },
   'GetShaderiv': {
     'type': 'GETn',
@@ -3200,14 +3208,14 @@ _FUNCTION_INFO = {
   },
   'GetStringi': {
     'type': 'NoCommand',
-    'unsafe': True,
+    'es3': True,
   },
   'GetSynciv': {
     'type': 'GETn',
     'cmd_args': 'GLuint sync, GLenumSyncParameter pname, void* values',
     'result': ['SizedResult<GLint>'],
     'id_mapping': ['Sync'],
-    'unsafe': True,
+    'es3': True,
   },
   'GetTexParameterfv': {
     'type': 'GETn',
@@ -3233,7 +3241,7 @@ _FUNCTION_INFO = {
         'GLidProgram program, uint32_t name_bucket_id, GLuint* index',
     'result': ['GLuint'],
     'error_return': 'GL_INVALID_INDEX',
-    'unsafe': True,
+    'es3': True,
   },
   'GetUniformBlocksCHROMIUM': {
     'type': 'Custom',
@@ -3242,7 +3250,7 @@ _FUNCTION_INFO = {
     'client_test': False,
     'cmd_args': 'GLidProgram program, uint32_t bucket_id',
     'result': ['uint32_t'],
-    'unsafe': True,
+    'es3': True,
   },
   'GetUniformsES3CHROMIUM': {
     'type': 'Custom',
@@ -3251,7 +3259,7 @@ _FUNCTION_INFO = {
     'client_test': False,
     'cmd_args': 'GLidProgram program, uint32_t bucket_id',
     'result': ['uint32_t'],
-    'unsafe': True,
+    'es3': True,
   },
   'GetTransformFeedbackVarying': {
     'type': 'Custom',
@@ -3264,7 +3272,7 @@ _FUNCTION_INFO = {
       'int32_t size',
       'uint32_t type',
     ],
-    'unsafe': True,
+    'es3': True,
   },
   'GetTransformFeedbackVaryingsCHROMIUM': {
     'type': 'Custom',
@@ -3273,7 +3281,7 @@ _FUNCTION_INFO = {
     'client_test': False,
     'cmd_args': 'GLidProgram program, uint32_t bucket_id',
     'result': ['uint32_t'],
-    'unsafe': True,
+    'es3': True,
   },
   'GetUniformfv': {
     'type': 'Custom',
@@ -3289,7 +3297,7 @@ _FUNCTION_INFO = {
     'type': 'Custom',
     'data_transfer_methods': ['shm'],
     'result': ['SizedResult<GLuint>'],
-    'unsafe': True,
+    'es3': True,
   },
   'GetUniformIndices': {
     'type': 'Custom',
@@ -3297,7 +3305,7 @@ _FUNCTION_INFO = {
     'result': ['SizedResult<GLuint>'],
     'cmd_args': 'GLidProgram program, uint32_t names_bucket_id, '
                 'GLuint* indices',
-    'unsafe': True,
+    'es3': True,
   },
   'GetUniformLocation': {
     'type': 'Custom',
@@ -3330,7 +3338,7 @@ _FUNCTION_INFO = {
     'decoder_func': 'DoGetVertexAttribIiv',
     'expectation': False,
     'client_test': False,
-    'unsafe': True,
+    'es3': True,
   },
   'GetVertexAttribIuiv': {
     'type': 'GETn',
@@ -3339,7 +3347,7 @@ _FUNCTION_INFO = {
     'decoder_func': 'DoGetVertexAttribIuiv',
     'expectation': False,
     'client_test': False,
-    'unsafe': True,
+    'es3': True,
   },
   'GetVertexAttribPointerv': {
     'type': 'Custom',
@@ -3353,7 +3361,7 @@ _FUNCTION_INFO = {
     'decoder_func': 'DoInvalidateFramebuffer',
     'client_test': False,
     'unit_test': False,
-    'unsafe': True,
+    'es3': True,
   },
   'InvalidateSubFramebuffer': {
     'type': 'PUTn',
@@ -3361,7 +3369,7 @@ _FUNCTION_INFO = {
     'decoder_func': 'DoInvalidateSubFramebuffer',
     'client_test': False,
     'unit_test': False,
-    'unsafe': True,
+    'es3': True,
   },
   'IsBuffer': {
     'type': 'Is',
@@ -3399,7 +3407,7 @@ _FUNCTION_INFO = {
     'type': 'Is',
     'decoder_func': 'DoIsSampler',
     'expectation': False,
-    'unsafe': True,
+    'es3': True,
   },
   'IsSync': {
     'type': 'Is',
@@ -3407,7 +3415,7 @@ _FUNCTION_INFO = {
     'cmd_args': 'GLuint sync',
     'decoder_func': 'DoIsSync',
     'expectation': False,
-    'unsafe': True,
+    'es3': True,
   },
   'IsTexture': {
     'type': 'Is',
@@ -3418,7 +3426,7 @@ _FUNCTION_INFO = {
     'type': 'Is',
     'decoder_func': 'DoIsTransformFeedback',
     'expectation': False,
-    'unsafe': True,
+    'es3': True,
   },
   'GetLastFlushIdCHROMIUM': {
     'type': 'NoCommand',
@@ -3455,14 +3463,14 @@ _FUNCTION_INFO = {
                 'GLsizeiptr size, GLbitfieldMapBufferAccess access, '
                 'uint32_t data_shm_id, uint32_t data_shm_offset, '
                 'uint32_t result_shm_id, uint32_t result_shm_offset',
-    'unsafe': True,
+    'es3': True,
     'result': ['uint32_t'],
     'trace_level': 1,
   },
   'PauseTransformFeedback': {
     'decoder_func': 'DoPauseTransformFeedback',
     'unit_test': False,
-    'unsafe': True,
+    'es3': True,
   },
   'PixelStorei': {
     'type': 'Custom',
@@ -3478,7 +3486,7 @@ _FUNCTION_INFO = {
     'decoder_func': 'DoProduceTextureCHROMIUM',
     'impl_func': False,
     'type': 'PUT',
-    'count': 64,  # GL_MAILBOX_SIZE_CHROMIUM
+    'count': 16,  # GL_MAILBOX_SIZE_CHROMIUM
     'unit_test': False,
     'client_test': False,
     'extension': "CHROMIUM_texture_mailbox",
@@ -3488,7 +3496,7 @@ _FUNCTION_INFO = {
     'decoder_func': 'DoProduceTextureDirectCHROMIUM',
     'impl_func': False,
     'type': 'PUT',
-    'count': 64,  # GL_MAILBOX_SIZE_CHROMIUM
+    'count': 16,  # GL_MAILBOX_SIZE_CHROMIUM
     'unit_test': False,
     'client_test': False,
     'extension': "CHROMIUM_texture_mailbox",
@@ -3523,7 +3531,7 @@ _FUNCTION_INFO = {
     'trace_level': 1,
   },
   'ReadBuffer': {
-    'unsafe': True,
+    'es3': True,
     'decoder_func': 'DoReadBuffer',
     'trace_level': 1,
   },
@@ -3558,14 +3566,14 @@ _FUNCTION_INFO = {
   'ResumeTransformFeedback': {
     'decoder_func': 'DoResumeTransformFeedback',
     'unit_test': False,
-    'unsafe': True,
+    'es3': True,
   },
   'SamplerParameterf': {
     'valid_args': {
       '2': 'GL_NEAREST'
     },
     'decoder_func': 'DoSamplerParameterf',
-    'unsafe': True,
+    'es3': True,
   },
   'SamplerParameterfv': {
     'type': 'PUT',
@@ -3574,14 +3582,14 @@ _FUNCTION_INFO = {
     'gl_test_func': 'glSamplerParameterf',
     'decoder_func': 'DoSamplerParameterfv',
     'first_element_only': True,
-    'unsafe': True,
+    'es3': True,
   },
   'SamplerParameteri': {
     'valid_args': {
       '2': 'GL_NEAREST'
     },
     'decoder_func': 'DoSamplerParameteri',
-    'unsafe': True,
+    'es3': True,
   },
   'SamplerParameteriv': {
     'type': 'PUT',
@@ -3590,7 +3598,7 @@ _FUNCTION_INFO = {
     'gl_test_func': 'glSamplerParameteri',
     'decoder_func': 'DoSamplerParameteriv',
     'first_element_only': True,
-    'unsafe': True,
+    'es3': True,
   },
   'ShaderBinary': {
     'type': 'Custom',
@@ -3652,7 +3660,7 @@ _FUNCTION_INFO = {
     'impl_func': False,
     'data_transfer_methods': ['shm'],
     'client_test': False,
-    'unsafe': True,
+    'es3': True,
     'trace_level': 2,
   },
   'TexParameterf': {
@@ -3684,7 +3692,7 @@ _FUNCTION_INFO = {
     'first_element_only': True,
   },
   'TexStorage3D': {
-    'unsafe': True,
+    'es3': True,
     'unit_test': False,
     'decoder_func': 'DoTexStorage3D',
     'trace_level': 2,
@@ -3712,7 +3720,7 @@ _FUNCTION_INFO = {
                 'GLsizei width, GLsizei height, GLsizei depth, '
                 'GLenumTextureFormat format, GLenumPixelType type, '
                 'const void* pixels, GLboolean internal',
-    'unsafe': True,
+    'es3': True,
   },
   'TransformFeedbackVaryings': {
     'type': 'PUTSTR',
@@ -3721,7 +3729,7 @@ _FUNCTION_INFO = {
     'cmd_args':
         'GLuint program, const char** varyings, GLenum buffermode',
     'expectation': False,
-    'unsafe': True,
+    'es3': True,
   },
   'Uniform1f': {'type': 'PUTXn', 'count': 1},
   'Uniform1fv': {
@@ -3740,14 +3748,14 @@ _FUNCTION_INFO = {
     'type': 'PUTXn',
     'count': 1,
     'unit_test': False,
-    'unsafe': True,
+    'es3': True,
   },
   'Uniform1uiv': {
     'type': 'PUTn',
     'count': 1,
     'decoder_func': 'DoUniform1uiv',
     'unit_test': False,
-    'unsafe': True,
+    'es3': True,
   },
   'Uniform2i': {'type': 'PUTXn', 'count': 2},
   'Uniform2f': {'type': 'PUTXn', 'count': 2},
@@ -3765,14 +3773,14 @@ _FUNCTION_INFO = {
     'type': 'PUTXn',
     'count': 2,
     'unit_test': False,
-    'unsafe': True,
+    'es3': True,
   },
   'Uniform2uiv': {
     'type': 'PUTn',
     'count': 2,
     'decoder_func': 'DoUniform2uiv',
     'unit_test': False,
-    'unsafe': True,
+    'es3': True,
   },
   'Uniform3i': {'type': 'PUTXn', 'count': 3},
   'Uniform3f': {'type': 'PUTXn', 'count': 3},
@@ -3790,14 +3798,14 @@ _FUNCTION_INFO = {
     'type': 'PUTXn',
     'count': 3,
     'unit_test': False,
-    'unsafe': True,
+    'es3': True,
   },
   'Uniform3uiv': {
     'type': 'PUTn',
     'count': 3,
     'decoder_func': 'DoUniform3uiv',
     'unit_test': False,
-    'unsafe': True,
+    'es3': True,
   },
   'Uniform4i': {'type': 'PUTXn', 'count': 4},
   'Uniform4f': {'type': 'PUTXn', 'count': 4},
@@ -3815,14 +3823,14 @@ _FUNCTION_INFO = {
     'type': 'PUTXn',
     'count': 4,
     'unit_test': False,
-    'unsafe': True,
+    'es3': True,
   },
   'Uniform4uiv': {
     'type': 'PUTn',
     'count': 4,
     'decoder_func': 'DoUniform4uiv',
     'unit_test': False,
-    'unsafe': True,
+    'es3': True,
   },
   'UniformMatrix2fv': {
     'type': 'PUTn',
@@ -3834,13 +3842,13 @@ _FUNCTION_INFO = {
     'type': 'PUTn',
     'count': 6,
     'decoder_func': 'DoUniformMatrix2x3fv',
-    'unsafe': True,
+    'es3': True,
   },
   'UniformMatrix2x4fv': {
     'type': 'PUTn',
     'count': 8,
     'decoder_func': 'DoUniformMatrix2x4fv',
-    'unsafe': True,
+    'es3': True,
   },
   'UniformMatrix3fv': {
     'type': 'PUTn',
@@ -3852,13 +3860,13 @@ _FUNCTION_INFO = {
     'type': 'PUTn',
     'count': 6,
     'decoder_func': 'DoUniformMatrix3x2fv',
-    'unsafe': True,
+    'es3': True,
   },
   'UniformMatrix3x4fv': {
     'type': 'PUTn',
     'count': 12,
     'decoder_func': 'DoUniformMatrix3x4fv',
-    'unsafe': True,
+    'es3': True,
   },
   'UniformMatrix4fv': {
     'type': 'PUTn',
@@ -3878,18 +3886,18 @@ _FUNCTION_INFO = {
     'type': 'PUTn',
     'count': 8,
     'decoder_func': 'DoUniformMatrix4x2fv',
-    'unsafe': True,
+    'es3': True,
   },
   'UniformMatrix4x3fv': {
     'type': 'PUTn',
     'count': 12,
     'decoder_func': 'DoUniformMatrix4x3fv',
-    'unsafe': True,
+    'es3': True,
   },
   'UniformBlockBinding': {
     'type': 'Custom',
     'impl_func': False,
-    'unsafe': True,
+    'es3': True,
   },
   'UnmapBufferCHROMIUM': {
     'type': 'NoCommand',
@@ -3904,7 +3912,7 @@ _FUNCTION_INFO = {
   },
   'UnmapBuffer': {
     'type': 'Custom',
-    'unsafe': True,
+    'es3': True,
     'trace_level': 1,
   },
   'UnmapTexSubImage2DCHROMIUM': {
@@ -3943,23 +3951,23 @@ _FUNCTION_INFO = {
     'decoder_func': 'DoVertexAttrib4fv',
   },
   'VertexAttribI4i': {
-    'unsafe': True,
+    'es3': True,
     'decoder_func': 'DoVertexAttribI4i',
   },
   'VertexAttribI4iv': {
     'type': 'PUT',
     'count': 4,
-    'unsafe': True,
+    'es3': True,
     'decoder_func': 'DoVertexAttribI4iv',
   },
   'VertexAttribI4ui': {
-    'unsafe': True,
+    'es3': True,
     'decoder_func': 'DoVertexAttribI4ui',
   },
   'VertexAttribI4uiv': {
     'type': 'PUT',
     'count': 4,
-    'unsafe': True,
+    'es3': True,
     'decoder_func': 'DoVertexAttribI4uiv',
   },
   'VertexAttribIPointer': {
@@ -3969,7 +3977,7 @@ _FUNCTION_INFO = {
                 'GLenumVertexAttribIType type, GLsizei stride, '
                 'GLuint offset',
     'client_test': False,
-    'unsafe': True,
+    'es3': True,
   },
   'VertexAttribPointer': {
     'type': 'Custom',
@@ -3985,7 +3993,7 @@ _FUNCTION_INFO = {
                 'GLuint64 timeout',
     'impl_func': False,
     'client_test': False,
-    'unsafe': True,
+    'es3': True,
     'trace_level': 1,
   },
   'Scissor': {
@@ -4114,7 +4122,7 @@ _FUNCTION_INFO = {
   'BeginTransformFeedback': {
     'decoder_func': 'DoBeginTransformFeedback',
     'unit_test': False,
-    'unsafe': True,
+    'es3': True,
   },
   'EndQueryEXT': {
     'type': 'Custom',
@@ -4128,7 +4136,7 @@ _FUNCTION_INFO = {
   'EndTransformFeedback': {
     'decoder_func': 'DoEndTransformFeedback',
     'unit_test': False,
-    'unsafe': True,
+    'es3': True,
   },
   'FlushDriverCachesCHROMIUM': {
     'decoder_func': 'DoFlushDriverCachesCHROMIUM',
@@ -4768,7 +4776,7 @@ static_assert(offsetof(%(cmd_name)s::Result, %(field_name)s) == %(offset)d,
 
   def WriteHandlerImplementation(self, func, f):
     """Writes the handler implementation for this command."""
-    if func.IsUnsafe() and func.GetInfo('id_mapping'):
+    if func.IsES3() and func.GetInfo('id_mapping'):
       code_no_gen = """  if (!group_->Get%(type)sServiceId(
         %(var)s, &%(service_var)s)) {
     LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "%(func)s", "invalid %(var)s id");
@@ -4823,6 +4831,10 @@ static_assert(offsetof(%(cmd_name)s::Result, %(field_name)s) == %(offset)d,
         args.append("nullptr")
       else:
         args.append(arg.name)
+
+    if func.GetInfo('type') == 'GETn' and func.name != 'GetSynciv':
+      args.append('num_values')
+
     f.write("  %s(%s);\n" %
                (func.GetGLFunctionName(), ", ".join(args)))
 
@@ -4863,7 +4875,7 @@ static_assert(offsetof(%(cmd_name)s::Result, %(field_name)s) == %(offset)d,
 
   def __WriteIdMapping(self, func, f):
     """Writes client side / service side ID mapping."""
-    if not func.IsUnsafe() or not func.GetInfo('id_mapping'):
+    if not func.IsES3() or not func.GetInfo('id_mapping'):
       return
     for id_type in func.GetInfo('id_mapping'):
       f.write("  group_->Get%sServiceId(%s, &%s);\n" %
@@ -4886,8 +4898,8 @@ static_assert(offsetof(%(cmd_name)s::Result, %(field_name)s) == %(offset)d,
     f.write("""error::Error GLES2DecoderImpl::Handle%(name)s(
         uint32_t immediate_data_size, const volatile void* cmd_data) {
       """ % {'name': func.name})
-    if func.IsUnsafe():
-      f.write("""if (!unsafe_es3_apis_enabled())
+    if func.IsES3():
+      f.write("""if (!feature_info_->IsWebGL2OrES3Context())
           return error::kUnknownCommand;
         """)
     if func.GetCmdArgs():
@@ -5053,7 +5065,7 @@ static_assert(offsetof(%(cmd_name)s::Result, %(field_name)s) == %(offset)d,
 
   def WriteInvalidUnitTest(self, func, f, test, *extras):
     """Writes an invalid unit test for the service implementation."""
-    if func.IsUnsafe():
+    if func.IsES3():
       return
     for invalid_arg_index, invalid_arg in enumerate(func.GetOriginalArgs()):
       # Service implementation does not test constants, as they are not part of
@@ -5122,24 +5134,14 @@ TEST_P(%(test_name)s, %(name)sValidArgs) {
   SpecializedSetup<cmds::%(name)s, 0>(true);
   cmds::%(name)s cmd;
   cmd.Init(%(args)s);"""
-    if func.IsUnsafe():
-      valid_test += """
-  decoder_->set_unsafe_es3_apis_enabled(true);
-  EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
-  EXPECT_EQ(GL_NO_ERROR, GetGLError());
-  decoder_->set_unsafe_es3_apis_enabled(false);
-  EXPECT_EQ(error::kUnknownCommand, ExecuteCmd(cmd));
-}
-"""
-    else:
-      valid_test += """
+    valid_test += """
   EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
   EXPECT_EQ(GL_NO_ERROR, GetGLError());
 }
 """
     self.WriteValidUnitTest(func, f, valid_test, *extras)
 
-    if not func.IsUnsafe():
+    if not func.IsES3():
       invalid_test = """
 TEST_P(%(test_name)s, %(name)sInvalidArgs%(arg_index)d_%(value_index)d) {
   EXPECT_CALL(*gl_, %(gl_func_name)s(%(gl_args)s)).Times(0);
@@ -5618,6 +5620,15 @@ class StateSetNamedParameter(TypeHandler):
 class CustomHandler(TypeHandler):
   """Handler for commands that are auto-generated but require minor tweaks."""
 
+  def InitFunction(self, func):
+    """Overrriden from TypeHandler."""
+    if (func.name.startswith('CompressedTex') and func.name.endswith('Bucket')):
+      # Remove imageSize argument, take the size from the bucket instead.
+      func.cmd_args = [arg for arg in func.cmd_args if arg.name != 'imageSize']
+      func.AddCmdArg(Argument('bucket_id', 'GLuint'))
+    else:
+      TypeHandler.InitFunction(self, func)
+
   def WriteServiceImplementation(self, func, f):
     """Overrriden from TypeHandler."""
     pass
@@ -5690,17 +5701,7 @@ class NoCommandHandler(CustomHandler):
 
 
 class DataHandler(TypeHandler):
-  """Handler for glBufferData, glBufferSubData, glTexImage*D, glTexSubImage*D,
-     glCompressedTexImage*D, glCompressedTexImageSub*D."""
-
-  def InitFunction(self, func):
-    """Overrriden from TypeHandler."""
-    if (func.name.startswith('CompressedTex') and func.name.endswith('Bucket')):
-      # Remove imageSize argument, take the size from the bucket instead.
-      func.cmd_args = [arg for arg in func.cmd_args if arg.name != 'imageSize']
-      func.AddCmdArg(Argument('bucket_id', 'GLuint'))
-    else:
-      TypeHandler.InitFunction(self, func)
+  """Handler for glBufferData, glBufferSubData, glTex{Sub}Image*D."""
 
   def WriteGetDataSizeCode(self, func, f):
     """Overrriden from TypeHandler."""
@@ -5710,18 +5711,6 @@ class DataHandler(TypeHandler):
       name = name[0:-9]
     if name == 'BufferData' or name == 'BufferSubData':
       f.write("  uint32_t data_size = size;\n")
-    elif (name.startswith('CompressedTex')):
-      if name.endswith('Bucket'):
-        f.write("""  Bucket* bucket = GetBucket(bucket_id);
-  if (!bucket)
-    return error::kInvalidArguments;
-  uint32_t data_size = bucket->size();
-  GLsizei imageSize = data_size;
-  const void* data = bucket->GetData(0, data_size);
-  DCHECK(data || !imageSize);
-""")
-      else:
-        f.write("  uint32_t data_size = imageSize;\n")
     elif name == 'TexImage2D' or name == 'TexSubImage2D':
       code = """  uint32_t data_size;
   if (!GLES2Util::ComputeImageDataSize(
@@ -5786,18 +5775,7 @@ TEST_P(%(test_name)s, %(name)sValidArgs) {
   EXPECT_CALL(*gl_, %(gl_func_name)s(%(gl_args)s));
   SpecializedSetup<cmds::%(name)s, 0>(true);
   cmds::%(name)s cmd;
-  cmd.Init(%(args)s);"""
-      if func.IsUnsafe():
-        valid_test += """
-  decoder_->set_unsafe_es3_apis_enabled(true);
-  EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
-  EXPECT_EQ(GL_NO_ERROR, GetGLError());
-  decoder_->set_unsafe_es3_apis_enabled(false);
-  EXPECT_EQ(error::kUnknownCommand, ExecuteCmd(cmd));
-}
-"""
-      else:
-        valid_test += """
+  cmd.Init(%(args)s);
   EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
   EXPECT_EQ(GL_NO_ERROR, GetGLError());
 }
@@ -5826,18 +5804,7 @@ TEST_P(%(test_name)s, %(name)sValidArgs) {
   EXPECT_CALL(*gl_, %(gl_func_name)s(%(gl_args)s));
   SpecializedSetup<cmds::%(name)s, 0>(true);
   cmds::%(name)s cmd;
-  cmd.Init(%(args)s);"""
-      if func.IsUnsafe():
-        valid_test += """
-  decoder_->set_unsafe_es3_apis_enabled(true);
-  EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
-  EXPECT_EQ(GL_NO_ERROR, GetGLError());
-  decoder_->set_unsafe_es3_apis_enabled(false);
-  EXPECT_EQ(error::kUnknownCommand, ExecuteCmd(cmd));
-}
-"""
-      else:
-        valid_test += """
+  cmd.Init(%(args)s);
   EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
   EXPECT_EQ(GL_NO_ERROR, GetGLError());
 }
@@ -5851,19 +5818,7 @@ TEST_P(%(test_name)s, %(name)sValidArgsNewId) {
      .WillOnce(SetArgumentPointee<1>(kNewServiceId));
   SpecializedSetup<cmds::%(name)s, 0>(true);
   cmds::%(name)s cmd;
-  cmd.Init(%(args_with_new_id)s);"""
-        if func.IsUnsafe():
-          valid_test += """
-  decoder_->set_unsafe_es3_apis_enabled(true);
-  EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
-  EXPECT_EQ(GL_NO_ERROR, GetGLError());
-  EXPECT_TRUE(Get%(resource_type)s(kNewClientId) != NULL);
-  decoder_->set_unsafe_es3_apis_enabled(false);
-  EXPECT_EQ(error::kUnknownCommand, ExecuteCmd(cmd));
-}
-"""
-        else:
-          valid_test += """
+  cmd.Init(%(args_with_new_id)s);
   EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
   EXPECT_EQ(GL_NO_ERROR, GetGLError());
   EXPECT_TRUE(Get%(resource_type)s(kNewClientId) != NULL);
@@ -5944,7 +5899,7 @@ TEST_F(GLES2ImplementationTest, %(name)s) {
 
   gl_->%(name)s(%(args)s);
   EXPECT_EQ(0, memcmp(&expected, commands_, sizeof(expected)));"""
-    if not func.IsUnsafe():
+    if not func.IsES3():
       code += """
   ClearCommands();
   gl_->%(name)s(%(args)s);
@@ -6082,11 +6037,7 @@ TEST_P(%(test_name)s, %(name)sValidArgs) {
       .WillOnce(SetArgumentPointee<1>(kNewServiceId));
   cmds::%(name)s* cmd = GetImmediateAs<cmds::%(name)s>();
   GLuint temp = kNewClientId;
-  SpecializedSetup<cmds::%(name)s, 0>(true);"""
-    if func.IsUnsafe():
-      valid_test += """
-  decoder_->set_unsafe_es3_apis_enabled(true);"""
-    valid_test += """
+  SpecializedSetup<cmds::%(name)s, 0>(true);
   cmd->Init(1, &temp);
   EXPECT_EQ(error::kNoError,
             ExecuteImmediateCmd(*cmd, sizeof(temp)));
@@ -6102,11 +6053,7 @@ TEST_P(%(test_name)s, %(name)sDuplicateOrNullIds) {
   EXPECT_CALL(*gl_, %(gl_func_name)s(_, _)).Times(0);
   cmds::%(name)s* cmd = GetImmediateAs<cmds::%(name)s>();
   GLuint temp[3] = {kNewClientId, kNewClientId + 1, kNewClientId};
-  SpecializedSetup<cmds::%(name)s, 1>(true);"""
-    if func.IsUnsafe():
-      duplicate_id_test += """
-  decoder_->set_unsafe_es3_apis_enabled(true);"""
-    duplicate_id_test += """
+  SpecializedSetup<cmds::%(name)s, 1>(true);
   cmd->Init(3, temp);
   EXPECT_EQ(error::kInvalidArguments,
             ExecuteImmediateCmd(*cmd, sizeof(temp)));
@@ -6127,17 +6074,7 @@ TEST_P(%(test_name)s, %(name)sInvalidArgs) {
   EXPECT_CALL(*gl_, %(gl_func_name)s(_, _)).Times(0);
   cmds::%(name)s* cmd = GetImmediateAs<cmds::%(name)s>();
   SpecializedSetup<cmds::%(name)s, 0>(false);
-  cmd->Init(1, &client_%(resource_name)s_id_);"""
-    if func.IsUnsafe():
-      invalid_test += """
-  decoder_->set_unsafe_es3_apis_enabled(true);
-  EXPECT_EQ(error::kInvalidArguments,
-            ExecuteImmediateCmd(*cmd, sizeof(&client_%(resource_name)s_id_)));
-  decoder_->set_unsafe_es3_apis_enabled(false);
-}
-"""
-    else:
-      invalid_test += """
+  cmd->Init(1, &client_%(resource_name)s_id_);
   EXPECT_EQ(error::kInvalidArguments,
             ExecuteImmediateCmd(*cmd, sizeof(&client_%(resource_name)s_id_)));
 }
@@ -6259,20 +6196,14 @@ TEST_P(%(test_name)s, %(name)sValidArgs) {
       .WillOnce(Return(%(const_service_id)s));
   SpecializedSetup<cmds::%(name)s, 0>(true);
   cmds::%(name)s cmd;
-  cmd.Init(%(args)s%(comma)skNewClientId);"""
-    if func.IsUnsafe():
-      valid_test += """
-  decoder_->set_unsafe_es3_apis_enabled(true);"""
-    valid_test += """
+  cmd.Init(%(args)s%(comma)skNewClientId);
   EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
   EXPECT_EQ(GL_NO_ERROR, GetGLError());"""
-    if func.IsUnsafe():
+    if func.IsES3():
       valid_test += """
   %(return_type)s service_id = 0;
   EXPECT_TRUE(Get%(resource_type)sServiceId(kNewClientId, &service_id));
   EXPECT_EQ(%(const_service_id)s, service_id);
-  decoder_->set_unsafe_es3_apis_enabled(false);
-  EXPECT_EQ(error::kUnknownCommand, ExecuteCmd(cmd));
 }
 """
     else:
@@ -6316,7 +6247,7 @@ TEST_P(%(test_name)s, %(name)sInvalidArgs%(arg_index)d_%(value_index)d) {
 
   def WriteHandlerImplementation (self, func, f):
     """Overrriden from TypeHandler."""
-    if func.IsUnsafe():
+    if func.IsES3():
       code = """  uint32_t client_id = c.client_id;
   %(return_type)s service_id = 0;
   if (group_->Get%(resource_name)sServiceId(client_id, &service_id)) {
@@ -6382,7 +6313,7 @@ class DeleteHandler(TypeHandler):
 
   def WriteServiceImplementation(self, func, f):
     """Overrriden from TypeHandler."""
-    if func.IsUnsafe():
+    if func.IsES3():
       TypeHandler.WriteServiceImplementation(self, func, f)
     # HandleDeleteShader and HandleDeleteProgram are manually written.
     pass
@@ -6488,11 +6419,7 @@ TEST_P(%(test_name)s, %(name)sValidArgs) {
       .Times(1);
   cmds::%(name)s& cmd = *GetImmediateAs<cmds::%(name)s>();
   SpecializedSetup<cmds::%(name)s, 0>(true);
-  cmd.Init(1, &client_%(resource_name)s_id_);"""
-    if func.IsUnsafe():
-      valid_test += """
-  decoder_->set_unsafe_es3_apis_enabled(true);"""
-    valid_test += """
+  cmd.Init(1, &client_%(resource_name)s_id_);
   EXPECT_EQ(error::kNoError,
             ExecuteImmediateCmd(cmd, sizeof(client_%(resource_name)s_id_)));
   EXPECT_EQ(GL_NO_ERROR, GetGLError());
@@ -6509,19 +6436,7 @@ TEST_P(%(test_name)s, %(name)sInvalidArgs) {
   cmds::%(name)s& cmd = *GetImmediateAs<cmds::%(name)s>();
   SpecializedSetup<cmds::%(name)s, 0>(false);
   GLuint temp = kInvalidClientId;
-  cmd.Init(1, &temp);"""
-    if func.IsUnsafe():
-      invalid_test += """
-  decoder_->set_unsafe_es3_apis_enabled(true);
-  EXPECT_EQ(error::kNoError,
-            ExecuteImmediateCmd(cmd, sizeof(temp)));
-  decoder_->set_unsafe_es3_apis_enabled(false);
-  EXPECT_EQ(error::kUnknownCommand,
-            ExecuteImmediateCmd(cmd, sizeof(temp)));
-}
-"""
-    else:
-      invalid_test += """
+  cmd.Init(1, &temp);
   EXPECT_EQ(error::kNoError,
             ExecuteImmediateCmd(cmd, sizeof(temp)));
 }
@@ -6700,7 +6615,10 @@ class GETnHandler(TypeHandler):
 
     code = """  typedef cmds::%(func_name)s::Result Result;
   GLsizei num_values = 0;
-  GetNumValuesReturnedForGLGet(pname, &num_values);
+  if (!GetNumValuesReturnedForGLGet(pname, &num_values)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM(":%(func_name)s", pname, "pname");
+    return error::kNoError;
+  }
   Result* result = GetSharedMemoryAs<Result*>(
       c.%(last_arg_name)s_shm_id, c.%(last_arg_name)s_shm_offset,
       Result::ComputeSize(num_values));
@@ -6896,21 +6814,12 @@ TEST_P(%(test_name)s, %(name)sValidArgs) {
   EXPECT_CALL(*gl_, %(gl_func_name)s(%(local_gl_args)s));
   result->size = 0;
   cmds::%(name)s cmd;
-  cmd.Init(%(cmd_args)s);"""
-    if func.IsUnsafe():
-      valid_test += """
-  decoder_->set_unsafe_es3_apis_enabled(true);"""
-    valid_test += """
+  cmd.Init(%(cmd_args)s);
   EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
   EXPECT_EQ(decoder_->GetGLES2Util()->GLGetNumValuesReturned(
                 %(valid_pname)s),
             result->GetNumResults());
-  EXPECT_EQ(GL_NO_ERROR, GetGLError());"""
-    if func.IsUnsafe():
-      valid_test += """
-  decoder_->set_unsafe_es3_apis_enabled(false);
-  EXPECT_EQ(error::kUnknownCommand, ExecuteCmd(cmd));"""
-    valid_test += """
+  EXPECT_EQ(GL_NO_ERROR, GetGLError());
 }
 """
     gl_arg_strings = []
@@ -6949,7 +6858,7 @@ TEST_P(%(test_name)s, %(name)sValidArgs) {
         'valid_pname': valid_pname,
       }, *extras)
 
-    if not func.IsUnsafe():
+    if not func.IsES3():
       invalid_test = """
 TEST_P(%(test_name)s, %(name)sInvalidArgs%(arg_index)d_%(value_index)d) {
   EXPECT_CALL(*gl_, %(gl_func_name)s(%(gl_args)s)).Times(0);
@@ -7039,20 +6948,10 @@ TEST_P(%(test_name)s, %(name)sValidArgs) {
   cmd.Init(%(gl_client_args)s, &temp[0]);
   EXPECT_CALL(
       *gl_,
-      %(gl_func_name)s(%(gl_args)s, %(expectation)s));"""
-    if func.IsUnsafe():
-      valid_test += """
-  decoder_->set_unsafe_es3_apis_enabled(true);"""
-    valid_test += """
+      %(gl_func_name)s(%(gl_args)s, %(expectation)s));
   EXPECT_EQ(error::kNoError,
             ExecuteImmediateCmd(cmd, sizeof(temp)));
-  EXPECT_EQ(GL_NO_ERROR, GetGLError());"""
-    if func.IsUnsafe():
-      valid_test += """
-  decoder_->set_unsafe_es3_apis_enabled(false);
-  EXPECT_EQ(error::kUnknownCommand,
-            ExecuteImmediateCmd(cmd, sizeof(temp)));"""
-    valid_test += """
+  EXPECT_EQ(GL_NO_ERROR, GetGLError());
 }
 """
     gl_client_arg_strings = [
@@ -7082,7 +6981,7 @@ TEST_P(%(test_name)s, %(name)sValidArgs) {
     invalid_test = """
 TEST_P(%(test_name)s, %(name)sInvalidArgs%(arg_index)d_%(value_index)d) {
   cmds::%(name)s& cmd = *GetImmediateAs<cmds::%(name)s>();"""
-    if func.IsUnsafe():
+    if func.IsES3():
       invalid_test += """
   EXPECT_CALL(*gl_, %(gl_func_name)s(%(gl_any_args)s, _)).Times(1);
 """
@@ -7093,17 +6992,7 @@ TEST_P(%(test_name)s, %(name)sInvalidArgs%(arg_index)d_%(value_index)d) {
     invalid_test += """
   SpecializedSetup<cmds::%(name)s, 0>(false);
   %(data_type)s temp[%(data_count)s] = { %(data_value)s, };
-  cmd.Init(%(all_but_last_args)s, &temp[0]);"""
-    if func.IsUnsafe():
-      invalid_test += """
-  decoder_->set_unsafe_es3_apis_enabled(true);
-  EXPECT_EQ(error::%(parse_result)s,
-            ExecuteImmediateCmd(cmd, sizeof(temp)));
-  decoder_->set_unsafe_es3_apis_enabled(false);
-}
-"""
-    else:
-      invalid_test += """
+  cmd.Init(%(all_but_last_args)s, &temp[0]);
   EXPECT_EQ(error::%(parse_result)s,
             ExecuteImmediateCmd(cmd, sizeof(temp)));
   %(gl_error_test)s
@@ -7372,20 +7261,10 @@ TEST_P(%(test_name)s, %(name)sValidArgs) {
       *gl_,
       %(gl_func_name)s(%(gl_args)s,
           PointsToArray(temp, %(data_count)s)));
-  cmd.Init(%(args)s, &temp[0]);"""
-    if func.IsUnsafe():
-      valid_test += """
-  decoder_->set_unsafe_es3_apis_enabled(true);"""
-    valid_test += """
+  cmd.Init(%(args)s, &temp[0]);
   EXPECT_EQ(error::kNoError,
             ExecuteImmediateCmd(cmd, sizeof(temp)));
-  EXPECT_EQ(GL_NO_ERROR, GetGLError());"""
-    if func.IsUnsafe():
-      valid_test += """
-  decoder_->set_unsafe_es3_apis_enabled(false);
-  EXPECT_EQ(error::kUnknownCommand,
-            ExecuteImmediateCmd(cmd, sizeof(temp)));"""
-    valid_test += """
+  EXPECT_EQ(GL_NO_ERROR, GetGLError());
 }
 """
     gl_arg_strings = []
@@ -7908,13 +7787,7 @@ TEST_P(%(test_name)s, %(name)sValidArgs) {
   SetBucketAsCStrings(kBucketId, 1, kSource, 1, kValidStrEnd);
   cmds::%(name)s cmd;
   cmd.Init(%(cmd_args)s);
-  decoder_->set_unsafe_es3_apis_enabled(true);
   EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));"""
-    if func.IsUnsafe():
-      test += """
-  decoder_->set_unsafe_es3_apis_enabled(false);
-  EXPECT_EQ(error::kUnknownCommand, ExecuteCmd(cmd));
-"""
     test += """
 }
 """
@@ -7929,7 +7802,6 @@ TEST_P(%(test_name)s, %(name)sInvalidArgs) {
   const char kSource0[] = "hello";
   const char* kSource[] = { kSource0 };
   const char kValidStrEnd = 0;
-  decoder_->set_unsafe_es3_apis_enabled(true);
   cmds::%(name)s cmd;
   // Test no bucket.
   cmd.Init(%(cmd_args)s);
@@ -7959,7 +7831,6 @@ TEST_P(%(test_name)s, %(name)sInvalidHeader) {
       std::numeric_limits<GLsizei>::max(),
       -1,
   };
-  decoder_->set_unsafe_es3_apis_enabled(true);
   for (size_t ii = 0; ii < arraysize(kTests); ++ii) {
     SetBucketAsCStrings(kBucketId, 1, kSource, kTests[ii], kValidStrEnd);
     cmds::%(name)s cmd;
@@ -7981,7 +7852,6 @@ TEST_P(%(test_name)s, %(name)sInvalidStringEnding) {
   SetBucketAsCStrings(kBucketId, 1, kSource, 1, kInvalidStrEnd);
   cmds::%(name)s cmd;
   cmd.Init(%(cmd_args)s);
-  decoder_->set_unsafe_es3_apis_enabled(true);
   EXPECT_EQ(error::kInvalidArguments, ExecuteCmd(cmd));
 }
 """
@@ -8021,18 +7891,9 @@ TEST_P(%(test_name)s, %(name)sValidArgs) {
   EXPECT_CALL(*gl_, %(name)sv(%(local_args)s));
   SpecializedSetup<cmds::%(name)s, 0>(true);
   cmds::%(name)s cmd;
-  cmd.Init(%(args)s);"""
-    if func.IsUnsafe():
-      valid_test += """
-  decoder_->set_unsafe_es3_apis_enabled(true);"""
-    valid_test += """
+  cmd.Init(%(args)s);
   EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
-  EXPECT_EQ(GL_NO_ERROR, GetGLError());"""
-    if func.IsUnsafe():
-      valid_test += """
-  decoder_->set_unsafe_es3_apis_enabled(false);
-  EXPECT_EQ(error::kUnknownCommand, ExecuteCmd(cmd));"""
-    valid_test += """
+  EXPECT_EQ(GL_NO_ERROR, GetGLError());
 }
 """
     args = func.GetOriginalArgs()
@@ -8227,18 +8088,9 @@ TEST_P(%(test_name)s, %(name)sValidArgs) {
   EXPECT_CALL(*gl_, %(gl_func_name)s(%(gl_args)s));
   SpecializedSetup<cmds::%(name)s, 0>(true);
   cmds::%(name)s cmd;
-  cmd.Init(%(args)s%(comma)sshared_memory_id_, shared_memory_offset_);"""
-    if func.IsUnsafe():
-      valid_test += """
-  decoder_->set_unsafe_es3_apis_enabled(true);"""
-    valid_test += """
+  cmd.Init(%(args)s%(comma)sshared_memory_id_, shared_memory_offset_);
   EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
-  EXPECT_EQ(GL_NO_ERROR, GetGLError());"""
-    if func.IsUnsafe():
-      valid_test += """
-  decoder_->set_unsafe_es3_apis_enabled(false);
-  EXPECT_EQ(error::kUnknownCommand, ExecuteCmd(cmd));"""
-    valid_test += """
+  EXPECT_EQ(GL_NO_ERROR, GetGLError());
 }
 """
     comma = ""
@@ -8264,20 +8116,12 @@ TEST_P(%(test_name)s, %(name)sInvalidArgs%(arg_index)d_%(value_index)d) {
     invalid_test = """
 TEST_P(%(test_name)s, %(name)sInvalidArgsBadSharedMemoryId) {
   EXPECT_CALL(*gl_, %(gl_func_name)s(%(gl_args)s)).Times(0);
-  SpecializedSetup<cmds::%(name)s, 0>(false);"""
-    if func.IsUnsafe():
-      invalid_test += """
-  decoder_->set_unsafe_es3_apis_enabled(true);"""
-    invalid_test += """
+  SpecializedSetup<cmds::%(name)s, 0>(false);
   cmds::%(name)s cmd;
   cmd.Init(%(args)s%(comma)skInvalidSharedMemoryId, shared_memory_offset_);
   EXPECT_EQ(error::kOutOfBounds, ExecuteCmd(cmd));
   cmd.Init(%(args)s%(comma)sshared_memory_id_, kInvalidSharedMemoryOffset);
-  EXPECT_EQ(error::kOutOfBounds, ExecuteCmd(cmd));"""
-    if func.IsUnsafe():
-      invalid_test += """
-  decoder_->set_unsafe_es3_apis_enabled(true);"""
-    invalid_test += """
+  EXPECT_EQ(error::kOutOfBounds, ExecuteCmd(cmd));
 }
 """
     self.WriteValidUnitTest(func, f, invalid_test, {
@@ -9413,9 +9257,9 @@ class Function(object):
     """Returns whether the function is immediate data function or not."""
     return False
 
-  def IsUnsafe(self):
-    """Returns whether the function has service side validation or not."""
-    return self.GetInfo('unsafe', False)
+  def IsES3(self):
+    """Returns whether the function requires an ES3 context or not."""
+    return self.GetInfo('es3', False)
 
   def GetInfo(self, name, default = None):
     """Returns a value from the function info for this function."""
@@ -9446,7 +9290,7 @@ class Function(object):
   def IsCoreGLFunction(self):
     return (not self.IsExtension() and
             not self.GetInfo('pepper_interface') and
-            not self.IsUnsafe())
+            not self.IsES3())
 
   def InPepperInterface(self, interface):
     ext = self.GetInfo('pepper_interface')
@@ -10430,7 +10274,10 @@ void ContextState::InitState(const ContextState *prev_state) const {
                            (item_name, item_name))
             if test_prev:
               f.write("    )\n")
-            f.write("  gl%s(%s);\n" % (state['func'], ", ".join(args)))
+            if 'custom_function' in state:
+              f.write("  %s(%s);\n" % (state['func'], ", ".join(args)))
+            else:
+              f.write("  gl%s(%s);\n" % (state['func'], ", ".join(args)))
 
       f.write("  if (prev_state) {")
       WriteStates(True)
@@ -10584,12 +10431,14 @@ namespace gles2 {
       comment = "// It is included by gles2_cmd_decoder_unittest_%d.cc\n" \
                 % count
       with CHeaderWriter(filename, comment) as f:
-        test_name = 'GLES2DecoderTest%d' % count
         end = test_num + FUNCTIONS_PER_FILE
         if end > num_tests:
           end = num_tests
         for idx in range(test_num, end):
           func = self.functions[idx]
+          test_name = 'GLES2DecoderTest%d' % count
+          if func.IsES3():
+            test_name = 'GLES3DecoderTest%d' % count
 
           # Do any filtering of the functions here, so that the functions
           # will not move between the numbered files if filtering properties
@@ -10684,10 +10533,14 @@ void GLES2DecoderTestBase::SetupInitStateExpectations(bool es3_capable) {
               args.append(item['default'])
           # TODO: Currently we do not check array values.
           args = ["_" if isinstance(arg, list) else arg for arg in args]
-          f.write("  EXPECT_CALL(*gl_, %s(%s))\n" %
-                     (state['func'], ", ".join(args)))
-          f.write("      .Times(1)\n")
-          f.write("      .RetiresOnSaturation();\n")
+          if 'custom_function' in state:
+            f.write("  SetupInitStateManualExpectationsFor%s(%s);\n" %
+                       (state['func'], ", ".join(args)))
+          else:
+            f.write("  EXPECT_CALL(*gl_, %s(%s))\n" %
+                       (state['func'], ", ".join(args)))
+            f.write("      .Times(1)\n")
+            f.write("      .RetiresOnSaturation();\n")
           if 'extension_flag' in state:
             f.write("  }\n")
       f.write("  SetupInitStateManualExpectations(es3_capable);\n")
@@ -10708,8 +10561,11 @@ void GLES2DecoderTestBase::SetupInitStateExpectations(bool es3_capable) {
           if func.GetInfo('unit_test') != False:
             extension = ToCamelCase(
               ToGLExtensionString(func.GetInfo('extension_flag')))
+            test_name = 'GLES2DecoderTestWith%s' % extension
+            if func.IsES3():
+              test_name = 'GLES3DecoderTestWith%s' % extension
             func.WriteServiceUnitTest(f, {
-              'test_name': 'GLES2DecoderTestWith%s' % extension
+              'test_name': test_name
             })
     self.generated_cpp_filenames.append(filename)
 
@@ -10940,12 +10796,11 @@ extern const NameToFunc g_gles2_function_table[] = {
           f.write(code % {
             'name': ToUnderscore(name),
           })
-      f.write("UpdateES30CompressedTextureFormats();");
       f.write("}\n\n");
 
-      f.write("void Validators::UpdateES30CompressedTextureFormats() {\n")
+      f.write("void Validators::UpdateETCCompressedTextureFormats() {\n")
       for name in ['CompressedTextureFormat', 'TextureInternalFormatStorage']:
-        for fmt in _ES30_COMPRESSED_TEXTURE_FORMATS:
+        for fmt in _ETC_COMPRESSED_TEXTURE_FORMATS:
           code = """  %(name)s.AddValue(%(format)s);
 """
           f.write(code % {
@@ -11014,12 +10869,6 @@ const size_t GLES2Util::enum_to_string_table_len_ =
             for es3_enum in _NAMED_TYPE_INFO[enum]['valid_es3']:
               if not es3_enum in valid_list:
                 valid_list.append(es3_enum)
-          if enum in [
-              'CompressedTextureFormat',
-              'TextureInternalFormatStorage',
-            ]:
-            for es3_enum in _ES30_COMPRESSED_TEXTURE_FORMATS:
-              valid_list.append(es3_enum)
           assert len(valid_list) == len(set(valid_list))
           if len(valid_list) > 0:
             f.write("  static const EnumToString string_table[] = {\n")

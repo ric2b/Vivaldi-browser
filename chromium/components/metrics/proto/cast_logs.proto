@@ -15,7 +15,7 @@ package metrics;
 // Next tag: 7
 message CastLogsProto {
   // Cast specific device information.
-  // Next tag: 5
+  // Next tag: 6
   message CastDeviceInfo {
     // The product type of Cast device sent from Cast-enabled devices.
     // Next tag: 5
@@ -37,6 +37,9 @@ message CastLogsProto {
 
     // The model of the Cast device.
     optional string model = 4;
+
+    // The serial number.
+    optional string serial_number = 5;
   }
   // The device sends this information at least once per day.
   optional CastDeviceInfo cast_device_info = 1;
@@ -121,7 +124,7 @@ message CastLogsProto {
   repeated CastConnectionInfo cast_connection_info = 2;
 
   // Stores Cast-enabled device specific events with a various context data.
-  // Next tag: 12
+  // Next tag: 13
   message CastEventProto {
     // The name of the action, hashed by same logic used to hash user action
     // event and histogram.
@@ -157,6 +160,10 @@ message CastLogsProto {
     // For application events associated with an assistant session, identifies
     // the assistant conversation.
     optional string conversation_key = 11;
+
+    // Request ID of V2 Application Protocol, identifies a pair of request
+    // and response.
+    optional fixed32 request_id = 12;
   }
   repeated CastEventProto cast_event = 3;
 
@@ -164,7 +171,7 @@ message CastLogsProto {
   optional fixed32 virtual_release_track = 4;
 
   // Cast specific device information which is expected to change over time.
-  // Next tag: 2
+  // Next tag: 4
   message CastDeviceMutableInfo {
     // This is the last type of reboot the device encountered
     // Next tag: 9

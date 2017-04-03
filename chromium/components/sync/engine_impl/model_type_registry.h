@@ -11,38 +11,30 @@
 #include <vector>
 
 #include "base/macros.h"
-#include "base/memory/scoped_vector.h"
 #include "base/memory/weak_ptr.h"
 #include "components/sync/base/model_type.h"
-#include "components/sync/core/model_type_connector.h"
-#include "components/sync/core/non_blocking_sync_common.h"
-#include "components/sync/core/sync_encryption_handler.h"
 #include "components/sync/engine/cycle/type_debug_info_observer.h"
 #include "components/sync/engine/model_safe_worker.h"
+#include "components/sync/engine/model_type_connector.h"
+#include "components/sync/engine/non_blocking_sync_common.h"
+#include "components/sync/engine/sync_encryption_handler.h"
 #include "components/sync/engine_impl/nudge_handler.h"
+#include "components/sync/engine_impl/uss_migrator.h"
+#include "components/sync/syncable/user_share.h"
 
 namespace syncer {
-class ModelTypeProcessor;
-class ModelTypeWorker;
-struct ModelTypeState;
-}
-
-namespace syncer {
-
-namespace syncable {
-class Directory;
-}  // namespace syncable
 
 class CommitContributor;
+class DataTypeDebugInfoEmitter;
 class DirectoryCommitContributor;
 class DirectoryUpdateHandler;
-class DirectoryTypeDebugInfoEmitter;
+class ModelTypeProcessor;
+class ModelTypeWorker;
 class UpdateHandler;
+struct ModelTypeState;
 
 typedef std::map<ModelType, UpdateHandler*> UpdateHandlerMap;
 typedef std::map<ModelType, CommitContributor*> CommitContributorMap;
-typedef std::map<ModelType, DirectoryTypeDebugInfoEmitter*>
-    DirectoryTypeDebugInfoEmitterMap;
 
 // Keeps track of the sets of active update handlers and commit contributors.
 class ModelTypeRegistry : public ModelTypeConnector,
@@ -50,8 +42,9 @@ class ModelTypeRegistry : public ModelTypeConnector,
  public:
   // Constructs a ModelTypeRegistry that supports directory types.
   ModelTypeRegistry(const std::vector<scoped_refptr<ModelSafeWorker>>& workers,
-                    syncable::Directory* directory,
-                    NudgeHandler* nudge_handler);
+                    UserShare* user_share,
+                    NudgeHandler* nudge_handler,
+                    const UssMigrator& uss_migrator);
   ~ModelTypeRegistry() override;
 
   // Sets the set of enabled types.
@@ -97,7 +90,6 @@ class ModelTypeRegistry : public ModelTypeConnector,
   // Simple getters.
   UpdateHandlerMap* update_handler_map();
   CommitContributorMap* commit_contributor_map();
-  DirectoryTypeDebugInfoEmitterMap* directory_type_debug_info_emitter_map();
 
   void RegisterDirectoryTypeDebugInfoObserver(TypeDebugInfoObserver* observer);
   void UnregisterDirectoryTypeDebugInfoObserver(
@@ -109,34 +101,43 @@ class ModelTypeRegistry : public ModelTypeConnector,
   base::WeakPtr<ModelTypeConnector> AsWeakPtr();
 
  private:
+  typedef std::map<ModelType, std::unique_ptr<DataTypeDebugInfoEmitter>>
+      DataTypeDebugInfoEmitterMap;
+
   void OnEncryptionStateChanged();
+
+  // DebugInfoEmitters are never deleted. Returns an existing one if we have it.
+  DataTypeDebugInfoEmitter* GetEmitter(ModelType type);
 
   ModelTypeSet GetEnabledNonBlockingTypes() const;
   ModelTypeSet GetEnabledDirectoryTypes() const;
 
-  // Sets of handlers and contributors.
-  ScopedVector<DirectoryCommitContributor> directory_commit_contributors_;
-  ScopedVector<DirectoryUpdateHandler> directory_update_handlers_;
-  ScopedVector<DirectoryTypeDebugInfoEmitter>
-      directory_type_debug_info_emitters_;
+  syncable::Directory* directory() const {
+    return user_share_->directory.get();
+  }
 
-  ScopedVector<ModelTypeWorker> model_type_workers_;
+  // Sets of handlers and contributors.
+  std::vector<std::unique_ptr<DirectoryCommitContributor>>
+      directory_commit_contributors_;
+  std::vector<std::unique_ptr<DirectoryUpdateHandler>>
+      directory_update_handlers_;
+
+  std::vector<std::unique_ptr<ModelTypeWorker>> model_type_workers_;
 
   // Maps of UpdateHandlers and CommitContributors.
   // They do not own any of the objects they point to.
   UpdateHandlerMap update_handler_map_;
   CommitContributorMap commit_contributor_map_;
 
-  // Map of DebugInfoEmitters for directory types.
-  // Non-blocking types handle debug info differently.
+  // Map of DebugInfoEmitters for directory types and Non-blocking types.
   // Does not own its contents.
-  DirectoryTypeDebugInfoEmitterMap directory_type_debug_info_emitter_map_;
+  DataTypeDebugInfoEmitterMap data_type_debug_info_emitter_map_;
 
   // The known ModelSafeWorkers.
   std::map<ModelSafeGroup, scoped_refptr<ModelSafeWorker>> workers_map_;
 
-  // The directory.  Not owned.
-  syncable::Directory* directory_;
+  // The user share. Not owned.
+  UserShare* user_share_;
 
   // A copy of the directory's most recent cryptographer.
   std::unique_ptr<Cryptographer> cryptographer_;
@@ -149,6 +150,9 @@ class ModelTypeRegistry : public ModelTypeConnector,
 
   // The set of enabled directory types.
   ModelTypeSet enabled_directory_types_;
+
+  // Function to call to migrate data from the directory to USS.
+  UssMigrator uss_migrator_;
 
   // The set of observers of per-type debug info.
   //

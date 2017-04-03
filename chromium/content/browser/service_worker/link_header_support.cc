@@ -16,6 +16,7 @@
 #include "content/common/service_worker/service_worker_utils.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
+#include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/origin_util.h"
@@ -55,14 +56,29 @@ void HandleServiceWorkerLink(
   ServiceWorkerContext* service_worker_context =
       filter ? filter->service_worker_context()
              : service_worker_context_for_testing;
+  if (IsBrowserSideNavigationEnabled() &&
+      ServiceWorkerUtils::IsMainResourceType(request_info->GetResourceType()) &&
+      !service_worker_context) {
+    service_worker_context = request_info->service_worker_context();
+  }
+
   if (!service_worker_context)
     return;
+
+  ServiceWorkerProviderHost* provider_host =
+      ServiceWorkerRequestHandler::GetProviderHost(request);
+
+  // If fetched from a service worker, make sure fetching service worker is
+  // controlling at least one client to prevent a service worker from spawning
+  // new service workers in the background.
+  if (provider_host && provider_host->IsHostToRunningServiceWorker()) {
+    if (!provider_host->running_hosted_version()->HasControllee())
+      return;
+  }
 
   if (ServiceWorkerUtils::IsMainResourceType(request_info->GetResourceType())) {
     // In case of navigations, make sure the navigation will actually result in
     // a secure context.
-    ServiceWorkerProviderHost* provider_host =
-        ServiceWorkerRequestHandler::GetProviderHost(request);
     if (!provider_host || !provider_host->IsContextSecureForServiceWorker())
       return;
   } else {
@@ -88,9 +104,10 @@ void HandleServiceWorkerLink(
   if (!context_url.is_valid() || !script_url.is_valid() ||
       !scope_url.is_valid())
     return;
-  if (!ServiceWorkerUtils::CanRegisterServiceWorker(context_url, scope_url,
-                                                    script_url))
+  if (!ServiceWorkerUtils::AllOriginsMatchAndCanAccessServiceWorkers(
+          {context_url, scope_url, script_url})) {
     return;
+  }
   std::string error;
   if (ServiceWorkerUtils::ContainsDisallowedCharacter(scope_url, script_url,
                                                       &error))

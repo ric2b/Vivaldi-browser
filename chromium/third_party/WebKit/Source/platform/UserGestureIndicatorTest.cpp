@@ -5,46 +5,64 @@
 #include "platform/UserGestureIndicator.h"
 
 #include "testing/gtest/include/gtest/gtest.h"
+#include "wtf/CurrentTime.h"
 
 namespace blink {
+
+static double s_currentTime = 1000.0;
+
+static void advanceClock(double seconds) {
+  s_currentTime += seconds;
+}
+
+static double mockTimeFunction() {
+  return s_currentTime;
+}
+
+class TestUserGestureToken final : public UserGestureToken {
+  WTF_MAKE_NONCOPYABLE(TestUserGestureToken);
+
+ public:
+  static PassRefPtr<UserGestureToken> create(
+      Status status = PossiblyExistingGesture) {
+    return adoptRef(new TestUserGestureToken(status));
+  }
+
+ private:
+  TestUserGestureToken(Status status) : UserGestureToken(status) {}
+};
 
 // Checks for the initial state of UserGestureIndicator.
 TEST(UserGestureIndicatorTest, InitialState) {
   EXPECT_FALSE(UserGestureIndicator::utilizeUserGesture());
-  EXPECT_FALSE(UserGestureIndicator::processedUserGestureSinceLoad());
   EXPECT_EQ(nullptr, UserGestureIndicator::currentToken());
   EXPECT_FALSE(UserGestureIndicator::consumeUserGesture());
 }
 
 TEST(UserGestureIndicatorTest, ConstructedWithNewUserGesture) {
-  UserGestureIndicator::clearProcessedUserGestureSinceLoad();
-  UserGestureIndicator userGestureScope(DefinitelyProcessingNewUserGesture);
+  UserGestureIndicator userGestureScope(
+      TestUserGestureToken::create(UserGestureToken::NewGesture));
 
   EXPECT_TRUE(UserGestureIndicator::utilizeUserGesture());
-  EXPECT_TRUE(UserGestureIndicator::processedUserGestureSinceLoad());
   EXPECT_NE(nullptr, UserGestureIndicator::currentToken());
 
   EXPECT_TRUE(UserGestureIndicator::consumeUserGesture());
 }
 
 TEST(UserGestureIndicatorTest, ConstructedWithUserGesture) {
-  UserGestureIndicator::clearProcessedUserGestureSinceLoad();
-  UserGestureIndicator userGestureScope(DefinitelyProcessingUserGesture);
+  UserGestureIndicator userGestureScope(TestUserGestureToken::create());
 
   EXPECT_TRUE(UserGestureIndicator::utilizeUserGesture());
-  EXPECT_TRUE(UserGestureIndicator::processedUserGestureSinceLoad());
   EXPECT_NE(nullptr, UserGestureIndicator::currentToken());
 
   EXPECT_TRUE(UserGestureIndicator::consumeUserGesture());
 }
 
 TEST(UserGestureIndicatorTest, ConstructedWithNoUserGesture) {
-  UserGestureIndicator::clearProcessedUserGestureSinceLoad();
-  UserGestureIndicator userGestureScope(DefinitelyNotProcessingUserGesture);
+  UserGestureIndicator userGestureScope(nullptr);
 
   EXPECT_FALSE(UserGestureIndicator::utilizeUserGesture());
-  EXPECT_FALSE(UserGestureIndicator::processedUserGestureSinceLoad());
-  EXPECT_NE(nullptr, UserGestureIndicator::currentToken());
+  EXPECT_EQ(nullptr, UserGestureIndicator::currentToken());
 
   EXPECT_FALSE(UserGestureIndicator::consumeUserGesture());
 }
@@ -52,10 +70,9 @@ TEST(UserGestureIndicatorTest, ConstructedWithNoUserGesture) {
 // Check that after UserGestureIndicator destruction state will be cleared.
 TEST(UserGestureIndicatorTest, DestructUserGestureIndicator) {
   {
-    UserGestureIndicator userGestureScope(DefinitelyProcessingUserGesture);
+    UserGestureIndicator userGestureScope(TestUserGestureToken::create());
 
     EXPECT_TRUE(UserGestureIndicator::utilizeUserGesture());
-    EXPECT_TRUE(UserGestureIndicator::processedUserGestureSinceLoad());
     EXPECT_NE(nullptr, UserGestureIndicator::currentToken());
   }
 
@@ -67,15 +84,16 @@ TEST(UserGestureIndicatorTest, DestructUserGestureIndicator) {
 // Tests creation of scoped UserGestureIndicator objects.
 TEST(UserGestureIndicatorTest, ScopedNewUserGestureIndicators) {
   // Root GestureIndicator and GestureToken.
-  UserGestureIndicator userGestureScope(DefinitelyProcessingNewUserGesture);
+  UserGestureIndicator userGestureScope(
+      TestUserGestureToken::create(UserGestureToken::NewGesture));
 
   EXPECT_TRUE(UserGestureIndicator::utilizeUserGesture());
-  EXPECT_TRUE(UserGestureIndicator::processedUserGestureSinceLoad());
   EXPECT_NE(nullptr, UserGestureIndicator::currentToken());
   {
     // Construct inner UserGestureIndicator.
     // It should share GestureToken with the root indicator.
-    UserGestureIndicator innerUserGesture(DefinitelyProcessingNewUserGesture);
+    UserGestureIndicator innerUserGesture(
+        TestUserGestureToken::create(UserGestureToken::NewGesture));
 
     EXPECT_TRUE(UserGestureIndicator::utilizeUserGesture());
     EXPECT_NE(nullptr, UserGestureIndicator::currentToken());
@@ -90,6 +108,24 @@ TEST(UserGestureIndicatorTest, ScopedNewUserGestureIndicators) {
   // Consume root gesture.
   EXPECT_TRUE(UserGestureIndicator::consumeUserGesture());
   EXPECT_FALSE(UserGestureIndicator::utilizeUserGesture());
+  EXPECT_NE(nullptr, UserGestureIndicator::currentToken());
+}
+
+TEST(UserGestureIndicatorTest, MultipleGesturesWithTheSameToken) {
+  UserGestureIndicator indicator(
+      TestUserGestureToken::create(UserGestureToken::NewGesture));
+  EXPECT_TRUE(UserGestureIndicator::processingUserGesture());
+  EXPECT_NE(nullptr, UserGestureIndicator::currentToken());
+  {
+    // Construct an inner indicator that shares the same token.
+    UserGestureIndicator innerIndicator(UserGestureIndicator::currentToken());
+    EXPECT_TRUE(UserGestureIndicator::processingUserGesture());
+    EXPECT_NE(nullptr, UserGestureIndicator::currentToken());
+  }
+  // Though the inner indicator was destroyed, the outer is still present (and
+  // the gesture hasn't been consumed), so it should still be processing a user
+  // gesture.
+  EXPECT_TRUE(UserGestureIndicator::processingUserGesture());
   EXPECT_NE(nullptr, UserGestureIndicator::currentToken());
 }
 
@@ -114,7 +150,8 @@ TEST(UserGestureIndicatorTest, Callback) {
   UsedCallback cb;
 
   {
-    UserGestureIndicator userGestureScope(DefinitelyProcessingUserGesture, &cb);
+    UserGestureIndicator userGestureScope(TestUserGestureToken::create());
+    UserGestureIndicator::currentToken()->setUserGestureUtilizedCallback(&cb);
     EXPECT_EQ(0u, cb.getAndResetUsedCount());
 
     // Untracked doesn't invoke the callback
@@ -133,7 +170,8 @@ TEST(UserGestureIndicatorTest, Callback) {
   EXPECT_EQ(0u, cb.getAndResetUsedCount());
 
   {
-    UserGestureIndicator userGestureScope(DefinitelyProcessingUserGesture, &cb);
+    UserGestureIndicator userGestureScope(TestUserGestureToken::create());
+    UserGestureIndicator::currentToken()->setUserGestureUtilizedCallback(&cb);
 
     // Consume also invokes the callback
     EXPECT_TRUE(UserGestureIndicator::consumeUserGesture());
@@ -146,11 +184,14 @@ TEST(UserGestureIndicatorTest, Callback) {
   }
 
   {
-    UserGestureIndicator userGestureScope(DefinitelyNotProcessingUserGesture,
-                                          &cb);
+    std::unique_ptr<UserGestureIndicator> userGestureScope(
+        new UserGestureIndicator(TestUserGestureToken::create()));
+    RefPtr<UserGestureToken> token = UserGestureIndicator::currentToken();
+    token->setUserGestureUtilizedCallback(&cb);
+    userGestureScope.reset();
 
-    // Callback not invoked when there isn't actually a user gesture
-    EXPECT_FALSE(UserGestureIndicator::processingUserGesture());
+    // The callback should be cleared when the UseGestureIndicator is deleted.
+    EXPECT_FALSE(UserGestureIndicator::utilizeUserGesture());
     EXPECT_EQ(0u, cb.getAndResetUsedCount());
   }
 
@@ -159,6 +200,37 @@ TEST(UserGestureIndicatorTest, Callback) {
   EXPECT_EQ(0u, cb.getAndResetUsedCount());
   EXPECT_FALSE(UserGestureIndicator::consumeUserGesture());
   EXPECT_EQ(0u, cb.getAndResetUsedCount());
+}
+
+TEST(UserGestureIndicatorTest, Timeouts) {
+  TimeFunction previous = setTimeFunctionsForTesting(mockTimeFunction);
+
+  {
+    // Token times out after 1 second.
+    RefPtr<UserGestureToken> token = TestUserGestureToken::create();
+    EXPECT_TRUE(token->hasGestures());
+    UserGestureIndicator userGestureScope(token.get());
+    EXPECT_TRUE(token->hasGestures());
+    advanceClock(0.75);
+    EXPECT_TRUE(token->hasGestures());
+    advanceClock(0.75);
+    EXPECT_FALSE(token->hasGestures());
+  }
+
+  {
+    // Timestamp is reset when a token is put in a UserGestureIndicator.
+    RefPtr<UserGestureToken> token = TestUserGestureToken::create();
+    EXPECT_TRUE(token->hasGestures());
+    advanceClock(0.75);
+    EXPECT_TRUE(token->hasGestures());
+    UserGestureIndicator userGestureScope(token.get());
+    advanceClock(0.75);
+    EXPECT_TRUE(token->hasGestures());
+    advanceClock(0.75);
+    EXPECT_FALSE(token->hasGestures());
+  }
+
+  setTimeFunctionsForTesting(previous);
 }
 
 }  // namespace blink

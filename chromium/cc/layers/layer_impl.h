@@ -18,8 +18,6 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/values.h"
-#include "cc/animation/element_id.h"
-#include "cc/animation/target_property.h"
 #include "cc/base/cc_export.h"
 #include "cc/base/region.h"
 #include "cc/base/synced_property.h"
@@ -33,7 +31,9 @@
 #include "cc/quads/shared_quad_state.h"
 #include "cc/resources/resource_provider.h"
 #include "cc/tiles/tile_priority.h"
+#include "cc/trees/element_id.h"
 #include "cc/trees/mutator_host_client.h"
+#include "cc/trees/target_property.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "third_party/skia/include/core/SkXfermode.h"
 #include "ui/gfx/geometry/point3_f.h"
@@ -52,20 +52,14 @@ class DictionaryValue;
 
 namespace cc {
 
-class AnimationHost;
-class LayerTreeHostImpl;
 class LayerTreeImpl;
 class MicroBenchmarkImpl;
-class Occlusion;
-class EffectTree;
+class MutatorHost;
 class PrioritizedTile;
 class RenderPass;
-class RenderPassId;
-class Renderer;
 class ScrollbarLayerImplBase;
 class SimpleEnclosedRegion;
 class Tile;
-class TransformTree;
 class ScrollState;
 
 struct AppendQuadsData;
@@ -98,7 +92,6 @@ class CC_EXPORT LayerImpl {
   bool IsActive() const;
 
   void DistributeScroll(ScrollState* scroll_state);
-  void ApplyScroll(ScrollState* scroll_state);
 
   void set_property_tree_sequence_number(int sequence_number) {}
 
@@ -388,6 +381,7 @@ class CC_EXPORT LayerImpl {
   virtual void RecreateTileResources();
 
   virtual std::unique_ptr<LayerImpl> CreateLayerImpl(LayerTreeImpl* tree_impl);
+  virtual bool IsSnapped();
   virtual void PushPropertiesTo(LayerImpl* layer);
 
   virtual void GetAllPrioritizedTilesForTracing(
@@ -423,12 +417,6 @@ class CC_EXPORT LayerImpl {
 
   virtual gfx::Rect GetEnclosingRectInTargetSpace() const;
 
-  void set_scrolls_drawn_descendant(bool scrolls_drawn_descendant) {
-    scrolls_drawn_descendant_ = scrolls_drawn_descendant;
-  }
-
-  bool scrolls_drawn_descendant() { return scrolls_drawn_descendant_; }
-
   int num_copy_requests_in_target_subtree();
 
   void UpdatePropertyTreeForScrollingAndAnimationIfNeeded();
@@ -452,7 +440,16 @@ class CC_EXPORT LayerImpl {
     return has_will_change_transform_hint_;
   }
 
-  AnimationHost* GetAnimationHost() const;
+  void SetPreferredRasterBounds(const gfx::Size& preferred_raster_bounds);
+  bool has_preferred_raster_bounds() const {
+    return has_preferred_raster_bounds_;
+  }
+  const gfx::Size& preferred_raster_scale() const {
+    return preferred_raster_bounds_;
+  }
+  void ClearPreferredRasterBounds();
+
+  MutatorHost* GetMutatorHost() const;
 
   ElementListType GetElementTypeForAnimation() const;
 
@@ -567,11 +564,17 @@ class CC_EXPORT LayerImpl {
   std::unique_ptr<base::trace_event::ConvertableToTraceFormat>
       owned_debug_info_;
   base::trace_event::ConvertableToTraceFormat* debug_info_;
+  // TODO(http://crbug.com/557160): EffectNode instead of LayerImpl should
+  // own RenderSurfaceImpl. Currently SPv2 creates dummy layers for the sole
+  // purpose of holding a render surface. Once done, remember to remove dummy
+  // layers from PaintArtifactCompositor as well
   std::unique_ptr<RenderSurfaceImpl> render_surface_;
+  gfx::Size preferred_raster_bounds_;
 
-  bool scrolls_drawn_descendant_ : 1;
+  bool has_preferred_raster_bounds_ : 1;
   bool has_will_change_transform_hint_ : 1;
   bool needs_push_properties_ : 1;
+  bool scrollbars_hidden_ : 1;
 
   DISALLOW_COPY_AND_ASSIGN(LayerImpl);
 };

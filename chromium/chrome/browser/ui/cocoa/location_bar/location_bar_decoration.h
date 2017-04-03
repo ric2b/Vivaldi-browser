@@ -12,6 +12,9 @@
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/vector_icons_public.h"
 
+@class DecorationMouseTrackingDelegate;
+@class CrTrackingArea;
+
 // Base class for decorations at the left and right of the location
 // bar.  For instance, the location icon.
 
@@ -21,6 +24,10 @@
 // Cocoa, and while these are view-like, they aren't views at all.
 // Decorations are more like Cocoa cells, except implemented in C++ to
 // allow more similarity to the other platform implementations.
+
+// This enum class represents the state of the decoration's interactions
+// with the mouse.
+enum class DecorationMouseState { NONE, HOVER, PRESSED };
 
 class LocationBarDecoration {
  public:
@@ -36,6 +43,9 @@ class LocationBarDecoration {
   // or |kOmittedWidth| if it should be omitted.
   virtual CGFloat GetWidthForSpace(CGFloat width);
 
+  // Returns a NSRect derived from |frame| for the background to fill.
+  virtual NSRect GetBackgroundFrame(NSRect frame);
+
   // Draw the decoration in the frame provided.  The frame will be
   // generated from an earlier call to |GetWidthForSpace()|.
   virtual void DrawInFrame(NSRect frame, NSView* control_view);
@@ -45,12 +55,14 @@ class LocationBarDecoration {
   // generated from an earlier call to |GetWidthForSpace()|, and the
   // |background_frame| will include the column of pixels exactly
   // between two decorations.
-  virtual void DrawWithBackgroundInFrame(NSRect background_frame,
-                                         NSRect frame,
-                                         NSView* control_view);
+  void DrawWithBackgroundInFrame(NSRect frame, NSView* control_view);
 
   // Returns the tooltip for this decoration, return |nil| for no tooltip.
   virtual NSString* GetToolTip();
+
+  // Methods to set up and remove the tracking area from the |control_view|.
+  CrTrackingArea* SetupTrackingArea(NSRect frame, NSView* control_view);
+  void RemoveTrackingArea();
 
   // Decorations which do not accept mouse events are treated like the
   // field's background for purposes of selecting text.  When such
@@ -58,6 +70,11 @@ class LocationBarDecoration {
   // I-beam cursor.  Decorations which do accept mouse events will get
   // an arrow cursor when the mouse is over them.
   virtual bool AcceptsMousePress();
+
+  // Returns true if the decoration should display a background if it's
+  // hovered or pressed. The default value is equivalent to the value returned
+  // from AcceptsMousePress().
+  virtual bool HasHoverAndPressEffect();
 
   // Determine if the item can act as a drag source.
   virtual bool IsDraggable();
@@ -74,9 +91,22 @@ class LocationBarDecoration {
   // The pasteboard to drag.
   virtual NSPasteboard* GetDragPasteboard();
 
-  // Called on mouse down.  Return |false| to indicate that the press
-  // was not processed and should be handled by the cell.
+  // Called on mouse down, when the decoration isn't being dragged. Return
+  // |false| to indicate that the press was not processed and should be
+  // handled by the cell.
   virtual bool OnMousePressed(NSRect frame, NSPoint location);
+
+  // Mouse events called on mouse down/up.
+  void OnMouseDown();
+  void OnMouseUp();
+
+  // Called by |tracking_delegate_| when the mouse enters/exits the decoration.
+  void OnMouseEntered();
+  void OnMouseExited();
+
+  // Sets the active state of the decoration. If the state has changed, call
+  // UpdateDecorationState().
+  void SetActive(bool active);
 
   // Called to get the right-click menu, return |nil| for no menu.
   virtual NSMenu* GetMenu();
@@ -110,6 +140,10 @@ class LocationBarDecoration {
   // to the private DecorationAccessibilityView helper class.
   void OnAccessibilityViewAction();
 
+  DecorationMouseState state() const { return state_; }
+
+  bool active() const { return active_; }
+
   // Width returned by |GetWidthForSpace()| when the item should be
   // omitted for this width;
   static const CGFloat kOmittedWidth;
@@ -132,8 +166,29 @@ class LocationBarDecoration {
   NSColor* GetDividerColor(bool location_bar_is_dark) const;
 
  private:
+  // Called when the state of the decoration is updated.
+  void UpdateDecorationState();
+
   bool visible_ = false;
+
+  // True if the decoration is active.
+  bool active_ = false;
+
   base::scoped_nsobject<NSView> accessibility_view_;
+
+  // The decoration's tracking area. Only set if the decoration accepts a mouse
+  // press.
+  base::scoped_nsobject<CrTrackingArea> tracking_area_;
+
+  // The view that |tracking_area_| is added to.
+  NSView* tracking_area_owner_ = nullptr;
+
+  // Delegate object that handles mouseEntered: and mouseExited: events from
+  // the tracking area.
+  base::scoped_nsobject<DecorationMouseTrackingDelegate> tracking_delegate_;
+
+  // The state of the decoration.
+  DecorationMouseState state_ = DecorationMouseState::NONE;
 
   DISALLOW_COPY_AND_ASSIGN(LocationBarDecoration);
 };

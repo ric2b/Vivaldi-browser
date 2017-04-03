@@ -41,6 +41,7 @@
 #include "content/public/browser/resource_dispatcher_host.h"
 #include "content/public/browser/resource_throttle.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/context_menu_params.h"
 #include "content/public/common/resource_type.h"
 #include "content/public/common/url_constants.h"
@@ -53,8 +54,8 @@
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
+#include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "third_party/WebKit/public/web/WebContextMenuData.h"
-#include "third_party/WebKit/public/web/WebInputEvent.h"
 
 using content::ResourceType;
 using content::WebContents;
@@ -120,8 +121,7 @@ class TestNavigationListener
   //
   // Needs to be invoked on the IO thread.
   content::ResourceThrottle* CreateResourceThrottle(
-      const GURL& url,
-      ResourceType resource_type) {
+      const GURL& url) {
     DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
     if (urls_to_delay_.find(url) == urls_to_delay_.end())
       return NULL;
@@ -320,8 +320,7 @@ class TestResourceDispatcherHostDelegate
         resource_type,
         throttles);
     content::ResourceThrottle* throttle =
-        test_navigation_listener_->CreateResourceThrottle(request->url(),
-                                                          resource_type);
+        test_navigation_listener_->CreateResourceThrottle(request->url());
     if (throttle)
       throttles->push_back(throttle);
   }
@@ -405,7 +404,12 @@ IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, ClientRedirect) {
       << message_;
 }
 
-IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, ServerRedirect) {
+#if defined(OS_LINUX)  // http://crbug.com/660288
+#define MAYBE_ServerRedirect DISABLED_ServerRedirect
+#else
+#define MAYBE_ServerRedirect ServerRedirect
+#endif
+IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, MAYBE_ServerRedirect) {
   ASSERT_TRUE(StartEmbeddedTestServer());
   ASSERT_TRUE(RunExtensionTest("webnavigation/serverRedirect"))
       << message_;
@@ -504,7 +508,13 @@ IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, FilteredTest) {
   ASSERT_TRUE(RunExtensionTest("webnavigation/filtered")) << message_;
 }
 
-IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, UserAction) {
+// Flaky on Windows. See http://crbug.com/662160.
+#if defined(OS_WIN)
+#define MAYBE_UserAction DISABLED_UserAction
+#else
+#define MAYBE_UserAction UserAction
+#endif
+IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, MAYBE_UserAction) {
   content::IsolateAllSitesForTesting(base::CommandLine::ForCurrentProcess());
   ASSERT_TRUE(StartEmbeddedTestServer());
 
@@ -681,6 +691,11 @@ IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, CrossProcess) {
 // resumes all URL requests. Instead, the test explicitly delays each URL
 // and resumes manually at the required time.
 IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, CrossProcessAbort) {
+  // This test does not make sense in PlzNavigate mode, as simultanious
+  // navigations that make network requests are not supported.
+  if (content::IsBrowserSideNavigationEnabled())
+    return;
+
   ASSERT_TRUE(StartEmbeddedTestServer());
 
   // Add the cross-site URL delay early on, as loading the extension will

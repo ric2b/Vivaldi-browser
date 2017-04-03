@@ -35,6 +35,7 @@
 
 namespace blink {
 
+class Path;
 class SVGPointTearOff;
 
 class SVGGeometryElement : public SVGGraphicsElement {
@@ -48,6 +49,8 @@ class SVGGeometryElement : public SVGGraphicsElement {
   void toClipPath(Path&) const;
 
   LayoutObject* createLayoutObject(const ComputedStyle&) override;
+  virtual float getTotalLength();
+  virtual SVGPointTearOff* getPointAtLength(float distance);
 
  protected:
   SVGGeometryElement(const QualifiedName&,

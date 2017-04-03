@@ -12,10 +12,12 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "content/browser/loader/intercepting_resource_handler.h"
 #include "content/browser/loader/resource_dispatcher_host_impl.h"
+#include "content/browser/loader/test_resource_handler.h"
 #include "content/public/browser/resource_controller.h"
 #include "content/public/browser/resource_dispatcher_host_delegate.h"
 #include "content/public/browser/resource_request_info.h"
@@ -32,97 +34,6 @@
 namespace content {
 
 namespace {
-
-class TestResourceHandler : public ResourceHandler {
- public:
-  TestResourceHandler(bool response_started_succeeds,
-                      bool defer_on_response_started,
-                      bool will_read_succeeds,
-                      bool read_completed_succeeds,
-                      bool defer_on_read_completed)
-      : ResourceHandler(nullptr),
-        buffer_(new net::IOBuffer(2048)),
-        response_started_succeeds_(response_started_succeeds),
-        defer_on_response_started_(defer_on_response_started),
-        will_read_succeeds_(will_read_succeeds),
-        read_completed_succeeds_(read_completed_succeeds),
-        defer_on_read_completed_(defer_on_read_completed),
-        on_will_start_called_(0),
-        on_request_redirected_called_(0),
-        on_response_started_called_(0),
-        on_will_read_called_(0),
-        on_read_completed_called_(0) {}
-
-  void SetController(ResourceController* controller) override {}
-
-  bool OnRequestRedirected(const net::RedirectInfo& redirect_info,
-                           ResourceResponse* response,
-                           bool* defer) override {
-    on_request_redirected_called_++;
-    NOTREACHED();
-    return false;
-  }
-
-  bool OnResponseStarted(ResourceResponse* response, bool* defer) override {
-    on_response_started_called_++;
-    if (defer_on_response_started_)
-      *defer = true;
-    return response_started_succeeds_;
-  }
-
-  bool OnWillStart(const GURL& url, bool* defer) override {
-    on_will_start_called_++;
-    return false;
-  }
-
-  bool OnWillRead(scoped_refptr<net::IOBuffer>* buf,
-                  int* buf_size,
-                  int min_size) override {
-    on_will_read_called_++;
-    *buf = buffer_;
-    *buf_size = 2048;
-    return will_read_succeeds_;
-  }
-
-  bool OnReadCompleted(int bytes_read, bool* defer) override {
-    DCHECK_LT(bytes_read, 2048);
-    on_read_completed_called_++;
-    if (defer_on_read_completed_)
-      *defer = true;
-    return read_completed_succeeds_;
-  }
-
-  void OnResponseCompleted(const net::URLRequestStatus& status,
-                           bool* defer) override {}
-
-  void OnDataDownloaded(int bytes_downloaded) override { NOTREACHED(); }
-
-  scoped_refptr<net::IOBuffer> buffer() { return buffer_; }
-
-  int on_will_start_called() const { return on_will_start_called_; }
-  int on_request_redirected_called() const {
-    return on_request_redirected_called_;
-  }
-  int on_response_started_called() const { return on_response_started_called_; }
-  int on_will_read_called() const { return on_will_read_called_; }
-  int on_read_completed_called() const { return on_read_completed_called_; }
-
- private:
-  scoped_refptr<net::IOBuffer> buffer_;
-  bool response_started_succeeds_;
-  bool defer_on_response_started_;
-  bool will_read_succeeds_;
-  bool read_completed_succeeds_;
-  bool defer_on_read_completed_;
-
-  int on_will_start_called_;
-  int on_request_redirected_called_;
-  int on_response_started_called_;
-  int on_will_read_called_;
-  int on_read_completed_called_;
-
-  DISALLOW_COPY_AND_ASSIGN(TestResourceHandler);
-};
 
 class TestResourceDispatcherHostDelegate
     : public ResourceDispatcherHostDelegate {
@@ -179,7 +90,8 @@ class TestResourceDispatcherHost : public ResourceDispatcherHostImpl {
  private:
   std::unique_ptr<ResourceHandler> CreateNewResourceHandler() {
     std::unique_ptr<TestResourceHandler> new_resource_handler(
-        new TestResourceHandler(false, false, true, true, false));
+        new TestResourceHandler());
+    new_resource_handler->set_on_response_started_result(false);
     new_resource_handler_ = new_resource_handler.get();
     return std::move(new_resource_handler);
   }
@@ -340,12 +252,14 @@ MimeSniffingResourceHandlerTest::TestAcceptHeaderSettingWithURLRequest(
                                           true,    // is_async
                                           false);  // is_using_lofi
 
+  std::unique_ptr<TestResourceHandler> scoped_test_handler(
+      new TestResourceHandler());
+  scoped_test_handler->set_on_response_started_result(false);
+
   std::unique_ptr<ResourceHandler> mime_sniffing_handler(
-      new MimeSniffingResourceHandler(
-          std::unique_ptr<ResourceHandler>(
-              new TestResourceHandler(false, false, false, false, false)),
-          nullptr, nullptr, nullptr, request,
-          REQUEST_CONTEXT_TYPE_UNSPECIFIED));
+      new MimeSniffingResourceHandler(std::move(scoped_test_handler), nullptr,
+                                      nullptr, nullptr, request,
+                                      REQUEST_CONTEXT_TYPE_UNSPECIFIED));
 
   bool defer = false;
   mime_sniffing_handler->OnWillStart(request->url(), &defer);
@@ -380,13 +294,16 @@ bool MimeSniffingResourceHandlerTest::TestStreamIsIntercepted(
   host.SetDelegate(&host_delegate);
 
   TestFakePluginService plugin_service(plugin_available_, plugin_stale_);
+
   std::unique_ptr<InterceptingResourceHandler> intercepting_handler(
-      new InterceptingResourceHandler(std::unique_ptr<ResourceHandler>(),
+      new InterceptingResourceHandler(base::MakeUnique<TestResourceHandler>(),
                                       nullptr));
+  std::unique_ptr<TestResourceHandler> scoped_test_handler(
+      new TestResourceHandler());
+  scoped_test_handler->set_on_response_started_result(false);
   std::unique_ptr<ResourceHandler> mime_handler(new MimeSniffingResourceHandler(
-      std::unique_ptr<ResourceHandler>(
-          new TestResourceHandler(false, false, false, false, false)),
-      &host, &plugin_service, intercepting_handler.get(), request.get(),
+      std::unique_ptr<ResourceHandler>(std::move(scoped_test_handler)), &host,
+      &plugin_service, intercepting_handler.get(), request.get(),
       REQUEST_CONTEXT_TYPE_UNSPECIFIED));
 
   TestResourceController resource_controller;
@@ -397,6 +314,9 @@ bool MimeSniffingResourceHandlerTest::TestStreamIsIntercepted(
   response->head.mime_type = "application/pdf";
 
   bool defer = false;
+  mime_handler->OnWillStart(request->url(), &defer);
+  EXPECT_FALSE(defer);
+
   mime_handler->OnResponseStarted(response.get(), &defer);
 
   content::RunAllPendingInMessageLoop();
@@ -433,12 +353,16 @@ void MimeSniffingResourceHandlerTest::TestHandlerSniffing(
 
   TestFakePluginService plugin_service(plugin_available_, plugin_stale_);
   std::unique_ptr<InterceptingResourceHandler> intercepting_handler(
-      new InterceptingResourceHandler(std::unique_ptr<ResourceHandler>(),
+      new InterceptingResourceHandler(base::MakeUnique<TestResourceHandler>(),
                                       nullptr));
-  std::unique_ptr<TestResourceHandler> scoped_test_handler =
-      std::unique_ptr<TestResourceHandler>(new TestResourceHandler(
-          response_started, defer_response_started, will_read, read_completed,
-          defer_read_completed));
+
+  std::unique_ptr<TestResourceHandler> scoped_test_handler(
+      new TestResourceHandler());
+  scoped_test_handler->set_on_response_started_result(response_started);
+  scoped_test_handler->set_defer_on_response_started(defer_response_started);
+  scoped_test_handler->set_on_will_read_result(will_read);
+  scoped_test_handler->set_on_read_completed_result(read_completed);
+  scoped_test_handler->set_defer_on_read_completed(defer_read_completed);
   TestResourceHandler* test_handler = scoped_test_handler.get();
   std::unique_ptr<MimeSniffingResourceHandler> mime_sniffing_handler(
       new MimeSniffingResourceHandler(std::move(scoped_test_handler), &host,
@@ -594,13 +518,16 @@ void MimeSniffingResourceHandlerTest::TestHandlerNoSniffing(
 
   TestFakePluginService plugin_service(plugin_available_, plugin_stale_);
   std::unique_ptr<InterceptingResourceHandler> intercepting_handler(
-      new InterceptingResourceHandler(std::unique_ptr<ResourceHandler>(),
+      new InterceptingResourceHandler(base::MakeUnique<TestResourceHandler>(),
                                       nullptr));
 
-  std::unique_ptr<TestResourceHandler> scoped_test_handler =
-      std::unique_ptr<TestResourceHandler>(new TestResourceHandler(
-          response_started, defer_response_started, will_read, read_completed,
-          defer_read_completed));
+  std::unique_ptr<TestResourceHandler> scoped_test_handler(
+      new TestResourceHandler());
+  scoped_test_handler->set_on_response_started_result(response_started);
+  scoped_test_handler->set_defer_on_response_started(defer_response_started);
+  scoped_test_handler->set_on_will_read_result(will_read);
+  scoped_test_handler->set_on_read_completed_result(read_completed);
+  scoped_test_handler->set_defer_on_read_completed(defer_read_completed);
   TestResourceHandler* test_handler = scoped_test_handler.get();
   std::unique_ptr<MimeSniffingResourceHandler> mime_sniffing_handler(
       new MimeSniffingResourceHandler(std::move(scoped_test_handler), &host,
@@ -988,17 +915,21 @@ TEST_F(MimeSniffingResourceHandlerTest, 304Handling) {
 
   TestFakePluginService plugin_service(false, false);
   std::unique_ptr<ResourceHandler> intercepting_handler(
-      new InterceptingResourceHandler(std::unique_ptr<ResourceHandler>(),
+      new InterceptingResourceHandler(base::MakeUnique<TestResourceHandler>(),
                                       nullptr));
   std::unique_ptr<ResourceHandler> mime_handler(new MimeSniffingResourceHandler(
-      std::unique_ptr<ResourceHandler>(
-          new TestResourceHandler(true, false, true, true, false)),
-      &host, &plugin_service,
+      std::unique_ptr<ResourceHandler>(new TestResourceHandler()), &host,
+      &plugin_service,
       static_cast<InterceptingResourceHandler*>(intercepting_handler.get()),
       request.get(), REQUEST_CONTEXT_TYPE_UNSPECIFIED));
 
   TestResourceController resource_controller;
   mime_handler->SetController(&resource_controller);
+
+  // Request starts.
+  bool defer = false;
+  mime_handler->OnWillStart(request->url(), &defer);
+  EXPECT_FALSE(defer);
 
   // Simulate a 304 response.
   scoped_refptr<ResourceResponse> response(new ResourceResponse);
@@ -1008,7 +939,6 @@ TEST_F(MimeSniffingResourceHandlerTest, 304Handling) {
 
   // The response is received. No new ResourceHandler should be created to
   // handle the download.
-  bool defer = false;
   mime_handler->OnResponseStarted(response.get(), &defer);
   EXPECT_FALSE(defer);
   EXPECT_FALSE(host.new_resource_handler());
@@ -1036,14 +966,12 @@ TEST_F(MimeSniffingResourceHandlerTest, FetchShouldDisableMimeSniffing) {
 
   TestFakePluginService plugin_service(false, false);
   std::unique_ptr<InterceptingResourceHandler> intercepting_handler(
-      new InterceptingResourceHandler(nullptr, nullptr));
+      new InterceptingResourceHandler(base::MakeUnique<TestResourceHandler>(),
+                                      nullptr));
 
   std::unique_ptr<TestResourceHandler> scoped_test_handler(
-      new TestResourceHandler(false,    // response_started
-                              false,    // defer_response_started
-                              true,     // will_read,
-                              true,     // read_completed,
-                              false));  // defer_read_completed
+      new TestResourceHandler());
+  scoped_test_handler->set_on_response_started_result(false);
   std::unique_ptr<ResourceHandler> mime_sniffing_handler(
       new MimeSniffingResourceHandler(std::move(scoped_test_handler), &host,
                                       &plugin_service,

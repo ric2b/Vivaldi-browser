@@ -18,6 +18,7 @@
 #include "base/logging.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "base/test/gtest_util.h"
 #include "base/test/launcher/test_launcher.h"
 #include "base/values.h"
 
@@ -28,12 +29,6 @@ namespace {
 // The default output file for XML output.
 const FilePath::CharType kDefaultOutputFile[] = FILE_PATH_LITERAL(
     "test_detail.xml");
-
-std::string TestNameWithoutDisabledPrefix(const std::string& test_name) {
-  std::string test_name_no_disabled(test_name);
-  ReplaceSubstringsAfterOffset(&test_name_no_disabled, 0, "DISABLED_", "");
-  return test_name_no_disabled;
-}
 
 // Converts the given epoch time in milliseconds to a date string in the ISO
 // 8601 format, without the timezone information.
@@ -65,6 +60,7 @@ struct TestSuiteResultsAggregator {
       case TestResult::TEST_FAILURE:
         failures++;
         break;
+      case TestResult::TEST_EXCESSIVE_OUTPUT:
       case TestResult::TEST_FAILURE_ON_EXIT:
       case TestResult::TEST_TIMEOUT:
       case TestResult::TEST_CRASH:
@@ -234,8 +230,11 @@ void TestResultsTracker::AddDisabledTest(const std::string& test_name) {
 void TestResultsTracker::AddTestResult(const TestResult& result) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
+  // Record disabled test names without DISABLED_ prefix so that they are easy
+  // to compare with regular test names, e.g. before or after disabling.
   per_iteration_data_[iteration_].results[
-      result.full_name].test_results.push_back(result);
+      TestNameWithoutDisabledPrefix(result.full_name)].test_results.push_back(
+          result);
 }
 
 void TestResultsTracker::PrintSummaryOfCurrentIteration() const {
@@ -247,6 +246,9 @@ void TestResultsTracker::PrintSummaryOfCurrentIteration() const {
   PrintTests(tests_by_status[TestResult::TEST_FAILURE_ON_EXIT].begin(),
              tests_by_status[TestResult::TEST_FAILURE_ON_EXIT].end(),
              "failed on exit");
+  PrintTests(tests_by_status[TestResult::TEST_EXCESSIVE_OUTPUT].begin(),
+             tests_by_status[TestResult::TEST_EXCESSIVE_OUTPUT].end(),
+             "produced excessive output");
   PrintTests(tests_by_status[TestResult::TEST_TIMEOUT].begin(),
              tests_by_status[TestResult::TEST_TIMEOUT].end(),
              "timed out");
@@ -275,6 +277,9 @@ void TestResultsTracker::PrintSummaryOfAllIterations() const {
   PrintTests(tests_by_status[TestResult::TEST_FAILURE_ON_EXIT].begin(),
              tests_by_status[TestResult::TEST_FAILURE_ON_EXIT].end(),
              "failed on exit");
+  PrintTests(tests_by_status[TestResult::TEST_EXCESSIVE_OUTPUT].begin(),
+             tests_by_status[TestResult::TEST_EXCESSIVE_OUTPUT].end(),
+             "produced excessive output");
   PrintTests(tests_by_status[TestResult::TEST_TIMEOUT].begin(),
              tests_by_status[TestResult::TEST_TIMEOUT].end(),
              "timed out");
@@ -296,12 +301,17 @@ void TestResultsTracker::AddGlobalTag(const std::string& tag) {
   global_tags_.insert(tag);
 }
 
-bool TestResultsTracker::SaveSummaryAsJSON(const FilePath& path) const {
+bool TestResultsTracker::SaveSummaryAsJSON(
+    const FilePath& path,
+    const std::vector<std::string>& additional_tags) const {
   std::unique_ptr<DictionaryValue> summary_root(new DictionaryValue);
 
   std::unique_ptr<ListValue> global_tags(new ListValue);
   for (const auto& global_tag : global_tags_) {
     global_tags->AppendString(global_tag);
+  }
+  for (const auto& tag : additional_tags) {
+    global_tags->AppendString(tag);
   }
   summary_root->Set("global_tags", std::move(global_tags));
 
@@ -371,6 +381,18 @@ bool TestResultsTracker::SaveSummaryAsJSON(const FilePath& path) const {
     per_iteration_data->Append(std::move(current_iteration_data));
   }
   summary_root->Set("per_iteration_data", std::move(per_iteration_data));
+
+  std::unique_ptr<DictionaryValue> test_locations(new DictionaryValue);
+  for (const auto& item : test_locations_) {
+    std::string test_name = item.first;
+    CodeLocation location = item.second;
+    std::unique_ptr<DictionaryValue> location_value(new DictionaryValue);
+    location_value->SetString("file", location.file);
+    location_value->SetInteger("line", location.line);
+    test_locations->SetWithoutPathExpansion(test_name,
+                                            std::move(location_value));
+  }
+  summary_root->Set("test_locations", std::move(test_locations));
 
   JSONFileValueSerializer serializer(path);
   return serializer.Serialize(*summary_root);

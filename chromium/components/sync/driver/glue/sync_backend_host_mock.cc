@@ -4,8 +4,8 @@
 
 #include "components/sync/driver/glue/sync_backend_host_mock.h"
 
-#include "components/sync/core/activation_context.h"
 #include "components/sync/driver/sync_frontend.h"
+#include "components/sync/engine/activation_context.h"
 
 namespace syncer {
 
@@ -16,14 +16,14 @@ SyncBackendHostMock::~SyncBackendHostMock() {}
 
 void SyncBackendHostMock::Initialize(
     SyncFrontend* frontend,
-    std::unique_ptr<base::Thread> sync_thread,
-    const scoped_refptr<base::SingleThreadTaskRunner>& db_thread,
-    const scoped_refptr<base::SingleThreadTaskRunner>& file_thread,
+    base::Thread* sync_thread,
     const WeakHandle<JsEventHandler>& event_handler,
     const GURL& service_url,
     const std::string& sync_user_agent,
     const SyncCredentials& credentials,
     bool delete_sync_data_folder,
+    bool enable_local_sync_backend,
+    const base::FilePath& local_sync_backend_folder,
     std::unique_ptr<SyncManagerFactory> sync_manager_factory,
     const WeakHandle<UnrecoverableErrorHandler>& unrecoverable_error_handler,
     const base::Closure& report_unrecoverable_error_function,
@@ -51,10 +51,7 @@ bool SyncBackendHostMock::SetDecryptionPassphrase(
 
 void SyncBackendHostMock::StopSyncingForShutdown() {}
 
-std::unique_ptr<base::Thread> SyncBackendHostMock::Shutdown(
-    ShutdownReason reason) {
-  return std::unique_ptr<base::Thread>();
-}
+void SyncBackendHostMock::Shutdown(ShutdownReason reason) {}
 
 void SyncBackendHostMock::UnregisterInvalidationIds() {}
 
@@ -81,7 +78,7 @@ void SyncBackendHostMock::ActivateNonBlockingDataType(
 void SyncBackendHostMock::DeactivateNonBlockingDataType(ModelType type) {}
 
 UserShare* SyncBackendHostMock::GetUserShare() const {
-  return NULL;
+  return nullptr;
 }
 
 SyncBackendHost::Status SyncBackendHostMock::GetDetailedStatus() {
@@ -117,10 +114,6 @@ void SyncBackendHostMock::GetModelSafeRoutingInfo(
     ModelSafeRoutingInfo* out) const {}
 
 void SyncBackendHostMock::FlushDirectory() const {}
-
-base::MessageLoop* SyncBackendHostMock::GetSyncLoopForTesting() {
-  return NULL;
-}
 
 void SyncBackendHostMock::RefreshTypesForTest(ModelTypeSet types) {}
 

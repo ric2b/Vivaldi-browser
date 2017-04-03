@@ -7,6 +7,7 @@
 
 #include "browser/menus/vivaldi_menu_enums.h"
 
+#include "base/strings/utf_string_conversions.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
 #include "chrome/browser/renderer_context_menu/render_view_context_menu.h"
@@ -28,6 +29,46 @@ using blink::WebContextMenuData;
 using extensions::WebViewGuest;
 
 namespace vivaldi {
+
+base::string16 GetModifierStringFromEventFlags(int event_flags) {
+  base::string16 modifiers;
+  if (event_flags & ui::EF_CONTROL_DOWN)
+    modifiers.append(base::ASCIIToUTF16("ctrl"));
+  if (event_flags & ui::EF_SHIFT_DOWN) {
+    if (modifiers.length() > 0)
+      modifiers.append(base::ASCIIToUTF16(","));
+    modifiers.append(base::ASCIIToUTF16("shift"));
+  }
+  if (event_flags & ui::EF_ALT_DOWN) {
+    if (modifiers.length() > 0)
+      modifiers.append(base::ASCIIToUTF16(","));
+    modifiers.append(base::ASCIIToUTF16("alt"));
+  }
+  if (event_flags & ui::EF_COMMAND_DOWN) {
+    if (modifiers.length() > 0)
+      modifiers.append(base::ASCIIToUTF16(","));
+    modifiers.append(base::ASCIIToUTF16("cmd"));
+  }
+  return modifiers;
+}
+
+void SendSimpleAction(WebContents* web_contents,
+                      int event_flags,
+                      const std::string& command,
+                      const base::string16& text = base::ASCIIToUTF16(""),
+                      const std::string& url = "") {
+  WebViewGuest* guestView = WebViewGuest::FromWebContents(web_contents);
+  DCHECK(guestView);
+  base::ListValue* args = new base::ListValue;
+  args->Append(base::MakeUnique<base::StringValue>(command));
+  args->Append(base::MakeUnique<base::StringValue>(text));
+  args->Append(base::MakeUnique<base::StringValue>(url));
+  base::string16 modifiers = GetModifierStringFromEventFlags(event_flags);
+  args->Append(base::MakeUnique<base::StringValue>(modifiers));
+  guestView->SimpleAction(*args);
+}
+
+
 bool IsVivaldiCommandId(int id) {
   return (id >= IDC_VIVALDI_MENU_ENUMS_START &&
           id < IDC_VIVALDI_MENU_ENUMS_END);
@@ -65,6 +106,15 @@ void VivaldiAddLinkItems(SimpleMenuModel &menu,
     menu.InsertItemWithStringIdAt(++index,
                                  IDC_CONTENT_CONTEXT_OPENLINKOFFTHERECORD,
                                  IDS_VIV_OPEN_LINK_NEW_PRIVATE_WINDOW);
+    menu.InsertSeparatorAt(++index, ui::NORMAL_SEPARATOR);
+    menu.InsertItemWithStringIdAt(++index,
+                                 IDC_VIV_BOOKMARK_LINK,
+                                 IDS_VIV_BOOKMARK_LINK);
+    menu.InsertItemWithStringIdAt(++index,
+                                 IDC_VIV_ADD_LINK_TO_WEBPANEL,
+                                 IDS_VIV_ADD_LINK_TO_WEBPANEL);
+
+
   }
 }
 
@@ -91,8 +141,44 @@ void VivaldiAddImageItems(SimpleMenuModel &menu,
                                   IDS_VIV_OPEN_IMAGE_NEW_PRIVATE_WINDOW);
     menu.InsertSeparatorAt(++index, ui::NORMAL_SEPARATOR);
 
-    menu.AddItemWithStringId(IDC_CONTENT_CONTEXT_RELOADIMAGE,
-                             IDS_CONTENT_CONTEXT_RELOADIMAGE);
+    index = menu.GetIndexOfCommandId(IDC_CONTENT_CONTEXT_COPYIMAGELOCATION);
+    DCHECK(index>=0);
+    menu.InsertSeparatorAt(++index, ui::NORMAL_SEPARATOR);
+    menu.InsertItemWithStringIdAt(++index,
+                                  IDC_VIV_USE_IMAGE_AS_BACKGROUND,
+                                  IDS_VIV_USE_IMAGE_AS_BACKGROUND);
+    menu.InsertItemWithStringIdAt(++index,
+                                  IDC_CONTENT_CONTEXT_RELOADIMAGE,
+                                  IDS_CONTENT_CONTEXT_RELOADIMAGE);
+  }
+}
+
+void VivaldiAddCopyItems(SimpleMenuModel &menu,
+                         WebContents* web_contents,
+                         const ContextMenuParams &params) {
+  if (IsVivaldiRunning() && WebViewGuest::FromWebContents(web_contents)) {
+    menu.AddItemWithStringId(IDC_VIV_COPY_TO_NOTE,
+                             IDS_VIV_COPY_TO_NOTE);
+  }
+}
+
+void VivaldiAddPageItems(SimpleMenuModel &menu,
+                         const ContextMenuParams &params) {
+  if (IsVivaldiRunning()) {
+    int index = menu.GetIndexOfCommandId(IDC_SAVE_PAGE);
+    DCHECK(index>=0);
+    menu.InsertItemWithStringIdAt(index,
+      IDC_VIV_BOOKMARK_PAGE,
+      IDS_VIV_BOOKMARK_PAGE);
+    menu.InsertItemWithStringIdAt(++index,
+      IDC_VIV_ADD_PAGE_TO_WEBPANEL,
+      IDS_VIV_ADD_PAGE_TO_WEBPANEL);
+    menu.InsertSeparatorAt(++index, ui::NORMAL_SEPARATOR);
+    index = menu.GetIndexOfCommandId(IDC_ROUTE_MEDIA);
+    DCHECK(index>=0);
+    menu.InsertItemWithStringIdAt(++index,
+      IDC_VIV_COPY_PAGE_ADDRESS,
+      IDS_VIV_COPY_PAGE_ADDRESS);
   }
 }
 
@@ -108,7 +194,8 @@ void VivaldiAddEditableItems(SimpleMenuModel &menu,
   int index = menu.GetIndexOfCommandId(IDC_CONTENT_CONTEXT_PASTE);
   DCHECK(index>=0);
 
- if (params.isVivaldiAddressfield){
+  if (params.vivaldi_input_type == "vivaldi-addressfield" ||
+      params.vivaldi_input_type == "vivaldi-searchfield") {
     menu.InsertItemWithStringIdAt(++index,
                                   IDC_CONTENT_CONTEXT_PASTE_AND_GO,
                                   IDS_CONTENT_CONTEXT_PASTE_AND_GO);
@@ -137,6 +224,32 @@ void VivaldiAddEditableItems(SimpleMenuModel &menu,
     }
   }
 }
+
+void VivaldiAddDeveloperItems(SimpleMenuModel &menu,
+                              const ContextMenuParams &params) {
+  if (IsVivaldiRunning()) {
+    if (params.src_url.is_empty() && params.link_url.is_empty()) {
+      menu.AddItemWithStringId(IDC_VIV_VALIDATE_PAGE,
+                               IDS_VIV_VALIDATE_PAGE);
+    }
+  }
+}
+
+
+
+
+void VivaldiAddFullscreenItems(SimpleMenuModel &menu,
+                               WebContents* web_contents,
+                               const ContextMenuParams &params) {
+  if (IsVivaldiRunning() && WebViewGuest::FromWebContents(web_contents)) {
+    menu.AddSeparator(ui::NORMAL_SEPARATOR);
+    menu.AddItemWithStringId(IDC_VIV_FULLSCREEN,
+                             IDS_VIV_FULLSCREEN);
+  }
+}
+
+
+
 
 bool IsVivaldiCommandIdEnabled(const SimpleMenuModel &menu,
                                const ContextMenuParams &params,
@@ -174,6 +287,20 @@ bool IsVivaldiCommandIdEnabled(const SimpleMenuModel &menu,
       enabled = !params.keyword_url.is_empty();
       break;
 
+    case IDC_VIV_COPY_TO_NOTE:
+      enabled = !params.selection_text.empty();
+      break;
+
+    case IDC_VIV_BOOKMARK_PAGE:
+    case IDC_VIV_BOOKMARK_LINK:
+    case IDC_VIV_ADD_PAGE_TO_WEBPANEL:
+    case IDC_VIV_ADD_LINK_TO_WEBPANEL:
+    case IDC_VIV_COPY_PAGE_ADDRESS:
+    case IDC_VIV_USE_IMAGE_AS_BACKGROUND:
+    case IDC_VIV_VALIDATE_PAGE:
+    case IDC_VIV_FULLSCREEN:
+      enabled = true;
+      break;
   }
   return true;
 }
@@ -181,6 +308,7 @@ bool IsVivaldiCommandIdEnabled(const SimpleMenuModel &menu,
 bool VivaldiExecuteCommand(RenderViewContextMenu* context_menu,
                            const ContextMenuParams& params,
                            WebContents* source_web_contents,
+                           int event_flags,
                            int id,
                            const OpenURLCall& openurl) {
   switch(id) {
@@ -226,9 +354,16 @@ bool VivaldiExecuteCommand(RenderViewContextMenu* context_menu,
         base::string16 text;
         ui::Clipboard::GetForCurrentThread()->ReadText(
             ui::CLIPBOARD_TYPE_COPY_PASTE, &text);
-
+        base::string16 target;
+        if (params.vivaldi_input_type == "vivaldi-addressfield")
+          target = base::ASCIIToUTF16("url");
+        else if (params.vivaldi_input_type == "vivaldi-searchfield")
+          target = base::ASCIIToUTF16("search");
+        base::string16 modifiers = GetModifierStringFromEventFlags(event_flags);
         base::ListValue* args = new base::ListValue;
         args->Append(base::MakeUnique<base::StringValue>(text));
+        args->Append(base::MakeUnique<base::StringValue>(target));
+        args->Append(base::MakeUnique<base::StringValue>(modifiers));
         extensions::WebViewGuest* current_webviewguest =
             vivaldi::ui_tools::GetActiveWebViewGuest();
         if (current_webviewguest) {
@@ -246,9 +381,92 @@ bool VivaldiExecuteCommand(RenderViewContextMenu* context_menu,
           base::MakeUnique<base::StringValue>(params.keyword_url.spec()));
 
       vivGuestView->CreateSearch(*args);
-
+      }
       break;
-    }
+    case IDC_VIV_COPY_TO_NOTE:
+      if (IsVivaldiRunning()) {
+        SendSimpleAction(
+          source_web_contents,
+          event_flags,
+          "copyToNote",
+          params.selection_text,
+          params.page_url.spec());
+      }
+      break;
+
+    case IDC_VIV_BOOKMARK_PAGE:
+      if (IsVivaldiRunning()) {
+        SendSimpleAction(
+          source_web_contents,
+          event_flags,
+          "addActivePageToBookmarks");
+      }
+      break;
+
+    case IDC_VIV_BOOKMARK_LINK:
+      if (IsVivaldiRunning()) {
+        SendSimpleAction(
+          source_web_contents,
+          event_flags,
+          "addUrlToBookmarks",
+          params.link_text,
+          params.link_url.spec());
+      }
+      break;
+
+    case IDC_VIV_ADD_PAGE_TO_WEBPANEL:
+    case IDC_VIV_ADD_LINK_TO_WEBPANEL:
+      if (IsVivaldiRunning()) {
+        SendSimpleAction(
+          source_web_contents,
+          event_flags,
+          "addUrlToWebPanel",
+          base::ASCIIToUTF16(""),
+          id == IDC_VIV_ADD_PAGE_TO_WEBPANEL
+            ? params.page_url.spec() : params.link_url.spec());
+      }
+      break;
+
+    case IDC_VIV_COPY_PAGE_ADDRESS:
+      if (IsVivaldiRunning()) {
+        SendSimpleAction(
+          source_web_contents,
+          event_flags,
+          "copyUrlToClipboard",
+          base::ASCIIToUTF16(""),
+          params.page_url.spec());
+      }
+      break;
+
+    case IDC_VIV_USE_IMAGE_AS_BACKGROUND:
+      if (IsVivaldiRunning()) {
+        SendSimpleAction(
+          source_web_contents,
+          event_flags,
+          "useImageAsBackground",
+          base::ASCIIToUTF16(""),
+          params.src_url.spec());
+      }
+      break;
+
+    case IDC_VIV_VALIDATE_PAGE:
+      if (IsVivaldiRunning()) {
+        SendSimpleAction(
+          source_web_contents,
+          event_flags,
+          "validateUrl",
+          base::ASCIIToUTF16(""),
+          params.page_url.spec());
+      }
+      break;
+
+    case IDC_VIV_FULLSCREEN:
+      SendSimpleAction(
+          source_web_contents,
+          event_flags,
+          "fullscreen");
+      break;
+
   }
   return true;
 }
@@ -321,6 +539,17 @@ bool VivaldiGetAcceleratorForCommandId(
     case IDC_VIEW_SOURCE:
       *accel = ui::Accelerator(ui::VKEY_U, ui::EF_CONTROL_DOWN);
       return true;
+    case IDC_VIV_COPY_TO_NOTE:
+      *accel = ui::Accelerator(ui::VKEY_C,
+                                ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN);
+      return true;
+    case IDC_VIV_BOOKMARK_PAGE:
+      *accel = ui::Accelerator(ui::VKEY_D,ui::EF_CONTROL_DOWN);
+      return true;
+    case IDC_VIV_FULLSCREEN:
+      *accel = ui::Accelerator(ui::VKEY_F11, ui::EF_NONE);
+      return true;
+
     default:
       return false;
   }

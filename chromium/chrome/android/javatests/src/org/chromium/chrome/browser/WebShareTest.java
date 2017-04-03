@@ -7,17 +7,16 @@ package org.chromium.chrome.browser;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Build;
-import android.os.Environment;
 import android.support.v7.app.AlertDialog;
 import android.test.suitebuilder.annotation.MediumTest;
 
+import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.browser.share.ShareHelper;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.test.ChromeActivityTestCaseBase;
-import org.chromium.content.browser.test.util.CallbackHelper;
 import org.chromium.net.test.EmbeddedTestServer;
 
 /** Test suite for Web Share (navigator.share) functionality. */
@@ -65,8 +64,7 @@ public class WebShareTest extends ChromeActivityTestCaseBase<ChromeActivity> {
     protected void setUp() throws Exception {
         super.setUp();
 
-        mTestServer = EmbeddedTestServer.createAndStartFileServer(
-                getInstrumentation().getContext(), Environment.getExternalStorageDirectory());
+        mTestServer = EmbeddedTestServer.createAndStartServer(getInstrumentation().getContext());
 
         mUrl = mTestServer.getURL(TEST_FILE);
 

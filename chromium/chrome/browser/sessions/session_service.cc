@@ -60,6 +60,7 @@
 #endif
 
 #include "app/vivaldi_apptools.h"
+#include "components/sessions/vivaldi_session_service_commands.h"
 
 using base::Time;
 using content::NavigationEntry;

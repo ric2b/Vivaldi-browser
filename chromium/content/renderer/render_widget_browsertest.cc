@@ -6,6 +6,8 @@
 #include "content/public/test/render_view_test.h"
 #include "content/renderer/render_view_impl.h"
 #include "content/renderer/render_widget.h"
+#include "third_party/WebKit/public/web/WebFrameWidget.h"
+#include "third_party/WebKit/public/web/WebInputMethodController.h"
 
 namespace content {
 
@@ -36,8 +38,7 @@ TEST_F(RenderWidgetTest, OnResize) {
   resize_params.new_size = gfx::Size();
   resize_params.physical_backing_size = gfx::Size();
   resize_params.top_controls_height = 0.f;
-  resize_params.top_controls_shrink_blink_size = false;
-  resize_params.resizer_rect = gfx::Rect();
+  resize_params.browser_controls_shrink_blink_size = false;
   resize_params.is_fullscreen_granted = false;
   resize_params.needs_resize_ack = false;
   OnResize(resize_params);
@@ -58,7 +59,7 @@ TEST_F(RenderWidgetTest, OnResize) {
   EXPECT_EQ(resize_params.needs_resize_ack, next_paint_is_resize_ack());
 
   // Clear the flag.
-  widget()->DidCompleteSwapBuffers();
+  widget()->DidReceiveCompositorFrameAck();
 
   // Setting the same size again should not send the ack.
   resize_params.needs_resize_ack = false;
@@ -110,7 +111,9 @@ TEST_F(RenderWidgetTest, GetCompositionRangeValidComposition) {
       "<div contenteditable>EDITABLE</div>"
       "<script> document.querySelector('div').focus(); </script>");
   blink::WebVector<blink::WebCompositionUnderline> emptyUnderlines;
-  widget()->GetWebWidget()->setComposition("hello", emptyUnderlines, 3, 3);
+  DCHECK(widget()->GetInputMethodController());
+  widget()->GetInputMethodController()->setComposition("hello", emptyUnderlines,
+                                                       3, 3);
   gfx::Range range;
   GetCompositionRange(&range);
   EXPECT_TRUE(range.IsValid());

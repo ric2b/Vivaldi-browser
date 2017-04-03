@@ -18,6 +18,7 @@
 #include "chrome/common/extensions/api/generated_schemas.h"
 #include "chrome/common/extensions/api/manifest_features.h"
 #include "chrome/common/extensions/api/permission_features.h"
+#include "chrome/common/extensions/chrome_aliases.h"
 #include "chrome/common/extensions/chrome_manifest_handlers.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/common/extensions/manifest_handlers/theme_handler.h"
@@ -34,6 +35,7 @@
 #include "extensions/common/extension_api.h"
 #include "extensions/common/extension_icon_set.h"
 #include "extensions/common/extension_urls.h"
+#include "extensions/common/extensions_aliases.h"
 #include "extensions/common/features/api_feature.h"
 #include "extensions/common/features/behavior_feature.h"
 #include "extensions/common/features/feature_channel.h"
@@ -123,8 +125,10 @@ void ChromeExtensionsClient::Initialize() {
   }
 
   // Set up permissions.
-  PermissionsInfo::GetInstance()->AddProvider(chrome_api_permissions_);
-  PermissionsInfo::GetInstance()->AddProvider(extensions_api_permissions_);
+  PermissionsInfo::GetInstance()->AddProvider(chrome_api_permissions_,
+                                              GetChromePermissionAliases());
+  PermissionsInfo::GetInstance()->AddProvider(extensions_api_permissions_,
+                                              GetExtensionsPermissionAliases());
 
   // Set up the scripting whitelist.
   // Whitelist ChromeVox, an accessibility extension from Google that needs
@@ -288,12 +292,20 @@ std::string ChromeExtensionsClient::GetWebstoreBaseURL() const {
   return gallery_prefix;
 }
 
-std::string ChromeExtensionsClient::GetWebstoreUpdateURL() const {
+const GURL& ChromeExtensionsClient::GetWebstoreUpdateURL() const {
+  // Browser tests like to alter the command line at runtime with new update
+  // URLs. Just update the cached value of the update url (to avoid reparsing
+  // it) if the value has changed.
   base::CommandLine* cmdline = base::CommandLine::ForCurrentProcess();
-  if (cmdline->HasSwitch(switches::kAppsGalleryUpdateURL))
-    return cmdline->GetSwitchValueASCII(switches::kAppsGalleryUpdateURL);
-  else
-    return extension_urls::GetDefaultWebstoreUpdateUrl().spec();
+  if (cmdline->HasSwitch(switches::kAppsGalleryUpdateURL)) {
+    std::string url =
+        cmdline->GetSwitchValueASCII(switches::kAppsGalleryUpdateURL);
+    if (webstore_update_url_ != url)
+      webstore_update_url_ = GURL(url);
+  } else if (webstore_update_url_.is_empty()) {
+    webstore_update_url_ = GURL(extension_urls::GetDefaultWebstoreUpdateUrl());
+  }
+  return webstore_update_url_;
 }
 
 bool ChromeExtensionsClient::IsBlacklistUpdateURL(const GURL& url) const {

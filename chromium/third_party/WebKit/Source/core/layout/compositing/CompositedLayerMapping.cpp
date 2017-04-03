@@ -304,6 +304,17 @@ void CompositedLayerMapping::updateStickyConstraints(
     const StickyPositionScrollingConstraints& constraints =
         ancestorOverflowLayer->getScrollableArea()->stickyConstraintsMap().get(
             &m_owningLayer);
+
+    // Find the layout offset of the unshifted sticky box within its enclosing
+    // layer.
+    LayoutPoint enclosingLayerOffset;
+    m_owningLayer.enclosingLayerWithCompositedLayerMapping(ExcludeSelf)
+        ->convertToLayerCoords(m_owningLayer.ancestorOverflowLayer(),
+                               enclosingLayerOffset);
+    FloatPoint stickyBoxOffset =
+        constraints.scrollContainerRelativeStickyBoxRect().location();
+    stickyBoxOffset.moveBy(FloatPoint(-enclosingLayerOffset));
+
     webConstraint.isSticky = true;
     webConstraint.isAnchoredLeft =
         constraints.anchorEdges() &
@@ -321,6 +332,8 @@ void CompositedLayerMapping::updateStickyConstraints(
     webConstraint.rightOffset = constraints.rightOffset();
     webConstraint.topOffset = constraints.topOffset();
     webConstraint.bottomOffset = constraints.bottomOffset();
+    webConstraint.parentRelativeStickyBoxOffset =
+        roundedIntPoint(stickyBoxOffset);
     webConstraint.scrollContainerRelativeStickyBoxRect =
         enclosingIntRect(constraints.scrollContainerRelativeStickyBoxRect());
     webConstraint.scrollContainerRelativeContainingBlockRect = enclosingIntRect(
@@ -355,11 +368,9 @@ void CompositedLayerMapping::
       backgroundPaintsOntoScrollingContentsLayer()) {
     m_backgroundPaintsOntoScrollingContentsLayer =
         shouldPaintOntoScrollingContentsLayer;
-    // If the background is no longer painted onto the scrolling contents layer
-    // the scrolling contents layer needs to be updated. If it is going to be
-    // painted onto the scrolling contents layer this update will be triggered
-    // by LayoutBoxModelObject::setBackingNeedsPaintInvalidationInRect
-    if (hasScrollingLayer() && !shouldPaintOntoScrollingContentsLayer)
+    // The scrolling contents layer needs to be updated for changed
+    // m_backgroundPaintsOntoScrollingContentsLayer.
+    if (hasScrollingLayer())
       m_scrollingContentsLayer->setNeedsDisplay();
   }
 }
@@ -459,6 +470,9 @@ bool CompositedLayerMapping::
   if (clippingContainer->enclosingLayer() == scrollParent)
     return false;
 
+  if (clippingContainer->enclosingLayer()->hasRootScrollerAsDescendant())
+    return false;
+
   if (compositingAncestor->layoutObject()->isDescendantOf(clippingContainer))
     return false;
 
@@ -518,7 +532,7 @@ bool CompositedLayerMapping::updateGraphicsLayerConfiguration() {
     needsDescendantsClippingLayer = false;
 
   // We disable clipping on ancestor layers of the root scroller to give it
-  // the same behavior w.r.t top controls as the real root layer. See the
+  // the same behavior w.r.t browser controls as the real root layer. See the
   // RootScrollerController class for more details.
   if (m_owningLayer.hasRootScrollerAsDescendant())
     needsDescendantsClippingLayer = false;
@@ -532,10 +546,7 @@ bool CompositedLayerMapping::updateGraphicsLayerConfiguration() {
   // that sibling need not be composited at all. In such scenarios, an ancestor
   // clipping layer is necessary to apply the composited clip for this layer.
   bool needsAncestorClip =
-      owningLayerClippedByLayerNotAboveCompositedAncestor(scrollParent) &&
-      !m_owningLayer.clippingContainer()
-           ->enclosingLayer()
-           ->hasRootScrollerAsDescendant();
+      owningLayerClippedByLayerNotAboveCompositedAncestor(scrollParent);
 
   if (updateClippingLayers(needsAncestorClip, needsDescendantsClippingLayer))
     layerConfigChanged = true;
@@ -1109,9 +1120,10 @@ void CompositedLayerMapping::updateOverflowControlsHostLayerGeometry(
       transformState.flatten();
       hostLayerPosition = LayoutPoint(transformState.lastPlanarPoint());
       if (PaintLayerScrollableArea* scrollableArea =
-              compositingStackingContext->getScrollableArea())
+              compositingStackingContext->getScrollableArea()) {
         hostLayerPosition.move(
-            LayoutSize(scrollableArea->adjustedScrollOffset()));
+            LayoutSize(toFloatSize(scrollableArea->scrollPosition())));
+      }
       hostLayerPosition.move(-stackingOffsetFromLayoutObject);
     }
   } else {
@@ -1220,9 +1232,9 @@ void CompositedLayerMapping::updateScrollingLayerGeometry(
   ASSERT(m_scrollingContentsLayer);
   LayoutBox* layoutBox = toLayoutBox(layoutObject());
   IntRect overflowClipRect =
-      enclosingIntRect(layoutBox->overflowClipRect(LayoutPoint()));
-  DoubleSize adjustedScrollOffset =
-      m_owningLayer.getScrollableArea()->adjustedScrollOffset();
+      pixelSnappedIntRect(layoutBox->overflowClipRect(LayoutPoint()));
+  FloatPoint scrollPosition =
+      m_owningLayer.getScrollableArea()->scrollPosition();
   m_scrollingLayer->setPosition(FloatPoint(
       overflowClipRect.location() - localCompositingBounds.location() +
       roundedIntSize(m_owningLayer.subpixelAccumulation())));
@@ -1242,15 +1254,15 @@ void CompositedLayerMapping::updateScrollingLayerGeometry(
   bool overflowClipRectOffsetChanged =
       oldScrollingLayerOffset != m_scrollingLayer->offsetFromLayoutObject();
 
-  IntSize scrollSize(layoutBox->scrollWidth().toInt(),
-                     layoutBox->scrollHeight().toInt());
+  IntSize scrollSize(layoutBox->pixelSnappedScrollWidth(),
+                     layoutBox->pixelSnappedScrollHeight());
   if (scrollSize != m_scrollingContentsLayer->size() ||
       overflowClipRectOffsetChanged)
     m_scrollingContentsLayer->setNeedsDisplay();
 
   DoubleSize scrollingContentsOffset(
-      overflowClipRect.location().x() - adjustedScrollOffset.width(),
-      overflowClipRect.location().y() - adjustedScrollOffset.height());
+      overflowClipRect.location().x() - scrollPosition.x(),
+      overflowClipRect.location().y() - scrollPosition.y());
   // The scroll offset change is compared using floating point so that
   // fractional scroll offset change can be propagated to compositor.
   if (scrollingContentsOffset != m_scrollingContentsOffset ||
@@ -1258,9 +1270,8 @@ void CompositedLayerMapping::updateScrollingLayerGeometry(
     bool coordinatorHandlesOffset =
         compositor()->scrollingLayerDidChange(&m_owningLayer);
     m_scrollingContentsLayer->setPosition(
-        coordinatorHandlesOffset
-            ? FloatPoint()
-            : FloatPoint(-toFloatSize(adjustedScrollOffset)));
+        coordinatorHandlesOffset ? FloatPoint()
+                                 : FloatPoint(-toFloatSize(scrollPosition)));
   }
   m_scrollingContentsOffset = scrollingContentsOffset;
 
@@ -1926,12 +1937,12 @@ void CompositedLayerMapping::updateElementIdAndCompositorMutableProperties() {
     } else if (owningNode->isDocumentNode() &&
                RuntimeEnabledFeatures::rootLayerScrollingEnabled()) {
       owningNode = animatingElement = scrollingElement;
-      if (scrollingElement)
+      if (scrollingElement && scrollingElement->layoutObject())
         animatingStyle = scrollingElement->layoutObject()->style();
     }
   }
 
-  if (RuntimeEnabledFeatures::compositorWorkerEnabled() && animatingElement &&
+  if (RuntimeEnabledFeatures::compositorWorkerEnabled() && animatingStyle &&
       animatingStyle->hasCompositorProxy()) {
     uint32_t compositorMutableProperties =
         animatingElement->compositorMutableProperties();
@@ -2597,6 +2608,8 @@ const GraphicsLayerPaintInfo* CompositedLayerMapping::containingSquashedLayer(
     const LayoutObject* layoutObject,
     const Vector<GraphicsLayerPaintInfo>& layers,
     unsigned maxSquashedLayerIndex) {
+  if (!layoutObject)
+    return nullptr;
   for (size_t i = 0; i < layers.size() && i < maxSquashedLayerIndex; ++i) {
     if (layoutObject->isDescendantOf(layers[i].paintLayer->layoutObject()))
       return &layers[i];
@@ -2893,10 +2906,11 @@ void CompositedLayerMapping::adjustForCompositedScrolling(
     if (PaintLayerScrollableArea* scrollableArea =
             m_owningLayer.getScrollableArea()) {
       if (scrollableArea->usesCompositedScrolling()) {
-        // Note: this is just the scroll offset, *not* the "adjusted scroll
-        // offset". Scroll offset does not include the origin adjustment. That
-        // is instead baked already into offsetFromLayoutObject.
-        DoubleSize scrollOffset = scrollableArea->scrollOffset();
+        // Note: this is the offset from the beginning of flow of the block, not
+        // the offset from the top/left of the overflow rect.
+        // offsetFromLayoutObject adds the origin offset from top/left to the
+        // beginning of flow.
+        ScrollOffset scrollOffset = scrollableArea->scrollOffset();
         offset.expand(-scrollOffset.width(), -scrollOffset.height());
       }
     }

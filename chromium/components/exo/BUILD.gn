@@ -46,6 +46,7 @@ source_set("exo") {
 
   deps = [
     "//ash",
+    "//ash/public/cpp",
     "//base",
     "//cc",
     "//cc/surfaces:surfaces",
@@ -81,8 +82,9 @@ source_set("test_support") {
 
   deps = [
     ":exo",
-    "//ash:ash_with_aura_test_support",
-    "//ash:test_support_without_content",
+    "//ash/public/cpp",
+    "//ash/test:ash_with_aura_test_support",
+    "//ash/test:test_support_without_content",
     "//base",
     "//gpu",
     "//skia",
@@ -90,6 +92,7 @@ source_set("test_support") {
     "//ui/aura",
     "//ui/compositor",
     "//ui/gfx/geometry",
+    "//ui/views",
     "//ui/wm:wm",
   ]
 }
@@ -114,6 +117,7 @@ source_set("unit_tests") {
     ":exo",
     ":test_support",
     "//ash",
+    "//ash/public/cpp",
     "//base",
     "//base/test:test_support",
     "//cc",
@@ -146,8 +150,8 @@ test("exo_unittests") {
 
   deps = [
     ":unit_tests",
-    "//ash:ash_with_aura_test_support",
-    "//ash:test_support_without_content",
+    "//ash/test:ash_with_aura_test_support",
+    "//ash/test:test_support_without_content",
     "//base",
     "//base/test:test_support",
     "//device/gamepad:test_helpers",

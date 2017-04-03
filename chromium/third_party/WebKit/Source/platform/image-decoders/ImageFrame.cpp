@@ -103,27 +103,28 @@ bool ImageFrame::takeBitmapDataIfWritable(ImageFrame* other) {
   return true;
 }
 
-bool ImageFrame::setSizeAndColorProfile(int newWidth,
-                                        int newHeight,
-                                        const ICCProfile& newIccProfile) {
-  // setSizeAndColorProfile() should only be called once, it leaks memory
+bool ImageFrame::setSizeAndColorSpace(int newWidth,
+                                      int newHeight,
+                                      sk_sp<SkColorSpace> colorSpace) {
+  // setSizeAndColorSpace() should only be called once, it leaks memory
   // otherwise.
-  ASSERT(!width() && !height());
+  DCHECK(!width() && !height());
 
-  sk_sp<SkColorSpace> colorSpace;
+  // The image must specify a color space.
+  // TODO(ccameron): This should be set unconditionally, but specifying a
+  // non-renderable SkColorSpace results in errors.
+  // https://bugs.chromium.org/p/skia/issues/detail?id=5907
   if (RuntimeEnabledFeatures::colorCorrectRenderingEnabled()) {
-    if (newIccProfile.isEmpty())
-      colorSpace = SkColorSpace::NewNamed(SkColorSpace::kSRGB_Named);
-    else
-      colorSpace =
-          SkColorSpace::NewICC(newIccProfile.data(), newIccProfile.size());
     DCHECK(colorSpace);
+    m_colorSpace = std::move(colorSpace);
+  } else {
+    DCHECK(!colorSpace);
   }
 
   m_bitmap.setInfo(SkImageInfo::MakeN32(
       newWidth, newHeight,
       m_premultiplyAlpha ? kPremul_SkAlphaType : kUnpremul_SkAlphaType,
-      colorSpace));
+      m_colorSpace));
   if (!m_bitmap.tryAllocPixels(m_allocator, 0))
     return false;
 
@@ -167,6 +168,41 @@ void ImageFrame::zeroFillFrameRect(const IntRect& rect) {
 
   m_bitmap.eraseArea(rect, SkColorSetARGB(0, 0, 0, 0));
   setHasAlpha(true);
+}
+
+static uint8_t blendChannel(uint8_t src,
+                            uint8_t srcA,
+                            uint8_t dst,
+                            uint8_t dstA,
+                            unsigned scale) {
+  unsigned blendUnscaled = src * srcA + dst * dstA;
+  DCHECK(blendUnscaled < (1ULL << 32) / scale);
+  return (blendUnscaled * scale) >> 24;
+}
+
+static uint32_t blendSrcOverDstNonPremultiplied(uint32_t src, uint32_t dst) {
+  uint8_t srcA = SkGetPackedA32(src);
+  if (srcA == 0)
+    return dst;
+
+  uint8_t dstA = SkGetPackedA32(dst);
+  uint8_t dstFactorA = (dstA * SkAlpha255To256(255 - srcA)) >> 8;
+  DCHECK(srcA + dstFactorA < (1U << 8));
+  uint8_t blendA = srcA + dstFactorA;
+  unsigned scale = (1UL << 24) / blendA;
+
+  uint8_t blendR = blendChannel(SkGetPackedR32(src), srcA, SkGetPackedR32(dst),
+                                dstFactorA, scale);
+  uint8_t blendG = blendChannel(SkGetPackedG32(src), srcA, SkGetPackedG32(dst),
+                                dstFactorA, scale);
+  uint8_t blendB = blendChannel(SkGetPackedB32(src), srcA, SkGetPackedB32(dst),
+                                dstFactorA, scale);
+
+  return SkPackARGB32NoCheck(blendA, blendR, blendG, blendB);
+}
+
+void ImageFrame::blendSrcOverDstRaw(PixelData* src, PixelData dst) {
+  *src = blendSrcOverDstNonPremultiplied(*src, dst);
 }
 
 SkAlphaType ImageFrame::computeAlphaType() const {

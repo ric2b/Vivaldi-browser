@@ -32,7 +32,6 @@
 #define RTCPeerConnection_h
 
 #include "bindings/core/v8/ActiveScriptWrappable.h"
-#include "bindings/core/v8/Dictionary.h"
 #include "bindings/core/v8/ScriptPromise.h"
 #include "core/dom/ActiveDOMObject.h"
 #include "modules/EventTargetModules.h"
@@ -61,6 +60,7 @@ class RTCSessionDescriptionInit;
 class RTCStatsCallback;
 class ScriptState;
 class VoidCallback;
+struct WebRTCConfiguration;
 
 class RTCPeerConnection final : public EventTargetWithInlineData,
                                 public WebRTCPeerConnectionHandlerClient,
@@ -72,7 +72,7 @@ class RTCPeerConnection final : public EventTargetWithInlineData,
 
  public:
   static RTCPeerConnection* create(ExecutionContext*,
-                                   const Dictionary&,
+                                   const RTCConfiguration&,
                                    const Dictionary&,
                                    ExceptionState&);
   ~RTCPeerConnection() override;
@@ -108,7 +108,7 @@ class RTCPeerConnection final : public EventTargetWithInlineData,
   String signalingState() const;
 
   void updateIce(ExecutionContext*,
-                 const Dictionary& rtcConfiguration,
+                 const RTCConfiguration&,
                  const Dictionary& mediaConstraints,
                  ExceptionState&);
 
@@ -148,7 +148,8 @@ class RTCPeerConnection final : public EventTargetWithInlineData,
                          MediaStreamTrack* selector = nullptr);
   ScriptPromise getStats(ScriptState*, MediaStreamTrack* selector = nullptr);
 
-  RTCDataChannel* createDataChannel(String label,
+  RTCDataChannel* createDataChannel(ExecutionContext*,
+                                    String label,
                                     const Dictionary& dataChannelDict,
                                     ExceptionState&);
 
@@ -213,7 +214,7 @@ class RTCPeerConnection final : public EventTargetWithInlineData,
   };
 
   RTCPeerConnection(ExecutionContext*,
-                    RTCConfiguration*,
+                    const WebRTCConfiguration&,
                     WebMediaConstraints,
                     ExceptionState&);
   void dispose();

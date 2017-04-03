@@ -17,6 +17,12 @@ namespace chromeos {
 
 class UIProxyConfigService;
 
+// This namespace defines helper functions and pref names for setting/getting a
+// Proxy configuration. These prefs are not directly read from or written to the
+// pref store, but instead are passed to/from UIProxyConfigService.
+
+namespace proxy_cros_settings_parser {
+
 extern const char kProxyPacUrl[];
 extern const char kProxySingleHttp[];
 extern const char kProxySingleHttpPort[];
@@ -36,20 +42,19 @@ extern const char kProxyUsePacUrl[];
 extern const char* const kProxySettings[];
 extern const size_t kProxySettingsCount;
 
-// This namespace defines helper functions for setting/getting Proxy settings.
-namespace proxy_cros_settings_parser {
-
 // Returns true if the supplied |path| is a proxy preference name.
 bool IsProxyPref(const std::string& path);
 
 // Sets a value in the current proxy configuration on the specified profile.
-void SetProxyPrefValue(const std::string& path,
+void SetProxyPrefValue(const std::string& network_guid,
+                       const std::string& path,
                        const base::Value* in_value,
                        UIProxyConfigService* config_service);
 
 // Gets a value from the current proxy configuration on the specified profile.
-bool GetProxyPrefValue(const UIProxyConfigService& config_service,
+bool GetProxyPrefValue(const std::string& network_guid,
                        const std::string& path,
+                       UIProxyConfigService* config_service,
                        base::Value** out_value);
 
 }  // namespace proxy_cros_settings_parser

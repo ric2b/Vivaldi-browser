@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// Keep this file in sync with the .proto files in this directory.
-
 #include "components/sync/protocol/proto_value_conversions.h"
 
 #include <string>
@@ -12,6 +10,7 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "components/sync/base/model_type.h"
+#include "components/sync/base/unique_position.h"
 #include "components/sync/protocol/app_notification_specifics.pb.h"
 #include "components/sync/protocol/app_setting_specifics.pb.h"
 #include "components/sync/protocol/app_specifics.pb.h"
@@ -43,6 +42,7 @@
 namespace syncer {
 namespace {
 
+// Keep this file in sync with the .proto files in this directory.
 class ProtoValueConversionsTest : public testing::Test {
  protected:
   template <class T>
@@ -115,7 +115,8 @@ TEST_F(ProtoValueConversionsTest, AppSettingSpecificsToValue) {
   sync_pb::AppNotificationSettings specifics;
   specifics.set_disabled(true);
   specifics.set_oauth_client_id("some_id_value");
-  std::unique_ptr<base::DictionaryValue> value(AppSettingsToValue(specifics));
+  std::unique_ptr<base::DictionaryValue>
+      value(AppNotificationSettingsToValue(specifics));
   EXPECT_FALSE(value->empty());
   bool disabled_value = false;
   std::string oauth_client_id_value;
@@ -142,7 +143,24 @@ TEST_F(ProtoValueConversionsTest, AutofillProfileSpecificsToValue) {
 }
 
 TEST_F(ProtoValueConversionsTest, AutofillWalletSpecificsToValue) {
-  TestSpecificsToValue(AutofillWalletSpecificsToValue);
+  sync_pb::AutofillWalletSpecifics specifics;
+  specifics.mutable_masked_card()->set_name_on_card("Igloo");
+  specifics.mutable_address()->set_recipient_name("John");
+
+  specifics.set_type(sync_pb::AutofillWalletSpecifics::UNKNOWN);
+  auto value = AutofillWalletSpecificsToValue(specifics);
+  EXPECT_FALSE(value->Get("masked_card", nullptr));
+  EXPECT_FALSE(value->Get("address", nullptr));
+
+  specifics.set_type(sync_pb::AutofillWalletSpecifics::MASKED_CREDIT_CARD);
+  value = AutofillWalletSpecificsToValue(specifics);
+  EXPECT_TRUE(value->Get("masked_card", nullptr));
+  EXPECT_FALSE(value->Get("address", nullptr));
+
+  specifics.set_type(sync_pb::AutofillWalletSpecifics::POSTAL_ADDRESS);
+  value = AutofillWalletSpecificsToValue(specifics);
+  EXPECT_FALSE(value->Get("masked_card", nullptr));
+  EXPECT_TRUE(value->Get("address", nullptr));
 }
 
 TEST_F(ProtoValueConversionsTest, WalletMetadataSpecificsToValue) {
@@ -206,7 +224,31 @@ TEST_F(ProtoValueConversionsTest, DeviceInfoSpecificsToValue) {
 }
 
 TEST_F(ProtoValueConversionsTest, ExperimentsSpecificsToValue) {
-  TestSpecificsToValue(ExperimentsSpecificsToValue);
+#define TEST_EXPERIMENT_ENABLED_FIELD(field) \
+  { \
+    sync_pb::ExperimentsSpecifics specifics; \
+    specifics.mutable_##field(); \
+    auto value = ExperimentsSpecificsToValue(specifics); \
+    EXPECT_TRUE(value->empty()); \
+  } \
+  { \
+    sync_pb::ExperimentsSpecifics specifics; \
+    specifics.mutable_##field()->set_enabled(false); \
+    auto value = ExperimentsSpecificsToValue(specifics); \
+    bool field_enabled = true; \
+    EXPECT_EQ(1u, value->size()); \
+    EXPECT_TRUE(value->GetBoolean(#field, &field_enabled)); \
+    EXPECT_FALSE(field_enabled); \
+  }
+
+  TEST_EXPERIMENT_ENABLED_FIELD(keystore_encryption)
+  TEST_EXPERIMENT_ENABLED_FIELD(history_delete_directives)
+  TEST_EXPERIMENT_ENABLED_FIELD(autofill_culling)
+  TEST_EXPERIMENT_ENABLED_FIELD(pre_commit_update_avoidance)
+  TEST_EXPERIMENT_ENABLED_FIELD(gcm_channel)
+  TEST_EXPERIMENT_ENABLED_FIELD(gcm_invalidations)
+
+#undef TEST_EXPERIMENT_ENABLED_FIELD
 }
 
 TEST_F(ProtoValueConversionsTest, ExtensionSettingSpecificsToValue) {
@@ -355,14 +397,38 @@ TEST_F(ProtoValueConversionsTest, EntitySpecificsToValue) {
             static_cast<int>(value->size()));
 }
 
+TEST_F(ProtoValueConversionsTest, UniquePositionToValue) {
+  sync_pb::SyncEntity entity;
+  entity.mutable_unique_position()->set_custom_compressed_v1("test");
+
+  auto value = SyncEntityToValue(entity, false);
+  std::string unique_position;
+  EXPECT_TRUE(value->GetString("unique_position", &unique_position));
+
+  std::string expected_unique_position =
+      UniquePosition::FromProto(entity.unique_position()).ToDebugString();
+  EXPECT_EQ(expected_unique_position, unique_position);
+}
+
+TEST_F(ProtoValueConversionsTest, SyncEntityToValueIncludeSpecifics) {
+  sync_pb::SyncEntity entity;
+  entity.mutable_specifics();
+
+  auto value = SyncEntityToValue(entity, true /* include_specifics */);
+  EXPECT_TRUE(value->GetDictionary("specifics", nullptr));
+
+  value = SyncEntityToValue(entity, false /* include_specifics */);
+  EXPECT_FALSE(value->GetDictionary("specifics", nullptr));
+}
+
 namespace {
 // Returns whether the given value has specifics under the entries in the given
 // path.
 bool ValueHasSpecifics(const base::DictionaryValue& value,
                        const std::string& path) {
-  const base::ListValue* entities_list = NULL;
-  const base::DictionaryValue* entry_dictionary = NULL;
-  const base::DictionaryValue* specifics_dictionary = NULL;
+  const base::ListValue* entities_list = nullptr;
+  const base::DictionaryValue* entry_dictionary = nullptr;
+  const base::DictionaryValue* specifics_dictionary = nullptr;
 
   if (!value.GetList(path, &entities_list))
     return false;

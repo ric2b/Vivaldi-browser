@@ -28,10 +28,12 @@
 #include "crypto/sha2.h"
 #include "media/midi/midi_port_info.h"
 
-namespace media {
 namespace midi {
 
 namespace {
+
+using mojom::PortState;
+using mojom::Result;
 
 // Per-output buffer. This can be smaller, but then large sysex messages
 // will be (harmlessly) split across multiple seq events. This should
@@ -1201,11 +1203,11 @@ void MidiManagerAlsa::UpdatePortStateAndGenerateEvents() {
         case MidiPort::Type::kInput:
           source_map_.erase(
               AddrToInt(old_port->client_id(), old_port->port_id()));
-          SetInputPortState(web_port_index, MIDI_PORT_DISCONNECTED);
+          SetInputPortState(web_port_index, PortState::DISCONNECTED);
           break;
         case MidiPort::Type::kOutput:
           DeleteAlsaOutputPort(web_port_index);
-          SetOutputPortState(web_port_index, MIDI_PORT_DISCONNECTED);
+          SetOutputPortState(web_port_index, PortState::DISCONNECTED);
           break;
       }
     }
@@ -1230,7 +1232,7 @@ void MidiManagerAlsa::UpdatePortStateAndGenerateEvents() {
       it = new_port_state->erase(it);
 
       MidiPortInfo info(opaque_key, manufacturer, port_name, version,
-                        MIDI_PORT_OPENED);
+                        PortState::OPENED);
       switch (type) {
         case MidiPort::Type::kInput:
           if (Subscribe(web_port_index, client_id, port_id))
@@ -1252,12 +1254,12 @@ void MidiManagerAlsa::UpdatePortStateAndGenerateEvents() {
         case MidiPort::Type::kInput:
           if (Subscribe(web_port_index, (*old_port)->client_id(),
                         (*old_port)->port_id()))
-            SetInputPortState(web_port_index, MIDI_PORT_OPENED);
+            SetInputPortState(web_port_index, PortState::OPENED);
           break;
         case MidiPort::Type::kOutput:
           if (CreateAlsaOutputPort(web_port_index, (*old_port)->client_id(),
                                    (*old_port)->port_id()))
-            SetOutputPortState(web_port_index, MIDI_PORT_OPENED);
+            SetOutputPortState(web_port_index, PortState::OPENED);
           break;
       }
       (*old_port)->set_connected(true);
@@ -1404,4 +1406,3 @@ MidiManager* MidiManager::Create() {
 }
 
 }  // namespace midi
-}  // namespace media

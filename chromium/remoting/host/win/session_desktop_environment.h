@@ -31,7 +31,7 @@ class SessionDesktopEnvironment : public Me2MeDesktopEnvironment {
       scoped_refptr<base::SingleThreadTaskRunner> ui_task_runner,
       const base::Closure& inject_sas,
       const base::Closure& lock_workstation,
-      bool supports_touch_events);
+      const DesktopEnvironmentOptions& options);
 
   // Used to ask the daemon to inject Secure Attention Sequence.
   base::Closure inject_sas_;
@@ -56,7 +56,8 @@ class SessionDesktopEnvironmentFactory : public Me2MeDesktopEnvironmentFactory {
 
   // DesktopEnvironmentFactory implementation.
   std::unique_ptr<DesktopEnvironment> Create(
-      base::WeakPtr<ClientSessionControl> client_session_control) override;
+      base::WeakPtr<ClientSessionControl> client_session_control,
+      const DesktopEnvironmentOptions& options) override;
 
  private:
   // Used to ask the daemon to inject Secure Attention Sequence.

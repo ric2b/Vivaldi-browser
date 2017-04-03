@@ -45,7 +45,9 @@ const gpu::GpuPreferences GetGpuPreferencesFromCommandLine() {
 #endif
 #if defined(ENABLE_WEBRTC)
   gpu_preferences.disable_web_rtc_hw_encoding =
-      command_line->HasSwitch(switches::kDisableWebRtcHWEncoding);
+      command_line->HasSwitch(switches::kDisableWebRtcHWEncoding) &&
+      command_line->GetSwitchValueASCII(switches::kDisableWebRtcHWEncoding)
+          .empty();
 #endif
 #if defined(OS_WIN)
   uint32_t enable_accelerated_vpx_decode_val =
@@ -56,6 +58,8 @@ const gpu::GpuPreferences GetGpuPreferencesFromCommandLine() {
         static_cast<gpu::GpuPreferences::VpxDecodeVendors>(
             enable_accelerated_vpx_decode_val);
   }
+  gpu_preferences.enable_low_latency_dxva =
+      !command_line->HasSwitch(switches::kDisableLowLatencyDxva);
   gpu_preferences.enable_zero_copy_dxgi_video =
       !command_line->HasSwitch(switches::kDisableZeroCopyDxgiVideo);
   gpu_preferences.enable_nv12_dxgi_video =
@@ -77,6 +81,8 @@ const gpu::GpuPreferences GetGpuPreferencesFromCommandLine() {
       command_line->HasSwitch(switches::kEnableGPUDebugging);
   gpu_preferences.enable_gpu_service_logging_gpu =
       command_line->HasSwitch(switches::kEnableGPUServiceLoggingGPU);
+  gpu_preferences.enable_gpu_driver_debug_logging =
+      command_line->HasSwitch(switches::kEnableGPUDriverDebugLogging);
   gpu_preferences.disable_gpu_program_cache =
       command_line->HasSwitch(switches::kDisableGpuProgramCache);
   gpu_preferences.enforce_gl_minimums =
@@ -91,8 +97,6 @@ const gpu::GpuPreferences GetGpuPreferencesFromCommandLine() {
   }
   gpu_preferences.disable_gpu_shader_disk_cache =
       command_line->HasSwitch(switches::kDisableGpuShaderDiskCache);
-  gpu_preferences.enable_share_group_async_texture_upload =
-      command_line->HasSwitch(switches::kEnableShareGroupAsyncTextureUpload);
   gpu_preferences.enable_threaded_texture_mailboxes =
       command_line->HasSwitch(switches::kEnableThreadedTextureMailboxes);
   gpu_preferences.gl_shader_interm_output =
@@ -103,10 +107,10 @@ const gpu::GpuPreferences GetGpuPreferencesFromCommandLine() {
       command_line->HasSwitch(switches::kEnableGPUServiceLogging);
   gpu_preferences.enable_gpu_service_tracing =
       command_line->HasSwitch(switches::kEnableGPUServiceTracing);
-  gpu_preferences.enable_unsafe_es3_apis =
-      command_line->HasSwitch(switches::kEnableUnsafeES3APIs);
   gpu_preferences.use_passthrough_cmd_decoder =
       command_line->HasSwitch(switches::kUsePassthroughCmdDecoder);
+  // Some of these preferences are set or adjusted in
+  // GpuDataManagerImplPrivate::AppendGpuCommandLine.
   return gpu_preferences;
 }
 

@@ -162,13 +162,33 @@ cursors.Cursor.prototype = {
    * @private
    */
   get selectionNode_() {
-    if (!this.node)
+    var adjustedNode = this.node;
+    if (!adjustedNode)
       return null;
 
-    if (this.node.role == RoleType.inlineTextBox)
-      return this.node.parent;
+    // Make no adjustments if we're within editable content.
+    if (adjustedNode.state.editable)
+      return adjustedNode;
 
-    return this.node;
+    // Selections over line break nodes are broken.
+    var parent = adjustedNode.parent;
+    var grandparent = parent && parent.parent;
+    if (parent.role == RoleType.lineBreak) {
+      adjustedNode = grandparent;
+    } else if (grandparent.role == RoleType.lineBreak) {
+      adjustedNode = grandparent.parent;
+    } else if (this.index_ == cursors.NODE_INDEX ||
+        adjustedNode.role == RoleType.inlineTextBox ||
+        chrome.automation.NameFromType[adjustedNode.nameFrom] != 'contents') {
+      // A node offset or unselectable character offset.
+      adjustedNode = parent;
+    } else {
+      // A character offset into content.
+      adjustedNode =
+          adjustedNode.find({role: RoleType.staticText}) || adjustedNode;
+    }
+
+    return adjustedNode;
   },
 
   /**
@@ -180,7 +200,15 @@ cursors.Cursor.prototype = {
    */
   get selectionIndex_() {
     var adjustedIndex = this.index_;
-    if (this.node.role == RoleType.inlineTextBox) {
+
+    if (!this.node)
+      return -1;
+
+    if (this.node.state.editable) {
+      return this.index_ == cursors.NODE_INDEX ? 0 : this.index_;
+    } else if (this.node.role == RoleType.inlineTextBox &&
+    // Selections under a line break are broken.
+        this.node.parent && this.node.parent.role != RoleType.lineBreak) {
       if (adjustedIndex == cursors.NODE_INDEX)
         adjustedIndex = 0;
 
@@ -189,26 +217,29 @@ cursors.Cursor.prototype = {
         adjustedIndex += sibling.name.length;
         sibling = sibling.previousSibling;
       }
-    } else if (this.index_ == cursors.NODE_INDEX) {
-      // Indicies of this kind are buggy. Set it to 0 (different than the DOM
-      // index in parent convention).
-      adjustedIndex = 0;
+    } else if (this.index_ == cursors.NODE_INDEX ||
+        chrome.automation.NameFromType[this.node.nameFrom] != 'contents') {
+      // A node offset or unselectable character offset.
+
+      // The selected node could have been adjusted upwards in the tree.
+      var childOfSelection = this.node;
+      do {
+        adjustedIndex = childOfSelection.indexInParent;
+        childOfSelection = childOfSelection.parent;
+      } while (childOfSelection && childOfSelection != this.selectionNode_);
     }
+    // A character offset into content is the remaining case. It requires no
+    // adjustment.
+
     return adjustedIndex;
   },
 
   /**
    * Gets the accessible text of the node associated with this cursor.
-   *
-   * @param {!AutomationNode=} opt_node Use this node rather than this cursor's
-   * node.
    * @return {string}
    */
-  getText: function(opt_node) {
-    var node = opt_node || this.node;
-    if (node.role === RoleType.textField)
-      return node.value;
-    return node.name || '';
+  getText: function() {
+    return AutomationUtil.getText(this.node);
   },
 
   /**
@@ -241,7 +272,7 @@ cursors.Cursor.prototype = {
           newNode = AutomationUtil.findNextNode(
               newNode, dir, AutomationPredicate.leafWithText);
           if (newNode) {
-            var newText = this.getText(newNode);
+            var newText = AutomationUtil.getText(newNode);
             newIndex =
                 dir == Dir.FORWARD ? 0 :
                 StringUtil.previousCodePointOffset(newText, newText.length);
@@ -334,7 +365,7 @@ cursors.Cursor.prototype = {
                 AutomationPredicate.linebreak, true);
             newNode = newNode || originalNode;
             newIndex =
-                dir == Dir.FORWARD ? this.getText(newNode).length : 0;
+                dir == Dir.FORWARD ? AutomationUtil.getText(newNode).length : 0;
             break;
           case Movement.DIRECTIONAL:
             newNode = AutomationUtil.findNodeUntil(
@@ -526,16 +557,12 @@ cursors.Range.prototype = {
   },
 
   /**
-   * Gets a cursor bounding this range.
+   * Gets the directed end cursor of this range.
    * @param {Dir} dir Which endpoint cursor to return; Dir.FORWARD for end,
    * Dir.BACKWARD for start.
-   * @param {boolean=} opt_reverse Specify to have Dir.BACKWARD return end,
-   * Dir.FORWARD return start.
    * @return {!cursors.Cursor}
    */
-  getBound: function(dir, opt_reverse) {
-    if (opt_reverse)
-      return dir == Dir.BACKWARD ? this.end_ : this.start_;
+  getBound: function(dir) {
     return dir == Dir.FORWARD ? this.end_ : this.start_;
   },
 
@@ -554,13 +581,25 @@ cursors.Range.prototype = {
   },
 
   /**
-   * Returns true if this range covers less than a node.
+   * Returns true if this range covers a single node's text content or less.
    * @return {boolean}
    */
   isSubNode: function() {
     return this.start.node === this.end.node &&
         this.start.index > -1 &&
         this.end.index > -1;
+  },
+
+  /**
+   * Returns true if this range covers inline text (i.e. each end points to an
+   * inlineTextBox).
+   * @return {boolean?}
+   */
+  isInlineText: function() {
+    return this.start.node &&
+        this.end.node &&
+        this.start.node.role == this.end.role &&
+        this.start.node.role == RoleType.inlineTextBox;
   },
 
   /**
@@ -617,7 +656,7 @@ cursors.Range.prototype = {
       // We want to adjust to select the entire node for node offsets;
       // otherwise, use the plain character offset.
       var startIndex = this.start.selectionIndex_;
-      var endIndex = this.end.index == cursors.NODE_INDEX ?
+      var endIndex = this.end.index_ == cursors.NODE_INDEX ?
           this.end.selectionIndex_ + 1 : this.end.selectionIndex_;
 
       chrome.automation.setDocumentSelection(

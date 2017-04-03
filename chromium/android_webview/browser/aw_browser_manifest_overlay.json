@@ -1,0 +1,14 @@
+{
+  "name": "content_browser",
+  "interface_provider_specs": {
+    "navigation:frame": {
+      "provides": {
+        "renderer": [
+          "autofill::mojom::AutofillDriver",
+          "autofill::mojom::PasswordManagerDriver",
+          "web_restrictions::mojom::WebRestrictions"
+        ]
+      }
+    }
+  }
+}

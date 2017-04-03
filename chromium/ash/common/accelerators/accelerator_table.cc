@@ -72,9 +72,8 @@ const AcceleratorData kAcceleratorData[] = {
      TOUCH_HUD_CLEAR},
     {true, ui::VKEY_P, ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN,
      TOUCH_HUD_PROJECTION_TOGGLE},
-    // Accessibility: Spoken feedback shortcuts. The first one is to toggle
-    // spoken feedback on or off. The others are only valid when
-    // spoken feedback is enabled.
+    {true, ui::VKEY_H, ui::EF_COMMAND_DOWN | ui::EF_SHIFT_DOWN,
+     TOGGLE_HIGH_CONTRAST},
     {true, ui::VKEY_Z, ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN,
      TOGGLE_SPOKEN_FEEDBACK},
     {true, ui::VKEY_OEM_COMMA, ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN,
@@ -215,9 +214,12 @@ const AcceleratorData kDeprecatedAccelerators[] = {
 const size_t kDeprecatedAcceleratorsLength = arraysize(kDeprecatedAccelerators);
 
 const DeprecatedAcceleratorData kDeprecatedAcceleratorsData[] = {
-    {LOCK_SCREEN, "Ash.Accelerators.Deprecated.LockScreen",
-     IDS_DEPRECATED_LOCK_SCREEN_MSG, IDS_SHORTCUT_LOCK_SCREEN_OLD,
-     IDS_SHORTCUT_LOCK_SCREEN_NEW, true},
+    {
+        LOCK_SCREEN, "Ash.Accelerators.Deprecated.LockScreen",
+        IDS_DEPRECATED_LOCK_SCREEN_MSG, IDS_SHORTCUT_LOCK_SCREEN_OLD,
+        IDS_SHORTCUT_LOCK_SCREEN_NEW,
+        false  // Old accelerator was disabled in M56.
+    },
     {SHOW_TASK_MANAGER, "Ash.Accelerators.Deprecated.ShowTaskManager",
      IDS_DEPRECATED_SHOW_TASK_MANAGER_MSG, IDS_SHORTCUT_TASK_MANAGER_OLD,
      IDS_SHORTCUT_TASK_MANAGER_NEW, true},
@@ -340,6 +342,7 @@ const AcceleratorAction kActionsAllowedAtLoginOrLockScreen[] = {
     KEYBOARD_BRIGHTNESS_DOWN,
     KEYBOARD_BRIGHTNESS_UP,
     TOGGLE_CAPS_LOCK,
+    TOGGLE_HIGH_CONTRAST,
     TOGGLE_SPOKEN_FEEDBACK,
     TOGGLE_MIRROR_MODE,
     TOGGLE_WIFI,
@@ -403,6 +406,7 @@ const AcceleratorAction kActionsAllowedAtModalWindow[] = {
     SUSPEND,
     SWAP_PRIMARY_DISPLAY,
     TOGGLE_CAPS_LOCK,
+    TOGGLE_HIGH_CONTRAST,
     TOGGLE_MIRROR_MODE,
     TOGGLE_SPOKEN_FEEDBACK,
     TOGGLE_WIFI,
@@ -465,6 +469,7 @@ const AcceleratorAction kActionsAllowedInAppModeOrPinnedMode[] = {
     POWER_RELEASED,
     SWAP_PRIMARY_DISPLAY,
     TOGGLE_CAPS_LOCK,
+    TOGGLE_HIGH_CONTRAST,
     TOGGLE_MIRROR_MODE,
     TOGGLE_SPOKEN_FEEDBACK,
     TOGGLE_WIFI,
@@ -526,7 +531,9 @@ const AcceleratorAction kActionsKeepingMenuOpen[] = {
     DISABLE_CAPS_LOCK,
     KEYBOARD_BRIGHTNESS_DOWN,
     KEYBOARD_BRIGHTNESS_UP,
+    TOGGLE_APP_LIST,
     TOGGLE_CAPS_LOCK,
+    TOGGLE_HIGH_CONTRAST,
     TOGGLE_SPOKEN_FEEDBACK,
     TOGGLE_WIFI,
     VOLUME_DOWN,

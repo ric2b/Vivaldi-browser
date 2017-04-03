@@ -13,7 +13,7 @@ goog.provide('PanelCommandType');
 /**
  * Create one command to pass to the ChromeVox Panel.
  * @param {PanelCommandType} type The type of command.
- * @param {string|{text: string, braille: string}=} opt_data
+ * @param {string|{groups:Array}=} opt_data
  *     Optional data associated with the command.
  * @constructor
  */
@@ -48,4 +48,5 @@ PanelCommandType = {
   DISABLE_MENUS: 'disable_menus',
   SEARCH: 'search',
   TUTORIAL: 'tutorial',
+  UPDATE_NOTES: 'update_notes',
 };

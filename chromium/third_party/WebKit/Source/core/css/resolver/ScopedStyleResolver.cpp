@@ -38,7 +38,6 @@
 #include "core/css/StyleRule.h"
 #include "core/css/StyleSheetContents.h"
 #include "core/css/resolver/MatchRequest.h"
-#include "core/css/resolver/ViewportStyleResolver.h"
 #include "core/dom/Document.h"
 #include "core/dom/StyleChangeReason.h"
 #include "core/dom/StyleEngine.h"
@@ -105,6 +104,22 @@ void ScopedStyleResolver::appendCSSStyleSheet(
       ruleSet.deviceDependentMediaQueryResults());
 }
 
+void ScopedStyleResolver::appendActiveStyleSheets(
+    unsigned index,
+    const ActiveStyleSheetVector& activeSheets) {
+  for (auto activeIterator = activeSheets.begin() + index;
+       activeIterator != activeSheets.end(); activeIterator++) {
+    CSSStyleSheet* sheet = activeIterator->first;
+    if (!activeIterator->second)
+      continue;
+    const RuleSet& ruleSet = *activeIterator->second;
+    m_authorStyleSheets.append(sheet);
+    addKeyframeRules(ruleSet);
+    addFontFaceRules(ruleSet);
+    addTreeBoundaryCrossingRules(ruleSet, sheet, index++);
+  }
+}
+
 void ScopedStyleResolver::collectFeaturesTo(
     RuleFeatureSet& features,
     HeapHashSet<Member<const StyleSheetContents>>&
@@ -157,7 +172,8 @@ void ScopedStyleResolver::addKeyframeStyle(StyleRuleKeyframes* rule) {
   }
 }
 
-static Node& invalidationRootFor(const TreeScope& treeScope) {
+ContainerNode& ScopedStyleResolver::invalidationRootForTreeScope(
+    const TreeScope& treeScope) {
   if (treeScope.rootNode() == treeScope.document())
     return treeScope.document();
   return toShadowRoot(treeScope.rootNode()).host();
@@ -190,7 +206,7 @@ void ScopedStyleResolver::keyframesRulesAdded(const TreeScope& treeScope) {
     // rules were found for the animation-name, we need to recalculate style
     // for the elements in the scope, including its shadow host if
     // applicable.
-    invalidationRootFor(treeScope).setNeedsStyleRecalc(
+    invalidationRootForTreeScope(treeScope).setNeedsStyleRecalc(
         SubtreeStyleChange, StyleChangeReasonForTracing::create(
                                 StyleChangeReason::StyleSheetChange));
     return;
@@ -243,16 +259,6 @@ void ScopedStyleResolver::matchPageRules(PageRuleCollector& collector) {
     collector.matchPageRules(&m_authorStyleSheets[i]->contents()->ruleSet());
 }
 
-void ScopedStyleResolver::collectViewportRulesTo(
-    ViewportStyleResolver* resolver) const {
-  if (!m_scope->rootNode().isDocumentNode())
-    return;
-  for (size_t i = 0; i < m_authorStyleSheets.size(); ++i)
-    resolver->collectViewportRules(
-        &m_authorStyleSheets[i]->contents()->ruleSet(),
-        ViewportStyleResolver::AuthorOrigin);
-}
-
 DEFINE_TRACE(ScopedStyleResolver) {
   visitor->trace(m_scope);
   visitor->trace(m_authorStyleSheets);
@@ -291,8 +297,8 @@ void ScopedStyleResolver::addTreeBoundaryCrossingRules(
 
   if (!m_treeBoundaryCrossingRuleSet) {
     m_treeBoundaryCrossingRuleSet = new CSSStyleSheetRuleSubSet();
-    treeScope().document().styleResolver()->addTreeBoundaryCrossingScope(
-        treeScope().rootNode());
+    treeScope().document().styleEngine().addTreeBoundaryCrossingScope(
+        treeScope());
   }
 
   m_treeBoundaryCrossingRuleSet->append(

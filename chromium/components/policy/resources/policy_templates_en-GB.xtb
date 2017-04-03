@@ -19,6 +19,9 @@
       When this policy is set to false or unset, cookies set by the IdP are transferred to the user's profile during their first login on a device only.
 
       This policy affects users whose domain matches the device's enrolment domain only. For all other users, cookies set by the IdP are transferred to the user's profile during their first login on the device only.</translation>
+<translation id="1029536946382325801">If true, the user can use the hardware on Chrome devices to remotely attest its identity to the privacy CA via the Enterprise Platform Keys API chrome.enterprise.platformKeys.challengeUserKey().
+
+          If it is set to false, or if it is not set, calls to the API will fail with an error code.</translation>
 <translation id="1040446814317236570">Enable PAC URL stripping (for https://)</translation>
 <translation id="1044878202534415707">Report hardware statistics such as CPU/RAM usage.
 
@@ -54,6 +57,25 @@
 <translation id="1152117524387175066">Report the state of the device's dev switch at boot.
 
       If the policy is set to false, the state of the dev switch will not be reported.</translation>
+<translation id="1156080716265314451">Configures a list of printers.
+
+      This policy allows administrators to provide printer configurations for
+      their users.
+
+      <ph name="PRINTER_DISPLAY_NAME" /> and <ph name="PRINTER_DESCRIPTION" /> are free form strings that
+      can be customised for ease of printer selection. <ph name="PRINTER_MANUFACTURER" /> and <ph name="PRINTER_MODEL" /> should match one of the <ph name="PRODUCT_NAME" /> supported
+      printers.  <ph name="PRINTER_URI" /> should be an address reachable
+      from a client computer including the <ph name="URI_SCHEME" />,
+      <ph name="URI_PORT" />, and <ph name="URI_QUEUE" />.  <ph name="PRINTER_UUID" /> is optional.  If provided, it is used to
+      help deduplicate <ph name="ZEROCONF_DISCOVERY" /> printers.
+
+      Printer setup is completed upon the first use of a printer.  PPDs are not
+      downloaded until the printer is used.  After that time, frequently used
+      PPDs are cached.
+
+      This policy has no effect on whether users can configure printers on
+      individual devices.  It is intended to be supplementary to the
+      configuration of printers by individual users.</translation>
 <translation id="1160939557934457296">Disable proceeding from the Safe Browsing warning page</translation>
 <translation id="1198465924256827162">How frequently device status uploads are sent, in milliseconds.
 
@@ -157,7 +179,6 @@
       unable to use ARC.</translation>
 <translation id="1561424797596341174">Policy overrides for Debug builds of the remote access host</translation>
 <translation id="1583248206450240930">Use <ph name="PRODUCT_FRAME_NAME" /> by default</translation>
-<translation id="1606958238518590302">When this policy is set to true, users cannot write anything to external storage devices.</translation>
 <translation id="1608755754295374538">URLs that will be granted access to audio capture devices without prompt</translation>
 <translation id="1617235075406854669">Enable deleting browser and download history</translation>
 <translation id="1617384279878333801">Enable add person in profile manager</translation>
@@ -212,15 +233,6 @@
       If this policy is not configured or if it is set to "tls1.2" then <ph name="PRODUCT_NAME" /> no longer performs this fallback. Note that this does not disable support for older TLS versions, only whether <ph name="PRODUCT_NAME" /> will work around buggy servers which cannot negotiate versions correctly.
 
       Otherwise, if compatibility with a buggy server must be maintained, this policy may be set to "tls1.1". This is a stopgap measure and the server should be rapidly fixed.</translation>
-<translation id="1861037019115362154">Specifies a list of plugins that are disabled in <ph name="PRODUCT_NAME" /> and prevents users from changing this setting.
-
-      The wildcard characters '*' and '?' can be used to match sequences of arbitrary characters. '*' matches an arbitrary number of characters while '?' specifies an optional single character, i.e. matches zero or one characters. The escape character is '\', so to match actual '*', '?', or '\' characters, you can put a '\' in front of them.
-
-      If you enable this setting, the specified list of plugins is never used in <ph name="PRODUCT_NAME" />. The plugins are marked as disabled in 'about:plugins' and users cannot enable them.
-
-      Note that this policy can be overridden by EnabledPlugins and DisabledPluginsExceptions.
-
-      If this policy is left not set the user can use any plugin installed on the system except for hard-coded incompatible, outdated or dangerous plugins.</translation>
 <translation id="1864269674877167562">If this policy is set to a blank string or not configured, <ph name="PRODUCT_OS_NAME" /> will not show an auto-complete option during user sign-in flow.
       If this policy is set to a string representing a domain name, <ph name="PRODUCT_OS_NAME" /> will show an auto-complete option during user sign-in allowing the user to type in only their user name without the domain name extension. The user will be able to overwrite this domain name extension.</translation>
 <translation id="1865417998205858223">Key Permissions</translation>
@@ -361,13 +373,6 @@ The contents of the list 'URLs to open at start-up' are ignored unless you selec
 <translation id="2337466621458842053">Allows you to set a list of url patterns that specify sites which are allowed to display images.
 
           If this policy is left unset, the global default value will be used for all sites either from the 'DefaultImagesSetting' policy, if it is set, or the user's personal configuration otherwise.</translation>
-<translation id="2359612025446382967">If this policy is set to false, <ph name="PRODUCT_OS_NAME" /> will disable Bluetooth and the user cannot re-enable it.
-
-      If this policy is set to true or left unset, the user will be able to enable or disable Bluetooth as they wish.
-
-      If this policy is set, the user cannot change or override it.
-
-      After enabling Bluetooth, the device must be rebooted for the changes to take effect (no need to reboot the device when disabling Bluetooth).</translation>
 <translation id="2366415278352956652">Enables cast</translation>
 <translation id="2372547058085956601">The public session auto-login delay.
 
@@ -467,6 +472,7 @@ The contents of the list 'URLs to open at start-up' are ignored unless you selec
       If this setting is left unset, the user can decide to use this function or not.
 
       This setting has been removed from <ph name="PRODUCT_NAME" /> 29 and higher versions.</translation>
+<translation id="2432116014157020512">Password entry is required every week (168 hours).</translation>
 <translation id="2436445024487698630">Allows sign in to <ph name="PRODUCT_NAME" /></translation>
 <translation id="243972079416668391">Specify the action to take when the idle delay is reached while running on AC power.
 
@@ -525,6 +531,13 @@ The contents of the list 'URLs to open at start-up' are ignored unless you selec
           Google's instant results URL can be specified as: <ph name="GOOGLE_INSTANT_SEARCH_URL" />.
 
           This policy is only respected if the 'DefaultSearchProviderEnabled' policy is enabled.</translation>
+<translation id="2569647487017692047">If this policy is set to false, <ph name="PRODUCT_OS_NAME" /> will disable Bluetooth and the user cannot enable it back.
+
+      If this policy is set to true or left unset, the user will be able to enable or disable Bluetooth as they wish.
+
+      If this policy is set, the user cannot change or override it.
+
+      After enabling Bluetooth, the user must log out and log back in for the changes to take effect (no need for this when disabling Bluetooth).</translation>
 <translation id="2571066091915960923">Enable or disable the data compression proxy and prevent users from changing this setting.
 
       If you enable or disable this setting, users cannot change or override this setting.
@@ -647,6 +660,15 @@ The contents of the list 'URLs to open at start-up' are ignored unless you selec
 <translation id="2884728160143956392">Allow session only cookies on these sites</translation>
 <translation id="2893546967669465276">Send system logs to the management server</translation>
 <translation id="2899002520262095963">Android apps can use the network configurations and CA certificates set via this policy, but do not have access to some configuration options.</translation>
+<translation id="2901399514673504930">Treat external storage devices as read-only.
+
+      This policy is effective only when ExternalStorageDisabled is set to false or not configured.
+
+      When this policy is set to true, users cannot write anything to external storage devices.
+
+      If this setting is disabled or not configured then users can create and modify files of external storage devices which are physically writable.
+
+      Dynamic refresh of this policy is supported in M56 and later.</translation>
 <translation id="2906874737073861391">List of AppPack extensions</translation>
 <translation id="2908277604670530363">Maximum number of concurrent connections to the proxy server</translation>
 <translation id="2948087343485265211">Specifies whether audio activity affects power management.
@@ -693,9 +715,6 @@ The contents of the list 'URLs to open at start-up' are ignored unless you selec
           This policy is optional. If not set, no search term replacement will be performed.
 
           This policy is only respected if the 'DefaultSearchProviderEnabled' policy is enabled.</translation>
-<translation id="3067188277482006117">If true, the user can use the hardware on Chrome devices to remote attest its identity to the privacy CA via the Enterprise Platform Keys API chrome.enterprise.platformKeysPrivate.challengeUserKey().
-
-          If it is set to false, or if it is not set, calls to the API will fail with an error code.</translation>
 <translation id="3069958900488014740">Allows you to turn off WPAD (Web Proxy Auto-Discovery) optimisation in <ph name="PRODUCT_NAME" />.
 
       If this policy is set to false, WPAD optimisation is disabled causing <ph name="PRODUCT_NAME" /> to wait longer for DNS-based WPAD servers. If the policy is not set or is enabled, WPAD optimisation is enabled.
@@ -816,6 +835,7 @@ The contents of the list 'URLs to open at start-up' are ignored unless you selec
 
           If this policy is left not set the global default value will be used for all sites either from the 'DefaultKeygenSetting' policy if it is set or the user's personal configuration otherwise.</translation>
 <translation id="3322902067538988734">If this policy is set to true, the user has to sign in to <ph name="PRODUCT_NAME" /> with his or her profile before using the browser. And the default value of BrowserGuestModeEnabled will be set to false. If this policy is set to false or not configured, user can use the browser without sign in to <ph name="PRODUCT_NAME" />.</translation>
+<translation id="3347687541825006165">Sets how often user has to enter password to use quick unlock.</translation>
 <translation id="3381968327636295719">Use the host browser by default</translation>
 <translation id="3417418267404583991">If this policy is set to true or not configured, <ph name="PRODUCT_OS_NAME" /> will enable guest logins. Guest logins are anonymous user sessions and do not require a password.
 
@@ -1010,6 +1030,9 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
 
       If this policy is set to true, monitoring network packets (so-called <ph name="HEARTBEATS_TERM" />) will be sent.
       If set to false or unset, no packets will be sent.</translation>
+<translation id="3963602271515417124">If true, remote attestation is allowed for the device and a certificate will automatically be generated and uploaded to the Device Management Server.
+
+          If it is set to false, or if it is not set, no certificate will be generated and calls to the enterprise.platformKeys extension API will fail.</translation>
 <translation id="3964909636571393861">Allows access to a list of URLs</translation>
 <translation id="3965339130942650562">Timeout until idle user log-out is executed</translation>
 <translation id="3967075520570946456">Enable showing the welcome page on the first browser launch following OS upgrade.</translation>
@@ -1064,6 +1087,17 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
 
           If this policy is left not set, 'AllowCookies' will be used and the user will be able to change it.</translation>
 <translation id="4103289232974211388">Redirect to SAML IdP after user confirmation</translation>
+<translation id="4103941930938018145">This policy is deprecated. Please use the <ph name="DEFAULT_PLUGINS_SETTING_POLICY" /> to control the availability of the Flash plug-in and <ph name="ALWAYS_OPEN_PDF_EXTERNALLY_POLICY" /> to control whether the integrated PDF viewer should be used for opening PDF files.
+
+      Specifies a list of plug-ins that are disabled in <ph name="PRODUCT_NAME" /> and prevents users from changing this setting.
+
+      The wildcard characters '*' and '?' can be used to match sequences of arbitrary characters. '*' matches an arbitrary number of characters while '?' specifies an optional single character, i.e. matches zero or one characters. The escape character is '\', so to match actual '*', '?' or '\' characters, you can put a '\' in front of them.
+
+      If you enable this setting, the specified list of plug-ins is never used in <ph name="PRODUCT_NAME" />. The plug-ins are marked as disabled in 'about:plug-ins' and users cannot enable them.
+
+      Note that this policy can be overridden by EnabledPlug-ins and DisabledPlug-insExceptions.
+
+      If this policy is left not set, the user can use any plug-in installed on the system except for hard-coded incompatible, outdated or dangerous plug-ins.</translation>
 <translation id="410478022164847452">Specifies the length of time without user input after which the idle action is taken when running on AC power.
 
           When this policy is set, it specifies the length of time that the user must remain idle before <ph name="PRODUCT_OS_NAME" /> takes the idle action, which can be configured separately.
@@ -1122,6 +1156,7 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
 <translation id="4372704773119750918">Do not allow enterprise user to be part of multiprofile (primary or secondary)</translation>
 <translation id="4377599627073874279">Allow all sites to show all images</translation>
 <translation id="4389091865841123886">Configure the remote attestation with TPM mechanism.</translation>
+<translation id="4397469093966511008">Setting this policy to false stops users from choosing to send some system information and page content to Google servers. If this setting is true or not configured, then users will be allowed to send some system information and page content to Safe Browsing to help detect dangerous apps and sites.</translation>
 <translation id="4423597592074154136">Manually specify proxy settings</translation>
 <translation id="4429220551923452215">Enables or disables the apps shortcut in the bookmark bar.
 
@@ -1338,6 +1373,12 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
 <translation id="5208240613060747912">Allows you to set a list of url patterns that specify sites which are not allowed to display notifications.
 
           If this policy is left unset the global default value will be used for all sites either from the 'DefaultNotificationsSetting' policy, if it is set, or the user's personal configuration otherwise.</translation>
+<translation id="5209594095390052164">Allows choosing whether network throttling is enabled or not.
+      This applies to all users, and to all interfaces on the device. Once set,
+      the throttling persists until the policy is changed to disable it.
+
+      If set to false, there is no throttling.
+      If set to true, the system is throttled to achieve the provided upload and download rates (in kbits/s).</translation>
 <translation id="5219844027738217407">For Android apps, this policy affects the microphone only. When this policy is set to true, the microphone is muted for all Android apps, with no exceptions.</translation>
 <translation id="5226033722357981948"> finder should be disabled</translation>
 <translation id="523505283826916779">Accessibility settings</translation>
@@ -1415,12 +1456,18 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
           If this policy is left not set the global default value will be used for all sites either from the 'DefaultCookiesSetting' policy, if it is set, or the user's personal configuration otherwise.</translation>
 <translation id="5469825884154817306">Block images on these sites</translation>
 <translation id="5475361623548884387">Enable printing</translation>
-<translation id="5496487987837463732">Setting this policy to false stops users from choosing to send information about security errors they encounter to Google servers. If this setting is true or not configured, then users will be allowed to send information when they encounter an SSL error or Safe Browsing warning.</translation>
 <translation id="5499375345075963939">This policy is active in retail mode only.
 
       When the value of this policy is set and is not 0 then the currently logged in demo user will be logged out automatically after an inactivity time of the specified duration has elapsed.
 
       The policy value should be specified in milliseconds.</translation>
+<translation id="5506213378070007377">Information about the status of Android is sent back to the
+      server.
+
+      If the policy is set to false, no status information is reported.
+      If set to true or left unset, status information is reported.
+
+      This policy only applies if Android apps are enabled.</translation>
 <translation id="5511702823008968136">Enable Bookmark Bar</translation>
 <translation id="5512418063782665071">Home page URL</translation>
 <translation id="5523812257194833591">A public session to auto-login after a delay.
@@ -1472,6 +1519,11 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
           If this setting is enabled, then the remote access host compares the name of the local user (that the host is associated with) and the name of the Google account registered as the host owner (i.e. "johndoe" if the host is owned by "johndoe@example.com" Google account). The remote access host will not start if the name of the host owner is different from the name of the local user that the host is associated with. RemoteAccessHostMatchUsername policy should be used together with RemoteAccessHostDomain to also enforce that the Google account of the host owner is associated with a specific domain (i.e. "example.com").
 
           If this setting is disabled or not set, then the remote access host can be associated with any local user.</translation>
+<translation id="5694594914843889579">When this policy is set to true, external storage will not be available in the file browser.
+
+      This policy affects all types of storage media. For example: USB flash drives, external hard drives, SD and other memory cards, optical storage, etc. Internal storage is not affected, therefore files saved in the Download folder can still be accessed. Google Drive is also not affected by this policy.
+
+      If this setting is disabled or not configured then users can use all supported types of external storage on their device.</translation>
 <translation id="5697306356229823047">Report device users</translation>
 <translation id="570062449808736508">When this policy is set to a non-empty string, the WebView will read URL restrictions from the content provider with the given authority name.</translation>
 <translation id="5703863730741917647">Specify the action to take when the idle delay is reached.
@@ -1501,6 +1553,19 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
           When this policy is unset, a default length of time is used.
 
           The policy value should be specified in milliseconds.</translation>
+<translation id="5783595563813359339">This policy is deprecated. Please use the <ph name="DEFAULT_PLUGINS_SETTING_POLICY" /> to control the availability of the Flash plug-in and <ph name="ALWAYS_OPEN_PDF_EXTERNALLY_POLICY" /> to control whether the integrated PDF viewer should be used for opening PDF files.
+
+      Specifies a list of plug-ins that user can enable or disable in <ph name="PRODUCT_NAME" />.
+
+      The wildcard characters '*' and '?' can be used to match sequences of arbitrary characters. '*' matches an arbitrary number of characters while '?' specifies an optional single character, i.e. matches zero or one characters. The escape character is '\', so to match actual '*', '?' or '\' characters, you can put a '\' in front of them.
+
+      If you enable this setting, the specified list of plug-ins can be used in <ph name="PRODUCT_NAME" />. Users can enable or disable them in 'about:plug-ins', even if the plug-in also matches a pattern in DisabledPlug-ins. Users can also enable and disable plug-ins that don't match any patterns in DisabledPlug-ins, DisabledPlug-insExceptions and EnabledPlug-ins.
+
+      This policy is meant to allow for strict plug-in blacklisting where the 'DisabledPlug-ins' list contains wildcarded entries like disable all plug-ins '*' or disable all Java plug-ins '*Java*' but the administrator wishes to enable some particular version like 'IcedTea Java 2.3'. This particular versions can be specified in this policy.
+
+      Note that both the plug-in name and the plug-in's group name have to be exempted. Each plug-in group is shown in a separate section in about:plug-ins; each section may have one or more plug-ins. For example, the "Shockwave Flash" plug-in belongs to the "Adobe Flash Player" group, and both names have to have a match in the exceptions list if that plug-in is to be exempted from the blacklist.
+
+      If this policy is left not set, any plug-in that matches the patterns in the 'DisabledPlug-ins' will be locked disabled, and the user won't be able to enable them.</translation>
 <translation id="5795001131770861387">Enables HTTP/0.9 support on non-default ports</translation>
 <translation id="5809728392451418079">Set the display name for device-local accounts</translation>
 <translation id="5814301096961727113">Set the default state of spoken feedback on the login screen</translation>
@@ -1572,13 +1637,6 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
 
       If the policy is not set, or is set to false, then <ph name="PRODUCT_NAME" /> will not perform online revocation checks in <ph name="PRODUCT_NAME" /> 19 and later.</translation>
 <translation id="5966615072639944554">Extensions allowed to to use the remote attestation API</translation>
-<translation id="5974970919245996815">Report information about the status of Android is sent back to
-      the server.
-
-      If the policy is set to false, the information will not be reported.
-      If set to true or left unset, the information will be reported.
-
-      This policy only applies if Android apps are enabled.</translation>
 <translation id="5983708779415553259">Default behaviour for sites not in any content pack</translation>
 <translation id="5997543603646547632">Use 24 hour clock by default</translation>
 <translation id="6009903244351574348">Allow <ph name="PRODUCT_FRAME_NAME" /> to handle the listed content types.
@@ -1599,16 +1657,20 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
 
       If this policy is set to false, hardware acceleration will be disabled.</translation>
 <translation id="6074963268421707432">Do not allow any site to show desktop notifications</translation>
-<translation id="6076008833763548615">Disable mounting of external storage.
-
-      When this policy is set to true, external storage will not be available in the file browser.
-
-      This policy affects all types of storage media. For example: USB flash drives, external hard drives, SD and other memory cards, optical storage etc. Internal storage is not affected, therefore files saved in the Download folder can still be accessed. Google Drive is also not affected by this policy.
-
-      If this setting is disabled or not configured then users can use all supported types of external storage on their device.</translation>
 <translation id="6076099373507468537">Defines the list of USB devices that are allowed to be detached from their kernel driver in order to be used through the chrome.usb API directly inside a web application. Entries are pairs of USB Vendor Identifier and Product Identifier to identify a specific hardware.
 
       If this policy is not configured, the list of a detachable USB devices is empty.</translation>
+<translation id="608377055310226486">This policy is deprecated. Please use the <ph name="DEFAULT_PLUGINS_SETTING_POLICY" /> to control the availability of the Flash plug-in and <ph name="ALWAYS_OPEN_PDF_EXTERNALLY_POLICY" /> to control whether the integrated PDF viewer should be used for opening PDF files.
+
+      Specifies a list of plug-ins that are enabled in <ph name="PRODUCT_NAME" /> and prevents users from changing this setting.
+
+      The wildcard characters '*' and '?' can be used to match sequences of arbitrary characters. '*' matches an arbitrary number of characters while '?' specifies an optional single character, i.e. matches zero or one characters. The escape character is '\', so to match actual '*', '?' or '\' characters, you can put a '\' in front of them.
+
+      The specified list of plug-ins is always used in <ph name="PRODUCT_NAME" /> if they are installed. The plug-ins are marked as enabled in 'about:plug-ins' and users cannot disable them.
+
+      Note that this policy overrides both DisabledPlug-ins and DisabledPlug-insExceptions.
+
+      If this policy is left not set, the user can disable any plug-in installed on the system.</translation>
 <translation id="6093156968240188330">Allow remote users to interact with elevated windows in remote assistance sessions</translation>
 <translation id="6095999036251797924">Specifies the length of time without user input after which the screen is locked when running on AC power or battery.
 
@@ -1642,6 +1704,12 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
 <translation id="6155936611791017817">Set default state of the large cursor on the login screen</translation>
 <translation id="6157537876488211233">Comma-separated list of proxy bypass rules</translation>
 <translation id="6158324314836466367">Enterprise web store name (deprecated)</translation>
+<translation id="6166832345529129545">Controls which quick unlock modes are allowed to be set up and used.
+      This setting whitelists the allowed quick unlock modes that can be set up and used to unlock the lock screen. The value is a list of strings, each of which should be one of the following: "all", "PIN". If "all" is selected, then all supported quick modes will be available, otherwise the modes in the list will be the ones available.
+
+      If this setting is configured, quick unlock modes which have a type that is not on this list cannot be set up or used.
+
+      If this setting is left not configured, "PIN" mode will be enabled, and all other modes will be disabled.</translation>
 <translation id="6167074305866468481">Warning: SSLv3 support will be entirely removed from <ph name="PRODUCT_NAME" /> after version 43 (around July 2015) and this policy will be removed at the same time.
 
       If this policy is not configured then <ph name="PRODUCT_NAME" /> uses a default minimum version which is SSLv3 in <ph name="PRODUCT_NAME" /> 39 and TLS 1.0 in later versions.
@@ -1708,6 +1776,7 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
       If you enable this setting or do not set a value, Auto-fill will remain under the control of the user. This will allow them to configure Auto-fill profiles and to switch Auto-fill on or off at their own discretion.</translation>
 <translation id="6394350458541421998">This policy has been retired as of <ph name="PRODUCT_OS_NAME" /> version 29. Please use the PresentationScreenDimDelayScale policy instead.</translation>
 <translation id="6401669939808766804">Log the user out</translation>
+<translation id="6413263121045928260">Password entry is required every day (24 hours).</translation>
 <translation id="6417861582779909667">Allows you to set a list of url patterns that specify sites which are not allowed to set cookies.
 
           If this policy is left unset, the global default value will be used for all sites, either from the 'DefaultCookiesSetting' policy, if it is set, or the user's personal configuration otherwise.</translation>
@@ -1927,6 +1996,7 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
           to an Active Directory domain.</translation>
 <translation id="7063895219334505671">Allow pop-ups on these sites</translation>
 <translation id="706669471845501145">Allow SITE to show desktop notifications?</translation>
+<translation id="7072406291414141328">Enables throttling network bandwidth</translation>
 <translation id="7079519252486108041">Block pop-ups on these sites</translation>
 <translation id="7091198954851103976">Always runs plug-ins that require authorisation</translation>
 <translation id="7106631983877564505">Enable lock when <ph name="PRODUCT_OS_NAME" /> devices become idle or suspended.
@@ -1978,9 +2048,6 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
 <translation id="7132877481099023201">URLs that will be granted access to video capture devices without prompt</translation>
 <translation id="7167436895080860385">Allow users to show passwords in Password Manager (deprecated)</translation>
 <translation id="7173856672248996428">Ephemeral profile</translation>
-<translation id="7187256234726597551">If true, remote attestation is allowed for the device and a certificate will automatically be generated and uploaded to the Device Management Server.
-
-          If it is set to false, or if it is not set, no certificate will be generated and calls to the enterprise.platformKeysPrivate extension API will fail.</translation>
 <translation id="718956142899066210">Connection types allowed for updates</translation>
 <translation id="7194407337890404814">Default search provider name</translation>
 <translation id="7195064223823777550">Specify the action to take when the user closes the lid.
@@ -2106,6 +2173,7 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
 
       If this policy is not set, the default size will be used and the user will be able to override it with the --disk-cache-size flag.</translation>
 <translation id="7604169113182304895">Android apps may voluntarily choose to honour this list. You cannot force them to honour it.</translation>
+<translation id="7611372873040492235">Password entry is required every twelve hours.</translation>
 <translation id="7612157962821894603">System wide flags to be applied on <ph name="PRODUCT_NAME" /> startup</translation>
 <translation id="7614663184588396421">List of disabled protocol schemes</translation>
 <translation id="7625444193696794922">Specifies the release channel that this device should be locked to.</translation>
@@ -2268,6 +2336,9 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
           to an Active Directory domain.</translation>
 <translation id="7937766917976512374">Allow or deny video capture</translation>
 <translation id="7941975817681987555">Do not predict network actions on any network connection</translation>
+<translation id="7942429005743031780">This policy specifies the allowed extensions to use Enterprise Platform Keys API chrome.enterprise.platformKeys.challengeUserKey() for remote attestation. Extensions must be added to this list to use the API.
+
+          If an extension is not in the list, or the list is not set, the call to the API will fail with an error code.</translation>
 <translation id="7953256619080733119">Managed user manual exception hosts</translation>
 <translation id="7971839631300653352">SSL</translation>
 <translation id="7974114691960514888">This policy is no longer supported.
@@ -2279,6 +2350,7 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
 <translation id="7986374692540430898">You cannot force Android apps to use a proxy. A subset of proxy settings is made available to Android apps, which they may voluntarily choose to honour. See the <ph name="PROXY_MODE_POLICY" /> policy for more details.</translation>
 <translation id="802147957407376460">Rotate screen by 0 degrees</translation>
 <translation id="8044493735196713914">Report device boot mode</translation>
+<translation id="8050080920415773384">Native Printing</translation>
 <translation id="8059164285174960932">URL where remote access clients should obtain their authentication token</translation>
 <translation id="8071636581296916773">Enables usage of relay servers when remote clients are trying to establish a connection to this machine.
 
@@ -2356,9 +2428,6 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
 
       If this policy is not set there will be no exceptions to the blacklist from the 'URLBlacklist' policy.</translation>
 <translation id="8176035528522326671">Allow enterprise user to be primary multi-profile user only (Default behaviour for enterprise-managed users)</translation>
-<translation id="8197918588508433925">This policy specifies the allowed extensions to use Enterprise Platform Keys API chrome.enterprise.platformKeysPrivate.challengeUserKey() for remote attestation. Extensions must be added to this list to use the API.
-
-          If an extension is not in the list, or the list is not set, the call to the API will fail with an error code.</translation>
 <translation id="8214600119442850823">Configures the password manager.</translation>
 <translation id="8244525275280476362">Maximum fetch delay after a policy invalidation</translation>
 <translation id="8256688113167012935">Controls the account name <ph name="PRODUCT_OS_NAME" /> shows on the login screen for the corresponding device-local account.
@@ -2453,17 +2522,6 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
           For example patterns see https://www.chromium.org/developers/how-tos/chrome-frame-getting-started.</translation>
 <translation id="8493645415242333585">Disable saving browser history</translation>
 <translation id="8499172469244085141">Default Settings (users can override)</translation>
-<translation id="8501011084242226370">Specifies a list of plug-ins that user can enable or disable in <ph name="PRODUCT_NAME" />.
-
-      The wildcard characters '*' and '?' can be used to match sequences of arbitrary characters. '*' matches an arbitrary number of characters while '?' specifies an optional single character, i.e. matches zero or one characters. The escape character is '\', so to match actual '*', '?', or '\' characters, you can put a '\' in front of them.
-
-      If you enable this setting, the specified list of plug-ins can be used in <ph name="PRODUCT_NAME" />. Users can enable or disable them in 'about:plugins', even if the plug-in also matches a pattern in DisabledPlugins. Users can also enable and disable plug-ins that don't match any patterns in DisabledPlugins, DisabledPluginsExceptions and EnabledPlugins.
-
-      This policy is meant to allow for strict plug-in blacklisting where the 'DisabledPlugins' list contains wildcarded entries like disable all plug-ins '*' or disable all Java plug-ins '*Java*' but the administrator wishes to enable some particular version like 'IcedTea Java 2.3'. This particular versions can be specified in this policy.
-
-      Note that both the plug-in name and the plug-in's group name have to be exempted. Each plug-in group is shown in a separate section in about:plug-ins; each section may have one or more plug-ins. For example, the "Shockwave Flash" plug-in belongs to the "Adobe Flash Player" group, and both names have to have a match in the exceptions list if that plug-in is to be exempted from the blacklist.
-
-      If this policy is left not set, any plug-in that matches the patterns in the 'DisabledPlugins' will be locked disabled and the user won't be able to enable them.</translation>
 <translation id="8519264904050090490">Managed user manual exception URLs</translation>
 <translation id="8544375438507658205">Default HTML renderer for <ph name="PRODUCT_FRAME_NAME" /></translation>
 <translation id="8549772397068118889">Warn when visiting sites outside of content packs</translation>
@@ -2500,15 +2558,6 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
           Separate multiple server names with commas. Wildcards (*) are allowed.
 
           If you leave this policy unset <ph name="PRODUCT_NAME" /> will try to detect if a server is on the Intranet and only then will it respond to IWA requests. If a server is detected as Internet then IWA requests from it will be ignored by <ph name="PRODUCT_NAME" />.</translation>
-<translation id="8668394701842594241">Specifies a list of plug-ins that are enabled in <ph name="PRODUCT_NAME" /> and prevents users from changing this setting.
-
-      The wild card characters '*' and '?' can be used to match sequences of arbitrary characters. '*' matches an arbitrary number of characters while '?' specifies an optional single character, i.e. matches zero or one characters. The escape character is '\', so to match actual '*', '?' or '\' characters, you can put a '\' in front of them.
-
-      The specified list of plug-ins is always used in <ph name="PRODUCT_NAME" /> if they are installed. The plug-ins are marked as enabled in 'about:plug-ins' and users cannot disable them.
-
-      Note that this policy overrides both DisabledPlug-ins and DisabledPlug-insExceptions.
-
-      If this policy is left unset, the user can disable any plug-in installed on the system.</translation>
 <translation id="8672321184841719703">Target Auto-Update Version</translation>
 <translation id="868068801094828689">Enables anonymous reporting of usage and crash-related data about <ph name="PRODUCT_NAME" /> to Google and prevents users from changing this setting.
 
@@ -2644,6 +2693,7 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
 <translation id="9088433379343318874">Enable the supervised user content provider</translation>
 <translation id="9088444059179765143">Configure the automatic timezone detection method</translation>
 <translation id="9096086085182305205">Authentication server whitelist</translation>
+<translation id="9098186110082719131">Password entry is required every six hours.</translation>
 <translation id="9098553063150791878">Policies for HTTP authentication</translation>
 <translation id="9105265795073104888">Only a subset of proxy configuration options are made available to Android apps. Android apps may voluntarily choose to use the proxy. You cannot force them to use a proxy.</translation>
 <translation id="9112897538922695510">Allows you to register a list of protocol handlers. This can only be a recommended policy. The property |protocol| should be set to the scheme such as 'mailto' and the property |url| should be set to the URL pattern of the application that handles the scheme. The pattern can include a '%s', which if present will be replaced by the handled URL.
@@ -2678,5 +2728,11 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
 <translation id="922540222991413931">Configure extension, app, and user script install sources</translation>
 <translation id="924557436754151212">Import saved passwords from default browser on first run</translation>
 <translation id="930930237275114205">Set <ph name="PRODUCT_FRAME_NAME" /> user data directory</translation>
+<translation id="944607242500063080">Configure allowed quick unlock modes.</translation>
 <translation id="944817693306670849">Set disk cache size</translation>
+<translation id="969164417253718105">This setting controls how often the lock screen will request the password to be entered in order to continue using quick unlock. Each time the lock screen is entered, if the last password entry was more than this setting, the quick unlock will not be available on entering the lock screen. Should the user stay on the lock screen past this period of time, a password will be requested next time the user enters the wrong code, or re-enters the lock screen, whichever comes first.
+
+      If this setting is configured, users using quick unlock will be requested to enter their passwords on the lock screen depending on this setting.
+
+      If this setting is not configured, users using quick unlock will be requested to enter their password on the lock screen every day.</translation>
 </translationbundle>

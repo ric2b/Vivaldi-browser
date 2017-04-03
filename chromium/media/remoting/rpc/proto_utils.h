@@ -14,6 +14,7 @@
 #include "media/base/audio_decoder_config.h"
 #include "media/base/cdm_config.h"
 #include "media/base/cdm_key_information.h"
+#include "media/base/cdm_promise.h"
 #include "media/base/decoder_buffer.h"
 #include "media/base/demuxer_stream.h"
 #include "media/base/eme_constants.h"
@@ -26,12 +27,6 @@ namespace media {
 namespace remoting {
 
 class CdmPromiseResult;
-
-// Predefined invalid handle value RPC message.
-constexpr int kInvalidHandle = -1;
-
-// Predefined handle value for RPC messages related to initialization.
-constexpr int kReceiverHandle = 0;
 
 // Utility class to convert data between ::media::DecoderBuffer and byte array.
 // It is to serialize ::media::DecoderBuffer structure except for actual data
@@ -111,7 +106,7 @@ bool ConvertProtoToCdmPromiseWithCdmIdSessionId(const pb::RpcMessage& message,
 class CdmPromiseResult {
  public:
   CdmPromiseResult();
-  CdmPromiseResult(::media::MediaKeys::Exception exception,
+  CdmPromiseResult(::media::CdmPromise::Exception exception,
                    uint32_t system_code,
                    std::string error_message);
   CdmPromiseResult(const CdmPromiseResult& other);
@@ -120,13 +115,13 @@ class CdmPromiseResult {
   static CdmPromiseResult SuccessResult();
 
   bool success() const { return success_; }
-  ::media::MediaKeys::Exception exception() const { return exception_; }
+  ::media::CdmPromise::Exception exception() const { return exception_; }
   uint32_t system_code() const { return system_code_; }
   const std::string& error_message() const { return error_message_; }
 
  private:
   bool success_;
-  ::media::MediaKeys::Exception exception_;
+  ::media::CdmPromise::Exception exception_;
   uint32_t system_code_;
   std::string error_message_;
 };

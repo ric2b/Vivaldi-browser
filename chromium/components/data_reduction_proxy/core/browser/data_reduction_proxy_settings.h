@@ -9,7 +9,6 @@
 
 #include <memory>
 #include <string>
-#include <vector>
 
 #include "base/callback.h"
 #include "base/compiler_specific.h"
@@ -23,6 +22,10 @@
 #include "url/gurl.h"
 
 class PrefService;
+
+namespace base {
+class Clock;
+}
 
 namespace data_reduction_proxy {
 
@@ -155,6 +158,10 @@ class DataReductionProxySettings : public DataReductionProxyServiceObserver,
   // daily original and received content lengths.
   int64_t GetDataReductionLastUpdateTime();
 
+  // Returns the difference between the total original size of all HTTP content
+  // received from the network and the actual size of the HTTP content received.
+  int64_t GetTotalHttpContentLengthSaved();
+
   // Returns aggregate received and original content lengths over the specified
   // number of days, as well as the time these stats were last updated.
   void GetContentLengths(unsigned int days,
@@ -257,6 +264,12 @@ class DataReductionProxySettings : public DataReductionProxyServiceObserver,
                            TestLoFiSessionStateHistograms);
   FRIEND_TEST_ALL_PREFIXES(DataReductionProxySettingsTest,
                            TestSettingsEnabledStateHistograms);
+  FRIEND_TEST_ALL_PREFIXES(DataReductionProxySettingsTest,
+                           TestDaysSinceEnabled);
+  FRIEND_TEST_ALL_PREFIXES(DataReductionProxySettingsTest,
+                           TestDaysSinceEnabledWithTestClock);
+  FRIEND_TEST_ALL_PREFIXES(DataReductionProxySettingsTest,
+                           TestDaysSinceEnabledExistingUser);
 
   // Override of DataReductionProxyService::Observer.
   void OnServiceInitialized() override;
@@ -324,6 +337,9 @@ class DataReductionProxySettings : public DataReductionProxyServiceObserver,
   DataReductionProxyConfig* config_;
 
   SyntheticFieldTrialRegistrationCallback register_synthetic_field_trial_;
+
+  // Should not be null.
+  std::unique_ptr<base::Clock> clock_;
 
   base::ThreadChecker thread_checker_;
 

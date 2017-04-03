@@ -21,19 +21,17 @@ class MODULES_EXPORT AbstractAnimationWorkletThread : public WorkerThread {
   ~AbstractAnimationWorkletThread() override;
 
   WorkerBackingThread& workerBackingThread() override;
-  void clearWorkerBackingThread() override {
-    // Do nothing.
-    // The backing thread is cleared by clearSharedBackingThread().
-  }
 
-  bool shouldAttachThreadDebugger() const override { return false; }
+  // The backing thread is cleared by clearSharedBackingThread().
+  void clearWorkerBackingThread() override {}
 
+  // This may block the main thread.
   static void collectAllGarbage();
 
   static void ensureSharedBackingThread();
-  static void createSharedBackingThreadForTest();
-
   static void clearSharedBackingThread();
+
+  static void createSharedBackingThreadForTest();
 
  protected:
   AbstractAnimationWorkletThread(PassRefPtr<WorkerLoaderProxy>,

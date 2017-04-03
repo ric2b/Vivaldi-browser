@@ -136,8 +136,6 @@ class MEDIA_EXPORT VideoRendererAlgorithm {
 
   size_t frames_queued() const { return frame_queue_.size(); }
 
-  scoped_refptr<VideoFrame> first_frame() { return frame_queue_.front().frame; }
-
   // Returns the average of the duration of all frames in |frame_queue_|
   // as measured in wall clock (not media) time.
   base::TimeDelta average_frame_duration() const {
@@ -266,14 +264,6 @@ class MEDIA_EXPORT VideoRendererAlgorithm {
   // Queue of incoming frames waiting for rendering.
   using VideoFrameQueue = std::deque<ReadyFrame>;
   VideoFrameQueue frame_queue_;
-
-  // The index of the last frame rendered; presumed to be the first frame if no
-  // frame has been rendered yet. Updated by Render() and EnqueueFrame() if any
-  // frames are added or removed.
-  //
-  // In most cases this value is zero, but when out of order timestamps are
-  // present, the last rendered frame may be moved.
-  size_t last_frame_index_;
 
   // Handles cadence detection and frame cadence assignments.
   VideoCadenceEstimator cadence_estimator_;

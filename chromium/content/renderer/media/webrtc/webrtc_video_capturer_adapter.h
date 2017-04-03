@@ -13,9 +13,9 @@
 #include "base/macros.h"
 #include "base/threading/thread_checker.h"
 #include "content/common/content_export.h"
-#include "media/base/video_capture_types.h"
 #include "media/base/video_frame.h"
 #include "media/base/video_frame_pool.h"
+#include "media/capture/video_capture_types.h"
 #include "third_party/webrtc/media/base/videocapturer.h"
 
 namespace content {
@@ -50,6 +50,10 @@ class CONTENT_EXPORT WebRtcVideoCapturerAdapter
   bool GetBestCaptureFormat(const cricket::VideoFormat& desired,
                             cricket::VideoFormat* best_format) override;
   bool IsScreencast() const override;
+
+  // Helper class used for copying texture backed frames.
+  class TextureFrameCopier;
+  const scoped_refptr<TextureFrameCopier> texture_copier_;
 
   // |thread_checker_| is bound to the libjingle worker thread.
   base::ThreadChecker thread_checker_;

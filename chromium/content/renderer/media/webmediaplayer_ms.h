@@ -48,7 +48,6 @@ class MediaStreamAudioRenderer;
 class MediaStreamRendererFactory;
 class MediaStreamVideoRenderer;
 class WebMediaPlayerMSCompositor;
-class RenderFrameObserver;
 
 // WebMediaPlayerMS delegates calls from WebCore::MediaPlayerPrivate to
 // Chrome's media player when "src" is from media stream.
@@ -164,6 +163,8 @@ class CONTENT_EXPORT WebMediaPlayerMS
   // The callback for MediaStreamVideoRenderer to signal a new frame is
   // available.
   void OnFrameAvailable(const scoped_refptr<media::VideoFrame>& frame);
+  void OnRotationChanged(media::VideoRotation video_rotation, bool is_opaque);
+
   // Need repaint due to state change.
   void RepaintInternal();
 

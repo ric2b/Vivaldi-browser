@@ -116,9 +116,26 @@ IPC_STRUCT_BEGIN(ExtensionHostMsg_Request_Params)
   // id. Otherwise, this is -1.
   IPC_STRUCT_MEMBER(int, worker_thread_id)
 
-  // If this API call is for a service worker, then this is the embedded
-  // worker id. Otherwise, this is -1.
-  IPC_STRUCT_MEMBER(int, embedded_worker_id)
+  // If this API call is for a service worker, then this is the service
+  // worker version id. Otherwise, this is -1.
+  IPC_STRUCT_MEMBER(int64_t, service_worker_version_id)
+IPC_STRUCT_END()
+
+IPC_STRUCT_BEGIN(ExtensionMsg_DispatchEvent_Params)
+  // The id of the extension to dispatch the event to.
+  IPC_STRUCT_MEMBER(std::string, extension_id)
+
+  // The name of the event to dispatch.
+  IPC_STRUCT_MEMBER(std::string, event_name)
+
+  // The id of the event for use in the EventAck response message.
+  IPC_STRUCT_MEMBER(int, event_id)
+
+  // Whether or not the event is part of a user gesture.
+  IPC_STRUCT_MEMBER(bool, is_user_gesture)
+
+  // Additional filtering info for the event.
+  IPC_STRUCT_MEMBER(base::DictionaryValue, filtering_info)
 IPC_STRUCT_END()
 
 // Allows an extension to execute code in a tab.
@@ -234,6 +251,7 @@ IPC_STRUCT_TRAITS_END()
 IPC_STRUCT_TRAITS_BEGIN(extensions::UsbDevicePermissionData)
   IPC_STRUCT_TRAITS_MEMBER(vendor_id())
   IPC_STRUCT_TRAITS_MEMBER(product_id())
+  IPC_STRUCT_TRAITS_MEMBER(interface_class())
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(extensions::MediaGalleriesPermissionData)
@@ -433,6 +451,13 @@ IPC_MESSAGE_ROUTED4(ExtensionMsg_Response,
                     base::ListValue /* response wrapper (see comment above) */,
                     std::string /* error */)
 
+// Sent to the renderer to dispatch an event to an extension.
+// Note: |event_args| is separate from the params to avoid having the message
+// take ownership.
+IPC_MESSAGE_CONTROL2(ExtensionMsg_DispatchEvent,
+                     ExtensionMsg_DispatchEvent_Params /* params */,
+                     base::ListValue /* event_args */)
+
 // This message is optionally routed.  If used as a control message, it will
 // call a javascript function |function_name| from module |module_name| in
 // every registered context in the target process.  If routed, it will be
@@ -441,12 +466,11 @@ IPC_MESSAGE_ROUTED4(ExtensionMsg_Response,
 // If |extension_id| is non-empty, the function will be invoked only in
 // contexts owned by the extension. |args| is a list of primitive Value types
 // that are passed to the function.
-IPC_MESSAGE_ROUTED5(ExtensionMsg_MessageInvoke,
+IPC_MESSAGE_ROUTED4(ExtensionMsg_MessageInvoke,
                     std::string /* extension_id */,
                     std::string /* module_name */,
                     std::string /* function_name */,
-                    base::ListValue /* args */,
-                    bool /* delivered as part of a user gesture */)
+                    base::ListValue /* args */)
 
 // Set the top-level frame to the provided name.
 IPC_MESSAGE_ROUTED1(ExtensionMsg_SetFrameName,
@@ -541,10 +565,6 @@ IPC_MESSAGE_CONTROL3(ExtensionMsg_ClearTabSpecificPermissions,
 // Tell the renderer which type this view is.
 IPC_MESSAGE_ROUTED1(ExtensionMsg_NotifyRenderViewType,
                     extensions::ViewType /* view_type */)
-
-// Deliver a message sent with ExtensionHostMsg_PostMessage.
-IPC_MESSAGE_CONTROL1(ExtensionMsg_UsingWebRequestAPI,
-                     bool /* webrequest_used */)
 
 // The browser's response to the ExtensionMsg_WakeEventPage IPC.
 IPC_MESSAGE_CONTROL2(ExtensionMsg_WakeEventPageResponse,
@@ -900,3 +920,20 @@ IPC_MESSAGE_CONTROL5(ExtensionMsg_ResponseWorker,
                      bool /* success */,
                      base::ListValue /* response wrapper (see comment above) */,
                      std::string /* error */)
+
+// Asks the browser to increment the pending activity count for
+// the worker with version id |service_worker_version_id|.
+// Each request to increment must use unique |request_uuid|. If a request with
+// |request_uuid| is already in progress (due to race condition or renderer
+// compromise), browser process ignores the IPC.
+IPC_MESSAGE_CONTROL2(ExtensionHostMsg_IncrementServiceWorkerActivity,
+                     int64_t /* service_worker_version_id */,
+                     std::string /* request_uuid */)
+
+// Asks the browser to decrement the pending activity count for
+// the worker with version id |service_worker_version_id|.
+// |request_uuid| must match the GUID of a previous request, otherwise the
+// browser process ignores the IPC.
+IPC_MESSAGE_CONTROL2(ExtensionHostMsg_DecrementServiceWorkerActivity,
+                     int64_t /* service_worker_version_id */,
+                     std::string /* request_uuid */)

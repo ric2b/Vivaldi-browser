@@ -30,30 +30,38 @@ HttpsEngagementPageLoadMetricsObserver::OnStart(
   return CONTINUE_OBSERVING;
 }
 
-void HttpsEngagementPageLoadMetricsObserver::OnHidden() {
-  if (!currently_in_foreground_)
-    return;
-  foreground_time_ += base::TimeTicks::Now() - last_time_shown_;
-  currently_in_foreground_ = false;
+page_load_metrics::PageLoadMetricsObserver::ObservePolicy
+HttpsEngagementPageLoadMetricsObserver::OnHidden(
+    const page_load_metrics::PageLoadTiming& timing,
+    const page_load_metrics::PageLoadExtraInfo& extra_info) {
+  if (currently_in_foreground_) {
+    foreground_time_ += base::TimeTicks::Now() - last_time_shown_;
+    currently_in_foreground_ = false;
+  }
+  return CONTINUE_OBSERVING;
 }
 
-void HttpsEngagementPageLoadMetricsObserver::OnShown() {
+page_load_metrics::PageLoadMetricsObserver::ObservePolicy
+HttpsEngagementPageLoadMetricsObserver::OnShown() {
   last_time_shown_ = base::TimeTicks::Now();
   currently_in_foreground_ = true;
+  return CONTINUE_OBSERVING;
 }
 
 void HttpsEngagementPageLoadMetricsObserver::OnComplete(
     const page_load_metrics::PageLoadTiming& timing,
     const page_load_metrics::PageLoadExtraInfo& extra_info) {
-  if (!extra_info.committed_url.is_valid() || !extra_info.time_to_commit)
+  if (!extra_info.committed_url.is_valid() ||
+      extra_info.committed_url.is_empty()) {
     return;
+  }
 
   // Don't record anything if the user never saw it.
   if (!currently_in_foreground_ && foreground_time_.is_zero())
     return;
 
   if (currently_in_foreground_)
-    OnHidden();
+    OnHidden(timing, extra_info);
 
   if (extra_info.committed_url.SchemeIs(url::kHttpsScheme)) {
     if (engagement_service_)

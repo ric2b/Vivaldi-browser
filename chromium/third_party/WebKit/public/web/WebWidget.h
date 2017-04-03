@@ -31,6 +31,7 @@
 #ifndef WebWidget_h
 #define WebWidget_h
 
+#include "../platform/WebBrowserControlsState.h"
 #include "../platform/WebCanvas.h"
 #include "../platform/WebCommon.h"
 #include "../platform/WebFloatSize.h"
@@ -38,11 +39,10 @@
 #include "../platform/WebPoint.h"
 #include "../platform/WebRect.h"
 #include "../platform/WebSize.h"
-#include "../platform/WebTopControlsState.h"
+#include "../platform/WebTextInputInfo.h"
 #include "WebCompositionUnderline.h"
 #include "WebRange.h"
 #include "WebTextDirection.h"
-#include "WebTextInputInfo.h"
 
 namespace blink {
 
@@ -133,44 +133,13 @@ class WebWidget {
                                    const WebFloatSize& layoutViewportDelta,
                                    const WebFloatSize& elasticOverscrollDelta,
                                    float scaleFactor,
-                                   float topControlsShownRatioDelta) {}
+                                   float browserControlsShownRatioDelta) {}
 
   // Called to inform the WebWidget that mouse capture was lost.
   virtual void mouseCaptureLost() {}
 
   // Called to inform the WebWidget that it has gained or lost keyboard focus.
   virtual void setFocus(bool) {}
-
-  // Called to inform the WebWidget of a new composition text.
-  // If selectionStart and selectionEnd has the same value, then it indicates
-  // the input caret position. If the text is empty, then the existing
-  // composition text will be cancelled.
-  // Returns true if the composition text was set successfully.
-  virtual bool setComposition(
-      const WebString& text,
-      const WebVector<WebCompositionUnderline>& underlines,
-      int selectionStart,
-      int selectionEnd) {
-    return false;
-  }
-
-  enum ConfirmCompositionBehavior {
-    DoNotKeepSelection,
-    KeepSelection,
-  };
-
-  // Called to inform the WebWidget that deleting the ongoing composition if
-  // any, inserting the specified text, and moving the caret according to
-  // relativeCaretPosition.
-  virtual bool commitText(const WebString& text, int relativeCaretPosition) {
-    return false;
-  }
-
-  // Called to inform the WebWidget to confirm an ongoing composition.
-  virtual bool finishComposingText(
-      ConfirmCompositionBehavior selectionBehavior) {
-    return false;
-  }
 
   // Fetches the character range of the current composition, also called the
   // "marked range."
@@ -235,12 +204,6 @@ class WebWidget {
   // reasons such as the user exiting lock, window focus changing, etc.
   virtual void didLosePointerLock() {}
 
-  // Informs the WebWidget that the resizer rect changed. Happens for example
-  // on mac, when a widget appears below the WebWidget without changing the
-  // WebWidget's size (WebWidget::resize() automatically checks the resizer
-  // rect.)
-  virtual void didChangeWindowResizerRect() {}
-
   // The page background color. Can be used for filling in areas without
   // content.
   virtual WebColor backgroundColor() const {
@@ -251,11 +214,12 @@ class WebWidget {
   // but not the select popup.
   virtual WebPagePopup* pagePopup() const { return 0; }
 
-  // Updates top controls constraints and current state. Allows embedder to
-  // control what are valid states for top controls and if it should animate.
-  virtual void updateTopControlsState(WebTopControlsState constraints,
-                                      WebTopControlsState current,
-                                      bool animate) {}
+  // Updates browser controls constraints and current state. Allows embedder to
+  // control what are valid states for browser controls and if it should
+  // animate.
+  virtual void updateBrowserControlsState(WebBrowserControlsState constraints,
+                                          WebBrowserControlsState current,
+                                          bool animate) {}
 
   // Populate |bounds| with the composition character bounds for the ongoing
   // composition. Returns false if there is no focused input or any ongoing

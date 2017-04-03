@@ -6,6 +6,7 @@
 #define ASH_COMMON_SYSTEM_TRAY_HOVER_HIGHLIGHT_VIEW_H_
 
 #include "ash/common/system/tray/actionable_view.h"
+#include "ash/common/system/tray/tray_popup_item_style.h"
 #include "base/macros.h"
 #include "ui/gfx/font.h"
 #include "ui/gfx/text_constants.h"
@@ -17,6 +18,7 @@ class BoxLayout;
 }
 
 namespace ash {
+class TriView;
 class ViewClickListener;
 
 // A view that changes background color on hover, and triggers a callback in the
@@ -41,23 +43,37 @@ class HoverHighlightView : public ActionableView {
                       base::string16* tooltip) const override;
 
   // Convenience function for adding an icon and a label. This also sets the
-  // accessible name.
+  // accessible name. Primarily used for scrollable rows in detailed views.
   void AddIconAndLabel(const gfx::ImageSkia& image,
                        const base::string16& text,
                        bool highlight);
+
+  // Convenience function for adding an icon, a main label, and a sub label.
+  // This also sets the accessible name besed on the main label. Used for
+  // scrollable rows in detailed views in material design.
+  void AddIconAndLabels(const gfx::ImageSkia& image,
+                        const base::string16& text,
+                        const base::string16& sub_text);
 
   // Convenience function for adding an icon and a label. This also sets the
   // accessible name. This method allows the indent and spacing between elements
   // to be set by the caller. |icon_size| is the size of the icon. |indent| is
   // the distance between the edges of the view and the icons, and
   // |space_between_items| is the minimum distance between any two child views.
-  // All distances are in DP.
+  // All distances are in DP. Primarily used for scrollable rows in detailed
+  // views.
   void AddIconAndLabelCustomSize(const gfx::ImageSkia& image,
                                  const base::string16& text,
                                  bool highlight,
                                  int icon_size,
                                  int indent,
                                  int space_between_items);
+
+  // A convenience function for adding an icon and label for a system menu
+  // default view row.
+  void AddIconAndLabelForDefaultView(const gfx::ImageSkia& image,
+                                     const base::string16& text,
+                                     bool highlight);
 
   // Convenience function for adding a label with padding on the left for a
   // blank icon. This also sets the accessible name. Returns label after
@@ -73,12 +89,20 @@ class HoverHighlightView : public ActionableView {
                                   bool highlight,
                                   bool checked);
 
+  // Adds a row containing only a text label, inset on the left by the
+  // horizontal space that would normally be occupied by an icon.
+  void AddLabelRowMd(const base::string16& text);
+
   // Add an optional right icon to an already established view (call one of
   // the other Add* functions first). |icon_size| is the size of the icon in DP.
   void AddRightIcon(const gfx::ImageSkia& image, int icon_size);
 
-  // Hide or show the right icon.
-  void SetRightIconVisible(bool visible);
+  // Add an optional right view to an already established view (call one of
+  // the other Add* functions first).
+  void AddRightView(views::View* view);
+
+  // Hide or show the right view.
+  void SetRightViewVisible(bool visible);
 
   // Allows view to expand its height.
   // Size of unexapandable view is fixed and equals to kTrayPopupItemHeight.
@@ -102,6 +126,7 @@ class HoverHighlightView : public ActionableView {
   void set_text_default_color(SkColor color) { text_default_color_ = color; }
 
   views::Label* text_label() { return text_label_; }
+  views::Label* sub_text_label() { return sub_text_label_; }
 
   bool hover() const { return hover_; }
 
@@ -109,17 +134,34 @@ class HoverHighlightView : public ActionableView {
 
  protected:
   // Overridden from views::View.
-  void GetAccessibleState(ui::AXViewState* state) override;
+  void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
 
   // Sets the highlighted color on a text label if |hover| is set.
   void SetHoverHighlight(bool hover);
 
+  TriView* tri_view() { return tri_view_; }
+
  private:
-  // Actually adds the icon and label but does not set the layout manager
+  // Actually adds the icon and label but does not set the layout manager.
+  // Not used in material design.
   void DoAddIconAndLabel(const gfx::ImageSkia& image,
                          int icon_size,
                          const base::string16& text,
                          bool highlight);
+
+  // Adds the image and label to the row with the label being styled using
+  // |font_style|. Only used in material design.
+  void DoAddIconAndLabelMd(const gfx::ImageSkia& image,
+                           const base::string16& text,
+                           TrayPopupItemStyle::FontStyle font_style);
+
+  // Adds the image, main label and sub label to the row with the main label
+  // being styled using |font_style| and the sub label being styled using
+  // FontStyle::CAPTION and ColorStyle::INACTIVE. Only used in material design.
+  void DoAddIconAndLabelsMd(const gfx::ImageSkia& image,
+                            const base::string16& text,
+                            TrayPopupItemStyle::FontStyle font_style,
+                            const base::string16& sub_text);
 
   // Overridden from ActionableView:
   bool PerformAction(const ui::Event& event) override;
@@ -137,15 +179,18 @@ class HoverHighlightView : public ActionableView {
 
   ViewClickListener* listener_ = nullptr;
   views::Label* text_label_ = nullptr;
-  views::BoxLayout* box_layout_ = nullptr;
-  views::ImageView* right_icon_ = nullptr;
-  SkColor highlight_color_ = 0;
+  views::Label* sub_text_label_ = nullptr;
+  views::BoxLayout* box_layout_ = nullptr;  // Not used in material design.
+  views::ImageView* left_icon_ = nullptr;
+  views::View* right_view_ = nullptr;
+  TriView* tri_view_ = nullptr;  // Only used in material design.
+  SkColor highlight_color_ = 0;  // Not used in material design.
   SkColor default_color_ = 0;
-  SkColor text_highlight_color_ = 0;
-  SkColor text_default_color_ = 0;
-  bool hover_ = false;
+  SkColor text_highlight_color_ = 0;  // Not used in material design.
+  SkColor text_default_color_ = 0;    // Not used in material design.
+  bool hover_ = false;                // Not used in material design.
   bool expandable_ = false;
-  int custom_height_ = 0;
+  int custom_height_ = 0;  // Not used in material design.
   AccessibilityState accessibility_state_ = AccessibilityState::DEFAULT;
   base::string16 tooltip_;
 

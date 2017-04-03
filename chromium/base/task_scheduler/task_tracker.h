@@ -57,7 +57,7 @@ class BASE_EXPORT TaskTracker {
   // |sequence_token| is the token identifying the sequence from which |task|
   // was extracted. Returns true if |task| ran. WillPostTask() must have allowed
   // |task| to be posted before this is called.
-  bool RunTask(const Task* task, const SequenceToken& sequence_token);
+  bool RunTask(std::unique_ptr<Task> task, const SequenceToken& sequence_token);
 
   // Returns true once shutdown has started (Shutdown() has been called but
   // might not have returned). Note: sequential consistency with the thread
@@ -72,6 +72,11 @@ class BASE_EXPORT TaskTracker {
   // IsShutdownComplete() won't return true after this returns. Shutdown()
   // cannot be called after this.
   void SetHasShutdownStartedForTesting();
+
+ protected:
+  // Runs |task|. An override is expected to call its parent's implementation
+  // but is free to perform extra work before and after doing so.
+  virtual void PerformRunTask(std::unique_ptr<Task> task);
 
  private:
   class State;

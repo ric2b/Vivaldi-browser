@@ -7,6 +7,7 @@
 #include <string.h>
 
 #include <algorithm>
+#include <cctype>
 #include <ios>
 #include <iterator>
 #include <list>
@@ -19,6 +20,7 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/strings/string_util.h"
 #include "net/quic/core/quic_flags.h"
 #include "net/spdy/hpack/hpack_constants.h"
 #include "net/spdy/spdy_bitmasks.h"
@@ -536,8 +538,8 @@ const char* SpdyFramer::ErrorCodeToString(int error_code) {
 
 const char* SpdyFramer::StatusCodeToString(int status_code) {
   switch (status_code) {
-    case RST_STREAM_INVALID:
-      return "INVALID";
+    case RST_STREAM_NO_ERROR:
+      return "NO_ERROR";
     case RST_STREAM_PROTOCOL_ERROR:
       return "PROTOCOL_ERROR";
     case RST_STREAM_INVALID_STREAM:
@@ -1404,9 +1406,11 @@ void SpdyFramer::WriteHeaderBlockToZ(const SpdyHeaderBlock* headers,
   SpdyHeaderBlock::const_iterator it;
   for (it = headers->begin(); it != headers->end(); ++it) {
     WriteLengthZ(it->first.size(), length_length, kZStandardData, z);
-    WriteZ(it->first, kZStandardData, z);
 
-    if (it->first == "cookie") {
+    std::string lowercase_key = base::ToLowerASCII(it->first);
+    WriteZ(lowercase_key, kZStandardData, z);
+
+    if (lowercase_key == "cookie") {
       // We require the cookie values (save for the last) to end with a
       // semicolon and (save for the first) to start with a space. This is
       // typically the format that we are given them in but we reserialize them
@@ -1464,19 +1468,19 @@ void SpdyFramer::WriteHeaderBlockToZ(const SpdyHeaderBlock* headers,
         }
         WriteZ(cookie, kZCookieData, z);
       }
-    } else if (it->first == "accept" ||
-               it->first == "accept-charset" ||
-               it->first == "accept-encoding" ||
-               it->first == "accept-language" ||
-               it->first == "host" ||
-               it->first == "version" ||
-               it->first == "method" ||
-               it->first == "scheme" ||
-               it->first == ":host" ||
-               it->first == ":version" ||
-               it->first == ":method" ||
-               it->first == ":scheme" ||
-               it->first == "user-agent") {
+    } else if (lowercase_key == "accept" ||
+               lowercase_key == "accept-charset" ||
+               lowercase_key == "accept-encoding" ||
+               lowercase_key == "accept-language" ||
+               lowercase_key == "host" ||
+               lowercase_key == "version" ||
+               lowercase_key == "method" ||
+               lowercase_key == "scheme" ||
+               lowercase_key == ":host" ||
+               lowercase_key == ":version" ||
+               lowercase_key == ":method" ||
+               lowercase_key == ":scheme" ||
+               lowercase_key == "user-agent") {
       WriteLengthZ(it->second.size(), length_length, kZStandardData, z);
       WriteZ(it->second, kZStandardData, z);
     } else {
@@ -1696,7 +1700,7 @@ size_t SpdyFramer::ProcessControlFrameBeforeHeaderBlock(const char* data,
 #endif
     }
 
-    if (use_new_methods_ && current_frame_type_ != CONTINUATION) {
+    if (current_frame_type_ != CONTINUATION) {
       header_handler_ = visitor_->OnHeaderFrameStart(current_frame_stream_id_);
       if (header_handler_ == nullptr) {
         SPDY_BUG << "visitor_->OnHeaderFrameStart returned nullptr";
@@ -1766,34 +1770,18 @@ size_t SpdyFramer::ProcessControlFrameHeaderBlock(const char* data,
         size_t compressed_len = 0;
         if (GetHpackDecoder()->HandleControlFrameHeadersComplete(
                 &compressed_len)) {
-          if (use_new_methods_) {
-            visitor_->OnHeaderFrameEnd(current_frame_stream_id_, true);
-            if (state_ == SPDY_ERROR) {
-              return data_len;
-            }
-          } else {
-            // TODO(jgraettinger): To be removed with migration to
-            // SpdyHeadersHandlerInterface. Serializes the HPACK block as a
-            // SPDY3 block, delivered via reentrant call to
-            // ProcessControlFrameHeaderBlock().
-            DeliverHpackBlockAsSpdy3Block(compressed_len);
-            return process_bytes;
+          visitor_->OnHeaderFrameEnd(current_frame_stream_id_, true);
+          if (state_ == SPDY_ERROR) {
+            return data_len;
           }
         } else {
           set_error(SPDY_DECOMPRESS_FAILURE);
           processed_successfully = false;
         }
       } else {
-        if (use_new_methods_) {
-          visitor_->OnHeaderFrameEnd(current_frame_stream_id_, true);
-          if (state_ == SPDY_ERROR) {
-            return data_len;
-          }
-        } else {
-          // The complete header block has been delivered. We send a zero-length
-          // OnControlFrameHeaderData() to indicated this.
-          visitor_->OnControlFrameHeaderData(current_frame_stream_id_, nullptr,
-                                             0);
+        visitor_->OnHeaderFrameEnd(current_frame_stream_id_, true);
+        if (state_ == SPDY_ERROR) {
+          return data_len;
         }
       }
     }
@@ -1886,41 +1874,6 @@ size_t SpdyFramer::ProcessSettingsFramePayload(const char* data,
   }
 
   return processed_bytes;
-}
-
-void SpdyFramer::DeliverHpackBlockAsSpdy3Block(size_t compressed_len) {
-  DCHECK_EQ(HTTP2, protocol_version_);
-  DCHECK_EQ(remaining_padding_payload_length_, remaining_data_length_);
-
-  const SpdyHeaderBlock& block = GetHpackDecoder()->decoded_block();
-  if (block.empty()) {
-    // Special-case this to make tests happy.
-    ProcessControlFrameHeaderBlock(NULL, 0, false);
-    return;
-  }
-  size_t payload_len = GetSerializedLength(protocol_version_, &block);
-  SpdyFrameBuilder builder(payload_len, SPDY3);
-
-  SerializeHeaderBlockWithoutCompression(&builder, block);
-  SpdySerializedFrame frame = builder.take();
-
-  // Preserve padding length, and reset it after the re-entrant call.
-  size_t remaining_padding = remaining_padding_payload_length_;
-
-  remaining_padding_payload_length_ = 0;
-  remaining_data_length_ = frame.size();
-
-  if (payload_len != 0) {
-    int compression_pct = 100 - (100 * compressed_len) / payload_len;
-    DVLOG(1) << "Net.SpdyHpackDecompressionPercentage: " << compression_pct;
-    UMA_HISTOGRAM_PERCENTAGE("Net.SpdyHpackDecompressionPercentage",
-                             compression_pct);
-  }
-
-  ProcessControlFrameHeaderBlock(frame.data(), frame.size(), false);
-
-  remaining_padding_payload_length_ = remaining_padding;
-  remaining_data_length_ = remaining_padding;
 }
 
 bool SpdyFramer::ProcessSetting(const char* data) {
@@ -2154,7 +2107,7 @@ size_t SpdyFramer::ProcessRstStreamFramePayload(const char* data, size_t len) {
         DCHECK(successful_read);
       }
 
-      SpdyRstStreamStatus status = RST_STREAM_INVALID;
+      SpdyRstStreamStatus status = RST_STREAM_NO_ERROR;
       uint32_t status_raw = status;
       bool successful_read = reader.ReadUInt32(&status_raw);
       DCHECK(successful_read);
@@ -2358,6 +2311,14 @@ bool SpdyFramer::ParseHeaderBlockInBuffer(const char* header_data,
     if (!reader.ReadStringPiece32(&temp)) {
       DVLOG(1) << "Unable to read header name (" << index + 1 << " of "
                << num_headers << ").";
+      return false;
+    }
+    const char* begin = temp.data();
+    const char* end = begin;
+    std::advance(end, temp.size());
+    if (protocol_version_ == HTTP2 && std::any_of(begin, end, isupper)) {
+      DVLOG(1) << "Malformed header: Header name " << temp
+               << " contains upper-case characters.";
       return false;
     }
     std::string name = temp.as_string();
@@ -2591,7 +2552,7 @@ SpdySerializedFrame SpdyFramer::SerializeSynReply(
 SpdySerializedFrame SpdyFramer::SerializeRstStream(
     const SpdyRstStreamIR& rst_stream) const {
   // TODO(jgraettinger): For now, Chromium will support parsing RST_STREAM
-  // payloads, but will not emit them. SPDY4 is used for draft HTTP/2,
+  // payloads, but will not emit them. This is used for draft HTTP/2,
   // which doesn't currently include RST_STREAM payloads. GFE flags have been
   // commented but left in place to simplify future patching.
   // Compute the output buffer size, taking opaque data into account.
@@ -3301,17 +3262,11 @@ bool SpdyFramer::IncrementallyDecompressControlFrameHeaderData(
     if ((rv == Z_OK) || input_exhausted) {
       size_t decompressed_len = arraysize(buffer) - decomp->avail_out;
       if (decompressed_len > 0) {
-        if (use_new_methods_) {
-          processed_successfully =
-              header_parser_->HandleControlFrameHeadersData(stream_id, buffer,
-                                                            decompressed_len);
-          if (header_parser_->get_error() ==
-              SpdyHeadersBlockParser::NEED_MORE_DATA) {
-            processed_successfully = true;
-          }
-        } else {
-          processed_successfully = visitor_->OnControlFrameHeaderData(
-              stream_id, buffer, decompressed_len);
+        processed_successfully = header_parser_->HandleControlFrameHeadersData(
+            stream_id, buffer, decompressed_len);
+        if (header_parser_->get_error() ==
+            SpdyHeadersBlockParser::NEED_MORE_DATA) {
+          processed_successfully = true;
         }
       }
       if (!processed_successfully) {
@@ -3333,16 +3288,10 @@ bool SpdyFramer::IncrementallyDeliverControlFrameHeaderData(
   bool read_successfully = true;
   while (read_successfully && len > 0) {
     size_t bytes_to_deliver = std::min(len, kHeaderDataChunkMaxSize);
-    if (use_new_methods_) {
-      read_successfully = header_parser_->HandleControlFrameHeadersData(
-          stream_id, data, bytes_to_deliver);
-      if (header_parser_->get_error() ==
-          SpdyHeadersBlockParser::NEED_MORE_DATA) {
-        read_successfully = true;
-      }
-    } else {
-      read_successfully =
-          visitor_->OnControlFrameHeaderData(stream_id, data, bytes_to_deliver);
+    read_successfully = header_parser_->HandleControlFrameHeadersData(
+        stream_id, data, bytes_to_deliver);
+    if (header_parser_->get_error() == SpdyHeadersBlockParser::NEED_MORE_DATA) {
+      read_successfully = true;
     }
     data += bytes_to_deliver;
     len -= bytes_to_deliver;
@@ -3393,7 +3342,7 @@ void SpdyFramer::SerializeHeaderBlockWithoutCompression(
 
   // Serialize each header.
   for (const auto& header : header_block) {
-    builder->WriteStringPiece32(header.first);
+    builder->WriteStringPiece32(base::ToLowerASCII(header.first));
     builder->WriteStringPiece32(header.second);
   }
 }

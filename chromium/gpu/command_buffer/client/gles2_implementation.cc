@@ -373,6 +373,10 @@ void GLES2Implementation::FreeEverything() {
   helper_->FreeRingBuffer();
 }
 
+void GLES2Implementation::FreeSharedMemory(void* mem) {
+  mapped_memory_->FreePendingToken(mem, helper_->InsertToken());
+}
+
 void GLES2Implementation::RunIfContextNotLost(const base::Closure& callback) {
   if (!lost_context_callback_run_)
     callback.Run();
@@ -434,6 +438,9 @@ void GLES2Implementation::SetAggressivelyFreeResources(
 bool GLES2Implementation::OnMemoryDump(
     const base::trace_event::MemoryDumpArgs& args,
     base::trace_event::ProcessMemoryDump* pmd) {
+  using base::trace_event::MemoryAllocatorDump;
+  using base::trace_event::MemoryDumpLevelOfDetail;
+
   if (!transfer_buffer_->HaveBuffer())
     return true;
 
@@ -441,20 +448,21 @@ bool GLES2Implementation::OnMemoryDump(
       base::trace_event::MemoryDumpManager::GetInstance()
           ->GetTracingProcessId();
 
-  base::trace_event::MemoryAllocatorDump* dump = pmd->CreateAllocatorDump(
-      base::StringPrintf("gpu/transfer_buffer_memory/buffer_%d",
-                         transfer_buffer_->GetShmId()));
-  dump->AddScalar(base::trace_event::MemoryAllocatorDump::kNameSize,
-                  base::trace_event::MemoryAllocatorDump::kUnitsBytes,
+  MemoryAllocatorDump* dump = pmd->CreateAllocatorDump(base::StringPrintf(
+      "gpu/transfer_buffer_memory/buffer_%d", transfer_buffer_->GetShmId()));
+  dump->AddScalar(MemoryAllocatorDump::kNameSize,
+                  MemoryAllocatorDump::kUnitsBytes,
                   transfer_buffer_->GetSize());
-  dump->AddScalar("free_size",
-                  base::trace_event::MemoryAllocatorDump::kUnitsBytes,
-                  transfer_buffer_->GetFreeSize());
-  auto guid =
-      GetBufferGUIDForTracing(tracing_process_id, transfer_buffer_->GetShmId());
-  const int kImportance = 2;
-  pmd->CreateSharedGlobalAllocatorDump(guid);
-  pmd->AddOwnershipEdge(dump->guid(), guid, kImportance);
+
+  if (args.level_of_detail != MemoryDumpLevelOfDetail::BACKGROUND) {
+    dump->AddScalar("free_size", MemoryAllocatorDump::kUnitsBytes,
+                    transfer_buffer_->GetFreeSize());
+    auto guid = GetBufferGUIDForTracing(tracing_process_id,
+                                        transfer_buffer_->GetShmId());
+    const int kImportance = 2;
+    pmd->CreateSharedGlobalAllocatorDump(guid);
+    pmd->AddOwnershipEdge(dump->guid(), guid, kImportance);
+  }
 
   return true;
 }
@@ -1640,6 +1648,54 @@ GLint GLES2Implementation::GetAttribLocation(
   return loc;
 }
 
+void* GLES2Implementation::GetBufferSubDataAsyncCHROMIUM(
+    GLenum target, GLintptr offset, GLsizeiptr size) {
+  const char* name = "glGetBufferSubDataAsyncCHROMIUM";
+  GPU_CLIENT_SINGLE_THREAD_CHECK();
+  GPU_CLIENT_LOG("[" << GetLogPrefix() << "] " << name << "("
+      << GLES2Util::GetStringEnum(target) << ", " << offset << ", "
+      << size << ")");
+  switch (target) {
+    case GL_ARRAY_BUFFER:
+    case GL_ELEMENT_ARRAY_BUFFER:
+    case GL_COPY_READ_BUFFER:
+    case GL_COPY_WRITE_BUFFER:
+    case GL_PIXEL_PACK_BUFFER:
+    case GL_PIXEL_UNPACK_BUFFER:
+    case GL_TRANSFORM_FEEDBACK_BUFFER:
+    case GL_UNIFORM_BUFFER:
+      break;
+    default:
+      SetGLError(GL_INVALID_ENUM, name, "invalid target");
+      return nullptr;
+  }
+
+  GLuint buffer = GetBoundBufferHelper(target);
+  if (buffer == 0) {
+    SetGLError(GL_INVALID_OPERATION, name, "no buffer bound");
+    return nullptr;
+  }
+
+  if (!ValidateSize("glMapBufferRange", size) ||
+      !ValidateOffset("glMapBufferRange", offset)) {
+    SetGLError(GL_INVALID_VALUE, name, "invalid size/offset");
+    return nullptr;
+  }
+
+  int32_t shm_id;
+  unsigned int shm_offset;
+  void* shm_ptr = mapped_memory_->Alloc(size, &shm_id, &shm_offset);
+  if (!shm_ptr) {
+    SetGLError(GL_OUT_OF_MEMORY, name, "out of memory");
+    return nullptr;
+  }
+
+  helper_->GetBufferSubDataAsyncCHROMIUM(target, offset, size,
+      shm_id, shm_offset);
+
+  return shm_ptr;
+}
+
 GLint GLES2Implementation::GetUniformLocationHelper(
     GLuint program, const char* name) {
   typedef cmds::GetUniformLocation::Result Result;
@@ -2278,7 +2334,10 @@ void GLES2Implementation::CompressedTexImage2D(
     }
     return;
   }
-  if (data) {
+  if (bound_pixel_unpack_buffer_) {
+    helper_->CompressedTexImage2D(target, level, internalformat, width, height,
+                                  image_size, 0, ToGLuint(data));
+  } else if (data) {
     SetBucketContents(kResultBucketId, data, image_size);
     helper_->CompressedTexImage2DBucket(target, level, internalformat, width,
                                         height, kResultBucketId);
@@ -2325,13 +2384,20 @@ void GLES2Implementation::CompressedTexSubImage2D(
     }
     return;
   }
-  SetBucketContents(kResultBucketId, data, image_size);
-  helper_->CompressedTexSubImage2DBucket(
-      target, level, xoffset, yoffset, width, height, format, kResultBucketId);
-  // Free the bucket. This is not required but it does free up the memory.
-  // and we don't have to wait for the result so from the client's perspective
-  // it's cheap.
-  helper_->SetBucketSize(kResultBucketId, 0);
+  if (bound_pixel_unpack_buffer_) {
+    helper_->CompressedTexSubImage2D(
+        target, level, xoffset, yoffset, width, height, format, image_size,
+        0, ToGLuint(data));
+  } else {
+    SetBucketContents(kResultBucketId, data, image_size);
+    helper_->CompressedTexSubImage2DBucket(
+        target, level, xoffset, yoffset, width, height, format,
+        kResultBucketId);
+    // Free the bucket. This is not required but it does free up the memory.
+    // and we don't have to wait for the result so from the client's perspective
+    // it's cheap.
+    helper_->SetBucketSize(kResultBucketId, 0);
+  }
   CheckGLError();
 }
 
@@ -2368,7 +2434,11 @@ void GLES2Implementation::CompressedTexImage3D(
     }
     return;
   }
-  if (data) {
+  if (bound_pixel_unpack_buffer_) {
+    helper_->CompressedTexImage3D(
+        target, level, internalformat, width, height, depth, image_size,
+        0, ToGLuint(data));
+  } else if (data) {
     SetBucketContents(kResultBucketId, data, image_size);
     helper_->CompressedTexImage3DBucket(target, level, internalformat, width,
                                         height, depth, kResultBucketId);
@@ -2417,14 +2487,20 @@ void GLES2Implementation::CompressedTexSubImage3D(
     }
     return;
   }
-  SetBucketContents(kResultBucketId, data, image_size);
-  helper_->CompressedTexSubImage3DBucket(
-      target, level, xoffset, yoffset, zoffset, width, height, depth, format,
-      kResultBucketId);
-  // Free the bucket. This is not required but it does free up the memory.
-  // and we don't have to wait for the result so from the client's perspective
-  // it's cheap.
-  helper_->SetBucketSize(kResultBucketId, 0);
+  if (bound_pixel_unpack_buffer_) {
+    helper_->CompressedTexSubImage3D(
+        target, level, xoffset, yoffset, zoffset, width, height, depth, format,
+        image_size, 0, ToGLuint(data));
+  } else {
+    SetBucketContents(kResultBucketId, data, image_size);
+    helper_->CompressedTexSubImage3DBucket(
+        target, level, xoffset, yoffset, zoffset, width, height, depth, format,
+        kResultBucketId);
+    // Free the bucket. This is not required but it does free up the memory.
+    // and we don't have to wait for the result so from the client's perspective
+    // it's cheap.
+    helper_->SetBucketSize(kResultBucketId, 0);
+  }
   CheckGLError();
 }
 
@@ -2477,6 +2553,7 @@ void GLES2Implementation::TexImage2D(
   uint32_t padded_row_size;
   uint32_t skip_size;
   PixelStoreParams params = GetUnpackParameters(k2D);
+
   if (!GLES2Util::ComputeImageDataSizesES3(width, height, 1,
                                            format, type,
                                            params,

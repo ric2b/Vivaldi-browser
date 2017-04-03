@@ -12,6 +12,63 @@
 namespace gpu {
 namespace gles2 {
 
+namespace {
+const char* GetDebugSourceString(GLenum source) {
+  switch (source) {
+    case GL_DEBUG_SOURCE_API:
+      return "OpenGL";
+    case GL_DEBUG_SOURCE_WINDOW_SYSTEM:
+      return "Window System";
+    case GL_DEBUG_SOURCE_SHADER_COMPILER:
+      return "Shader Compiler";
+    case GL_DEBUG_SOURCE_THIRD_PARTY:
+      return "Third Party";
+    case GL_DEBUG_SOURCE_APPLICATION:
+      return "Application";
+    case GL_DEBUG_SOURCE_OTHER:
+      return "Other";
+    default:
+      return "UNKNOWN";
+  }
+}
+
+const char* GetDebugTypeString(GLenum type) {
+  switch (type) {
+    case GL_DEBUG_TYPE_ERROR:
+      return "Error";
+    case GL_DEBUG_TYPE_DEPRECATED_BEHAVIOR:
+      return "Deprecated behavior";
+    case GL_DEBUG_TYPE_UNDEFINED_BEHAVIOR:
+      return "Undefined behavior";
+    case GL_DEBUG_TYPE_PORTABILITY:
+      return "Portability";
+    case GL_DEBUG_TYPE_PERFORMANCE:
+      return "Performance";
+    case GL_DEBUG_TYPE_OTHER:
+      return "Other";
+    case GL_DEBUG_TYPE_MARKER:
+      return "Marker";
+    default:
+      return "UNKNOWN";
+  }
+}
+
+const char* GetDebugSeverityString(GLenum severity) {
+  switch (severity) {
+    case GL_DEBUG_SEVERITY_HIGH:
+      return "High";
+    case GL_DEBUG_SEVERITY_MEDIUM:
+      return "Medium";
+    case GL_DEBUG_SEVERITY_LOW:
+      return "Low";
+    case GL_DEBUG_SEVERITY_NOTIFICATION:
+      return "Notification";
+    default:
+      return "UNKNOWN";
+  }
+}
+}
+
 std::vector<int> GetAllGLErrors() {
   int gl_errors[] = {
     GL_NO_ERROR,
@@ -121,7 +178,7 @@ void PopulateNumericCapabilities(Capabilities* caps,
                 &caps->num_compressed_texture_formats);
   glGetIntegerv(GL_NUM_SHADER_BINARY_FORMATS, &caps->num_shader_binary_formats);
 
-  if (feature_info->IsES3Enabled()) {
+  if (feature_info->IsWebGL2OrES3Context()) {
     glGetIntegerv(GL_MAX_3D_TEXTURE_SIZE, &caps->max_3d_texture_size);
     glGetIntegerv(GL_MAX_ARRAY_TEXTURE_LAYERS, &caps->max_array_texture_layers);
     glGetIntegerv(GL_MAX_COLOR_ATTACHMENTS, &caps->max_color_attachments);
@@ -171,7 +228,7 @@ void PopulateNumericCapabilities(Capabilities* caps,
   }
   if (feature_info->feature_flags().multisampled_render_to_texture ||
       feature_info->feature_flags().chromium_framebuffer_multisample ||
-      feature_info->IsES3Enabled()) {
+      feature_info->IsWebGL2OrES3Context()) {
     glGetIntegerv(GL_MAX_SAMPLES, &caps->max_samples);
   }
 }
@@ -182,6 +239,68 @@ bool CheckUniqueAndNonNullIds(GLsizei n, const GLuint* client_ids) {
   std::unordered_set<uint32_t> unique_ids(client_ids, client_ids + n);
   return (unique_ids.size() == static_cast<size_t>(n)) &&
          (unique_ids.find(0) == unique_ids.end());
+}
+
+const char* GetServiceVersionString(const FeatureInfo* feature_info) {
+  if (feature_info->IsWebGL2OrES3Context())
+    return "OpenGL ES 3.0 Chromium";
+  else
+    return "OpenGL ES 2.0 Chromium";
+}
+
+const char* GetServiceShadingLanguageVersionString(
+    const FeatureInfo* feature_info) {
+  if (feature_info->IsWebGL2OrES3Context())
+    return "OpenGL ES GLSL ES 3.0 Chromium";
+  else
+    return "OpenGL ES GLSL ES 1.0 Chromium";
+}
+
+const char* GetServiceRendererString(const FeatureInfo* feature_info) {
+  // Return the unmasked RENDERER string for WebGL contexts.
+  // It is used by WEBGL_debug_renderer_info.
+  if (!feature_info->IsWebGLContext())
+    return "Chromium";
+  else
+    return reinterpret_cast<const char*>(glGetString(GL_RENDERER));
+}
+
+const char* GetServiceVendorString(const FeatureInfo* feature_info) {
+  // Return the unmasked VENDOR string for WebGL contexts.
+  // It is used by WEBGL_debug_renderer_info.
+  if (!feature_info->IsWebGLContext())
+    return "Chromium";
+  else
+    return reinterpret_cast<const char*>(glGetString(GL_VENDOR));
+}
+
+void APIENTRY LogGLDebugMessage(GLenum source,
+                                GLenum type,
+                                GLuint id,
+                                GLenum severity,
+                                GLsizei length,
+                                const GLchar* message,
+                                GLvoid* user_param) {
+  LOG(ERROR) << "GL Driver Message (" << GetDebugSourceString(source) << ", "
+             << GetDebugTypeString(type) << ", " << id << ", "
+             << GetDebugSeverityString(severity) << "): " << message;
+}
+
+void InitializeGLDebugLogging() {
+  glEnable(GL_DEBUG_OUTPUT);
+  glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
+
+  // Enable logging of medium and high severity messages
+  glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DEBUG_SEVERITY_HIGH, 0,
+                        nullptr, GL_TRUE);
+  glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DEBUG_SEVERITY_MEDIUM, 0,
+                        nullptr, GL_TRUE);
+  glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DEBUG_SEVERITY_LOW, 0,
+                        nullptr, GL_FALSE);
+  glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE,
+                        GL_DEBUG_SEVERITY_NOTIFICATION, 0, nullptr, GL_FALSE);
+
+  glDebugMessageCallback(&LogGLDebugMessage, nullptr);
 }
 
 }  // namespace gles2

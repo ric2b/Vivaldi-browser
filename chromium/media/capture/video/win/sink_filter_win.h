@@ -13,10 +13,10 @@
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "media/base/video_capture_types.h"
 #include "media/capture/video/video_capture_device.h"
 #include "media/capture/video/win/filter_base_win.h"
 #include "media/capture/video/win/sink_filter_observer_win.h"
+#include "media/capture/video_capture_types.h"
 
 namespace media {
 
@@ -30,6 +30,11 @@ extern GUID kMediaSubTypeI420;
 // might appear in non-USB capture cards and it's implemented as a normal YUV
 // pixel format with the characters HDYC encoded in the first array word.
 extern GUID kMediaSubTypeHDYC;
+
+// 16-bit grey-scale single plane formats provided by some depth cameras.
+extern GUID kMediaSubTypeZ16;
+extern GUID kMediaSubTypeINVZ;
+extern GUID kMediaSubTypeY16;
 
 class SinkInputPin;
 

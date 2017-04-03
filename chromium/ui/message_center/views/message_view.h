@@ -19,10 +19,6 @@
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/slide_out_view.h"
 
-namespace ui {
-class MenuModel;
-}
-
 namespace views {
 class ImageButton;
 class ImageView;
@@ -63,7 +59,7 @@ class MESSAGE_CENTER_EXPORT MessageView : public views::SlideOutView,
   bool IsPinned();
 
   // Overridden from views::View:
-  void GetAccessibleState(ui::AXViewState* state) override;
+  void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
   bool OnMousePressed(const ui::MouseEvent& event) override;
   bool OnKeyPressed(const ui::KeyEvent& event) override;
   bool OnKeyReleased(const ui::KeyEvent& event) override;

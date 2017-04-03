@@ -87,8 +87,8 @@ LinkHighlightImpl::LinkHighlightImpl(Node* node, WebViewImpl* owningWebViewImpl)
   WebCompositorSupport* compositorSupport =
       Platform::current()->compositorSupport();
   DCHECK(compositorSupport);
-  m_contentLayer = wrapUnique(compositorSupport->createContentLayer(this));
-  m_clipLayer = wrapUnique(compositorSupport->createLayer());
+  m_contentLayer = compositorSupport->createContentLayer(this);
+  m_clipLayer = compositorSupport->createLayer();
   m_clipLayer->setTransformOrigin(WebFloatPoint3D());
   m_clipLayer->addChild(m_contentLayer->layer());
 
@@ -264,11 +264,10 @@ bool LinkHighlightImpl::computeHighlightLayerPathAndPosition(
     // Scrolling content layers have the same offset from layout object as the
     // non-scrolling layers. Thus we need to adjust for their scroll offset.
     if (m_isScrollingGraphicsLayer) {
-      DoubleSize adjustedScrollOffset = paintInvalidationContainer.layer()
-                                            ->getScrollableArea()
-                                            ->adjustedScrollOffset();
-      absoluteQuad.move(adjustedScrollOffset.width(),
-                        adjustedScrollOffset.height());
+      FloatPoint scrollPosition = paintInvalidationContainer.layer()
+                                      ->getScrollableArea()
+                                      ->scrollPosition();
+      absoluteQuad.move(toScrollOffset(scrollPosition));
     }
 
     // Transform node quads in target absolute coords to local coordinates in

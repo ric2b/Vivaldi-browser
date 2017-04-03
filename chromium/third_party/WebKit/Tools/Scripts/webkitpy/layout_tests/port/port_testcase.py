@@ -327,8 +327,6 @@ class PortTestCase(unittest.TestCase):
     def test_skipped_directories_for_symbols(self):
         # This first test confirms that the commonly found symbols result in the expected skipped directories.
         port = self.make_port()
-        # pylint: disable=protected-access
-        port._symbols_string = lambda: "fooSymbol"
         self.assertEqual(
             set(port._skipped_tests_for_unsupported_features(test_list=['webaudio/codec-tests/mp3/foo.html'])),
             set([
@@ -363,7 +361,7 @@ class PortTestCase(unittest.TestCase):
         del port.host.environ['WEBKIT_HTTP_SERVER_CONF_PATH']
         self.assertEqual(
             port.path_to_apache_config_file(),
-            port.host.filesystem.join(port.layout_tests_dir(), 'http/conf/httpd.conf'))
+            port.host.filesystem.join(port.apache_config_directory(), 'httpd.conf'))
 
         # Check that even if we mock out _apache_config_file_name, the environment variable takes precedence.
         port.host.environ['WEBKIT_HTTP_SERVER_CONF_PATH'] = '/existing/httpd.conf'

@@ -35,7 +35,7 @@
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "content/public/test/test_renderer_host.h"
 #include "content/public/test/test_utils.h"
-#include "services/shell/public/cpp/interface_provider.h"
+#include "services/service_manager/public/cpp/interface_provider.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
@@ -597,8 +597,8 @@ class VisitRelayingRenderProcessHost : public MockRenderProcessHost {
       content::BrowserContext* browser_context,
       VisitCountingContext* context)
       : MockRenderProcessHost(browser_context), widgets_(0) {
-    SetRemoteInterfaces(base::MakeUnique<shell::InterfaceProvider>());
-    shell::InterfaceProvider::TestApi test_api(GetRemoteInterfaces());
+    SetRemoteInterfaces(base::MakeUnique<service_manager::InterfaceProvider>());
+    service_manager::InterfaceProvider::TestApi test_api(GetRemoteInterfaces());
     test_api.SetBinderForName(
         mojom::VisitedLinkNotificationSink::Name_,
         base::Bind(&VisitCountingContext::Bind, base::Unretained(context)));
@@ -746,7 +746,7 @@ TEST_F(VisitedLinkEventsTest, Coalescence) {
 
 TEST_F(VisitedLinkEventsTest, Basics) {
   RenderViewHostTester::For(rvh())->CreateTestRenderView(
-      base::string16(), MSG_ROUTING_NONE, MSG_ROUTING_NONE, -1, false);
+      base::string16(), MSG_ROUTING_NONE, MSG_ROUTING_NONE, false);
 
   // Waiting complete rebuild the table.
   content::RunAllBlockingPoolTasksUntilIdle();
@@ -778,7 +778,7 @@ TEST_F(VisitedLinkEventsTest, Basics) {
 
 TEST_F(VisitedLinkEventsTest, TabVisibility) {
   RenderViewHostTester::For(rvh())->CreateTestRenderView(
-      base::string16(), MSG_ROUTING_NONE, MSG_ROUTING_NONE, -1, false);
+      base::string16(), MSG_ROUTING_NONE, MSG_ROUTING_NONE, false);
 
   // Waiting complete rebuild the table.
   content::RunAllBlockingPoolTasksUntilIdle();

@@ -56,6 +56,9 @@ DEBIAN_PACKAGES="\
   libdrm-nouveau2
   libdrm-radeon1
   libdrm2
+  libegl1-mesa
+  libegl1-mesa-dev
+  libegl1-mesa-drivers
   libelf1
   libelf-dev
   libexpat1
@@ -90,6 +93,8 @@ DEBIAN_PACKAGES="\
   libgpg-error-dev
   libgssapi-krb5-2
   libgssrpc4
+  libgtk-3-0
+  libgtk-3-dev
   libgtk2.0-0
   libgtk2.0-dev
   libk5crypto3
@@ -134,6 +139,8 @@ DEBIAN_PACKAGES="\
   libstdc++6
   libstdc++6-4.6-dev
   libtasn1-3
+  libwayland0
+  libwayland-dev
   libx11-6
   libx11-dev
   libx11-xcb1

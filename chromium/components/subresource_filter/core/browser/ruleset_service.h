@@ -32,7 +32,7 @@ class SequencedTaskRunner;
 namespace subresource_filter {
 
 class RulesetIndexer;
-class RulesetDistributor;
+class RulesetServiceDelegate;
 
 // Encapsulates information about a version of unindexed subresource
 // filtering rules on disk.
@@ -72,7 +72,6 @@ struct IndexedRulesetVersion {
   IndexedRulesetVersion& operator=(const IndexedRulesetVersion&);
 
   static void RegisterPrefs(PrefRegistrySimple* registry);
-
   static int CurrentFormatVersion();
 
   bool IsValid() const;
@@ -80,17 +79,62 @@ struct IndexedRulesetVersion {
 
   void SaveToPrefs(PrefService* local_state) const;
   void ReadFromPrefs(PrefService* local_state);
-  base::FilePath GetSubdirectoryPathForVersion(
-      const base::FilePath& base_dir) const;
 
   std::string content_version;
   int format_version = 0;
 };
 
+// Contains all utility functions that govern how files pertaining to indexed
+// ruleset version should be organized on disk.
+//
+// The various indexed ruleset versions are kept in a two-level directory
+// hierarchy based on their format and content version numbers, like so:
+//
+//   |base_dir|
+//    |
+//    +--10 (format_version)
+//    |  |
+//    |  +--1 (content_version)
+//    |  |   \...
+//    |  |
+//    |  +--2 (content_version)
+//    |      \...
+//    |
+//    +--11 (format_version)
+//       |
+//       +--2 (content_version)
+//           \...
+//
+class IndexedRulesetLocator {
+ public:
+  // Returns a path to a directory under |base_dir| where files corresponding to
+  // the given |version| should be stored.
+  static base::FilePath GetSubdirectoryPathForVersion(
+      const base::FilePath& base_dir,
+      const IndexedRulesetVersion& version);
+
+  static base::FilePath GetRulesetDataFilePath(
+      const base::FilePath& version_directory);
+  static base::FilePath GetLicenseFilePath(
+      const base::FilePath& version_directory);
+  static base::FilePath GetSentinelFilePath(
+      const base::FilePath& version_directory);
+
+  // Cleans up the |indexed_ruleset_base_dir| by deleting all obsoleted ruleset
+  // versions, keeping only:
+  //  -- the |most_recent_version|, if it is valid,
+  //  -- versions of the current format that have a sentinel file present.
+  // To be called on the |blocking_task_runner_|.
+  static void DeleteObsoleteRulesets(
+      const base::FilePath& indexed_ruleset_base_dir,
+      const IndexedRulesetVersion& most_recent_version);
+};
+
 // Responsible for indexing subresource filtering rules that are downloaded
 // through the component updater; for versioned storage of the indexed ruleset;
 // and for supplying the most up-to-date version of the indexed ruleset to the
-// RulesetDistributors for distribution.
+// RulesetServiceDelegate, provided in the constructor, that abstracts away
+// distribution of the ruleset to renderers.
 //
 // Files corresponding to each version of the indexed ruleset are stored in a
 // separate subdirectory inside |indexed_ruleset_base_dir| named after the
@@ -126,6 +170,7 @@ class RulesetService : public base::SupportsWeakPtr<RulesetService> {
   // See class comments for details of arguments.
   RulesetService(PrefService* local_state,
                  scoped_refptr<base::SequencedTaskRunner> blocking_task_runner,
+                 std::unique_ptr<RulesetServiceDelegate> delegate,
                  const base::FilePath& indexed_ruleset_base_dir);
   virtual ~RulesetService();
 
@@ -135,17 +180,15 @@ class RulesetService : public base::SupportsWeakPtr<RulesetService> {
   // need to remain accessible even after the method returns.
   //
   // Computation-heavy steps and I/O are performed on a background thread.
-  // Still, to prevent start-up congestion, this method should be called at the
-  // earliest shortly after start-up.
+  // Furthermore, to prevent start-up congestion, new rulesets provided via this
+  // method will not be processed until after start-up.
   //
   // Virtual so that it can be mocked out in tests.
   virtual void IndexAndStoreAndPublishRulesetIfNeeded(
       const UnindexedRulesetInfo& unindexed_ruleset_info);
 
-  // Registers a |distributor| that will be notified each time a new version of
-  // the ruleset becomes avalable. The |distributor| will be destroyed along
-  // with |this|.
-  void RegisterDistributor(std::unique_ptr<RulesetDistributor> distributor);
+  // Exposed for browser tests.
+  RulesetServiceDelegate* delegate() { return delegate_.get(); }
 
  private:
   friend class SubresourceFilteringRulesetServiceTest;
@@ -156,13 +199,6 @@ class RulesetService : public base::SupportsWeakPtr<RulesetService> {
 
   using WriteRulesetCallback =
       base::Callback<void(const IndexedRulesetVersion&)>;
-
-  static base::FilePath GetRulesetDataFilePath(
-      const base::FilePath& version_directory);
-  static base::FilePath GetLicenseFilePath(
-      const base::FilePath& version_directory);
-  static base::FilePath GetSentinelFilePath(
-      const base::FilePath& version_directory);
 
   // Reads the ruleset described in |unindexed_ruleset_info|, indexes it, and
   // calls WriteRuleset() to persist the indexed ruleset. Returns the resulting
@@ -198,6 +234,9 @@ class RulesetService : public base::SupportsWeakPtr<RulesetService> {
   static decltype(&IndexRuleset) g_index_ruleset_func;
   static decltype(&base::ReplaceFile) g_replace_file_func;
 
+  // Performs indexing of the queued unindexed ruleset (if any) after start-up.
+  void InitializeAfterStartup();
+
   // Posts a task to the |blocking_task_runner_| to index and persist the given
   // unindexed ruleset. Then, on success, updates the most recently indexed
   // version in preferences and invokes |success_callback| on the calling
@@ -213,10 +252,13 @@ class RulesetService : public base::SupportsWeakPtr<RulesetService> {
 
   PrefService* const local_state_;
   scoped_refptr<base::SequencedTaskRunner> blocking_task_runner_;
+  std::unique_ptr<RulesetServiceDelegate> delegate_;
+
+  UnindexedRulesetInfo queued_unindexed_ruleset_info_;
+  bool is_after_startup_;
 
   const base::FilePath indexed_ruleset_base_dir_;
   std::unique_ptr<base::FileProxy> ruleset_data_;
-  std::vector<std::unique_ptr<RulesetDistributor>> distributors_;
 
   DISALLOW_COPY_AND_ASSIGN(RulesetService);
 };

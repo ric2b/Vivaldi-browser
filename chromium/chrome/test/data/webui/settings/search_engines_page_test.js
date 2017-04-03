@@ -176,28 +176,45 @@ cr.define('settings_search_engines_page', function() {
       });
 
       test('Remove_Enabled', function() {
+        // Open action menu.
+        MockInteractions.tap(entry.$$('paper-icon-button'));
+        var menu = entry.$$('dialog[is=cr-action-menu]');
+        assertTrue(menu.open);
+
         var deleteButton = entry.$.delete;
         assertTrue(!!deleteButton);
         assertFalse(deleteButton.hidden);
         MockInteractions.tap(deleteButton);
         return browserProxy.whenCalled('removeSearchEngine').then(
             function(modelIndex) {
+              assertFalse(menu.open);
               assertEquals(entry.engine.modelIndex, modelIndex);
             });
       });
 
       test('MakeDefault_Enabled', function() {
+        // Open action menu.
+        MockInteractions.tap(entry.$$('paper-icon-button'));
+        var menu = entry.$$('dialog[is=cr-action-menu]');
+        assertTrue(menu.open);
+
         var makeDefaultButton = entry.$.makeDefault;
         assertTrue(!!makeDefaultButton);
         MockInteractions.tap(makeDefaultButton);
         return browserProxy.whenCalled('setDefaultSearchEngine').then(
             function(modelIndex) {
+              assertFalse(menu.open);
               assertEquals(entry.engine.modelIndex, modelIndex);
             });
       });
 
       // Test that clicking the "edit" button brings up a dialog.
       test('Edit_Enabled', function() {
+        // Open action menu.
+        MockInteractions.tap(entry.$$('paper-icon-button'));
+        var menu = entry.$$('dialog[is=cr-action-menu]');
+        assertTrue(menu.open);
+
         var engine = entry.engine;
         var editButton = entry.$.edit;
         assertTrue(!!editButton);
@@ -324,12 +341,15 @@ cr.define('settings_search_engines_page', function() {
       var browserProxy = null;
 
       setup(function() {
-        browserProxy = new settings_search.TestSearchEnginesBrowserProxy();
-        settings.SearchEnginesBrowserProxyImpl.instance_ = browserProxy;
+        browserProxy = new TestExtensionControlBrowserProxy();
+        settings.ExtensionControlBrowserProxyImpl.instance_ = browserProxy;
         PolymerTest.clearBody();
         entry = document.createElement('settings-omnibox-extension-entry');
         entry.set('engine', createSampleOmniboxExtension());
         document.body.appendChild(entry);
+
+        // Open action menu.
+        MockInteractions.tap(entry.$$('paper-icon-button'));
       });
 
       teardown(function() { entry.remove(); });

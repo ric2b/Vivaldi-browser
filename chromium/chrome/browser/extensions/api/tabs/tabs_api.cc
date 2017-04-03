@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "base/bind.h"
+#include "base/command_line.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
@@ -231,9 +232,7 @@ bool IsValidStateForWindowsCreateFunction(
 
   bool has_bound = create_data->left || create_data->top ||
                    create_data->width || create_data->height;
-  bool is_panel =
-      create_data->type == windows::CreateType::CREATE_TYPE_PANEL ||
-      create_data->type == windows::CreateType::CREATE_TYPE_DETACHED_PANEL;
+  bool is_panel = create_data->type == windows::CreateType::CREATE_TYPE_PANEL;
 
   switch (create_data->state) {
     case windows::WINDOW_STATE_MINIMIZED:
@@ -508,8 +507,7 @@ ExtensionFunction::ResponseAction WindowsCreateFunction::Run() {
         extension_id = extension()->id();
         break;
 
-      case windows::CREATE_TYPE_PANEL:
-      case windows::CREATE_TYPE_DETACHED_PANEL: {
+      case windows::CREATE_TYPE_PANEL: {
         extension_id = extension()->id();
 #if defined(USE_ASH)
       // Only ChromeOS' version of chrome.windows.create would create a panel

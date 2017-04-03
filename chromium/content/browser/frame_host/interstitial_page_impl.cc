@@ -18,7 +18,6 @@
 #include "base/threading/thread.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
-#include "content/browser/browser_plugin/browser_plugin_guest.h"
 #include "content/browser/dom_storage/dom_storage_context_wrapper.h"
 #include "content/browser/dom_storage/session_storage_namespace_impl.h"
 #include "content/browser/frame_host/interstitial_page_navigator_impl.h"
@@ -53,6 +52,8 @@
 #include "net/url_request/url_request_context_getter.h"
 #include "ui/base/page_transition_types.h"
 
+#include "content/browser/browser_plugin/browser_plugin_guest.h"
+
 using blink::WebDragOperation;
 using blink::WebDragOperationsMask;
 
@@ -79,7 +80,8 @@ class InterstitialPageImpl::InterstitialPageRVHDelegateView
                      WebDragOperationsMask operations_allowed,
                      const gfx::ImageSkia& image,
                      const gfx::Vector2d& image_offset,
-                     const DragEventSourceInfo& event_info) override;
+                     const DragEventSourceInfo& event_info,
+                     RenderWidgetHostImpl* source_rwh) override;
   void UpdateDragCursor(WebDragOperation operation) override;
   void GotFocus() override;
   void TakeFocus(bool reverse) override;
@@ -152,7 +154,6 @@ InterstitialPageImpl::InterstitialPageImpl(
       url_(url),
       new_navigation_(new_navigation),
       should_discard_pending_nav_entry_(new_navigation),
-      reload_on_dont_proceed_(false),
       enabled_(true),
       action_taken_(NO_ACTION),
       render_view_host_(NULL),
@@ -236,7 +237,8 @@ void InterstitialPageImpl::Show() {
 
     controller_->SetTransientEntry(std::move(entry));
 
-    static_cast<WebContentsImpl*>(web_contents_)->DidChangeVisibleSSLState();
+    static_cast<WebContentsImpl*>(web_contents_)
+        ->DidChangeVisibleSecurityState();
   }
 
   DCHECK(!render_view_host_);
@@ -261,9 +263,9 @@ void InterstitialPageImpl::Hide() {
     return;
 
   Disable();
-  // Need to call DidChangeVisibleSSLState here since we navigate away from the
-  // interstatial page, and the ssl state might change.
-  static_cast<WebContentsImpl*>(web_contents_)->DidChangeVisibleSSLState();
+  // Need to call DidChangeVisibleSecurityState here since we navigate away from
+  // the interstatial page, and the ssl state might change.
+  static_cast<WebContentsImpl*>(web_contents_)->DidChangeVisibleSecurityState();
 
   RenderWidgetHostView* old_view =
       controller_->delegate()->GetRenderViewHost()->GetWidget()->GetView();
@@ -305,7 +307,7 @@ void InterstitialPageImpl::Hide() {
   if (entry && !new_navigation_ && should_revert_web_contents_title_)
     web_contents_->UpdateTitleForEntry(entry, original_web_contents_title_);
 
-  static_cast<WebContentsImpl*>(web_contents_)->DidChangeVisibleSSLState();
+  static_cast<WebContentsImpl*>(web_contents_)->DidChangeVisibleSecurityState();
 
   InterstitialPageMap::iterator iter =
       g_web_contents_to_interstitial_page->find(web_contents_);
@@ -393,7 +395,6 @@ void InterstitialPageImpl::RenderFrameCreated(
 
 void InterstitialPageImpl::UpdateTitle(
     RenderFrameHost* render_frame_host,
-    int32_t page_id,
     const base::string16& title,
     base::i18n::TextDirection title_direction) {
   if (!enabled())
@@ -589,7 +590,7 @@ RenderViewHostImpl* InterstitialPageImpl::CreateRenderViewHost() {
   int32_t widget_routing_id = site_instance->GetProcess()->GetNextRoutingID();
   frame_tree_.root()->render_manager()->Init(
       site_instance.get(), widget_routing_id, MSG_ROUTING_NONE,
-      widget_routing_id);
+      widget_routing_id, false);
   return frame_tree_.root()->current_frame_host()->render_view_host();
 }
 
@@ -603,11 +604,8 @@ WebContentsView* InterstitialPageImpl::CreateWebContentsView() {
   RenderWidgetHostImpl::From(render_view_host_->GetWidget())->SetView(view);
   render_view_host_->AllowBindings(BINDINGS_POLICY_DOM_AUTOMATION);
 
-  int32_t max_page_id = web_contents()->GetMaxPageIDForSiteInstance(
-      render_view_host_->GetSiteInstance());
   render_view_host_->CreateRenderView(MSG_ROUTING_NONE,
                                       MSG_ROUTING_NONE,
-                                      max_page_id,
                                       FrameReplicationState(),
                                       false);
   controller_->delegate()->RenderFrameForInterstitialPageCreated(
@@ -682,9 +680,6 @@ void InterstitialPageImpl::DontProceed() {
     // cancelled.
     controller_->DiscardNonCommittedEntries();
   }
-
-  if (reload_on_dont_proceed_)
-    controller_->Reload(true);
 
   Hide();
   delegate_->OnDontProceed();
@@ -902,8 +897,10 @@ void InterstitialPageImpl::InterstitialPageRVHDelegateView::StartDragging(
     WebDragOperationsMask allowed_operations,
     const gfx::ImageSkia& image,
     const gfx::Vector2d& image_offset,
-    const DragEventSourceInfo& event_info) {
-  interstitial_page_->render_view_host_->DragSourceSystemDragEnded();
+    const DragEventSourceInfo& event_info,
+    RenderWidgetHostImpl* source_rwh) {
+  interstitial_page_->render_view_host_->GetWidget()->
+      DragSourceSystemDragEnded();
   DVLOG(1) << "InterstitialPage does not support dragging yet.";
 }
 

@@ -19,7 +19,7 @@
 @interface WebsiteSettingsBubbleController (ExposedForTesting)
 - (NSView*)permissionsView;
 - (NSButton*)resetDecisionsButton;
-- (NSButton*)securityDetailsButton;
+- (NSButton*)connectionHelpButton;
 @end
 
 @implementation WebsiteSettingsBubbleController (ExposedForTesting)
@@ -29,8 +29,9 @@
 - (NSButton*)resetDecisionsButton {
   return resetDecisionsButton_;
 }
-- (NSButton*)securityDetailsButton {
-  return securityDetailsButton_;
+- (NSButton*)connectionHelpButton {
+
+  return connectionHelpButton_;
 }
 @end
 
@@ -62,33 +63,26 @@ enum PermissionMenuIndices {
 };
 
 const ContentSettingsType kTestPermissionTypes[] = {
-  // NOTE: FULLSCREEN does not support "Always block", so it must appear as
-  // one of the first three permissions.
-  CONTENT_SETTINGS_TYPE_FULLSCREEN,
   CONTENT_SETTINGS_TYPE_IMAGES,
   CONTENT_SETTINGS_TYPE_JAVASCRIPT,
   CONTENT_SETTINGS_TYPE_PLUGINS,
   CONTENT_SETTINGS_TYPE_POPUPS,
   CONTENT_SETTINGS_TYPE_GEOLOCATION,
   CONTENT_SETTINGS_TYPE_NOTIFICATIONS,
-  CONTENT_SETTINGS_TYPE_MOUSELOCK,
   CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC
 };
 
 const ContentSetting kTestSettings[] = {
   CONTENT_SETTING_DEFAULT,
   CONTENT_SETTING_DEFAULT,
-  CONTENT_SETTING_DEFAULT,
   CONTENT_SETTING_ALLOW,
   CONTENT_SETTING_BLOCK,
   CONTENT_SETTING_ALLOW,
   CONTENT_SETTING_BLOCK,
-  CONTENT_SETTING_ALLOW,
   CONTENT_SETTING_BLOCK
 };
 
 const ContentSetting kTestDefaultSettings[] = {
-  CONTENT_SETTING_ALLOW,
   CONTENT_SETTING_BLOCK,
   CONTENT_SETTING_ASK
 };
@@ -98,10 +92,8 @@ const content_settings::SettingSource kTestSettingSources[] = {
   content_settings::SETTING_SOURCE_USER,
   content_settings::SETTING_SOURCE_USER,
   content_settings::SETTING_SOURCE_USER,
-  content_settings::SETTING_SOURCE_USER,
   content_settings::SETTING_SOURCE_POLICY,
   content_settings::SETTING_SOURCE_POLICY,
-  content_settings::SETTING_SOURCE_EXTENSION,
   content_settings::SETTING_SOURCE_EXTENSION
 };
 
@@ -136,8 +128,7 @@ class WebsiteSettingsBubbleControllerTest : public CocoaTest {
               websiteSettingsUIBridge:bridge_
                           webContents:web_contents_factory_.CreateWebContents(
                                           &profile_)
-                                  url:GURL("https://www.google.com")
-                   isDevToolsDisabled:NO];
+                                  url:GURL("https://www.google.com")];
     window_ = [controller_ window];
     [controller_ showWindow:nil];
   }
@@ -203,7 +194,8 @@ class WebsiteSettingsBubbleControllerTest : public CocoaTest {
       permission_info_list.push_back(info);
     }
     ChosenObjectInfoList chosen_object_info_list;
-    bridge_->SetPermissionInfo(permission_info_list, chosen_object_info_list);
+    bridge_->SetPermissionInfo(permission_info_list,
+                               std::move(chosen_object_info_list));
   }
 
   content::TestBrowserThreadBundle thread_bundle_;
@@ -214,7 +206,7 @@ class WebsiteSettingsBubbleControllerTest : public CocoaTest {
   NSWindow* window_;  // Weak, owned by controller.
 };
 
-TEST_F(WebsiteSettingsBubbleControllerTest, SecurityDetailsButton) {
+TEST_F(WebsiteSettingsBubbleControllerTest, ConnectionHelpButton) {
   WebsiteSettingsUI::IdentityInfo info;
   info.site_identity = std::string("example.com");
   info.identity_status = WebsiteSettings::SITE_IDENTITY_STATUS_UNKNOWN;
@@ -223,8 +215,8 @@ TEST_F(WebsiteSettingsBubbleControllerTest, SecurityDetailsButton) {
 
   bridge_->SetIdentityInfo(const_cast<WebsiteSettingsUI::IdentityInfo&>(info));
 
-  EXPECT_EQ([[controller_ securityDetailsButton] action],
-            @selector(showSecurityDetails:));
+  EXPECT_EQ([[controller_ connectionHelpButton] action],
+            @selector(openConnectionHelp:));
 }
 
 TEST_F(WebsiteSettingsBubbleControllerTest, ResetDecisionsButton) {
@@ -287,9 +279,9 @@ TEST_F(WebsiteSettingsBubbleControllerTest, SetPermissionInfo) {
   }
   EXPECT_EQ(arraysize(kTestPermissionTypes), [labels count]);
 
-  // 4 of the buttons should be disabled -- the ones that have a setting source
+  // 3 of the buttons should be disabled -- the ones that have a setting source
   // of SETTING_SOURCE_POLICY or SETTING_SOURCE_EXTENSION.
-  EXPECT_EQ(4, disabled_count);
+  EXPECT_EQ(3, disabled_count);
 }
 
 TEST_F(WebsiteSettingsBubbleControllerTest, WindowWidth) {

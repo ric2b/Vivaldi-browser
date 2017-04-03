@@ -14,9 +14,9 @@
 #import "ios/web/public/web_state/js/crw_js_injection_evaluator.h"
 #include "ios/web/test/mojo_test.mojom.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
-#include "services/shell/public/cpp/identity.h"
-#include "services/shell/public/cpp/interface_factory.h"
-#include "services/shell/public/cpp/interface_registry.h"
+#include "services/service_manager/public/cpp/identity.h"
+#include "services/service_manager/public/cpp/interface_factory.h"
+#include "services/service_manager/public/cpp/interface_registry.h"
 #import "testing/gtest_mac.h"
 #import "third_party/ocmock/OCMock/OCMock.h"
 
@@ -44,13 +44,14 @@ id GetObject(const std::string& json) {
 }
 
 // Test mojo handler factory.
-class TestUIHandlerFactory : public shell::InterfaceFactory<TestUIHandlerMojo> {
+class TestUIHandlerFactory
+    : public service_manager::InterfaceFactory<TestUIHandlerMojo> {
  public:
   ~TestUIHandlerFactory() override {}
 
  private:
-  // shell::InterfaceFactory overrides.
-  void Create(const shell::Identity& remote_identity,
+  // service_manager::InterfaceFactory overrides.
+  void Create(const service_manager::Identity& remote_identity,
               mojo::InterfaceRequest<TestUIHandlerMojo> request) override {}
 };
 
@@ -60,7 +61,8 @@ class TestUIHandlerFactory : public shell::InterfaceFactory<TestUIHandlerMojo> {
 class MojoFacadeTest : public WebTest {
  protected:
   MojoFacadeTest() {
-    interface_registry_.reset(new shell::InterfaceRegistry);
+    interface_registry_.reset(
+        new service_manager::InterfaceRegistry(std::string()));
     interface_registry_->AddInterface(&ui_handler_factory_);
     evaluator_.reset([[OCMockObject
         mockForProtocol:@protocol(CRWJSInjectionEvaluator)] retain]);
@@ -74,7 +76,7 @@ class MojoFacadeTest : public WebTest {
 
  private:
   TestUIHandlerFactory ui_handler_factory_;
-  std::unique_ptr<shell::InterfaceRegistry> interface_registry_;
+  std::unique_ptr<service_manager::InterfaceRegistry> interface_registry_;
   base::scoped_nsobject<OCMockObject> evaluator_;
   std::unique_ptr<MojoFacade> facade_;
 };

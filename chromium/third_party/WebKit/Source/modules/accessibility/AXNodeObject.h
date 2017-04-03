@@ -38,7 +38,6 @@ namespace blink {
 class AXObjectCacheImpl;
 class Element;
 class HTMLLabelElement;
-class LayoutRect;
 class Node;
 
 class MODULES_EXPORT AXNodeObject : public AXObject {
@@ -160,8 +159,6 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
   String stringValue() const override;
 
   // ARIA attributes.
-  String ariaDescribedByAttribute() const final;
-  String ariaLabelledbyAttribute() const final;
   AccessibilityRole ariaRoleAttribute() const final;
 
   // AX name calculation.
@@ -208,6 +205,7 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
   void setFocused(bool) final;
   void increment() final;
   void decrement() final;
+  void setSequentialFocusNavigationStartingPoint() final;
 
   // Notifications that this object may have changed.
   void childrenChanged() override;

@@ -65,6 +65,7 @@
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/user_agent.h"
+#include "extensions/features/features.h"
 #include "net/base/host_mapping_rules.h"
 #include "net/base/logging_network_change_observer.h"
 #include "net/base/sdch_manager.h"
@@ -83,12 +84,12 @@
 #include "net/dns/host_cache.h"
 #include "net/dns/host_resolver.h"
 #include "net/dns/mapped_host_resolver.h"
-#include "net/ftp/ftp_network_layer.h"
 #include "net/http/http_auth_filter.h"
 #include "net/http/http_auth_handler_factory.h"
 #include "net/http/http_auth_preferences.h"
 #include "net/http/http_network_layer.h"
 #include "net/http/http_server_properties_impl.h"
+#include "net/net_features.h"
 #include "net/nqe/external_estimate_provider.h"
 #include "net/nqe/network_quality_estimator.h"
 #include "net/proxy/proxy_config_service.h"
@@ -109,7 +110,7 @@
 #include "net/url_request/url_request_job_factory_impl.h"
 #include "url/url_constants.h"
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "chrome/browser/extensions/event_router_forwarder.h"
 #endif
 
@@ -130,8 +131,8 @@
 #endif
 
 #if defined(OS_ANDROID) && defined(ARCH_CPU_ARMEL)
-#include <openssl/cpu.h>
 #include "crypto/openssl_util.h"
+#include "third_party/boringssl/src/include/openssl/cpu.h"
 #endif
 
 using content::BrowserThread;
@@ -317,12 +318,12 @@ IOThread::IOThread(
     net_log::ChromeNetLog* net_log,
     extensions::EventRouterForwarder* extension_event_router_forwarder)
     : net_log_(net_log),
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
       extension_event_router_forwarder_(extension_event_router_forwarder),
 #endif
       globals_(nullptr),
       is_quic_allowed_by_policy_(true),
-      http_09_on_non_default_ports_enabled_(false),
+      http_09_on_non_default_ports_enabled_(true),
       creation_time_(base::TimeTicks::Now()),
       weak_factory_(this) {
   scoped_refptr<base::SingleThreadTaskRunner> io_thread_proxy =
@@ -494,7 +495,7 @@ void IOThread::Init() {
   // Setup the HistogramWatcher to run on the IO thread.
   net::NetworkChangeNotifier::InitHistogramWatcher();
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   globals_->extension_event_router_forwarder =
       extension_event_router_forwarder_;
 #endif
@@ -514,8 +515,7 @@ void IOThread::Init() {
 
   std::unique_ptr<ChromeNetworkDelegate> chrome_network_delegate(
       new ChromeNetworkDelegate(extension_event_router_forwarder(),
-                                &system_enable_referrers_,
-                                metrics_data_use_forwarder_));
+                                &system_enable_referrers_));
   // By default, data usage is considered off the record.
   chrome_network_delegate->set_data_use_aggregator(
       globals_->data_use_aggregator.get(),
@@ -531,7 +531,7 @@ void IOThread::Init() {
 
   globals_->system_network_delegate =
       globals_->data_use_ascriber->CreateNetworkDelegate(
-          std::move(chrome_network_delegate));
+          std::move(chrome_network_delegate), metrics_data_use_forwarder_);
 
   globals_->host_resolver = CreateGlobalHostResolver(net_log_);
 
@@ -1061,13 +1061,10 @@ net::URLRequestContext* IOThread::ConstructProxyScriptFetcherContext(
           content::BrowserThread::GetBlockingPool()
               ->GetTaskRunnerWithShutdownBehavior(
                   base::SequencedWorkerPool::SKIP_ON_SHUTDOWN)));
-#if !defined(DISABLE_FTP_SUPPORT)
-  globals->proxy_script_fetcher_ftp_transaction_factory.reset(
-      new net::FtpNetworkLayer(globals->host_resolver.get()));
+#if !BUILDFLAG(DISABLE_FTP_SUPPORT)
   job_factory->SetProtocolHandler(
       url::kFtpScheme,
-      base::MakeUnique<net::FtpProtocolHandler>(
-          globals->proxy_script_fetcher_ftp_transaction_factory.get()));
+      net::FtpProtocolHandler::Create(globals->host_resolver.get()));
 #endif
   globals->proxy_script_fetcher_url_request_job_factory =
       std::move(job_factory);
